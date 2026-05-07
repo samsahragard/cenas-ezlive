@@ -93,13 +93,11 @@
   <div class="order-view-actions">
     {% if mode == 'single' %}
       <a href="/orders/view/{{ external_order_id }}/xlsx" class="btn-download">Download Excel</a>
-      {% if order and order.external_delivery_id %}
-        <button id="unassignBtn" type="button" class="btn-download" style="background:#c0392b;"
-                data-order="{{ external_order_id }}"
-                onclick="unassignCourier(this)">
-          Free up ezCater driver field
-        </button>
-      {% endif %}
+      <button id="unassignBtn" type="button" class="btn-download" style="background:#c0392b;"
+              data-order="{{ external_order_id }}"
+              onclick="unassignCourier(this)">
+        Free up ezCater driver field
+      </button>
     {% elif mode == 'combined' %}
       <a href="/orders/{{ location }}/{{ date }}/xlsx{% if collapse_empty_rows %}?collapse_empty_rows=1{% endif %}" class="btn-download">Download Excel</a>
     {% endif %}

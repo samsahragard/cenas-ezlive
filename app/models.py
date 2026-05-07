@@ -1,0 +1,250 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from sqlalchemy import (
+    String,
+    Integer,
+    Boolean,
+    DateTime,
+    Text,
+    ForeignKey,
+    UniqueConstraint,
+    JSON,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    # ezCater Delivery UUID (e.g. "5cbca855-da04-46c9-9e3d-234d089ac3b0").
+    # Needed by the "unassign auto-assigned courier" action so the API can
+    # be called without re-looking-up the order by external_order_id.
+    external_delivery_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    client: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    upon_delivery_ask_for: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    delivery_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    delivery_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    headcount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    reported_store: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reported_store_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    origin_store_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    delivery_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    deliver_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    delivery_window: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    setup_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(50), default="new", nullable=False, index=True)
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    flags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # Dispatch result, computed at upload time. Persisted so per-order views
+    # can render the Driver / Prep Expo / Master tabs without re-running the
+    # Google Maps + dispatch_planner stack.
+    kitchen_ready_time: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    driver_departure_time: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    assigned_driver: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    route_group_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    route_stop_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+    processing_orders: Mapped[list["ProcessingOrder"]] = relationship(
+        back_populates="order"
+    )
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+
+    raw_alias: Mapped[str] = mapped_column(String(255))
+    item_key: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+
+    qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    package_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    packaging: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    servings: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    choices: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    extras: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    flags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    source: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    order: Mapped["Order"] = relationship(back_populates="items")
+
+    breakdowns: Mapped[list["PrepBreakdownRecord"]] = relationship(
+        back_populates="order_item",
+        cascade="all, delete-orphan",
+    )
+
+
+class PrepBreakdownRecord(Base):
+    __tablename__ = "prep_breakdowns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_item_id: Mapped[int] = mapped_column(
+        ForeignKey("order_items.id", ondelete="CASCADE"),
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    rules_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    breakdown: Mapped[dict] = mapped_column(JSON)
+
+    order_item: Mapped["OrderItem"] = relationship(back_populates="breakdowns")
+
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(50), default="processing", nullable=False, index=True)
+
+    pdf_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    trigger_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    processing_orders: Mapped[list["ProcessingOrder"]] = relationship(
+        back_populates="processing_job",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProcessingOrder(Base):
+    __tablename__ = "processing_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    processing_job_id: Mapped[int] = mapped_column(
+        ForeignKey("processing_jobs.id", ondelete="CASCADE"),
+        index=True,
+    )
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+
+    status: Mapped[str] = mapped_column(String(50), default="processing", nullable=False, index=True)
+    stage_failed: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    processing_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    processing_job: Mapped["ProcessingJob"] = relationship(back_populates="processing_orders")
+    order: Mapped[Order | None] = relationship(back_populates="processing_orders")
+
+    failure_snapshots: Mapped[list["FailureSnapshot"]] = relationship(
+        back_populates="processing_order",
+        cascade="all, delete-orphan",
+    )
+
+
+class FailureSnapshot(Base):
+    __tablename__ = "failure_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    processing_order_id: Mapped[int] = mapped_column(
+        ForeignKey("processing_orders.id", ondelete="CASCADE"),
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.utcnow() + timedelta(days=14),
+        index=True,
+    )
+
+    raw_order_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    normalized_order_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    traceback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    processing_order: Mapped["ProcessingOrder"] = relationship(back_populates="failure_snapshots")
+
+class Driver(Base):
+    __tablename__ = "drivers"
+    __table_args__ = (UniqueConstraint("name", "location", name="uq_driver_name_location"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    location: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DriverLog(Base):
+    __tablename__ = "driver_logs"
+    # Driver name, date, order link, ex miles, ex miles verified, $10 bonus (on time? tracking? took photo?), 5 star, notes
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    driver_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    pickup_date: Mapped[str] = mapped_column(String(20), nullable=False)
+    order_link: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    ex_miles: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ex_miles_verified: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    on_time: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    tracking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    picture: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    five_star: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    location: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    logged_by: Mapped[str | None] = mapped_column(String(100), nullable=True)

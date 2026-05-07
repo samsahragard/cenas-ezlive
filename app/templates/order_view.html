@@ -1,0 +1,190 @@
+<!-- templates/order_view.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} — Cenas Kitchen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .order-view-header {
+      max-width: 1200px;
+      margin: 0 auto 1rem;
+      text-align: left;
+      background: white;
+      border: 2px solid #729B79;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+    }
+    .order-view-header h2 {
+      margin: 0 0 0.5rem;
+      color: #A44A3F;
+    }
+    .order-view-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.5rem 1.5rem;
+      font-size: 0.92rem;
+      color: #2e2a2b;
+    }
+    .order-view-meta .label {
+      font-size: 0.74rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #729B79;
+      display: block;
+    }
+    .order-view-actions {
+      display: flex;
+      gap: 0.6rem;
+      margin: 1rem auto;
+      max-width: 1200px;
+      justify-content: flex-end;
+    }
+    @media print {
+      nav, .order-view-actions, .tabs { display: none !important; }
+      .grid-view { display: block !important; page-break-after: always; }
+      .order-view-header { border: 1px solid #555; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="nav-brand">Cenas Kitchen</div>
+    <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/orders">Order Processor</a>
+      <a href="/manager">Manager Dashboard</a>
+      <a href="/driver">Driver Portal</a>
+      <a href="/review">Order Review</a>
+    </div>
+  </nav>
+
+  <h1>{{ title }}</h1>
+
+  {% if mode == 'single' and order %}
+  <div class="order-view-header">
+    <h2>Order {{ order.external_order_id }}</h2>
+    <div class="order-view-meta">
+      <div><span class="label">Date</span>{{ order.delivery_date or '—' }}</div>
+      <div><span class="label">Deliver at</span>{{ order.deliver_at or '—' }}</div>
+      <div><span class="label">Customer</span>{{ order.client or '—' }}</div>
+      <div><span class="label">Headcount</span>{{ order.headcount or '—' }}</div>
+      <div><span class="label">Store</span>{{ order.reported_store or '—' }}</div>
+      <div><span class="label">Driver</span>{{ order.assigned_driver or '—' }}</div>
+      <div><span class="label">Kitchen ready</span>{{ order.kitchen_ready_time or '—' }}</div>
+      <div><span class="label">Departure</span>{{ order.driver_departure_time or '—' }}</div>
+      <div style="grid-column: 1 / -1;"><span class="label">Address</span>{{ order.delivery_address or '—' }}</div>
+      {% if order.delivery_instructions %}
+      <div style="grid-column: 1 / -1;"><span class="label">Instructions</span>{{ order.delivery_instructions }}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% elif mode == 'combined' %}
+  <div class="order-view-header">
+    <h2>{{ location_label }} — {{ date }}</h2>
+    <div>{{ combined_count }} order{{ 's' if combined_count != 1 else '' }} combined into one prep + dispatch sheet.</div>
+  </div>
+  {% endif %}
+
+  <div class="order-view-actions">
+    {% if mode == 'single' %}
+      <a href="/orders/view/{{ external_order_id }}/xlsx" class="btn-download">Download Excel</a>
+      {% if order and order.external_delivery_id %}
+        <button id="unassignBtn" type="button" class="btn-download" style="background:#c0392b;"
+                data-order="{{ external_order_id }}"
+                onclick="unassignCourier(this)">
+          Free up ezCater driver field
+        </button>
+      {% endif %}
+    {% elif mode == 'combined' %}
+      <a href="/orders/{{ location }}/{{ date }}/xlsx{% if collapse_empty_rows %}?collapse_empty_rows=1{% endif %}" class="btn-download">Download Excel</a>
+    {% endif %}
+    <button onclick="window.print()" class="btn-download">Print</button>
+    <a href="javascript:history.back()" class="btn-download" style="background:#729B79;">Back</a>
+  </div>
+  {% if mode == 'single' %}
+  <script>
+    async function unassignCourier(btn) {
+      if (!confirm("Unassign the auto-assigned courier (Sam CK #1 or Masood CK #2) from this order on ezCater? After this, the ezCater portal will let you assign a real driver.")) {
+        return;
+      }
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = "Working…";
+      try {
+        const r = await fetch(`/orders/view/${encodeURIComponent(btn.dataset.order)}/unassign-courier`, { method: "POST" });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          btn.textContent = "Unassigned ✓ — refresh ezCater";
+          btn.style.background = "#27ae60";
+        } else {
+          alert("Unassign failed: " + (data.error || `HTTP ${r.status}`));
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }
+      } catch (e) {
+        alert("Network error: " + e);
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+  </script>
+  {% endif %}
+
+  <div class="tabs">
+    {% for view_name in ["master", "kitchen", "driver", "prep_expo"] %}
+      <a class="tab {% if active_view == view_name %}active{% endif %}" href="#" onclick="showView('{{ view_name }}'); return false;">
+        {{ view_name.replace("_", " ").title() }}
+      </a>
+    {% endfor %}
+  </div>
+
+  {% for view_name, grid in grids.items() %}
+    <div class="grid-view" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
+      <div class="table-wrap">
+        <table>
+          <tbody>
+            {% set ns = namespace(last_section=None) %}
+            {% for row in grid.rows %}
+              {% if row.section != ns.last_section %}
+                {% if row.section != "Header" %}
+                <tr class="section-row">
+                  <td colspan="{{ grid.columns|length + 1 }}">{{ row.section }}</td>
+                </tr>
+                {% endif %}
+                {% set ns.last_section = row.section %}
+              {% endif %}
+              <tr{% if row.key == "meta.order_id" %} class="bold-row"{% endif %}>
+                <td>{{ row.label }}</td>
+                {% for col in grid.columns %}
+                  {% if col["order_id"] == "Total" %}
+                    <td class="total-col">{{ col["values"].get(row.key, "") }}</td>
+                  {% else %}
+                    <td>{{ col["values"].get(row.key, "") }}</td>
+                  {% endif %}
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+
+  <script>
+    function showView(viewName) {
+      document.querySelectorAll(".grid-view").forEach(el => { el.style.display = "none"; });
+      const active = document.getElementById("view-" + viewName);
+      if (active) active.style.display = "block";
+      document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+      const clicked = Array.from(document.querySelectorAll(".tab")).find(tab =>
+        tab.textContent.trim().toLowerCase() === viewName.replace("_", " "));
+      if (clicked) clicked.classList.add("active");
+    }
+  </script>
+</body>
+</html>

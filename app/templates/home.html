@@ -1,0 +1,88 @@
+<!-- templates/home -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cenas Kitchen — Operations</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="home-body">
+
+  <nav>
+    <div class="nav-brand">Cenas Kitchen</div>
+    <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
+    <div class="nav-links">
+      <a href="/" class="active">Home</a>
+      <a href="/orders">Order Processor</a>
+      <a href="/manager">Manager Dashboard</a>
+      <a href="/driver">Driver Portal</a>
+      <a href="/review">Order Review</a>
+    </div>
+  </nav>
+
+  <main class="home-main">
+
+    <section class="hero">
+      <p class="hero-eyebrow">Internal Operations Platform</p>
+      <h1 class="hero-title">Cenas Kitchen</h1>
+      <p class="hero-sub">Catering order processing and driver performance management — all in one place.</p>
+    </section>
+
+    <section class="portal-cards">
+
+      <div class="portal-card">
+        <div class="portal-card-accent"></div>
+        <div class="portal-card-body">
+          <h2>Order Processor</h2>
+          <p>Upload Catering PDF confirmations to generate kitchen prep sheets broken down by item, quantity, and packaging. Export directly to Excel.</p>
+          <a href="/orders" class="btn-portal">Open Processor</a>
+        </div>
+      </div>
+
+      <div class="portal-card">
+        <div class="portal-card-accent"></div>
+        <div class="portal-card-body">
+          <h2>Manager Dashboard</h2>
+          <p>Log and review driver delivery performance by location. Track mileage, bonuses, and five-star ratings. Manage your driver roster.</p>
+          <a href="/manager" class="btn-portal">Open Dashboard</a>
+        </div>
+      </div>
+
+      <div class="portal-card">
+        <div class="portal-card-accent"></div>
+        <div class="portal-card-body">
+          <h2>Driver Portal</h2>
+          <p>Drivers: select your location and name to view your personal delivery log and performance history.</p>
+          <a href="/driver" class="btn-portal">View My Logs</a>
+        </div>
+      </div>
+
+    </section>
+
+    <section class="portal-cards" style="margin-top: 1.5rem;">
+
+      <div class="portal-card">
+        <div class="portal-card-accent"></div>
+        <div class="portal-card-body">
+          <h2>Tomball Orders</h2>
+          <p>Browse processed catering orders for the Tomball + Spring locations, grouped by date. Click any order to re-open its kitchen prep sheets, or open the day's combined view.</p>
+          <a href="/orders/tomball" class="btn-portal">Open Tomball Orders</a>
+        </div>
+      </div>
+
+      <div class="portal-card">
+        <div class="portal-card-accent"></div>
+        <div class="portal-card-body">
+          <h2>Copperfield Orders</h2>
+          <p>Browse processed catering orders for the Copperfield + Houston Westheimer locations, grouped by date. Click any order to re-open its kitchen prep sheets, or open the day's combined view.</p>
+          <a href="/orders/copperfield" class="btn-portal">Open Copperfield Orders</a>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Cenas Kitchen - Order Review</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    </head>
+    <body>
+        <nav>
+            <div class="nav-brand">Cenas Kitchen</div>
+            <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/orders">Order Processor</a>
+                <a href="/manager">Manager Dashboard</a>
+                <a href="/driver">Driver Portal</a>
+                <a href="/review" class="active">Order Review</a>
+            </div>
+        </nav>
+
+        <h1>Order Review Queue</h1>
+
+        {% if error %}
+        <div class="banner banner-error">{{ error }}</div>
+        {% endif %}
+
+        {% if orders %}
+        <p style="color:#555; margin-bottom:1rem;">
+            {{ orders | length }} order{{ 's' if orders | length != 1 }} submitted.
+            {% set flagged = orders | selectattr("needs_review") | list %}
+            {% if flagged %} &nbsp;<span class="flag-badge">{{ flagged | length }} need review</span>
+            {% endif %}
+        </p>
+        <div class="table-scroll">
+            <table class="log-table">
+                <thead>
+                    <tr class="group-header">
+                        <th>Order #</th>
+                        <th>Date</th>
+                        <th>Deliver At</th>
+                        <th>Client</th>
+                        <th>Phone</th>
+                        <th>Store</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in orders %}
+                    <tr>
+                        <td>{{ o.external_order_id or '-' }}</td>
+                        <td>{{ o.delivery_date or '-' }}</td>
+                        <td>{{ o.deliver_at or '-' }}</td>
+                        <td>{{ o.client or '-' }}</td>
+                        <td>{{ o.customer_phone or '-' }}</td>
+                        <td>{{ o.reported_store or '-' }}</td>
+                        <td style="text-align:left;">
+                            {% if o.needs_review %}
+                                {% if o.flags %}
+                                    {% for flag in o.flags %}
+                                        {% if flag.startswith("UNKNOWN_STORE:") %}
+                                            <div class="flag-badge flag-badge-error" style="margin-bottom:0.35rem;">Store not recognized: {{ flag.split(":", 1)[1] }}</div>
+                                        {% elif flag.startswith("UNPARSED_DATE:") %}
+                                            <div class="flag-badge flag-badge-error" style="margin-bottom:0.35rem;">Date could not be parsed: {{ flag.split(":", 1)[1] }}</div>
+                                        {% elif flag.startswith("UNPARSED_TIME:") %}
+                                            <div class="flag-badge flag-badge-error" style="margin-bottom:0.35rem;">Time could not be parsed: {{ flag.split(":", 1)[1] }}</div>
+                                        {% elif flag == "UNKNOWN_ITEM" %}
+                                            <div class="flag-badge flag-badge-error" style="margin-bottom:0.35rem;">One or more items not in catalog</div>
+                                        {% else %}
+                                            <div class="flag-badge flag-badge-error" style="margin-bottom:0.35rem;">{{ flag }}</div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="flag-badge flag-badge-error">Gemini extraction confidence warning</div>
+                                {% endif %}
+                            {% else %}
+                                <span style="color:#729B79; font-weight:bold;">&#10003; OK</span>
+                            {% endif %}
+                            {% if o.needs_review and o.warning_count %}
+                                <div style="font-size:0.75rem; color:#888; margin-top:0.3rem;">{{ o.warning_count }} warning{{ 's' if o.warning_count != 1 }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/review/{{ o.external_order_id }}" class="btn-portal" style="font-size:0.85rem; padding:0.35rem 0.85rem;">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="review-empty">
+            No orders submitted yet.
+        </div>
+        {% endif %}
+    </body>
+</html>

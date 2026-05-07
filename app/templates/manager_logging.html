@@ -1,0 +1,201 @@
+<!-- templates/manager_logging -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manager Dashboard</title>
+  <link rel="stylesheet" href="../static/style.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav>
+    <div class="nav-brand">Cenas Kitchen</div>
+    <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/orders">Order Processor</a>
+      <a href="/manager" class="active">Manager Dashboard</a>
+      <a href="/driver">Driver Portal</a>
+      <a href="/review">Order Review</a>
+    </div>
+  </nav>
+{% if view == "login" %}
+
+  <h1>Manager Dashboard</h1>
+  <h3>Select your location and sign in</h3>
+
+  {% if error %}
+  <div class="banner banner-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="login-card">
+    <form action="{{ url_for('manager.manager_verify') }}" method="POST">
+      <div class="login-field">
+        <label for="location">Location</label>
+        <select id="location" name="location" required>
+          <option value="" disabled selected>Select…</option>
+          <option value="copperfield">Copperfield</option>
+          <option value="tomball">Tomball</option>
+          <option value="corporate">Corporate (All Locations)</option>
+        </select>
+      </div>
+      <div class="login-field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="••••••" required autofocus>
+      </div>
+      <button type="submit" class="btn-login">Sign In</button>
+    </form>
+  </div>
+
+{% elif view == "dashboard" %}
+
+  <div class="driver-topbar">
+    <div>
+      <h1>Manager Dashboard</h1>
+      <h3>
+        <span class="location-badge">{{ location_label }}</span>
+        Driver Order Log
+      </h3>
+    </div>
+    <form action="{{ url_for('manager.manager_logout') }}" method="POST">
+      <button type="submit" class="btn-logout">Sign Out</button>
+    </form>
+  </div>
+
+  {% if request.args.get("saved") %}
+  <div class="banner banner-success">Log saved successfully.</div>
+  {% endif %}
+
+  {% if request.args.get("driver_added") %}
+  <div class="banner banner-success">Driver added successfully.</div>
+  {% endif %}
+
+  {% if request.args.get("driver_deleted") %}
+  <div class="banner banner-success">Driver removed successfully.</div>
+  {% endif %}
+
+  {% if error %}
+  <div class="banner banner-error">{{ error }}</div>
+  {% endif %}
+
+  <form action="{{ url_for('manager.manager_log') }}" method="POST">
+  <div class="table-scroll">
+    <table class="log-table">
+      <thead>
+        <tr class="group-header">
+          {% if is_corporate %}<th rowspan="2">Location</th>{% endif %}
+          <th rowspan="2">Driver</th>
+          <th rowspan="2">Date</th>
+          <th rowspan="2">Order Link</th>
+          <th rowspan="2">Expected Miles</th>
+          <th rowspan="2">Verified Miles</th>
+          <th colspan="3">$10 Bonus</th>
+          <th rowspan="2">5★ Review</th>
+          <th rowspan="2">Notes</th>
+          <th rowspan="2">Logged By</th>
+        </tr>
+        <tr class="group-header">
+          <th>On Time?</th>
+          <th>Tracking?</th>
+          <th>Picture?</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% if logs %}
+          {% for log in logs %}
+          <tr>
+            {% if is_corporate %}<td><span class="location-badge">{{ log.location }}</span></td>{% endif %}
+            <td>{{ log.driver_name }}</td>
+            <td>{{ log.pickup_date }}</td>
+            <td><a href="{{ log.order_link }}" target="_blank">{{ log.order_link }}</a></td>
+            <td>{{ log.ex_miles if log.ex_miles is not none else '—' }}</td>
+            <td>{{ log.ex_miles_verified if log.ex_miles_verified is not none else '—' }}</td>
+            <td>{% if log.on_time %}✓{% else %}—{% endif %}</td>
+            <td>{% if log.tracking %}✓{% else %}—{% endif %}</td>
+            <td>{% if log.picture %}✓{% else %}—{% endif %}</td>
+            <td>{% if log.five_star %}✓{% else %}—{% endif %}</td>
+            <td>{{ log.notes or '' }}</td>
+            <td>{{ log.logged_by or '' }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="{{ 12 if is_corporate else 11 }}" style="color:#999; font-style:italic;">No entries yet.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+
+      {% if not is_corporate %}
+      <tfoot>
+        <tr>
+          <td>
+            <select name="driver_name" required>
+              <option value="" disabled selected>Select…</option>
+              {% for driver in drivers %}
+              <option value="{{ driver.name }}">{{ driver.name }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><input type="date" name="pickup_date" required></td>
+          <td><input type="text" name="order_link" placeholder="Order # ..."></td>
+          <td><input type="number" name="ex_miles" min="0" placeholder="0"></td>
+          <td><input type="number" name="ex_miles_verified" min="0" placeholder="0"></td>
+          <td><input type="checkbox" name="on_time" value="1"></td>
+          <td><input type="checkbox" name="tracking" value="1"></td>
+          <td><input type="checkbox" name="picture" value="1"></td>
+          <td><input type="checkbox" name="five_star" value="1"></td>
+          <td><textarea name="notes" placeholder="Optional…"></textarea></td>
+          <td><input type="text" name="logged_by" placeholder="Your name…"></td>
+        </tr>
+        <tr>
+          <td colspan="11" class="submit-cell">
+            <button type="submit" class="btn-primary">+ Add Row</button>
+          </td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+  </form>
+
+  {% if not is_corporate %}
+  <div class="driver-mgmt">
+    <h3>Manage Drivers — {{ location_label }}</h3>
+
+    <div class="driver-mgmt-body">
+      <div class="driver-list">
+        <p class="driver-list-label">Current Drivers</p>
+        {% if drivers %}
+          <ul>
+            {% for driver in drivers %}
+            <li class="driver-list-item">
+              <span>{{ driver.name }}</span>
+              <form action="{{ url_for('manager.delete_driver', driver_id=driver.id) }}" method="POST" style="display:inline;">
+                <button type="submit" class="btn-delete-driver" onclick="return confirm('Remove {{ driver.name }}?')">&#x2715;</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p style="color:#999; font-style:italic;">No drivers yet.</p>
+        {% endif %}
+      </div>
+
+      <form class="driver-add-form" action="{{ url_for('manager.add_driver') }}" method="POST">
+        <p class="driver-list-label">Add New Driver</p>
+        <div class="driver-add-field">
+          <label for="new_driver_name">Name</label>
+          <input type="text" id="new_driver_name" name="driver_name" placeholder="Full name" required>
+        </div>
+        <button type="submit" class="btn-add-driver">+ Add Driver</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+{% endif %}
+
+</body>
+</html>

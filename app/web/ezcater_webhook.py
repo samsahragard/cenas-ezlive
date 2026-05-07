@@ -38,15 +38,30 @@ webhook = Blueprint("ezcater_webhook", __name__)
 # Constants / config
 # ---------------------------------------------------------------------------
 
-OPENCLAW_SCRIPTS = Path(r"C:\Users\sam\.openclaw\scripts")
-SECRETS_DIR = Path(r"C:\Users\sam\.openclaw\.secrets")
+# Path resolution: works on AiCk (uses ~/.openclaw/scripts) AND on Render
+# (uses bundled scripts/ in the repo). The bundled copy is preferred when both
+# exist because env vars can be configured to override file-reads anyway.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_BUNDLED_SCRIPTS = _REPO_ROOT / "scripts"
+_AICK_SCRIPTS = Path(r"C:\Users\sam\.openclaw\scripts")
+OPENCLAW_SCRIPTS = _AICK_SCRIPTS if _AICK_SCRIPTS.exists() else _BUNDLED_SCRIPTS
+
+# Webhook log: writable location. Falls back to /tmp on Render (or wherever
+# the disk is mounted).
+_log_dir = OPENCLAW_SCRIPTS if OPENCLAW_SCRIPTS.exists() else Path(os.getenv("WEBHOOK_LOG_DIR", "/tmp"))
+WEBHOOK_LOG = _log_dir / "ezcater_webhook.jsonl"
+
+# Secrets: env vars first (Render), file fallback (AiCk).
+_AICK_SECRETS = Path(r"C:\Users\sam\.openclaw\.secrets")
+EZ_TOKEN_FILE = _AICK_SECRETS / "ezcater_api_token.txt"
+INGEST_TOKEN_FILE = _AICK_SECRETS / "ingest_token.txt"
 OPENCLAW_JSON = Path(r"C:\Users\sam\.openclaw\openclaw.json")
 
-WEBHOOK_LOG = OPENCLAW_SCRIPTS / "ezcater_webhook.jsonl"
-EZ_TOKEN_FILE = SECRETS_DIR / "ezcater_api_token.txt"
-INGEST_TOKEN_FILE = SECRETS_DIR / "ingest_token.txt"
-DISTANCE_SCRIPT = OPENCLAW_SCRIPTS / "ezcater_distance.py"
-INGEST_URL = "http://127.0.0.1:5000/orders/ingest_structured"
+# Distance check: prefer bundled script, fall back to AiCk's path.
+DISTANCE_SCRIPT = _BUNDLED_SCRIPTS / "ezcater_distance.py" if (_BUNDLED_SCRIPTS / "ezcater_distance.py").exists() else _AICK_SCRIPTS / "ezcater_distance.py"
+
+# Self-call URL for ingest. On Render, $PORT is the bound port. On AiCk, 5000.
+INGEST_URL = os.getenv("INGEST_URL") or f"http://127.0.0.1:{os.getenv('PORT', '5000')}/orders/ingest_structured"
 EZCATER_API = "https://api.ezcater.com/graphql"
 
 # Caterer UUID -> internal store id (matches normalize.py:resolve_origin_store_id).
@@ -112,6 +127,10 @@ def _is_test_mode() -> bool:
 # ---------------------------------------------------------------------------
 
 def _ez_token() -> str:
+    """ezCater Partner API token. Env var (Render) wins over file (AiCk)."""
+    val = os.getenv("EZCATER_API_TOKEN")
+    if val:
+        return val.strip()
     return EZ_TOKEN_FILE.read_text(encoding="utf-8").strip()
 
 
@@ -162,12 +181,17 @@ def _distance_check(drop_off_address: str, order_store_num: int) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def _tg_token() -> str | None:
+    """Telegram bot token. Env var (Render) wins over openclaw.json (AiCk)."""
+    val = os.getenv("TELEGRAM_BOT_TOKEN")
+    if val:
+        return val.strip()
     try:
-        cfg = json.loads(OPENCLAW_JSON.read_text(encoding="utf-8-sig"))
-        return ((cfg.get("channels") or {}).get("telegram") or {}).get("botToken")
+        if OPENCLAW_JSON.exists():
+            cfg = json.loads(OPENCLAW_JSON.read_text(encoding="utf-8-sig"))
+            return ((cfg.get("channels") or {}).get("telegram") or {}).get("botToken")
     except Exception:
         logger.exception("could not read telegram token from openclaw.json")
-        return None
+    return None
 
 
 def _tg_send(text: str) -> None:
@@ -225,7 +249,11 @@ def _assign_courier(delivery_uuid: str, courier: dict) -> tuple[bool, str]:
 def _ingest_into_ezlive(raw_order_payload: dict) -> tuple[bool, dict]:
     """POST to local /orders/ingest_structured. Returns (ok, response_dict)."""
     try:
-        ingest_token = INGEST_TOKEN_FILE.read_text(encoding="utf-8").strip()
+        ingest_token = (os.getenv("INGEST_TOKEN") or
+                        (INGEST_TOKEN_FILE.read_text(encoding="utf-8").strip()
+                         if INGEST_TOKEN_FILE.exists() else "")).strip()
+        if not ingest_token:
+            return False, {"error": "INGEST_TOKEN not configured"}
         body = json.dumps(raw_order_payload).encode()
         req = urllib.request.Request(
             INGEST_URL, data=body,

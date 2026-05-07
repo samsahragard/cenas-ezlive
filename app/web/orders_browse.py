@@ -158,8 +158,18 @@ def combined_day_xlsx(location: str, date: str):
 # through the UI. This endpoint calls courierUnassign on Cenas Kitchen's
 # behalf so the portal driver field opens up for manual reassignment.
 
+import os
+
 EZCATER_API = "https://api.ezcater.com/graphql"
 EZ_TOKEN_FILE = Path(r"C:\Users\sam\.openclaw\.secrets\ezcater_api_token.txt")
+
+
+def _ez_token_unassign() -> str:
+    """Token resolver: env var (Render) wins over file (AiCk)."""
+    val = os.getenv("EZCATER_API_TOKEN")
+    if val:
+        return val.strip()
+    return EZ_TOKEN_FILE.read_text(encoding="utf-8").strip()
 
 # Mirror the mapping in ezcater_webhook.py so we can derive which courier
 # was auto-assigned without storing that on the Order row.
@@ -174,7 +184,7 @@ def _ezcater_gql(query: str, variables: dict | None = None) -> dict:
     req = urllib.request.Request(
         EZCATER_API, data=body, method="POST",
         headers={
-            "Authorization": f"Bearer {EZ_TOKEN_FILE.read_text(encoding='utf-8').strip()}",
+            "Authorization": f"Bearer {_ez_token_unassign()}",
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "Mozilla/5.0 (cenaskitchen unassign-courier)",

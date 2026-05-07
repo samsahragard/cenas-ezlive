@@ -1,0 +1,21 @@
+{
+  "_comment": "Approved senders for orders@cenaskitchen.com. Ingest pipeline auto-opens attachments only from these. Unknown senders with attachments => Telegram Sam. Sam-managed list.",
+  "senders": {
+    "losrojas1212@icloud.com": {
+      "vendor": "alvarado",
+      "label": "Alvarado's Mexican Produce",
+      "expected_format": "image"
+    },
+    "jlunaproduce@aol.com": {
+      "vendor": "jluna",
+      "label": "J. Luna Produce Co.",
+      "expected_format": "xlsx"
+    },
+    "ck@cenaskitchen.com": {
+      "vendor": "jluna",
+      "label": "Sam-forwarded JLUNA email",
+      "expected_format": "xlsx",
+      "_note": "Allows Sam-forwarded JLUNA emails through (same xlsx attachment, different envelope sender). Remove once JLUNA sends directly."
+    }
+  }
+}

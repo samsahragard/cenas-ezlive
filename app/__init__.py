@@ -10,7 +10,9 @@ from app.web.driver_routes import driver as drvr
 from app.web.review_routes import review as rvw
 from app.web.orders_browse import browse as obrowse
 from app.web.ezcater_webhook import webhook as ezwh
+from app.web.produce_order import produce_order as produce
 from app.web import auth as ezauth
+from app.services import produce_ingest
 
 
 def create_app():
@@ -32,11 +34,17 @@ def create_app():
     app.register_blueprint(rvw)
     app.register_blueprint(obrowse)
     app.register_blueprint(ezwh)
+    app.register_blueprint(produce)
 
     # Install the shared-password gate AFTER all other blueprints so the
     # before_request hook sees their routes. Webhook + ingest endpoints
     # are exempted inside auth.install().
     ezauth.install(app)
+
+    # Start the IMAP poller for produce vendor pricing. No-op unless
+    # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock
+    # ensures only one gunicorn worker actually polls.
+    produce_ingest.start_in_background()
 
     @app.cli.command("create-driver")
     @click.argument("name")

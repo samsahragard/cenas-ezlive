@@ -1,0 +1,19 @@
+{% extends "produce/base.html" %}
+{% block content %}
+
+{% if error %}
+<div class="result-box result-err">
+  <h2>⚠️ {{ error }}</h2>
+  <p>Order ID: <code>{{ order_id }}</code></p>
+</div>
+{% else %}
+<div class="result-box result-warn">
+  <h2>🚫 Order canceled</h2>
+  <p>Order <code>{{ order["order_id"] }}</code> for <strong>{{ order["manager"] }}</strong> has been canceled.</p>
+  <p>The manager has been notified by email.</p>
+</div>
+{% endif %}
+
+<p><a href="{{ url_for('produce_order.index') }}">← Back to order guide</a></p>
+
+{% endblock %}

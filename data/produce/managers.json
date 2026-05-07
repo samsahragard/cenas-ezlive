@@ -1,0 +1,30 @@
+{
+  "_comment": "Kitchen managers who order produce. default_location is what their selected location should normally be; mismatch (selected != default) triggers Sam-verification flow. Javier has no default (both locations).",
+  "managers": {
+    "Gina": {
+      "email": "gina@cenaskitchen.com",
+      "phone": "(475) 276-9760",
+      "default_location": "Tomball"
+    },
+    "Janeth": {
+      "email": "janeth@cenaskitchen.com",
+      "phone": "(832) 541-1871",
+      "default_location": "Tomball"
+    },
+    "Yasmine": {
+      "email": "yasmine@cenaskitchen.com",
+      "phone": "(346) 232-9862",
+      "default_location": "Copperfield"
+    },
+    "Sebastion": {
+      "email": "sebastion@cenaskitchen.com",
+      "phone": "(475) 276-9788",
+      "default_location": "Copperfield"
+    },
+    "Javier": {
+      "email": "javier@cenaskitchen.com",
+      "phone": "(346) 634-9994",
+      "default_location": null
+    }
+  }
+}

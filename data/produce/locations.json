@@ -1,0 +1,13 @@
+{
+  "_comment": "Cenas Kitchen locations. The address_block is appended verbatim to vendor order emails per Sam's spec.",
+  "locations": {
+    "Tomball": {
+      "label": "Tomball Cenas Kitchen",
+      "address_block": "Tomball Cenas Kitchen\n27727 Tomball Parkway\nTomball TX 77375\n832 559 8804"
+    },
+    "Copperfield": {
+      "label": "Copperfield Cenas Kitchen",
+      "address_block": "Copperfield Cenas Kitchen\n15650 FM 529\nHouston TX 77095\n832 674 7745"
+    }
+  }
+}

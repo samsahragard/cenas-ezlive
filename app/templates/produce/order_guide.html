@@ -1,0 +1,272 @@
+{% extends "produce/base.html" %}
+{% block content %}
+
+{% if test_mode %}
+<div class="banner banner-warn">
+  ⚠️ <strong>TEST MODE</strong> — Vendor emails go to <code>sam@</code> (J. Luna) and <code>masood@</code> (Alvarado), NOT to the real vendors. Switch <code>vendor_routing.json</code> mode to <code>"production"</code> when ready.
+</div>
+{% endif %}
+
+<div class="checkout-card">
+  <div class="checkout-row">
+    <div class="field">
+      <label for="manager">Manager <span class="req">*</span></label>
+      <select id="manager" required>
+        <option value="">— pick your name —</option>
+        {% for name, info in managers.items() %}
+        <option value="{{ name }}" data-default="{{ info.default_location or '' }}">{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="location">Location <span class="req">*</span></label>
+      <select id="location" required>
+        <option value="">— pick location —</option>
+        {% for key, loc in locations.items() %}
+        <option value="{{ key }}">{{ loc.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="delivery_date">Delivery Date <span class="req">*</span></label>
+      <input type="date" id="delivery_date" required>
+    </div>
+  </div>
+  <div id="manager-hint" class="hint" style="display:none"></div>
+</div>
+
+<!-- Sticky cart bar — always visible while scrolling -->
+<div class="sticky-cart" id="sticky-cart">
+  <div class="cart-trackers">
+    <div class="tracker tracker-jluna">
+      <span class="tracker-label">J. Luna</span>
+      <span class="tracker-value"><span id="jluna-count">0</span> items · <strong id="jluna-total">$0.00</strong></span>
+    </div>
+    <div class="tracker tracker-alvarado">
+      <span class="tracker-label">Alvarado</span>
+      <span class="tracker-value"><span id="alvarado-count">0</span> items · <strong id="alvarado-total">$0.00</strong></span>
+    </div>
+    <div class="tracker tracker-total">
+      <span class="tracker-label">Total</span>
+      <span class="tracker-value"><span id="total-count">0</span> items · <strong id="grand-total">$0.00</strong></span>
+    </div>
+  </div>
+  <button id="submit-btn" class="btn btn-primary" disabled>Place Order</button>
+</div>
+
+<div class="legend">
+  <strong class="legend-title">Legend:</strong>
+  <span class="legend-item"><span class="marker marker-star">★</span> What we want</span>
+  <span class="legend-item"><span class="marker marker-circle">○</span> If price is better</span>
+</div>
+
+<h2 class="section-title">This Week's Items <span class="muted">({{ items|length }} available)</span></h2>
+
+{% if items|length == 0 %}
+<div class="banner banner-warn">
+  No vendor prices available yet. The site reads prices from the most recent Alvarado image and J. Luna xlsx received at <code>orders@cenaskitchen.com</code>. Once those land, items will appear here automatically.
+</div>
+{% endif %}
+
+{% set half = (items|length + 1) // 2 %}
+{% set left_items = items[:half] %}
+{% set right_items = items[half:] %}
+
+<div class="item-grid">
+  {% for col_items in [left_items, right_items] %}
+  <div class="item-block">
+    <div class="item-table-wrap">
+    <table class="item-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Size</th>
+          <th>Price</th>
+          <th>Vendor</th>
+          <th class="qty-col">Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in col_items %}
+        <tr class="item-row {% if not it.orderable %}item-row-noprice{% endif %}"
+            data-name="{{ it.canonical_name }}"
+            data-size="{{ it.canonical_size }}"
+            data-price="{{ it.price if it.price is not none else 0 }}"
+            data-vendor="{{ it.vendor or '' }}"
+            data-vendor-label="{{ it.vendor_label or '' }}">
+          <td>
+            {{ it.canonical_name }}{% if it.marker == 'star' %}<span class="marker marker-star" title="What we want">★</span>{% elif it.marker == 'circle' %}<span class="marker marker-circle" title="If price is better">○</span>{% endif %}
+          </td>
+          <td>{{ it.canonical_size }}</td>
+          <td class="price">
+            {% if it.price is not none %}${{ "%.2f"|format(it.price) }}{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if it.vendor_label %}<span class="badge badge-{{ it.vendor }}">{{ it.vendor_label }}</span>{% else %}<span class="muted">no price</span>{% endif %}
+          </td>
+          <td class="qty-col">
+            <input type="number" min="0" max="999" step="1" value="0" class="qty-input" inputmode="numeric" {% if not it.orderable %}disabled title="No vendor price this week"{% endif %}>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if unavailable %}
+<details class="unavailable-section">
+  <summary>{{ unavailable|length }} canonical items not currently available from either vendor</summary>
+  <ul>
+    {% for it in unavailable %}<li>{{ it.canonical_name }} ({{ it.canonical_size }})</li>{% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+<div id="result" class="result-box" style="display:none"></div>
+
+<script>
+const SUBMIT_URL = "{{ url_for('produce_order.submit') }}";
+
+const managerSelect = document.getElementById('manager');
+const locationSelect = document.getElementById('location');
+const dateInput = document.getElementById('delivery_date');
+const managerHint = document.getElementById('manager-hint');
+const submitBtn = document.getElementById('submit-btn');
+const resultBox = document.getElementById('result');
+
+const jlunaCountEl = document.getElementById('jluna-count');
+const jlunaTotalEl = document.getElementById('jluna-total');
+const alvCountEl   = document.getElementById('alvarado-count');
+const alvTotalEl   = document.getElementById('alvarado-total');
+const totalCountEl = document.getElementById('total-count');
+const grandTotalEl = document.getElementById('grand-total');
+
+// Default delivery date = tomorrow
+const tomorrow = new Date();
+tomorrow.setDate(tomorrow.getDate() + 1);
+dateInput.value = tomorrow.toISOString().slice(0, 10);
+
+function getCart() {
+  const cart = [];
+  const totals = { jluna: { count: 0, sum: 0 }, alvarado: { count: 0, sum: 0 } };
+  document.querySelectorAll('.item-row').forEach(row => {
+    const qtyInput = row.querySelector('.qty-input');
+    if (qtyInput.disabled) return;
+    const qty = parseInt(qtyInput.value || '0', 10);
+    if (qty > 0) {
+      const price = parseFloat(row.dataset.price);
+      const vendor = row.dataset.vendor;
+      const lineTotal = price * qty;
+      cart.push({
+        canonical_name: row.dataset.name,
+        canonical_size: row.dataset.size,
+        qty: qty,
+        price: price,
+        vendor: vendor,
+      });
+      if (totals[vendor]) {
+        totals[vendor].count += 1;
+        totals[vendor].sum += lineTotal;
+      }
+    }
+  });
+  return { cart, totals };
+}
+
+function fmt(n) { return '$' + n.toFixed(2); }
+
+function refreshCart() {
+  const { cart, totals } = getCart();
+  jlunaCountEl.textContent = totals.jluna.count;
+  jlunaTotalEl.textContent = fmt(totals.jluna.sum);
+  alvCountEl.textContent   = totals.alvarado.count;
+  alvTotalEl.textContent   = fmt(totals.alvarado.sum);
+  totalCountEl.textContent = cart.length;
+  grandTotalEl.textContent = fmt(totals.jluna.sum + totals.alvarado.sum);
+
+  submitBtn.disabled = cart.length === 0;
+}
+
+function refreshManagerHint() {
+  const mgr = managerSelect.options[managerSelect.selectedIndex];
+  const def = mgr ? mgr.dataset.default : '';
+  if (def) {
+    managerHint.textContent = `${mgr.value}'s default location is ${def}.`;
+    managerHint.style.display = '';
+  } else if (mgr && mgr.value) {
+    managerHint.textContent = `${mgr.value} is not tied to a single location — pick whichever you're ordering for.`;
+    managerHint.style.display = '';
+  } else {
+    managerHint.style.display = 'none';
+  }
+}
+
+document.querySelectorAll('.qty-input').forEach(inp => {
+  inp.addEventListener('input', refreshCart);
+});
+managerSelect.addEventListener('change', refreshManagerHint);
+
+submitBtn.addEventListener('click', async () => {
+  const manager = managerSelect.value;
+  const location = locationSelect.value;
+  const delivery_date = dateInput.value;
+  const { cart } = getCart();
+
+  if (!manager) { alert('Pick your manager name'); return; }
+  if (!location) { alert('Pick a location'); return; }
+  if (!delivery_date) { alert('Pick a delivery date'); return; }
+  if (cart.length === 0) { alert('Add at least one item'); return; }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting…';
+
+  try {
+    const resp = await fetch(SUBMIT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manager, location, delivery_date, cart }),
+    });
+    const data = await resp.json();
+    showResult(data);
+  } catch (e) {
+    showResult({ ok: false, error: 'Network error: ' + e.message });
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Place Order';
+  }
+});
+
+function showResult(data) {
+  resultBox.style.display = '';
+  if (data.ok && data.status === 'sent') {
+    let html = `<h3 class="result-ok">✅ Order sent</h3>
+      <p>Order ID: <code>${data.order_id}</code></p>
+      <ul>`;
+    (data.vendor_sends || []).forEach(v => {
+      html += `<li>${v.vendor_label} → ${v.to_addr}: <strong>$${v.total.toFixed(2)}</strong></li>`;
+    });
+    html += `</ul><p>Manager confirmation email sent at ${data.manager_confirmation_at || '-'}.</p>`;
+    resultBox.innerHTML = html;
+    resultBox.className = 'result-box result-ok';
+    document.querySelectorAll('.qty-input').forEach(i => { if (!i.disabled) i.value = 0; });
+    refreshCart();
+  } else if (data.ok && data.status === 'held') {
+    resultBox.innerHTML = `<h3 class="result-warn">⏳ Order held for verification</h3>
+      <p>${data.message}</p>
+      <p>Order ID: <code>${data.order_id}</code></p>`;
+    resultBox.className = 'result-box result-warn';
+  } else {
+    resultBox.innerHTML = `<h3 class="result-err">❌ Error</h3><p>${data.error || JSON.stringify(data)}</p>`;
+    resultBox.className = 'result-box result-err';
+  }
+  resultBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+refreshCart();
+refreshManagerHint();
+</script>
+
+{% endblock %}

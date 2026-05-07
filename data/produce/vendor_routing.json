@@ -1,0 +1,12 @@
+{
+  "_comment": "Where to email orders for each vendor. CURRENTLY IN TEST MODE - replace with real vendor emails before going to production.",
+  "mode": "test",
+  "test": {
+    "alvarado": {"to": "masood@cenaskitchen.com", "label": "Alvarado's Mexican Produce (test->Masood)"},
+    "jluna":    {"to": "sam@cenaskitchen.com",    "label": "J. Luna Produce Co. (test->Sam)"}
+  },
+  "production": {
+    "alvarado": {"to": "losrojas1212@icloud.com", "label": "Alvarado's Mexican Produce"},
+    "jluna":    {"to": "jlunaproduce@aol.com",    "label": "J. Luna Produce Co."}
+  }
+}

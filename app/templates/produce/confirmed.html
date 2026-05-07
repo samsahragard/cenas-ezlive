@@ -1,0 +1,36 @@
+{% extends "produce/base.html" %}
+{% block content %}
+
+{% if error %}
+<div class="result-box result-err">
+  <h2>⚠️ {{ error }}</h2>
+  <p>Order ID: <code>{{ order_id }}</code></p>
+</div>
+{% else %}
+<div class="result-box result-ok">
+  <h2>✅ Order confirmed and sent</h2>
+  <p>Order <code>{{ order["order_id"] }}</code> for <strong>{{ order["manager"] }}</strong> at <strong>{{ order["used_location"] }}</strong></p>
+  {% if order.get("default_location") and order["default_location"] != order["used_location"] %}
+  <p class="muted">(Override applied — {{ order["manager"] }}'s default is {{ order["default_location"] }}, sent as {{ order["used_location"] }})</p>
+  {% endif %}
+  <p>Delivery: {{ order["delivery_date"] }}</p>
+
+  <h3>Vendor sends</h3>
+  <ul>
+  {% for v in result["vendor_sends"] %}
+    <li>{{ v["vendor_label"] }} → <code>{{ v["to_addr"] }}</code> — total <strong>${{ "%.2f"|format(v["total"]) }}</strong> {% if v["ok"] %}✅{% else %}❌ {{ v.get("error","") }}{% endif %}</li>
+  {% endfor %}
+  </ul>
+  {% if result["errors"] %}
+  <h3 class="result-err">Errors</h3>
+  <ul>{% for e in result["errors"] %}<li>{{ e }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if result["manager_confirmation_at"] %}
+  <p class="muted">Manager confirmation email sent at {{ result["manager_confirmation_at"] }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<p><a href="{{ url_for('produce_order.index') }}">← Back to order guide</a></p>
+
+{% endblock %}

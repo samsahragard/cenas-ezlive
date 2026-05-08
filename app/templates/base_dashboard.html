@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Cenas Kitchen{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
 <div class="layout">
 
+  <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <aside class="sidebar">
     <div class="brand"><div class="brand-mark"></div></div>
 
@@ -49,6 +51,12 @@
     {% block topbar %}
     <div class="topbar">
       <div class="topbar-left">
+        <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Open navigation">
+          <span class="menu-toggle-bars">
+            <span></span><span></span><span></span>
+          </span>
+          <span class="menu-toggle-label">Menu</span>
+        </button>
         <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
         {% block page_subtitle %}{% endblock %}
       </div>

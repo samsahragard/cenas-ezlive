@@ -5,7 +5,7 @@
 {% block page_title %}Manager Dashboard{% endblock %}
 {% block page_subtitle %}
   {% if view == "login" %}
-    <p class="greeting-sub">Select your location and sign in.</p>
+    <p class="greeting-sub">Select your location.</p>
   {% else %}
     <p class="greeting-sub">
       <span class="location-badge">{{ location_label }}</span>
@@ -35,11 +35,7 @@
           <option value="corporate">Corporate (All Locations)</option>
         </select>
       </div>
-      <div class="login-field">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" placeholder="••••••" required autofocus>
-      </div>
-      <button type="submit" class="btn-login">Sign in</button>
+      <button type="submit" class="btn-login">Continue</button>
     </form>
   </div>
 

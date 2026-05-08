@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import os
 from flask import Blueprint, render_template, request, redirect, url_for, session
 from app.db import get_db
 from app.models import Driver, DriverLog
 
 manager = Blueprint("manager", __name__)
-
-LOCATION_PASSWORDS = {
-    "copperfield": os.getenv("MANAGER_PASSWORD_COPPERFIELD", ""),
-    "tomball": os.getenv("MANAGER_PASSWORD_TOMBALL", ""),
-    "corporate": os.getenv("CORPORATE_PASSWORD", ""),
-}
 
 LOCATION_LABELS = {
     "copperfield": "Copperfield",
@@ -32,15 +25,10 @@ def manager_login():
 @manager.route("/manager/verify", methods=["POST"])
 def manager_verify():
     location = request.form.get("location", "").strip().lower()
-    password = request.form.get("password", "").strip()
 
-    expected = LOCATION_PASSWORDS.get(location)
-    if not expected:
+    if location not in LOCATION_LABELS:
         return render_template("manager_logging.html", view="login",
                                error="Invalid location.")
-    if password != expected:
-        return render_template("manager_logging.html", view="login",
-                               error="Incorrect password.")
 
     session["manager_location"] = location
     return redirect(url_for("manager.manager_log"))

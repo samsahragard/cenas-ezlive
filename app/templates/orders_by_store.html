@@ -1,115 +1,32 @@
-<!-- templates/orders_by_store.html -->
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ location_label }} Orders — Cenas Kitchen</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <style>
-    .day-section {
-      margin: 1.25rem auto 2.5rem;
-      max-width: 1200px;
-      text-align: left;
-    }
-    .day-header {
-      font-size: 1.15rem;
-      font-weight: bold;
-      color: #A44A3F;
-      margin: 0 0 0.5rem;
-      padding-bottom: 0.4rem;
-      border-bottom: 2px solid #729B79;
-    }
-    .order-list-table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-      font-size: 0.92rem;
-    }
-    .order-list-table thead th {
-      background: #484041;
-      color: #f5f5f5;
-      padding: 0.5rem 0.6rem;
-      text-align: left;
-      font-weight: bold;
-      font-size: 0.82rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .order-list-table tbody td {
-      padding: 0.55rem 0.6rem;
-      border-bottom: 1px solid #eee;
-      vertical-align: top;
-    }
-    .order-list-table tbody tr:hover {
-      background: #f5f1ee;
-      cursor: pointer;
-    }
-    .order-list-table tbody tr.review-row td {
-      background: #fff8e1;
-    }
-    .order-list-table tbody tr.review-row:hover td {
-      background: #fff0c1;
-    }
-    .order-list-table .order-num {
-      font-weight: bold;
-      color: #A44A3F;
-      white-space: nowrap;
-    }
-    .order-list-table .deliver-at {
-      white-space: nowrap;
-      color: #555;
-    }
-    .order-list-table .pill {
-      display: inline-block;
-      padding: 0.15rem 0.55rem;
-      border-radius: 12px;
-      font-size: 0.72rem;
-      font-weight: bold;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-    .pill-ok { background: #d4edda; color: #155724; }
-    .pill-review { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
-    .all-row td {
-      background: #cdc5bc !important;
-      color: #2e2a2b;
-      font-weight: bold;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .all-row:hover td { background: #b8b0a8 !important; }
-    .empty-state {
-      text-align: center;
-      padding: 3rem 1rem;
-      color: #729B79;
-      font-weight: bold;
-    }
-  </style>
-</head>
-<body>
+{% extends "base_dashboard.html" %}
+{% set active = location %}
+{% block title %}{{ location_label }} Orders — Cenas Kitchen{% endblock %}
 
-  <nav>
-    <div class="nav-brand">Cenas Kitchen</div>
-    <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
-    <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/orders">Order Processor</a>
-      <a href="/manager">Manager Dashboard</a>
-      <a href="/driver">Driver Portal</a>
-      <a href="/review">Order Review</a>
+{% block page_title %}{{ location_label }} Orders{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">{{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries · today and upcoming</p>
+{% endblock %}
+{% block topbar_right %}
+  <a class="btn-portal" href="/orders">+ Process new PDFs</a>
+{% endblock %}
+
+{% block content %}
+{% if not groups %}
+  <div class="empty-state">
+    <p style="margin:0 0 12px;font-size:15px;color:#fff;">No processed orders for {{ location_label }} yet.</p>
+    <a class="btn-portal" href="/orders">Upload PDFs</a>
+  </div>
+{% endif %}
+
+{% for grp in groups %}
+  <section class="day-section">
+    <div class="day-header">
+      {{ grp.display }}
+      <span style="font-weight:500; color:var(--text-3); font-size:12px; margin-left:6px;">
+        ({{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }})
+      </span>
     </div>
-  </nav>
-
-  <h1>{{ location_label }} Orders</h1>
-
-  {% if not groups %}
-    <div class="empty-state">No processed orders for {{ location_label }} yet.<br>Upload PDFs at <a href="/orders">/orders</a>.</div>
-  {% endif %}
-
-  {% for grp in groups %}
-    <section class="day-section">
-      <div class="day-header">{{ grp.display }} <span style="font-weight:normal; color:#555; font-size:0.85rem;">({{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }})</span></div>
+    <div class="table-scroll">
       <table class="order-list-table">
         <thead>
           <tr>
@@ -128,10 +45,10 @@
           <tr class="{% if o.needs_review %}review-row{% endif %}" onclick="window.location='/orders/view/{{ o.external_order_id }}'">
             <td class="order-num">{{ o.external_order_id }}</td>
             <td class="deliver-at">{{ o.deliver_at or '' }}</td>
-            <td>{{ o.client or '' }}</td>
+            <td>{{ o.client or '—' }}</td>
             <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
-            <td>{{ o.delivery_address or '' }}</td>
-            <td>{{ o.reported_store or '' }}</td>
+            <td>{{ o.delivery_address or '—' }}</td>
+            <td>{{ o.reported_store or '—' }}</td>
             <td>{{ o.assigned_driver or '—' }}</td>
             <td>
               {% if o.needs_review %}
@@ -147,8 +64,7 @@
           </tr>
         </tbody>
       </table>
-    </section>
-  {% endfor %}
-
-</body>
-</html>
+    </div>
+  </section>
+{% endfor %}
+{% endblock %}

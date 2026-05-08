@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Cenas Kitchen{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark"></div></div>
+
+    <div class="nav-section">Today</div>
+    <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="nav-icon">▦</span>Dashboard</a>
+
+    <div class="nav-section">Operations</div>
+    <a class="nav-link {% if active == 'tomball' %}active{% endif %}" href="/orders/tomball"><span class="nav-icon">▤</span>Tomball</a>
+    <a class="nav-link {% if active == 'copperfield' %}active{% endif %}" href="/orders/copperfield"><span class="nav-icon">▤</span>Copperfield</a>
+    <a class="nav-link {% if active == 'processor' %}active{% endif %}" href="/orders"><span class="nav-icon">⌘</span>Order Processor</a>
+    <a class="nav-link {% if active == 'review' %}active{% endif %}" href="/review"><span class="nav-icon">✓</span>Review Queue</a>
+
+    <div class="nav-section">Vendor Orders</div>
+    <a class="nav-link {% if active == 'produce' %}active{% endif %}" href="/produce/"><span class="nav-icon">🥬</span>Produce</a>
+    <a class="nav-link disabled"><span class="nav-icon">○</span>Meat<span class="nav-soon">soon</span></a>
+    <a class="nav-link disabled"><span class="nav-icon">○</span>Dry Goods<span class="nav-soon">soon</span></a>
+
+    <div class="nav-section">People</div>
+    <a class="nav-link {% if active == 'manager' %}active{% endif %}" href="/manager"><span class="nav-icon">👥</span>Manager Dashboard</a>
+    <a class="nav-link {% if active == 'driver' %}active{% endif %}" href="/driver"><span class="nav-icon">👤</span>Driver Portal</a>
+    <a class="nav-link disabled"><span class="nav-icon">○</span>Labor<span class="nav-soon">soon</span></a>
+
+    <div class="nav-section">Insights</div>
+    <a class="nav-link disabled"><span class="nav-icon">📈</span>Sales<span class="nav-soon">soon</span></a>
+    <a class="nav-link disabled"><span class="nav-icon">🎯</span>Forecasts<span class="nav-soon">soon</span></a>
+
+    <div class="sidebar-footer">
+      <div class="avatar"></div>
+      <div>
+        <div class="avatar-name">Cenas Kitchen</div>
+        <div class="avatar-role">Operations</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    {% block topbar %}
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+        {% block page_subtitle %}{% endblock %}
+      </div>
+      <div class="topbar-right">
+        {% block topbar_right %}{% endblock %}
+      </div>
+    </div>
+    {% endblock %}
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<img class="wordmark" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen">
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,36 +1,26 @@
-<!-- templates/driver_viewing -->
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Driver Portal</title>
-  <link rel="stylesheet" href="../static/style.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
+{% extends "base_dashboard.html" %}
+{% set active = 'driver' %}
+{% block title %}Driver Portal — Cenas Kitchen{% endblock %}
 
-    <nav>
-      <div class="nav-brand">Cenas Kitchen</div>
-      <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
-      <div class="nav-links">
-        <a href="/">Home</a>
-        <a href="/orders">Order Processor</a>
-        <a href="/manager">Manager Dashboard</a>
-        <a href="/driver" class="active">Driver Portal</a>
-        <a href="/review">Order Review</a>
-    </div>
-  </nav>
-
-{% if view == "login" %}
-
-  <h1>Driver Portal</h1>
-  <h3>Select your location and name to view your logs</h3>
-
-  {% if error %}
-  <div class="banner banner-error">{{ error }}</div>
+{% block page_title %}Driver Portal{% endblock %}
+{% block page_subtitle %}
+  {% if view == "login" %}
+    <p class="greeting-sub">Select your location and name to view your delivery logs.</p>
+  {% else %}
+    <p class="greeting-sub">{{ driver.name }} · <span class="location-badge">{{ location_label }}</span></p>
   {% endif %}
+{% endblock %}
+{% block topbar_right %}
+  {% if view == "logs" %}
+  <form action="{{ url_for('driver.driver_logout') }}" method="POST" style="margin:0;">
+    <button type="submit" class="btn-logout">Sign out</button>
+  </form>
+  {% endif %}
+{% endblock %}
 
+{% block content %}
+{% if view == "login" %}
+  {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
   <div class="login-card">
     <form action="{{ url_for('driver.driver_verify') }}" method="POST">
       <div class="login-field">
@@ -45,22 +35,11 @@
         <label for="name">Name</label>
         <input type="text" id="name" name="name" placeholder="Your name" required autofocus>
       </div>
-      <button type="submit" class="btn-login">View My Logs</button>
+      <button type="submit" class="btn-login">View my logs</button>
     </form>
   </div>
 
 {% elif view == "logs" %}
-
-  <div class="driver-topbar">
-    <div>
-      <h1>My Logs</h1>
-      <h3>{{ driver.name }} — <span class="location-badge">{{ location_label }}</span></h3>
-    </div>
-    <form action="{{ url_for('driver.driver_logout') }}" method="POST">
-      <button type="submit" class="btn-logout">Sign Out</button>
-    </form>
-  </div>
-
   <div class="table-scroll">
     <table class="log-table log-table-view">
       <thead>
@@ -83,31 +62,24 @@
         {% if logs %}
           {% for log in logs %}
           <tr>
-            <td data-label="Date">{{ log.pickup_date }}</td>
-            <td data-label="Order Link">
-              {% if log.order_link %}
-              <a href="{{ log.order_link }}" target="_blank">{{ log.order_link }}</a>
-              {% else %}—{% endif %}
-            </td>
-            <td data-label="Expected Miles">{{ log.ex_miles if log.ex_miles is not none else '—' }}</td>
-            <td data-label="Verified Miles">{{ log.ex_miles_verified if log.ex_miles_verified is not none else '—' }}</td>
-            <td data-label="Bonus: On Time?">{% if log.on_time %}✓{% else %}—{% endif %}</td>
-            <td data-label="Bonus: Tracking?">{% if log.tracking %}✓{% else %}—{% endif %}</td>
-            <td data-label="Bonus: Picture?">{% if log.picture %}✓{% else %}—{% endif %}</td>
-            <td data-label="5★ Review">{% if log.five_star %}✓{% else %}—{% endif %}</td>
-            <td data-label="Notes">{{ log.notes or '' }}</td>
+            <td>{{ log.pickup_date }}</td>
+            <td>{% if log.order_link %}<a href="{{ log.order_link }}" target="_blank" style="color:var(--accent-soft);">{{ log.order_link }}</a>{% else %}—{% endif %}</td>
+            <td>{{ log.ex_miles if log.ex_miles is not none else '—' }}</td>
+            <td>{{ log.ex_miles_verified if log.ex_miles_verified is not none else '—' }}</td>
+            <td>{% if log.on_time %}✓{% else %}—{% endif %}</td>
+            <td>{% if log.tracking %}✓{% else %}—{% endif %}</td>
+            <td>{% if log.picture %}✓{% else %}—{% endif %}</td>
+            <td>{% if log.five_star %}✓{% else %}—{% endif %}</td>
+            <td>{{ log.notes or '' }}</td>
           </tr>
           {% endfor %}
         {% else %}
           <tr>
-            <td colspan="9" style="color:#999; font-style:italic;">No entries yet.</td>
+            <td colspan="9" style="color:var(--text-3); font-style:italic; text-align:center;">No entries yet.</td>
           </tr>
         {% endif %}
       </tbody>
     </table>
   </div>
-
 {% endif %}
-
-</body>
-</html>
+{% endblock %}

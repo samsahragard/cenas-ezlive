@@ -1,154 +1,130 @@
-  <!doctype html>
-  <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Cenas Kitchen — Review Order {{ order.external_order_id }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  </head>
-  <body>
-    <nav>
-      <div class="nav-brand">Cenas Kitchen</div>
-      <button class="nav-toggle"
-  onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu"
-   aria-expanded="false">&#9776;</button>
-      <div class="nav-links">
-        <a href="/">Home</a>
-        <a href="/orders">Order Processor</a>
-        <a href="/manager">Manager Dashboard</a>
-        <a href="/driver">Driver Portal</a>
-        <a href="/review" class="active">Order Review</a>
-      </div>
-    </nav>
+{% extends "base_dashboard.html" %}
+{% set active = 'review' %}
+{% block title %}Review {{ order.external_order_id }} — Cenas Kitchen{% endblock %}
 
-    <div style="text-align:left; margin-bottom:0.5rem;">
-      <a href="/review" style="color:#729B79; font-size:0.9rem;">&larr; Back to
-  Review Queue</a>
-    </div>
+{% block page_title %}Order #{{ order.external_order_id }}{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub"><a href="/review" style="color:var(--accent-soft);">← Back to Review Queue</a></p>
+{% endblock %}
 
-    <h1>Order #{{ order.external_order_id }}</h1>
-
-    {% if order.flags %}
-      <div class="review-banner" style="margin-bottom:1.5rem;">
-        <strong>Order-level flags:</strong>
-        <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.4rem;">
-          {% for flag in order.flags %}
-            {% if flag.startswith("UNKNOWN_STORE:") %}
-              <span class="flag-badge flag-badge-error">Store not recognized: {{ flag.split(":", 1)[1] }}</span>
-            {% elif flag.startswith("UNPARSED_DATE:") %}
-              <span class="flag-badge flag-badge-error">Date could not be parsed: {{ flag.split(":", 1)[1] }}</span>
-            {% elif flag.startswith("UNPARSED_TIME:") %}
-              <span class="flag-badge flag-badge-error">Time could not be parsed: {{ flag.split(":", 1)[1] }}</span>
-            {% elif flag == "UNKNOWN_ITEM" %}
-              <span class="flag-badge flag-badge-error">One or more items not in catalog</span>
-            {% else %}
-              <span class="flag-badge flag-badge-error">{{ flag }}</span>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-    {% elif order.needs_review %}
-      <div class="review-banner" style="margin-bottom:1.5rem;">
-        <strong>Gemini extraction confidence warning</strong> — review extracted values carefully.
-      </div>
-    {% endif %}
-
-    <!-- Order Metadata -->
-    <div class="review-card">
-      <h3 style="margin-top:0;">Order Details</h3>
-      <div class="review-meta-grid">
-        <div class="review-meta-item">
-          <span class="review-meta-label">Client</span>
-          <span>{{ order.client or '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Ask For</span>
-          <span>{{ order.upon_delivery_ask_for or '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Phone</span>
-          <span>{{ order.customer_phone or '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Date</span>
-          <span>{{ order.delivery_date or '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Deliver At</span>
-          <span>{{ order.deliver_at or '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Headcount</span>
-          <span>{{ order.headcount if order.headcount is not none else '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Store (Reported)</span>
-          <span>{{ order.reported_store or '—' }}</span>
-        </div>
-        <div class="review-meta-item">
-          <span class="review-meta-label">Origin Store ID</span>
-          <span>{{ order.origin_store_id or '—' }}</span>
-        </div>
-        <div class="review-meta-item" style="grid-column: 1 / -1;">
-          <span class="review-meta-label">Delivery Address</span>
-          <span>{{ order.delivery_address or '—' }}</span>
-        </div>
-        {% if order.delivery_instructions %}
-        <div class="review-meta-item" style="grid-column: 1 / -1;">
-          <span class="review-meta-label">Delivery Instructions</span>
-          <span>{{ order.delivery_instructions }}</span>
-        </div>
+{% block content %}
+{% if order.flags %}
+  <div class="review-banner">
+    <strong>Order-level flags:</strong>
+    <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+      {% for flag in order.flags %}
+        {% if flag.startswith("UNKNOWN_STORE:") %}
+          <span class="flag-badge flag-badge-error">Store not recognized: {{ flag.split(":", 1)[1] }}</span>
+        {% elif flag.startswith("UNPARSED_DATE:") %}
+          <span class="flag-badge flag-badge-error">Date could not be parsed: {{ flag.split(":", 1)[1] }}</span>
+        {% elif flag.startswith("UNPARSED_TIME:") %}
+          <span class="flag-badge flag-badge-error">Time could not be parsed: {{ flag.split(":", 1)[1] }}</span>
+        {% elif flag == "UNKNOWN_ITEM" %}
+          <span class="flag-badge flag-badge-error">One or more items not in catalog</span>
+        {% else %}
+          <span class="flag-badge flag-badge-error">{{ flag }}</span>
         {% endif %}
-      </div>
+      {% endfor %}
     </div>
+  </div>
+{% elif order.needs_review %}
+  <div class="review-banner">
+    <strong>Extraction confidence warning</strong> — review extracted values carefully.
+  </div>
+{% endif %}
 
-    <!-- Items Table -->
-    <div class="review-card" style="margin-top:1.5rem;">
-      <h3 style="margin-top:0;">Extracted Items ({{ items | length }})</h3>
-      <div class="table-scroll">
-        <table class="log-table">
-          <thead>
-            <tr class="group-header">
-              <th>Raw Alias (from PDF)</th>
-              <th>Matched Key</th>
-              <th>Qty</th>
-              <th>Package Type</th>
-              <th>Packaging</th>
-              <th>Choices</th>
-              <th>Flags</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in items %}
-            {% set has_flags = item.flags and item.flags | length > 0 %}
-            <tr {% if has_flags %}class="item-flagged-row"{% endif %}>
-              <td style="text-align:left;">{{ item.raw_alias or '—' }}</td>
-              <td>{{ item.item_key or '—' }}</td>
-              <td>{{ item.qty if item.qty is not none else '—' }}</td>
-              <td>{{ item.package_type or '—' }}</td>
-              <td>{{ item.packaging or '—' }}</td>
-              <td style="text-align:left; font-size:0.85rem;">
-                {% if item.choices %}
-                  {% for key, val in item.choices.items() %}
-                    {% if val and val != 'none' %}
-                      <div><strong>{{ key }}:</strong> {{ val }}</div>
-                    {% endif %}
-                  {% endfor %}
-                {% else %}
-                  —
+<!-- Order Metadata -->
+<div class="review-card">
+  <h3>Order Details</h3>
+  <div class="review-meta-grid">
+    <div class="review-meta-item">
+      <span class="review-meta-label">Client</span>
+      <span>{{ order.client or '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Ask For</span>
+      <span>{{ order.upon_delivery_ask_for or '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Phone</span>
+      <span>{{ order.customer_phone or '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Date</span>
+      <span>{{ order.delivery_date or '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Deliver At</span>
+      <span>{{ order.deliver_at or '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Headcount</span>
+      <span>{{ order.headcount if order.headcount is not none else '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Store (Reported)</span>
+      <span>{{ order.reported_store or '—' }}</span>
+    </div>
+    <div class="review-meta-item">
+      <span class="review-meta-label">Origin Store ID</span>
+      <span>{{ order.origin_store_id or '—' }}</span>
+    </div>
+    <div class="review-meta-item" style="grid-column: 1 / -1;">
+      <span class="review-meta-label">Delivery Address</span>
+      <span>{{ order.delivery_address or '—' }}</span>
+    </div>
+    {% if order.delivery_instructions %}
+    <div class="review-meta-item" style="grid-column: 1 / -1;">
+      <span class="review-meta-label">Delivery Instructions</span>
+      <span>{{ order.delivery_instructions }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Items Table -->
+<div class="review-card">
+  <h3>Extracted Items ({{ items | length }})</h3>
+  <div class="table-scroll" style="border:none; box-shadow:none; background:transparent;">
+    <table class="log-table">
+      <thead>
+        <tr class="group-header">
+          <th>Raw Alias (from PDF)</th>
+          <th>Matched Key</th>
+          <th>Qty</th>
+          <th>Package Type</th>
+          <th>Packaging</th>
+          <th>Choices</th>
+          <th>Flags</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        {% set has_flags = item.flags and item.flags | length > 0 %}
+        <tr {% if has_flags %}class="item-flagged-row"{% endif %}>
+          <td>{{ item.raw_alias or '—' }}</td>
+          <td>{{ item.item_key or '—' }}</td>
+          <td>{{ item.qty if item.qty is not none else '—' }}</td>
+          <td>{{ item.package_type or '—' }}</td>
+          <td>{{ item.packaging or '—' }}</td>
+          <td style="font-size:12px;">
+            {% if item.choices %}
+              {% for key, val in item.choices.items() %}
+                {% if val and val != 'none' %}
+                  <div><strong>{{ key }}:</strong> {{ val }}</div>
                 {% endif %}
-              </td>
-              <td>
-                {% for flag in (item.flags or []) %}
-                  <span class="flag-badge flag-badge-error">{{ flag }}</span>
-                {% endfor %}
-              </td>
-            </tr>
+              {% endfor %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% for flag in (item.flags or []) %}
+              <span class="flag-badge flag-badge-error">{{ flag }}</span>
             {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-  </body>
-  </html>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

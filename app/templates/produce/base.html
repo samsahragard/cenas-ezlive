@@ -1,28 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Cenas Kitchen Produce Order Guide{% endblock %}</title>
+{% extends "base_dashboard.html" %}
+{% set active = 'produce' %}
+{% block title %}{% block produce_title %}Cenas Kitchen Produce Order Guide{% endblock %}{% endblock %}
+{% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='produce/styles.css') }}">
-</head>
-<body>
-<header class="site-header">
-  <div class="container header-inner">
-    <h1>🥬 Cenas Kitchen</h1>
-    <span class="subtitle">Daily Produce Order Guide</span>
-    <a href="/" class="header-home-link">← Operations Home</a>
-  </div>
-</header>
-
-<main class="container main-content">
-{% block content %}{% endblock %}
-</main>
-
-<footer class="site-footer">
-  <div class="container">
-    Cenas Kitchen Internal Order System
-  </div>
-</footer>
-</body>
-</html>
+{% endblock %}
+{% block page_title %}Produce Order Guide{% endblock %}
+{% block page_subtitle %}{% block produce_subtitle %}{% endblock %}{% endblock %}
+{% block content %}{% block produce_content %}{% endblock %}{% endblock %}

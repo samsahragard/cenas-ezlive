@@ -1,178 +1,148 @@
-<!-- templates/ezcater/orders.html -->
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Cenas Kitchen Orders</title>
-  <link rel="stylesheet" href="../static/style.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <nav>
-    <div class="nav-brand">Cenas Kitchen</div>
-    <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
-    <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/orders" class="active">Order Processor</a>
-      <a href="/manager">Manager Dashboard</a>
-      <a href="/driver">Driver Portal</a>
-      <a href="/review">Order Review</a>
+{% extends "base_dashboard.html" %}
+{% set active = 'processor' %}
+{% block title %}Order Processor — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Order Processor{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Upload Catering PDF confirmations to generate kitchen prep sheets.</p>
+{% endblock %}
+
+{% block content %}
+<div class="upload-box">
+  <form method="POST" enctype="multipart/form-data" id="ordersForm">
+    <div class="toolbar">
+      <input type="file" name="pdfs" accept=".pdf" multiple required>
     </div>
-  </nav>
-  <h1>Cenas Kitchen Order Processor</h1>
-
-  <div class="upload-box">
-    <form method="POST" enctype="multipart/form-data" id="ordersForm">
-      <div class="toolbar">
-        <input type="file" name="pdfs" accept=".pdf" multiple required>
-      </div>
-        <div class="actions">
-          <button type="submit" formaction="/orders" name="submit_action" value="process">Process PDFs</button>
-          {% if xlsx_job_id %}
-            <a href="/download/job/{{ xlsx_job_id }}" class="btn-download">Download Excel</a>
-          {% else %}
-            <button type="button" class="btn-download" disabled>Download Excel</button>
-          {% endif %}
-          <label class="collapse-toggle">
-            <input type="checkbox" name="collapse_empty_rows" value="1"
-                      {% if collapse_empty_rows %}checked{% endif %}>
-          Collapse Empty Rows
-          </label>
-        </div>
-    </form>
-  </div>
-  {% if error %}
-    <div class="error-banner">{{ error }}</div>
-  {% endif %}
-
-  {% set review_orders = orders | selectattr("needs_review") | list %}
-  {% if review_orders %}
-    <div class="review-banner">
-      <strong>{{ review_orders | length }} order(s) need review:</strong>
-      <ul>
-        {% for o in review_orders %}
-        <li>
-          <strong>{{ o.order_id or "Unknown ID" }}</strong>:
-          {{ o.warnings | join(", ") }}
-        </li>
-        {% endfor %}
-      </ul>
+    <div class="actions">
+      <button type="submit" formaction="/orders" name="submit_action" value="process" class="btn-primary">Process PDFs</button>
+      {% if xlsx_job_id %}
+        <a href="/download/job/{{ xlsx_job_id }}" class="btn-download">Download Excel</a>
+      {% else %}
+        <button type="button" class="btn-download" disabled>Download Excel</button>
+      {% endif %}
+      <label class="collapse-toggle">
+        <input type="checkbox" name="collapse_empty_rows" value="1" {% if collapse_empty_rows %}checked{% endif %}>
+        Collapse empty rows
+      </label>
     </div>
-  {% endif %}
+  </form>
+</div>
 
-  {% if grids %}
-    <div class="tabs">
-      {% for view_name in ["master", "kitchen", "driver", "prep_expo"] %}
-        <a
-          class="tab {% if active_view == view_name %}active{% endif %}"
-          href="#"
-          onclick="showView('{{ view_name }}'); return false;"
-        >
-          {{ view_name.replace("_", " ").title() }}
-        </a>
+{% if error %}
+  <div class="error-banner">{{ error }}</div>
+{% endif %}
+
+{% set review_orders = orders | selectattr("needs_review") | list %}
+{% if review_orders %}
+  <div class="review-banner">
+    <strong>{{ review_orders | length }} order(s) need review:</strong>
+    <ul>
+      {% for o in review_orders %}
+      <li><strong>{{ o.order_id or "Unknown ID" }}</strong>: {{ o.warnings | join(", ") }}</li>
       {% endfor %}
-    </div>
-
-    {% for view_name, grid in grids.items() %}
-      <div class="grid-view" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
-        <div class="table-wrap">
-          <table>
-            <tbody>
-              {% set ns = namespace(last_section=None) %}
-              {% for row in grid.rows %}
-                {% if row.section != ns.last_section %}
-                  {% if row.section != "Header" %}
-                  <tr class="section-row">
-                    <td colspan="{{ grid.columns|length + 1 }}">{{ row.section }}</td>
-                  </tr>
-                  {% endif %}
-                  {% set ns.last_section = row.section %}
-                {% endif %}
-                <tr{% if row.key == "meta.order_id" %} class="bold-row"{% endif %}>
-                  <td>{{ row.label }}</td>
-                  {% for col in grid.columns %}
-                    {% if col["order_id"] == "Total" %}
-                      <td class="total-col">{{ col["values"].get(row.key, "") }}</td>
-                    {% else %}
-                      <td>{{ col["values"].get(row.key, "") }}</td>
-                    {% endif %}
-                  {% endfor %}
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    {% endfor %}
-
-    </form>
-  {% endif %}
-
-  <div id="processing-overlay">
-    <div class="spinner"></div>
-    <p id="processing-msg">Processing PDFs...</p>
+    </ul>
   </div>
-  
-  <script>
-    function showView(viewName) {
-      document.querySelectorAll(".grid-view").forEach(el => {
-        el.style.display = "none";
-      });
+{% endif %}
 
-      const active = document.getElementById("view-" + viewName);
-      if (active) active.style.display = "block";
+{% if grids %}
+  <div class="tabs">
+    {% for view_name in ["master", "kitchen", "driver", "prep_expo"] %}
+      <a class="tab {% if active_view == view_name %}active{% endif %}"
+         href="#" onclick="showView('{{ view_name }}'); return false;">
+        {{ view_name.replace("_", " ").title() }}
+      </a>
+    {% endfor %}
+  </div>
 
-      document.querySelectorAll(".tab").forEach(tab => {
-        tab.classList.remove("active");
-      });
+  {% for view_name, grid in grids.items() %}
+    <div class="grid-view" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
+      <div class="table-wrap">
+        <table>
+          <tbody>
+            {% set ns = namespace(last_section=None) %}
+            {% for row in grid.rows %}
+              {% if row.section != ns.last_section %}
+                {% if row.section != "Header" %}
+                <tr class="section-row">
+                  <td colspan="{{ grid.columns|length + 1 }}">{{ row.section }}</td>
+                </tr>
+                {% endif %}
+                {% set ns.last_section = row.section %}
+              {% endif %}
+              <tr{% if row.key == "meta.order_id" %} class="bold-row"{% endif %}>
+                <td>{{ row.label }}</td>
+                {% for col in grid.columns %}
+                  {% if col["order_id"] == "Total" %}
+                    <td class="total-col">{{ col["values"].get(row.key, "") }}</td>
+                  {% else %}
+                    <td>{{ col["values"].get(row.key, "") }}</td>
+                  {% endif %}
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+{% endif %}
 
-      const clicked = Array.from(document.querySelectorAll(".tab"))
-        .find(tab => tab.textContent.trim().toLowerCase() === viewName.replace("_", " "));
-      if (clicked) clicked.classList.add("active");
+<div id="processing-overlay">
+  <div class="spinner"></div>
+  <p id="processing-msg">Processing PDFs...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function showView(viewName) {
+    document.querySelectorAll(".grid-view").forEach(el => { el.style.display = "none"; });
+    const active = document.getElementById("view-" + viewName);
+    if (active) active.style.display = "block";
+    document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+    const clicked = Array.from(document.querySelectorAll(".tab"))
+      .find(tab => tab.textContent.trim().toLowerCase() === viewName.replace("_", " "));
+    if (clicked) clicked.classList.add("active");
+  }
+
+  document.getElementById("ordersForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const overlay = document.getElementById("processing-overlay");
+    const msg = document.getElementById("processing-msg");
+    overlay.classList.add("active");
+
+    let jobId;
+    try {
+      const res = await fetch("/orders", { method: "POST", body: new FormData(this) });
+      const data = await res.json();
+      jobId = data.job_id;
+      if (!jobId) throw new Error(data.error || "No job ID returned");
+    } catch (err) {
+      overlay.classList.remove("active");
+      alert("Upload failed: " + err.message);
+      return;
     }
 
-    document.getElementById("ordersForm").addEventListener("submit", async function(e) {
-      e.preventDefault();
-
-      const overlay = document.getElementById("processing-overlay");
-      const msg = document.getElementById("processing-msg");
-      overlay.classList.add("active");
-
-      let jobId;
+    async function poll() {
       try {
-        const res = await fetch("/orders", { method: "POST", body: new FormData(this) });
+        const res = await fetch(`/orders/status/${jobId}/poll`);
         const data = await res.json();
-        jobId = data.job_id;
-        if (!jobId) throw new Error(data.error || "No job ID returned");
-      } catch (err) {
-        overlay.classList.remove("active");
-        alert("Upload failed: " + err.message);
-        return;
-      }
-
-      async function poll() {
-        try {
-          const res = await fetch(`/orders/status/${jobId}/poll`);
-          const data = await res.json();
-
-          if (data.status === "done") {
-            msg.textContent = `Done! ${data.success_count} succeeded, ${data.failure_count} failed. Loading results…`;
-            setTimeout(() => window.location.href = `/orders/result/${jobId}`, 600);
-            return;
-          }
-          if (data.status === "failed") {
-            overlay.classList.remove("active");
-            alert("Processing failed: " + (data.error || "Unknown error"));
-            return;
-          }
-          setTimeout(poll, 2000);
-        } catch {
-          setTimeout(poll, 3000);
+        if (data.status === "done") {
+          msg.textContent = `Done! ${data.success_count} succeeded, ${data.failure_count} failed. Loading results…`;
+          setTimeout(() => window.location.href = `/orders/result/${jobId}`, 600);
+          return;
         }
+        if (data.status === "failed") {
+          overlay.classList.remove("active");
+          alert("Processing failed: " + (data.error || "Unknown error"));
+          return;
+        }
+        setTimeout(poll, 2000);
+      } catch {
+        setTimeout(poll, 3000);
       }
-
-      poll();
-    });
-  </script>
-</body>
-</html>
+    }
+    poll();
+  });
+</script>
+{% endblock %}

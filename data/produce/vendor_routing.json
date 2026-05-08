@@ -6,7 +6,7 @@
     "jluna":    {"to": "sam@cenaskitchen.com",    "label": "J. Luna Produce Co. (test->Sam)"}
   },
   "production": {
-    "alvarado": {"to": "losrojas1212@icloud.com", "label": "Alvarado's Mexican Produce"},
-    "jluna":    {"to": "jlunaproduce@aol.com",    "label": "J. Luna Produce Co."}
+    "alvarado": {"to": "C.alvarado@alvaradosmexicanproducts.com", "label": "Alvarado's Mexican Produce"},
+    "jluna":    {"to": "jlunaproduce@aol.com",                    "label": "J. Luna Produce Co."}
   }
 }

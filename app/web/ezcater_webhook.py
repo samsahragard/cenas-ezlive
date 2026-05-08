@@ -73,16 +73,17 @@ CATERER_UUID_TO_STORE = {
 }
 
 # "Driver" = label that tells managers which physical kitchen preps the order.
-# Stores 1 + 3 are prepped at Copperfield kitchen ("Sam CK #1" label).
-# Stores 2 + 4 are prepped at Tomball kitchen ("Masood CK #2" label).
+# Stores 1 + 3 are prepped at Copperfield kitchen — Masood works there ("Masood CK #1").
+# Stores 2 + 4 are prepped at Tomball kitchen — Sam works there ("Sam CK #2").
 # Stores 3 + 4 are ghost-storefront listings on ezCater (no physical kitchen).
-SAM    = {"id": "sam-ck-1",    "firstName": "Sam",    "lastName": "CK #1",
+# The "#1" / "#2" suffix matches the kitchen number, not the person's seniority.
+SAM    = {"id": "sam-ck-2",    "firstName": "Sam",    "lastName": "CK #2",
           "phone": "+17133661208", "providerSource": "IN_HOUSE"}
-MASOOD = {"id": "masood-ck-2", "firstName": "Masood", "lastName": "CK #2",
+MASOOD = {"id": "masood-ck-1", "firstName": "Masood", "lastName": "CK #1",
           "phone": "+18322832219", "providerSource": "IN_HOUSE"}
 DRIVER_FOR_STORE = {
-    "store_1": SAM,    "store_3": SAM,     # Copperfield kitchen
-    "store_2": MASOOD, "store_4": MASOOD,  # Tomball kitchen
+    "store_1": MASOOD, "store_3": MASOOD,  # Copperfield kitchen (Cenas Kitchen #1)
+    "store_2": SAM,    "store_4": SAM,     # Tomball kitchen   (Cenas Kitchen #2)
 }
 
 # Sam's chat. (Could read from openclaw.json allowFrom; hardcoded for clarity.)

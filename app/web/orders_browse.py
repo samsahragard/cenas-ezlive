@@ -173,9 +173,18 @@ def _ez_token_unassign() -> str:
 
 # Mirror the mapping in ezcater_webhook.py so we can derive which courier
 # was auto-assigned without storing that on the Order row.
+# Sam handles Tomball (#2). Masood handles Copperfield (#1).
 _COURIER_ID_FOR_STORE = {
-    "store_1": "sam-ck-1",     "store_3": "sam-ck-1",      # Copperfield kitchen
-    "store_2": "masood-ck-2",  "store_4": "masood-ck-2",   # Tomball kitchen
+    "store_1": "masood-ck-1", "store_3": "masood-ck-1",  # Copperfield kitchen
+    "store_2": "sam-ck-2",    "store_4": "sam-ck-2",     # Tomball kitchen
+}
+
+# Pre-swap orders (ingested before 2026-05-08) had the inverted IDs assigned.
+# When unassigning we try the new id first, then fall back to the old one
+# if the new id wasn't actually the courier on that delivery.
+_LEGACY_COURIER_ID_FOR_STORE = {
+    "store_1": "sam-ck-1",     "store_3": "sam-ck-1",
+    "store_2": "masood-ck-2",  "store_4": "masood-ck-2",
 }
 
 
@@ -198,11 +207,46 @@ def _ezcater_gql(query: str, variables: dict | None = None) -> dict:
         return {"_http_error": e.code, "_body": e.read().decode(errors="replace")[:300]}
 
 
+_UNASSIGN_MUTATION = """
+mutation Unassign($input: CourierUnassignInput!) {
+  courierUnassign(input: $input) {
+    delivery { id }
+    userErrors {
+      __typename
+      ... on UserError { message }
+      ... on DeliveryValidationError { message }
+    }
+  }
+}
+"""
+
+
+def _try_unassign(delivery_id: str, courier_id: str) -> tuple[bool, str]:
+    """Returns (ok, error_msg). ok=True means courierUnassign returned no errors."""
+    res = _ezcater_gql(_UNASSIGN_MUTATION,
+                       {"input": {"deliveryId": delivery_id, "courierId": courier_id}})
+    if "_http_error" in res:
+        return False, f"ezCater API HTTP {res['_http_error']}: {res.get('_body', '')[:120]}"
+    if "errors" in res:
+        msgs = "; ".join(e.get("message", "?") for e in res["errors"])[:300]
+        return False, f"ezCater error: {msgs}"
+    payload = (res.get("data") or {}).get("courierUnassign") or {}
+    user_errors = payload.get("userErrors") or []
+    if user_errors:
+        msgs = "; ".join(e.get("message", "?") for e in user_errors if isinstance(e, dict))[:300]
+        return False, f"unassign rejected: {msgs}"
+    return True, ""
+
+
 @browse.route("/orders/view/<external_order_id>/unassign-courier", methods=["POST"])
 def unassign_courier(external_order_id: str):
     """Free up the ezCater portal driver field so a manager can manually
-    assign a real driver. Calls courierUnassign on the auto-assigned
-    in-house courier (Sam CK #1 or Masood CK #2)."""
+    assign a real driver. Calls courierUnassign on the in-house courier
+    auto-assigned by ezcater_webhook.py.
+
+    Tries the new courier id (sam-ck-2 / masood-ck-1) first, then falls
+    back to the legacy id (sam-ck-1 / masood-ck-2) if the order pre-dates
+    the 2026-05-08 swap."""
     db = next(get_db())
     try:
         order = db.query(Order).filter_by(external_order_id=external_order_id).first()
@@ -215,43 +259,30 @@ def unassign_courier(external_order_id: str):
                           "Either it pre-dates the API ingest pipeline or wasn't "
                           "auto-assigned. Use the ezCater portal directly.")
             }), 400
-        courier_id = _COURIER_ID_FOR_STORE.get(order.origin_store_id)
-        if not courier_id:
+        primary = _COURIER_ID_FOR_STORE.get(order.origin_store_id)
+        legacy = _LEGACY_COURIER_ID_FOR_STORE.get(order.origin_store_id)
+        if not primary:
             return jsonify({
                 "ok": False,
                 "error": f"unknown origin_store_id={order.origin_store_id!r}"
             }), 400
 
-        res = _ezcater_gql("""
-        mutation Unassign($input: CourierUnassignInput!) {
-          courierUnassign(input: $input) {
-            delivery { id }
-            userErrors {
-              __typename
-              ... on UserError { message }
-              ... on DeliveryValidationError { message }
-            }
-          }
-        }
-        """, {"input": {"deliveryId": order.external_delivery_id, "courierId": courier_id}})
-
-        if "_http_error" in res:
-            logger.warning("unassign HTTP %s: %s", res["_http_error"], res.get("_body", "")[:200])
-            return jsonify({"ok": False, "error": f"ezCater API HTTP {res['_http_error']}"}), 502
-        if "errors" in res:
-            msgs = "; ".join(e.get("message", "?") for e in res["errors"])[:300]
-            return jsonify({"ok": False, "error": f"ezCater error: {msgs}"}), 502
-        payload = (res.get("data") or {}).get("courierUnassign") or {}
-        user_errors = payload.get("userErrors") or []
-        if user_errors:
-            msgs = "; ".join(e.get("message", "?") for e in user_errors if isinstance(e, dict))[:300]
-            return jsonify({"ok": False, "error": f"unassign rejected: {msgs}"}), 502
+        ok, err = _try_unassign(order.external_delivery_id, primary)
+        unassigned = primary
+        if not ok and legacy and legacy != primary:
+            logger.info("primary unassign of %s failed (%s); retrying with legacy id %s",
+                        primary, err[:80], legacy)
+            ok, err = _try_unassign(order.external_delivery_id, legacy)
+            if ok:
+                unassigned = legacy
+        if not ok:
+            return jsonify({"ok": False, "error": err}), 502
 
         logger.info("unassigned courier %s from delivery %s (order %s)",
-                    courier_id, order.external_delivery_id, external_order_id)
+                    unassigned, order.external_delivery_id, external_order_id)
         return jsonify({
             "ok": True,
-            "unassigned": courier_id,
+            "unassigned": unassigned,
             "delivery_id": order.external_delivery_id,
             "note": "Refresh the ezCater portal — the driver field should now be open for manual assignment.",
         })

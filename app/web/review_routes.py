@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from flask import Blueprint, render_template
 
 from app.db import get_db
@@ -11,9 +13,13 @@ review = Blueprint("review", __name__)
 def review_queue():
     db = next(get_db())
     try:
+        # Rolling window: only show today's + upcoming orders. Orders with
+        # delivery_date in the past are archived from the review queue.
+        today_iso = datetime.now().strftime("%Y-%m-%d")
         orders = (
             db.query(Order)
-            .order_by(Order.delivery_date.desc(), Order.deliver_at)
+            .filter(Order.delivery_date >= today_iso)
+            .order_by(Order.delivery_date.asc(), Order.deliver_at)
             .all()
         )
         return render_template("review_queue.html", orders=orders)

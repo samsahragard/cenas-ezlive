@@ -90,7 +90,158 @@ def _evict_stale_jobs():
 
 @cater.route("/", methods=["GET"])
 def home():
-    return render_template("home.html")
+    """Manager dashboard. Pulls today's deliveries + attention items live
+    from the DB so a manager opening the site sees the agenda first, not
+    just navigation."""
+    from datetime import datetime
+    from pathlib import Path
+    import json
+    from app.db import get_db
+    from app.models import Order
+
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+
+    db = next(get_db())
+    try:
+        # Today's deliveries (non-cancelled), in chronological order.
+        today_orders = (
+            db.query(Order)
+            .filter(Order.delivery_date == today_iso)
+            .filter(Order.status != "cancelled")
+            .order_by(Order.deliver_at)
+            .all()
+        )
+
+        # Future + today orders that need review (capped at 5 for the list).
+        review_orders = (
+            db.query(Order)
+            .filter(Order.delivery_date >= today_iso)
+            .filter(Order.status != "cancelled")
+            .filter(Order.needs_review.is_(True))
+            .order_by(Order.delivery_date, Order.deliver_at)
+            .all()
+        )
+
+        # KPI counts
+        tomball_today = sum(1 for o in today_orders if (o.origin_store_id or "") in ("store_2", "store_4"))
+        copperfield_today = len(today_orders) - tomball_today
+        heads_today = sum((o.headcount or 0) for o in today_orders)
+
+        # Annotate each today order with location label + a status badge.
+        decorated_today = []
+        for o in today_orders:
+            origin = o.origin_store_id or ""
+            loc = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
+            if o.needs_review:
+                badge_class, badge_text = "badge-warn", "Needs review"
+            elif not (o.client and o.client.strip()):
+                badge_class, badge_text = "badge-warn", "No customer"
+            elif o.assigned_driver:
+                badge_class, badge_text = "badge-good", "On track"
+            else:
+                badge_class, badge_text = "badge-info", "Unassigned"
+            sub_bits = []
+            if o.assigned_driver:
+                sub_bits.append(f"Driver: {o.assigned_driver}")
+            if o.headcount:
+                sub_bits.append(f"{o.headcount} heads")
+            if o.setup_required:
+                sub_bits.append("Setup required")
+            decorated_today.append({
+                "order_id": o.external_order_id,
+                "time": o.deliver_at or "—",
+                "name": (o.client or "").strip() or f"{loc} delivery",
+                "sub": " · ".join(sub_bits),
+                "location": loc,
+                "badge_class": badge_class,
+                "badge_text": badge_text,
+            })
+
+        # Attention list: needs-review first, then orders today with no client.
+        attention = []
+        for o in review_orders[:3]:
+            origin = o.origin_store_id or ""
+            loc = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
+            attention.append({
+                "kind": "warn",
+                "text": f"{o.external_order_id} flagged for review",
+                "meta": f"{loc} · {o.delivery_date} {o.deliver_at or ''} · open the order page",
+            })
+        # Today's orders missing a customer name
+        for o in today_orders:
+            if not (o.client and o.client.strip()):
+                origin = o.origin_store_id or ""
+                loc = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
+                attention.append({
+                    "kind": "warn",
+                    "text": f"{o.external_order_id} missing customer name",
+                    "meta": f"{loc} · {o.deliver_at or 'time TBD'} · review before kitchen prep",
+                })
+                if len(attention) >= 5:
+                    break
+
+    finally:
+        db.close()
+
+    # Produce winners + last-refresh
+    produce_state_dir = Path(os.getenv("PRODUCE_STATE_DIR")
+                             or (Path(__file__).resolve().parents[2] / "instance" / "produce"))
+    alvarado = {}
+    jluna = {}
+    try:
+        af = produce_state_dir / "alvarado.json"
+        if af.exists():
+            alvarado = json.loads(af.read_text(encoding="utf-8"))
+        jf = produce_state_dir / "jluna.json"
+        if jf.exists():
+            jluna = json.loads(jf.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("could not read produce state for dashboard")
+    produce_winners = len({(it.get("canonical_name"), it.get("canonical_size"))
+                           for it in (alvarado.get("items") or []) + (jluna.get("items") or [])
+                           if it.get("canonical_name")})
+    last_parsed = max(filter(None, [alvarado.get("parsed_at"), jluna.get("parsed_at")]),
+                      default=None)
+    last_parsed_short = ""
+    if last_parsed:
+        try:
+            dt = datetime.fromisoformat(last_parsed.replace("Z", "+00:00"))
+            last_parsed_short = dt.strftime("%b %d, %I:%M %p").replace(" 0", " ").lstrip("0")
+        except Exception:
+            last_parsed_short = last_parsed[:16]
+
+    # Stale-produce attention item
+    if last_parsed:
+        try:
+            from datetime import timezone
+            dt = datetime.fromisoformat(last_parsed.replace("Z", "+00:00"))
+            now_utc = datetime.now(timezone.utc)
+            age_days = (now_utc - dt).days
+            if age_days >= 5:
+                attention.append({
+                    "kind": "info",
+                    "text": f"Produce prices are {age_days} days old",
+                    "meta": "Vendor email overdue — site shows stale data",
+                })
+        except Exception:
+            pass
+
+    _now = datetime.now()
+    today_long = _now.strftime("%A, %B %d").replace(" 0", " ")
+
+    return render_template(
+        "home.html",
+        today_iso=today_iso,
+        today_long=today_long,
+        today_orders=decorated_today,
+        attention=attention[:5],
+        tomball_today=tomball_today,
+        copperfield_today=copperfield_today,
+        heads_today=heads_today,
+        review_count=len(review_orders),
+        produce_winners=produce_winners,
+        produce_last_refresh=last_parsed_short,
+    )
 
 
 @cater.route("/orders", methods=["GET", "POST"])

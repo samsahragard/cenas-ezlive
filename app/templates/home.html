@@ -1,97 +1,264 @@
-<!-- templates/home -->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cenas Kitchen — Operations</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>Cenas Kitchen — Manager Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
 </head>
-<body class="home-body">
+<body>
+<div class="layout">
 
-  <nav>
-    <div class="nav-brand">Cenas Kitchen</div>
-    <button class="nav-toggle" onclick="this.closest('nav').classList.toggle('nav-open')" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
-    <div class="nav-links">
-      <a href="/" class="active">Home</a>
-      <a href="/orders">Order Processor</a>
-      <a href="/manager">Manager Dashboard</a>
-      <a href="/driver">Driver Portal</a>
-      <a href="/review">Order Review</a>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark"></div></div>
+
+    <div class="nav-section">Today</div>
+    <a class="nav-link active" href="/"><span class="nav-icon">▦</span>Dashboard</a>
+
+    <div class="nav-section">Operations</div>
+    <a class="nav-link" href="/orders/tomball"><span class="nav-icon">▤</span>Tomball</a>
+    <a class="nav-link" href="/orders/copperfield"><span class="nav-icon">▤</span>Copperfield</a>
+    <a class="nav-link" href="/orders"><span class="nav-icon">⌘</span>Order Processor</a>
+    <a class="nav-link" href="/review"><span class="nav-icon">✓</span>Review Queue</a>
+
+    <div class="nav-section">Vendor Orders</div>
+    <a class="nav-link" href="/produce/"><span class="nav-icon">🥬</span>Produce</a>
+    <a class="nav-link disabled"><span class="nav-icon">○</span>Meat<span class="nav-soon">soon</span></a>
+    <a class="nav-link disabled"><span class="nav-icon">○</span>Dry Goods<span class="nav-soon">soon</span></a>
+
+    <div class="nav-section">People</div>
+    <a class="nav-link" href="/manager"><span class="nav-icon">👥</span>Manager Dashboard</a>
+    <a class="nav-link" href="/driver"><span class="nav-icon">👤</span>Driver Portal</a>
+    <a class="nav-link disabled"><span class="nav-icon">○</span>Labor<span class="nav-soon">soon</span></a>
+
+    <div class="nav-section">Insights</div>
+    <a class="nav-link disabled"><span class="nav-icon">📈</span>Sales<span class="nav-soon">soon</span></a>
+    <a class="nav-link disabled"><span class="nav-icon">🎯</span>Forecasts<span class="nav-soon">soon</span></a>
+
+    <div class="sidebar-footer">
+      <div class="avatar"></div>
+      <div>
+        <div class="avatar-name">Cenas Kitchen</div>
+        <div class="avatar-role">Operations</div>
+      </div>
     </div>
-  </nav>
+  </aside>
 
-  <main class="home-main">
+  <!-- Main -->
+  <main class="main">
 
-    <section class="hero">
-      <p class="hero-eyebrow">Internal Operations Platform</p>
-      <h1 class="hero-title">Cenas Kitchen</h1>
-      <p class="hero-sub">Catering order processing and driver performance management — all in one place.</p>
-    </section>
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1 class="greeting">Welcome back <span class="wave">👋</span></h1>
+        <p class="greeting-sub">
+          {{ today_long }} · {{ today_orders|length }} deliveries today
+          {% if today_orders %}({{ tomball_today }} Tomball · {{ copperfield_today }} Copperfield){% endif %}
+        </p>
+      </div>
+      <div class="topbar-right">
+        <input class="search" placeholder="Search orders, customers, items…" />
+        <button class="icon-btn">🔔{% if attention %}<span class="dot"></span>{% endif %}</button>
+      </div>
+    </div>
 
-    <section class="portal-cards">
+    <!-- KPI strip -->
+    <div class="kpis">
+      <div class="kpi kpi-1">
+        <div class="kpi-icon">📦</div>
+        <div class="kpi-value">{{ today_orders|length }}</div>
+        <div class="kpi-label">Today's deliveries</div>
+        <div class="kpi-meta">{{ tomball_today }} Tomball · {{ copperfield_today }} Copperfield</div>
+      </div>
+      <div class="kpi kpi-2">
+        <div class="kpi-icon">👥</div>
+        <div class="kpi-value">{{ heads_today }}</div>
+        <div class="kpi-label">Heads to feed</div>
+        <div class="kpi-meta">{% if today_orders %}avg {{ (heads_today / today_orders|length)|round(0, 'floor')|int }}/order{% else %}—{% endif %}</div>
+      </div>
+      <div class="kpi kpi-3">
+        <div class="kpi-icon">⚠</div>
+        <div class="kpi-value">{{ review_count }}</div>
+        <div class="kpi-label">Need review</div>
+        <div class="kpi-meta">today + upcoming</div>
+      </div>
+      <div class="kpi kpi-4">
+        <div class="kpi-icon">🥬</div>
+        <div class="kpi-value">{{ produce_winners }}</div>
+        <div class="kpi-label">Produce winners</div>
+        <div class="kpi-meta">{% if produce_last_refresh %}refreshed {{ produce_last_refresh }}{% else %}no data yet{% endif %}</div>
+      </div>
+    </div>
 
-      <div class="portal-card">
-        <div class="portal-card-accent"></div>
-        <div class="portal-card-body">
-          <h2>Order Processor</h2>
-          <p>Upload Catering PDF confirmations to generate kitchen prep sheets broken down by item, quantity, and packaging. Export directly to Excel.</p>
-          <a href="/orders" class="btn-portal">Open Processor</a>
+    <!-- Charts row (placeholders until sales data is wired) -->
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Sales mix</div>
+            <div class="card-sub">coming soon — sales tracking</div>
+          </div>
+        </div>
+        <div class="donut-wrap">
+          <div class="donut"></div>
+          <div class="donut-legend">
+            <div class="donut-row"><span class="swatch" style="background:var(--good)"></span>Catering<span class="pct">—</span></div>
+            <div class="donut-row"><span class="swatch" style="background:var(--rose)"></span>Walk-in<span class="pct">—</span></div>
+            <div class="donut-row"><span class="swatch" style="background:var(--accent)"></span>Delivery<span class="pct">—</span></div>
+            <div class="donut-row"><span class="swatch" style="background:var(--violet)"></span>Other<span class="pct">—</span></div>
+          </div>
         </div>
       </div>
 
-      <div class="portal-card">
-        <div class="portal-card-accent"></div>
-        <div class="portal-card-body">
-          <h2>Manager Dashboard</h2>
-          <p>Log and review driver delivery performance by location. Track mileage, bonuses, and five-star ratings. Manage your driver roster.</p>
-          <a href="/manager" class="btn-portal">Open Dashboard</a>
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Orders this week</div>
+            <div class="card-sub">coming soon — historical chart</div>
+          </div>
+        </div>
+        <div class="bars">
+          <div class="bar-col"><div class="bar" data-v="—" style="height:20%"></div><div class="label">Mon</div></div>
+          <div class="bar-col"><div class="bar" data-v="—" style="height:25%"></div><div class="label">Tue</div></div>
+          <div class="bar-col"><div class="bar" data-v="—" style="height:30%"></div><div class="label">Wed</div></div>
+          <div class="bar-col"><div class="bar" data-v="—" style="height:28%"></div><div class="label">Thu</div></div>
+          <div class="bar-col"><div class="bar" data-v="—" style="height:35%"></div><div class="label">Fri</div></div>
+          <div class="bar-col"><div class="bar" data-v="—" style="height:18%"></div><div class="label">Sat</div></div>
+          <div class="bar-col"><div class="bar" data-v="—" style="height:12%"></div><div class="label">Sun</div></div>
         </div>
       </div>
+    </div>
 
-      <div class="portal-card">
-        <div class="portal-card-accent"></div>
-        <div class="portal-card-body">
-          <h2>Driver Portal</h2>
-          <p>Drivers: select your location and name to view your personal delivery log and performance history.</p>
-          <a href="/driver" class="btn-portal">View My Logs</a>
+    <!-- Today's deliveries + attention -->
+    <div class="agenda-grid">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Today's deliveries</div>
+          <div>
+            <a class="card-link" href="/orders/tomball">Tomball →</a>
+            &nbsp;&nbsp;
+            <a class="card-link" href="/orders/copperfield">Copperfield →</a>
+          </div>
         </div>
+        {% if today_orders %}
+          {% for o in today_orders %}
+          <a class="today-row" href="/orders/view/{{ o.order_id }}" style="text-decoration:none">
+            <span class="today-time">{{ o.time }}</span>
+            <span class="today-name">{{ o.name }} {% if o.order_id %}<span class="sub">{{ o.order_id }}{% if o.sub %} · {{ o.sub }}{% endif %}</span>{% else %}<span class="sub">{{ o.sub }}</span>{% endif %}</span>
+            <span class="today-loc">{{ o.location }}</span>
+            <span><span class="badge {{ o.badge_class }}">{{ o.badge_text }}</span></span>
+          </a>
+          {% endfor %}
+        {% else %}
+          <div class="today-empty">No deliveries today.</div>
+        {% endif %}
       </div>
 
-    </section>
-
-    <section class="portal-cards" style="margin-top: 1.5rem;">
-
-      <div class="portal-card">
-        <div class="portal-card-accent"></div>
-        <div class="portal-card-body">
-          <h2>Tomball Orders</h2>
-          <p>Browse processed catering orders for the Tomball + Spring locations, grouped by date. Click any order to re-open its kitchen prep sheets, or open the day's combined view.</p>
-          <a href="/orders/tomball" class="btn-portal">Open Tomball Orders</a>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Needs attention</div>
+          <span class="card-sub">{{ attention|length }}</span>
         </div>
+        {% if attention %}
+          {% for a in attention %}
+          <div class="attention-row">
+            <div class="attention-dot {% if a.kind == 'info' %}info{% endif %}"></div>
+            <div class="attention-text">
+              {{ a.text }}
+              <span class="meta">{{ a.meta }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="attention-empty">All clear ✓</div>
+        {% endif %}
       </div>
+    </div>
 
-      <div class="portal-card">
-        <div class="portal-card-accent"></div>
-        <div class="portal-card-body">
-          <h2>Copperfield Orders</h2>
-          <p>Browse processed catering orders for the Copperfield + Houston Westheimer locations, grouped by date. Click any order to re-open its kitchen prep sheets, or open the day's combined view.</p>
-          <a href="/orders/copperfield" class="btn-portal">Open Copperfield Orders</a>
+    <!-- Section cards -->
+    <div class="section-title">Operations</div>
+    <div class="sections-grid">
+      <a class="section-card" href="/orders/tomball">
+        <div class="section-card-head">
+          <div class="section-icon">▤</div>
+          <div class="section-card-title">Tomball Orders</div>
         </div>
-      </div>
-
-      <div class="portal-card">
-        <div class="portal-card-accent"></div>
-        <div class="portal-card-body">
-          <h2>Produce Order</h2>
-          <p>Daily produce order guide. Managers see the cheaper vendor's price per item and submit a cart — vendor emails fire automatically. Prices auto-update from Alvarado &amp; J. Luna pricing emails to <code>orders@</code>.</p>
-          <a href="/produce/" class="btn-portal">Open Produce Order</a>
+        <div class="section-card-desc">Catering orders for the Tomball + Spring locations, grouped by date.</div>
+      </a>
+      <a class="section-card" href="/orders/copperfield">
+        <div class="section-card-head">
+          <div class="section-icon">▤</div>
+          <div class="section-card-title">Copperfield Orders</div>
         </div>
-      </div>
+        <div class="section-card-desc">Catering orders for the Copperfield + Westheimer locations.</div>
+      </a>
+      <a class="section-card" href="/orders">
+        <div class="section-card-head">
+          <div class="section-icon">⌘</div>
+          <div class="section-card-title">Order Processor</div>
+        </div>
+        <div class="section-card-desc">Upload PDF confirmations to generate kitchen prep sheets.</div>
+      </a>
+    </div>
 
-    </section>
+    <div class="section-title">Vendor Orders</div>
+    <div class="sections-grid">
+      <a class="section-card" href="/produce/">
+        <div class="section-card-head">
+          <div class="section-icon">🥬</div>
+          <div class="section-card-title">Produce Order</div>
+        </div>
+        <div class="section-card-desc">Daily order guide. Cheaper-vendor pricing, one-click submit.</div>
+      </a>
+      <a class="section-card disabled">
+        <span class="coming-soon">soon</span>
+        <div class="section-card-head">
+          <div class="section-icon">🥩</div>
+          <div class="section-card-title">Meat Vendors</div>
+        </div>
+        <div class="section-card-desc">Track meat suppliers, weekly orders, price trends.</div>
+      </a>
+      <a class="section-card disabled">
+        <span class="coming-soon">soon</span>
+        <div class="section-card-head">
+          <div class="section-icon">📦</div>
+          <div class="section-card-title">Dry Goods</div>
+        </div>
+        <div class="section-card-desc">Sysco / DPI standing orders + ad-hoc restock.</div>
+      </a>
+    </div>
+
+    <div class="section-title">People &amp; Insights</div>
+    <div class="sections-grid">
+      <a class="section-card" href="/manager">
+        <div class="section-card-head">
+          <div class="section-icon">👥</div>
+          <div class="section-card-title">Manager Dashboard</div>
+        </div>
+        <div class="section-card-desc">Log driver performance, mileage, bonuses, five-star ratings.</div>
+      </a>
+      <a class="section-card" href="/driver">
+        <div class="section-card-head">
+          <div class="section-icon">👤</div>
+          <div class="section-card-title">Driver Portal</div>
+        </div>
+        <div class="section-card-desc">Drivers see their delivery log + performance history.</div>
+      </a>
+      <a class="section-card disabled">
+        <span class="coming-soon">soon</span>
+        <div class="section-card-head">
+          <div class="section-icon">📈</div>
+          <div class="section-card-title">Sales &amp; Forecasts</div>
+        </div>
+        <div class="section-card-desc">Daily revenue, week-over-week, predictive volume.</div>
+      </a>
+    </div>
 
   </main>
+</div>
+
+<!-- Faint marquee wordmark in the corner -->
+<img class="wordmark" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen">
 
 </body>
 </html>

@@ -86,6 +86,32 @@ def labor():
     return render_template("reports_labor.html", **ctx)
 
 
+@reports.route("/roster")
+def roster():
+    location = _location_filter()
+    position = (request.args.get("position") or "all").strip()
+    include_inactive = request.args.get("include_inactive") == "1"
+    ctx = {
+        "active": "roster",
+        "page_title": "Roster",
+        "form_location": location,
+        "form_position": position,
+        "form_include_inactive": include_inactive,
+        "error": None,
+        "report": None,
+    }
+    try:
+        ctx["report"] = sling_reports.roster_report(
+            location_filter=location,
+            position_filter=None if position == "all" else position,
+            include_inactive=include_inactive,
+        )
+    except Exception as ex:
+        log.exception("roster report failed")
+        ctx["error"] = f"Could not generate roster: {ex}"
+    return render_template("reports_roster.html", **ctx)
+
+
 @reports.route("/schedule")
 def schedule():
     start, end, err = _parse_date_range()

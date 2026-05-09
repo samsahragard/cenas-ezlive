@@ -117,6 +117,16 @@ class SlingClient:
         path.write_text(json.dumps(data), encoding="utf-8")
         return data  # type: ignore[return-value]
 
+    def fetch_group_members(self, group_id: int, refresh: bool = False) -> list:
+        """Fetch all users in a group (location or position)."""
+        path = _cache_dir() / f"group_members_{group_id}.json"
+        if path.exists() and not refresh:
+            return json.loads(path.read_text(encoding="utf-8"))
+        log.info("sling: fetching group %s members", group_id)
+        data = self._http_get(f"/groups/{group_id}/users")
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return data  # type: ignore[return-value]
+
     def fetch_calendar(self, start: datetime, end: datetime, refresh: bool = False) -> list:
         """Pull all calendar entries (shifts + availability + leave) for [start, end).
 

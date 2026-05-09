@@ -1,0 +1,132 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'roster' %}
+{% block title %}Roster — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Roster{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Active employees by location, with positions they can fill. Source: Sling.</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('reports.roster') }}"
+      style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
+             padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
+             display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="location" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Location</label>
+    <select id="location" name="location"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="both"        {% if form_location == 'both' %}selected{% endif %}>Both</option>
+      <option value="tomball"     {% if form_location == 'tomball' %}selected{% endif %}>Tomball</option>
+      <option value="copperfield" {% if form_location == 'copperfield' %}selected{% endif %}>Copperfield</option>
+    </select>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px; min-width: 200px;">
+    <label for="position" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Position</label>
+    <select id="position" name="position"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="all" {% if form_position == 'all' %}selected{% endif %}>All positions</option>
+      {% if report and report.available_positions %}
+        {% for pos in report.available_positions %}
+          <option value="{{ pos }}" {% if form_position == pos %}selected{% endif %}>{{ pos }}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px; padding-bottom: 4px;">
+    <input type="checkbox" id="include_inactive" name="include_inactive" value="1"
+           {% if form_include_inactive %}checked{% endif %}
+           style="width: 16px; height: 16px;">
+    <label for="include_inactive" style="font-size:13px; color: var(--text-2);">Include inactive</label>
+  </div>
+  <button type="submit" class="btn-portal" style="padding:10px 22px;">Apply</button>
+</form>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+{% if report %}
+
+<div class="kpis" style="margin-bottom:18px; grid-template-columns: repeat(3, 1fr);">
+  <div class="kpi-card kpi-1">
+    <div class="kpi-label">Showing</div>
+    <div class="kpi-value">{{ report.totals.shown }}</div>
+    <div class="kpi-sub">{% if report.position_filter != 'all' %}{{ report.position_filter }}{% else %}all positions{% endif %}{% if not report.include_inactive %} · active only{% endif %}</div>
+  </div>
+  <div class="kpi-card kpi-2">
+    <div class="kpi-label">Active total</div>
+    <div class="kpi-value">{{ report.totals.active }}</div>
+    <div class="kpi-sub">across selected locations</div>
+  </div>
+  <div class="kpi-card kpi-3">
+    <div class="kpi-label">Positions in org</div>
+    <div class="kpi-value">{{ report.available_positions | length }}</div>
+    <div class="kpi-sub">defined in Sling</div>
+  </div>
+</div>
+
+{% for loc_key, data in report.by_location.items() %}
+<h2 style="margin: 18px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">
+  {{ data.label }}
+  <span style="color: var(--text-3); font-size: 13px; font-weight: 400; margin-left: 8px;">
+    {{ data.count }} shown · {{ data.active_count }} active
+  </span>
+</h2>
+{% if data.people %}
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Name</th>
+        <th>Positions</th>
+        <th>Email</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in data.people %}
+      <tr {% if not p.active %}style="opacity: 0.5;"{% endif %}>
+        <td><strong>{{ p.name }}</strong></td>
+        <td>
+          {% for pos in p.positions %}
+            <span class="pill" style="font-size:10px; margin-right:4px; background: rgba(232, 122, 62, 0.18); color: var(--accent-soft); border: 1px solid rgba(232, 122, 62, 0.35); padding:2px 8px; border-radius: 10px;">{{ pos }}</span>
+          {% endfor %}
+          {% if not p.positions %}<span style="color:var(--text-3); font-size:11px;">—</span>{% endif %}
+        </td>
+        <td style="color:var(--text-3); font-size: 12px;">{{ p.email }}</td>
+        <td>
+          {% if p.active %}
+            <span class="pill pill-ok" style="font-size:10px;">Active</span>
+          {% else %}
+            <span class="pill" style="font-size:10px; background: rgba(255,255,255,0.06); color: var(--text-3);">Inactive</span>
+          {% endif %}
+          {% if p.has_toast_guid %}
+            <span style="font-size:10px; color:var(--text-3); margin-left: 4px;" title="Linked to Toast employee record">· Toast</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state" style="margin: 12px 0;">
+  <p style="margin:0;font-size:14px;color:var(--text-3);">No employees match these filters at {{ data.label }}.</p>
+</div>
+{% endif %}
+{% endfor %}
+
+<div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
+  <p><strong>Notes</strong></p>
+  <ul>
+    <li>"Active" = currently on Sling's roster (not deactivated).</li>
+    <li>"Toast" badge = employee has a linked Toast Payroll record. Useful for sanity-checking labor-cost numbers.</li>
+    <li>Position pills come from Sling's group memberships — a person can hold multiple positions and will show all of them.</li>
+    <li>Filtering by a position narrows to people who CAN work it (not who is scheduled today).</li>
+    <li>Membership data is cached for the session; first hit pulls from Sling, subsequent ones are instant. Add <code>?refresh=1</code> manually if you need to bust cache (not yet wired).</li>
+  </ul>
+</div>
+
+{% endif %}
+
+{% endblock %}

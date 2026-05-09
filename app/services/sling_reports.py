@@ -170,3 +170,91 @@ def schedule_report(start: datetime, end: datetime,
         },
         "open_shifts": sorted(open_shifts, key=lambda r: r["in_dt"]),
     }
+
+
+# ============== ROSTER ==============
+
+def roster_report(location_filter: Optional[str] = None,
+                  position_filter: Optional[str] = None,
+                  include_inactive: bool = False,
+                  refresh: bool = False) -> dict:
+    """Compute a per-location employee roster with positions held.
+
+    location_filter: 'both' (default), 'tomball', 'copperfield'.
+    position_filter: position name string, or None for all.
+    include_inactive: by default only active employees are shown.
+    """
+    client = SlingClient.shared()
+    groups = client.fetch_groups(refresh=refresh)
+
+    # Build reverse index: user_id -> set of position-names they're in.
+    position_groups = [g for g in groups
+                       if g.get("type") == "position" and not g.get("archivedAt")]
+    user_to_positions: dict[int, set[str]] = {}
+    for pg in position_groups:
+        members = client.fetch_group_members(pg["id"], refresh=refresh)
+        title = (pg.get("name") or "?").strip()
+        for m in members:
+            user_to_positions.setdefault(m["id"], set()).add(title)
+
+    # Active position names list (for the dropdown)
+    available_positions = sorted({(pg.get("name") or "?").strip() for pg in position_groups})
+
+    # Pick locations
+    if location_filter and location_filter != "both":
+        wanted = {location_filter}
+    else:
+        wanted = {"tomball", "copperfield"}
+
+    by_location_out: dict = {}
+    total_shown = 0
+    total_active = 0
+    for loc_key, loc_id in LOCATION_KEY_TO_ID.items():
+        if loc_key not in wanted:
+            continue
+        loc_label = LOCATION_MAP[loc_id][1]
+        members = client.fetch_group_members(loc_id, refresh=refresh)
+        rows = []
+        for u in members:
+            uid = u["id"]
+            is_active = bool(u.get("active"))
+            if not include_inactive and not is_active:
+                continue
+            positions = sorted(user_to_positions.get(uid, set()))
+            # Apply position filter if any
+            if position_filter and position_filter != "all":
+                if position_filter not in positions:
+                    continue
+            full = " ".join(filter(None, [u.get("name"), u.get("lastname")])).strip() \
+                   or u.get("legalName") or u.get("email") or f"id-{uid}"
+            email = u.get("email") or ""
+            rows.append({
+                "id": uid,
+                "name": full,
+                "positions": positions,
+                "email": email,
+                "active": is_active,
+                "has_toast_guid": bool(u.get("hasToastGuid")),
+            })
+            if is_active:
+                total_active += 1
+        rows.sort(key=lambda r: (not r["active"], (r["name"].split()[-1] if r["name"] else "").lower(), r["name"].lower()))
+        total_shown += len(rows)
+        by_location_out[loc_key] = {
+            "label": loc_label,
+            "people": rows,
+            "count": len(rows),
+            "active_count": sum(1 for r in rows if r["active"]),
+        }
+
+    return {
+        "location_filter": location_filter or "both",
+        "position_filter": position_filter or "all",
+        "include_inactive": include_inactive,
+        "available_positions": available_positions,
+        "by_location": by_location_out,
+        "totals": {
+            "shown": total_shown,
+            "active": total_active,
+        },
+    }

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.services.toast_client import ToastClient, restaurant_guids
-from app.services.role_classifier import classify_role
+from app.services.role_classifier import classify_role, is_management_position
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +101,7 @@ def _resolve_locations(location_filter: str | None) -> dict[str, str]:
 def labor_report(start: datetime, end: datetime,
                  location_filter: str | None = None,
                  role_filter: str | None = None,
+                 redact_management: bool = False,
                  refresh: bool = False) -> dict:
     """Compute labor-by-position report for [start, end] inclusive.
 
@@ -108,6 +109,12 @@ def labor_report(start: datetime, end: datetime,
     titles are included. The aggregator still runs over everything (so the
     in-store-context net-sales denominator is unchanged), then filtered rows
     are removed at render time.
+
+    redact_management: when True, management positions (Kitchen Manager,
+    Floor Manager, etc. — see role_classifier.is_management_position) only
+    show their % Net Sales — people count, hours, dollar amounts, and the
+    per-person detail list are zeroed/cleared. Used in Tomball / Copperfield
+    / Corporate views. Partner view (owners only) sets this False.
 
     Returns dict shaped for direct template consumption.
     """
@@ -206,6 +213,32 @@ def labor_report(start: datetime, end: datetime,
         if role_keep and classify_role(title) != role_keep:
             continue
         hrs = s["regular_hours"] + s["overtime_hours"]
+        is_mgmt = is_management_position(title)
+        # Compute the row's pct_net_sales BEFORE we accumulate filtered totals.
+        # This is the only field that survives redaction.
+        row_pct_net_sales = (s["labor_cost"] / net_sales * 100) if net_sales > 0 else 0.0
+
+        if redact_management and is_mgmt:
+            # Privacy: people / hours / cost / names hidden in non-Partner views
+            rows.append({
+                "title": title,
+                "role": classify_role(title),
+                "redacted": True,
+                "people_count": None,
+                "hours": None,
+                "labor_cost": None,
+                "pct_net_sales": row_pct_net_sales,
+                "pct_of_labor": None,
+                "shifts": None,
+                "people": [],   # detail list hidden
+            })
+            # Still contribute to filtered totals (so the KPI strip is correct)
+            # but we hide them per-row.
+            filtered_cost += s["labor_cost"]
+            filtered_hours += hrs
+            filtered_shifts += s["shifts"]
+            continue
+
         people_list = sorted(
             (
                 {"name": name, "hours": p["hours"], "cost": p["cost"],
@@ -217,10 +250,11 @@ def labor_report(start: datetime, end: datetime,
         rows.append({
             "title": title,
             "role": classify_role(title),
+            "redacted": False,
             "people_count": len(s["people"]),
             "hours": hrs,
             "labor_cost": s["labor_cost"],
-            "pct_net_sales": (s["labor_cost"] / net_sales * 100) if net_sales > 0 else 0.0,
+            "pct_net_sales": row_pct_net_sales,
             "pct_of_labor": (s["labor_cost"] / total_cost * 100) if total_cost else 0.0,
             "shifts": s["shifts"],
             "people": people_list,

@@ -31,6 +31,7 @@ EXEMPT_PREFIXES = (
     "/favicon.ico",
     "/login",
     "/logout",
+    "/partner-login",            # second-factor for Partner — still gated by /login
 )
 
 
@@ -71,7 +72,28 @@ def login():
 @auth.route("/logout")
 def logout():
     session.pop("auth_ok", None)
+    session.pop("partner_auth_ok", None)
     return redirect(url_for("auth.login"))
+
+
+@auth.route("/partner-login", methods=["GET", "POST"])
+def partner_login():
+    """Second-factor gate for /partner/* — Partner is owner-only and shows
+    private data (full management labor, future legal/financial sections).
+
+    Requires the user to already be past the site-level `cenas` gate. The
+    `PARTNER_PASSWORD` env var is the second-factor password (separate
+    from EZLIVE_PASSWORD so co-managers can be in the site without seeing
+    Partner data)."""
+    if request.method == "POST":
+        pw = (request.form.get("password") or "").strip()
+        expected = os.getenv("PARTNER_PASSWORD", "")
+        if expected and pw == expected:
+            session["partner_auth_ok"] = True
+            session.permanent = True
+            return redirect("/partner/")
+        return render_template("partner_login.html", error="Wrong password."), 401
+    return render_template("partner_login.html", error=None)
 
 
 @auth.route("/")

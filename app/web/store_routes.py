@@ -18,7 +18,7 @@ templates can write `url_for('store.reports_labor')` and Flask will produce
 """
 from __future__ import annotations
 
-from flask import Blueprint, g, abort, request, render_template, redirect, url_for
+from flask import Blueprint, g, abort, request, render_template, redirect, url_for, session
 
 # slug → location filter for downstream report functions
 STORE_TO_LOCATION = {
@@ -65,6 +65,15 @@ def _inject_store(endpoint, values):
     """When generating URLs from inside a store context, auto-fill the slug."""
     if "store_slug" not in values and getattr(g, "current_store", None):
         values["store_slug"] = g.current_store
+
+
+@store_bp.before_request
+def _partner_gate():
+    """Second-factor auth for /partner/* — only owners (Sam + Masood) can see
+    full management labor + future financial/legal sections. Everyone else
+    sees Tomball / Copperfield / Corporate, which redact management data."""
+    if getattr(g, "current_store", None) == "partner" and not session.get("partner_auth_ok"):
+        return redirect(url_for("auth.partner_login"))
 
 
 # ============== HOME DASHBOARD ==============

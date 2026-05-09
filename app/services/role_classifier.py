@@ -60,3 +60,31 @@ def is_boh(position_name: str | None) -> bool:
 
 def is_foh(position_name: str | None) -> bool:
     return classify_role(position_name) == "foh"
+
+
+# ============== Management positions (privacy redaction) ==============
+# Per Sam's request 2026-05-09: Tomball / Copperfield / Corporate views must
+# NOT show people / hours / dollar amounts for management positions — only
+# the % of net sales. Partner view (owners only) sees everything.
+_MANAGEMENT_EXACT = {
+    "kitchen manager",
+    "asst kitchen manager", "asst. kitchen manager", "assistant kitchen manager",
+    "floor manager",
+    "general manager", "gm",
+    "owner",
+    "corporate", "corporate admin",
+}
+
+
+def is_management_position(position_name: str | None) -> bool:
+    """True for positions whose people / hours / pay should be redacted in
+    non-Partner views. Substring 'manager' catches future variants too."""
+    if not position_name:
+        return False
+    name = position_name.strip().lower()
+    if name in _MANAGEMENT_EXACT:
+        return True
+    # Substring fallback — catches "Kitchen Mgr", "Sr. Kitchen Manager", etc.
+    if "manager" in name or "owner" in name or "corporate" in name:
+        return True
+    return False

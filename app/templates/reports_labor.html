@@ -87,20 +87,37 @@
       {% for r in report.by_position %}
       <tr>
         <td><strong>{{ r.title }}</strong></td>
-        <td style="text-align:right;">{{ r.people_count }}</td>
-        <td style="text-align:right;">{{ "%.1f"|format(r.hours) }}</td>
-        <td style="text-align:right;">${{ "{:,.2f}".format(r.labor_cost) }}</td>
-        <td style="text-align:right;"><strong style="color:var(--accent-soft);">{{ "%.2f"|format(r.pct_net_sales) }}%</strong></td>
-        <td style="text-align:right; color:var(--text-3);">{{ "%.1f"|format(r.pct_of_labor) }}%</td>
-        <td style="text-align:right; color:var(--text-3);">{{ r.shifts }}</td>
+        {% if r.redacted %}
+          <td style="text-align:right; color: var(--text-3);">—</td>
+          <td style="text-align:right; color: var(--text-3);">—</td>
+          <td style="text-align:right; color: var(--text-3);">—</td>
+          <td style="text-align:right;"><strong style="color:var(--accent-soft);">{{ "%.2f"|format(r.pct_net_sales) }}%</strong></td>
+          <td style="text-align:right; color: var(--text-3);">—</td>
+          <td style="text-align:right; color: var(--text-3);">—</td>
+        {% else %}
+          <td style="text-align:right;">{{ r.people_count }}</td>
+          <td style="text-align:right;">{{ "%.1f"|format(r.hours) }}</td>
+          <td style="text-align:right;">${{ "{:,.2f}".format(r.labor_cost) }}</td>
+          <td style="text-align:right;"><strong style="color:var(--accent-soft);">{{ "%.2f"|format(r.pct_net_sales) }}%</strong></td>
+          <td style="text-align:right; color:var(--text-3);">{{ "%.1f"|format(r.pct_of_labor) }}%</td>
+          <td style="text-align:right; color:var(--text-3);">{{ r.shifts }}</td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
-<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">People in each position</h2>
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">
+  People in each position
+  {% if redact_management %}
+  <span style="color:var(--text-3); font-size: 13px; font-weight: 400; margin-left: 8px;">
+    (management roles hidden — Partner view shows everything)
+  </span>
+  {% endif %}
+</h2>
 {% for r in report.by_position %}
+  {% if not r.redacted %}
   <details style="margin-bottom: 12px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 10px; padding: 12px 16px;">
     <summary style="cursor: pointer; color: #fff; font-weight: 600;">
       {{ r.title }}
@@ -131,6 +148,7 @@
       </table>
     </div>
   </details>
+  {% endif %}
 {% endfor %}
 
 <div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">

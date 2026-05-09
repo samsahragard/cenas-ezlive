@@ -166,11 +166,16 @@ def labor():
     role_subtitle = {"boh": " — BOH only (Cook / Prep / Grill / Dish / Enchilada / Kitchen Mgr)",
                      "foh": " — FOH only (Server / Bartender / Host / Cashier / Busser / Expo / Floor Mgr)"
                      }.get(role_filter, "")
+    # Privacy: only Partner view shows full management labor data.
+    is_partner = getattr(g, "current_store", None) == "partner"
+    redact_management = not is_partner
     ctx = {
         "active": active_key,
         "page_title": "Labor Report" + (role_subtitle and (" · " + role_filter.upper())),
         "role_subtitle": role_subtitle,
         "role_filter": role_filter,
+        "redact_management": redact_management,
+        "is_partner": is_partner,
         "form_default_start": request.args.get("start") or default_start,
         "form_default_end": request.args.get("end") or default_end,
         "form_location": location,
@@ -179,7 +184,11 @@ def labor():
     }
     if start and end and not err:
         try:
-            ctx["report"] = toast_reports.labor_report(start, end, location, role_filter=role_filter)
+            ctx["report"] = toast_reports.labor_report(
+                start, end, location,
+                role_filter=role_filter,
+                redact_management=redact_management,
+            )
         except Exception as ex:
             log.exception("labor report failed")
             ctx["error"] = f"Could not generate report: {ex}"

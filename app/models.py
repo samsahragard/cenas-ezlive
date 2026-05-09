@@ -286,3 +286,31 @@ class DeveloperChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     author: Mapped[str] = mapped_column(String(60), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+
+    attachments: Mapped[list["DeveloperChatAttachment"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="DeveloperChatAttachment.id",
+    )
+
+
+class DeveloperChatAttachment(Base):
+    """Files attached to a Developer Chat message. Up to 5 per message,
+    enforced at the route layer. Files live under CHAT_ATTACHMENTS_DIR
+    (default /var/data/chat-attachments) at <message_id>/<safe_filename>."""
+    __tablename__ = "developer_chat_attachment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("developer_chat.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    is_image: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    message: Mapped["DeveloperChatMessage"] = relationship(back_populates="attachments")

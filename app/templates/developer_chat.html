@@ -62,8 +62,11 @@
   .chat-input {
     border-top: 1px solid var(--glass-border);
     padding: 12px;
-    display: flex; gap: 8px; align-items: stretch;
+    display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
     background: rgba(0,0,0,0.30);
+  }
+  .chat-input-row {
+    display: flex; gap: 8px; align-items: stretch; width: 100%;
   }
   .chat-input select, .chat-input textarea {
     background: rgba(0,0,0,0.45);
@@ -86,11 +89,73 @@
     font-weight: 600;
   }
   .chat-input button:hover { filter: brightness(1.08); }
+  .chat-input button[type=button] {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--glass-border);
+    flex: 0 0 auto;
+    padding: 8px 12px;
+  }
+  .chat-input input[type=file] { display: none; }
+  .chat-attach-row {
+    width: 100%;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    font-size: 12px; color: var(--text-3);
+    min-height: 0;
+  }
+  .chat-attach-row:empty { display: none; }
+  .chat-attach-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 3px 8px 3px 10px;
+    color: #fff;
+  }
+  .chat-attach-chip .chip-x {
+    cursor: pointer; opacity: 0.65; font-size: 14px; line-height: 1;
+    padding: 0 2px;
+  }
+  .chat-attach-chip .chip-x:hover { opacity: 1; }
 
   .chat-status {
     font-size: 11px; color: var(--text-3); padding: 4px 16px;
     background: rgba(0,0,0,0.20); border-bottom: 1px solid var(--glass-border);
   }
+  .upload-error {
+    background: rgba(232,80,80,0.18);
+    border: 1px solid rgba(232,80,80,0.5);
+    color: #fff;
+    padding: 8px 12px;
+    margin: 8px 12px 0;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  /* Inline attachments inside a message bubble */
+  .msg-attachments {
+    margin-top: 8px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .msg-attach-img {
+    max-width: 220px; max-height: 220px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.12);
+    cursor: pointer;
+    display: block;
+    background: rgba(0,0,0,0.30);
+  }
+  .msg-attach-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .msg-attach-link:hover { background: rgba(255,255,255,0.10); }
+  .msg-attach-size { color: var(--text-3); font-size: 11px; }
 </style>
 {% endblock %}
 
@@ -102,35 +167,66 @@
     <span id="msg-count">{{ messages | length }} message{{ 's' if (messages | length) != 1 else '' }}</span>
   </div>
 
+  {% if upload_error %}
+  <div class="upload-error">⚠️ {{ upload_error }}</div>
+  {% endif %}
+
   <div class="chat-list" id="chat-list">
     {% for m in messages %}
     <div class="msg {{ m.css_class }}" data-id="{{ m.id }}">
       <div class="msg-meta"><strong>{{ m.author }}</strong>{{ m.created_at_display }}</div>
-      <div class="msg-body">{{ m.body }}</div>
+      {% if m.body %}<div class="msg-body">{{ m.body }}</div>{% endif %}
+      {% if m.attachments %}
+      <div class="msg-attachments">
+        {% for a in m.attachments %}
+          {% if a.is_image %}
+            <a href="{{ a.url }}" target="_blank" rel="noopener" title="{{ a.filename }}">
+              <img class="msg-attach-img" src="{{ a.url }}" alt="{{ a.filename }}" loading="lazy">
+            </a>
+          {% else %}
+            <a class="msg-attach-link" href="{{ a.url }}" target="_blank" rel="noopener">
+              📎 {{ a.filename }}
+              <span class="msg-attach-size">({{ (a.size_bytes / 1024) | round(0, 'floor') | int }} KB)</span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
     <div id="bottom"></div>
   </div>
 
-  <form class="chat-input" method="POST" action="{{ url_for('developer_chat.post_message') }}">
-    <select name="author">
-      <option value="sam" selected>sam</option>
-      <option value="aick-claude">aick-claude</option>
-      <option value="ck-claude">ck-claude</option>
-      <option value="system">system</option>
-    </select>
-    <textarea name="body" placeholder="Type a message…" required></textarea>
-    <button type="submit">Send</button>
+  <form class="chat-input" method="POST" action="{{ url_for('developer_chat.post_message') }}" enctype="multipart/form-data" id="chat-form">
+    <div class="chat-input-row">
+      <select name="author">
+        <option value="sam" selected>sam</option>
+        <option value="aick-claude">aick-claude</option>
+        <option value="ck-claude">ck-claude</option>
+        <option value="system">system</option>
+      </select>
+      <textarea name="body" placeholder="Type a message…"></textarea>
+      <button type="button" onclick="document.getElementById('attach-input').click()" title="Attach files (up to {{ max_attachments }})">📎</button>
+      <button type="submit">Send</button>
+    </div>
+    <input type="file" id="attach-input" name="attachments" multiple accept="image/*,.pdf,.csv,.txt,.md,.log,.xlsx,.xls">
+    <div class="chat-attach-row" id="attach-preview"></div>
   </form>
 </div>
 
 <script>
 (function() {
   let lastId = {{ last_id }};
+  const MAX_ATTACHMENTS = {{ max_attachments }};
+  const MAX_BYTES = {{ max_attachment_mb }} * 1024 * 1024;
   const list = document.getElementById('chat-list');
   const bottom = document.getElementById('bottom');
   const status = document.getElementById('poll-status');
   const counter = document.getElementById('msg-count');
+  const attachInput = document.getElementById('attach-input');
+  const attachPreview = document.getElementById('attach-preview');
+  const form = document.getElementById('chat-form');
+  const bodyTextarea = form.querySelector('textarea[name=body]');
 
   function authorClass(author) {
     const a = (author || '').toLowerCase();
@@ -145,12 +241,99 @@
     const div = document.createElement('div');
     div.className = 'msg ' + authorClass(m.author);
     div.dataset.id = m.id;
-    div.innerHTML = '<div class="msg-meta"><strong></strong></div><div class="msg-body"></div>';
-    div.querySelector('.msg-meta strong').textContent = m.author;
-    div.querySelector('.msg-meta').appendChild(document.createTextNode(m.created_at_display));
-    div.querySelector('.msg-body').textContent = m.body;
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    const strong = document.createElement('strong');
+    strong.textContent = m.author;
+    meta.appendChild(strong);
+    meta.appendChild(document.createTextNode(m.created_at_display));
+    div.appendChild(meta);
+
+    if (m.body) {
+      const body = document.createElement('div');
+      body.className = 'msg-body';
+      body.textContent = m.body;
+      div.appendChild(body);
+    }
+
+    if (m.attachments && m.attachments.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-attachments';
+      for (const a of m.attachments) {
+        if (a.is_image) {
+          const link = document.createElement('a');
+          link.href = a.url; link.target = '_blank'; link.rel = 'noopener';
+          link.title = a.filename;
+          const img = document.createElement('img');
+          img.className = 'msg-attach-img';
+          img.src = a.url; img.alt = a.filename; img.loading = 'lazy';
+          link.appendChild(img);
+          wrap.appendChild(link);
+        } else {
+          const link = document.createElement('a');
+          link.className = 'msg-attach-link';
+          link.href = a.url; link.target = '_blank'; link.rel = 'noopener';
+          link.appendChild(document.createTextNode('📎 ' + a.filename + ' '));
+          const sz = document.createElement('span');
+          sz.className = 'msg-attach-size';
+          sz.textContent = '(' + Math.floor(a.size_bytes / 1024) + ' KB)';
+          link.appendChild(sz);
+          wrap.appendChild(link);
+        }
+      }
+      div.appendChild(wrap);
+    }
+
     list.insertBefore(div, bottom);
   }
+
+  function renderPreview() {
+    attachPreview.innerHTML = '';
+    const files = Array.from(attachInput.files || []);
+    files.forEach((f, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'chat-attach-chip';
+      chip.appendChild(document.createTextNode(f.name + ' (' + Math.floor(f.size / 1024) + ' KB)'));
+      const x = document.createElement('span');
+      x.className = 'chip-x'; x.textContent = '×'; x.title = 'remove';
+      x.addEventListener('click', () => removeAt(idx));
+      chip.appendChild(x);
+      attachPreview.appendChild(chip);
+    });
+  }
+
+  function removeAt(idx) {
+    const dt = new DataTransfer();
+    Array.from(attachInput.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+    attachInput.files = dt.files;
+    renderPreview();
+  }
+
+  attachInput.addEventListener('change', () => {
+    const files = Array.from(attachInput.files || []);
+    if (files.length > MAX_ATTACHMENTS) {
+      alert('Max ' + MAX_ATTACHMENTS + ' attachments per message');
+      attachInput.value = ''; return;
+    }
+    for (const f of files) {
+      if (f.size > MAX_BYTES) {
+        alert(f.name + ' is over the ' + (MAX_BYTES/1024/1024) + ' MB limit');
+        attachInput.value = ''; return;
+      }
+    }
+    renderPreview();
+  });
+
+  // Allow empty body if attachments present
+  form.addEventListener('submit', (e) => {
+    const body = (bodyTextarea.value || '').trim();
+    const hasFiles = (attachInput.files || []).length > 0;
+    if (!body && !hasFiles) {
+      e.preventDefault();
+      bodyTextarea.focus();
+    }
+  });
 
   function poll() {
     fetch('{{ url_for("developer_chat.messages_json") }}?since_id=' + lastId, {

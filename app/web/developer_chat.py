@@ -7,8 +7,9 @@ already be past the Partner password.
 
 Routes:
     GET  /partner/developer/chat                 — chat UI (auto-polls)
-    POST /partner/developer/chat/post            — submit a new message
+    POST /partner/developer/chat/post            — submit a new message (multipart, up to 5 attachments)
     GET  /partner/developer/chat/messages.json   — JSON poll feed (?since_id=N)
+    GET  /partner/developer/chat/attachment/<id> — download an attachment
 
 The JSON endpoint is what makes it scriptable: a Claude running on AiCk
 or CK can `curl` it (with the partner cookie) and stream new messages
@@ -17,17 +18,42 @@ into a local log file.
 from __future__ import annotations
 
 import logging
+import mimetypes
+import os
+import re
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, abort, g
+from pathlib import Path
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, abort, g, send_file
+from werkzeug.utils import secure_filename
 
 from app.db import SessionLocal
-from app.models import DeveloperChatMessage
+from app.models import DeveloperChatMessage, DeveloperChatAttachment
 
 log = logging.getLogger(__name__)
 
 dev_chat = Blueprint("developer_chat", __name__)
 
 CT = timezone(timedelta(hours=-5))   # Central time for display
+
+# Attachment upload limits
+MAX_ATTACHMENTS_PER_MESSAGE = 5
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024   # 10 MB
+ALLOWED_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic",  # images
+    ".pdf",                                              # docs
+    ".csv", ".txt", ".md", ".log",                       # text dumps
+    ".xlsx", ".xls",                                     # spreadsheets
+}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
+
+
+def _attachments_dir() -> Path:
+    """Where attachment files live on disk. Defaults to /var/data/chat-attachments
+    (Render persistent disk); override with CHAT_ATTACHMENTS_DIR for local dev."""
+    base = os.environ.get("CHAT_ATTACHMENTS_DIR", "/var/data/chat-attachments")
+    p = Path(base)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def _enforce_partner():
@@ -70,6 +96,10 @@ def chat_page():
         page_title="Developer Chat",
         messages=rendered,
         last_id=last_id,
+        upload_error=request.args.get("upload_error"),
+        max_attachments=MAX_ATTACHMENTS_PER_MESSAGE,
+        max_attachment_mb=int(MAX_ATTACHMENT_BYTES / 1024 / 1024),
+        allowed_extensions=sorted(ALLOWED_EXTENSIONS),
     )
 
 
@@ -80,17 +110,115 @@ def post_message():
         return gate
     author = (request.form.get("author") or "sam").strip()[:60]
     body = (request.form.get("body") or "").strip()
-    if not body:
+
+    # Parse uploaded files. Empty FileStorage entries (no filename) get skipped.
+    files = [f for f in request.files.getlist("attachments") if f and f.filename]
+    if len(files) > MAX_ATTACHMENTS_PER_MESSAGE:
+        return _post_error(f"Too many attachments — max {MAX_ATTACHMENTS_PER_MESSAGE} per message")
+
+    # Validate each file before we touch the DB
+    validated: list[tuple] = []  # (orig_name, ext, bytes_data)
+    for f in files:
+        orig = f.filename or ""
+        ext = os.path.splitext(orig)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            return _post_error(f"Unsupported file type: {ext or '(none)'}. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+        data = f.read()
+        if len(data) > MAX_ATTACHMENT_BYTES:
+            return _post_error(f"{orig} is {len(data)/1024/1024:.1f} MB — limit is {MAX_ATTACHMENT_BYTES/1024/1024:.0f} MB")
+        if not data:
+            continue  # skip empties
+        validated.append((orig, ext, data))
+
+    # An empty body is OK as long as at least one attachment is present.
+    if not body and not validated:
         return redirect(url_for("developer_chat.chat_page"))
+
     db = SessionLocal()
     try:
         m = DeveloperChatMessage(author=author, body=body)
         db.add(m)
+        db.flush()   # need m.id for the file paths
+
+        for orig, ext, data in validated:
+            safe = secure_filename(orig) or f"file{ext}"
+            # Avoid filename collisions inside one message
+            safe = _ensure_unique_in_msg(safe, m.id)
+            msg_dir = _attachments_dir() / str(m.id)
+            msg_dir.mkdir(parents=True, exist_ok=True)
+            target = msg_dir / safe
+            target.write_bytes(data)
+            mime = (mimetypes.guess_type(safe)[0] or "application/octet-stream")
+            att = DeveloperChatAttachment(
+                message_id=m.id,
+                filename=orig[:255],
+                mime_type=mime[:100],
+                size_bytes=len(data),
+                storage_path=f"{m.id}/{safe}",
+                is_image=(ext in IMAGE_EXTENSIONS),
+            )
+            db.add(att)
+
         db.commit()
-        log.info("dev-chat post: %s wrote %d chars", author, len(body))
+        log.info(
+            "dev-chat post: %s wrote %d chars + %d attachments",
+            author, len(body), len(validated),
+        )
     finally:
         db.close()
     return redirect(url_for("developer_chat.chat_page") + "#bottom")
+
+
+def _ensure_unique_in_msg(name: str, msg_id: int) -> str:
+    """If <attachments_dir>/<msg_id>/<name> already exists, suffix -2, -3, ..."""
+    base = _attachments_dir() / str(msg_id)
+    if not (base / name).exists():
+        return name
+    stem, ext = os.path.splitext(name)
+    i = 2
+    while (base / f"{stem}-{i}{ext}").exists():
+        i += 1
+    return f"{stem}-{i}{ext}"
+
+
+def _post_error(msg: str):
+    """Pass an error back via flash-style query param so the chat page can surface it."""
+    from urllib.parse import quote
+    return redirect(url_for("developer_chat.chat_page") + f"?upload_error={quote(msg)}")
+
+
+@dev_chat.route("/partner/developer/chat/attachment/<int:att_id>", methods=["GET"])
+def download_attachment(att_id: int):
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    db = SessionLocal()
+    try:
+        att = db.get(DeveloperChatAttachment, att_id)
+        if not att:
+            abort(404)
+        # Resolve safely against attachments dir — if storage_path tries to
+        # escape via .. or absolute path, refuse.
+        base = _attachments_dir().resolve()
+        full = (base / att.storage_path).resolve()
+        try:
+            full.relative_to(base)
+        except ValueError:
+            abort(404)
+        if not full.is_file():
+            abort(404)
+        # For images, serve inline so the browser can render thumbnails.
+        # For everything else, attach so the browser downloads.
+        as_attachment = not att.is_image
+        return send_file(
+            str(full),
+            mimetype=att.mime_type or "application/octet-stream",
+            as_attachment=as_attachment,
+            download_name=att.filename,
+            max_age=0,
+        )
+    finally:
+        db.close()
 
 
 @dev_chat.route("/partner/developer/chat/messages.json", methods=["GET"])
@@ -117,12 +245,23 @@ def messages_json():
 
 
 def _msg_to_dict(m: DeveloperChatMessage) -> dict:
+    atts = []
+    for a in m.attachments or []:
+        atts.append({
+            "id": a.id,
+            "filename": a.filename,
+            "mime_type": a.mime_type,
+            "size_bytes": a.size_bytes,
+            "is_image": a.is_image,
+            "url": url_for("developer_chat.download_attachment", att_id=a.id),
+        })
     return {
         "id": m.id,
         "author": m.author,
         "body": m.body,
         "created_at_iso": m.created_at.replace(tzinfo=timezone.utc).isoformat(),
         "created_at_display": m.created_at.replace(tzinfo=timezone.utc).astimezone(CT).strftime("%a %b %d, %I:%M %p"),
+        "attachments": atts,
     }
 
 

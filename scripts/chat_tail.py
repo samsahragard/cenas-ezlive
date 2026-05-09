@@ -23,6 +23,12 @@ import urllib.request
 from http.cookiejar import LWPCookieJar
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 BASE = "https://app.cenaskitchen.com"
 COOKIE_FILE = Path.home() / ".cenas-chat-cookies"
 
@@ -132,8 +138,15 @@ def main() -> int:
             for m in d.get("messages") or []:
                 t = m.get("created_at_display", "")
                 a = m.get("author", "?")
-                b = m.get("body", "").rstrip()
-                print(f"[{t}] {a}: {b}", flush=True)
+                b = (m.get("body") or "").rstrip()
+                atts = m.get("attachments") or []
+                suffix = ""
+                if atts:
+                    names = ", ".join(x.get("filename", "?") for x in atts)
+                    suffix = f"  [\U0001f4ce {len(atts)}: {names}]"
+                # Body might be empty if the message is attachment-only.
+                line = f"[{t}] {a}: {b}{suffix}" if b else f"[{t}] {a}:{suffix.lstrip()}"
+                print(line, flush=True)
                 last_id = max(last_id, m.get("id", 0))
             if not d.get("messages"):
                 # Quietly skip — only print initial sync message

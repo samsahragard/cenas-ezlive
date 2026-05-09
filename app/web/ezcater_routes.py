@@ -8,7 +8,7 @@ from uuid import uuid4
 import threading
 import time
 
-from flask import Blueprint, current_app, render_template, request, send_file, jsonify, redirect, url_for
+from flask import Blueprint, current_app, render_template, request, send_file, jsonify, redirect, url_for, g
 from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
@@ -88,11 +88,14 @@ def _evict_stale_jobs():
         del _jobs[jid]
 
 
-@cater.route("/", methods=["GET"])
 def home():
     """Manager dashboard. Pulls today's deliveries + attention items live
     from the DB so a manager opening the site sees the agenda first, not
-    just navigation."""
+    just navigation.
+
+    Note: the route registration for this view moved out — `/` now serves
+    the store picker. The `/<store>/` URL prefix layer (store_routes.py)
+    calls this function directly after setting g.current_location."""
     from datetime import datetime
     from pathlib import Path
     import json
@@ -100,27 +103,33 @@ def home():
     from app.models import Order
 
     today_iso = datetime.now().strftime("%Y-%m-%d")
+    # Per-store filtering: Tomball = stores 2/4, Copperfield = stores 1/3
+    location = getattr(g, "current_location", "both")
+    tomball_stores = ("store_2", "store_4")
+    copperfield_stores = ("store_1", "store_3")
 
     db = next(get_db())
     try:
-        # Today's deliveries (non-cancelled), in chronological order.
-        today_orders = (
+        today_q = (
             db.query(Order)
             .filter(Order.delivery_date == today_iso)
             .filter(Order.status != "cancelled")
-            .order_by(Order.deliver_at)
-            .all()
         )
-
-        # Future + today orders that need review (capped at 5 for the list).
-        review_orders = (
+        review_q = (
             db.query(Order)
             .filter(Order.delivery_date >= today_iso)
             .filter(Order.status != "cancelled")
             .filter(Order.needs_review.is_(True))
-            .order_by(Order.delivery_date, Order.deliver_at)
-            .all()
         )
+        if location == "tomball":
+            today_q = today_q.filter(Order.origin_store_id.in_(tomball_stores))
+            review_q = review_q.filter(Order.origin_store_id.in_(tomball_stores))
+        elif location == "copperfield":
+            today_q = today_q.filter(Order.origin_store_id.in_(copperfield_stores))
+            review_q = review_q.filter(Order.origin_store_id.in_(copperfield_stores))
+
+        today_orders = today_q.order_by(Order.deliver_at).all()
+        review_orders = review_q.order_by(Order.delivery_date, Order.deliver_at).all()
 
         # KPI counts
         tomball_today = sum(1 for o in today_orders if (o.origin_store_id or "") in ("store_2", "store_4"))

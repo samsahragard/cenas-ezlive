@@ -72,3 +72,15 @@ def login():
 def logout():
     session.pop("auth_ok", None)
     return redirect(url_for("auth.login"))
+
+
+@auth.route("/")
+def store_picker():
+    """Landing page: pick which store/scope to enter.
+
+    All four entry points use the shared `EZLIVE_PASSWORD` gate (already
+    enforced by the global before_request). Tomball = DOS MAS, Copperfield
+    = UNO MAS. Corporate + Partner show both locations combined; Partner
+    is reserved for owners (Sam + Masood) and will gain private legal/financial
+    sections later — for now mirrors Corporate."""
+    return render_template("store_picker.html")

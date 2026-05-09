@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, g
 
 from app.services import toast_reports, sling_reports
 
@@ -44,6 +44,17 @@ def _parse_date_range() -> tuple[datetime | None, datetime | None, str | None]:
 
 
 def _location_filter() -> str:
+    """Determine which location to scope this report to.
+
+    Priority:
+      1. `g.location_override` set by store_routes.py URL prefix layer
+         (e.g., visiting /dos/reports/labor sets it to 'tomball')
+      2. ?location= query param (legacy top-level URLs)
+      3. 'both' default
+    """
+    override = getattr(g, "location_override", None)
+    if override and override in {"tomball", "copperfield", "both"}:
+        return override
     loc = (request.args.get("location") or "both").strip().lower()
     return loc if loc in {"both", "tomball", "copperfield"} else "both"
 

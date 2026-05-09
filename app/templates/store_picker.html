@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cenas Kitchen — Pick a store</title>
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="theme-color" content="#0a0604">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cenas Kitchen">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0a0604;
+      background-image:
+        linear-gradient(rgba(10,6,4,0.65), rgba(10,6,4,0.85)),
+        url('{{ url_for('static', filename='brand/bg-tequila.jpg') }}');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 36px 16px 60px;
+      box-sizing: border-box;
+    }
+    .picker-title {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .picker-title img.bull {
+      height: 80px;
+      width: auto;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,0.6));
+      margin-bottom: 8px;
+    }
+    .picker-title h1 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      margin: 0;
+    }
+    .picker-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 380px));
+      gap: 18px;
+      max-width: 820px;
+      width: 100%;
+    }
+    @media (max-width: 700px) {
+      .picker-grid { grid-template-columns: 1fr; max-width: 380px; }
+    }
+    .picker-card {
+      position: relative;
+      display: block;
+      text-decoration: none;
+      color: #fff;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 18px;
+      overflow: hidden;
+      backdrop-filter: blur(12px);
+      transition: transform 0.18s ease, border-color 0.18s, box-shadow 0.18s;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    }
+    .picker-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(232, 122, 62, 0.6);
+      box-shadow: 0 10px 32px rgba(232, 122, 62, 0.25);
+    }
+    .picker-card.disabled {
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    .picker-marquee {
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Georgia', serif;
+      font-size: 64px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(255,180,80,0.18), transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(255,80,80,0.18), transparent 50%),
+        linear-gradient(180deg, #1a0e08 0%, #0e0604 100%);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      letter-spacing: 6px;
+    }
+    .picker-marquee.dos    { color: #f4a93b; text-shadow: 0 0 12px rgba(244,169,59,0.45); }
+    .picker-marquee.uno    { color: #e87a3e; text-shadow: 0 0 12px rgba(232,122,62,0.45); }
+    .picker-marquee.corp   { color: #cccccc; font-size: 36px; letter-spacing: 4px; }
+    .picker-marquee.part   { color: #d4af37; font-size: 36px; letter-spacing: 4px; }
+    .picker-body {
+      padding: 16px 20px;
+    }
+    .picker-body h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 4px 0;
+      color: #fff;
+    }
+    .picker-body p.sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      margin: 0 0 10px 0;
+    }
+    .picker-login {
+      font-size: 12px;
+      color: var(--accent-soft, #f4b48a);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .soon-tag {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.55);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .picker-footer {
+      margin-top: 32px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="picker-title">
+    <img class="bull" src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="Cenas Kitchen">
+    <h1>Cenas Kitchen — Operations</h1>
+  </div>
+
+  <div class="picker-grid">
+    <a class="picker-card" href="/dos/">
+      <div class="picker-marquee dos">DOS MAS</div>
+      <div class="picker-body">
+        <h2>Tomball</h2>
+        <p class="sub">27727 Tomball Pkwy</p>
+        <span class="picker-login">Log in →</span>
+      </div>
+    </a>
+
+    <a class="picker-card" href="/uno/">
+      <div class="picker-marquee uno">UNO MAS</div>
+      <div class="picker-body">
+        <h2>Copperfield</h2>
+        <p class="sub">15650 FM 529</p>
+        <span class="picker-login">Log in →</span>
+      </div>
+    </a>
+
+    <a class="picker-card" href="/corporate/">
+      <div class="picker-marquee corp">CORPORATE</div>
+      <div class="picker-body">
+        <h2>Corporate</h2>
+        <p class="sub">Both locations · combined view</p>
+        <span class="picker-login">Log in →</span>
+      </div>
+      <span class="soon-tag">Beta</span>
+    </a>
+
+    <a class="picker-card" href="/partner/">
+      <div class="picker-marquee part">PARTNER</div>
+      <div class="picker-body">
+        <h2>Partner</h2>
+        <p class="sub">Owners only — financial + legal (soon)</p>
+        <span class="picker-login">Log in →</span>
+      </div>
+      <span class="soon-tag">Beta</span>
+    </a>
+  </div>
+
+  <p class="picker-footer">v1 · cenaskitchen.com</p>
+</body>
+</html>

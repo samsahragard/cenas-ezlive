@@ -16,6 +16,23 @@
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
+{# Store context (set by /<store>/... routes via store_routes.py). Falls back to dos for safety. #}
+{% set store_slug = g.current_store or 'dos' %}
+{% set store_label = g.store_label or 'Tomball' %}
+{# Active leaf — pages set `active = '<key>'`. Parent expansion is computed off this. #}
+{% set ops_open = active in ['vendors','corporate_order','produce','webstaurant','vendor_perf','specs',
+                              'ezcater_orders','processor','review','driver_tracking','driver_portal',
+                              'boh_roster','foh_roster','all_roster','weekly_schedule'] %}
+{% set vendors_open = active in ['vendors','corporate_order','produce','webstaurant','vendor_perf','specs'] %}
+{% set produce_open = active in ['produce','produce_orders'] %}
+{% set ezc_open = active in ['ezcater_orders','processor','review','driver_tracking','driver_portal'] %}
+{% set sched_open = active in ['boh_roster','foh_roster','all_roster','weekly_schedule'] %}
+{% set ins_open = active in ['perf_server','perf_bartenders','perf_prep','perf_all',
+                             'sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total',
+                             'boh_labor','foh_labor'] %}
+{% set perf_open = active in ['perf_server','perf_bartenders','perf_prep','perf_all'] %}
+{% set sales_open = active in ['sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total'] %}
+{% set labor_open = active in ['boh_labor','foh_labor'] %}
 <body>
 <div class="layout">
 
@@ -23,37 +40,122 @@
   <aside class="sidebar">
     <div class="brand"><div class="brand-mark"></div></div>
 
+    {# Store switcher — back to picker #}
+    <a class="store-switcher" href="/" title="Switch store">
+      <div class="store-switcher-label">{{ store_label }}</div>
+      <div class="store-switcher-sub">switch store ↗</div>
+    </a>
+
     <div class="nav-section">Today</div>
-    <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="nav-icon">▦</span>Dashboard</a>
+    <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/{{ store_slug }}/">
+      <span class="nav-icon">▦</span>{{ store_label }} Dashboard
+    </a>
 
     <div class="nav-section">Operations</div>
-    <a class="nav-link {% if active == 'tomball' %}active{% endif %}" href="/orders/tomball"><span class="nav-icon">▤</span>Tomball</a>
-    <a class="nav-link {% if active == 'copperfield' %}active{% endif %}" href="/orders/copperfield"><span class="nav-icon">▤</span>Copperfield</a>
-    <a class="nav-link {% if active == 'processor' %}active{% endif %}" href="/orders"><span class="nav-icon">⌘</span>Order Processor</a>
-    <a class="nav-link {% if active == 'review' %}active{% endif %}" href="/review"><span class="nav-icon">✓</span>Review Queue</a>
 
-    <div class="nav-section">Vendor Orders</div>
-    <a class="nav-link {% if active == 'produce' %}active{% endif %}" href="/produce/"><span class="nav-icon">🥬</span>Produce</a>
-    <a class="nav-link disabled"><span class="nav-icon">○</span>Meat<span class="nav-soon">soon</span></a>
-    <a class="nav-link disabled"><span class="nav-icon">○</span>Dry Goods<span class="nav-soon">soon</span></a>
+    {# Vendors group #}
+    <div class="nav-group {% if vendors_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">📦</span>Vendors
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link disabled"><span class="nav-icon">○</span>Corporate Order<span class="nav-soon">soon</span></a>
+        <div class="nav-subgroup {% if produce_open %}expanded{% endif %}">
+          <button class="nav-subgroup-toggle" type="button" onclick="toggleNavGroup(this)">
+            <span class="nav-icon">🥬</span>Produce
+            <span class="nav-chevron">▸</span>
+          </button>
+          <div class="nav-subgroup-children">
+            <a class="nav-link {% if active == 'produce_orders' %}active{% endif %}" href="/{{ store_slug }}/produce/"><span class="nav-icon">·</span>Orders</a>
+          </div>
+        </div>
+        <a class="nav-link disabled"><span class="nav-icon">○</span>Webstaurant<span class="nav-soon">soon</span></a>
+        <a class="nav-link disabled"><span class="nav-icon">○</span>Performance<span class="nav-soon">soon</span></a>
+        <a class="nav-link disabled"><span class="nav-icon">○</span>Specs<span class="nav-soon">soon</span></a>
+      </div>
+    </div>
 
-    <div class="nav-section">People</div>
-    <a class="nav-link {% if active == 'manager' %}active{% endif %}" href="/manager"><span class="nav-icon">👥</span>Manager Dashboard</a>
-    <a class="nav-link {% if active == 'driver' %}active{% endif %}" href="/driver"><span class="nav-icon">👤</span>Driver Portal</a>
-    <a class="nav-link {% if active == 'schedule' %}active{% endif %}" href="/reports/schedule"><span class="nav-icon">📅</span>Schedule</a>
-    <a class="nav-link {% if active == 'roster' %}active{% endif %}" href="/reports/roster"><span class="nav-icon">📋</span>Roster</a>
-    <a class="nav-link {% if active == 'labor' %}active{% endif %}" href="/reports/labor"><span class="nav-icon">⏱</span>Labor</a>
-    <a class="nav-link {% if active == 'server_perf' %}active{% endif %}" href="/reports/server-performance"><span class="nav-icon">🍽</span>Server Performance</a>
+    {# Ezcater group #}
+    <div class="nav-group {% if ezc_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">▤</span>Ezcater
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'ezcater_orders' %}active{% endif %}" href="/{{ store_slug }}/orders"><span class="nav-icon">·</span>Orders</a>
+        <a class="nav-link {% if active == 'processor' %}active{% endif %}" href="/{{ store_slug }}/orders/processor"><span class="nav-icon">·</span>Order Processor</a>
+        <a class="nav-link {% if active == 'review' %}active{% endif %}" href="/{{ store_slug }}/review"><span class="nav-icon">·</span>Review Queue</a>
+        <a class="nav-link {% if active == 'driver_tracking' %}active{% endif %}" href="/{{ store_slug }}/driver-tracking"><span class="nav-icon">·</span>Driver Tracking</a>
+        <a class="nav-link {% if active == 'driver_portal' %}active{% endif %}" href="/{{ store_slug }}/driver-portal"><span class="nav-icon">·</span>Driver Portal</a>
+      </div>
+    </div>
+
+    {# Schedule group #}
+    <div class="nav-group {% if sched_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">📅</span>Schedule
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'boh_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/boh"><span class="nav-icon">·</span>BOH Roster</a>
+        <a class="nav-link {% if active == 'foh_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/foh"><span class="nav-icon">·</span>FOH Roster</a>
+        <a class="nav-link {% if active == 'all_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/all"><span class="nav-icon">·</span>All Roster</a>
+        <a class="nav-link {% if active == 'weekly_schedule' %}active{% endif %}" href="/{{ store_slug }}/schedule"><span class="nav-icon">·</span>Weekly</a>
+      </div>
+    </div>
 
     <div class="nav-section">Insights</div>
-    <a class="nav-link {% if active == 'third_party_sales' %}active{% endif %}" href="/reports/third-party-sales"><span class="nav-icon">📈</span>Third-Party Sales</a>
+
+    {# Performance group #}
+    <div class="nav-group {% if perf_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">🍽</span>Performance
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'perf_server' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/server"><span class="nav-icon">·</span>Server</a>
+        <a class="nav-link {% if active == 'perf_bartenders' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/bartenders"><span class="nav-icon">·</span>Bartenders</a>
+        <a class="nav-link disabled"><span class="nav-icon">·</span>Prep<span class="nav-soon">soon</span></a>
+        <a class="nav-link {% if active == 'perf_all' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/all"><span class="nav-icon">·</span>All</a>
+      </div>
+    </div>
+
+    {# Sales group #}
+    <div class="nav-group {% if sales_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">📈</span>Sales
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'sales_toast' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/toast"><span class="nav-icon">·</span>Toast</a>
+        <a class="nav-link {% if active == 'sales_online' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/online"><span class="nav-icon">·</span>Online Toast</a>
+        <a class="nav-link {% if active == 'sales_ezcater' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/ezcater"><span class="nav-icon">·</span>Ezcater</a>
+        <a class="nav-link {% if active == 'sales_doordash' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/doordash"><span class="nav-icon">·</span>Door Dash</a>
+        <a class="nav-link {% if active == 'sales_uber' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/uber"><span class="nav-icon">·</span>Uber</a>
+        <a class="nav-link {% if active == 'sales_total' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/total"><span class="nav-icon">·</span>Total</a>
+      </div>
+    </div>
+
+    {# Labor group #}
+    <div class="nav-group {% if labor_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">⏱</span>Labor
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'boh_labor' %}active{% endif %}" href="/{{ store_slug }}/reports/labor/boh"><span class="nav-icon">·</span>BOH Labor</a>
+        <a class="nav-link {% if active == 'foh_labor' %}active{% endif %}" href="/{{ store_slug }}/reports/labor/foh"><span class="nav-icon">·</span>FOH Labor</a>
+      </div>
+    </div>
+
     <a class="nav-link disabled"><span class="nav-icon">🎯</span>Forecasts<span class="nav-soon">soon</span></a>
 
     <div class="sidebar-footer">
       <div class="avatar"></div>
       <div>
         <div class="avatar-name">Cenas Kitchen</div>
-        <div class="avatar-role">Operations</div>
+        <div class="avatar-role">{{ store_label }} · Operations</div>
       </div>
     </div>
   </aside>

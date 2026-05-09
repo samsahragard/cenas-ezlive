@@ -819,3 +819,112 @@ input[type=password]:focus, textarea:focus, select:focus {
   .search { width: 100%; }
   .wordmark { width: 140px; opacity: 0.30; bottom: 12px; right: 16px; }
 }
+
+/* ============ Store switcher (top of sidebar) ============ */
+.store-switcher {
+  display: block;
+  text-decoration: none;
+  margin: 0 12px 14px 12px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(232, 122, 62, 0.18), rgba(232, 122, 62, 0.05));
+  border: 1px solid rgba(232, 122, 62, 0.30);
+  border-radius: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.store-switcher:hover {
+  background: linear-gradient(135deg, rgba(232, 122, 62, 0.30), rgba(232, 122, 62, 0.10));
+  border-color: rgba(232, 122, 62, 0.50);
+}
+.store-switcher-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+.store-switcher-sub {
+  font-size: 10px;
+  color: var(--accent-soft, #f4b48a);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* ============ Nested nav groups ============ */
+.nav-group, .nav-subgroup {
+  margin: 0;
+}
+.nav-group-toggle, .nav-subgroup-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 1px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-subgroup-toggle {
+  padding-left: 30px;
+  font-size: 12.5px;
+}
+.nav-group-toggle:hover, .nav-subgroup-toggle:hover {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+}
+.nav-group-toggle .nav-icon, .nav-subgroup-toggle .nav-icon {
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.nav-chevron {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-3);
+  transition: transform 0.18s ease;
+}
+.nav-group.expanded > .nav-group-toggle .nav-chevron,
+.nav-subgroup.expanded > .nav-subgroup-toggle .nav-chevron {
+  transform: rotate(90deg);
+}
+
+.nav-group-children, .nav-subgroup-children {
+  display: none;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  margin-left: 22px;
+  margin-bottom: 4px;
+}
+.nav-group.expanded > .nav-group-children,
+.nav-subgroup.expanded > .nav-subgroup-children {
+  display: block;
+}
+.nav-group-children .nav-link,
+.nav-subgroup-children .nav-link {
+  font-size: 12.5px;
+  padding-left: 16px;
+}
+.nav-group-children .nav-link .nav-icon,
+.nav-subgroup-children .nav-link .nav-icon {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* Desktop: hover-to-expand as a UX nicety on top of click. */
+@media (min-width: 901px) {
+  .nav-group:hover > .nav-group-children,
+  .nav-subgroup:hover > .nav-subgroup-children {
+    display: block;
+  }
+  .nav-group:hover > .nav-group-toggle .nav-chevron,
+  .nav-subgroup:hover > .nav-subgroup-toggle .nav-chevron {
+    transform: rotate(90deg);
+  }
+}

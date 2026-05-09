@@ -115,6 +115,11 @@ def main() -> int:
     args = ap.parse_args()
 
     opener = _opener()
+    # Always re-auth at startup. Login endpoints are idempotent (just re-set
+    # the session cookie); the cookie cache below avoids spurious failures
+    # when the server-side session was reset by a deploy or the cookie file
+    # is older than the session expiry.
+    _login(opener, args.site_password, args.partner_password)
     if args.post is not None:
         _post(opener, args.author, args.post, args.site_password, args.partner_password)
         print(f"posted as {args.author}: {args.post[:80]}")

@@ -1,0 +1,70 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>Sidebar tour</h2>
+<p>Every feature on the site is reachable from the sidebar inside a store context. Below: what each leaf does, where the data comes from, and any privacy / role behavior.</p>
+
+<h2>TODAY → [Store] Dashboard</h2>
+<p>Manager landing page. KPI strip (today's deliveries, heads to feed, orders needing review, produce winners), today's per-delivery list with status badge, "needs attention" panel, and section cards. Filters automatically to the current store's location.</p>
+
+<h2>OPERATIONS → Tomball / Copperfield (per-store sidebar)</h2>
+<p>Routes through to the existing <code>/orders/&lt;location&gt;</code> view — list of catering orders for that location with rolling date filter (today + upcoming).</p>
+
+<h2>OPERATIONS → Vendors → Produce → Orders</h2>
+<p>Per-item price history page. KPI strip (items tracked, biggest movers, snapshot window). Biggest-movers callout flags items where the most recent two snapshots per vendor moved &geq; 5% (red ↑ / green ↓). Per-item Chart.js line chart with separate Alvarado + J. Luna lines, lookback dropdown 30 / 60 / 90 / 180 / 365 days. Latest-pricing table with cheaper-vendor highlighted in green.</p>
+<p>Data: <code>produce_price_snapshot</code> table, populated by <code>produce_ingest.py</code> every time the IMAP poller parses a fresh vendor email.</p>
+
+<h2>OPERATIONS → Vendors → Produce → Order Guide</h2>
+<p>The original produce ordering UI — daily list of items with cheaper-vendor pricing + qty input, single submit. Sends an order email to the vendor + a Telegram confirm link to Sam.</p>
+
+<h2>OPERATIONS → Ezcater → orders / order processor / review queue</h2>
+<ul>
+  <li><strong>orders</strong>: per-location catering order list (Tomball or Copperfield based on URL prefix), today + upcoming, status filter excludes cancelled.</li>
+  <li><strong>order processor</strong>: PDF upload page — uses Anthropic vision to extract orders from PDFs (legacy fallback for cases where the ezCater webhook misses).</li>
+  <li><strong>review queue</strong>: orders flagged for review (extraction confidence warnings, missing customer name, unparsed dates, etc.).</li>
+</ul>
+
+<h2>OPERATIONS → Ezcater → Driver Tracking</h2>
+<p>Renamed from "Manager Dashboard". Per-location managers log driver performance (mileage, on-time, tracking, photo, 5-star, notes). Reads from the <code>driver_logs</code> table.</p>
+
+<h2>OPERATIONS → Ezcater → Driver Portal</h2>
+<p>Driver-facing view. Currently shows assignments and delivery details. (Future: per-driver login + GPS tracking — <em>not yet built</em>.)</p>
+
+<h2>OPERATIONS → Schedule → BOH / FOH / All Roster</h2>
+<p>Three filtered views of the Sling-sourced employee roster. BOH = at least one BOH position. FOH = at least one FOH AND no BOH. All = everyone. Position pills show every role each person can fill. "Toast" badge surfaces when an employee has a linked Toast Payroll record.</p>
+<p>Data source: Sling <code>/groups/&lt;id&gt;/users</code> for each location group, cross-referenced with each position group's members. BOH/FOH classification is in <code>app/services/role_classifier.py</code>.</p>
+
+<h2>OPERATIONS → Schedule → Weekly</h2>
+<p>Sling-sourced shift schedule for a date range. KPI strip (total shifts, hours, open shifts), per-day shift tables, by-position rollup. Quick-pick buttons: This week / Next 2 weeks / Next 4 weeks / Past week. Range capped at 28 days. <strong>Covers BOTH locations</strong> — Toast's API only mirrors one location's shifts, so we hit Sling directly for full coverage.</p>
+
+<h2>INSIGHTS → Performance → Server / Bartenders / All</h2>
+<p>Per-server tip percentage + service timing (avg drink, apps, entree, drink→entree gap, ticket duration, CC tabs/tips, tip %). Filters to the requested role:</p>
+<ul>
+  <li><strong>Server</strong>: Server + Server Trainee + Lead Server</li>
+  <li><strong>Bartenders</strong>: Bartender</li>
+  <li><strong>All</strong>: Server + Trainee + Bartender + Host</li>
+</ul>
+<p>Data: Toast <code>/orders/v2/ordersBulk</code> per business date, parsed for selection timing + payment data. Items classified into drink / appetizer / entree using a 1,200-item bundled lookup with keyword fallback.</p>
+
+<h2>INSIGHTS → Sales → Toast / Online / DoorDash / Uber / Total / EzCater</h2>
+<p>Per-channel sales rollup. Each leaf filters Toast orders by channel:</p>
+<ul>
+  <li><strong>Toast</strong>: dine-in (<code>source = "In Store"</code>)</li>
+  <li><strong>Online</strong>: Toast Online Ordering (<code>source = "Online"</code>)</li>
+  <li><strong>DoorDash</strong>: orders with <code>source = "API"</code> + DoorDash placeholder address ("1 DoorDash Value", San Francisco)</li>
+  <li><strong>Uber</strong>: similar API-channel detection (currently empty — no Uber Eats orders yet)</li>
+  <li><strong>Total</strong>: all channels combined including in-store</li>
+  <li><strong>EzCater</strong>: <em>placeholder</em> — orders are in the Order DB but per-item pricing isn't yet captured at the order level</li>
+</ul>
+
+<h2>INSIGHTS → Labor → BOH / FOH</h2>
+<p>Labor cost by Toast job title with % of net sales (industry-standard labor cost ratio). Splits BOH (kitchen — Cook / Prep / Grill / Dish / Enchilada / Kitchen Mgr) and FOH (Server / Bartender / Host / Cashier / Busser / Expo / Floor Mgr).</p>
+<p><strong>Privacy: management positions (Kitchen Manager, Floor Manager, General Manager, Owner, Corporate, Asst Kitchen Manager) show only their % of net sales — not people count, not hours, not labor cost — in Tomball / Copperfield / Corporate views.</strong> Only the Partner view shows full management detail.</p>
+
+<h2>DEVELOPER → Chat (Partner only)</h2>
+<p>Persistent thread for Sam + this Claude + future AI agents. Auto-polls every 4s. Author dropdown supports sam / aick-claude / ck-claude / system / custom. Color-coded by author.</p>
+
+<h2>DEVELOPER → App (Partner only)</h2>
+<p>These docs (you're reading them now). Read-only. Updates only via Sam-approved git commits — no edit UI.</p>
+
+{% endblock %}

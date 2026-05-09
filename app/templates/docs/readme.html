@@ -1,0 +1,76 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What is this site?</h2>
+<p>
+  <strong>app.cenaskitchen.com</strong> is the all-in-one operations dashboard for Cenas Kitchen, a two-location Tex-Mex restaurant in Houston (Tomball + Copperfield, branded "DOS MAS" and "UNO MAS" respectively). It consolidates catering orders, produce ordering, scheduling, labor cost, server performance, and third-party sales data into one navigable site — with per-store scoping and an owner-only Partner area for sensitive labor and financial data.
+</p>
+
+<h2>Who uses it?</h2>
+<ul>
+  <li><strong>Cenas Kitchen managers</strong> — daily catering ops, produce orders, schedule lookups.</li>
+  <li><strong>Sam (owner)</strong> — full visibility, including management labor cost, the Partner area, and the developer chat.</li>
+  <li><strong>Drivers</strong> — sign in to the Driver Portal to see assignments and (future) GPS tracking.</li>
+  <li><strong>Sam + Masood (owners)</strong> — Partner area only, for management labor breakdown and the Developer Chat with this Claude / future AI agents.</li>
+</ul>
+
+<h2>Top-level layout</h2>
+<p>The site opens to a <strong>store picker</strong> at <code>/</code> with four entry points:</p>
+<table>
+  <tr><th>Entry</th><th>URL prefix</th><th>Scope</th><th>Auth</th></tr>
+  <tr><td>Tomball (DOS MAS)</td><td><code>/dos/</code></td><td>Tomball location only</td><td>Site password</td></tr>
+  <tr><td>Copperfield (UNO MAS)</td><td><code>/uno/</code></td><td>Copperfield location only</td><td>Site password</td></tr>
+  <tr><td>Corporate</td><td><code>/corporate/</code></td><td>Both locations combined</td><td>Site password</td></tr>
+  <tr><td>Partner</td><td><code>/partner/</code></td><td>Both, owners-only (full management labor + chat + future legal/financial)</td><td>Site password <strong>+</strong> separate Partner password</td></tr>
+</table>
+<p>Once inside a store, the sidebar links auto-prefix with that store's slug, so every report renders scoped to that location's data.</p>
+
+<h2>What does each section do?</h2>
+<p>See the <a href="/partner/developer/app/features">Features</a> doc for a per-page breakdown. Quick overview:</p>
+<ul>
+  <li><strong>Today → Dashboard</strong>: KPI strip + today's deliveries + needs-attention items.</li>
+  <li><strong>Operations → Vendors → Produce → Orders</strong>: weekly Alvarado vs J. Luna price tracking + per-item history charts.</li>
+  <li><strong>Operations → Ezcater</strong>: catering order processor, review queue, driver tracking, driver portal.</li>
+  <li><strong>Operations → Schedule</strong>: BOH / FOH / All Roster + Weekly schedule view from Sling.</li>
+  <li><strong>Insights → Performance</strong>: per-server tip percentage + service timing from Toast.</li>
+  <li><strong>Insights → Sales</strong>: third-party sales by channel (Toast in-store, Online, DoorDash, etc.).</li>
+  <li><strong>Insights → Labor</strong>: BOH / FOH labor cost as % of net sales.</li>
+  <li><strong>Developer → Chat</strong> (Partner only): persistent thread for Sam + AI agents.</li>
+  <li><strong>Developer → App</strong> (Partner only): these docs.</li>
+</ul>
+
+<h2>How is data flowing in?</h2>
+<p>See the <a href="/partner/developer/app/data-sources">Data Sources</a> doc. In summary:</p>
+<ul>
+  <li><strong>Toast POS</strong> — orders, employees, jobs, time entries, scheduled shifts. Pulled on demand by report routes; cached on disk.</li>
+  <li><strong>Sling</strong> — schedules + roster (both locations cleanly; Toast's API only mirrors one location).</li>
+  <li><strong>EzCater Partner API</strong> — incoming order webhooks → auto-assign courier → ingest into the kitchen DB → Telegram notify.</li>
+  <li><strong>Produce vendors</strong> — Alvarado / J. Luna email weekly price sheets to <code>orders@cenaskitchen.com</code>; an IMAP poller parses them and writes to the DB.</li>
+</ul>
+
+<h2>Where the code lives</h2>
+<table>
+  <tr><th>Where</th><th>What</th></tr>
+  <tr><td>GitHub</td><td><code>github.com/leverr18/cenas-ezlive</code> (auto-deploys to Render on push to <code>main</code>)</td></tr>
+  <tr><td>Local dev clone</td><td><code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code></td></tr>
+  <tr><td>Hosting</td><td>Render.com — service <code>cenas-ezlive</code></td></tr>
+  <tr><td>Public URL</td><td>https://app.cenaskitchen.com (CNAME → cenas-ezlive.onrender.com)</td></tr>
+</table>
+
+<h2>How updates ship</h2>
+<ol>
+  <li>Sam asks for a change in chat or via this Developer Chat.</li>
+  <li>This Claude (or a successor) makes the code change, smoke-tests locally.</li>
+  <li>Sam approves; commit + push to <code>main</code>.</li>
+  <li>Render auto-builds + deploys (~3-5 min). New code goes live on the same URL.</li>
+</ol>
+
+<h2>Where to go from here</h2>
+<ul>
+  <li><a href="/partner/developer/app/architecture">Architecture</a> — how the Flask app is structured (blueprints, services, DB).</li>
+  <li><a href="/partner/developer/app/features">Features</a> — what each report page does.</li>
+  <li><a href="/partner/developer/app/data-sources">Data Sources</a> — every external system this site talks to.</li>
+  <li><a href="/partner/developer/app/deployment">Deployment</a> — Render config, env vars, migration story.</li>
+  <li><a href="/partner/developer/app/tech-stack">Tech Stack</a> — Python / Flask / SQLite / Toast / Sling / Chart.js.</li>
+</ul>
+{% endblock %}

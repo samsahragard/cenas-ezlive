@@ -154,10 +154,25 @@
 
     {% if store_slug == 'partner' %}
     {# DEVELOPER section — Partner-only. Lets Sam + Claude(s) coordinate via persistent chat. #}
+    {% set app_doc_open = active in ['doc_readme','doc_architecture','doc_features','doc_tech_stack','doc_deployment','doc_data_sources'] %}
     <div class="nav-section">Developer</div>
     <a class="nav-link {% if active == 'dev_chat' %}active{% endif %}" href="/partner/developer/chat">
       <span class="nav-icon">💬</span>Chat
     </a>
+    <div class="nav-group {% if app_doc_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">📖</span>App
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'doc_readme' %}active{% endif %}" href="/partner/developer/app/readme"><span class="nav-icon">·</span>README</a>
+        <a class="nav-link {% if active == 'doc_architecture' %}active{% endif %}" href="/partner/developer/app/architecture"><span class="nav-icon">·</span>Architecture</a>
+        <a class="nav-link {% if active == 'doc_features' %}active{% endif %}" href="/partner/developer/app/features"><span class="nav-icon">·</span>Features</a>
+        <a class="nav-link {% if active == 'doc_tech_stack' %}active{% endif %}" href="/partner/developer/app/tech-stack"><span class="nav-icon">·</span>Tech Stack</a>
+        <a class="nav-link {% if active == 'doc_deployment' %}active{% endif %}" href="/partner/developer/app/deployment"><span class="nav-icon">·</span>Deployment</a>
+        <a class="nav-link {% if active == 'doc_data_sources' %}active{% endif %}" href="/partner/developer/app/data-sources"><span class="nav-icon">·</span>Data Sources</a>
+      </div>
+    </div>
     {% endif %}
 
     <div class="sidebar-footer">

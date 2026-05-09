@@ -1,0 +1,102 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>Architecture overview</h2>
+<p>Single Flask app, SQLite DB on a persistent disk. No microservices, no message bus. Everything that needs to be persistent goes through SQLAlchemy ORM. Background work (the produce IMAP poller) runs as a daemon thread inside the gunicorn process, guarded by a file lock so multiple workers don't double-poll.</p>
+
+<h2>Top-level layout</h2>
+<pre>
+cenas-kitchen-claude/
+├── app/
+│   ├── __init__.py             create_app() — registers blueprints, runs DB create_all + bootstraps
+│   ├── db.py                   SQLAlchemy engine + SessionLocal
+│   ├── models.py               All ORM models (Order, OrderItem, Driver, DriverLog,
+│   │                           ProducePriceSnapshot, DeveloperChatMessage)
+│   ├── web/                    Flask blueprints (URL routes)
+│   │   ├── auth.py             /login, /partner-login, store_picker at /
+│   │   ├── store_routes.py     /<store_slug>/* — per-store scope + delegation
+│   │   ├── ezcater_routes.py   home(), legacy /orders/, ingest endpoints
+│   │   ├── ezcater_webhook.py  /ezcater/webhook — auto-pipeline
+│   │   ├── orders_browse.py    /orders/<location>, /orders/view/<id>
+│   │   ├── manager_routes.py   /manager (renamed Driver Tracking in sidebar)
+│   │   ├── driver_routes.py    /driver
+│   │   ├── review_routes.py    /review
+│   │   ├── produce_order.py    /produce/* — order guide
+│   │   ├── reports.py          /reports/labor /reports/server-performance etc.
+│   │   └── developer_chat.py   /partner/developer/chat + app docs
+│   ├── services/               Pure-Python aggregation logic, no Flask deps
+│   │   ├── orders_service.py   PDF processing pipeline
+│   │   ├── orders_query.py     list_orders_for_location, grid builders
+│   │   ├── persistence_service.py
+│   │   ├── dispatch_planner.py
+│   │   ├── routing_service.py
+│   │   ├── produce_ingest.py   IMAP poller (runs as daemon thread)
+│   │   ├── produce_history.py  Price-history queries
+│   │   ├── toast_client.py     Toast OAuth + HTTP + disk cache
+│   │   ├── toast_reports.py    labor_report, server_perf_report, third_party_sales_report
+│   │   ├── sling_client.py     Sling API client + Cloudflare-WAF-friendly headers
+│   │   ├── sling_reports.py    schedule_report, roster_report
+│   │   └── role_classifier.py  BOH/FOH + management classification
+│   ├── templates/              Jinja2 templates
+│   ├── static/                 dashboard.css, brand assets, icons, JS
+│   └── docs/ (referenced)      App docs templates
+├── migrations/versions/        Alembic migration files
+└── scripts/                    Operational helpers (chat_tail.py, ezcater_*)
+</pre>
+
+<h2>Blueprints (URL routing)</h2>
+<table>
+  <tr><th>Blueprint</th><th>Mount</th><th>Owns</th></tr>
+  <tr><td><code>auth</code></td><td>root</td><td>Site password gate, store picker, partner login</td></tr>
+  <tr><td><code>store</code></td><td><code>/&lt;store_slug&gt;</code></td><td>Per-store wrappers that set <code>g.location_override</code> and delegate to top-level handlers</td></tr>
+  <tr><td><code>ezcater</code></td><td>various</td><td>Manager dashboard home, legacy <code>/orders/*</code>, ingest endpoints</td></tr>
+  <tr><td><code>browse</code></td><td><code>/orders</code></td><td>Per-location order lists, single + combined views</td></tr>
+  <tr><td><code>manager / driver / review</code></td><td>their paths</td><td>Logging UIs</td></tr>
+  <tr><td><code>produce_order</code></td><td><code>/produce</code></td><td>Order guide, cart submission, vendor email confirm/cancel</td></tr>
+  <tr><td><code>webhook</code></td><td><code>/ezcater/webhook</code></td><td>ezCater Partner API webhook auto-pipeline</td></tr>
+  <tr><td><code>reports</code></td><td><code>/reports</code></td><td>Labor, Server Perf, Third-Party Sales, Schedule, Roster, Produce Orders</td></tr>
+  <tr><td><code>developer_chat</code></td><td><code>/partner/developer/*</code></td><td>Chat + App docs (this page)</td></tr>
+</table>
+
+<h2>The store-prefix layer</h2>
+<p>The <strong>store_routes.py</strong> blueprint is the navigation skeleton for the four scopes (DOS / UNO / Corporate / Partner). It uses Flask's <code>url_value_preprocessor</code> to extract the slug off the URL and put it on <code>g.current_store</code>, then has thin wrapper routes that delegate to the top-level handlers (e.g., <code>/dos/reports/labor/boh</code> sets <code>g.location_override = 'tomball'</code> and <code>g.labor_filter = 'boh'</code>, then calls the existing <code>/reports/labor</code> handler).</p>
+<p>Why this design: the legacy top-level URLs (<code>/reports/labor?location=tomball</code>) still work for backwards compatibility and bookmark stability, while the new <code>/&lt;store&gt;/...</code> URLs are the canonical thing the sidebar generates. Reports honor <code>g.location_override</code> first, fall back to the <code>?location=</code> query param.</p>
+
+<h2>Auth — two tiers</h2>
+<table>
+  <tr><th>Tier</th><th>Gate</th><th>Where checked</th></tr>
+  <tr><td>1 — site</td><td><code>EZLIVE_PASSWORD</code> env var</td><td><code>auth._gate</code> before_request hook in <code>auth.py</code></td></tr>
+  <tr><td>2 — Partner</td><td><code>PARTNER_PASSWORD</code> env var</td><td><code>store_bp.before_request</code> hook in <code>store_routes.py</code> (only fires for <code>/partner/*</code>) AND each <code>developer_chat.py</code> route's <code>_enforce_partner()</code> guard (since dev_chat routes don't go through the store_bp prefix preprocessor)</td></tr>
+</table>
+<p>Logout (<code>/logout</code>) clears both <code>session['auth_ok']</code> and <code>session['partner_auth_ok']</code>.</p>
+
+<h2>Database</h2>
+<p><strong>SQLite</strong> on a Render persistent disk. Path is <code>/var/data/cenas_kitchen.db</code> via the <code>DATABASE_URL</code> env var. Tables:</p>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td><code>orders</code></td><td>Catering orders (ezCater + manual PDF upload)</td></tr>
+  <tr><td><code>order_items</code></td><td>Per-line items in each catering order</td></tr>
+  <tr><td><code>drivers</code></td><td>Driver directory (one row per driver per location)</td></tr>
+  <tr><td><code>driver_logs</code></td><td>Per-delivery driver performance entries</td></tr>
+  <tr><td><code>produce_price_snapshot</code></td><td>One row per (vendor × item × snapshot date), populated by the IMAP poller</td></tr>
+  <tr><td><code>developer_chat</code></td><td>Persistent chat for Sam + AI agents</td></tr>
+</table>
+<p>Schema-evolution story: alembic migrations live in <code>migrations/versions/</code>. Render's preDeployCommand <em>should</em> run <code>alembic upgrade head</code> but that field is currently unset on the service. As a backstop, <code>create_app()</code> calls <code>Base.metadata.create_all()</code> on startup which is idempotent and creates any new tables (but doesn't apply ALTERs to existing tables).</p>
+
+<h2>Background work</h2>
+<table>
+  <tr><th>Job</th><th>Where it lives</th><th>How it runs</th></tr>
+  <tr><td>Produce IMAP polling</td><td><code>app/services/produce_ingest.py</code></td><td>Daemon thread spawned by <code>create_app()</code>; <code>fcntl</code> file lock at <code>/var/data/produce/.ingest.lock</code> ensures only one gunicorn worker actually polls. Default interval 60s. Disabled unless <code>PRODUCE_INGEST_ENABLED=1</code> in env.</td></tr>
+  <tr><td>EzCater webhook handler</td><td><code>app/web/ezcater_webhook.py</code></td><td>Synchronous handler — receives webhook, pulls order via Partner API (with retry + soft-fail for race-conditioned <code>deliveryId</code>), assigns courier, calls <code>/orders/ingest_structured</code> self-route, sends Telegram</td></tr>
+</table>
+
+<h2>Caching strategy</h2>
+<table>
+  <tr><th>What</th><th>Where</th><th>TTL / refresh</th></tr>
+  <tr><td>Toast orders / employees / jobs / time entries</td><td><code>/var/data/toast/&lt;file&gt;.json</code></td><td>Indefinite — refresh by deleting the file or passing <code>refresh=True</code> in the service call</td></tr>
+  <tr><td>Sling groups / users / calendar</td><td><code>/var/data/sling/&lt;file&gt;.json</code></td><td>Same pattern</td></tr>
+  <tr><td>Toast OAuth token</td><td>In-process memory (<code>ToastClient.shared()</code>)</td><td>Auto-refresh on JWT exp - 5 min, or on 401 retry</td></tr>
+  <tr><td>Produce vendor JSONs</td><td><code>/var/data/produce/{alvarado,jluna}.json</code></td><td>Replaced on each fresh IMAP-parsed email</td></tr>
+</table>
+
+{% endblock %}

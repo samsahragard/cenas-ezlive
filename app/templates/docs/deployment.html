@@ -1,0 +1,117 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>Deployment overview</h2>
+<p>Render.com auto-deploys on every push to the <code>main</code> branch of <code>github.com/leverr18/cenas-ezlive</code>. Build takes ~2-3 min; pre-deploy + spin-up adds another ~2 min, so total time from <code>git push</code> to live is typically 4-5 min. The 502 page during deploy swap is normal and resolves in ~30s.</p>
+
+<h2>Render service config</h2>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Service name</td><td><code>cenas-ezlive</code></td></tr>
+  <tr><td>Plan</td><td>Starter ($7/mo, always-on, persistent disks supported)</td></tr>
+  <tr><td>Region</td><td>Oregon</td></tr>
+  <tr><td>Repo</td><td><code>leverr18/cenas-ezlive</code> (auto-deploys from <code>main</code>)</td></tr>
+  <tr><td>Default URL</td><td><code>cenas-ezlive.onrender.com</code></td></tr>
+  <tr><td>Custom URL</td><td><code>app.cenaskitchen.com</code></td></tr>
+  <tr><td>Build command</td><td><code>pip install -r requirements.txt</code></td></tr>
+  <tr><td>Pre-deploy command</td><td><em>currently unset</em> — should be <code>alembic upgrade head</code> (see "DB schema" below)</td></tr>
+  <tr><td>Start command</td><td><code>gunicorn --timeout 120 wsgi:app</code></td></tr>
+</table>
+
+<h2>Persistent disk</h2>
+<p>1 GB at <code>/var/data</code>. Holds:</p>
+<ul>
+  <li><code>cenas_kitchen.db</code> — the SQLite DB. Path is wired in via the <code>DATABASE_URL</code> env var.</li>
+  <li><code>toast/*</code> — Toast API cache files (orders, employees, jobs, time entries per location).</li>
+  <li><code>sling/*</code> — Sling API cache (groups, users, calendar windows).</li>
+  <li><code>produce/*</code> — vendor JSONs (current week's parsed prices) + ingest state + IMAP attachment files.</li>
+</ul>
+
+<h2>Environment variables</h2>
+<p>Names only — values live as Render env vars. Tap them via the Render dashboard or via the API (see <a href="/partner/developer/app/data-sources">Data Sources</a> for the API ops cheatsheet).</p>
+<h3>Auth</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>EZLIVE_PASSWORD</code></td><td>Site-level password (Tier 1) — gates everything except a few exempt endpoints</td></tr>
+  <tr><td><code>PARTNER_PASSWORD</code></td><td>Second-factor for <code>/partner/*</code> — gates owner-only views (full management labor + dev chat)</td></tr>
+  <tr><td><code>SECRET_KEY</code></td><td>Flask session signing key</td></tr>
+  <tr><td><code>INGEST_TOKEN</code></td><td>Bearer token for the legacy PDF ingest endpoints (out-of-band; not browser-facing)</td></tr>
+</table>
+<h3>Database</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>DATABASE_URL</code></td><td>SQLite path — e.g., <code>sqlite:////var/data/cenas_kitchen.db</code></td></tr>
+</table>
+<h3>Toast POS</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>TOAST_CLIENT_ID</code></td><td>OAuth client id</td></tr>
+  <tr><td><code>TOAST_CLIENT_SECRET</code></td><td>OAuth client secret</td></tr>
+  <tr><td><code>TOAST_RESTAURANT_GUID_TOMBALL</code></td><td>Restaurant GUID for Tomball</td></tr>
+  <tr><td><code>TOAST_RESTAURANT_GUID_COPPERFIELD</code></td><td>Restaurant GUID for Copperfield</td></tr>
+</table>
+<h3>Sling</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>SLING_API_KEY</code></td><td>Authorization header value captured from a logged-in browser session. Lasts ~30 days; refresh by re-capturing</td></tr>
+  <tr><td><code>SLING_ORG_ID</code></td><td>Optional override (default 451153 = Cenas Kitchen)</td></tr>
+</table>
+<h3>EzCater</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>EZCATER_API_TOKEN</code></td><td>Bearer token for ezCater Partner API + GraphQL mutations</td></tr>
+</table>
+<h3>External services</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Vision parsing of PDFs + produce email images</td></tr>
+  <tr><td><code>ANTHROPIC_MODEL</code></td><td>Optional model override</td></tr>
+  <tr><td><code>GOOGLE_MAPS_API_KEY</code></td><td>Routes API for distance / travel time</td></tr>
+  <tr><td><code>TELEGRAM_BOT_TOKEN</code></td><td>Bot token for outbound notifications</td></tr>
+  <tr><td><code>ORDERS_EMAIL_PWD</code></td><td>IMAP password for the produce-vendor email account</td></tr>
+</table>
+<h3>Toggles</h3>
+<table>
+  <tr><th>Var</th><th>Purpose</th></tr>
+  <tr><td><code>WEBHOOK_TEST_MODE</code></td><td>1 = log only, don't act on ezCater webhooks</td></tr>
+  <tr><td><code>PRODUCE_INGEST_ENABLED</code></td><td>1 = run the IMAP poller daemon thread</td></tr>
+  <tr><td><code>PRODUCE_STATE_DIR</code></td><td>Path override for vendor JSON state (default <code>/var/data/produce</code>)</td></tr>
+  <tr><td><code>LOG_LEVEL</code></td><td>Python logging level (INFO, DEBUG, etc.)</td></tr>
+</table>
+
+<h2>DB schema management</h2>
+<p>Two paths exist; the alembic path is the right long-term answer but currently isn't wired:</p>
+<ul>
+  <li><strong>Alembic migrations</strong> in <code>migrations/versions/</code>. Runs via <code>alembic upgrade head</code> when configured as the Render <code>preDeployCommand</code>. <em>Currently the field is unset.</em></li>
+  <li><strong>Backstop:</strong> <code>create_app()</code> calls <code>Base.metadata.create_all()</code> on startup. This creates any new tables that aren't on the live DB but does NOT apply ALTERs to existing tables. Safe for adding entirely new model classes; not safe for adding columns to existing models.</li>
+</ul>
+<p>If you add a new column to an existing model: add a migration AND consider a code-level idempotent <code>op.add_column(if_not_exists=True)</code> until preDeployCommand is wired.</p>
+
+<h2>Common deploy tasks</h2>
+
+<h3>Trigger a deploy without a git push</h3>
+<p>Push to <code>main</code> auto-deploys. To trigger without code changes (e.g., to pick up env-var changes), use the Render dashboard's "Manual Deploy" button OR call the Render API:</p>
+<pre>POST https://api.render.com/v1/services/srv-d7ue6ivlk1mc73aaka20/deploys
+Body: {"clearCache":"do_not_clear"}
+Auth: Bearer &lt;render_api_key&gt;
+</pre>
+
+<h3>Set or update an env var</h3>
+<pre>PUT https://api.render.com/v1/services/srv-d7ue6ivlk1mc73aaka20/env-vars/&lt;NAME&gt;
+Body: {"value":"&lt;new value&gt;"}
+</pre>
+<p>(See the secrets path doc for where the Render API key is stored.)</p>
+
+<h3>Tail logs</h3>
+<pre>GET https://api.render.com/v1/logs?ownerId=&lt;owner&gt;&resource=srv-d7ue6ivlk1mc73aaka20&limit=100&direction=backward</pre>
+
+<h2>Local development</h2>
+<ol>
+  <li>Clone <code>github.com/leverr18/cenas-ezlive</code> to <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code></li>
+  <li>Create venv: <code>python -m venv .venv</code></li>
+  <li>Install deps: <code>./.venv/Scripts/pip install -r requirements.txt</code></li>
+  <li>Set env vars in a local <code>.env</code> (the app's <code>db.py</code> calls <code>load_dotenv</code>)</li>
+  <li>Run dev server: <code>./.venv/Scripts/waitress-serve.exe --listen=127.0.0.1:5000 wsgi:app</code> or <code>flask run</code></li>
+</ol>
+
+{% endblock %}

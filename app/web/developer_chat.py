@@ -141,3 +141,43 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
     else:
         d["css_class"] = "msg-other"
     return d
+
+
+# ============== App Docs (Partner-only) ==============
+# Read-only documentation served from Jinja templates. NO secrets in any of
+# these templates — tokens, passwords, API keys are referenced by env-var
+# name or by their secrets-file path, never by value. Updates only via Sam-
+# approved git commits; no edit UI.
+DOC_PAGES = [
+    ("readme",        "README",       "doc_readme"),
+    ("architecture",  "Architecture", "doc_architecture"),
+    ("features",      "Features",     "doc_features"),
+    ("tech-stack",    "Tech Stack",   "doc_tech_stack"),
+    ("deployment",    "Deployment",   "doc_deployment"),
+    ("data-sources",  "Data Sources", "doc_data_sources"),
+]
+
+
+@dev_chat.route("/partner/developer/app")
+@dev_chat.route("/partner/developer/app/<page>")
+def app_doc(page: str = "readme"):
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    page_meta = next(((slug, label, active_key) for slug, label, active_key in DOC_PAGES
+                      if slug == page), None)
+    if page_meta is None:
+        abort(404)
+    slug, label, active_key = page_meta
+    # Set partner context for the sidebar
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    template_name = f"docs/{slug.replace('-', '_')}.html"
+    return render_template(
+        template_name,
+        active=active_key,
+        page_title=label,
+        doc_pages=DOC_PAGES,
+        current_doc_slug=slug,
+    )

@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, render_template, request, g
 
-from app.services import toast_reports, sling_reports
+from app.services import toast_reports, sling_reports, produce_history
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +72,42 @@ def _default_dates_future() -> tuple[str, str]:
     today = datetime.now().date()
     end = today + timedelta(days=6)
     return today.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
+@reports.route("/produce-orders")
+def produce_orders():
+    """Produce orders + price history page (Vendors → Produce → Orders).
+
+    Shows: latest pricing (Alvarado vs J. Luna with winner per item),
+    biggest movers (week-over-week price moves >= 5%), per-item price
+    history chart (Chart.js).
+    """
+    selected_item = (request.args.get("item") or "").strip()
+    days = max(7, min(int(request.args.get("days") or 90), 365))
+    movers_threshold = float(request.args.get("threshold") or 5.0)
+
+    ctx = {
+        "active": "produce_orders",
+        "page_title": "Produce Orders & Price History",
+        "selected_item": selected_item,
+        "days": days,
+        "movers_threshold": movers_threshold,
+        "error": None,
+    }
+    try:
+        ctx["latest"] = produce_history.latest_prices()
+        ctx["movers"] = produce_history.biggest_movers(threshold_pct=movers_threshold)
+        ctx["available_items"] = produce_history.list_distinct_items()
+        if selected_item:
+            # parse "Name|Size" or just "Name"
+            parts = selected_item.split("|", 1)
+            name = parts[0].strip()
+            size = parts[1].strip() if len(parts) > 1 else None
+            ctx["history"] = produce_history.history_for_item(name, size, days=days)
+    except Exception as ex:
+        log.exception("produce-orders report failed")
+        ctx["error"] = f"Could not load produce history: {ex}"
+    return render_template("reports_produce_orders.html", **ctx)
 
 
 @reports.route("/third-party-sales")

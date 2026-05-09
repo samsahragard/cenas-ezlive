@@ -113,6 +113,78 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _save_price_snapshots(vendor: str, payload: dict) -> None:
+    """Insert one row per (vendor, item) into produce_price_snapshot.
+
+    snapshot_date is parsed from `payload['date_range']` if present (the week
+    the prices apply to — typically Mon-Sun); falls back to today's date.
+    Uses INSERT OR IGNORE on the unique (snapshot_date, vendor, canonical_name,
+    canonical_size) constraint so re-runs of the same email are idempotent."""
+    from datetime import date
+    import re
+    from app.db import SessionLocal
+    from app.models import ProducePriceSnapshot
+
+    items = payload.get("items") or []
+    if not items:
+        return
+
+    # Pick a snapshot_date: parse "5/5 - 5/11" / "5/5/2026 - 5/11/2026" style,
+    # take the start date. Fall back to today.
+    today_iso = date.today().isoformat()
+    snapshot_date = today_iso
+    dr = (payload.get("date_range") or "").strip()
+    if dr:
+        m = re.search(r"(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?", dr)
+        if m:
+            mo = int(m.group(1)); dy = int(m.group(2))
+            yr_raw = m.group(3)
+            yr = int(yr_raw) if yr_raw else date.today().year
+            if yr < 100:
+                yr += 2000
+            try:
+                snapshot_date = date(yr, mo, dy).isoformat()
+            except ValueError:
+                pass
+
+    parsed_at = payload.get("parsed_at")
+    db = SessionLocal()
+    inserted = skipped = 0
+    try:
+        for it in items:
+            cn = (it.get("canonical_name") or "").strip()
+            cs = (it.get("canonical_size") or "").strip() or None
+            price = it.get("price")
+            if not cn or price is None:
+                continue
+            # Idempotency: check if a row already exists for this key, skip if so
+            exists = (
+                db.query(ProducePriceSnapshot)
+                .filter_by(snapshot_date=snapshot_date, vendor=vendor,
+                           canonical_name=cn, canonical_size=cs)
+                .first()
+            )
+            if exists:
+                skipped += 1
+                continue
+            db.add(ProducePriceSnapshot(
+                snapshot_date=snapshot_date,
+                vendor=vendor,
+                canonical_name=cn,
+                canonical_size=cs,
+                price=float(price),
+                raw_item_name=(it.get("vendor_name") or it.get("name")),
+                parsed_at=parsed_at,
+                date_range=dr or None,
+            ))
+            inserted += 1
+        db.commit()
+    finally:
+        db.close()
+    logger.info("price-snapshot vendor=%s date=%s inserted=%d skipped=%d",
+                vendor, snapshot_date, inserted, skipped)
+
+
 def _read_json(path: Path, default=None):
     if path.exists():
         try:
@@ -461,6 +533,13 @@ def _process_email(M, mid: bytes, sender_info: dict) -> dict | None:
     _write_json(vendor_file, payload)
     logger.info("mid=%s vendor=%s parsed=%d mapped=%d unmapped=%d",
                 mid_str, vendor, len(items), len(mapped), len(unmapped))
+
+    # Persist a snapshot row per item to produce_price_snapshot — feeds the
+    # price-history view. Idempotent: re-runs of the same email won't dup.
+    try:
+        _save_price_snapshots(vendor, payload)
+    except Exception:
+        logger.exception("price-snapshot persistence failed for vendor=%s mid=%s", vendor, mid_str)
 
     if unmapped:
         sample = ", ".join(f"{u['vendor_name']} {u['vendor_size']}" for u in unmapped[:3])

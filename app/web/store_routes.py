@@ -90,6 +90,16 @@ def produce(subpath: str = ""):
     return redirect(target)
 
 
+@store_bp.route("/produce/orders")
+def produce_orders():
+    """Vendors → Produce → Orders (per Sam's mockup). Price history + biggest
+    movers + winner table. Currently org-wide (vendor pricing isn't location-
+    specific in our setup); the per-store URL prefix is preserved for symmetry
+    with the other sidebar leaves."""
+    from app.web.reports import produce_orders as view
+    return view()
+
+
 # ============== OPERATIONS — EZCATER ==============
 
 @store_bp.route("/orders")

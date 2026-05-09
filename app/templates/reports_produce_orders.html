@@ -1,0 +1,252 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('produce_orders') %}
+{% block title %}Produce Orders — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Produce Orders &amp; Price History{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Track per-item price movement Alvarado vs J. Luna over time. Catches vendors quietly bumping prices.</p>
+{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+{# ============ KPI strip ============ #}
+{% if latest %}
+<div class="kpis" style="margin-bottom:18px; grid-template-columns: repeat(3, 1fr);">
+  <div class="kpi-card kpi-1">
+    <div class="kpi-label">Items tracked</div>
+    <div class="kpi-value">{{ latest.total }}</div>
+    <div class="kpi-sub">canonical SKUs in current vendor sheets</div>
+  </div>
+  <div class="kpi-card kpi-2">
+    <div class="kpi-label">Biggest movers (week/week)</div>
+    <div class="kpi-value">{{ movers.rows | length }}</div>
+    <div class="kpi-sub">≥ {{ "%.0f"|format(movers_threshold) }}% change since previous snapshot</div>
+  </div>
+  <div class="kpi-card kpi-3">
+    <div class="kpi-label">Snapshot window</div>
+    <div class="kpi-value" style="font-size:18px;">{{ days }} days</div>
+    <div class="kpi-sub">in-process price log</div>
+  </div>
+</div>
+{% endif %}
+
+{# ============ Biggest movers callout ============ #}
+{% if movers and movers.rows %}
+<h2 style="margin: 18px 0 8px 0; color: #fff; font-size: 17px; font-weight: 600;">
+  ⚠️ Biggest movers — week over week
+  <span style="color: var(--text-3); font-size: 13px; font-weight: 400; margin-left: 8px;">
+    items where the price moved ≥ {{ "%.0f"|format(movers_threshold) }}% on either vendor
+  </span>
+</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Item</th>
+        <th>Size</th>
+        <th>Vendor</th>
+        <th style="text-align:right;">Old price ({{ movers.rows[0].old_date if movers.rows else '' }})</th>
+        <th style="text-align:right;">New price</th>
+        <th style="text-align:right;">% change</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in movers.rows %}
+      <tr>
+        <td><strong>{{ m.name }}</strong></td>
+        <td style="color:var(--text-3); font-size: 12px;">{{ m.size or '—' }}</td>
+        <td><span class="pill" style="font-size:10px; padding: 2px 8px; background: rgba(255,255,255,0.06); color: var(--text-2); border: 1px solid var(--glass-border);">{{ m.vendor.title() }}</span></td>
+        <td style="text-align:right; color:var(--text-3);">${{ "%.2f"|format(m.old_price) }} <span style="font-size:10px;">({{ m.old_date }})</span></td>
+        <td style="text-align:right;">${{ "%.2f"|format(m.new_price) }} <span style="font-size:10px; color:var(--text-3);">({{ m.new_date }})</span></td>
+        <td style="text-align:right;">
+          <strong style="color: {{ '#ef6e6e' if m.direction == 'up' else '#7ad27a' }};">
+            {{ '+' if m.direction == 'up' else '' }}{{ "%.1f"|format(m.pct_change) }}%
+          </strong>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; color: var(--text-2);">
+  <strong style="color:#7ad27a;">No big movers right now.</strong>
+  <span style="color: var(--text-3); margin-left: 8px;">No item moved ≥ {{ "%.0f"|format(movers_threshold) }}% since the last vendor email. Check back next week.</span>
+</div>
+{% endif %}
+
+{# ============ Per-item history chart ============ #}
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 17px; font-weight: 600;">
+  Per-item price history
+</h2>
+<form method="GET" action="{{ url_for('reports.produce_orders') }}"
+      style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
+             padding: 14px; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+  <div style="display:flex; flex-direction:column; gap:4px; min-width: 280px;">
+    <label for="item" style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Item</label>
+    <select id="item" name="item"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="">— pick an item —</option>
+      {% for it in available_items %}
+        {% set opt_value = it.name + ('|' + it.size if it.size else '') %}
+        <option value="{{ opt_value }}" {% if selected_item == opt_value %}selected{% endif %}>
+          {{ it.name }}{% if it.size %} · {{ it.size }}{% endif %}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="days" style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Lookback</label>
+    <select id="days" name="days"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="30"  {% if days == 30 %}selected{% endif %}>30 days</option>
+      <option value="60"  {% if days == 60 %}selected{% endif %}>60 days</option>
+      <option value="90"  {% if days == 90 %}selected{% endif %}>90 days</option>
+      <option value="180" {% if days == 180 %}selected{% endif %}>6 months</option>
+      <option value="365" {% if days == 365 %}selected{% endif %}>1 year</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-portal" style="padding:10px 22px;">Show chart</button>
+</form>
+
+{% if history %}
+<div style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+  <h3 style="margin: 0 0 8px 0; color: #fff; font-size: 16px;">
+    {{ history.name }}{% if history.size %} <span style="color:var(--text-3); font-weight: 400;">· {{ history.size }}</span>{% endif %}
+  </h3>
+  <div style="position: relative; height: 320px;">
+    <canvas id="priceChart"></canvas>
+  </div>
+  {% if not history.snapshot_dates %}
+  <p style="color: var(--text-3); font-size: 13px; margin-top: 10px;">No price snapshots yet for this item in the {{ days }}-day window.</p>
+  {% endif %}
+</div>
+<script>
+(function() {
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const data = {
+    datasets: [
+      {
+        label: 'Alvarado',
+        data: {{ history.vendors.alvarado | tojson }},
+        borderColor: '#f4a93b',
+        backgroundColor: 'rgba(244, 169, 59, 0.1)',
+        borderWidth: 2,
+        tension: 0.15,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+      {
+        label: 'J. Luna',
+        data: {{ history.vendors.jluna | tojson }},
+        borderColor: '#7ad27a',
+        backgroundColor: 'rgba(122, 210, 122, 0.1)',
+        borderWidth: 2,
+        tension: 0.15,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+    ],
+  };
+  new Chart(ctx, {
+    type: 'line',
+    data: data,
+    options: {
+      maintainAspectRatio: false,
+      parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      scales: {
+        x: { type: 'category', ticks: { color: '#cccccc' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        y: { ticks: { color: '#cccccc', callback: function(v) { return '$' + v; } },
+              grid: { color: 'rgba(255,255,255,0.06)' },
+              title: { display: true, text: 'Price', color: '#cccccc' } },
+      },
+      plugins: {
+        legend: { labels: { color: '#cccccc' } },
+        tooltip: {
+          callbacks: { label: function(ctx) { return ctx.dataset.label + ': $' + ctx.parsed.y.toFixed(2); } }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+
+{# ============ Latest pricing table ============ #}
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 17px; font-weight: 600;">
+  Latest pricing — current week
+</h2>
+{% if latest and latest.rows %}
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Item</th>
+        <th>Size</th>
+        <th style="text-align:right;">Alvarado</th>
+        <th style="text-align:right;">J. Luna</th>
+        <th>Winner</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in latest.rows %}
+      <tr>
+        <td><strong>{{ it.name }}</strong></td>
+        <td style="color:var(--text-3); font-size: 12px;">{{ it.size or '—' }}</td>
+        <td style="text-align:right;">
+          {% if it.alvarado %}
+            <strong style="{% if it.winner == 'alvarado' %}color: #7ad27a;{% endif %}">${{ "%.2f"|format(it.alvarado.price) }}</strong>
+            <div style="font-size:10px; color:var(--text-3);">{{ it.alvarado.snapshot_date }}</div>
+          {% else %}
+            <span style="color:var(--text-3);">—</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right;">
+          {% if it.jluna %}
+            <strong style="{% if it.winner == 'jluna' %}color: #7ad27a;{% endif %}">${{ "%.2f"|format(it.jluna.price) }}</strong>
+            <div style="font-size:10px; color:var(--text-3);">{{ it.jluna.snapshot_date }}</div>
+          {% else %}
+            <span style="color:var(--text-3);">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if it.winner == 'alvarado' %}
+            <span class="pill pill-ok" style="font-size:10px; padding:2px 8px;">Alvarado</span>
+          {% elif it.winner == 'jluna' %}
+            <span class="pill pill-ok" style="font-size:10px; padding:2px 8px;">J. Luna</span>
+          {% else %}
+            <span style="color:var(--text-3); font-size:11px;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <p style="margin:0;font-size:14px;color:#fff;">No price snapshots yet.</p>
+  <p style="margin:6px 0 0 0; color: var(--text-3); font-size: 12px;">
+    Vendors send weekly price emails; the IMAP poller writes a snapshot each time.
+    History will populate over the coming weeks.
+  </p>
+</div>
+{% endif %}
+
+<div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
+  <p><strong>How this works</strong></p>
+  <ul>
+    <li>Each Monday-ish, Alvarado and J. Luna email their weekly price sheet to <code>orders@cenaskitchen.com</code>. The IMAP poller (running on Render) parses each sheet and writes one snapshot row per item to the <code>produce_price_snapshot</code> table.</li>
+    <li>"Biggest movers" compares each item's most recent two snapshots per vendor and surfaces anything that moved ≥ {{ "%.0f"|format(movers_threshold) }}%. Negative = price went down (good for us); positive = vendor bumped the price.</li>
+    <li>Per-item chart shows both vendors over the chosen lookback window. Easy to screenshot and send back when a vendor explains a sudden jump.</li>
+    <li>Currently the page shows org-wide pricing — vendor sheets aren't location-specific. Per-store URL prefix is preserved for navigation symmetry.</li>
+    <li>Also see <a href="/produce/" style="color: var(--accent-soft);">Produce Order Guide</a> for placing a new order using these prices.</li>
+  </ul>
+</div>
+
+{% endblock %}

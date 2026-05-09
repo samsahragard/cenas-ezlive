@@ -6,6 +6,8 @@ from sqlalchemy import (
     Integer,
     Boolean,
     DateTime,
+    Float,
+    Date,
     Text,
     ForeignKey,
     UniqueConstraint,
@@ -248,3 +250,28 @@ class DriverLog(Base):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     logged_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class ProducePriceSnapshot(Base):
+    """One row per (vendor, item, snapshot_date) — captures the price the
+    vendor quoted in their weekly price sheet. Populated by produce_ingest
+    every time a fresh email is parsed; the (snapshot_date, vendor,
+    canonical_name, canonical_size) uniqueness keeps re-runs idempotent."""
+    __tablename__ = "produce_price_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    snapshot_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    vendor: Mapped[str] = mapped_column(String(50), nullable=False, index=True)         # 'alvarado' / 'jluna'
+    canonical_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    canonical_size: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    raw_item_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    parsed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)            # ISO timestamp from the source email
+    date_range: Mapped[str | None] = mapped_column(String(80), nullable=True)           # e.g. "5/5 - 5/11"
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_date", "vendor", "canonical_name", "canonical_size",
+                         name="uq_pps_per_day_vendor_item"),
+    )

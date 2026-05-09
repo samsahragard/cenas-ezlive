@@ -152,6 +152,65 @@
       color: rgba(255,255,255,0.35);
       text-align: center;
     }
+    /* Drivers card — full width below the 2x2 store grid, two-button layout */
+    .drivers-card {
+      grid-column: 1 / -1;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 18px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+      padding: 20px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 18px;
+      justify-content: space-between;
+    }
+    .drivers-card .drivers-text h2 {
+      margin: 0 0 2px 0;
+      font-size: 18px;
+      color: #fff;
+    }
+    .drivers-card .drivers-text p {
+      margin: 0;
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+    }
+    .drivers-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .drivers-btn {
+      display: inline-block;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      text-decoration: none;
+      border: 1px solid transparent;
+      transition: transform 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .drivers-btn-primary {
+      background: rgba(232, 122, 62, 0.85);
+      color: #fff;
+    }
+    .drivers-btn-primary:hover {
+      transform: translateY(-1px);
+      background: rgba(232, 122, 62, 1);
+    }
+    .drivers-btn-secondary {
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.85);
+      border-color: rgba(255,255,255,0.18);
+    }
+    .drivers-btn-secondary:hover {
+      transform: translateY(-1px);
+      border-color: rgba(232, 122, 62, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -202,6 +261,17 @@
       </div>
       <span class="soon-tag">Beta</span>
     </a>
+
+    <div class="drivers-card">
+      <div class="drivers-text">
+        <h2>Drivers</h2>
+        <p>Sign up or log in to view your delivery logs.</p>
+      </div>
+      <div class="drivers-actions">
+        <a class="drivers-btn drivers-btn-secondary" href="/driver/login">Log in</a>
+        <a class="drivers-btn drivers-btn-primary" href="/driver/signup">Sign up</a>
+      </div>
+    </div>
   </div>
 
   <p class="picker-footer">v1 · cenaskitchen.com</p>

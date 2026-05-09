@@ -219,12 +219,23 @@ class FailureSnapshot(Base):
 
 class Driver(Base):
     __tablename__ = "drivers"
-    __table_args__ = (UniqueConstraint("name", "location", name="uq_driver_name_location"),)
+    __table_args__ = (
+        UniqueConstraint("name", "location", name="uq_driver_name_location"),
+        UniqueConstraint("email", name="uq_drivers_email"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     location: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lockout_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class DriverLog(Base):

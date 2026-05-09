@@ -1,0 +1,104 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'drivers_admin' %}
+{% block title %}Drivers — {{ store_label }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Drivers{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {% if current_location == 'both' %}
+      All locations · {{ drivers|length }} driver{{ '' if drivers|length == 1 else 's' }}
+    {% else %}
+      <span class="location-badge">{{ store_label }}</span> · {{ drivers|length }} driver{{ '' if drivers|length == 1 else 's' }}
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block content %}
+{% if temp_pw %}
+  <div class="banner banner-success" style="margin-bottom:18px;">
+    <strong>Temp password for {{ temp_for }}:</strong>
+    <code style="font-size:18px;letter-spacing:1px;background:rgba(0,0,0,0.35);padding:4px 10px;border-radius:6px;margin-left:8px;">{{ temp_pw }}</code>
+    <span style="display:block;margin-top:6px;font-size:12px;opacity:0.7;">
+      Read this to the driver — it won't be shown again. They can log in with it and use the password they want to keep.
+    </span>
+  </div>
+{% endif %}
+{% if error %}
+  <div class="banner banner-error" style="margin-bottom:18px;">{{ error }}</div>
+{% endif %}
+
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Status</th>
+        <th>Name</th>
+        {% if current_location == 'both' %}<th>Location</th>{% endif %}
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Address</th>
+        <th>Account</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if drivers %}
+        {% for d in drivers %}
+        <tr style="{% if not d.active %}opacity:0.5;{% endif %}">
+          <td>
+            {% if not d.active %}
+              <span style="color:#c0392b;font-weight:600;">Inactive</span>
+            {% elif not d.password_hash %}
+              <span style="color:#d4af37;font-weight:600;">No password</span>
+            {% elif d.lockout_until %}
+              <span style="color:#d4af37;font-weight:600;">Locked out</span>
+            {% else %}
+              <span style="color:#7bb87b;">Active</span>
+            {% endif %}
+          </td>
+          <td>{{ d.name }}</td>
+          {% if current_location == 'both' %}<td>{{ location_labels.get(d.location, d.location) }}</td>{% endif %}
+          <td>{% if d.email %}<a href="mailto:{{ d.email }}" style="color:var(--accent-soft);">{{ d.email }}</a>{% else %}<span style="opacity:0.45;">—</span>{% endif %}</td>
+          <td>{{ d.phone or '—' }}</td>
+          <td>{{ d.address or '—' }}</td>
+          <td>
+            {% if d.password_hash %}set{% else %}—{% endif %}
+            {% if d.failed_attempts and d.failed_attempts > 0 %}
+              <span style="color:#d4af37;font-size:11px;display:block;">{{ d.failed_attempts }} failed</span>
+            {% endif %}
+          </td>
+          <td>
+            <form action="{{ url_for('store.drivers_reset', driver_id=d.id) }}" method="POST"
+                  style="display:inline-block;margin-right:6px;"
+                  onsubmit="return confirm('Reset password for {{ d.name }}? You’ll get a new temp password to read to them.');">
+              <button type="submit" class="btn-logout" style="background:rgba(232,122,62,0.85);color:#fff;font-size:11px;padding:5px 10px;">Reset PW</button>
+            </form>
+            <form action="{{ url_for('store.drivers_toggle_active', driver_id=d.id) }}" method="POST"
+                  style="display:inline-block;"
+                  onsubmit="return confirm('{% if d.active %}Deactivate{% else %}Reactivate{% endif %} {{ d.name }}?');">
+              <button type="submit" class="btn-logout" style="font-size:11px;padding:5px 10px;">
+                {% if d.active %}Deactivate{% else %}Reactivate{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="{% if current_location == 'both' %}8{% else %}7{% endif %}"
+              style="color:var(--text-3);font-style:italic;text-align:center;padding:30px;">
+            No drivers yet.
+            {% if current_location != 'both' %}
+              Drivers can sign up at <a href="/driver/signup" style="color:var(--accent-soft);">/driver/signup</a>.
+            {% endif %}
+          </td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<p style="margin-top:18px;font-size:12px;color:var(--text-3);">
+  Drivers self-sign-up from the main page. Reset issues a one-time temp password — read it to them; they can log in and create the password they want.
+</p>
+{% endblock %}

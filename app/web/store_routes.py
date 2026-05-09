@@ -20,6 +20,10 @@ from __future__ import annotations
 
 from flask import Blueprint, g, abort, request, render_template, redirect, url_for, session
 
+from app.db import get_db
+from app.models import Driver
+from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
+
 # slug → location filter for downstream report functions
 STORE_TO_LOCATION = {
     "dos":       "tomball",
@@ -140,6 +144,64 @@ def driver_tracking():
 @store_bp.route("/driver-portal")
 def driver_portal():
     return redirect("/driver" + (("?" + request.query_string.decode()) if request.query_string else ""))
+
+
+# ============== OPERATIONS — DRIVERS ADMIN ==============
+
+@store_bp.route("/drivers", methods=["GET"])
+def drivers_admin():
+    """Per-store driver admin: list / reset PW / deactivate.
+
+    Per-location stores see only their own drivers; corporate + partner see all.
+    Anyone past the site `cenas` gate can reach /uno/, /dos/, /corporate/.
+    Partner is additionally gated by the partner-auth before_request hook above.
+    """
+    db = next(get_db())
+    try:
+        q = db.query(Driver)
+        if g.current_location != "both":
+            q = q.filter(Driver.location == g.current_location)
+        rows = q.order_by(Driver.location, Driver.name).all()
+        return render_template(
+            "driver_admin.html",
+            drivers=rows,
+            store_label=g.store_label,
+            current_location=g.current_location,
+            location_labels=LOCATION_LABELS,
+            temp_pw=request.args.get("temp_pw"),
+            temp_for=request.args.get("temp_for"),
+            error=request.args.get("error"),
+            active="drivers_admin",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/drivers/<int:driver_id>/reset", methods=["POST"])
+def drivers_reset(driver_id: int):
+    db = next(get_db())
+    try:
+        row = db.get(Driver, driver_id)
+        if not row or (g.current_location != "both" and row.location != g.current_location):
+            return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
+        temp = issue_temp_password(db, row)
+        return redirect(url_for("store.drivers_admin", temp_pw=temp, temp_for=row.name))
+    finally:
+        db.close()
+
+
+@store_bp.route("/drivers/<int:driver_id>/toggle-active", methods=["POST"])
+def drivers_toggle_active(driver_id: int):
+    db = next(get_db())
+    try:
+        row = db.get(Driver, driver_id)
+        if not row or (g.current_location != "both" and row.location != g.current_location):
+            return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
+        row.active = not row.active
+        db.commit()
+        return redirect(url_for("store.drivers_admin"))
+    finally:
+        db.close()
 
 
 # ============== OPERATIONS — SCHEDULE ==============

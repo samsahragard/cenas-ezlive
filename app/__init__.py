@@ -62,6 +62,40 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("Base.metadata.create_all failed (non-fatal)")
 
+    # Idempotent column backfill for the drivers table. Required because
+    # alembic Pre-Deploy isn't wired on Render and create_all() doesn't ALTER
+    # existing tables — so the columns added in migration 8_drivers_auth would
+    # otherwise never appear in production. Each ALTER is gated on column
+    # absence, so this is safe to run on every boot.
+    try:
+        from sqlalchemy import inspect as _sa_inspect, text as _sa_text
+        from app.db import engine as _eng
+        if _eng is not None:
+            insp = _sa_inspect(_eng)
+            if "drivers" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("drivers")}
+                bool_true = "1" if _eng.dialect.name == "sqlite" else "TRUE"
+                additions = [
+                    ("email", "VARCHAR(200)"),
+                    ("phone", "VARCHAR(50)"),
+                    ("address", "VARCHAR(300)"),
+                    ("password_hash", "VARCHAR(200)"),
+                    ("active", f"BOOLEAN NOT NULL DEFAULT {bool_true}"),
+                    ("failed_attempts", "INTEGER NOT NULL DEFAULT 0"),
+                    ("lockout_until", "TIMESTAMP"),
+                ]
+                added = []
+                with _eng.begin() as conn:
+                    for col_name, col_def in additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text(f"ALTER TABLE drivers ADD COLUMN {col_name} {col_def}"))
+                            added.append(col_name)
+                if added:
+                    logging.getLogger(__name__).info(
+                        "drivers table: backfilled missing columns %s", added)
+    except Exception:
+        logging.getLogger(__name__).exception("drivers column backfill failed (non-fatal)")
+
     # One-time bootstrap of produce_price_snapshot from the current vendor JSONs
     # if the table is empty and the JSONs exist. Idempotent — only runs once.
     try:

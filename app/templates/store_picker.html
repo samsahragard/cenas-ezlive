@@ -82,25 +82,35 @@
       pointer-events: none;
     }
     .picker-marquee {
-      height: 200px;
+      height: 280px;
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
+      background: #0e0604;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      position: relative;
+    }
+    .picker-marquee img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+    /* Text fallback for Corporate / Partner (no photo) */
+    .picker-marquee.text-only {
       font-family: 'Georgia', serif;
-      font-size: 64px;
+      font-size: 36px;
       font-weight: 800;
       letter-spacing: 4px;
       background:
-        radial-gradient(circle at 20% 30%, rgba(255,180,80,0.18), transparent 50%),
-        radial-gradient(circle at 80% 70%, rgba(255,80,80,0.18), transparent 50%),
+        radial-gradient(circle at 20% 30%, rgba(255,180,80,0.12), transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(255,80,80,0.12), transparent 50%),
         linear-gradient(180deg, #1a0e08 0%, #0e0604 100%);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      letter-spacing: 6px;
     }
-    .picker-marquee.dos    { color: #f4a93b; text-shadow: 0 0 12px rgba(244,169,59,0.45); }
-    .picker-marquee.uno    { color: #e87a3e; text-shadow: 0 0 12px rgba(232,122,62,0.45); }
-    .picker-marquee.corp   { color: #cccccc; font-size: 36px; letter-spacing: 4px; }
-    .picker-marquee.part   { color: #d4af37; font-size: 36px; letter-spacing: 4px; }
+    .picker-marquee.text-only.corp { color: #cccccc; }
+    .picker-marquee.text-only.part { color: #d4af37; }
     .picker-body {
       padding: 16px 20px;
     }
@@ -151,17 +161,10 @@
   </div>
 
   <div class="picker-grid">
-    <a class="picker-card" href="/dos/">
-      <div class="picker-marquee dos">DOS MAS</div>
-      <div class="picker-body">
-        <h2>Tomball</h2>
-        <p class="sub">27727 Tomball Pkwy</p>
-        <span class="picker-login">Log in →</span>
-      </div>
-    </a>
-
     <a class="picker-card" href="/uno/">
-      <div class="picker-marquee uno">UNO MAS</div>
+      <div class="picker-marquee">
+        <img src="{{ url_for('static', filename='brand/uno-mas.jpg') }}" alt="UNO MAS">
+      </div>
       <div class="picker-body">
         <h2>Copperfield</h2>
         <p class="sub">15650 FM 529</p>
@@ -169,8 +172,19 @@
       </div>
     </a>
 
+    <a class="picker-card" href="/dos/">
+      <div class="picker-marquee">
+        <img src="{{ url_for('static', filename='brand/dos-mas.jpg') }}" alt="DOS MAS">
+      </div>
+      <div class="picker-body">
+        <h2>Tomball</h2>
+        <p class="sub">27727 Tomball Pkwy</p>
+        <span class="picker-login">Log in →</span>
+      </div>
+    </a>
+
     <a class="picker-card" href="/corporate/">
-      <div class="picker-marquee corp">CORPORATE</div>
+      <div class="picker-marquee text-only corp">CORPORATE</div>
       <div class="picker-body">
         <h2>Corporate</h2>
         <p class="sub">Both locations · combined view</p>
@@ -180,7 +194,7 @@
     </a>
 
     <a class="picker-card" href="/partner/">
-      <div class="picker-marquee part">PARTNER</div>
+      <div class="picker-marquee text-only part">PARTNER</div>
       <div class="picker-body">
         <h2>Partner</h2>
         <p class="sub">Owners only — financial + legal (soon)</p>

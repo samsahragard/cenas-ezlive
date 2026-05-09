@@ -40,7 +40,8 @@
     <div class="nav-section">People</div>
     <a class="nav-link {% if active == 'manager' %}active{% endif %}" href="/manager"><span class="nav-icon">👥</span>Manager Dashboard</a>
     <a class="nav-link {% if active == 'driver' %}active{% endif %}" href="/driver"><span class="nav-icon">👤</span>Driver Portal</a>
-    <a class="nav-link disabled"><span class="nav-icon">○</span>Labor<span class="nav-soon">soon</span></a>
+    <a class="nav-link {% if active == 'labor' %}active{% endif %}" href="/reports/labor"><span class="nav-icon">⏱</span>Labor</a>
+    <a class="nav-link {% if active == 'server_perf' %}active{% endif %}" href="/reports/server-performance"><span class="nav-icon">🍽</span>Server Performance</a>
 
     <div class="nav-section">Insights</div>
     <a class="nav-link disabled"><span class="nav-icon">📈</span>Sales<span class="nav-soon">soon</span></a>

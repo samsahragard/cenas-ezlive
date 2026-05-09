@@ -1,0 +1,117 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'server_perf' %}
+{% block title %}Server Performance — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Server Performance{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Per-waiter tip % + service timing (drink → entree gap, ticket duration). FOH staff only (Server / Trainee / Bartender / Host).</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('reports.server_performance') }}"
+      style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
+             padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
+             display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="start" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Start date</label>
+    <input type="date" id="start" name="start" value="{{ form_default_start }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="end" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">End date</label>
+    <input type="date" id="end" name="end" value="{{ form_default_end }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="location" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Location</label>
+    <select id="location" name="location"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="both"        {% if form_location == 'both' %}selected{% endif %}>Both</option>
+      <option value="tomball"     {% if form_location == 'tomball' %}selected{% endif %}>Tomball</option>
+      <option value="copperfield" {% if form_location == 'copperfield' %}selected{% endif %}>Copperfield</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-portal" style="padding:10px 22px;">Run report</button>
+</form>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+{% if report %}
+{% for loc, data in report.by_location.items() %}
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">
+  {{ data.label }}
+  <span style="color: var(--text-3); font-size: 14px; font-weight: 400; margin-left: 8px;">
+    {{ data.total_checks }} checks across {{ data.rows | length }} server{{ 's' if data.rows | length != 1 else '' }}
+  </span>
+</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Server</th>
+        <th style="text-align:right;">Tickets</th>
+        <th style="text-align:right;">Avg drink</th>
+        <th style="text-align:right;">Avg apps (n)</th>
+        <th style="text-align:right;">Avg entree</th>
+        <th style="text-align:right;">Drink→Entree gap</th>
+        <th style="text-align:right;">Avg duration</th>
+        <th style="text-align:right;">CC tabs</th>
+        <th style="text-align:right;">CC tips</th>
+        <th style="text-align:right;">Tip %</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in data.rows %}
+      <tr>
+        <td><strong>{{ r.name }}</strong></td>
+        <td style="text-align:right;">{{ r.tickets }}</td>
+        <td style="text-align:right;">{{ fmt_duration(r.avg_drink_secs) }}</td>
+        <td style="text-align:right;">
+          {% if r.avg_app_secs is not none %}
+            {{ fmt_duration(r.avg_app_secs) }}
+            <span style="color:var(--text-3); font-size:11px;">({{ r.app_count }})</span>
+          {% else %}—{% endif %}
+        </td>
+        <td style="text-align:right;">{{ fmt_duration(r.avg_entree_secs) }}</td>
+        <td style="text-align:right;">{{ fmt_duration(r.avg_gap_secs) }}</td>
+        <td style="text-align:right;">{{ fmt_duration(r.avg_duration_secs) }}</td>
+        <td style="text-align:right;">${{ "{:,.2f}".format(r.cc_subtotal) }}</td>
+        <td style="text-align:right;">${{ "{:,.2f}".format(r.cc_tips) }}</td>
+        <td style="text-align:right;">
+          {% if r.tip_pct is not none %}
+            <strong style="color:var(--accent-soft);">{{ "%.1f"|format(r.tip_pct) }}%</strong>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+<div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
+  <p><strong>Notes</strong></p>
+  <ul>
+    <li><strong>Avg drink</strong> = order open → first drink rung in.</li>
+    <li><strong>Avg apps (n)</strong> = order open → first appetizer; n = tickets that had an appetizer.</li>
+    <li><strong>Avg entree</strong> = order open → first entree rung in.</li>
+    <li><strong>Drink→Entree gap</strong> = avg time between first drink and first entree on same check.
+      <em>Bigger = better service</em> (server made two trips).
+      <em>Small (under ~1 min) = rushed</em> (server took whole order at once).</li>
+    <li><strong>Avg duration</strong> = order open → check closed.</li>
+    <li><strong>CC tabs</strong> = sum of <code>payment.amount</code> for CREDIT payments (food + drinks + tax, before tip).</li>
+    <li><strong>CC tips</strong> = sum of <code>payment.tipAmount</code> for CREDIT payments (added on top of the tab).</li>
+    <li><strong>Tip %</strong> = total CC tips / total CC tabs × 100. Cash sales excluded — Toast doesn't track cash tips.</li>
+    <li>Voided orders + voided checks + voided selections excluded.</li>
+    <li>Only employees with Server / Server Trainee / Bartender / Host roles included. Managers/cooks/owners excluded.</li>
+  </ul>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <p style="margin:0;font-size:15px;color:#fff;">Pick a date range and run the report.</p>
+</div>
+{% endif %}
+
+{% endblock %}

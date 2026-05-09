@@ -1,0 +1,155 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'labor' %}
+{% block title %}Labor Report — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Labor Report{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Labor cost by position with % of net sales (industry-standard labor cost ratio).</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('reports.labor') }}"
+      style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
+             padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
+             display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="start" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Start date</label>
+    <input type="date" id="start" name="start" value="{{ form_default_start }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="end" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">End date</label>
+    <input type="date" id="end" name="end" value="{{ form_default_end }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="location" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Location</label>
+    <select id="location" name="location"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="both"        {% if form_location == 'both' %}selected{% endif %}>Both</option>
+      <option value="tomball"     {% if form_location == 'tomball' %}selected{% endif %}>Tomball</option>
+      <option value="copperfield" {% if form_location == 'copperfield' %}selected{% endif %}>Copperfield</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-portal" style="padding:10px 22px;">Run report</button>
+</form>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+{% if report %}
+
+<div class="kpis" style="margin-bottom:18px;">
+  <div class="kpi-card kpi-1">
+    <div class="kpi-label">Net sales</div>
+    <div class="kpi-value">${{ "{:,.0f}".format(report.totals.net_sales) }}</div>
+    <div class="kpi-sub">pre-tax · pre-tip</div>
+  </div>
+  <div class="kpi-card kpi-2">
+    <div class="kpi-label">Labor cost</div>
+    <div class="kpi-value">${{ "{:,.0f}".format(report.totals.labor_cost) }}</div>
+    <div class="kpi-sub">{{ "%.1f"|format(report.totals.hours) }} hrs · {{ report.totals.shifts }} shifts</div>
+  </div>
+  <div class="kpi-card kpi-3">
+    <div class="kpi-label">Labor cost ratio</div>
+    <div class="kpi-value">{{ "%.1f"|format(report.totals.labor_pct_of_sales) }}%</div>
+    <div class="kpi-sub">of net sales</div>
+  </div>
+  <div class="kpi-card kpi-4">
+    <div class="kpi-label">Range</div>
+    <div class="kpi-value" style="font-size:18px;">{{ report.start }} → {{ report.end }}</div>
+    <div class="kpi-sub">{{ report.locations | join(' + ') }}</div>
+  </div>
+</div>
+
+{% if report.warnings %}
+  {% for w in report.warnings %}
+    <div class="banner banner-warn">{{ w }}</div>
+  {% endfor %}
+{% endif %}
+
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">By position</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Position</th>
+        <th style="text-align:right;">People</th>
+        <th style="text-align:right;">Hours</th>
+        <th style="text-align:right;">Labor cost</th>
+        <th style="text-align:right;">% Net Sales</th>
+        <th style="text-align:right;">% of Labor</th>
+        <th style="text-align:right;">Shifts</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in report.by_position %}
+      <tr>
+        <td><strong>{{ r.title }}</strong></td>
+        <td style="text-align:right;">{{ r.people_count }}</td>
+        <td style="text-align:right;">{{ "%.1f"|format(r.hours) }}</td>
+        <td style="text-align:right;">${{ "{:,.2f}".format(r.labor_cost) }}</td>
+        <td style="text-align:right;"><strong style="color:var(--accent-soft);">{{ "%.2f"|format(r.pct_net_sales) }}%</strong></td>
+        <td style="text-align:right; color:var(--text-3);">{{ "%.1f"|format(r.pct_of_labor) }}%</td>
+        <td style="text-align:right; color:var(--text-3);">{{ r.shifts }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">People in each position</h2>
+{% for r in report.by_position %}
+  <details style="margin-bottom: 12px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 10px; padding: 12px 16px;">
+    <summary style="cursor: pointer; color: #fff; font-weight: 600;">
+      {{ r.title }}
+      <span style="color:var(--text-3); font-weight: 400; margin-left: 8px;">
+        — {{ r.people_count }} ppl · {{ "%.1f"|format(r.hours) }} hrs · ${{ "{:,.2f}".format(r.labor_cost) }} ({{ "%.2f"|format(r.pct_net_sales) }}% of net sales)
+      </span>
+    </summary>
+    <div class="table-scroll" style="margin-top:10px;">
+      <table class="log-table">
+        <thead>
+          <tr class="group-header">
+            <th>Person</th>
+            <th style="text-align:right;">Hours</th>
+            <th style="text-align:right;">Cost</th>
+            <th>Locations</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in r.people %}
+          <tr>
+            <td>{{ p.name }}</td>
+            <td style="text-align:right;">{{ "%.1f"|format(p.hours) }}</td>
+            <td style="text-align:right;">${{ "{:,.2f}".format(p.cost) }}</td>
+            <td style="color:var(--text-3); font-size: 12px;">{{ p.locations | join(', ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+{% endfor %}
+
+<div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
+  <p><strong>Notes</strong></p>
+  <ul>
+    <li><strong>Net sales</strong> = sum of <code>check.amount</code> (pre-tax subtotal) across non-voided checks. Excludes tax, tips, and voided checks.</li>
+    <li><strong>% Net Sales</strong> = position labor cost / net sales × 100. Industry-standard labor cost ratio.</li>
+    <li><strong>% of Labor</strong> = position labor cost / total labor cost × 100. (How payroll is distributed within the labor pool.)</li>
+    <li><strong>Hours</strong> = regularHours + overtimeHours (clocked time, not scheduled).</li>
+    <li><strong>Labor cost</strong> = regularHours × hourlyWage + overtimeHours × hourlyWage × 1.5 (1.5× OT multiplier).</li>
+    <li>Tips (cash + CC) are server earnings paid by customer, NOT employer expense — not in labor cost.</li>
+    <li>Salaried positions (GM, Owner) show $0 in Toast <code>hourlyWage</code> — their real cost lives in payroll.</li>
+    <li>Deleted time entries + voided checks excluded.</li>
+  </ul>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <p style="margin:0;font-size:15px;color:#fff;">Pick a date range and run the report.</p>
+</div>
+{% endif %}
+
+{% endblock %}

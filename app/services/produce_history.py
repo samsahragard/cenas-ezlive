@@ -177,9 +177,12 @@ def list_distinct_items() -> list[dict]:
 
 def bootstrap_from_current_jsons(state_dir) -> dict:
     """Read alvarado.json + jluna.json from the produce state dir and seed the
-    snapshot table. Idempotent (uses upsert via existence check)."""
+    snapshot table. Per-row commits so a race with the IMAP poller (or another
+    gunicorn worker also bootstrapping) doesn't roll back everything — just
+    skips the conflicting row."""
     from pathlib import Path
     import json as jsonlib
+    from sqlalchemy.exc import IntegrityError
 
     state_dir = Path(state_dir)
     inserted = 0
@@ -191,7 +194,6 @@ def bootstrap_from_current_jsons(state_dir) -> dict:
             if not f.exists():
                 continue
             payload = jsonlib.loads(f.read_text(encoding="utf-8"))
-            # Re-use the same date-derivation logic as produce_ingest._save_price_snapshots
             from datetime import date as _date
             import re as _re
             today_iso = _date.today().isoformat()
@@ -215,25 +217,21 @@ def bootstrap_from_current_jsons(state_dir) -> dict:
                 price = it.get("price")
                 if not cn or price is None:
                     continue
-                exists = (
-                    db.query(ProducePriceSnapshot)
-                    .filter_by(snapshot_date=snapshot_date, vendor=vendor,
-                               canonical_name=cn, canonical_size=cs)
-                    .first()
-                )
-                if exists:
-                    skipped += 1
-                    continue
-                db.add(ProducePriceSnapshot(
+                row = ProducePriceSnapshot(
                     snapshot_date=snapshot_date, vendor=vendor,
                     canonical_name=cn, canonical_size=cs,
                     price=float(price),
                     raw_item_name=(it.get("vendor_name") or it.get("name")),
                     parsed_at=payload.get("parsed_at"),
                     date_range=dr or None,
-                ))
-                inserted += 1
-        db.commit()
+                )
+                db.add(row)
+                try:
+                    db.commit()
+                    inserted += 1
+                except IntegrityError:
+                    db.rollback()
+                    skipped += 1
     finally:
         db.close()
     return {"inserted": inserted, "skipped": skipped}

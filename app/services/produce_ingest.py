@@ -148,6 +148,7 @@ def _save_price_snapshots(vendor: str, payload: dict) -> None:
                 pass
 
     parsed_at = payload.get("parsed_at")
+    from sqlalchemy.exc import IntegrityError as _IE
     db = SessionLocal()
     inserted = skipped = 0
     try:
@@ -157,28 +158,22 @@ def _save_price_snapshots(vendor: str, payload: dict) -> None:
             price = it.get("price")
             if not cn or price is None:
                 continue
-            # Idempotency: check if a row already exists for this key, skip if so
-            exists = (
-                db.query(ProducePriceSnapshot)
-                .filter_by(snapshot_date=snapshot_date, vendor=vendor,
-                           canonical_name=cn, canonical_size=cs)
-                .first()
-            )
-            if exists:
-                skipped += 1
-                continue
+            # Per-row commit so a race with another worker (or the bootstrap on
+            # startup) doesn't roll back the whole batch — just skips the
+            # conflicting row.
             db.add(ProducePriceSnapshot(
-                snapshot_date=snapshot_date,
-                vendor=vendor,
-                canonical_name=cn,
-                canonical_size=cs,
+                snapshot_date=snapshot_date, vendor=vendor,
+                canonical_name=cn, canonical_size=cs,
                 price=float(price),
                 raw_item_name=(it.get("vendor_name") or it.get("name")),
-                parsed_at=parsed_at,
-                date_range=dr or None,
+                parsed_at=parsed_at, date_range=dr or None,
             ))
-            inserted += 1
-        db.commit()
+            try:
+                db.commit()
+                inserted += 1
+            except _IE:
+                db.rollback()
+                skipped += 1
     finally:
         db.close()
     logger.info("price-snapshot vendor=%s date=%s inserted=%d skipped=%d",

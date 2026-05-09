@@ -38,6 +38,7 @@
     max-width: 88%;
   }
   .msg-sam     { border-color: rgba( 64,128,232,0.45); align-self: flex-end; background: rgba( 64,128,232,0.08); }
+  .msg-masood  { border-color: rgba(180,110,232,0.45); align-self: flex-end; background: rgba(180,110,232,0.08); }
   .msg-aick    { border-color: rgba(232,122, 62,0.45); align-self: flex-start; background: rgba(232,122, 62,0.08); }
   .msg-ck      { border-color: rgba(122,210,122,0.45); align-self: flex-start; background: rgba(122,210,122,0.08); }
   .msg-system  { border-color: rgba(255,255,255,0.16); align-self: center;   background: rgba(255,255,255,0.04); font-style: italic; }
@@ -201,6 +202,7 @@
     <div class="chat-input-row">
       <select name="author">
         <option value="sam" selected>sam</option>
+        <option value="masood">masood</option>
         <option value="aick-claude">aick-claude</option>
         <option value="ck-claude">ck-claude</option>
         <option value="system">system</option>
@@ -231,9 +233,11 @@
   function authorClass(author) {
     const a = (author || '').toLowerCase();
     if (a === 'sam') return 'msg-sam';
-    if (a.includes('aick') || a.includes('claude')) return 'msg-aick';
+    if (a === 'masood') return 'msg-masood';
+    if (a.includes('aick')) return 'msg-aick';
     if (a.includes('ck')) return 'msg-ck';
     if (a === 'system') return 'msg-system';
+    if (a.includes('claude')) return 'msg-aick';
     return 'msg-other';
   }
 

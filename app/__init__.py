@@ -60,6 +60,30 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("Base.metadata.create_all failed (non-fatal)")
 
+    # One-time bootstrap of produce_price_snapshot from the current vendor JSONs
+    # if the table is empty and the JSONs exist. Idempotent — only runs once.
+    try:
+        from app.db import SessionLocal
+        from app.models import ProducePriceSnapshot
+        from app.services.produce_history import bootstrap_from_current_jsons
+        from pathlib import Path as _P
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                count = db.query(ProducePriceSnapshot).count()
+            finally:
+                db.close()
+            if count == 0:
+                state_dir = _P(os.getenv("PRODUCE_STATE_DIR")
+                               or (_P(__file__).resolve().parents[1] / "instance" / "produce"))
+                if state_dir.exists():
+                    result = bootstrap_from_current_jsons(state_dir)
+                    logging.getLogger(__name__).info(
+                        "produce price-snapshot bootstrap: inserted=%d skipped=%d",
+                        result.get("inserted", 0), result.get("skipped", 0))
+    except Exception:
+        logging.getLogger(__name__).exception("produce snapshot bootstrap failed (non-fatal)")
+
     # Start the IMAP poller for produce vendor pricing. No-op unless
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock
     # ensures only one gunicorn worker actually polls.

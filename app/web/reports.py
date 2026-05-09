@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, render_template, request
 
-from app.services import toast_reports
+from app.services import toast_reports, sling_reports
 
 log = logging.getLogger(__name__)
 
@@ -49,11 +49,18 @@ def _location_filter() -> str:
 
 
 def _default_dates() -> tuple[str, str]:
-    """Default form values: last 7 days ending yesterday."""
+    """Default form values for past-data reports: last 7 days ending yesterday."""
     today = datetime.now().date()
     end = today - timedelta(days=1)
     start = end - timedelta(days=6)
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
+def _default_dates_future() -> tuple[str, str]:
+    """Default form values for forward-looking reports (schedule): today + next 7 days."""
+    today = datetime.now().date()
+    end = today + timedelta(days=6)
+    return today.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
 @reports.route("/labor")
@@ -77,6 +84,29 @@ def labor():
             log.exception("labor report failed")
             ctx["error"] = f"Could not generate report: {ex}"
     return render_template("reports_labor.html", **ctx)
+
+
+@reports.route("/schedule")
+def schedule():
+    start, end, err = _parse_date_range()
+    location = _location_filter()
+    default_start, default_end = _default_dates_future()
+    ctx = {
+        "active": "schedule",
+        "page_title": "Schedule",
+        "form_default_start": request.args.get("start") or default_start,
+        "form_default_end": request.args.get("end") or default_end,
+        "form_location": location,
+        "error": err,
+        "report": None,
+    }
+    if start and end and not err:
+        try:
+            ctx["report"] = sling_reports.schedule_report(start, end, location)
+        except Exception as ex:
+            log.exception("schedule report failed")
+            ctx["error"] = f"Could not generate schedule: {ex}"
+    return render_template("reports_schedule.html", **ctx)
 
 
 @reports.route("/server-performance")

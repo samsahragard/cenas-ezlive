@@ -1,0 +1,208 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'schedule' %}
+{% block title %}Schedule — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Schedule{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Published + planning shifts from Sling, both locations. Default range: today + next 7 days.</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('reports.schedule') }}"
+      style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
+             padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
+             display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="start" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Start date</label>
+    <input type="date" id="start" name="start" value="{{ form_default_start }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="end" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">End date</label>
+    <input type="date" id="end" name="end" value="{{ form_default_end }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="location" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Location</label>
+    <select id="location" name="location"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="both"        {% if form_location == 'both' %}selected{% endif %}>Both</option>
+      <option value="tomball"     {% if form_location == 'tomball' %}selected{% endif %}>Tomball</option>
+      <option value="copperfield" {% if form_location == 'copperfield' %}selected{% endif %}>Copperfield</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-portal" style="padding:10px 22px;">Run report</button>
+</form>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+{% if report %}
+
+<div class="kpis" style="margin-bottom:18px;">
+  <div class="kpi-card kpi-1">
+    <div class="kpi-label">Total shifts</div>
+    <div class="kpi-value">{{ report.totals.shifts }}</div>
+    <div class="kpi-sub">{{ report.days | length }} day{{ 's' if report.days | length != 1 else '' }}</div>
+  </div>
+  <div class="kpi-card kpi-2">
+    <div class="kpi-label">Total hours</div>
+    <div class="kpi-value">{{ "%.1f"|format(report.totals.hours) }}</div>
+    <div class="kpi-sub">scheduled (post-break)</div>
+  </div>
+  <div class="kpi-card kpi-3">
+    <div class="kpi-label">Open shifts</div>
+    <div class="kpi-value">{{ report.totals.open_shifts }}</div>
+    <div class="kpi-sub">unassigned</div>
+  </div>
+  <div class="kpi-card kpi-4">
+    <div class="kpi-label">Range</div>
+    <div class="kpi-value" style="font-size:18px;">{{ report.start }} → {{ report.end }}</div>
+    <div class="kpi-sub">
+      {% if report.location_filter == 'both' %}both locations{% else %}{{ report.location_filter | capitalize }}{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if report.location_filter == 'both' and report.by_location %}
+<div style="display:flex; gap:12px; margin-bottom: 24px;">
+  {% for key, data in report.by_location.items() %}
+  <div style="flex:1; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 10px; padding: 12px 16px;">
+    <div style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">{{ data.label }}</div>
+    <div style="font-size: 22px; font-weight: 600; color: #fff; margin-top: 4px;">{{ data.shifts }} shifts</div>
+    <div style="font-size: 13px; color: var(--text-3);">{{ "%.1f"|format(data.hours) }} hrs</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if report.days %}
+{% for day in report.days %}
+<h2 style="margin: 18px 0 8px 0; color: #fff; font-size: 17px; font-weight: 600;">
+  {{ day.label }}
+  <span style="color: var(--text-3); font-size: 13px; font-weight: 400; margin-left: 8px;">
+    {{ day.shift_count }} shift{{ 's' if day.shift_count != 1 else '' }} · {{ "%.1f"|format(day.hours_total) }} hrs
+  </span>
+</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Name</th>
+        <th>Position</th>
+        {% if report.location_filter == 'both' %}<th>Location</th>{% endif %}
+        <th style="text-align:right;">In</th>
+        <th style="text-align:right;">Out</th>
+        <th style="text-align:right;">Hrs</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in day.shifts %}
+      <tr>
+        <td><strong>{{ s.name or '(unassigned)' }}</strong></td>
+        <td>{{ s.position }}</td>
+        {% if report.location_filter == 'both' %}
+        <td style="color:var(--text-3); font-size: 12px;">{{ s.location_label or '?' }}</td>
+        {% endif %}
+        <td style="text-align:right;">{{ s.in_dt.strftime('%I:%M %p').lstrip('0') }}</td>
+        <td style="text-align:right;">{{ s.out_dt.strftime('%I:%M %p').lstrip('0') if s.out_dt else '?' }}</td>
+        <td style="text-align:right;">{{ "%.1f"|format(s.hours) }}</td>
+        <td>
+          {% if s.status == 'published' %}
+            <span class="pill pill-ok" style="font-size:10px;">Published</span>
+          {% elif s.status == 'planning' %}
+            <span class="pill pill-warn" style="font-size:10px;">Planning</span>
+          {% else %}
+            <span style="color:var(--text-3); font-size:11px;">{{ s.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+{% if report.open_shifts %}
+<h2 style="margin: 24px 0 8px 0; color: var(--warn, #f4a93b); font-size: 17px; font-weight: 600;">
+  Open shifts ({{ report.open_shifts | length }})
+  <span style="color: var(--text-3); font-size: 13px; font-weight: 400; margin-left: 8px;">unassigned — needs to be filled</span>
+</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Date</th>
+        <th>Position</th>
+        <th>Location</th>
+        <th style="text-align:right;">In</th>
+        <th style="text-align:right;">Out</th>
+        <th style="text-align:right;">Slots</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in report.open_shifts %}
+      <tr>
+        <td>{{ s.in_dt.strftime('%a %m/%d') }}</td>
+        <td><strong>{{ s.position }}</strong></td>
+        <td style="color:var(--text-3); font-size: 12px;">{{ s.location_label or '?' }}</td>
+        <td style="text-align:right;">{{ s.in_dt.strftime('%I:%M %p').lstrip('0') }}</td>
+        <td style="text-align:right;">{{ s.out_dt.strftime('%I:%M %p').lstrip('0') if s.out_dt else '?' }}</td>
+        <td style="text-align:right;">{{ s.slots }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 17px; font-weight: 600;">By position</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Position</th>
+        <th style="text-align:right;">People</th>
+        <th style="text-align:right;">Shifts</th>
+        <th style="text-align:right;">Hours</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in report.by_position %}
+      <tr>
+        <td><strong>{{ p.title }}</strong></td>
+        <td style="text-align:right;">{{ p.people_count }}</td>
+        <td style="text-align:right;">{{ p.shifts }}</td>
+        <td style="text-align:right;">{{ "%.1f"|format(p.hours) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
+  <p><strong>Notes</strong></p>
+  <ul>
+    <li>Source: <strong>Sling</strong> (getsling.com), the underlying scheduling tool. Toast's scheduling UI shows the same shifts but only exposes Tomball-roster ones via its Partner API; Sling has both locations.</li>
+    <li><strong>Hours</strong> = (out − in) − break duration. Break is whatever the schedule lists for that shift.</li>
+    <li><strong>Status</strong>: <em>Published</em> = visible to the employee in their Sling app. <em>Planning</em> = manager has drafted but not yet sent.</li>
+    <li><strong>Open shifts</strong> are unassigned blocks where a position needs to be filled. Manager assigns from inside Sling.</li>
+    <li>Time off / leave / availability requests aren't shown here yet — only assigned shifts. Could add a tab if useful.</li>
+    <li>Sling token is captured from a logged-in browser session and lasts ~30 days. If shifts stop loading with a "401" or "token expired" banner, log in fresh and refresh.</li>
+  </ul>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <p style="margin:0;font-size:15px;color:#fff;">No shifts in the selected range.</p>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <p style="margin:0;font-size:15px;color:#fff;">Pick a date range and run the report.</p>
+</div>
+{% endif %}
+
+{% endblock %}

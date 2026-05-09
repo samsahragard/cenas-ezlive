@@ -13,6 +13,7 @@ from app.web.ezcater_webhook import webhook as ezwh
 from app.web.produce_order import produce_order as produce
 from app.web.reports import reports as reports_bp
 from app.web.store_routes import store_bp
+from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web import auth as ezauth
 from app.services import produce_ingest
 
@@ -39,6 +40,7 @@ def create_app():
     app.register_blueprint(produce)
     app.register_blueprint(reports_bp)
     app.register_blueprint(store_bp)
+    app.register_blueprint(dev_chat_bp)
 
     # Install the shared-password gate AFTER all other blueprints so the
     # before_request hook sees their routes. Webhook + ingest endpoints

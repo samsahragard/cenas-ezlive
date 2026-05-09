@@ -1,0 +1,194 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('dev_chat') %}
+{% block title %}Developer Chat — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Developer Chat{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Persistent thread for Sam + AI agents (this Claude, CK Claude, future ones). Auto-refreshes every 4 seconds.</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .chat-wrap {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 220px);
+    min-height: 420px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .chat-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .chat-list:empty::after {
+    content: "No messages yet. Drop a hello below.";
+    color: var(--text-3);
+    font-size: 13px;
+    margin: auto;
+  }
+  .msg {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 10px 14px;
+    max-width: 88%;
+  }
+  .msg-sam     { border-color: rgba( 64,128,232,0.45); align-self: flex-end; background: rgba( 64,128,232,0.08); }
+  .msg-aick    { border-color: rgba(232,122, 62,0.45); align-self: flex-start; background: rgba(232,122, 62,0.08); }
+  .msg-ck      { border-color: rgba(122,210,122,0.45); align-self: flex-start; background: rgba(122,210,122,0.08); }
+  .msg-system  { border-color: rgba(255,255,255,0.16); align-self: center;   background: rgba(255,255,255,0.04); font-style: italic; }
+  .msg-other   { align-self: flex-start; }
+
+  .msg-meta {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-3);
+    margin-bottom: 4px;
+  }
+  .msg-meta strong { color: #fff; font-weight: 700; letter-spacing: 0; text-transform: none; font-size: 12px; margin-right: 8px; }
+  .msg-body {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .chat-input {
+    border-top: 1px solid var(--glass-border);
+    padding: 12px;
+    display: flex; gap: 8px; align-items: stretch;
+    background: rgba(0,0,0,0.30);
+  }
+  .chat-input select, .chat-input textarea {
+    background: rgba(0,0,0,0.45);
+    border: 1px solid var(--glass-border);
+    color: #fff;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 14px;
+  }
+  .chat-input select { flex: 0 0 140px; }
+  .chat-input textarea { flex: 1; resize: vertical; min-height: 38px; max-height: 200px; }
+  .chat-input button {
+    flex: 0 0 90px;
+    background: var(--accent, #e87a3e);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .chat-input button:hover { filter: brightness(1.08); }
+
+  .chat-status {
+    font-size: 11px; color: var(--text-3); padding: 4px 16px;
+    background: rgba(0,0,0,0.20); border-bottom: 1px solid var(--glass-border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="chat-wrap">
+  <div class="chat-status">
+    <span id="poll-status">Last sync: never</span>
+    &nbsp;·&nbsp;
+    <span id="msg-count">{{ messages | length }} message{{ 's' if (messages | length) != 1 else '' }}</span>
+  </div>
+
+  <div class="chat-list" id="chat-list">
+    {% for m in messages %}
+    <div class="msg {{ m.css_class }}" data-id="{{ m.id }}">
+      <div class="msg-meta"><strong>{{ m.author }}</strong>{{ m.created_at_display }}</div>
+      <div class="msg-body">{{ m.body }}</div>
+    </div>
+    {% endfor %}
+    <div id="bottom"></div>
+  </div>
+
+  <form class="chat-input" method="POST" action="{{ url_for('developer_chat.post_message') }}">
+    <select name="author">
+      <option value="sam" selected>sam</option>
+      <option value="aick-claude">aick-claude</option>
+      <option value="ck-claude">ck-claude</option>
+      <option value="system">system</option>
+    </select>
+    <textarea name="body" placeholder="Type a message…" required></textarea>
+    <button type="submit">Send</button>
+  </form>
+</div>
+
+<script>
+(function() {
+  let lastId = {{ last_id }};
+  const list = document.getElementById('chat-list');
+  const bottom = document.getElementById('bottom');
+  const status = document.getElementById('poll-status');
+  const counter = document.getElementById('msg-count');
+
+  function authorClass(author) {
+    const a = (author || '').toLowerCase();
+    if (a === 'sam') return 'msg-sam';
+    if (a.includes('aick') || a.includes('claude')) return 'msg-aick';
+    if (a.includes('ck')) return 'msg-ck';
+    if (a === 'system') return 'msg-system';
+    return 'msg-other';
+  }
+
+  function appendMsg(m) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + authorClass(m.author);
+    div.dataset.id = m.id;
+    div.innerHTML = '<div class="msg-meta"><strong></strong></div><div class="msg-body"></div>';
+    div.querySelector('.msg-meta strong').textContent = m.author;
+    div.querySelector('.msg-meta').appendChild(document.createTextNode(m.created_at_display));
+    div.querySelector('.msg-body').textContent = m.body;
+    list.insertBefore(div, bottom);
+  }
+
+  function poll() {
+    fetch('{{ url_for("developer_chat.messages_json") }}?since_id=' + lastId, {
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json' }
+    })
+    .then(r => {
+      if (r.status === 401) {
+        status.textContent = 'Session expired — refresh page';
+        return null;
+      }
+      return r.json();
+    })
+    .then(d => {
+      if (!d) return;
+      const wasAtBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 80;
+      let added = 0;
+      for (const m of d.messages || []) {
+        if (m.id > lastId) {
+          appendMsg(m);
+          lastId = m.id;
+          added++;
+        }
+      }
+      const total = list.querySelectorAll('.msg').length;
+      counter.textContent = total + ' message' + (total === 1 ? '' : 's');
+      const now = new Date();
+      status.textContent = 'Last sync: ' + now.toLocaleTimeString();
+      if (added && wasAtBottom) bottom.scrollIntoView({behavior: 'smooth'});
+    })
+    .catch(e => { status.textContent = 'sync error: ' + e; });
+  }
+  // Initial scroll-to-bottom
+  setTimeout(() => bottom.scrollIntoView(), 100);
+  // Poll every 4s
+  setInterval(poll, 4000);
+  // Also poll once on load to initialize the "last sync" stamp
+  poll();
+})();
+</script>
+{% endblock %}

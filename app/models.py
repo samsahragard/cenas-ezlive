@@ -275,3 +275,14 @@ class ProducePriceSnapshot(Base):
         UniqueConstraint("snapshot_date", "vendor", "canonical_name", "canonical_size",
                          name="uq_pps_per_day_vendor_item"),
     )
+
+
+class DeveloperChatMessage(Base):
+    """Persistent chat for Sam + Claude instances (and any other AI agents)
+    to coordinate via the Partner-only Developer view."""
+    __tablename__ = "developer_chat"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    author: Mapped[str] = mapped_column(String(60), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)

@@ -1,5 +1,5 @@
 {% extends "base_dashboard.html" %}
-{% set active = 'schedule' %}
+{% set active = active|default('schedule') %}
 {% block title %}Schedule — Cenas Kitchen{% endblock %}
 
 {% block page_title %}Schedule{% endblock %}
@@ -34,6 +34,19 @@
   </div>
   <button type="submit" class="btn-portal" style="padding:10px 22px;">Run report</button>
 </form>
+
+{% if presets %}
+<div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom: 14px;">
+  <span style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; padding-top:6px;">Quick range:</span>
+  {% for p in presets %}
+    <a href="?start={{ p.start }}&end={{ p.end }}&location={{ form_location }}"
+       class="pill"
+       style="font-size:11px; padding: 5px 10px; background: rgba(255,255,255,0.06); color: var(--text-2); border: 1px solid var(--glass-border); text-decoration: none;">
+      {{ p.label }}
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
 
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 

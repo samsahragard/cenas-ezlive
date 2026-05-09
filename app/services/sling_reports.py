@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from app.services.sling_client import SlingClient
+from app.services.role_classifier import classify_role
 
 log = logging.getLogger(__name__)
 
@@ -176,12 +177,16 @@ def schedule_report(start: datetime, end: datetime,
 
 def roster_report(location_filter: Optional[str] = None,
                   position_filter: Optional[str] = None,
+                  role_filter: Optional[str] = None,
                   include_inactive: bool = False,
                   refresh: bool = False) -> dict:
     """Compute a per-location employee roster with positions held.
 
     location_filter: 'both' (default), 'tomball', 'copperfield'.
     position_filter: position name string, or None for all.
+    role_filter: 'boh' to show only people whose positions include any BOH role;
+                 'foh' to show only FOH (no BOH positions); 'all' or None for everyone.
+                 Mutually compatible with position_filter.
     include_inactive: by default only active employees are shown.
     """
     client = SlingClient.shared()
@@ -225,6 +230,15 @@ def roster_report(location_filter: Optional[str] = None,
             if position_filter and position_filter != "all":
                 if position_filter not in positions:
                     continue
+            # Apply BOH/FOH role filter
+            if role_filter and role_filter in ("boh", "foh"):
+                roles_held = {classify_role(p) for p in positions}
+                if role_filter == "boh" and "boh" not in roles_held:
+                    continue
+                if role_filter == "foh":
+                    # FOH-only people: at least one FOH position AND no BOH
+                    if "foh" not in roles_held or "boh" in roles_held:
+                        continue
             full = " ".join(filter(None, [u.get("name"), u.get("lastname")])).strip() \
                    or u.get("legalName") or u.get("email") or f"id-{uid}"
             email = u.get("email") or ""
@@ -250,6 +264,7 @@ def roster_report(location_filter: Optional[str] = None,
     return {
         "location_filter": location_filter or "both",
         "position_filter": position_filter or "all",
+        "role_filter": role_filter or "all",
         "include_inactive": include_inactive,
         "available_positions": available_positions,
         "by_location": by_location_out,

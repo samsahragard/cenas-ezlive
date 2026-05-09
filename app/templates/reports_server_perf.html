@@ -1,5 +1,5 @@
 {% extends "base_dashboard.html" %}
-{% set active = 'server_perf' %}
+{% set active = active|default('server_perf') %}
 {% block title %}Server Performance — Cenas Kitchen{% endblock %}
 
 {% block page_title %}Server Performance{% endblock %}

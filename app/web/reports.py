@@ -88,9 +88,30 @@ def third_party_sales():
         "error": err,
         "report": None,
     }
+    channel_filter = getattr(g, "sales_channel", None)
+    if channel_filter not in ("toast", "online", "doordash", "uber", "total", "ezcater", "all"):
+        channel_filter = None
+    page_label = {"toast": " · In-Store", "online": " · Online", "doordash": " · DoorDash",
+                  "uber": " · Uber Eats", "total": " · Total", "ezcater": " · Ezcater"}.get(channel_filter, "")
+    active_key = {"toast": "sales_toast", "online": "sales_online", "doordash": "sales_doordash",
+                  "uber": "sales_uber", "total": "sales_total",
+                  "ezcater": "sales_ezcater"}.get(channel_filter, "third_party_sales")
+    ctx["page_title"] = "Third-Party Sales" + page_label if not page_label else ("Sales" + page_label)
+    ctx["active"] = active_key
+    ctx["channel_filter"] = channel_filter
+    if channel_filter == "ezcater":
+        # ezCater isn't in Toast — it lives in our Order DB. Wiring this up to
+        # actual sales totals requires per-item pricing we don't have yet.
+        ctx["error"] = ("EzCater sales report coming in Phase 3. "
+                        "EzCater orders are tracked in the Order DB but per-item pricing "
+                        "isn't yet captured at the order level — we currently store "
+                        "headcount but not the order total.")
+        return render_template("reports_third_party_sales.html", **ctx)
     if start and end and not err:
         try:
-            ctx["report"] = toast_reports.third_party_sales_report(start, end, location)
+            ctx["report"] = toast_reports.third_party_sales_report(
+                start, end, location, channel_filter=channel_filter
+            )
         except Exception as ex:
             log.exception("third-party sales report failed")
             ctx["error"] = f"Could not generate report: {ex}"
@@ -102,9 +123,18 @@ def labor():
     start, end, err = _parse_date_range()
     location = _location_filter()
     default_start, default_end = _default_dates()
+    role_filter = getattr(g, "labor_filter", None)  # 'boh' / 'foh' / None (= all)
+    if role_filter not in ("boh", "foh"):
+        role_filter = None
+    active_key = {"boh": "boh_labor", "foh": "foh_labor"}.get(role_filter, "labor")
+    role_subtitle = {"boh": " — BOH only (Cook / Prep / Grill / Dish / Enchilada / Kitchen Mgr)",
+                     "foh": " — FOH only (Server / Bartender / Host / Cashier / Busser / Expo / Floor Mgr)"
+                     }.get(role_filter, "")
     ctx = {
-        "active": "labor",
-        "page_title": "Labor Report",
+        "active": active_key,
+        "page_title": "Labor Report" + (role_subtitle and (" · " + role_filter.upper())),
+        "role_subtitle": role_subtitle,
+        "role_filter": role_filter,
         "form_default_start": request.args.get("start") or default_start,
         "form_default_end": request.args.get("end") or default_end,
         "form_location": location,
@@ -113,7 +143,7 @@ def labor():
     }
     if start and end and not err:
         try:
-            ctx["report"] = toast_reports.labor_report(start, end, location)
+            ctx["report"] = toast_reports.labor_report(start, end, location, role_filter=role_filter)
         except Exception as ex:
             log.exception("labor report failed")
             ctx["error"] = f"Could not generate report: {ex}"
@@ -125,9 +155,15 @@ def roster():
     location = _location_filter()
     position = (request.args.get("position") or "all").strip()
     include_inactive = request.args.get("include_inactive") == "1"
+    role_filter = getattr(g, "roster_filter", None)  # 'boh' / 'foh' / 'all' / None
+    if role_filter not in ("boh", "foh", "all"):
+        role_filter = None
+    active_key = {"boh": "boh_roster", "foh": "foh_roster", "all": "all_roster"}.get(role_filter, "roster")
+    role_subtitle = {"boh": " · BOH only", "foh": " · FOH only"}.get(role_filter, "")
     ctx = {
-        "active": "roster",
-        "page_title": "Roster",
+        "active": active_key,
+        "page_title": "Roster" + role_subtitle,
+        "role_filter": role_filter,
         "form_location": location,
         "form_position": position,
         "form_include_inactive": include_inactive,
@@ -138,6 +174,7 @@ def roster():
         ctx["report"] = sling_reports.roster_report(
             location_filter=location,
             position_filter=None if position == "all" else position,
+            role_filter=role_filter if role_filter in ("boh", "foh") else None,
             include_inactive=include_inactive,
         )
     except Exception as ex:
@@ -151,21 +188,35 @@ def schedule():
     start, end, err = _parse_date_range()
     location = _location_filter()
     default_start, default_end = _default_dates_future()
+    today = datetime.now().date()
+    # Preset quick-picks. Users can also override via the date pickers.
+    def _fmt(d): return d.strftime("%Y-%m-%d")
+    presets = [
+        {"label": "This week",     "start": _fmt(today),                     "end": _fmt(today + timedelta(days=6))},
+        {"label": "Next 2 weeks",  "start": _fmt(today),                     "end": _fmt(today + timedelta(days=13))},
+        {"label": "Next 4 weeks",  "start": _fmt(today),                     "end": _fmt(today + timedelta(days=27))},
+        {"label": "Past week",     "start": _fmt(today - timedelta(days=7)), "end": _fmt(today - timedelta(days=1))},
+    ]
     ctx = {
-        "active": "schedule",
+        "active": "weekly_schedule",
         "page_title": "Schedule",
         "form_default_start": request.args.get("start") or default_start,
         "form_default_end": request.args.get("end") or default_end,
         "form_location": location,
+        "presets": presets,
         "error": err,
         "report": None,
     }
     if start and end and not err:
-        try:
-            ctx["report"] = sling_reports.schedule_report(start, end, location)
-        except Exception as ex:
-            log.exception("schedule report failed")
-            ctx["error"] = f"Could not generate schedule: {ex}"
+        # Cap the range at 4 weeks (28 days) per Sam's spec
+        if (end - start).days > 28:
+            ctx["error"] = "Range too long — pick 4 weeks (28 days) or less."
+        else:
+            try:
+                ctx["report"] = sling_reports.schedule_report(start, end, location)
+            except Exception as ex:
+                log.exception("schedule report failed")
+                ctx["error"] = f"Could not generate schedule: {ex}"
     return render_template("reports_schedule.html", **ctx)
 
 
@@ -174,9 +225,15 @@ def server_performance():
     start, end, err = _parse_date_range()
     location = _location_filter()
     default_start, default_end = _default_dates()
+    role_filter = getattr(g, "role_filter", None)
+    if role_filter not in ("server", "bartenders", "all"):
+        role_filter = None
+    active_key = {"server": "perf_server", "bartenders": "perf_bartenders", "all": "perf_all"}.get(role_filter, "server_perf")
+    role_label = {"server": " · Servers", "bartenders": " · Bartenders", "all": " · All FOH"}.get(role_filter, "")
     ctx = {
-        "active": "server_perf",
-        "page_title": "Server Performance",
+        "active": active_key,
+        "page_title": "Server Performance" + role_label,
+        "role_filter": role_filter,
         "form_default_start": request.args.get("start") or default_start,
         "form_default_end": request.args.get("end") or default_end,
         "form_location": location,
@@ -185,7 +242,7 @@ def server_performance():
     }
     if start and end and not err:
         try:
-            ctx["report"] = toast_reports.server_perf_report(start, end, location)
+            ctx["report"] = toast_reports.server_perf_report(start, end, location, role_filter=role_filter)
         except Exception as ex:
             log.exception("server perf report failed")
             ctx["error"] = f"Could not generate report: {ex}"

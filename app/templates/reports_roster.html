@@ -1,5 +1,5 @@
 {% extends "base_dashboard.html" %}
-{% set active = 'roster' %}
+{% set active = active|default('roster') %}
 {% block title %}Roster — Cenas Kitchen{% endblock %}
 
 {% block page_title %}Roster{% endblock %}

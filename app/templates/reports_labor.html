@@ -1,8 +1,9 @@
 {% extends "base_dashboard.html" %}
-{% set active = 'labor' %}
+{# `active` is set by the view (per-store / role-filtered variants set boh_labor / foh_labor); falls back to 'labor' for the legacy /reports/labor route #}
+{% set active = active|default('labor') %}
 {% block title %}Labor Report — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Labor Report{% endblock %}
+{% block page_title %}Labor Report{{ role_subtitle|default('') }}{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Labor cost by position with % of net sales (industry-standard labor cost ratio).</p>
 {% endblock %}

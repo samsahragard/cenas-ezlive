@@ -1,5 +1,5 @@
 {% extends "base_dashboard.html" %}
-{% set active = 'third_party_sales' %}
+{% set active = active|default('third_party_sales') %}
 {% block title %}Third-Party Sales — Cenas Kitchen{% endblock %}
 
 {% block page_title %}Third-Party Sales{% endblock %}

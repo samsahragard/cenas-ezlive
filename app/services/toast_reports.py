@@ -14,12 +14,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.services.toast_client import ToastClient, restaurant_guids
+from app.services.role_classifier import classify_role
 
 log = logging.getLogger(__name__)
 
 TZ = timezone(timedelta(hours=-5))  # CDT for our date range; avoids Windows tzdata issue
 
 SERVICE_JOB_TITLES = {"server", "server trainee", "bartender", "host"}
+
+# Role filter sub-sets for the per-role Performance pages (Sidebar > Insights > Performance)
+PERF_ROLE_TITLES = {
+    "server":     {"server", "server trainee", "lead server"},
+    "bartenders": {"bartender"},
+    "all":        SERVICE_JOB_TITLES,
+}
 
 # Word-boundary keyword fallback when item GUID isn't in the categories lookup.
 DRINK_KEYWORD_WORDS = {
@@ -92,8 +100,14 @@ def _resolve_locations(location_filter: str | None) -> dict[str, str]:
 
 def labor_report(start: datetime, end: datetime,
                  location_filter: str | None = None,
+                 role_filter: str | None = None,
                  refresh: bool = False) -> dict:
     """Compute labor-by-position report for [start, end] inclusive.
+
+    role_filter: 'boh' / 'foh' / 'all' (or None) — restricts which Toast job
+    titles are included. The aggregator still runs over everything (so the
+    in-store-context net-sales denominator is unchanged), then filtered rows
+    are removed at render time.
 
     Returns dict shaped for direct template consumption.
     """
@@ -176,8 +190,21 @@ def labor_report(start: datetime, end: datetime,
     total_shifts = sum(s["shifts"] for s in by_job.values())
     overall_pct = (total_cost / net_sales * 100) if net_sales > 0 else 0.0
 
+    # Apply role filter if requested. We keep the unfiltered totals (computed
+    # above) intact since they reflect actual labor cost; the filtered subset
+    # is what's RENDERED. We also recompute filtered totals so the KPI strip
+    # matches what's in the table.
+    role_keep = None
+    if role_filter in ("boh", "foh"):
+        role_keep = role_filter
+
     rows = []
+    filtered_cost = 0.0
+    filtered_hours = 0.0
+    filtered_shifts = 0
     for title, s in sorted(by_job.items(), key=lambda kv: -kv[1]["labor_cost"]):
+        if role_keep and classify_role(title) != role_keep:
+            continue
         hrs = s["regular_hours"] + s["overtime_hours"]
         people_list = sorted(
             (
@@ -189,6 +216,7 @@ def labor_report(start: datetime, end: datetime,
         )
         rows.append({
             "title": title,
+            "role": classify_role(title),
             "people_count": len(s["people"]),
             "hours": hrs,
             "labor_cost": s["labor_cost"],
@@ -197,6 +225,20 @@ def labor_report(start: datetime, end: datetime,
             "shifts": s["shifts"],
             "people": people_list,
         })
+        filtered_cost += s["labor_cost"]
+        filtered_hours += hrs
+        filtered_shifts += s["shifts"]
+    # When filtering, surface filtered totals; otherwise use the full ones.
+    if role_keep:
+        labor_cost_to_show = filtered_cost
+        hours_to_show = filtered_hours
+        shifts_to_show = filtered_shifts
+        labor_pct_to_show = (filtered_cost / net_sales * 100) if net_sales > 0 else 0.0
+    else:
+        labor_cost_to_show = total_cost
+        hours_to_show = total_hours
+        shifts_to_show = total_shifts
+        labor_pct_to_show = overall_pct
 
     warnings: list[str] = []
     if sales_files_missing:
@@ -211,12 +253,17 @@ def labor_report(start: datetime, end: datetime,
         "start": start.strftime("%Y-%m-%d"),
         "end": end.strftime("%Y-%m-%d"),
         "locations": sorted(locations.keys()),
+        "role_filter": role_filter or "all",
         "totals": {
             "net_sales": net_sales,
-            "labor_cost": total_cost,
-            "hours": total_hours,
-            "shifts": total_shifts,
-            "labor_pct_of_sales": overall_pct,
+            "labor_cost": labor_cost_to_show,
+            "hours": hours_to_show,
+            "shifts": shifts_to_show,
+            "labor_pct_of_sales": labor_pct_to_show,
+            # Always carry the unfiltered totals as well, so a BOH/FOH page
+            # can show "BOH = X% of total labor cost" context.
+            "labor_cost_unfiltered": total_cost,
+            "hours_unfiltered": total_hours,
         },
         "by_position": rows,
         "warnings": warnings,
@@ -280,11 +327,17 @@ def _analyze_check(check: dict, order: dict, item_categories: dict) -> dict | No
 
 def server_perf_report(start: datetime, end: datetime,
                        location_filter: str | None = None,
+                       role_filter: str | None = None,
                        refresh: bool = False) -> dict:
-    """Compute per-server performance report for [start, end] inclusive."""
+    """Compute per-server performance report for [start, end] inclusive.
+
+    role_filter: 'server' (Server + Trainee + Lead Server), 'bartenders'
+    (Bartender), 'all' / None (current behavior — all FOH service: Server +
+    Trainee + Bartender + Host)."""
     client = ToastClient.shared()
     locations = _resolve_locations(location_filter)
     item_categories = _load_item_categories()
+    titles_to_keep = PERF_ROLE_TITLES.get(role_filter or "all", SERVICE_JOB_TITLES)
 
     # Pre-fetch employees + jobs to build the service-employee filter
     employee_lookup: dict[str, str] = {}
@@ -294,7 +347,7 @@ def server_perf_report(start: datetime, end: datetime,
         jobs = client.fetch_jobs(loc, rg, refresh=refresh)
         service_job_guids_loc = {
             j["guid"] for j in jobs
-            if (j.get("title") or "").strip().lower() in SERVICE_JOB_TITLES and not j.get("deleted")
+            if (j.get("title") or "").strip().lower() in titles_to_keep and not j.get("deleted")
         }
         for e in emps:
             full = " ".join(filter(None, [e.get("firstName"), e.get("lastName")])).strip() \
@@ -390,6 +443,7 @@ def server_perf_report(start: datetime, end: datetime,
     return {
         "start": start.strftime("%Y-%m-%d"),
         "end": end.strftime("%Y-%m-%d"),
+        "role_filter": role_filter or "all",
         "by_location": by_location_out,
     }
 
@@ -437,14 +491,34 @@ def _channel_for_order(order: dict) -> tuple[str, str]:
     return src.lower().replace(" ", "_"), src
 
 
+# Channel filter → set of allowed channel keys (output of _channel_for_order)
+SALES_CHANNEL_FILTERS = {
+    "toast":     {"in_store"},
+    "online":    {"online"},
+    "doordash":  {"doordash"},
+    "uber":      {"uber_eats"},
+    "total":     None,        # include EVERYTHING (in-store + all third-party)
+    "all":       None,        # legacy: keep treating 'all' as third-party only
+}
+
+
 def third_party_sales_report(start: datetime, end: datetime,
                              location_filter: str | None = None,
+                             channel_filter: str | None = None,
                              refresh: bool = False) -> dict:
-    """Sales by non-dine-in channel for [start, end] inclusive.
+    """Sales by channel for [start, end] inclusive.
 
-    Pulls Toast orders day-by-day per location, classifies each non-in-store
-    order into a channel (DoorDash / Online / Toast Local / etc.), and
-    aggregates: order count, sales, by-day, by-location, top items.
+    Default behavior (channel_filter=None or 'all') excludes In Store
+    (dine-in) orders — that's the legacy "Third-Party Sales" semantics.
+
+    With channel_filter='toast' returns ONLY in-store orders.
+    With channel_filter='online' / 'doordash' / 'uber' returns just that
+    one channel (DoorDash address-placeholder detection still applies).
+    With channel_filter='total' returns ALL channels including in-store.
+
+    Pulls Toast orders day-by-day per location, classifies each order into
+    a channel, and aggregates: order count, sales, by-day, by-location,
+    top items.
     """
     client = ToastClient.shared()
     locations = _resolve_locations(location_filter)
@@ -469,6 +543,17 @@ def third_party_sales_report(start: datetime, end: datetime,
     overall_sales = 0.0
     grand_total_in_store = 0  # for context
 
+    # Resolve channel filter
+    if channel_filter == "all":
+        channel_filter = None
+    allowed_keys = SALES_CHANNEL_FILTERS.get(channel_filter, "__legacy__") if channel_filter else None
+    if allowed_keys == "__legacy__":
+        allowed_keys = None  # unknown filter, default to legacy third-party-only
+
+    # Whether to count In Store orders. For default + 'all' = no (legacy).
+    # For 'toast' or 'total' = yes.
+    include_in_store = channel_filter in ("toast", "total")
+
     for loc, rg in locations.items():
         for bd in dates:
             try:
@@ -483,6 +568,11 @@ def third_party_sales_report(start: datetime, end: datetime,
                 key, label = _channel_for_order(o)
                 if key == "in_store":
                     grand_total_in_store += 1
+                    if not include_in_store:
+                        continue
+                # Apply channel filter (allowed_keys=None means "no filter beyond
+                # the in_store skip already done above")
+                if allowed_keys is not None and key not in allowed_keys:
                     continue
                 # Net sales for this order = sum of non-voided check.amount
                 amt = sum(float(c.get("amount") or 0)
@@ -545,6 +635,7 @@ def third_party_sales_report(start: datetime, end: datetime,
         "start": start.strftime("%Y-%m-%d"),
         "end": end.strftime("%Y-%m-%d"),
         "locations": sorted(locations.keys()),
+        "channel_filter": channel_filter or "all",
         "by_channel": channels_out,
         "totals": {
             "orders": overall_orders,

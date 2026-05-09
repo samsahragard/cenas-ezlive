@@ -45,6 +45,21 @@ def create_app():
     # are exempted inside auth.install().
     ezauth.install(app)
 
+    # Ensure model tables exist. Idempotent — won't recreate or alter
+    # existing tables, just creates any missing ones. This is a backstop
+    # for environments where alembic Pre-Deploy isn't configured (Render's
+    # preDeployCommand was set to None as of 2026-05-09; alembic migrations
+    # 1-4 had already been applied to the live DB so this is a no-op for
+    # them — only NEW model tables in newer commits get created).
+    try:
+        from app.db import engine
+        from app.models import Base
+        if engine is not None:
+            Base.metadata.create_all(engine)
+            logging.getLogger(__name__).info("Base.metadata.create_all completed")
+    except Exception:
+        logging.getLogger(__name__).exception("Base.metadata.create_all failed (non-fatal)")
+
     # Start the IMAP poller for produce vendor pricing. No-op unless
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock
     # ensures only one gunicorn worker actually polls.

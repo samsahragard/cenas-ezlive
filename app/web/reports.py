@@ -63,6 +63,29 @@ def _default_dates_future() -> tuple[str, str]:
     return today.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
+@reports.route("/third-party-sales")
+def third_party_sales():
+    start, end, err = _parse_date_range()
+    location = _location_filter()
+    default_start, default_end = _default_dates()
+    ctx = {
+        "active": "third_party_sales",
+        "page_title": "Third-Party Sales",
+        "form_default_start": request.args.get("start") or default_start,
+        "form_default_end": request.args.get("end") or default_end,
+        "form_location": location,
+        "error": err,
+        "report": None,
+    }
+    if start and end and not err:
+        try:
+            ctx["report"] = toast_reports.third_party_sales_report(start, end, location)
+        except Exception as ex:
+            log.exception("third-party sales report failed")
+            ctx["error"] = f"Could not generate report: {ex}"
+    return render_template("reports_third_party_sales.html", **ctx)
+
+
 @reports.route("/labor")
 def labor():
     start, end, err = _parse_date_range()

@@ -396,6 +396,168 @@ def server_perf_report(start: datetime, end: datetime,
 
 # ============== formatting helpers (used by templates) ==============
 
+# ============== THIRD-PARTY SALES REPORT ==============
+
+def _channel_for_order(order: dict) -> tuple[str, str]:
+    """Classify a Toast order into (channel_key, channel_label).
+
+    Handles the known channels Cenas Kitchen has seen plus generic detection
+    of new third-party providers via deliveryInfo placeholder addresses.
+    Returns ("in_store", "In Store") for dine-in (caller filters those out).
+    """
+    src = (order.get("source") or "").strip()
+    if src == "In Store" or not src:
+        return "in_store", "In Store"
+    # Source 'API' is the integration channel (DoorDash, future UE/GH).
+    # Disambiguate via deliveryInfo placeholder address that the third-party
+    # uses (DoorDash uses '1 DoorDash Value', SF, 94103; Uber uses similar).
+    if src == "API":
+        di = order.get("deliveryInfo") or {}
+        addr = (di.get("address1") or "").lower()
+        city = (di.get("city") or "").lower()
+        if "doordash" in addr:
+            return "doordash", "DoorDash"
+        if "uber" in addr:
+            return "uber_eats", "Uber Eats"
+        if "grubhub" in addr:
+            return "grubhub", "Grubhub"
+        if city == "san francisco":  # DD HQ city, fallback signal
+            return "doordash", "DoorDash"
+        # New third party we haven't seen — surface the channelGuid so it's
+        # obvious in the UI and we can label it later.
+        cg = (order.get("channelGuid") or "?")[:8]
+        return f"api_{cg}", f"Third-party ({cg})"
+    if src == "Online":
+        return "online", "Toast Online Ordering"
+    if src == "Toast Local":
+        return "toast_local", "Toast Local"
+    if src == "Toast Pickup App":
+        return "toast_pickup", "Toast Pickup App"
+    # Unknown — keep visible
+    return src.lower().replace(" ", "_"), src
+
+
+def third_party_sales_report(start: datetime, end: datetime,
+                             location_filter: str | None = None,
+                             refresh: bool = False) -> dict:
+    """Sales by non-dine-in channel for [start, end] inclusive.
+
+    Pulls Toast orders day-by-day per location, classifies each non-in-store
+    order into a channel (DoorDash / Online / Toast Local / etc.), and
+    aggregates: order count, sales, by-day, by-location, top items.
+    """
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+
+    cur = start
+    dates = []
+    while cur <= end:
+        dates.append(cur.strftime("%Y%m%d"))
+        cur += timedelta(days=1)
+
+    # by_channel[key] = { meta + accumulators }
+    by_channel: dict = defaultdict(lambda: {
+        "label": "?",
+        "orders": 0,
+        "sales": 0.0,
+        "by_day": defaultdict(lambda: {"orders": 0, "sales": 0.0}),
+        "by_location": defaultdict(lambda: {"orders": 0, "sales": 0.0}),
+        "items": defaultdict(lambda: {"qty": 0, "revenue": 0.0}),
+    })
+
+    overall_orders = 0
+    overall_sales = 0.0
+    grand_total_in_store = 0  # for context
+
+    for loc, rg in locations.items():
+        for bd in dates:
+            try:
+                orders = client.fetch_orders_for_date(loc, rg, bd, refresh=refresh)
+            except Exception as ex:
+                log.warning("toast: skipping orders %s/%s: %s", loc, bd, ex)
+                continue
+            day_iso = f"{bd[:4]}-{bd[4:6]}-{bd[6:8]}"
+            for o in orders:
+                if o.get("voided"):
+                    continue
+                key, label = _channel_for_order(o)
+                if key == "in_store":
+                    grand_total_in_store += 1
+                    continue
+                # Net sales for this order = sum of non-voided check.amount
+                amt = sum(float(c.get("amount") or 0)
+                          for c in (o.get("checks") or [])
+                          if not c.get("voided") and not c.get("deleted"))
+
+                slot = by_channel[key]
+                slot["label"] = label
+                slot["orders"] += 1
+                slot["sales"] += amt
+                slot["by_day"][day_iso]["orders"] += 1
+                slot["by_day"][day_iso]["sales"] += amt
+                slot["by_location"][loc]["orders"] += 1
+                slot["by_location"][loc]["sales"] += amt
+                # Item rollup
+                for c in (o.get("checks") or []):
+                    if c.get("voided") or c.get("deleted"):
+                        continue
+                    for sel in (c.get("selections") or []):
+                        if sel.get("voided"):
+                            continue
+                        name = (sel.get("displayName") or "?").strip()
+                        qty = float(sel.get("quantity") or 1)
+                        price = float(sel.get("price") or 0)
+                        slot["items"][name]["qty"] += qty
+                        slot["items"][name]["revenue"] += price
+
+                overall_orders += 1
+                overall_sales += amt
+
+    # Render-friendly: sort channels by sales desc, build sorted by_day + top items
+    channels_out = []
+    for key, slot in by_channel.items():
+        days_list = [
+            {"date": d, "orders": v["orders"], "sales": v["sales"]}
+            for d, v in sorted(slot["by_day"].items())
+        ]
+        loc_list = [
+            {"location": loc_key, "label": LOCATION_KEYS_TO_LABEL.get(loc_key, loc_key.title()),
+             "orders": v["orders"], "sales": v["sales"]}
+            for loc_key, v in sorted(slot["by_location"].items(), key=lambda kv: -kv[1]["sales"])
+        ]
+        items_list = sorted(
+            ({"name": n, "qty": v["qty"], "revenue": v["revenue"]} for n, v in slot["items"].items()),
+            key=lambda r: -r["revenue"],
+        )[:10]
+        channels_out.append({
+            "key": key,
+            "label": slot["label"],
+            "orders": slot["orders"],
+            "sales": slot["sales"],
+            "avg_ticket": (slot["sales"] / slot["orders"]) if slot["orders"] else 0.0,
+            "by_day": days_list,
+            "by_location": loc_list,
+            "top_items": items_list,
+        })
+    channels_out.sort(key=lambda r: -r["sales"])
+
+    return {
+        "start": start.strftime("%Y-%m-%d"),
+        "end": end.strftime("%Y-%m-%d"),
+        "locations": sorted(locations.keys()),
+        "by_channel": channels_out,
+        "totals": {
+            "orders": overall_orders,
+            "sales": overall_sales,
+            "in_store_orders_for_context": grand_total_in_store,
+        },
+    }
+
+
+# Light location label map used by the third-party report
+LOCATION_KEYS_TO_LABEL = {"tomball": "Tomball", "copperfield": "Copperfield"}
+
+
 def fmt_duration(seconds: float | None) -> str:
     if seconds is None:
         return "—"

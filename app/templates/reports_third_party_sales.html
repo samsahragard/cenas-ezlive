@@ -1,0 +1,170 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'third_party_sales' %}
+{% block title %}Third-Party Sales — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Third-Party Sales{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Sales by non-dine-in channel: DoorDash, Toast Online Ordering, Toast Local, etc. Pulls from Toast.</p>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('reports.third_party_sales') }}"
+      style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
+             padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
+             display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="start" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Start date</label>
+    <input type="date" id="start" name="start" value="{{ form_default_start }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="end" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">End date</label>
+    <input type="date" id="end" name="end" value="{{ form_default_end }}" required
+           style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label for="location" style="font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Location</label>
+    <select id="location" name="location"
+            style="padding:8px 10px; border-radius:6px; background:rgba(0,0,0,0.35); border:1px solid var(--glass-border); color:#fff; font-size:14px;">
+      <option value="both"        {% if form_location == 'both' %}selected{% endif %}>Both</option>
+      <option value="tomball"     {% if form_location == 'tomball' %}selected{% endif %}>Tomball</option>
+      <option value="copperfield" {% if form_location == 'copperfield' %}selected{% endif %}>Copperfield</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-portal" style="padding:10px 22px;">Run report</button>
+</form>
+
+{% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
+
+{% if report %}
+
+<div class="kpis" style="margin-bottom:18px; grid-template-columns: repeat(3, 1fr);">
+  <div class="kpi-card kpi-1">
+    <div class="kpi-label">Total third-party orders</div>
+    <div class="kpi-value">{{ report.totals.orders }}</div>
+    <div class="kpi-sub">{{ report.start }} → {{ report.end }}</div>
+  </div>
+  <div class="kpi-card kpi-2">
+    <div class="kpi-label">Total third-party sales</div>
+    <div class="kpi-value">${{ "{:,.0f}".format(report.totals.sales) }}</div>
+    <div class="kpi-sub">pre-tax · pre-tip</div>
+  </div>
+  <div class="kpi-card kpi-3">
+    <div class="kpi-label">In-store orders (context)</div>
+    <div class="kpi-value">{{ report.totals.in_store_orders_for_context }}</div>
+    <div class="kpi-sub">dine-in, excluded from totals</div>
+  </div>
+</div>
+
+{% if report.by_channel %}
+
+<h2 style="margin: 18px 0 10px 0; color: #fff; font-size: 17px; font-weight: 600;">By channel</h2>
+<div class="table-scroll">
+  <table class="log-table">
+    <thead>
+      <tr class="group-header">
+        <th>Channel</th>
+        <th style="text-align:right;">Orders</th>
+        <th style="text-align:right;">Sales</th>
+        <th style="text-align:right;">Avg ticket</th>
+        <th>By location</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ch in report.by_channel %}
+      <tr>
+        <td><strong>{{ ch.label }}</strong></td>
+        <td style="text-align:right;">{{ ch.orders }}</td>
+        <td style="text-align:right;"><strong style="color:var(--accent-soft);">${{ "{:,.2f}".format(ch.sales) }}</strong></td>
+        <td style="text-align:right; color:var(--text-3);">${{ "{:,.2f}".format(ch.avg_ticket) }}</td>
+        <td style="font-size: 12px; color: var(--text-3);">
+          {% for loc in ch.by_location %}
+            <span style="margin-right:10px;">{{ loc.label }}: {{ loc.orders }} / ${{ "{:,.0f}".format(loc.sales) }}</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 17px; font-weight: 600;">Per-channel detail</h2>
+{% for ch in report.by_channel %}
+  <details style="margin-bottom: 12px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 10px; padding: 12px 16px;" {% if loop.first %}open{% endif %}>
+    <summary style="cursor: pointer; color: #fff; font-weight: 600;">
+      {{ ch.label }}
+      <span style="color:var(--text-3); font-weight: 400; margin-left: 8px;">
+        — {{ ch.orders }} orders · ${{ "{:,.2f}".format(ch.sales) }} · avg ${{ "%.2f"|format(ch.avg_ticket) }}
+      </span>
+    </summary>
+
+    <div style="display: flex; gap: 24px; flex-wrap: wrap; margin-top: 14px;">
+      {# By day #}
+      <div style="flex: 1; min-width: 280px;">
+        <div style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom: 6px;">By day</div>
+        <table class="log-table" style="font-size: 12px;">
+          <thead>
+            <tr class="group-header"><th>Date</th><th style="text-align:right;">Orders</th><th style="text-align:right;">Sales</th></tr>
+          </thead>
+          <tbody>
+            {% for d in ch.by_day %}
+            <tr>
+              <td>{{ d.date }}</td>
+              <td style="text-align:right;">{{ d.orders }}</td>
+              <td style="text-align:right;">${{ "{:,.2f}".format(d.sales) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# Top items #}
+      {% if ch.top_items %}
+      <div style="flex: 1; min-width: 280px;">
+        <div style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom: 6px;">Top items (by revenue)</div>
+        <table class="log-table" style="font-size: 12px;">
+          <thead>
+            <tr class="group-header"><th>Item</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Revenue</th></tr>
+          </thead>
+          <tbody>
+            {% for it in ch.top_items %}
+            <tr>
+              <td>{{ it.name }}</td>
+              <td style="text-align:right;">{{ "%.0f"|format(it.qty) }}</td>
+              <td style="text-align:right;">${{ "{:,.2f}".format(it.revenue) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </details>
+{% endfor %}
+
+<div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
+  <p><strong>Notes</strong></p>
+  <ul>
+    <li><strong>Source: Toast.</strong> Each Toast order has a <code>source</code> field (In Store / API / Online / etc.). We exclude In Store and group the rest by channel.</li>
+    <li><strong>DoorDash detection</strong>: orders with <code>source = "API"</code> + <code>deliveryInfo.address1</code> starting with "DoorDash" (DoorDash uses a placeholder HQ address since they don't share customer addresses with restaurants).</li>
+    <li><strong>Other third-parties</strong>: when Uber Eats / Grubhub get integrated to Toast, they'll auto-appear here using the same address-placeholder detection.</li>
+    <li><strong>Sales</strong> = sum of <code>check.amount</code> (pre-tax, pre-tip) across non-voided checks. Same denominator as the Labor report's net sales.</li>
+    <li><strong>Avg ticket</strong> = sales / orders for that channel.</li>
+    <li>If a channel shows lower volume than expected, the third-party integration may be partial — verify with Toast that all the platform's orders are routing through the integration. (DoorDash on Cenas Kitchen was just enabled — volume will grow.)</li>
+  </ul>
+</div>
+
+{% else %}
+<div class="empty-state" style="margin-top: 18px;">
+  <p style="margin:0;font-size:15px;color:#fff;">No non-dine-in orders in this range.</p>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <p style="margin:0;font-size:15px;color:#fff;">Pick a date range and run the report.</p>
+</div>
+{% endif %}
+
+{% endblock %}

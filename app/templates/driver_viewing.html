@@ -89,21 +89,15 @@
   const statusEl= document.getElementById('gps-status');
 
   let onShift = card.dataset.onShift === '1';
-  let watchId = null;
-  let heartbeatId = null;
+  let pollId = null;
   let wakeLock = null;
-  let lastSentAt = null;
-  let lastSentLat = null, lastSentLng = null;
-  let latestPos = null;       // most recent watchPosition fix, POSTed or not
   let postCount = 0;
 
-  // Don't POST every fix — only if moved ~10m or 30s since last fresh fix.
-  // The heartbeat below covers the "I'm parked, no fresh fix" case.
-  const MIN_DISTANCE_M = 10;
-  const MAX_INTERVAL_S = 30;
-  const HEARTBEAT_MS   = 15000;  // resend last known pos at this cadence so the
-                                  // manager map keeps ticking even when the phone
-                                  // is stationary and watchPosition stays silent
+  // Explicit polling beats watchPosition on iOS Safari, which throttles or
+  // pauses the watch callback aggressively when the page isn't actively
+  // moving / screen is dim / etc. setInterval guarantees a fresh fix attempt
+  // every POLL_MS regardless of what the OS thinks the page is doing.
+  const POLL_MS = 5000;
 
   function setUI(state, msg) {
     if (state === 'on') {
@@ -120,16 +114,6 @@
     if (msg !== undefined) metaEl.textContent = msg;
   }
 
-  function distanceM(la1, ln1, la2, ln2) {
-    const R = 6371000;
-    const toRad = d => d * Math.PI / 180;
-    const dLat = toRad(la2 - la1);
-    const dLng = toRad(ln2 - ln1);
-    const a = Math.sin(dLat/2)**2 +
-              Math.cos(toRad(la1)) * Math.cos(toRad(la2)) * Math.sin(dLng/2)**2;
-    return 2 * R * Math.asin(Math.sqrt(a));
-  }
-
   async function requestWakeLock() {
     if ('wakeLock' in navigator) {
       try { wakeLock = await navigator.wakeLock.request('screen'); }
@@ -141,18 +125,8 @@
     if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   }
 
-  async function postPosition(pos, force) {
+  async function postPosition(pos) {
     const c = pos.coords;
-    const now = Date.now();
-    latestPos = pos;
-    if (!force && lastSentAt !== null && lastSentLat !== null) {
-      const elapsedS = (now - lastSentAt) / 1000;
-      const movedM   = distanceM(lastSentLat, lastSentLng, c.latitude, c.longitude);
-      if (movedM < MIN_DISTANCE_M && elapsedS < MAX_INTERVAL_S) {
-        statusEl.textContent = `idle · ${Math.round(movedM)}m moved · accuracy ${Math.round(c.accuracy)}m`;
-        return;
-      }
-    }
     try {
       const res = await fetch('/driver/track', {
         method: 'POST',
@@ -166,7 +140,7 @@
         }),
       });
       if (res.ok) {
-        lastSentAt = now; lastSentLat = c.latitude; lastSentLng = c.longitude; postCount++;
+        postCount++;
         statusEl.textContent = `streamed · ${postCount} fix${postCount === 1 ? '' : 'es'} · accuracy ${Math.round(c.accuracy)}m`;
       } else if (res.status === 409) {
         statusEl.textContent = 'shift closed on server — refresh page';
@@ -179,31 +153,32 @@
     }
   }
 
+  function pollOnce() {
+    if (!('geolocation' in navigator)) {
+      statusEl.textContent = 'this device has no GPS';
+      stopStreaming();
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      postPosition,
+      (err) => { statusEl.textContent = `GPS error: ${err.message}`; },
+      {enableHighAccuracy: true, maximumAge: 0, timeout: 8000}
+    );
+  }
+
   function startStreaming() {
     if (!('geolocation' in navigator)) {
       statusEl.textContent = 'this device has no GPS';
       return;
     }
     requestWakeLock();
-    watchId = navigator.geolocation.watchPosition(
-      (pos) => postPosition(pos, false),
-      (err) => { statusEl.textContent = `GPS error: ${err.message}`; },
-      {enableHighAccuracy: true, maximumAge: 0, timeout: 30000}
-    );
-    // Heartbeat: even when the phone is stationary and watchPosition stays
-    // silent, resend the last known position every HEARTBEAT_MS so the
-    // manager's map shows "last seen N seconds ago" instead of going stale.
-    heartbeatId = setInterval(() => {
-      if (!latestPos) return;
-      const sinceMs = lastSentAt === null ? Infinity : (Date.now() - lastSentAt);
-      if (sinceMs >= HEARTBEAT_MS - 500) postPosition(latestPos, true);
-    }, HEARTBEAT_MS);
+    pollOnce();                               // immediate first fix
+    pollId = setInterval(pollOnce, POLL_MS);  // then every POLL_MS
     statusEl.textContent = 'requesting GPS…';
   }
 
   function stopStreaming() {
-    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-    if (heartbeatId !== null) { clearInterval(heartbeatId); heartbeatId = null; }
+    if (pollId !== null) { clearInterval(pollId); pollId = null; }
     releaseWakeLock();
     statusEl.textContent = '';
   }

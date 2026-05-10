@@ -901,54 +901,53 @@ input[type=password]:focus, textarea:focus, select:focus {
   transform: rotate(90deg);
 }
 
-/* Top-level group dropdown floats as an overlay so the other top-level
-   groups don't shift when one is expanded. Lighter, slightly translucent bg
-   distinguishes it from the surrounding sidebar. */
+/* Top-level group dropdown — flies out TO THE RIGHT of the sidebar so it
+   never covers the categories below it. position: fixed escapes the
+   sidebar's overflow:auto clipping; JS sets top + left dynamically on
+   click via positionNavFlyout(). Skinnier (220px) and slightly lighter
+   bg than the main sidebar. */
 .nav-group-children {
   display: none;
-  position: absolute;
-  top: calc(100% + 2px);   /* just below the toggle button */
-  left: 6px;
-  right: 6px;
+  position: fixed;        /* relative to viewport — JS sets top + left */
+  width: 220px;
   background: rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   padding: 6px 4px;
-  z-index: 30;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  /* margin/border-left from the old in-flow style — reset */
-  margin-left: 0;
-  margin-bottom: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.10);
+  z-index: 200;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.50);
+  margin: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-/* Subgroup children stay inline within the parent dropdown so the panel
+/* Subgroup children stay inline within the parent flyout so the panel
    grows naturally when a nested group expands. */
 .nav-subgroup-children {
   display: none;
   padding-left: 6px;
-  margin-left: 18px;
+  margin-left: 16px;
   margin-bottom: 4px;
   border-left: 1px solid rgba(255, 255, 255, 0.10);
 }
 
-.nav-group.expanded > .nav-group-children,
+.nav-group.expanded > .nav-group-children {
+  display: block;
+  animation: navFlyOutRight 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
 .nav-subgroup.expanded > .nav-subgroup-children {
   display: block;
-  animation: navDropDown 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: navDropDown 0.18s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
+@keyframes navFlyOutRight {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 @keyframes navDropDown {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scaleY(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scaleY(1);
-  }
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .nav-group-children .nav-link,
@@ -961,18 +960,10 @@ input[type=password]:focus, textarea:focus, select:focus {
   font-size: 10px;
   color: var(--text-3);
 }
-
-/* Desktop: hover-to-expand as a UX nicety on top of click. */
-@media (min-width: 901px) {
-  .nav-group:hover > .nav-group-children,
-  .nav-subgroup:hover > .nav-subgroup-children {
-    display: block;
-    animation: navDropDown 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
-  }
-  .nav-group:hover > .nav-group-toggle .nav-chevron,
-  .nav-subgroup:hover > .nav-subgroup-toggle .nav-chevron {
-    transform: rotate(90deg);
-  }
+/* Subgroup toggle inside the flyout panel — pull it left so it lines up
+   with siblings (the panel is narrow + has its own padding). */
+.nav-group-children .nav-subgroup-toggle {
+  padding-left: 14px;
 }
 
 /* ============ Dashboard Summary (Sales + Labor at top) ============ */

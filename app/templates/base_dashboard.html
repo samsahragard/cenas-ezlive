@@ -60,7 +60,7 @@
         <span class="nav-chevron">▸</span>
       </button>
       <div class="nav-group-children">
-        <a class="nav-link disabled"><span class="nav-icon">○</span>Corporate Order<span class="nav-soon">soon</span></a>
+        <a class="nav-link {% if active == 'corporate_order' %}active{% endif %}" href="/{{ store_slug }}/corporate-order"><span class="nav-icon">○</span>Corporate Order</a>
         <div class="nav-subgroup {% if produce_open %}expanded{% endif %}">
           <button class="nav-subgroup-toggle" type="button" onclick="toggleNavGroup(this)">
             <span class="nav-icon">🥬</span>Produce

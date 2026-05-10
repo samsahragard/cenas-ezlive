@@ -85,6 +85,9 @@ def parse_export_xlsx(stream: IO[bytes]) -> list[dict]:
         order_number = raw[idx["Order Number"]]
         if not order_number:
             continue
+        # Skip the summary/total row at the bottom (Order Number = "Total")
+        if str(order_number).strip().lower() == "total":
+            continue
         food_total = raw[idx["Food Total"]]
         if food_total is None:
             continue

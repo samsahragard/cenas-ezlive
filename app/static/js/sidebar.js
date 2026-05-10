@@ -71,10 +71,15 @@ function repositionOpenFlyouts() {
 window.addEventListener('scroll', repositionOpenFlyouts, true);
 window.addEventListener('resize', repositionOpenFlyouts);
 
-// Hover-to-open path: position the flyout the moment the cursor enters
-// the group so the CSS-driven display:block reveals it in the right spot.
+// Hover-to-open path. Two pieces:
+//   (a) Pre-position EVERY flyout at page load so when the CSS :hover rule
+//       fires display:block, the panel is already at the right spot
+//       instead of flashing at viewport (0,0) where position:fixed defaults.
+//   (b) Re-position on mouseenter so the spot stays correct after viewport
+//       scroll/resize.
 document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.nav-group').forEach((g) => {
+    positionNavFlyout(g);
     g.addEventListener('mouseenter', () => positionNavFlyout(g));
   });
 });

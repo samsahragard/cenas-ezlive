@@ -469,6 +469,25 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     raw_order = map_to_raw_order(api_order)
     ingest_ok, ingest_resp = _ingest_into_ezlive(raw_order)
 
+    # Step 4b: AUTO-RESOLVER — if the first ingest came back with warnings,
+    # give ezCater's backend a few seconds to settle (the read at submit-time
+    # can be stale), re-pull, and re-ingest once. Replaces the old human-
+    # review queue. If warnings persist after re-pull, fall through to the
+    # Telegram alert below.
+    warnings = (ingest_resp or {}).get("warnings") or []
+    if ingest_ok and warnings:
+        logger.info("auto-resolver: %d warnings on %s; re-pulling in 5s", len(warnings), order_number)
+        _time.sleep(5)
+        api_resp2 = gql_pull(entity_id, _ez_token())
+        if "errors" not in api_resp2:
+            api_order2 = (api_resp2.get("data") or {}).get("order")
+            if api_order2:
+                raw_order2 = map_to_raw_order(api_order2)
+                ingest_ok2, ingest_resp2 = _ingest_into_ezlive(raw_order2)
+                if ingest_ok2:
+                    warnings = (ingest_resp2 or {}).get("warnings") or []
+                    ingest_resp = ingest_resp2
+
     # Step 5: Telegram
     lines = []
     lines.append(f"{'✅' if (assign_ok and ingest_ok) else '⚠️'} Order {order_number} (store_{store_num})")
@@ -488,8 +507,16 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     if ingest_ok:
         view_url = ingest_resp.get("view_url") or ""
         warns = ingest_resp.get("warnings") or []
-        warn_str = f" ({len(warns)} warns)" if warns else ""
-        lines.append(f"EZLive: ingested{warn_str} {view_url}")
+        if warns:
+            # Inline the warning text directly in the Telegram so Sam can act
+            # without opening the dashboard. Replaces the old Review Queue.
+            warn_block = "\n".join(f"  • {w}" for w in warns[:8])
+            extra = f"\n  …+{len(warns) - 8} more" if len(warns) > 8 else ""
+            lines.append(f"EZLive: ingested with {len(warns)} warning{'s' if len(warns)!=1 else ''}:\n{warn_block}{extra}")
+            if view_url:
+                lines.append(f"  View: {view_url}")
+        else:
+            lines.append(f"EZLive: ingested {view_url}")
     else:
         lines.append(f"EZLive: FAILED — {json.dumps(ingest_resp)[:200]}")
 

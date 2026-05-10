@@ -1,44 +1,21 @@
+"""Review Queue — RETIRED 2026-05-10.
+
+Replaced by the auto-resolver pipeline (see ezcater_webhook + orders_service):
+when an order arrives with extraction warnings, the system re-pulls from the
+ezCater Partner API, re-validates, and Telegrams Sam if anything is still off.
+No more manual queue page.
+
+Old `/review` and `/review/<id>` URLs now redirect to the store-picker so
+existing bookmarks don't 404.
+"""
 from __future__ import annotations
 
-from datetime import datetime
-
-from flask import Blueprint, render_template
-
-from app.db import get_db
-from app.models import Order, OrderItem
+from flask import Blueprint, redirect
 
 review = Blueprint("review", __name__)
 
-@review.route("/review")
-def review_queue():
-    db = next(get_db())
-    try:
-        # Rolling window: only show today's + upcoming orders. Orders with
-        # delivery_date in the past are archived from the review queue.
-        today_iso = datetime.now().strftime("%Y-%m-%d")
-        orders = (
-            db.query(Order)
-            .filter(Order.delivery_date >= today_iso)
-            .order_by(Order.delivery_date.asc(), Order.deliver_at)
-            .all()
-        )
-        return render_template("review_queue.html", orders=orders)
-    finally:
-        db.close()
 
+@review.route("/review")
 @review.route("/review/<external_order_id>")
-def review_details(external_order_id: str):
-    db = next(get_db())
-    try:
-        order = db.query(Order).filter_by(external_order_id=external_order_id).first()
-        if not order:
-            return render_template("review_queue.html", orders=[], error=f"Order {external_order_id!r} not found.")
-    
-        items = (
-            db.query(OrderItem)
-            .filter_by(order_id=order.id)
-            .all()
-        )
-        return render_template("review_detail.html", order=order, items=items)
-    finally:
-        db.close()
+def review_redirect(external_order_id: str | None = None):
+    return redirect("/")

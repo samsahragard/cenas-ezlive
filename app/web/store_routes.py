@@ -133,8 +133,6 @@ def ezcater_landing():
          "sub": "Today + upcoming catering orders for this store."},
         {"label": "Order Processor", "icon": "📄", "href": f"/{g.current_store}/orders/processor",
          "sub": "Upload PDF orders for legacy ingest (webhook is primary now)."},
-        {"label": "Review Queue", "icon": "🔍", "href": f"/{g.current_store}/review",
-         "sub": "Orders flagged for review — extraction warnings, missing fields."},
         {"label": "Driver Payroll", "icon": "💵", "href": f"/{g.current_store}/driver-tracking",
          "sub": "Per-driver delivery log: miles / on-time / tracking / 5★ / notes."},
         {"label": "Driver Portal", "icon": "🚗", "href": f"/{g.current_store}/driver-portal",
@@ -243,7 +241,9 @@ def orders_processor():
 
 @store_bp.route("/review")
 def review_queue():
-    return redirect("/review" + (("?" + request.query_string.decode()) if request.query_string else ""))
+    """Retired 2026-05-10 — Review Queue replaced by auto-resolver +
+    Telegram alerts. Redirect any old bookmarks back to the store dashboard."""
+    return redirect(f"/{g.current_store}/")
 
 
 @store_bp.route("/driver-tracking")

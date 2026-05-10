@@ -29,12 +29,6 @@
     <div class="kpi-label">Heads to feed</div>
     <div class="kpi-meta">{% if today_orders %}avg {{ (heads_today / today_orders|length)|round(0, 'floor')|int }}/order{% else %}—{% endif %}</div>
   </div>
-  <div class="kpi kpi-3">
-    <div class="kpi-icon">⚠</div>
-    <div class="kpi-value">{{ review_count }}</div>
-    <div class="kpi-label">Need review</div>
-    <div class="kpi-meta">today + upcoming</div>
-  </div>
   <div class="kpi kpi-4">
     <div class="kpi-icon">🥬</div>
     <div class="kpi-value">{{ produce_winners }}</div>

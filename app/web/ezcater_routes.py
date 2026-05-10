@@ -115,21 +115,14 @@ def home():
             .filter(Order.delivery_date == today_iso)
             .filter(Order.status != "cancelled")
         )
-        review_q = (
-            db.query(Order)
-            .filter(Order.delivery_date >= today_iso)
-            .filter(Order.status != "cancelled")
-            .filter(Order.needs_review.is_(True))
-        )
         if location == "tomball":
             today_q = today_q.filter(Order.origin_store_id.in_(tomball_stores))
-            review_q = review_q.filter(Order.origin_store_id.in_(tomball_stores))
         elif location == "copperfield":
             today_q = today_q.filter(Order.origin_store_id.in_(copperfield_stores))
-            review_q = review_q.filter(Order.origin_store_id.in_(copperfield_stores))
 
         today_orders = today_q.order_by(Order.deliver_at).all()
-        review_orders = review_q.order_by(Order.delivery_date, Order.deliver_at).all()
+        # Review queue retired 2026-05-10 — auto-resolver + Telegram replaces it.
+        review_orders = []
 
         # KPI counts
         tomball_today = sum(1 for o in today_orders if (o.origin_store_id or "") in ("store_2", "store_4"))
@@ -141,9 +134,7 @@ def home():
         for o in today_orders:
             origin = o.origin_store_id or ""
             loc = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
-            if o.needs_review:
-                badge_class, badge_text = "badge-warn", "Needs review"
-            elif not (o.client and o.client.strip()):
+            if not (o.client and o.client.strip()):
                 badge_class, badge_text = "badge-warn", "No customer"
             elif o.assigned_driver:
                 badge_class, badge_text = "badge-good", "On track"
@@ -166,16 +157,11 @@ def home():
                 "badge_text": badge_text,
             })
 
-        # Attention list: needs-review first, then orders today with no client.
+        # Attention list. Review-queue items removed (auto-resolver handles
+        # extraction warnings now via Telegram alerts). Still flag today's
+        # orders missing a customer name as those are user-facing data
+        # quality issues kitchen needs to know about.
         attention = []
-        for o in review_orders[:3]:
-            origin = o.origin_store_id or ""
-            loc = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
-            attention.append({
-                "kind": "warn",
-                "text": f"{o.external_order_id} flagged for review",
-                "meta": f"{loc} · {o.delivery_date} {o.deliver_at or ''} · open the order page",
-            })
         # Today's orders missing a customer name
         for o in today_orders:
             if not (o.client and o.client.strip()):

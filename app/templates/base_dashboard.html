@@ -20,10 +20,12 @@
 {% set store_slug = g.current_store or 'dos' %}
 {% set store_label = g.store_label or 'Tomball' %}
 {# Active leaf — pages set `active = '<key>'`. Parent expansion is computed off this. #}
-{% set ops_open = active in ['vendors','corporate_order','produce','webstaurant','vendor_perf','specs',
+{% set ops_open = active in ['vendors','produce','webstaurant','vendor_perf','specs',
+                              'corporate_order','corporate_order_reports',
                               'ezcater_orders','processor','review','driver_tracking','driver_portal','drivers_admin','drivers_live',
                               'boh_roster','foh_roster','all_roster','weekly_schedule'] %}
-{% set vendors_open = active in ['vendors','corporate_order','produce','webstaurant','vendor_perf','specs'] %}
+{% set vendors_open = active in ['vendors','produce','webstaurant','vendor_perf','specs'] %}
+{% set corp_open = active in ['corporate_order','corporate_order_reports'] %}
 {% set produce_open = active in ['produce','produce_orders'] %}
 {% set ezc_open = active in ['ezcater_orders','processor','review','driver_tracking','driver_portal','drivers_admin','drivers_live'] %}
 {% set sched_open = active in ['boh_roster','foh_roster','all_roster','weekly_schedule'] %}
@@ -53,6 +55,18 @@
 
     <div class="nav-section">Operations</div>
 
+    {# Corporate Order group — top-level under Operations per Sam (was nested under Vendors) #}
+    <div class="nav-group {% if corp_open %}expanded{% endif %}">
+      <a class="nav-group-toggle" href="/{{ store_slug }}/corporate-order">
+        <span class="nav-icon">🛒</span>Corporate Order
+        <span class="nav-chevron">▸</span>
+      </a>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'corporate_order' %}active{% endif %}" href="/{{ store_slug }}/corporate-order"><span class="nav-icon">·</span>Order</a>
+        <a class="nav-link {% if active == 'corporate_order_reports' %}active{% endif %}" href="/{{ store_slug }}/corporate-order/reports"><span class="nav-icon">·</span>Reports</a>
+      </div>
+    </div>
+
     {# Vendors group #}
     <div class="nav-group {% if vendors_open %}expanded{% endif %}">
       <a class="nav-group-toggle" href="/{{ store_slug }}/vendors">
@@ -60,7 +74,6 @@
         <span class="nav-chevron">▸</span>
       </a>
       <div class="nav-group-children">
-        <a class="nav-link {% if active == 'corporate_order' %}active{% endif %}" href="/{{ store_slug }}/corporate-order"><span class="nav-icon">○</span>Corporate Order</a>
         <div class="nav-subgroup {% if produce_open %}expanded{% endif %}">
           <button class="nav-subgroup-toggle" type="button" onclick="toggleNavGroup(this)">
             <span class="nav-icon">🥬</span>Produce

@@ -1,0 +1,149 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('corporate_order_reports') %}
+{% block title %}Corporate Order — Reports — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Corporate Order — Reports{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {% if is_admin %}All stores · last 200 orders{% else %}{{ g.store_label }} · last 200 orders{% endif %}
+    · <a href="{{ url_for('corporate_order.view') }}" style="color:var(--accent-soft);">← back to Order</a>
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .reports-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  @media (min-width: 900px) {
+    .reports-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  .stat-card {
+    background: rgba(0,0,0,0.40);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .stat-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    font-weight: 600;
+  }
+  .stat-card ul {
+    list-style: none; margin: 0; padding: 0;
+  }
+  .stat-card li {
+    display: flex; justify-content: space-between; padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 13px;
+  }
+  .stat-card li:last-child { border-bottom: none; }
+  .stat-card .v {
+    color: rgba(255,255,255,0.95); font-weight: 600;
+  }
+  .stat-card .empty {
+    color: rgba(255,255,255,0.35); font-style: italic; font-size: 12px; padding: 6px 0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not configured %}
+  <div class="banner banner-error">
+    Corporate Order DB not connected. Set <code>CORPORATE_DB_URL</code> on Render to point at <code>cenas_db</code>.
+  </div>
+{% else %}
+
+<div class="reports-grid">
+  <div class="stat-card">
+    <h3>By status</h3>
+    {% if by_status %}
+    <ul>
+      {% for r in by_status %}
+        <li><span>{{ r.label }}</span><span class="v">{{ r.count }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">No data yet.</p>{% endif %}
+  </div>
+
+  <div class="stat-card">
+    <h3>By store</h3>
+    {% if by_store %}
+    <ul>
+      {% for r in by_store %}
+        <li><span>{{ r.label|title }}</span><span class="v">{{ r.count }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">No data yet.</p>{% endif %}
+  </div>
+
+  <div class="stat-card">
+    <h3>Top 10 products by quantity</h3>
+    {% if top_products %}
+    <ul>
+      {% for p in top_products %}
+        <li><span>{{ p.name }}</span><span class="v">{{ p.qty }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">No items shipped yet.</p>{% endif %}
+  </div>
+</div>
+
+<h2 style="font-size:14px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:24px 0 8px;font-weight:600;">
+  Order History
+</h2>
+
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Order #</th>
+        <th>Submitted</th>
+        <th>Store</th>
+        <th>Status</th>
+        <th>Items</th>
+        <th>Total qty</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if orders %}
+        {% for o in orders %}
+        <tr>
+          <td>#{{ o.id }}</td>
+          <td>{{ o.submitted_at.strftime('%Y-%m-%d %H:%M') if o.submitted_at else '—' }}</td>
+          <td>{{ (o.store_key or '?')|title }}</td>
+          <td>{{ o.status }}</td>
+          <td>{{ o.lines|length }}</td>
+          <td>{{ o.total_quantity }}</td>
+          <td>
+            <details>
+              <summary style="cursor:pointer;color:var(--accent-soft);font-size:12px;">view items</summary>
+              <ul style="margin:6px 0 0 0;padding:0;list-style:none;font-size:12px;">
+                {% for line in o.lines %}
+                  <li style="padding:2px 0;color:rgba(255,255,255,0.75);">
+                    {{ line.quantity }}× {{ line.name }} <span style="opacity:0.5;">— {{ line.category }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="7" style="color:var(--text-3);font-style:italic;text-align:center;padding:24px;">
+          No orders yet.
+        </td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+{% endblock %}

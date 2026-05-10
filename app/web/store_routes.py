@@ -112,8 +112,6 @@ def _render_landing(group_active: str, title: str, subtitle: str, cards: list[di
 @store_bp.route("/vendors")
 def vendors_landing():
     cards = [
-        {"label": "Corporate Order", "icon": "🛒", "href": f"/{g.current_store}/corporate-order",
-         "sub": "Catalog + cart for the marketing-site shop. Submit orders to corporate."},
         {"label": "Produce — Order", "icon": "🥬", "href": f"/{g.current_store}/produce/",
          "sub": "Today's order guide with cheaper-vendor pricing + one-click submit."},
         {"label": "Produce — Price History", "icon": "📈", "href": f"/{g.current_store}/produce/orders",

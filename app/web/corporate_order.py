@@ -261,6 +261,56 @@ def submit():
                             submitted=order["order_id"]))
 
 
+@corp_order.route("/corporate-order/reports", methods=["GET"])
+def reports():
+    """Order history + light analytics. Stores see their own orders; admins
+    (corporate / partner) see all orders + cross-store aggregates."""
+    if not corporate_shop.is_configured():
+        return render_template(
+            "corporate_order_reports.html",
+            active="corporate_order_reports",
+            page_title="Corporate Order — Reports",
+            configured=False,
+            is_admin=_is_admin(),
+            orders=[],
+            top_products=[],
+            by_store=[],
+            by_status=[],
+        )
+    if _is_admin():
+        orders = corporate_shop.list_orders(limit=200)
+    else:
+        orders = corporate_shop.list_orders(limit=200, store_filter=g.current_store)
+
+    # Light aggregates from the in-memory list — cheap for ~200 rows.
+    from collections import Counter, defaultdict
+    by_status = Counter(o.get("status") or "?" for o in orders)
+    by_store = Counter(o.get("store_key") or "?" for o in orders)
+    item_qty = defaultdict(int)
+    for o in orders:
+        for line in o.get("lines") or []:
+            item_qty[line["name"]] += line["quantity"]
+    top_products = sorted(
+        ({"name": n, "qty": q} for n, q in item_qty.items()),
+        key=lambda r: -r["qty"],
+    )[:10]
+    by_status_list = sorted(({"label": k, "count": v} for k, v in by_status.items()),
+                            key=lambda r: -r["count"])
+    by_store_list = sorted(({"label": k, "count": v} for k, v in by_store.items()),
+                           key=lambda r: -r["count"])
+    return render_template(
+        "corporate_order_reports.html",
+        active="corporate_order_reports",
+        page_title="Corporate Order — Reports",
+        configured=True,
+        is_admin=_is_admin(),
+        orders=orders,
+        top_products=top_products,
+        by_store=by_store_list,
+        by_status=by_status_list,
+    )
+
+
 @corp_order.route("/corporate-order/admin/order/<int:order_id>/status",
                   methods=["POST"])
 def update_status(order_id):

@@ -7,14 +7,66 @@ function closeSidebar() {
   document.body.classList.remove('sidebar-open');
 }
 
-// Nested nav groups (Vendors, Ezcater, Schedule, Performance, Sales, Labor)
-// Click the parent to toggle its children. Click on a child link auto-bubbles
-// to the parent's normal anchor behavior since the child is just an <a>.
-function toggleNavGroup(btn) {
-  const group = btn.closest('.nav-group, .nav-subgroup');
-  if (group) group.classList.toggle('expanded');
+// Position the right-flyout panel for a top-level .nav-group. Called on
+// click (and on scroll/resize while the flyout is open). Reads the toggle
+// button's rect and sets the panel's fixed-position top/left. Clamps so a
+// tall panel doesn't run off the bottom of the viewport.
+function positionNavFlyout(group) {
+  const toggle = group.querySelector(':scope > .nav-group-toggle');
+  const flyout = group.querySelector(':scope > .nav-group-children');
+  if (!toggle || !flyout) return;
+  const rect = toggle.getBoundingClientRect();
+  const panelHeight = flyout.offsetHeight || 200;
+  let top = rect.top;
+  const margin = 8;
+  if (top + panelHeight > window.innerHeight - margin) {
+    top = Math.max(margin, window.innerHeight - panelHeight - margin);
+  }
+  flyout.style.top = top + 'px';
+  flyout.style.left = (rect.right + 6) + 'px';
 }
 
+// Click-to-toggle nested nav groups. The top-level group flies out to the
+// right; subgroups expand inline within the flyout panel.
+function toggleNavGroup(btn) {
+  const group = btn.closest('.nav-group, .nav-subgroup');
+  if (!group) return;
+  const isTopLevel = group.classList.contains('nav-group');
+  const willExpand = !group.classList.contains('expanded');
+
+  // Only one top-level flyout open at a time — close any other open group.
+  if (isTopLevel && willExpand) {
+    document.querySelectorAll('.nav-group.expanded').forEach((g) => {
+      if (g !== group) g.classList.remove('expanded');
+    });
+  }
+
+  group.classList.toggle('expanded');
+  if (isTopLevel && willExpand) {
+    // Position after layout settles so offsetHeight is real.
+    requestAnimationFrame(() => positionNavFlyout(group));
+  }
+}
+
+// Close any open flyout when the user clicks somewhere outside it.
+document.addEventListener('click', function (e) {
+  if (e.target.closest('.nav-group')) return;
+  document.querySelectorAll('.nav-group.expanded').forEach((g) => {
+    g.classList.remove('expanded');
+  });
+});
+
+// Reposition any open flyout on viewport scroll/resize so it stays glued
+// to its toggle button.
+function repositionOpenFlyouts() {
+  document.querySelectorAll('.nav-group.expanded').forEach((g) => positionNavFlyout(g));
+}
+window.addEventListener('scroll', repositionOpenFlyouts, true);
+window.addEventListener('resize', repositionOpenFlyouts);
+
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape') closeSidebar();
+  if (e.key === 'Escape') {
+    closeSidebar();
+    document.querySelectorAll('.nav-group.expanded').forEach((g) => g.classList.remove('expanded'));
+  }
 });

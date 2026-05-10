@@ -250,7 +250,81 @@ def home():
         review_count=len(review_orders),
         produce_winners=produce_winners,
         produce_last_refresh=last_parsed_short,
+        dashboard_location=location,   # 'tomball' / 'copperfield' / 'both' for the JS fetcher
     )
+
+
+@cater.route("/dashboard/summary", methods=["GET"])
+def dashboard_summary():
+    """JSON feed powering the Sales + Labor boxes at the top of every dashboard.
+
+    Query params:
+        period   = today | week | prev_week  (default 'today')
+        location = both | tomball | copperfield  (default 'both')
+
+    Returns net sales, labor cost / hours / ratio for the requested window.
+    Net sales come from Toast (sum of pre-tax non-voided check.amount across
+    all channels — in-store + online + DoorDash + Toast Local). ezCater
+    catering revenue is NOT included yet (Order DB has headcount but no
+    per-order total).
+    """
+    from flask import request, jsonify
+    from datetime import datetime, timedelta
+    from app.services import toast_reports
+
+    period = (request.args.get("period") or "today").lower()
+    location = (request.args.get("location") or "both").lower()
+    if location not in ("both", "tomball", "copperfield"):
+        return jsonify({"error": f"invalid location {location!r}"}), 400
+
+    today = datetime.now().date()
+    if period == "today":
+        start = end = today
+        label = today.strftime("%a, %b %d").replace(" 0", " ")
+    elif period == "week":
+        # Current week: Monday → today
+        start = today - timedelta(days=today.weekday())
+        end = today
+        label = f"{start.strftime('%b %d')} – {end.strftime('%b %d')}".replace(" 0", " ")
+    elif period == "prev_week":
+        # Last Mon → last Sun
+        end = today - timedelta(days=today.weekday() + 1)
+        start = end - timedelta(days=6)
+        label = f"{start.strftime('%b %d')} – {end.strftime('%b %d')}".replace(" 0", " ")
+    else:
+        return jsonify({"error": f"invalid period {period!r}"}), 400
+
+    start_dt = datetime.combine(start, datetime.min.time())
+    end_dt = datetime.combine(end, datetime.min.time())
+    loc_filter = None if location == "both" else location
+
+    try:
+        report = toast_reports.labor_report(start_dt, end_dt, location_filter=loc_filter)
+    except Exception as e:
+        logger.exception("dashboard_summary: labor_report failed")
+        return jsonify({
+            "error": "toast_fetch_failed",
+            "detail": str(e)[:200],
+            "period": period, "location": location,
+        }), 502
+
+    t = report.get("totals") or {}
+    return jsonify({
+        "period": period,
+        "label": label,
+        "date_range": {"start": start.isoformat(), "end": end.isoformat()},
+        "location": location,
+        "sales": {
+            "total": float(t.get("net_sales") or 0.0),
+        },
+        "labor": {
+            "cost": float(t.get("labor_cost") or 0.0),
+            "hours": float(t.get("hours") or 0.0),
+            "shifts": int(t.get("shifts") or 0),
+            "ratio_pct": float(t.get("labor_pct_of_sales") or 0.0),
+        },
+        "warnings": report.get("warnings") or [],
+    })
 
 
 @cater.route("/orders", methods=["GET", "POST"])

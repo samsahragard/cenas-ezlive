@@ -928,3 +928,99 @@ input[type=password]:focus, textarea:focus, select:focus {
     transform: rotate(90deg);
   }
 }
+
+/* ============ Dashboard Summary (Sales + Labor at top) ============ */
+.dash-summary {
+  margin: 0 0 18px;
+}
+.summary-tabs {
+  display: flex; gap: 6px; align-items: center;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+.summary-tab {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-2);
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.summary-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+.summary-tab.is-active {
+  background: var(--accent, #e87a3e);
+  border-color: var(--accent, #e87a3e);
+  color: #fff;
+  font-weight: 600;
+}
+.summary-range {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.3px;
+}
+.summary-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  .summary-cards { grid-template-columns: 1fr; }
+}
+.summary-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  backdrop-filter: blur(8px);
+}
+.sales-card  { border-left: 4px solid #6dd16d; }
+.labor-card  { border-left: 4px solid #e87a3e; }
+.summary-icon {
+  font-size: 30px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.summary-content {
+  flex: 1; min-width: 0;
+}
+.summary-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.summary-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.summary-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+.summary-warnings {
+  margin-top: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.summary-warning {
+  font-size: 12px;
+  color: #f0c060;
+  background: rgba(240, 192, 96, 0.10);
+  border: 1px solid rgba(240, 192, 96, 0.30);
+  padding: 6px 10px;
+  border-radius: 6px;
+}

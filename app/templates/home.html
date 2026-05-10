@@ -15,6 +15,107 @@
 {% endblock %}
 
 {% block content %}
+<!-- Sales + Labor summary (top of every dashboard) -->
+<div class="dash-summary" data-location="{{ dashboard_location|default('both') }}">
+  <div class="summary-tabs">
+    <button type="button" class="summary-tab is-active" data-period="today">Today</button>
+    <button type="button" class="summary-tab" data-period="week">This Week</button>
+    <button type="button" class="summary-tab" data-period="prev_week">Last Week</button>
+    <span class="summary-range" id="summary-range"></span>
+  </div>
+  <div class="summary-cards">
+    <div class="summary-card sales-card">
+      <div class="summary-icon">💵</div>
+      <div class="summary-content">
+        <div class="summary-label">Sales</div>
+        <div class="summary-value" id="sales-value">—</div>
+        <div class="summary-meta" id="sales-meta">loading…</div>
+      </div>
+    </div>
+    <div class="summary-card labor-card">
+      <div class="summary-icon">👷</div>
+      <div class="summary-content">
+        <div class="summary-label">Labor</div>
+        <div class="summary-value" id="labor-value">—</div>
+        <div class="summary-meta" id="labor-meta">loading…</div>
+      </div>
+    </div>
+  </div>
+  <div class="summary-warnings" id="summary-warnings"></div>
+</div>
+
+<script>
+(function () {
+  const root = document.querySelector('.dash-summary');
+  if (!root) return;
+  const loc = root.dataset.location || 'both';
+  const tabs = root.querySelectorAll('.summary-tab');
+  const range = document.getElementById('summary-range');
+  const salesValue = document.getElementById('sales-value');
+  const salesMeta = document.getElementById('sales-meta');
+  const laborValue = document.getElementById('labor-value');
+  const laborMeta = document.getElementById('labor-meta');
+  const warnings = document.getElementById('summary-warnings');
+
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) return '—';
+    if (n >= 100000) return '$' + Math.round(n).toLocaleString();
+    return '$' + (n).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+  }
+  function fmtPct(n, digits) { return n == null || isNaN(n) ? '—' : n.toFixed(digits ?? 1) + '%'; }
+  function fmtHours(n) { return n == null || isNaN(n) ? '—' : (Math.round(n * 10) / 10).toLocaleString() + ' hrs'; }
+
+  function setLoading() {
+    salesValue.textContent = '…';
+    laborValue.textContent = '…';
+    salesMeta.textContent = 'loading…';
+    laborMeta.textContent = 'loading…';
+    warnings.textContent = '';
+  }
+
+  function fetchPeriod(period) {
+    setLoading();
+    fetch(`/dashboard/summary?period=${encodeURIComponent(period)}&location=${encodeURIComponent(loc)}`, {
+      credentials: 'same-origin', headers: {'Accept': 'application/json'},
+    })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
+    .then(d => {
+      range.textContent = d.label || '';
+      salesValue.textContent = fmtMoney(d.sales.total);
+      salesMeta.textContent = d.sales.total > 0
+        ? 'pre-tax · all channels (Toast)'
+        : 'no sales recorded yet';
+      laborValue.textContent = fmtMoney(d.labor.cost);
+      laborMeta.textContent = `${fmtPct(d.labor.ratio_pct)} of sales · ${fmtHours(d.labor.hours)} · ${d.labor.shifts || 0} shifts`;
+      warnings.innerHTML = '';
+      (d.warnings || []).forEach(w => {
+        const div = document.createElement('div');
+        div.className = 'summary-warning';
+        div.textContent = '⚠ ' + w;
+        warnings.appendChild(div);
+      });
+    })
+    .catch(err => {
+      const msg = (err && (err.error || err.detail)) || 'fetch failed';
+      salesValue.textContent = '—';
+      laborValue.textContent = '—';
+      salesMeta.textContent = msg;
+      laborMeta.textContent = msg;
+    });
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      fetchPeriod(t.dataset.period);
+    });
+  });
+
+  fetchPeriod('today');
+})();
+</script>
+
 <!-- KPI strip -->
 <div class="kpis">
   <div class="kpi kpi-1">

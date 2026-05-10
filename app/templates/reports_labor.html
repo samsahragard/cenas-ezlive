@@ -10,6 +10,21 @@
 
 {% block content %}
 
+<!-- Period quick-toggle (Today / This Week / Last Week). Defaults to Today. -->
+<div class="dash-chart-tabs" style="margin-bottom: 12px;">
+  {% set base = url_for('reports.labor') %}
+  {% set loc_qs = '&location=' ~ form_location if form_location else '' %}
+  <a class="dash-chart-tab {% if active_period == 'today' %}is-active{% endif %}"
+     href="{{ base }}?period=today{{ loc_qs }}">Today</a>
+  <a class="dash-chart-tab {% if active_period == 'week' %}is-active{% endif %}"
+     href="{{ base }}?period=week{{ loc_qs }}">This Week</a>
+  <a class="dash-chart-tab {% if active_period == 'prev_week' %}is-active{% endif %}"
+     href="{{ base }}?period=prev_week{{ loc_qs }}">Last Week</a>
+  {% if period_label %}
+  <span class="dash-chart-range">{{ period_label }}</span>
+  {% endif %}
+</div>
+
 <form method="GET" action="{{ url_for('reports.labor') }}"
       style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
              padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);

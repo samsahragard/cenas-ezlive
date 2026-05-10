@@ -60,6 +60,22 @@ def _period_to_dates(period: str) -> tuple[datetime | None, datetime | None, str
     return None, None, None
 
 
+def _resolve_period(start, end, err):
+    """Honour ?period= shortcut + auto-default to today on bare URL.
+
+    Returns (start, end, err, active_period, period_label). active_period is
+    'today' / 'week' / 'prev_week' if a preset is in effect, '' otherwise.
+    """
+    period = (request.args.get("period") or "").strip().lower()
+    if period in ("today", "week", "prev_week"):
+        s, e, label = _period_to_dates(period)
+        return s, e, None, period, label
+    if start is None and end is None and not err:
+        s, e, label = _period_to_dates("today")
+        return s, e, None, "today", label
+    return start, end, err, "", None
+
+
 def _last_name_key(name: str) -> tuple[str, str]:
     """Sort key: lower-case last name, then first name. Robust to single-word names."""
     parts = (name or "").strip().split()
@@ -160,14 +176,17 @@ def produce_orders():
 @reports.route("/third-party-sales")
 def third_party_sales():
     start, end, err = _parse_date_range()
+    start, end, err, active_period, period_label = _resolve_period(start, end, err)
     location = _location_filter()
     default_start, default_end = _default_dates()
     ctx = {
         "active": "third_party_sales",
         "page_title": "Third-Party Sales",
-        "form_default_start": request.args.get("start") or default_start,
-        "form_default_end": request.args.get("end") or default_end,
+        "form_default_start": request.args.get("start") or (start.strftime("%Y-%m-%d") if start else default_start),
+        "form_default_end": request.args.get("end") or (end.strftime("%Y-%m-%d") if end else default_end),
         "form_location": location,
+        "active_period": active_period,
+        "period_label": period_label,
         "error": err,
         "report": None,
     }
@@ -204,6 +223,7 @@ def third_party_sales():
 @reports.route("/labor")
 def labor():
     start, end, err = _parse_date_range()
+    start, end, err, active_period, period_label = _resolve_period(start, end, err)
     location = _location_filter()
     default_start, default_end = _default_dates()
     role_filter = getattr(g, "labor_filter", None)  # 'boh' / 'foh' / None (= all)
@@ -223,9 +243,11 @@ def labor():
         "role_filter": role_filter,
         "redact_management": redact_management,
         "is_partner": is_partner,
-        "form_default_start": request.args.get("start") or default_start,
-        "form_default_end": request.args.get("end") or default_end,
+        "form_default_start": request.args.get("start") or (start.strftime("%Y-%m-%d") if start else default_start),
+        "form_default_end": request.args.get("end") or (end.strftime("%Y-%m-%d") if end else default_end),
         "form_location": location,
+        "active_period": active_period,
+        "period_label": period_label,
         "error": err,
         "report": None,
     }

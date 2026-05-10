@@ -10,19 +10,36 @@
 
 {% block content %}
 
+{% set base = url_for('reports.labor') %}
+{% set loc_qs = '&location=' ~ form_location if form_location else '' %}
+{# Carry the role suffix on period clicks so switching time doesn't drop the role #}
+{% set role_path = '/' ~ role_filter if role_filter in ['boh','foh'] else '' %}
+{# When this view is reached via the per-store delegate (/<store>/labor),
+   role_filter is None on first hit. Build period URLs that preserve the
+   role path segment when present. #}
+
 <!-- Period quick-toggle (Today / This Week / Last Week). Defaults to Today. -->
-<div class="dash-chart-tabs" style="margin-bottom: 12px;">
-  {% set base = url_for('reports.labor') %}
-  {% set loc_qs = '&location=' ~ form_location if form_location else '' %}
+<div class="dash-chart-tabs" style="margin-bottom: 8px;">
   <a class="dash-chart-tab {% if active_period == 'today' %}is-active{% endif %}"
-     href="{{ base }}?period=today{{ loc_qs }}">Today</a>
+     href="{{ base }}{{ role_path }}?period=today{{ loc_qs }}">Today</a>
   <a class="dash-chart-tab {% if active_period == 'week' %}is-active{% endif %}"
-     href="{{ base }}?period=week{{ loc_qs }}">This Week</a>
+     href="{{ base }}{{ role_path }}?period=week{{ loc_qs }}">This Week</a>
   <a class="dash-chart-tab {% if active_period == 'prev_week' %}is-active{% endif %}"
-     href="{{ base }}?period=prev_week{{ loc_qs }}">Last Week</a>
+     href="{{ base }}{{ role_path }}?period=prev_week{{ loc_qs }}">Last Week</a>
   {% if period_label %}
   <span class="dash-chart-range">{{ period_label }}</span>
   {% endif %}
+</div>
+
+<!-- Role quick-toggle (All / BOH / FOH). Defaults to All. -->
+{% set period_qs = '&period=' ~ active_period if active_period else '' %}
+<div class="dash-chart-tabs" style="margin-bottom: 14px;">
+  <a class="dash-chart-tab {% if not role_filter %}is-active{% endif %}"
+     href="{{ base }}?{{ period_qs.lstrip('&') }}{{ loc_qs }}">All</a>
+  <a class="dash-chart-tab {% if role_filter == 'boh' %}is-active{% endif %}"
+     href="{{ base }}/boh?{{ period_qs.lstrip('&') }}{{ loc_qs }}">BOH</a>
+  <a class="dash-chart-tab {% if role_filter == 'foh' %}is-active{% endif %}"
+     href="{{ base }}/foh?{{ period_qs.lstrip('&') }}{{ loc_qs }}">FOH</a>
 </div>
 
 <form method="GET" action="{{ url_for('reports.labor') }}"

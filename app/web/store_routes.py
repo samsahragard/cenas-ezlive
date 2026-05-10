@@ -193,16 +193,12 @@ def sales_landing():
 
 @store_bp.route("/labor")
 def labor_landing():
-    cards = [
-        {"label": "BOH Labor", "icon": "👨‍🍳", "href": f"/{g.current_store}/reports/labor/boh",
-         "sub": "Back-of-house labor cost / hours / % of net sales."},
-        {"label": "FOH Labor", "icon": "🍽", "href": f"/{g.current_store}/reports/labor/foh",
-         "sub": "Front-of-house labor cost / hours / % of net sales."},
-        {"label": "All Labor", "icon": "Σ", "href": f"/{g.current_store}/reports/labor/all",
-         "sub": "Combined labor across BOH + FOH, with denominator = ALL revenue (Toast + DoorDash + Uber + ezCater)."},
-    ]
-    return _render_landing("labor_landing", "Labor",
-                           f"{g.store_label} · labor cost + ratio", cards)
+    """Per Sam: lands directly on the labor report with Today/Week/LastWeek
+    + BOH/FOH/All pills. Default = All + Today. Delegates to reports.labor."""
+    from app.web.reports import labor as view
+    if g.current_location and g.current_location != "both":
+        g.location_override = g.current_location
+    return view()
 
 
 # ============== OPERATIONS — VENDORS ==============

@@ -901,29 +901,17 @@ input[type=password]:focus, textarea:focus, select:focus {
   transform: rotate(90deg);
 }
 
-/* Top-level group dropdown — flies out TO THE RIGHT of the sidebar so it
-   never covers the categories below it. position: fixed escapes the
-   sidebar's overflow:auto clipping; JS sets top + left dynamically on
-   click via positionNavFlyout(). Skinnier (220px) and slightly lighter
-   bg than the main sidebar. */
+/* Per Sam: plain inline accordion. Children expand below the toggle and
+   push following groups down (no hover, no flyout overlay). The server
+   sets the `expanded` class server-side based on the active page so the
+   right group is open when the user lands. */
 .nav-group-children {
   display: none;
-  position: fixed;        /* relative to viewport — JS sets top + left */
-  width: 220px;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 6px 4px;
-  z-index: 200;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.50);
-  margin: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  padding-left: 8px;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  margin-left: 22px;
+  margin-bottom: 4px;
 }
-
-/* Subgroup children stay inline within the parent flyout so the panel
-   grows naturally when a nested group expands. */
 .nav-subgroup-children {
   display: none;
   padding-left: 6px;
@@ -931,35 +919,25 @@ input[type=password]:focus, textarea:focus, select:focus {
   margin-bottom: 4px;
   border-left: 1px solid rgba(255, 255, 255, 0.10);
 }
-
 .nav-group.expanded > .nav-group-children,
-.nav-group.hover-open > .nav-group-children {
-  display: block;
-  animation: navFlyOutRight 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
 .nav-subgroup.expanded > .nav-subgroup-children {
   display: block;
-  animation: navDropDown 0.18s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: navAccordion 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes navAccordion {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 1200px; }
 }
 
-/* Top-level group toggles are now <a> links (click navigates to the
-   section landing page). Strip default link styling so they look
-   identical to the prior <button> version. */
+/* Top-level group toggles are <a> links (click navigates to the section
+   landing page AND the corresponding _open server-side flag opens this
+   accordion on that page). Strip default link styling. */
 a.nav-group-toggle {
   text-decoration: none;
   color: var(--text-2);
 }
 a.nav-group-toggle:hover {
   color: #fff;
-}
-
-@keyframes navFlyOutRight {
-  from { opacity: 0; transform: translateX(-6px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-@keyframes navDropDown {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .nav-group-children .nav-link,

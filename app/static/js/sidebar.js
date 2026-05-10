@@ -7,118 +7,19 @@ function closeSidebar() {
   document.body.classList.remove('sidebar-open');
 }
 
-// Position the right-flyout panel for a top-level .nav-group. Called on
-// click (and on scroll/resize while the flyout is open). Reads the toggle
-// button's rect and sets the panel's fixed-position top/left. Clamps so a
-// tall panel doesn't run off the bottom of the viewport.
-function positionNavFlyout(group) {
-  const toggle = group.querySelector(':scope > .nav-group-toggle');
-  const flyout = group.querySelector(':scope > .nav-group-children');
-  if (!toggle || !flyout) return;
-  const rect = toggle.getBoundingClientRect();
-  const panelHeight = flyout.offsetHeight || 200;
-  let top = rect.top;
-  const margin = 8;
-  if (top + panelHeight > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - panelHeight - margin);
-  }
-  flyout.style.top = top + 'px';
-  flyout.style.left = (rect.right + 6) + 'px';
-}
-
-// Click-to-toggle nested nav groups. The top-level group flies out to the
-// right; subgroups expand inline within the flyout panel.
+// Click-to-toggle nested nav groups (plain inline accordion). Only used
+// for subgroups now — top-level groups are <a> links that navigate to a
+// landing page, and the server-side _open flags expand the right group on
+// the destination page so click → navigate also "opens" it visually.
 function toggleNavGroup(btn) {
   const group = btn.closest('.nav-group, .nav-subgroup');
-  if (!group) return;
-  const isTopLevel = group.classList.contains('nav-group');
-  const willExpand = !group.classList.contains('expanded');
-
-  // Only one top-level flyout open at a time — close any other open group.
-  if (isTopLevel && willExpand) {
-    document.querySelectorAll('.nav-group.expanded').forEach((g) => {
-      if (g !== group) g.classList.remove('expanded');
-    });
-  }
-
-  group.classList.toggle('expanded');
-  if (isTopLevel && willExpand) {
-    // Position after layout settles so offsetHeight is real.
-    requestAnimationFrame(() => positionNavFlyout(group));
-  }
+  if (group) group.classList.toggle('expanded');
 }
-
-// Close any open flyout when the user clicks somewhere outside it.
-document.addEventListener('click', function (e) {
-  if (e.target.closest('.nav-group')) return;
-  document.querySelectorAll('.nav-group.expanded').forEach((g) => {
-    g.classList.remove('expanded');
-  });
-});
-
-// Reposition any open flyout on viewport scroll/resize so it stays glued
-// to its toggle button. Also covers the new hover-open path: the CSS
-// `.nav-group:hover > .nav-group-children` shows the panel, but it still
-// needs JS to set its top/left since position: fixed has no anchor.
-function repositionOpenFlyouts() {
-  document.querySelectorAll('.nav-group').forEach((g) => {
-    const flyout = g.querySelector(':scope > .nav-group-children');
-    if (flyout && getComputedStyle(flyout).display !== 'none') {
-      positionNavFlyout(g);
-    }
-  });
-}
-window.addEventListener('scroll', repositionOpenFlyouts, true);
-window.addEventListener('resize', repositionOpenFlyouts);
-
-// Hover-to-open path. CSS-only :hover broke when cursor moved across the
-// 6px gap between the toggle and the position:fixed flyout — display:none
-// kicked in during the gap, killing the hit-test. JS handles it instead:
-// mouseenter opens (pre-positioned), mouseleave starts a 200ms close timer,
-// hovering the panel cancels the timer so the gap is forgiven.
-let _navHoverCloseTimer = null;
-
-function _openHoverFlyout(group) {
-  if (_navHoverCloseTimer) {
-    clearTimeout(_navHoverCloseTimer);
-    _navHoverCloseTimer = null;
-  }
-  document.querySelectorAll('.nav-group.hover-open').forEach((g) => {
-    if (g !== group) g.classList.remove('hover-open');
-  });
-  positionNavFlyout(group);
-  group.classList.add('hover-open');
-}
-
-function _scheduleHoverClose(group) {
-  if (_navHoverCloseTimer) clearTimeout(_navHoverCloseTimer);
-  _navHoverCloseTimer = setTimeout(() => {
-    group.classList.remove('hover-open');
-    _navHoverCloseTimer = null;
-  }, 200);
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('.nav-group').forEach((g) => {
-    positionNavFlyout(g);  // pre-position so layout is ready before any hover
-    g.addEventListener('mouseenter', () => _openHoverFlyout(g));
-    g.addEventListener('mouseleave', () => _scheduleHoverClose(g));
-    const flyout = g.querySelector(':scope > .nav-group-children');
-    if (flyout) {
-      flyout.addEventListener('mouseenter', () => {
-        if (_navHoverCloseTimer) {
-          clearTimeout(_navHoverCloseTimer);
-          _navHoverCloseTimer = null;
-        }
-      });
-      flyout.addEventListener('mouseleave', () => _scheduleHoverClose(g));
-    }
-  });
-});
 
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     closeSidebar();
-    document.querySelectorAll('.nav-group.expanded').forEach((g) => g.classList.remove('expanded'));
+    document.querySelectorAll('.nav-group.expanded, .nav-subgroup.expanded')
+      .forEach((g) => g.classList.remove('expanded'));
   }
 });

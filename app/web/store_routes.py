@@ -226,17 +226,24 @@ def produce_orders():
 
 @store_bp.route("/orders")
 def orders_list():
-    """Per-location order list — maps to /orders/tomball or /orders/copperfield."""
+    """Per-location order list. For partner/corporate (location=both), goes to
+    the store dashboard. For tomball/copperfield, renders the per-location
+    list inline so the sidebar inherits g.current_store from
+    store_bp.url_value_preprocessor (otherwise the bare /orders/<location>
+    URL loses store context — same shape as the driver-tracking bug)."""
     if g.current_location == "both":
-        # Corporate / Partner — show home dashboard since there's no combined orders list yet
         return redirect(url_for("store.home"))
-    return redirect(f"/orders/{g.current_location}")
+    from app.web.orders_browse import location_orders
+    return location_orders(g.current_location)
 
 
-@store_bp.route("/orders/processor")
+@store_bp.route("/orders/processor", methods=["GET", "POST"])
 def orders_processor():
-    """PDF processor — same as the legacy /orders endpoint."""
-    return redirect("/orders" + (("?" + request.query_string.decode()) if request.query_string else ""))
+    """PDF processor — renders cater.orders inline so the sidebar inherits
+    g.current_store / g.store_label (otherwise the bare /orders URL falls
+    back to Tomball default — same shape as the driver-tracking bug)."""
+    from app.web.ezcater_routes import orders as _cater_orders
+    return _cater_orders()
 
 
 @store_bp.route("/review")

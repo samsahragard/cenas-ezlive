@@ -130,6 +130,22 @@ def _persist_order(db, bundle: dict[str, Any]) -> int:
                 breakdown=breakdowns[idx],
             ))
 
+    # Compute order revenue from item unit prices baked into raw_alias
+    # ("Item @ $XX.XX"). Used by /reports/sales (ezCater channel) and the
+    # labor cost ratio. Falls back to the scraped storefront menu when an
+    # item line has no $ token.
+    try:
+        from app.services.ezcater_pricing import compute_order_total
+        items = (db.query(OrderItem)
+                 .filter(OrderItem.order_id == order.id)
+                 .all())
+        order.total_amount = compute_order_total(items)
+    except Exception:
+        # Non-fatal — total can be backfilled later
+        import logging
+        logging.getLogger(__name__).exception("compute_order_total failed for order %s", order.id)
+
+
 def _trim_order_table(db, limit: int = 40) -> None:
     total = db.query(Order).count()
     if total <= limit:

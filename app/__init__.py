@@ -100,6 +100,54 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("drivers column backfill failed (non-fatal)")
 
+    # Idempotent column backfill for orders.total_amount (migration 10).
+    # Same self-healing pattern as the drivers backfill above.
+    try:
+        from sqlalchemy import inspect as _sa_inspect2, text as _sa_text2
+        from app.db import engine as _eng2
+        if _eng2 is not None:
+            insp = _sa_inspect2(_eng2)
+            if "orders" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("orders")}
+                if "total_amount" not in existing:
+                    with _eng2.begin() as conn:
+                        conn.execute(_sa_text2("ALTER TABLE orders ADD COLUMN total_amount FLOAT"))
+                    logging.getLogger(__name__).info("orders table: added total_amount column")
+    except Exception:
+        logging.getLogger(__name__).exception("orders column backfill failed (non-fatal)")
+
+    # One-shot row backfill: compute total_amount for any existing Order rows
+    # where it's NULL but items have parseable unit prices. Runs once per boot
+    # for orders that haven't been touched yet — capped to 500 per boot so a
+    # cold-start on Render doesn't time out the worker if the table is huge.
+    try:
+        from app.db import SessionLocal
+        from app.models import Order, OrderItem
+        from app.services.ezcater_pricing import compute_order_total
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                pending = (db.query(Order)
+                           .filter(Order.total_amount.is_(None))
+                           .filter(Order.external_order_id.isnot(None))
+                           .limit(500)
+                           .all())
+                fixed = 0
+                for o in pending:
+                    items = db.query(OrderItem).filter(OrderItem.order_id == o.id).all()
+                    if not items:
+                        continue
+                    o.total_amount = compute_order_total(items)
+                    fixed += 1
+                if fixed:
+                    db.commit()
+                    logging.getLogger(__name__).info(
+                        "orders.total_amount: backfilled %d rows", fixed)
+            finally:
+                db.close()
+    except Exception:
+        logging.getLogger(__name__).exception("orders total_amount row-backfill failed (non-fatal)")
+
     # One-time bootstrap of produce_price_snapshot from the current vendor JSONs
     # if the table is empty and the JSONs exist. Idempotent — only runs once.
     try:

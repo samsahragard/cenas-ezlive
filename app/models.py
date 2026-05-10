@@ -64,6 +64,12 @@ class Order(Base):
 
     flags: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
+    # Sum of qty × unit_price across this order's items, computed from the
+    # "Item @ $XX.XX" prices baked into OrderItem.raw_alias by the ingest
+    # pipeline. Used by /reports/sales (ezCater channel) + the labor cost
+    # ratio. Nullable for legacy rows; populated by a backfill on first boot.
+    total_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Dispatch result, computed at upload time. Persisted so per-order views
     # can render the Driver / Prep Expo / Master tabs without re-running the
     # Google Maps + dispatch_planner stack.

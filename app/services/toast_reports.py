@@ -161,6 +161,19 @@ def labor_report(start: datetime, end: datetime,
                     net_sales += float(c.get("amount") or 0)
         cur += timedelta(days=1)
 
+    # Add ezCater revenue to the denominator. ezCater orders never go through
+    # Toast (they hit our webhook + own Order DB), so they were previously
+    # excluded — making the labor % look worse than reality. Pull totals
+    # straight from the Order table for the same date window + location set.
+    ezcater_sales = 0.0
+    try:
+        from app.services.ezcater_revenue import total_ezcater_revenue
+        ezc_loc = location_filter if location_filter in ("tomball", "copperfield") else "both"
+        ezcater_sales = total_ezcater_revenue(start.date(), end.date(), ezc_loc)
+        net_sales += ezcater_sales
+    except Exception:
+        log.exception("labor_report: ezCater revenue add failed (non-fatal)")
+
     # Aggregate by job title (collapsing same titles across locations)
     by_job: dict = defaultdict(lambda: {
         "regular_hours": 0.0, "overtime_hours": 0.0, "labor_cost": 0.0,
@@ -531,7 +544,8 @@ SALES_CHANNEL_FILTERS = {
     "online":    {"online"},
     "doordash":  {"doordash"},
     "uber":      {"uber_eats"},
-    "total":     None,        # include EVERYTHING (in-store + all third-party)
+    "ezcater":   {"ezcater"},
+    "total":     None,        # include EVERYTHING (in-store + all third-party + ezCater)
     "all":       None,        # legacy: keep treating 'all' as third-party only
 }
 
@@ -636,6 +650,29 @@ def third_party_sales_report(start: datetime, end: datetime,
 
                 overall_orders += 1
                 overall_sales += amt
+
+    # ezCater channel: pulled from our own Order DB (the webhook pipeline,
+    # not Toast). Same date range + location filter; only included unless the
+    # channel filter explicitly excludes ezcater.
+    if allowed_keys is None or "ezcater" in allowed_keys:
+        try:
+            from app.services.ezcater_revenue import fetch_ezcater_orders
+            ezc_loc = location_filter if location_filter in ("tomball", "copperfield") else "both"
+            ezc_rows = fetch_ezcater_orders(start.date(), end.date(), ezc_loc)
+            if ezc_rows:
+                slot = by_channel["ezcater"]
+                slot["label"] = "ezCater"
+                for r in ezc_rows:
+                    slot["orders"] += 1
+                    slot["sales"] += r["amount"]
+                    slot["by_day"][r["date"]]["orders"] += 1
+                    slot["by_day"][r["date"]]["sales"] += r["amount"]
+                    slot["by_location"][r["location"]]["orders"] += 1
+                    slot["by_location"][r["location"]]["sales"] += r["amount"]
+                    overall_orders += 1
+                    overall_sales += r["amount"]
+        except Exception:
+            log.exception("third_party_sales_report: ezCater add failed (non-fatal)")
 
     # Render-friendly: sort channels by sales desc, build sorted by_day + top items
     channels_out = []

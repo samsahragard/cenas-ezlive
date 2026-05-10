@@ -90,14 +90,20 @@
 
   let onShift = card.dataset.onShift === '1';
   let watchId = null;
+  let heartbeatId = null;
   let wakeLock = null;
   let lastSentAt = null;
   let lastSentLat = null, lastSentLng = null;
+  let latestPos = null;       // most recent watchPosition fix, POSTed or not
   let postCount = 0;
 
-  // Don't POST every fix — only if moved ~10m or 30s since last
+  // Don't POST every fix — only if moved ~10m or 30s since last fresh fix.
+  // The heartbeat below covers the "I'm parked, no fresh fix" case.
   const MIN_DISTANCE_M = 10;
   const MAX_INTERVAL_S = 30;
+  const HEARTBEAT_MS   = 15000;  // resend last known pos at this cadence so the
+                                  // manager map keeps ticking even when the phone
+                                  // is stationary and watchPosition stays silent
 
   function setUI(state, msg) {
     if (state === 'on') {
@@ -135,10 +141,11 @@
     if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   }
 
-  async function postPosition(pos) {
+  async function postPosition(pos, force) {
     const c = pos.coords;
     const now = Date.now();
-    if (lastSentAt !== null && lastSentLat !== null) {
+    latestPos = pos;
+    if (!force && lastSentAt !== null && lastSentLat !== null) {
       const elapsedS = (now - lastSentAt) / 1000;
       const movedM   = distanceM(lastSentLat, lastSentLng, c.latitude, c.longitude);
       if (movedM < MIN_DISTANCE_M && elapsedS < MAX_INTERVAL_S) {
@@ -179,15 +186,24 @@
     }
     requestWakeLock();
     watchId = navigator.geolocation.watchPosition(
-      postPosition,
+      (pos) => postPosition(pos, false),
       (err) => { statusEl.textContent = `GPS error: ${err.message}`; },
       {enableHighAccuracy: true, maximumAge: 0, timeout: 30000}
     );
+    // Heartbeat: even when the phone is stationary and watchPosition stays
+    // silent, resend the last known position every HEARTBEAT_MS so the
+    // manager's map shows "last seen N seconds ago" instead of going stale.
+    heartbeatId = setInterval(() => {
+      if (!latestPos) return;
+      const sinceMs = lastSentAt === null ? Infinity : (Date.now() - lastSentAt);
+      if (sinceMs >= HEARTBEAT_MS - 500) postPosition(latestPos, true);
+    }, HEARTBEAT_MS);
     statusEl.textContent = 'requesting GPS…';
   }
 
   function stopStreaming() {
     if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if (heartbeatId !== null) { clearInterval(heartbeatId); heartbeatId = null; }
     releaseWakeLock();
     statusEl.textContent = '';
   }

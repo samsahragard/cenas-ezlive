@@ -252,7 +252,7 @@ def drivers_live_positions():
                 "heading_deg":    latest.heading_deg,
                 "captured_at":    latest.captured_at.isoformat() + "Z",
                 "seconds_ago":    seconds_ago,
-                "stale":          seconds_ago > 120,
+                "stale":          seconds_ago > 60,
             })
         return jsonify({"drivers": results, "now": now.isoformat() + "Z"})
     finally:

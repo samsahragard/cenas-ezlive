@@ -52,6 +52,13 @@
               <span style="color:#d4af37;font-weight:600;">No password</span>
             {% elif d.lockout_until %}
               <span style="color:#d4af37;font-weight:600;">Locked out</span>
+            {% elif latest_shift_for.get(d.id) %}
+              <a href="{{ url_for('store.driver_shift_playback', driver_id=d.id, shift_id=latest_shift_for[d.id]) }}"
+                 title="See {{ d.name }}'s last known location"
+                 style="display:inline-block;color:#7bb87b;font-weight:600;text-decoration:none;
+                        padding:3px 10px;border:1px solid rgba(123,184,123,0.45);border-radius:6px;">
+                Active →
+              </a>
             {% else %}
               <span style="color:#7bb87b;">Active</span>
             {% endif %}

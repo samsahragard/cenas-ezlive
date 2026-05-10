@@ -164,9 +164,20 @@ def drivers_admin():
         if g.current_location != "both":
             q = q.filter(Driver.location == g.current_location)
         rows = q.order_by(Driver.location, Driver.name).all()
+        # latest shift per driver — drives the click-Active-to-see-location link
+        from sqlalchemy import func
+        latest_shift_for = {}
+        if rows:
+            ids = [d.id for d in rows]
+            for did, sid in (db.query(DriverShift.driver_id, func.max(DriverShift.id))
+                              .filter(DriverShift.driver_id.in_(ids))
+                              .group_by(DriverShift.driver_id)
+                              .all()):
+                latest_shift_for[did] = sid
         return render_template(
             "driver_admin.html",
             drivers=rows,
+            latest_shift_for=latest_shift_for,
             store_label=g.store_label,
             current_location=g.current_location,
             location_labels=LOCATION_LABELS,

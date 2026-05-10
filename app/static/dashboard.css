@@ -933,14 +933,9 @@ input[type=password]:focus, textarea:focus, select:focus {
 }
 
 .nav-group.expanded > .nav-group-children,
-.nav-group:hover > .nav-group-children {
+.nav-group.hover-open > .nav-group-children {
   display: block;
   animation: navFlyOutRight 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-/* Keep the flyout open while the cursor is over its panel — bridges the
-   small gap between the toggle and the panel so the hover doesn't drop. */
-.nav-group-children:hover {
-  display: block;
 }
 .nav-subgroup.expanded > .nav-subgroup-children {
   display: block;

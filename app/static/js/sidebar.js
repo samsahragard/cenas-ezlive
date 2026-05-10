@@ -71,16 +71,48 @@ function repositionOpenFlyouts() {
 window.addEventListener('scroll', repositionOpenFlyouts, true);
 window.addEventListener('resize', repositionOpenFlyouts);
 
-// Hover-to-open path. Two pieces:
-//   (a) Pre-position EVERY flyout at page load so when the CSS :hover rule
-//       fires display:block, the panel is already at the right spot
-//       instead of flashing at viewport (0,0) where position:fixed defaults.
-//   (b) Re-position on mouseenter so the spot stays correct after viewport
-//       scroll/resize.
+// Hover-to-open path. CSS-only :hover broke when cursor moved across the
+// 6px gap between the toggle and the position:fixed flyout — display:none
+// kicked in during the gap, killing the hit-test. JS handles it instead:
+// mouseenter opens (pre-positioned), mouseleave starts a 200ms close timer,
+// hovering the panel cancels the timer so the gap is forgiven.
+let _navHoverCloseTimer = null;
+
+function _openHoverFlyout(group) {
+  if (_navHoverCloseTimer) {
+    clearTimeout(_navHoverCloseTimer);
+    _navHoverCloseTimer = null;
+  }
+  document.querySelectorAll('.nav-group.hover-open').forEach((g) => {
+    if (g !== group) g.classList.remove('hover-open');
+  });
+  positionNavFlyout(group);
+  group.classList.add('hover-open');
+}
+
+function _scheduleHoverClose(group) {
+  if (_navHoverCloseTimer) clearTimeout(_navHoverCloseTimer);
+  _navHoverCloseTimer = setTimeout(() => {
+    group.classList.remove('hover-open');
+    _navHoverCloseTimer = null;
+  }, 200);
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.nav-group').forEach((g) => {
-    positionNavFlyout(g);
-    g.addEventListener('mouseenter', () => positionNavFlyout(g));
+    positionNavFlyout(g);  // pre-position so layout is ready before any hover
+    g.addEventListener('mouseenter', () => _openHoverFlyout(g));
+    g.addEventListener('mouseleave', () => _scheduleHoverClose(g));
+    const flyout = g.querySelector(':scope > .nav-group-children');
+    if (flyout) {
+      flyout.addEventListener('mouseenter', () => {
+        if (_navHoverCloseTimer) {
+          clearTimeout(_navHoverCloseTimer);
+          _navHoverCloseTimer = null;
+        }
+      });
+      flyout.addEventListener('mouseleave', () => _scheduleHoverClose(g));
+    }
   });
 });
 

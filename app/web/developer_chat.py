@@ -292,12 +292,13 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
 # name or by their secrets-file path, never by value. Updates only via Sam-
 # approved git commits; no edit UI.
 DOC_PAGES = [
-    ("readme",        "README",       "doc_readme"),
-    ("architecture",  "Architecture", "doc_architecture"),
-    ("features",      "Features",     "doc_features"),
-    ("tech-stack",    "Tech Stack",   "doc_tech_stack"),
-    ("deployment",    "Deployment",   "doc_deployment"),
-    ("data-sources",  "Data Sources", "doc_data_sources"),
+    ("readme",                   "README",            "doc_readme"),
+    ("architecture",             "Architecture",      "doc_architecture"),
+    ("features",                 "Features",          "doc_features"),
+    ("tech-stack",               "Tech Stack",        "doc_tech_stack"),
+    ("deployment",               "Deployment",        "doc_deployment"),
+    ("data-sources",             "Data Sources",      "doc_data_sources"),
+    ("ck-session-2026-05-10",    "ck Session 5/10",   "doc_ck_session_2026_05_10"),
 ]
 
 

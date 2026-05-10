@@ -171,7 +171,7 @@
 
     {% if store_slug == 'partner' %}
     {# DEVELOPER section — Partner-only. Lets Sam + Claude(s) coordinate via persistent chat. #}
-    {% set app_doc_open = active in ['doc_readme','doc_architecture','doc_features','doc_tech_stack','doc_deployment','doc_data_sources'] %}
+    {% set app_doc_open = active in ['doc_readme','doc_architecture','doc_features','doc_tech_stack','doc_deployment','doc_data_sources','doc_ck_session_2026_05_10'] %}
     {% set ez_dev_open = active in ['dev_ezcater_review'] %}
     <div class="nav-section">Developer</div>
     <a class="nav-link {% if active == 'dev_chat' %}active{% endif %}" href="/partner/developer/chat">
@@ -198,6 +198,7 @@
         <a class="nav-link {% if active == 'doc_tech_stack' %}active{% endif %}" href="/partner/developer/app/tech-stack"><span class="nav-icon">·</span>Tech Stack</a>
         <a class="nav-link {% if active == 'doc_deployment' %}active{% endif %}" href="/partner/developer/app/deployment"><span class="nav-icon">·</span>Deployment</a>
         <a class="nav-link {% if active == 'doc_data_sources' %}active{% endif %}" href="/partner/developer/app/data-sources"><span class="nav-icon">·</span>Data Sources</a>
+        <a class="nav-link {% if active == 'doc_ck_session_2026_05_10' %}active{% endif %}" href="/partner/developer/app/ck-session-2026-05-10"><span class="nav-icon">·</span>ck Session 5/10</a>
       </div>
     </div>
     {% endif %}

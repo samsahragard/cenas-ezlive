@@ -1,0 +1,61 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('dev_ezcater_review') %}
+{% block title %}Ezcater Review Queue — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Ezcater Review Queue{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Orders the auto-resolver couldn't clear automatically. After two pulls and a Claude API check, anything still flagged lands here for a human.</p>
+{% endblock %}
+
+{% block content %}
+{% if orders %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table class="orders-table" style="width: 100%; border-collapse: collapse;">
+    <thead>
+      <tr style="background: rgba(0,0,0,0.30);">
+        <th style="padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-3);">Order</th>
+        <th style="padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-3);">Customer</th>
+        <th style="padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-3);">Delivery</th>
+        <th style="padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-3);">Store</th>
+        <th style="padding: 10px 14px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-3);">Heads</th>
+        <th style="padding: 10px 14px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-3);">Warns</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+      <tr style="border-top: 1px solid rgba(255,255,255,0.06);">
+        <td style="padding: 10px 14px; color: #fff; font-size: 13px;">
+          <strong>{{ o.external_order_id or '—' }}</strong>
+        </td>
+        <td style="padding: 10px 14px; color: #fff; font-size: 13px;">{{ o.client or '—' }}</td>
+        <td style="padding: 10px 14px; color: var(--text-2); font-size: 13px;">
+          {{ o.delivery_date or '—' }} {{ o.deliver_at or '' }}
+        </td>
+        <td style="padding: 10px 14px; color: var(--text-2); font-size: 13px;">
+          {% set sid = o.origin_store_id or '' %}
+          {% if sid in ('store_2','store_4') %}Tomball{% elif sid in ('store_1','store_3') %}Copperfield{% else %}—{% endif %}
+        </td>
+        <td style="padding: 10px 14px; color: var(--text-2); font-size: 13px; text-align: right;">{{ o.headcount or '—' }}</td>
+        <td style="padding: 10px 14px; text-align: right;">
+          <span style="background: rgba(240,192,96,0.18); color: #f0c060; border: 1px solid rgba(240,192,96,0.40); padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">{{ o.warning_count or '?' }}</span>
+        </td>
+        <td style="padding: 10px 14px; text-align: right;">
+          <a href="/orders/view/{{ o.external_order_id }}" style="color: var(--accent-soft); font-size: 12px; text-decoration: none;">Open →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top: 14px; color: var(--text-3); font-size: 12px;">
+  {{ orders|length }} order{{ 's' if orders|length != 1 else '' }} flagged. The list rolls forward — yesterday's orders fall off automatically.
+</div>
+{% else %}
+<div class="card" style="padding: 32px; text-align: center;">
+  <div style="font-size: 32px; margin-bottom: 10px;">✓</div>
+  <div style="color: #fff; font-size: 15px; font-weight: 600;">All clear.</div>
+  <div style="color: var(--text-3); font-size: 13px; margin-top: 6px;">The auto-resolver hasn't flagged anything for review.</div>
+</div>
+{% endif %}
+{% endblock %}

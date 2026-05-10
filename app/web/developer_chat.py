@@ -301,6 +301,42 @@ DOC_PAGES = [
 ]
 
 
+@dev_chat.route("/partner/developer/ezcater")
+@dev_chat.route("/partner/developer/ezcater/review")
+def ezcater_review_queue():
+    """Partner-only Ezcater review queue. Lists orders the auto-resolver
+    couldn't auto-clear (Claude flagged at least one warning as real).
+    Replaces the old per-store /review queue Sam retired."""
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    from datetime import datetime
+    from app.db import get_db
+    from app.models import Order
+    db = next(get_db())
+    try:
+        today_iso = datetime.now().strftime("%Y-%m-%d")
+        orders = (
+            db.query(Order)
+            .filter(Order.delivery_date >= today_iso)
+            .filter(Order.status != "cancelled")
+            .filter(Order.needs_review.is_(True))
+            .order_by(Order.delivery_date.asc(), Order.deliver_at)
+            .all()
+        )
+    finally:
+        db.close()
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    return render_template(
+        "ezcater_review_queue.html",
+        active="dev_ezcater_review",
+        page_title="Ezcater · Review Queue",
+        orders=orders,
+    )
+
+
 @dev_chat.route("/partner/developer/app")
 @dev_chat.route("/partner/developer/app/<page>")
 def app_doc(page: str = "readme"):

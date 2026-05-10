@@ -172,10 +172,20 @@
     {% if store_slug == 'partner' %}
     {# DEVELOPER section — Partner-only. Lets Sam + Claude(s) coordinate via persistent chat. #}
     {% set app_doc_open = active in ['doc_readme','doc_architecture','doc_features','doc_tech_stack','doc_deployment','doc_data_sources'] %}
+    {% set ez_dev_open = active in ['dev_ezcater_review'] %}
     <div class="nav-section">Developer</div>
     <a class="nav-link {% if active == 'dev_chat' %}active{% endif %}" href="/partner/developer/chat">
       <span class="nav-icon">💬</span>Chat
     </a>
+    <div class="nav-group {% if ez_dev_open %}expanded{% endif %}">
+      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">▤</span>Ezcater
+        <span class="nav-chevron">▸</span>
+      </button>
+      <div class="nav-group-children">
+        <a class="nav-link {% if active == 'dev_ezcater_review' %}active{% endif %}" href="/partner/developer/ezcater"><span class="nav-icon">·</span>Review Queue</a>
+      </div>
+    </div>
     <div class="nav-group {% if app_doc_open %}expanded{% endif %}">
       <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
         <span class="nav-icon">📖</span>App

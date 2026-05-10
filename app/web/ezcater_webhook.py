@@ -385,6 +385,28 @@ def _process_cancelled(entity_id: str) -> None:
         db.close()
 
 
+def _clear_order_review_flag(external_order_id: str | None) -> None:
+    """Set Order.needs_review=False after Claude resolver clears warnings.
+    Used to silently pass an order through when the auto-resolver decides
+    the warnings were false positives."""
+    if not external_order_id:
+        return
+    try:
+        from app.db import get_db
+        from app.models import Order
+        db = next(get_db())
+        try:
+            o = db.query(Order).filter_by(external_order_id=external_order_id).first()
+            if o and o.needs_review:
+                o.needs_review = False
+                db.commit()
+                logger.info("auto-resolver: cleared needs_review on %s", external_order_id)
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("auto-resolver: could not clear needs_review on %s", external_order_id)
+
+
 def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     """LIVE-MODE: assign driver + ingest into kitchen UI + Telegram."""
     import time as _time
@@ -469,12 +491,17 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     raw_order = map_to_raw_order(api_order)
     ingest_ok, ingest_resp = _ingest_into_ezlive(raw_order)
 
-    # Step 4b: AUTO-RESOLVER — if the first ingest came back with warnings,
-    # give ezCater's backend a few seconds to settle (the read at submit-time
-    # can be stale), re-pull, and re-ingest once. Replaces the old human-
-    # review queue. If warnings persist after re-pull, fall through to the
-    # Telegram alert below.
+    # Step 4b: AUTO-RESOLVER. Three-tier resolution if the first ingest
+    # came back with warnings:
+    #   (1) wait 5s + re-pull from Partner API + re-ingest (handles ezCater
+    #       backend lag where field values arrive milliseconds late)
+    #   (2) if warnings still remain, ask Claude (haiku) whether each warning
+    #       is a real problem or a false positive — Claude knows what valid
+    #       catering data usually looks like
+    #   (3) if Claude can't clear it, set Order.needs_review=True so the
+    #       order surfaces in the Partner → Developer → Ezcater queue
     warnings = (ingest_resp or {}).get("warnings") or []
+    claude_notes = ""
     if ingest_ok and warnings:
         logger.info("auto-resolver: %d warnings on %s; re-pulling in 5s", len(warnings), order_number)
         _time.sleep(5)
@@ -487,6 +514,25 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
                 if ingest_ok2:
                     warnings = (ingest_resp2 or {}).get("warnings") or []
                     ingest_resp = ingest_resp2
+                    raw_order = raw_order2
+
+        if warnings:
+            # Tier 3: ask Claude
+            try:
+                from app.services.ezcater_resolver import try_claude_resolve
+                cleared, claude_notes = try_claude_resolve(
+                    raw_order=raw_order,
+                    raw_warnings=warnings,
+                )
+                logger.info("auto-resolver: Claude verdict for %s — cleared=%s notes=%s",
+                            order_number, cleared, claude_notes[:80])
+                if cleared:
+                    # Persist the cleared decision: flip needs_review off on the
+                    # Order row so the queue page won't list it.
+                    _clear_order_review_flag(raw_order.get("order_id"))
+                    warnings = []  # for downstream Telegram so we don't re-mention them
+            except Exception:
+                logger.exception("auto-resolver: Claude tier failed; leaving needs_review=True")
 
     # Step 5: Telegram
     lines = []
@@ -506,17 +552,11 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     lines.append(f"Assign: {'OK' if assign_ok else 'FAILED — ' + (assign_err or '?')}")
     if ingest_ok:
         view_url = ingest_resp.get("view_url") or ""
-        warns = ingest_resp.get("warnings") or []
-        if warns:
-            # Inline the warning text directly in the Telegram so Sam can act
-            # without opening the dashboard. Replaces the old Review Queue.
-            warn_block = "\n".join(f"  • {w}" for w in warns[:8])
-            extra = f"\n  …+{len(warns) - 8} more" if len(warns) > 8 else ""
-            lines.append(f"EZLive: ingested with {len(warns)} warning{'s' if len(warns)!=1 else ''}:\n{warn_block}{extra}")
-            if view_url:
-                lines.append(f"  View: {view_url}")
-        else:
-            lines.append(f"EZLive: ingested {view_url}")
+        # Don't re-include warnings in the Telegram — the auto-resolver
+        # has either cleared them (silent pass-through) or queued them
+        # to /partner/developer/ezcater for review. Sam asked for no
+        # Telegram on warnings.
+        lines.append(f"EZLive: ingested {view_url}")
     else:
         lines.append(f"EZLive: FAILED — {json.dumps(ingest_resp)[:200]}")
 

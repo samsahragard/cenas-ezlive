@@ -269,7 +269,7 @@ def dashboard_summary():
     per-order total).
     """
     from flask import request, jsonify
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from app.services import toast_reports
 
     period = (request.args.get("period") or "today").lower()
@@ -277,7 +277,10 @@ def dashboard_summary():
     if location not in ("both", "tomball", "copperfield"):
         return jsonify({"error": f"invalid location {location!r}"}), 400
 
-    today = datetime.now().date()
+    # Render runs in UTC; restaurant is in Central Time. "Today" must be the
+    # restaurant's calendar date or Toast's businessDate lookup misses data.
+    CT = timezone(timedelta(hours=-5))
+    today = datetime.now(CT).date()
     if period == "today":
         start = end = today
         label = today.strftime("%a, %b %d").replace(" 0", " ")

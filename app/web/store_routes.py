@@ -259,6 +259,138 @@ def drivers_live_positions():
         db.close()
 
 
+# ============== OPERATIONS — DRIVER SHIFT HISTORY / PLAYBACK ==============
+
+import math
+
+
+def _haversine_m(lat1, lng1, lat2, lng2):
+    R = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat/2)**2 + math.cos(p1) * math.cos(p2) * math.sin(dlng/2)**2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def _shift_summary(db, shift):
+    """Lightweight summary for one shift: duration, point count, distance, max speed.
+    Distance is the sum of consecutive haversine hops, so it includes minor GPS
+    jitter — fine for a glance-able number; not survey-grade."""
+    pts = (db.query(DriverLocation)
+           .filter(DriverLocation.shift_id == shift.id)
+           .order_by(DriverLocation.captured_at.asc())
+           .all())
+    distance_m = 0.0
+    max_speed = 0.0
+    for prev, cur in zip(pts, pts[1:]):
+        distance_m += _haversine_m(prev.lat, prev.lng, cur.lat, cur.lng)
+        if cur.speed_mps and cur.speed_mps > max_speed:
+            max_speed = cur.speed_mps
+    end = shift.ended_at or datetime.utcnow()
+    duration_s = max(0, int((end - shift.started_at).total_seconds()))
+    return {
+        "point_count": len(pts),
+        "distance_m":  round(distance_m, 1),
+        "duration_s":  duration_s,
+        "max_speed_mps": round(max_speed, 2),
+        "last_lat":    pts[-1].lat if pts else None,
+        "last_lng":    pts[-1].lng if pts else None,
+    }
+
+
+def _scoped_driver(db, driver_id):
+    """Look up a driver, enforcing the store's location scope."""
+    drv = db.get(Driver, driver_id)
+    if not drv:
+        return None
+    if g.current_location != "both" and drv.location != g.current_location:
+        return None
+    return drv
+
+
+@store_bp.route("/drivers/<int:driver_id>/shifts", methods=["GET"])
+def driver_shifts(driver_id: int):
+    db = next(get_db())
+    try:
+        drv = _scoped_driver(db, driver_id)
+        if not drv:
+            return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
+        shifts = (db.query(DriverShift)
+                  .filter(DriverShift.driver_id == driver_id)
+                  .order_by(DriverShift.started_at.desc())
+                  .limit(60)
+                  .all())
+        rows = [{"shift": s, "summary": _shift_summary(db, s)} for s in shifts]
+        return render_template(
+            "driver_shifts.html",
+            driver=drv,
+            store_label=g.store_label,
+            current_location=g.current_location,
+            location_labels=LOCATION_LABELS,
+            rows=rows,
+            active="drivers_admin",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/drivers/<int:driver_id>/shifts/<int:shift_id>", methods=["GET"])
+def driver_shift_playback(driver_id: int, shift_id: int):
+    db = next(get_db())
+    try:
+        drv = _scoped_driver(db, driver_id)
+        if not drv:
+            return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
+        shift = db.get(DriverShift, shift_id)
+        if not shift or shift.driver_id != driver_id:
+            return redirect(url_for("store.driver_shifts", driver_id=driver_id))
+        summary = _shift_summary(db, shift)
+        return render_template(
+            "driver_playback.html",
+            driver=drv,
+            shift=shift,
+            summary=summary,
+            store_label=g.store_label,
+            location_labels=LOCATION_LABELS,
+            active="drivers_admin",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/drivers/<int:driver_id>/shifts/<int:shift_id>/track.json", methods=["GET"])
+def driver_shift_track(driver_id: int, shift_id: int):
+    db = next(get_db())
+    try:
+        drv = _scoped_driver(db, driver_id)
+        if not drv:
+            return jsonify({"error": "not found"}), 404
+        shift = db.get(DriverShift, shift_id)
+        if not shift or shift.driver_id != driver_id:
+            return jsonify({"error": "not found"}), 404
+        pts = (db.query(DriverLocation)
+               .filter(DriverLocation.shift_id == shift_id)
+               .order_by(DriverLocation.captured_at.asc())
+               .all())
+        return jsonify({
+            "shift_id": shift_id,
+            "started_at": shift.started_at.isoformat() + "Z",
+            "ended_at":   shift.ended_at.isoformat() + "Z" if shift.ended_at else None,
+            "points": [
+                {
+                    "lat": p.lat, "lng": p.lng,
+                    "captured_at": p.captured_at.isoformat() + "Z",
+                    "accuracy_m": p.accuracy_m,
+                    "speed_mps": p.speed_mps,
+                }
+                for p in pts
+            ],
+        })
+    finally:
+        db.close()
+
+
 @store_bp.route("/drivers/<int:driver_id>/toggle-active", methods=["POST"])
 def drivers_toggle_active(driver_id: int):
     db = next(get_db())

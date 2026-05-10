@@ -1,0 +1,69 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'drivers_admin' %}
+{% block title %}Shifts — {{ driver.name }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}{{ driver.name }} — Shift History{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    <span class="location-badge">{{ location_labels.get(driver.location, driver.location) }}</span> ·
+    {{ rows|length }} shift{{ '' if rows|length == 1 else 's' }}
+    · <a href="{{ url_for('store.drivers_admin') }}" style="color:var(--accent-soft);">← back to Drivers</a>
+  </p>
+{% endblock %}
+
+{% block content %}
+{% if rows %}
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Started</th>
+        <th>Ended</th>
+        <th>Duration</th>
+        <th>Distance</th>
+        <th>Max speed</th>
+        <th>Fixes</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      {% set s = row.shift %}{% set m = row.summary %}
+      <tr>
+        <td>{{ s.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{% if s.ended_at %}{{ s.ended_at.strftime('%H:%M') }}{% else %}<span style="color:#7bb87b;">live</span>{% endif %}</td>
+        <td>{{ '%dh %02dm' % (m.duration_s // 3600, (m.duration_s % 3600) // 60) }}</td>
+        <td>{{ '%.2f mi' % (m.distance_m / 1609.34) }}</td>
+        <td>{% if m.max_speed_mps %}{{ '%.1f mph' % (m.max_speed_mps * 2.237) }}{% else %}—{% endif %}</td>
+        <td>{{ m.point_count }}</td>
+        <td>
+          {% if not s.ended_at %}
+            <span style="color:#7bb87b;">on shift</span>
+          {% elif m.point_count == 0 %}
+            <span style="color:#c0a850;">no GPS</span>
+          {% else %}
+            ended
+          {% endif %}
+        </td>
+        <td>
+          {% if m.point_count > 0 %}
+          <a href="{{ url_for('store.driver_shift_playback', driver_id=driver.id, shift_id=s.id) }}"
+             style="color:var(--accent-soft);font-weight:600;">View map →</a>
+          {% else %}
+          <span style="opacity:0.45;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p style="color:var(--text-3);font-style:italic;padding:30px;text-align:center;">No shifts recorded yet.</p>
+{% endif %}
+
+<p style="margin-top:18px;font-size:12px;color:var(--text-3);">
+  Shifts open when the driver taps Start in the Driver Portal and close on End. Distance is the sum of GPS hops, so it's a rough total (not a precise odometer reading).
+</p>
+{% endblock %}

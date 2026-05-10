@@ -1,0 +1,86 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'drivers_admin' %}
+{% block title %}Shift Map — {{ driver.name }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}{{ driver.name }} — Shift Map{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    <span class="location-badge">{{ location_labels.get(driver.location, driver.location) }}</span>
+    · {{ shift.started_at.strftime('%Y-%m-%d %H:%M') }} → {% if shift.ended_at %}{{ shift.ended_at.strftime('%H:%M') }}{% else %}<span style="color:#7bb87b;">live</span>{% endif %}
+    · <a href="{{ url_for('store.driver_shifts', driver_id=driver.id) }}" style="color:var(--accent-soft);">← back to shifts</a>
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  #playback-map { height: 65vh; min-height: 460px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); }
+  .stats-strip { display:flex; flex-wrap:wrap; gap: 18px; margin: 12px 0 18px;
+                 background: rgba(0,0,0,0.40); border-radius: 12px; padding: 14px 18px;
+                 border: 1px solid rgba(255,255,255,0.08); }
+  .stat { display:flex; flex-direction:column; gap: 2px; min-width: 110px; }
+  .stat .v { font-size: 18px; font-weight: 600; color: #fff; }
+  .stat .l { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+  .marker-start { background: #7bb87b; }
+  .marker-end   { background: #c0392b; }
+  .marker-dot { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stats-strip">
+  <div class="stat">
+    <span class="v">{{ '%dh %02dm' % (summary.duration_s // 3600, (summary.duration_s % 3600) // 60) }}</span>
+    <span class="l">Duration</span>
+  </div>
+  <div class="stat">
+    <span class="v">{{ '%.2f mi' % (summary.distance_m / 1609.34) }}</span>
+    <span class="l">Distance</span>
+  </div>
+  <div class="stat">
+    <span class="v">{% if summary.max_speed_mps %}{{ '%.1f mph' % (summary.max_speed_mps * 2.237) }}{% else %}—{% endif %}</span>
+    <span class="l">Max speed</span>
+  </div>
+  <div class="stat">
+    <span class="v">{{ summary.point_count }}</span>
+    <span class="l">GPS fixes</span>
+  </div>
+</div>
+
+<div id="playback-map"></div>
+
+<p style="margin-top:14px;font-size:12px;color:var(--text-3);">
+  Green dot = shift start. Red dot = last fix. Polyline traces every GPS point in order.
+</p>
+
+<script>
+(function() {
+  const TRACK_URL = '{{ url_for("store.driver_shift_track", driver_id=driver.id, shift_id=shift.id) }}';
+
+  const map = L.map('playback-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap',
+  }).addTo(map);
+
+  fetch(TRACK_URL).then(r => r.json()).then(data => {
+    const points = (data.points || []).map(p => [p.lat, p.lng]);
+    if (points.length === 0) {
+      map.setView([30.0, -95.6], 11);
+      return;
+    }
+    const line = L.polyline(points, { color: '#e87a3e', weight: 4, opacity: 0.9 }).addTo(map);
+    L.marker(points[0],            { icon: L.divIcon({ html: '<div class="marker-dot marker-start"></div>', className: '' }) })
+     .bindPopup(`Started ${data.started_at}`).addTo(map);
+    L.marker(points[points.length-1], { icon: L.divIcon({ html: '<div class="marker-dot marker-end"></div>',   className: '' }) })
+     .bindPopup(data.ended_at ? `Ended ${data.ended_at}` : 'Latest fix (still on shift)').addTo(map);
+    map.fitBounds(line.getBounds(), { padding: [40, 40], maxZoom: 17 });
+  }).catch(() => {
+    map.setView([30.0, -95.6], 11);
+  });
+})();
+</script>
+{% endblock %}

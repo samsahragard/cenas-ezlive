@@ -9,6 +9,21 @@
 
 {% block content %}
 
+<!-- Period quick-toggle (Today / This Week / Last Week). Defaults to Today on first load. -->
+<div class="dash-chart-tabs" style="margin-bottom: 12px;">
+  {% set base = url_for('reports.server_performance') %}
+  {% set loc_qs = '&location=' ~ form_location if form_location else '' %}
+  <a class="dash-chart-tab {% if active_period == 'today' %}is-active{% endif %}"
+     href="{{ base }}?period=today{{ loc_qs }}">Today</a>
+  <a class="dash-chart-tab {% if active_period == 'week' %}is-active{% endif %}"
+     href="{{ base }}?period=week{{ loc_qs }}">This Week</a>
+  <a class="dash-chart-tab {% if active_period == 'prev_week' %}is-active{% endif %}"
+     href="{{ base }}?period=prev_week{{ loc_qs }}">Last Week</a>
+  {% if period_label %}
+  <span class="dash-chart-range">{{ period_label }}</span>
+  {% endif %}
+</div>
+
 <form method="GET" action="{{ url_for('reports.server_performance') }}"
       style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
              padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
@@ -38,6 +53,7 @@
 {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
 
 {% if report %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% for loc, data in report.by_location.items() %}
 <h2 style="margin: 24px 0 10px 0; color: #fff; font-size: 18px; font-weight: 600;">
   {{ data.label }}
@@ -45,6 +61,69 @@
     {{ data.total_checks }} checks across {{ data.rows | length }} server{{ 's' if data.rows | length != 1 else '' }}
   </span>
 </h2>
+
+{% if data.rows %}
+<!-- Tip % bar chart, one row per server, sorted A-Z by last name -->
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head">
+    <div>
+      <div class="card-title">Tip % by server (A → Z by last name)</div>
+      <div class="card-sub">{{ data.rows | length }} {{ role_filter|default('server') }}s</div>
+    </div>
+  </div>
+  <div style="position:relative; padding:8px 4px 4px;">
+    <canvas id="tip-chart-{{ loc }}" height="{{ (data.rows | length) * 26 + 40 }}"></canvas>
+  </div>
+</div>
+<script>
+(function () {
+  const rows = {{ data.rows | tojson }};
+  const ctx = document.getElementById('tip-chart-{{ loc }}').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.name),
+      datasets: [{
+        label: 'Tip %',
+        data: rows.map(r => r.tip_pct == null ? 0 : r.tip_pct),
+        backgroundColor: rows.map(r => r.tip_pct == null ? 'rgba(255,255,255,0.2)' : '#e87a3e'),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const r = rows[ctx.dataIndex];
+              return r.tip_pct == null
+                ? `${r.name}: no CC tip data`
+                : `${r.name}: ${r.tip_pct.toFixed(1)}%  (${r.tickets} tickets)`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {color: 'rgba(255,255,255,0.65)', callback: (v) => v + '%'},
+          grid: {color: 'rgba(255,255,255,0.08)'},
+          title: {display: true, text: 'Tip %', color: 'rgba(255,255,255,0.65)'},
+        },
+        y: {
+          ticks: {color: 'rgba(255,255,255,0.85)', font: {size: 11}},
+          grid: {display: false},
+        },
+      },
+    },
+  });
+})();
+</script>
+{% endif %}
 <div class="table-scroll">
   <table class="log-table">
     <thead>

@@ -12,7 +12,7 @@ TOAST_API_KEY missing or expired).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, render_template, request, g
 
@@ -21,6 +21,53 @@ from app.services import toast_reports, sling_reports, produce_history
 log = logging.getLogger(__name__)
 
 reports = Blueprint("reports", __name__, url_prefix="/reports")
+
+# Restaurant is in Central Time; Render runs UTC. Date "today" must be the
+# restaurant's calendar date or businessDate lookups miss data after ~7pm.
+_CT = timezone(timedelta(hours=-5))
+
+
+def _today_ct():
+    return datetime.now(_CT).date()
+
+
+def _period_to_dates(period: str) -> tuple[datetime | None, datetime | None, str | None]:
+    """Map a period preset to (start_dt, end_dt, label).
+
+    period:
+        "today"     -> just today
+        "week"      -> Mon → today (current week, partial)
+        "prev_week" -> previous Mon → Sun
+    Returns (None, None, None) for unknown periods.
+    """
+    today = _today_ct()
+    if period == "today":
+        d = today
+        return (datetime.combine(d, datetime.min.time()),
+                datetime.combine(d, datetime.min.time()),
+                d.strftime("%a, %b %d").replace(" 0", " "))
+    if period == "week":
+        start = today - timedelta(days=today.weekday())
+        return (datetime.combine(start, datetime.min.time()),
+                datetime.combine(today, datetime.min.time()),
+                f"{start.strftime('%b %d')} – {today.strftime('%b %d')}".replace(" 0", " "))
+    if period == "prev_week":
+        end = today - timedelta(days=today.weekday() + 1)
+        start = end - timedelta(days=6)
+        return (datetime.combine(start, datetime.min.time()),
+                datetime.combine(end, datetime.min.time()),
+                f"{start.strftime('%b %d')} – {end.strftime('%b %d')}".replace(" 0", " "))
+    return None, None, None
+
+
+def _last_name_key(name: str) -> tuple[str, str]:
+    """Sort key: lower-case last name, then first name. Robust to single-word names."""
+    parts = (name or "").strip().split()
+    if not parts:
+        return ("", "")
+    last = parts[-1].lower()
+    rest = " ".join(parts[:-1]).lower() if len(parts) > 1 else ""
+    return (last, rest)
 
 
 def _parse_date_range() -> tuple[datetime | None, datetime | None, str | None]:
@@ -269,6 +316,22 @@ def schedule():
 def server_performance():
     start, end, err = _parse_date_range()
     location = _location_filter()
+
+    # Active period pill. If start/end are explicit + don't match a preset,
+    # we still highlight 'today' for visual consistency. URL-driven state
+    # via ?period=today|week|prev_week takes precedence + auto-fills dates
+    # so first-load shows real data without the user clicking Run.
+    period = (request.args.get("period") or "").strip().lower()
+    if period in ("today", "week", "prev_week"):
+        start, end, period_label = _period_to_dates(period)
+        err = None
+    elif start is None and end is None and not err:
+        # No explicit dates AND no period param → default to today.
+        period = "today"
+        start, end, period_label = _period_to_dates(period)
+    else:
+        period_label = None
+
     default_start, default_end = _default_dates()
     role_filter = getattr(g, "role_filter", None)
     if role_filter not in ("server", "bartenders", "all"):
@@ -279,15 +342,23 @@ def server_performance():
         "active": active_key,
         "page_title": "Server Performance" + role_label,
         "role_filter": role_filter,
-        "form_default_start": request.args.get("start") or default_start,
-        "form_default_end": request.args.get("end") or default_end,
+        "form_default_start": request.args.get("start") or (start.strftime("%Y-%m-%d") if start else default_start),
+        "form_default_end": request.args.get("end") or (end.strftime("%Y-%m-%d") if end else default_end),
         "form_location": location,
+        "active_period": period or "",
+        "period_label": period_label,
         "error": err,
         "report": None,
     }
     if start and end and not err:
         try:
-            ctx["report"] = toast_reports.server_perf_report(start, end, location, role_filter=role_filter)
+            report = toast_reports.server_perf_report(start, end, location, role_filter=role_filter)
+            # Sort rows alphabetically by last name within each location section.
+            for loc_key, data in (report.get("by_location") or {}).items():
+                rows = data.get("rows") or []
+                rows.sort(key=lambda r: _last_name_key(r.get("name") or ""))
+                data["rows"] = rows
+            ctx["report"] = report
         except Exception as ex:
             log.exception("server perf report failed")
             ctx["error"] = f"Could not generate report: {ex}"

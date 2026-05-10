@@ -273,6 +273,8 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
         d["css_class"] = "msg-sam"
     elif a == "masood":
         d["css_class"] = "msg-masood"
+    elif a == "samai":
+        d["css_class"] = "msg-samai"
     elif "aick" in a:
         d["css_class"] = "msg-aick"
     elif "ck" in a:

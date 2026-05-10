@@ -15,6 +15,7 @@ from app.web.reports import reports as reports_bp
 from app.web.store_routes import store_bp
 from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web.corporate_order import corp_order as corp_order_bp
+from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
 from app.web import auth as ezauth
 from app.services import produce_ingest
 
@@ -42,6 +43,7 @@ def create_app():
     app.register_blueprint(reports_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(dev_chat_bp)
+    app.register_blueprint(ezc_import_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")

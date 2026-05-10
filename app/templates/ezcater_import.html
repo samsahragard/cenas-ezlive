@@ -1,0 +1,81 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'ezcater_import' %}
+{% block title %}ezCater Import — Cenas Kitchen{% endblock %}
+
+{% block page_title %}ezCater Import{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Drop the Caterer Portal "Order Data" xlsx export to backfill order totals.</p>
+{% endblock %}
+
+{% block content %}
+{% if error %}
+  <div class="banner banner-error" style="margin-bottom:18px;">{{ error }}</div>
+{% endif %}
+
+{% if result %}
+  <div class="banner banner-success" style="margin-bottom:18px;">
+    <strong>Import complete.</strong>
+    Parsed <strong>{{ result.parsed }}</strong> rows · Updated <strong>{{ result.updated }}</strong> existing orders ·
+    Created <strong>{{ result.created }}</strong> stubs · Skipped <strong>{{ result.skipped }}</strong>.
+  </div>
+
+  {% if result.examples_updated %}
+  <h3 style="margin:20px 0 8px;font-size:14px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:1px;">
+    Sample updates
+  </h3>
+  <div class="table-scroll">
+    <table class="log-table log-table-view" style="width:auto;">
+      <thead><tr class="group-header"><th>Order #</th><th>Old total</th><th>New total</th></tr></thead>
+      <tbody>
+        {% for r in result.examples_updated %}
+        <tr>
+          <td>{{ r.order_number }}</td>
+          <td>{% if r.old is none %}—{% else %}${{ '%.2f'|format(r.old) }}{% endif %}</td>
+          <td>${{ '%.2f'|format(r.new) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if result.examples_created %}
+  <h3 style="margin:20px 0 8px;font-size:14px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:1px;">
+    Sample stubs created
+  </h3>
+  <div class="table-scroll">
+    <table class="log-table log-table-view" style="width:auto;">
+      <thead><tr class="group-header"><th>Order #</th><th>Date</th><th>Store</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for r in result.examples_created %}
+        <tr>
+          <td>{{ r.order_number }}</td>
+          <td>{{ r.date }}</td>
+          <td>{{ r.store }}</td>
+          <td>${{ '%.2f'|format(r.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+{% endif %}
+
+<div class="login-card" style="max-width:520px;margin-top:18px;">
+  <form method="POST" enctype="multipart/form-data">
+    <div class="login-field">
+      <label for="xlsx">Order Data XLSX</label>
+      <input type="file" id="xlsx" name="xlsx" accept=".xlsx" required
+             style="width:100%;padding:11px 13px;font-size:14px;background:rgba(255,255,255,0.04);
+                    border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;">
+    </div>
+    <button type="submit" class="btn-login" style="margin-top:14px;">Import</button>
+  </form>
+</div>
+
+<p style="margin-top:18px;font-size:12px;color:var(--text-3);">
+  Where to get the file: ezCater Caterer Portal → Reports → Order Data (or Sales) → date range → Export to XLSX.
+  We use the <code>Food Total</code> column as the canonical revenue (matches Toast's pre-tax check.amount).
+  <code>Caterer Total Due</code> is also captured for reference.
+</p>
+{% endblock %}

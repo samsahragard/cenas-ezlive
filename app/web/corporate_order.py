@@ -36,6 +36,13 @@ STORE_TO_LOCATION = {
     "uno": "copperfield", "dos": "tomball",
     "corporate": "both",  "partner": "both",
 }
+# Mirror store_routes.STORE_LABELS so the sidebar's "{{ store_label }}" doesn't
+# fall back to its 'Tomball' default when rendering a /<store>/corporate-order
+# page that's served by THIS blueprint (not store_bp).
+STORE_LABELS = {
+    "dos": "Tomball", "uno": "Copperfield",
+    "corporate": "Corporate", "partner": "Partner",
+}
 
 
 @corp_order.url_value_preprocessor
@@ -49,6 +56,7 @@ def _pull_store(endpoint, values):
         abort(404)
     g.current_store = slug
     g.current_location = STORE_TO_LOCATION[slug]
+    g.store_label = STORE_LABELS[slug]
 
 
 @corp_order.url_defaults

@@ -15,107 +15,6 @@
 {% endblock %}
 
 {% block content %}
-<!-- Sales + Labor summary (top of every dashboard) -->
-<div class="dash-summary" data-location="{{ dashboard_location|default('both') }}">
-  <div class="summary-tabs">
-    <button type="button" class="summary-tab is-active" data-period="today">Today</button>
-    <button type="button" class="summary-tab" data-period="week">This Week</button>
-    <button type="button" class="summary-tab" data-period="prev_week">Last Week</button>
-    <span class="summary-range" id="summary-range"></span>
-  </div>
-  <div class="summary-cards">
-    <div class="summary-card sales-card">
-      <div class="summary-icon">💵</div>
-      <div class="summary-content">
-        <div class="summary-label">Sales</div>
-        <div class="summary-value" id="sales-value">—</div>
-        <div class="summary-meta" id="sales-meta">loading…</div>
-      </div>
-    </div>
-    <div class="summary-card labor-card">
-      <div class="summary-icon">👷</div>
-      <div class="summary-content">
-        <div class="summary-label">Labor</div>
-        <div class="summary-value" id="labor-value">—</div>
-        <div class="summary-meta" id="labor-meta">loading…</div>
-      </div>
-    </div>
-  </div>
-  <div class="summary-warnings" id="summary-warnings"></div>
-</div>
-
-<script>
-(function () {
-  const root = document.querySelector('.dash-summary');
-  if (!root) return;
-  const loc = root.dataset.location || 'both';
-  const tabs = root.querySelectorAll('.summary-tab');
-  const range = document.getElementById('summary-range');
-  const salesValue = document.getElementById('sales-value');
-  const salesMeta = document.getElementById('sales-meta');
-  const laborValue = document.getElementById('labor-value');
-  const laborMeta = document.getElementById('labor-meta');
-  const warnings = document.getElementById('summary-warnings');
-
-  function fmtMoney(n) {
-    if (n == null || isNaN(n)) return '—';
-    if (n >= 100000) return '$' + Math.round(n).toLocaleString();
-    return '$' + (n).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
-  }
-  function fmtPct(n, digits) { return n == null || isNaN(n) ? '—' : n.toFixed(digits ?? 1) + '%'; }
-  function fmtHours(n) { return n == null || isNaN(n) ? '—' : (Math.round(n * 10) / 10).toLocaleString() + ' hrs'; }
-
-  function setLoading() {
-    salesValue.textContent = '…';
-    laborValue.textContent = '…';
-    salesMeta.textContent = 'loading…';
-    laborMeta.textContent = 'loading…';
-    warnings.textContent = '';
-  }
-
-  function fetchPeriod(period) {
-    setLoading();
-    fetch(`/dashboard/summary?period=${encodeURIComponent(period)}&location=${encodeURIComponent(loc)}`, {
-      credentials: 'same-origin', headers: {'Accept': 'application/json'},
-    })
-    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
-    .then(d => {
-      range.textContent = d.label || '';
-      salesValue.textContent = fmtMoney(d.sales.total);
-      salesMeta.textContent = d.sales.total > 0
-        ? 'pre-tax · all channels (Toast)'
-        : 'no sales recorded yet';
-      laborValue.textContent = fmtMoney(d.labor.cost);
-      laborMeta.textContent = `${fmtPct(d.labor.ratio_pct)} of sales · ${fmtHours(d.labor.hours)} · ${d.labor.shifts || 0} shifts`;
-      warnings.innerHTML = '';
-      (d.warnings || []).forEach(w => {
-        const div = document.createElement('div');
-        div.className = 'summary-warning';
-        div.textContent = '⚠ ' + w;
-        warnings.appendChild(div);
-      });
-    })
-    .catch(err => {
-      const msg = (err && (err.error || err.detail)) || 'fetch failed';
-      salesValue.textContent = '—';
-      laborValue.textContent = '—';
-      salesMeta.textContent = msg;
-      laborMeta.textContent = msg;
-    });
-  }
-
-  tabs.forEach(t => {
-    t.addEventListener('click', () => {
-      tabs.forEach(x => x.classList.remove('is-active'));
-      t.classList.add('is-active');
-      fetchPeriod(t.dataset.period);
-    });
-  });
-
-  fetchPeriod('today');
-})();
-</script>
-
 <!-- KPI strip -->
 <div class="kpis">
   <div class="kpi kpi-1">
@@ -144,44 +43,199 @@
   </div>
 </div>
 
-<!-- Charts row (placeholders until sales data is wired) -->
-<div class="charts-grid">
-  <div class="card">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Sales mix</div>
-        <div class="card-sub">coming soon — sales tracking</div>
-      </div>
-    </div>
-    <div class="donut-wrap">
-      <div class="donut"></div>
-      <div class="donut-legend">
-        <div class="donut-row"><span class="swatch" style="background:var(--good)"></span>Catering<span class="pct">—</span></div>
-        <div class="donut-row"><span class="swatch" style="background:var(--rose)"></span>Walk-in<span class="pct">—</span></div>
-        <div class="donut-row"><span class="swatch" style="background:var(--accent)"></span>Delivery<span class="pct">—</span></div>
-        <div class="donut-row"><span class="swatch" style="background:var(--violet)"></span>Other<span class="pct">—</span></div>
-      </div>
-    </div>
+<!-- Sales + Labor donuts (real data, with Today / This Week / Last Week toggle) -->
+<div class="dash-charts" data-location="{{ dashboard_location|default('both') }}">
+  <div class="dash-chart-tabs">
+    <button type="button" class="dash-chart-tab is-active" data-period="today">Today</button>
+    <button type="button" class="dash-chart-tab" data-period="week">This Week</button>
+    <button type="button" class="dash-chart-tab" data-period="prev_week">Last Week</button>
+    <span class="dash-chart-range" id="dash-chart-range"></span>
   </div>
 
-  <div class="card">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Orders this week</div>
-        <div class="card-sub">coming soon — historical chart</div>
+  <div class="charts-grid">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Sales mix</div>
+          <div class="card-sub" id="sales-sub">loading…</div>
+        </div>
+        <div class="card-total" id="sales-total">—</div>
+      </div>
+      <div class="donut-wrap">
+        <canvas id="sales-donut" width="180" height="180"></canvas>
+        <div class="donut-legend" id="sales-legend"></div>
       </div>
     </div>
-    <div class="bars">
-      <div class="bar-col"><div class="bar" data-v="—" style="height:20%"></div><div class="label">Mon</div></div>
-      <div class="bar-col"><div class="bar" data-v="—" style="height:25%"></div><div class="label">Tue</div></div>
-      <div class="bar-col"><div class="bar" data-v="—" style="height:30%"></div><div class="label">Wed</div></div>
-      <div class="bar-col"><div class="bar" data-v="—" style="height:28%"></div><div class="label">Thu</div></div>
-      <div class="bar-col"><div class="bar" data-v="—" style="height:35%"></div><div class="label">Fri</div></div>
-      <div class="bar-col"><div class="bar" data-v="—" style="height:18%"></div><div class="label">Sat</div></div>
-      <div class="bar-col"><div class="bar" data-v="—" style="height:12%"></div><div class="label">Sun</div></div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Labor mix</div>
+          <div class="card-sub" id="labor-sub">loading…</div>
+        </div>
+        <div class="card-total" id="labor-total">—</div>
+      </div>
+      <div class="donut-wrap">
+        <canvas id="labor-donut" width="180" height="180"></canvas>
+        <div class="donut-legend" id="labor-legend"></div>
+      </div>
     </div>
   </div>
+  <div class="dash-chart-warnings" id="dash-chart-warnings"></div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const root = document.querySelector('.dash-charts');
+  if (!root) return;
+  const loc = root.dataset.location || 'both';
+  const tabs = root.querySelectorAll('.dash-chart-tab');
+  const rangeLabel = document.getElementById('dash-chart-range');
+  const salesSub = document.getElementById('sales-sub');
+  const laborSub = document.getElementById('labor-sub');
+  const salesTotal = document.getElementById('sales-total');
+  const laborTotal = document.getElementById('labor-total');
+  const salesLegend = document.getElementById('sales-legend');
+  const laborLegend = document.getElementById('labor-legend');
+  const warnings = document.getElementById('dash-chart-warnings');
+
+  // Stable color palette (matches the original glass theme accents)
+  const COLORS = ['#6dd16d', '#e87a3e', '#4080e8', '#b46ee8', '#f0c060', '#e85d8e', '#5dd4d4', '#999'];
+
+  function fmtMoney(n) {
+    if (n == null || isNaN(n) || n === 0) return '$0';
+    return '$' + Math.round(n).toLocaleString();
+  }
+  function fmtPct(n, d) { return (n == null || isNaN(n)) ? '—' : (n).toFixed(d ?? 1) + '%'; }
+
+  let salesChart = null, laborChart = null;
+
+  function makeDonut(canvas, slices, totalForPct) {
+    const ctx = canvas.getContext('2d');
+    const data = {
+      labels: slices.map(s => s.label),
+      datasets: [{
+        data: slices.map(s => s.value),
+        backgroundColor: slices.map((_, i) => COLORS[i % COLORS.length]),
+        borderWidth: 0,
+      }],
+    };
+    return new Chart(ctx, {
+      type: 'doughnut',
+      data,
+      options: {
+        responsive: false,
+        cutout: '62%',
+        plugins: {
+          legend: {display: false},
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed;
+                const pct = totalForPct > 0 ? (v / totalForPct * 100).toFixed(1) + '%' : '';
+                return `${ctx.label}: ${fmtMoney(v)} (${pct})`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  function renderLegend(el, slices, totalForPct) {
+    el.innerHTML = '';
+    if (!slices.length) {
+      el.innerHTML = '<div class="donut-empty">no data for this period</div>';
+      return;
+    }
+    slices.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'donut-row';
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = COLORS[i % COLORS.length];
+      const lbl = document.createElement('span');
+      lbl.textContent = s.label;
+      const pct = document.createElement('span');
+      pct.className = 'pct';
+      pct.textContent = totalForPct > 0
+        ? `${fmtPct(s.value / totalForPct * 100)} · ${fmtMoney(s.value)}`
+        : fmtMoney(s.value);
+      row.appendChild(sw);
+      row.appendChild(lbl);
+      row.appendChild(pct);
+      el.appendChild(row);
+    });
+  }
+
+  function setLoading() {
+    salesSub.textContent = 'loading…';
+    laborSub.textContent = 'loading…';
+    salesTotal.textContent = '—';
+    laborTotal.textContent = '—';
+    salesLegend.innerHTML = '';
+    laborLegend.innerHTML = '';
+    if (salesChart) { salesChart.destroy(); salesChart = null; }
+    if (laborChart) { laborChart.destroy(); laborChart = null; }
+    warnings.innerHTML = '';
+  }
+
+  function fetchPeriod(period) {
+    setLoading();
+    fetch(`/dashboard/summary?period=${encodeURIComponent(period)}&location=${encodeURIComponent(loc)}`, {
+      credentials: 'same-origin', headers: {'Accept': 'application/json'},
+    })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
+    .then(d => {
+      rangeLabel.textContent = d.label || '';
+
+      // Sales
+      const salesSlices = (d.sales.by_channel || []).map(c => ({label: c.label, value: c.value}));
+      const salesTotalNum = d.sales.total || salesSlices.reduce((a, s) => a + s.value, 0);
+      salesTotal.textContent = fmtMoney(salesTotalNum);
+      salesSub.textContent = salesSlices.length
+        ? `${salesSlices.length} channel${salesSlices.length === 1 ? '' : 's'} · pre-tax`
+        : 'no sales yet';
+      salesChart = makeDonut(document.getElementById('sales-donut'), salesSlices, salesTotalNum);
+      renderLegend(salesLegend, salesSlices, salesTotalNum);
+
+      // Labor
+      const laborSlices = (d.labor.by_role || []).map(r => ({label: r.label, value: r.value}));
+      const laborTotalNum = d.labor.total_cost || laborSlices.reduce((a, s) => a + s.value, 0);
+      laborTotal.textContent = fmtMoney(laborTotalNum);
+      laborSub.textContent = laborTotalNum > 0
+        ? `${fmtPct(d.labor.ratio_pct)} of sales · ${(d.labor.hours || 0).toFixed(1)} hrs`
+        : 'no labor recorded yet';
+      laborChart = makeDonut(document.getElementById('labor-donut'), laborSlices, laborTotalNum);
+      renderLegend(laborLegend, laborSlices, laborTotalNum);
+
+      warnings.innerHTML = '';
+      (d.warnings || []).forEach(w => {
+        const div = document.createElement('div');
+        div.className = 'dash-chart-warning';
+        div.textContent = '⚠ ' + w;
+        warnings.appendChild(div);
+      });
+    })
+    .catch(err => {
+      const msg = (err && (err.error || err.detail)) || 'fetch failed';
+      salesSub.textContent = msg;
+      laborSub.textContent = msg;
+    });
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      fetchPeriod(t.dataset.period);
+    });
+  });
+
+  fetchPeriod('today');
+})();
+</script>
 
 <!-- Today's deliveries + attention -->
 <div class="agenda-grid">

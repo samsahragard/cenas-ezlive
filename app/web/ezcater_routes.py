@@ -302,31 +302,76 @@ def dashboard_summary():
     loc_filter = None if location == "both" else location
 
     try:
-        report = toast_reports.labor_report(start_dt, end_dt, location_filter=loc_filter)
+        labor_rep = toast_reports.labor_report(start_dt, end_dt, location_filter=loc_filter)
+        sales_rep = toast_reports.third_party_sales_report(
+            start_dt, end_dt, location_filter=loc_filter, channel_filter="total"
+        )
     except Exception as e:
-        logger.exception("dashboard_summary: labor_report failed")
+        logger.exception("dashboard_summary: toast fetch failed")
         return jsonify({
             "error": "toast_fetch_failed",
             "detail": str(e)[:200],
             "period": period, "location": location,
         }), 502
 
-    t = report.get("totals") or {}
+    # Sales: total + per-channel donut slices
+    sales_total = float((labor_rep.get("totals") or {}).get("net_sales") or 0.0)
+    sales_channels = []
+    for c in sales_rep.get("by_channel") or []:
+        sales_channels.append({
+            "key": c.get("key"),
+            "label": c.get("label"),
+            "value": float(c.get("sales") or 0.0),
+            "orders": int(c.get("orders") or 0),
+        })
+    # Drop empty/$0 slices and re-sort biggest first
+    sales_channels = sorted(
+        [c for c in sales_channels if c["value"] > 0],
+        key=lambda r: -r["value"],
+    )
+
+    # Labor: total + BOH/FOH donut slices
+    from app.services.role_classifier import classify_role
+    boh_cost = foh_cost = 0.0
+    for row in labor_rep.get("by_position") or []:
+        cost = row.get("labor_cost")
+        if cost is None:
+            # Management redaction returns None for cost; fall back to derived
+            # value: pct_net_sales * net_sales / 100. (Aggregate-only — never
+            # exposes individuals.)
+            pct = row.get("pct_net_sales") or 0.0
+            cost = (pct / 100.0) * sales_total
+        role = classify_role(row.get("title") or "")
+        if role == "boh":
+            boh_cost += cost
+        else:
+            foh_cost += cost
+    labor_total = float((labor_rep.get("totals") or {}).get("labor_cost") or 0.0)
+    if labor_total <= 0 and (boh_cost + foh_cost) > 0:
+        labor_total = boh_cost + foh_cost
+    labor_roles = []
+    if boh_cost > 0:
+        labor_roles.append({"key": "boh", "label": "BOH (Kitchen)", "value": boh_cost})
+    if foh_cost > 0:
+        labor_roles.append({"key": "foh", "label": "FOH (Service)", "value": foh_cost})
+
     return jsonify({
         "period": period,
         "label": label,
         "date_range": {"start": start.isoformat(), "end": end.isoformat()},
         "location": location,
         "sales": {
-            "total": float(t.get("net_sales") or 0.0),
+            "total": sales_total,
+            "by_channel": sales_channels,
         },
         "labor": {
-            "cost": float(t.get("labor_cost") or 0.0),
-            "hours": float(t.get("hours") or 0.0),
-            "shifts": int(t.get("shifts") or 0),
-            "ratio_pct": float(t.get("labor_pct_of_sales") or 0.0),
+            "total_cost": labor_total,
+            "hours": float((labor_rep.get("totals") or {}).get("hours") or 0.0),
+            "shifts": int((labor_rep.get("totals") or {}).get("shifts") or 0),
+            "ratio_pct": float((labor_rep.get("totals") or {}).get("labor_pct_of_sales") or 0.0),
+            "by_role": labor_roles,
         },
-        "warnings": report.get("warnings") or [],
+        "warnings": labor_rep.get("warnings") or [],
     })
 
 

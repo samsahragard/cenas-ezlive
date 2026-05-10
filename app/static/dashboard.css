@@ -1024,3 +1024,69 @@ input[type=password]:focus, textarea:focus, select:focus {
   padding: 6px 10px;
   border-radius: 6px;
 }
+
+/* ============ Dashboard charts (Sales + Labor donuts with period toggle) ============ */
+.dash-charts {
+  margin: 0 0 18px;
+}
+.dash-chart-tabs {
+  display: flex; gap: 6px; align-items: center;
+  margin-bottom: 12px; flex-wrap: wrap;
+}
+.dash-chart-tab {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-2);
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.dash-chart-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+.dash-chart-tab.is-active {
+  background: var(--accent, #e87a3e);
+  border-color: var(--accent, #e87a3e);
+  color: #fff;
+  font-weight: 600;
+}
+.dash-chart-range {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.3px;
+}
+.card-total {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.donut-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 16px;
+  font-style: italic;
+}
+.dash-chart-warnings {
+  margin-top: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.dash-chart-warning {
+  font-size: 12px;
+  color: #f0c060;
+  background: rgba(240, 192, 96, 0.10);
+  border: 1px solid rgba(240, 192, 96, 0.30);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+/* Make the canvas behave inside the existing .donut-wrap layout */
+.donut-wrap canvas {
+  flex: 0 0 auto;
+}

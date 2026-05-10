@@ -198,7 +198,9 @@ def list_orders(limit: int = 50, store_filter: str | None = None) -> list[dict]:
                 "customer_email": cust.email if cust else None,
                 "customer_username": cust.username if cust else None,
                 "store_key": store_key,
-                "items": [{
+                # Key name 'lines' (not 'items') to dodge Jinja's dict.items
+                # method-vs-key collision when rendering with `o.items`.
+                "lines": [{
                     "name": it.product_name,
                     "category": it.product_category,
                     "quantity": it.quantity,

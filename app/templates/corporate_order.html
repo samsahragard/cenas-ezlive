@@ -285,10 +285,10 @@ async function updateStock(productId) {
       <td>
         {{ o.total_quantity }} unit{{ 's' if o.total_quantity != 1 else '' }} ·
         <span style="color:var(--text-3);">
-        {% for it in o.items[:3] %}
+        {% for it in o.lines[:3] %}
           {{ it.quantity }}× {{ it.name }}{% if not loop.last %}, {% endif %}
         {% endfor %}
-        {% if o.items|length > 3 %} +{{ o.items|length - 3 }} more{% endif %}
+        {% if o.lines|length > 3 %} +{{ o.lines|length - 3 }} more{% endif %}
         </span>
       </td>
       <td><span class="order-status-pill s-{{ o.status|replace(' ', '-') }}">{{ o.status }}</span></td>

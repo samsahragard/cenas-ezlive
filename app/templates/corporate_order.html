@@ -15,26 +15,67 @@
 
 {% block head_extra %}
 <style>
-  .corp-toolbar {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    margin-bottom: 14px;
+  /* Two-column shop layout: left department sidebar + right product grid.
+     Mirrors a typical restaurant-supply catalog (e.g., USFoods/Sysco). */
+  .corp-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .corp-layout { grid-template-columns: 1fr; }
+  }
+  .corp-sidebar {
+    background: rgba(0,0,0,0.40);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 6px;
+    position: sticky;
+    top: 12px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+  .corp-sidebar-title {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    padding: 4px 12px 8px;
+    margin: 0;
+    font-weight: 600;
   }
   .corp-cat-pill {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--glass-border);
+    display: block;
+    background: transparent;
+    border: 1px solid transparent;
     color: var(--text-2);
-    padding: 5px 12px;
-    border-radius: 999px;
-    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 8px;
     font-size: 13px;
     text-decoration: none;
+    margin: 1px 0;
   }
-  .corp-cat-pill:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .corp-cat-pill:hover {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+  }
   .corp-cat-pill.is-active {
-    background: var(--accent, #e87a3e);
-    border-color: var(--accent, #e87a3e);
+    background: rgba(232, 122, 62, 0.18);
+    border-color: rgba(232, 122, 62, 0.45);
     color: #fff;
     font-weight: 600;
+  }
+  .corp-main-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .corp-main-title {
+    font-size: 18px; font-weight: 600; color: #fff; margin: 0;
+  }
+  .corp-main-count {
+    color: var(--text-3); font-size: 12px;
   }
   .corp-grid {
     display: grid;
@@ -181,18 +222,26 @@
   {% endif %}
 {% endwith %}
 
-<div class="corp-toolbar">
-  <a class="corp-cat-pill {% if not selected_category %}is-active{% endif %}" href="{{ url_for('corporate_order.view') }}">All</a>
-  {% for c in categories %}
-    <a class="corp-cat-pill {% if selected_category == c %}is-active{% endif %}"
-       href="{{ url_for('corporate_order.view', category=c) }}">{{ c }}</a>
-  {% endfor %}
-  <span style="margin-left:auto;color:var(--text-3);font-size:12px;">
-    {{ products|length }} item{{ 's' if products|length != 1 else '' }} · {{ g.store_label|default(g.current_store|title) }}
-  </span>
-</div>
+<div class="corp-layout">
+  <aside class="corp-sidebar">
+    <h3 class="corp-sidebar-title">Departments</h3>
+    <a class="corp-cat-pill {% if not selected_category %}is-active{% endif %}" href="{{ url_for('corporate_order.view') }}">All</a>
+    {% for c in categories %}
+      <a class="corp-cat-pill {% if selected_category == c %}is-active{% endif %}"
+         href="{{ url_for('corporate_order.view', category=c) }}">{{ c }}</a>
+    {% endfor %}
+  </aside>
 
-{% if products %}
+  <div class="corp-main">
+    <div class="corp-main-meta">
+      <h2 class="corp-main-title">{{ selected_category or 'All Products' }}</h2>
+      <span class="corp-main-count">
+        {{ products|length }} item{{ 's' if products|length != 1 else '' }} ·
+        <a href="{{ url_for('corporate_order.reports') }}" style="color:var(--accent-soft);text-decoration:none;">View order history →</a>
+      </span>
+    </div>
+
+    {% if products %}
 <form method="POST" action="{{ url_for('corporate_order.submit') }}" id="corp-form">
   <div class="corp-grid">
     {% for p in products %}
@@ -253,69 +302,13 @@ async function updateStock(productId) {
 </script>
 {% endif %}
 
-{% else %}
-<div class="empty-corp">
-  <p style="margin:0;">No products in this category yet.</p>
-</div>
-{% endif %}
-
-{# Orders list #}
-<h2 style="margin: 28px 0 8px; color: #fff; font-size: 16px; font-weight: 600;">
-  {% if is_admin %}Recent orders (all stores){% else %}Your recent orders{% endif %}
-</h2>
-{% if orders %}
-<div style="overflow-x:auto;">
-<table class="orders-table">
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>Store</th>
-      <th>Submitted</th>
-      <th>Items</th>
-      <th>Status</th>
-      {% if is_admin %}<th>Action</th>{% endif %}
-    </tr>
-  </thead>
-  <tbody>
-    {% for o in orders %}
-    <tr>
-      <td>{{ o.id }}</td>
-      <td>{{ o.customer_username or o.customer_email or '?' }}</td>
-      <td>{{ o.submitted_at.strftime('%a %b %d, %I:%M %p') if o.submitted_at else '—' }}</td>
-      <td>
-        {{ o.total_quantity }} unit{{ 's' if o.total_quantity != 1 else '' }} ·
-        <span style="color:var(--text-3);">
-        {% for it in o.lines[:3] %}
-          {{ it.quantity }}× {{ it.name }}{% if not loop.last %}, {% endif %}
-        {% endfor %}
-        {% if o.lines|length > 3 %} +{{ o.lines|length - 3 }} more{% endif %}
-        </span>
-      </td>
-      <td><span class="order-status-pill s-{{ o.status|replace(' ', '-') }}">{{ o.status }}</span></td>
-      {% if is_admin %}
-      <td>
-        <form method="POST" action="{{ url_for('corporate_order.update_status', order_id=o.id) }}" style="display:inline;">
-          <select name="status" onchange="this.form.submit()" style="
-              background: rgba(0,0,0,0.45); border: 1px solid var(--glass-border);
-              color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 12px;">
-            <option value="Submitted"   {% if o.status == 'Submitted' %}selected{% endif %}>Submitted</option>
-            <option value="In Progress" {% if o.status == 'In Progress' %}selected{% endif %}>In Progress</option>
-            <option value="Fulfilled"   {% if o.status == 'Fulfilled' %}selected{% endif %}>Fulfilled</option>
-            <option value="Cancelled"   {% if o.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
-          </select>
-        </form>
-      </td>
-      {% endif %}
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<div class="empty-corp" style="padding:18px;">
-  <p style="margin:0;">No orders yet.</p>
-</div>
-{% endif %}
+    {% else %}
+    <div class="empty-corp">
+      <p style="margin:0;">No products in this category yet.</p>
+    </div>
+    {% endif %}
+  </div>{# /corp-main #}
+</div>{# /corp-layout #}
 
 {% endif %}{# /configured #}
 

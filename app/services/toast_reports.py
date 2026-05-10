@@ -540,19 +540,22 @@ def _channel_for_order(order: dict) -> tuple[str, str]:
 
 # Channel filter → set of allowed channel keys (output of _channel_for_order)
 SALES_CHANNEL_FILTERS = {
-    "toast":     {"in_store"},
-    "online":    {"online"},
-    "doordash":  {"doordash"},
-    "uber":      {"uber_eats"},
-    "ezcater":   {"ezcater"},
-    "total":     None,        # include EVERYTHING (in-store + all third-party + ezCater)
-    "all":       None,        # legacy: keep treating 'all' as third-party only
+    "toast":         {"in_store"},
+    "online":        {"online"},
+    "doordash":      {"doordash"},
+    "uber":          {"uber_eats"},
+    "toast_local":   {"toast_local"},
+    "toast_pickup":  {"toast_pickup"},
+    "ezcater":       {"ezcater"},
+    "total":         None,    # include EVERYTHING (in-store + all third-party + ezCater)
+    "all":           None,    # legacy: keep treating 'all' as third-party only
 }
 
 
 def third_party_sales_report(start: datetime, end: datetime,
                              location_filter: str | None = None,
                              channel_filter: str | None = None,
+                             channels: list[str] | None = None,
                              refresh: bool = False) -> dict:
     """Sales by channel for [start, end] inclusive.
 
@@ -563,6 +566,11 @@ def third_party_sales_report(start: datetime, end: datetime,
     With channel_filter='online' / 'doordash' / 'uber' returns just that
     one channel (DoorDash address-placeholder detection still applies).
     With channel_filter='total' returns ALL channels including in-store.
+
+    `channels` (NEW): a list of channel keys to include — multi-select.
+    Built from SALES_CHANNEL_FILTERS keys (toast/online/doordash/uber/ezcater
+    plus 'total' or 'all' meaning include everything). When provided, takes
+    precedence over channel_filter.
 
     Pulls Toast orders day-by-day per location, classifies each order into
     a channel, and aggregates: order count, sales, by-day, by-location,
@@ -591,16 +599,38 @@ def third_party_sales_report(start: datetime, end: datetime,
     overall_sales = 0.0
     grand_total_in_store = 0  # for context
 
-    # Resolve channel filter
-    if channel_filter == "all":
-        channel_filter = None
-    allowed_keys = SALES_CHANNEL_FILTERS.get(channel_filter, "__legacy__") if channel_filter else None
-    if allowed_keys == "__legacy__":
-        allowed_keys = None  # unknown filter, default to legacy third-party-only
+    # Resolve channel filter — multi-channel `channels` takes precedence.
+    selected_channels: set[str] | None = None
+    if channels:
+        # Normalize. 'all' or 'total' anywhere = include everything.
+        if any(c.lower() in ("all", "total") for c in channels):
+            selected_channels = None  # no restriction
+        else:
+            allowed = set()
+            for c in channels:
+                key_set = SALES_CHANNEL_FILTERS.get(c.lower())
+                if isinstance(key_set, set):
+                    allowed |= key_set
+            selected_channels = allowed if allowed else set()
+    elif channel_filter:
+        if channel_filter == "all":
+            channel_filter = None
+        if channel_filter:
+            ks = SALES_CHANNEL_FILTERS.get(channel_filter, "__legacy__")
+            selected_channels = ks if isinstance(ks, set) else None
+            if ks == "__legacy__":
+                selected_channels = None
+    allowed_keys = selected_channels
 
-    # Whether to count In Store orders. For default + 'all' = no (legacy).
-    # For 'toast' or 'total' = yes.
-    include_in_store = channel_filter in ("toast", "total")
+    # Whether to count In Store orders.
+    if channels:
+        # Multi-select: include in-store iff 'toast' or 'total'/'all' present
+        include_in_store = (
+            allowed_keys is None or "in_store" in (allowed_keys or set())
+        )
+    else:
+        # Legacy single-filter behavior
+        include_in_store = channel_filter in ("toast", "total")
 
     for loc, rg in locations.items():
         for bd in dates:

@@ -2,26 +2,58 @@
 {% set active = active|default('third_party_sales') %}
 {% block title %}Third-Party Sales — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Third-Party Sales{% endblock %}
+{% block page_title %}{{ page_title|default('Sales') }}{% endblock %}
 {% block page_subtitle %}
-  <p class="greeting-sub">Sales by non-dine-in channel: DoorDash, Toast Online Ordering, Toast Local, etc. Pulls from Toast.</p>
+  <p class="greeting-sub">Pick a time period and one or more revenue centers. All channels = total combined; click a channel to add or remove it from the view.</p>
 {% endblock %}
 
 {% block content %}
 
+{# Build the carry-over query string so period + channel pills don't clobber
+   each other. Only carry the params we want to keep — drop ones being clicked. #}
+{% set base = url_for('reports.third_party_sales') %}
+
+{# Channels-CSV used by period pills (preserve current selection across time changes) #}
+{% set channels_param = (selected_channels or ['all']) | join(',') %}
+{% set channels_qs = '&channels=' ~ channels_param if channels_param else '' %}
+{% set loc_qs = '&location=' ~ form_location if form_location else '' %}
+
 <!-- Period quick-toggle (Today / This Week / Last Week). Defaults to Today. -->
-<div class="dash-chart-tabs" style="margin-bottom: 12px;">
-  {% set base = url_for('reports.third_party_sales') %}
-  {% set loc_qs = '&location=' ~ form_location if form_location else '' %}
+<div class="dash-chart-tabs" style="margin-bottom: 8px;">
   <a class="dash-chart-tab {% if active_period == 'today' %}is-active{% endif %}"
-     href="{{ base }}?period=today{{ loc_qs }}">Today</a>
+     href="{{ base }}?period=today{{ channels_qs }}{{ loc_qs }}">Today</a>
   <a class="dash-chart-tab {% if active_period == 'week' %}is-active{% endif %}"
-     href="{{ base }}?period=week{{ loc_qs }}">This Week</a>
+     href="{{ base }}?period=week{{ channels_qs }}{{ loc_qs }}">This Week</a>
   <a class="dash-chart-tab {% if active_period == 'prev_week' %}is-active{% endif %}"
-     href="{{ base }}?period=prev_week{{ loc_qs }}">Last Week</a>
+     href="{{ base }}?period=prev_week{{ channels_qs }}{{ loc_qs }}">Last Week</a>
   {% if period_label %}
   <span class="dash-chart-range">{{ period_label }}</span>
   {% endif %}
+</div>
+
+<!-- Revenue-center multi-select. Click a pill to toggle its channel.
+     'All' replaces the selection; clicking any other channel deselects 'All'. -->
+{% set period_qs = '&period=' ~ active_period if active_period else '' %}
+{% set is_all = ('all' in selected_channels) or not selected_channels %}
+<div class="dash-chart-tabs" style="margin-bottom: 14px;">
+  {% for key, label in available_channels %}
+    {% if key == 'all' %}
+      {% set is_active = is_all %}
+      {% set new_csv = 'all' %}
+    {% else %}
+      {% set is_active = (not is_all) and (key in selected_channels) %}
+      {% if is_active %}
+        {# remove this key from the set #}
+        {% set new_set = selected_channels | reject('equalto', key) | list %}
+      {% else %}
+        {# add this key (drop 'all') #}
+        {% set new_set = (selected_channels | reject('equalto', 'all') | list) + [key] %}
+      {% endif %}
+      {% set new_csv = new_set | join(',') if new_set else 'all' %}
+    {% endif %}
+    <a class="dash-chart-tab {% if is_active %}is-active{% endif %}"
+       href="{{ base }}?channels={{ new_csv }}{{ period_qs }}{{ loc_qs }}">{{ label }}</a>
+  {% endfor %}
 </div>
 
 <form method="GET" action="{{ url_for('reports.third_party_sales') }}"

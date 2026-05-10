@@ -181,22 +181,14 @@ def performance_landing():
 
 @store_bp.route("/sales")
 def sales_landing():
-    cards = [
-        {"label": "Toast (in-store)", "icon": "🏪", "href": f"/{g.current_store}/reports/sales/toast",
-         "sub": "Dine-in revenue from Toast POS."},
-        {"label": "Toast Online Ordering", "icon": "💻", "href": f"/{g.current_store}/reports/sales/online",
-         "sub": "Online orders placed through Toast's own ordering system."},
-        {"label": "DoorDash", "icon": "🚪", "href": f"/{g.current_store}/reports/sales/doordash",
-         "sub": "DoorDash delivery orders (auto-detected from Toast source)."},
-        {"label": "Uber Eats", "icon": "🚕", "href": f"/{g.current_store}/reports/sales/uber",
-         "sub": "Uber Eats orders (auto-detected from Toast source)."},
-        {"label": "ezCater", "icon": "🍱", "href": f"/{g.current_store}/reports/sales/ezcater",
-         "sub": "Catering revenue from ezCater (separate webhook pipeline)."},
-        {"label": "Total", "icon": "Σ", "href": f"/{g.current_store}/reports/sales/total",
-         "sub": "All channels combined — in-store + delivery + catering."},
-    ]
-    return _render_landing("sales_landing", "Sales",
-                           f"{g.store_label} · revenue by channel", cards)
+    """Per Sam: /uno/sales lands on the actual sales report (not a card-grid),
+    with multi-channel selection + Today/This Week/Last Week pills. Default
+    = All channels + Today. Delegates to the third-party-sales view so URL
+    state (channels=, period=) stays share-friendly."""
+    from app.web.reports import third_party_sales as view
+    if g.current_location and g.current_location != "both":
+        g.location_override = g.current_location
+    return view()
 
 
 @store_bp.route("/labor")

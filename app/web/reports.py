@@ -179,14 +179,37 @@ def third_party_sales():
     start, end, err, active_period, period_label = _resolve_period(start, end, err)
     location = _location_filter()
     default_start, default_end = _default_dates()
+
+    # Multi-channel selection. ?channels=toast,doordash,ezcater  (or 'all').
+    # When unset, default to All channels — matches Sam's spec for the
+    # store-scoped /uno/sales / /dos/sales view.
+    channels_csv = (request.args.get("channels") or "").strip()
+    channel_keys: list[str] = []
+    if channels_csv:
+        channel_keys = [c.strip().lower() for c in channels_csv.split(",") if c.strip()]
+    if not channel_keys:
+        channel_keys = ["all"]
+    available_channels = [
+        ("all",          "All"),
+        ("toast",        "Toast (in-store)"),
+        ("online",       "Toast Online"),
+        ("doordash",     "DoorDash"),
+        ("uber",         "Uber Eats"),
+        ("toast_local",  "Toast Local"),
+        ("toast_pickup", "Toast Pickup"),
+        ("ezcater",      "ezCater"),
+    ]
+
     ctx = {
         "active": "third_party_sales",
-        "page_title": "Third-Party Sales",
+        "page_title": "Sales",
         "form_default_start": request.args.get("start") or (start.strftime("%Y-%m-%d") if start else default_start),
         "form_default_end": request.args.get("end") or (end.strftime("%Y-%m-%d") if end else default_end),
         "form_location": location,
         "active_period": active_period,
         "period_label": period_label,
+        "selected_channels": channel_keys,
+        "available_channels": available_channels,
         "error": err,
         "report": None,
     }
@@ -211,8 +234,13 @@ def third_party_sales():
         return render_template("reports_third_party_sales.html", **ctx)
     if start and end and not err:
         try:
+            # Multi-channel takes precedence; fall back to legacy single
+            # channel_filter (used by the per-channel /reports/sales/<channel>
+            # store-bp wrapper).
             ctx["report"] = toast_reports.third_party_sales_report(
-                start, end, location, channel_filter=channel_filter
+                start, end, location,
+                channel_filter=channel_filter,
+                channels=channel_keys if not channel_filter else None,
             )
         except Exception as ex:
             log.exception("third-party sales report failed")

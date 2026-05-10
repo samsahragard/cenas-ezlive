@@ -69,7 +69,12 @@ aside.sidebar {
   -webkit-backdrop-filter: blur(28px) saturate(140%);
   border-right: 1px solid var(--glass-border);
   padding: 22px 0;
+  /* Grid default is align-self: stretch which makes the sidebar span the full
+     track and defeats sticky on long pages — pin to start so sticky-top:0 keeps
+     the sidebar visible while content scrolls. overflow-y handles tall nav. */
+  align-self: start;
   position: sticky; top: 0; height: 100vh;
+  overflow-y: auto;
   display: flex; flex-direction: column;
 }
 .brand {

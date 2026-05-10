@@ -246,10 +246,21 @@ def review_queue():
     return redirect(f"/{g.current_store}/")
 
 
-@store_bp.route("/driver-tracking")
+@store_bp.route("/driver-tracking", methods=["GET", "POST"])
 def driver_tracking():
-    """Renamed from Manager Dashboard."""
-    return redirect("/manager" + (("?" + request.query_string.decode()) if request.query_string else ""))
+    """Driver Payroll — manager view of drivers + log form.
+
+    Render the legacy /manager view inline (not redirect) so the sidebar
+    inherits g.current_store / g.store_label from
+    store_bp.url_value_preprocessor — otherwise /manager has no store
+    context and base_dashboard falls back to Tomball default (same shape
+    as the dd4bede Corporate Order bug).
+    """
+    from flask import session as _session
+    loc_map = {"tomball": "tomball", "copperfield": "copperfield", "both": "corporate"}
+    _session["manager_location"] = loc_map.get(g.current_location, "corporate")
+    from app.web.manager_routes import manager_log
+    return manager_log()
 
 
 @store_bp.route("/driver-portal")

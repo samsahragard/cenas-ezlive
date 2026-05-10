@@ -22,19 +22,19 @@
 {# Active leaf — pages set `active = '<key>'`. Parent expansion is computed off this. #}
 {% set ops_open = active in ['vendors','produce','webstaurant','vendor_perf','specs',
                               'corporate_order','corporate_order_reports',
-                              'ezcater_orders','processor','review','driver_tracking','driver_portal','drivers_admin','drivers_live',
-                              'boh_roster','foh_roster','all_roster','weekly_schedule'] %}
+                              'ezcater_landing','ezcater_orders','processor','review','driver_tracking','driver_portal','drivers_admin','drivers_live',
+                              'schedule_landing','boh_roster','foh_roster','all_roster','weekly_schedule'] %}
 {% set vendors_open = active in ['vendors','produce','webstaurant','vendor_perf','specs'] %}
 {% set corp_open = active in ['corporate_order','corporate_order_reports'] %}
 {% set produce_open = active in ['produce','produce_orders'] %}
-{% set ezc_open = active in ['ezcater_orders','processor','review','driver_tracking','driver_portal','drivers_admin','drivers_live'] %}
-{% set sched_open = active in ['boh_roster','foh_roster','all_roster','weekly_schedule'] %}
-{% set ins_open = active in ['perf_server','perf_bartenders','perf_prep','perf_all',
-                             'sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total',
-                             'boh_labor','foh_labor'] %}
-{% set perf_open = active in ['perf_server','perf_bartenders','perf_prep','perf_all'] %}
-{% set sales_open = active in ['sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total'] %}
-{% set labor_open = active in ['boh_labor','foh_labor'] %}
+{% set ezc_open = active in ['ezcater_landing','ezcater_orders','processor','review','driver_tracking','driver_portal','drivers_admin','drivers_live'] %}
+{% set sched_open = active in ['schedule_landing','boh_roster','foh_roster','all_roster','weekly_schedule'] %}
+{% set ins_open = active in ['perf_landing','perf_server','perf_bartenders','perf_prep','perf_all',
+                             'sales_landing','sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total',
+                             'labor_landing','boh_labor','foh_labor'] %}
+{% set perf_open = active in ['perf_landing','perf_server','perf_bartenders','perf_prep','perf_all'] %}
+{% set sales_open = active in ['sales_landing','sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total'] %}
+{% set labor_open = active in ['labor_landing','boh_labor','foh_labor'] %}
 <body>
 <div class="layout">
 

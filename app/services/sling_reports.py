@@ -14,6 +14,74 @@ from typing import Optional
 from app.services.sling_client import SlingClient
 from app.services.role_classifier import classify_role
 
+
+def _build_toast_phone_map() -> dict[str, str]:
+    """Build a name → phone map from Toast employees across both locations.
+
+    Sling's API doesn't expose phone numbers (only email), so we cross-reference
+    by name against Toast's `/labor/v1/employees` which has phoneNumber +
+    phoneNumberCountryCode. Returns lowercase 'first last' → formatted phone.
+    Missing creds or any failure returns an empty map (caller falls back).
+    """
+    import os
+    out: dict[str, str] = {}
+    try:
+        from app.services.toast_client import ToastClient
+        client = ToastClient.shared()
+    except Exception:
+        return out
+    for loc_key, env_var in (("tomball", "TOAST_RESTAURANT_GUID_TOMBALL"),
+                             ("copperfield", "TOAST_RESTAURANT_GUID_COPPERFIELD")):
+        rg = os.environ.get(env_var)
+        if not rg:
+            continue
+        try:
+            employees = client.fetch_employees(loc_key, rg)
+        except Exception as ex:
+            log.warning("toast: skipping employees for %s: %s", loc_key, ex)
+            continue
+        for e in employees or []:
+            if e.get("deleted"):
+                continue
+            phone = e.get("phoneNumber")
+            if not phone:
+                continue
+            cc = e.get("phoneNumberCountryCode") or ""
+            formatted = _fmt_phone(phone, cc)
+            first = (e.get("firstName") or e.get("chosenName") or "").strip().lower()
+            last = (e.get("lastName") or "").strip().lower()
+            if first and last:
+                out[f"{first} {last}"] = formatted
+            if last:
+                # Also keyed by last name only as a weak fallback (only used
+                # when the full-name match misses).
+                out.setdefault(f"_lastname_only_{last}", formatted)
+    return out
+
+
+def _fmt_phone(raw: str, cc: str = "") -> str:
+    """Format a 10-digit US number as (xxx) xxx-xxxx; leave others as-is."""
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    if len(digits) == 10:
+        return f"({digits[0:3]}) {digits[3:6]}-{digits[6:]}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+    return raw if not cc else f"+{cc} {raw}"
+
+
+def _phone_for(phone_map: dict[str, str], name: str) -> str:
+    """Look up a phone number for a Sling user given their first+last."""
+    if not phone_map or not name:
+        return ""
+    key = name.strip().lower()
+    if key in phone_map:
+        return phone_map[key]
+    # last-name fallback
+    parts = key.split()
+    if parts:
+        return phone_map.get(f"_lastname_only_{parts[-1]}", "")
+    return ""
+
 log = logging.getLogger(__name__)
 
 # Sling location id → display key + label (matches the existing Tomball/Copperfield convention)
@@ -214,6 +282,8 @@ def roster_report(location_filter: Optional[str] = None,
     by_location_out: dict = {}
     total_shown = 0
     total_active = 0
+    # Build the name→phone map ONCE (Sling has no phone API, Toast does).
+    phone_map = _build_toast_phone_map()
     for loc_key, loc_id in LOCATION_KEY_TO_ID.items():
         if loc_key not in wanted:
             continue
@@ -241,12 +311,12 @@ def roster_report(location_filter: Optional[str] = None,
                         continue
             full = " ".join(filter(None, [u.get("name"), u.get("lastname")])).strip() \
                    or u.get("legalName") or u.get("email") or f"id-{uid}"
-            email = u.get("email") or ""
+            phone = _phone_for(phone_map, full)
             rows.append({
                 "id": uid,
                 "name": full,
                 "positions": positions,
-                "email": email,
+                "phone": phone,
                 "active": is_active,
                 "has_toast_guid": bool(u.get("hasToastGuid")),
             })

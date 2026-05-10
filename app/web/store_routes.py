@@ -18,10 +18,12 @@ templates can write `url_for('store.reports_labor')` and Flask will produce
 """
 from __future__ import annotations
 
-from flask import Blueprint, g, abort, request, render_template, redirect, url_for, session
+from flask import Blueprint, g, abort, request, render_template, redirect, url_for, session, jsonify
+
+from datetime import datetime, timedelta
 
 from app.db import get_db
-from app.models import Driver
+from app.models import Driver, DriverShift, DriverLocation
 from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
 
 # slug → location filter for downstream report functions
@@ -186,6 +188,73 @@ def drivers_reset(driver_id: int):
             return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
         temp = issue_temp_password(db, row)
         return redirect(url_for("store.drivers_admin", temp_pw=temp, temp_for=row.name))
+    finally:
+        db.close()
+
+
+# ============== OPERATIONS — DRIVERS LIVE MAP ==============
+
+# Locations of the two stores — used as the initial map centre when no
+# drivers are streaming yet
+_STORE_CENTRES = {
+    "tomball":     (30.1118, -95.6230),   # 27727 Tomball Pkwy
+    "copperfield": (29.8730, -95.6428),   # 15650 FM 529
+    "both":        (30.0,    -95.6),      # midpoint-ish
+}
+
+
+@store_bp.route("/drivers-live", methods=["GET"])
+def drivers_live():
+    """Live map: a marker per driver currently on shift, auto-refreshing."""
+    centre_lat, centre_lng = _STORE_CENTRES.get(g.current_location, _STORE_CENTRES["both"])
+    return render_template(
+        "drivers_live.html",
+        store_label=g.store_label,
+        current_location=g.current_location,
+        centre_lat=centre_lat,
+        centre_lng=centre_lng,
+        active="drivers_live",
+    )
+
+
+@store_bp.route("/drivers-live/positions.json", methods=["GET"])
+def drivers_live_positions():
+    """JSON feed for the map. Returns one record per driver currently on shift,
+    with their most recent position fix. Filters to drivers at this store
+    (or all-locations for corporate/partner)."""
+    db = next(get_db())
+    try:
+        # Open shifts joined to driver, optionally filtered by location
+        q = (db.query(DriverShift, Driver)
+             .join(Driver, DriverShift.driver_id == Driver.id)
+             .filter(DriverShift.ended_at.is_(None)))
+        if g.current_location != "both":
+            q = q.filter(Driver.location == g.current_location)
+        results = []
+        now = datetime.utcnow()
+        for shift, drv in q.all():
+            latest = (db.query(DriverLocation)
+                      .filter(DriverLocation.shift_id == shift.id)
+                      .order_by(DriverLocation.captured_at.desc())
+                      .first())
+            if not latest:
+                continue
+            seconds_ago = max(0, int((now - latest.captured_at).total_seconds()))
+            results.append({
+                "driver_id":      drv.id,
+                "name":           drv.name,
+                "location":       drv.location,
+                "shift_started":  shift.started_at.isoformat() + "Z",
+                "lat":            latest.lat,
+                "lng":            latest.lng,
+                "accuracy_m":     latest.accuracy_m,
+                "speed_mps":      latest.speed_mps,
+                "heading_deg":    latest.heading_deg,
+                "captured_at":    latest.captured_at.isoformat() + "Z",
+                "seconds_ago":    seconds_ago,
+                "stale":          seconds_ago > 120,
+            })
+        return jsonify({"drivers": results, "now": now.isoformat() + "Z"})
     finally:
         db.close()
 

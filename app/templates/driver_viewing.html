@@ -4,82 +4,238 @@
 
 {% block page_title %}Driver Portal{% endblock %}
 {% block page_subtitle %}
-  {% if view == "login" %}
-    <p class="greeting-sub">Select your location and name to view your delivery logs.</p>
-  {% else %}
-    <p class="greeting-sub">{{ driver.name }} · <span class="location-badge">{{ location_label }}</span></p>
-  {% endif %}
+  <p class="greeting-sub">{{ driver.name }} · <span class="location-badge">{{ location_label }}</span></p>
 {% endblock %}
 {% block topbar_right %}
-  {% if view == "logs" %}
   <form action="{{ url_for('driver.driver_logout') }}" method="POST" style="margin:0;">
     <button type="submit" class="btn-logout">Sign out</button>
   </form>
-  {% endif %}
 {% endblock %}
 
 {% block content %}
-{% if view == "login" %}
-  {% if error %}<div class="banner banner-error">{{ error }}</div>{% endif %}
-  <div class="login-card">
-    <form action="{{ url_for('driver.driver_verify') }}" method="POST">
-      <div class="login-field">
-        <label for="location">Location</label>
-        <select id="location" name="location" required>
-          <option value="" disabled selected>Select…</option>
-          <option value="copperfield">Copperfield</option>
-          <option value="tomball">Tomball</option>
-        </select>
-      </div>
-      <div class="login-field">
-        <label for="name">Name</label>
-        <input type="text" id="name" name="name" placeholder="Your name" required autofocus>
-      </div>
-      <button type="submit" class="btn-login">View my logs</button>
-    </form>
-  </div>
 
-{% elif view == "logs" %}
-  <div class="table-scroll">
-    <table class="log-table log-table-view">
-      <thead>
-        <tr class="group-header">
-          <th rowspan="2">Date</th>
-          <th rowspan="2">Order Link</th>
-          <th rowspan="2">Expected Miles</th>
-          <th rowspan="2">Verified Miles</th>
-          <th colspan="3">$10 Bonus</th>
-          <th rowspan="2">5★ Review</th>
-          <th rowspan="2">Notes</th>
-        </tr>
-        <tr class="group-header">
-          <th>On Time?</th>
-          <th>Tracking?</th>
-          <th>Picture?</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if logs %}
-          {% for log in logs %}
-          <tr>
-            <td>{{ log.pickup_date }}</td>
-            <td>{% if log.order_link %}<a href="{{ log.order_link }}" target="_blank" style="color:var(--accent-soft);">{{ log.order_link }}</a>{% else %}—{% endif %}</td>
-            <td>{{ log.ex_miles if log.ex_miles is not none else '—' }}</td>
-            <td>{{ log.ex_miles_verified if log.ex_miles_verified is not none else '—' }}</td>
-            <td>{% if log.on_time %}✓{% else %}—{% endif %}</td>
-            <td>{% if log.tracking %}✓{% else %}—{% endif %}</td>
-            <td>{% if log.picture %}✓{% else %}—{% endif %}</td>
-            <td>{% if log.five_star %}✓{% else %}—{% endif %}</td>
-            <td>{{ log.notes or '' }}</td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td colspan="9" style="color:var(--text-3); font-style:italic; text-align:center;">No entries yet.</td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
+{# ============== SHIFT TOGGLE + GPS STREAMING ============== #}
+<div id="shift-card" data-on-shift="{{ '1' if on_shift else '0' }}"
+     style="background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.10);border-radius:14px;
+            padding:16px 18px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+  <div style="flex:1;min-width:200px;">
+    <div id="shift-state" style="font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+                                  color:{{ '#7bb87b' if on_shift else 'rgba(255,255,255,0.55)' }};">
+      {% if on_shift %}On shift{% else %}Off shift{% endif %}
+    </div>
+    <div id="shift-meta" style="font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;">
+      {% if on_shift %}Started at {{ shift_started_at }}{% else %}Tap Start when you begin a delivery — your phone will share its location with the manager until you tap End.{% endif %}
+    </div>
   </div>
-{% endif %}
+  <button id="shift-toggle" type="button"
+          style="padding:10px 22px;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;
+                 border:none;border-radius:10px;cursor:pointer;color:#fff;
+                 background:{{ '#c0392b' if on_shift else 'rgba(232,122,62,0.85)' }};">
+    {% if on_shift %}End shift{% else %}Start shift{% endif %}
+  </button>
+</div>
+<div id="gps-status" style="font-size:12px;color:rgba(255,255,255,0.45);margin:-10px 0 18px 4px;"></div>
+
+{# ============== LOG TABLE ============== #}
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th rowspan="2">Date</th>
+        <th rowspan="2">Order Link</th>
+        <th rowspan="2">Expected Miles</th>
+        <th rowspan="2">Verified Miles</th>
+        <th colspan="3">$10 Bonus</th>
+        <th rowspan="2">5★ Review</th>
+        <th rowspan="2">Notes</th>
+      </tr>
+      <tr class="group-header">
+        <th>On Time?</th>
+        <th>Tracking?</th>
+        <th>Picture?</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if logs %}
+        {% for log in logs %}
+        <tr>
+          <td>{{ log.pickup_date }}</td>
+          <td>{% if log.order_link %}<a href="{{ log.order_link }}" target="_blank" style="color:var(--accent-soft);">{{ log.order_link }}</a>{% else %}—{% endif %}</td>
+          <td>{{ log.ex_miles if log.ex_miles is not none else '—' }}</td>
+          <td>{{ log.ex_miles_verified if log.ex_miles_verified is not none else '—' }}</td>
+          <td>{% if log.on_time %}✓{% else %}—{% endif %}</td>
+          <td>{% if log.tracking %}✓{% else %}—{% endif %}</td>
+          <td>{% if log.picture %}✓{% else %}—{% endif %}</td>
+          <td>{% if log.five_star %}✓{% else %}—{% endif %}</td>
+          <td>{{ log.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="9" style="color:var(--text-3); font-style:italic; text-align:center;">No entries yet.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{# ============== GPS STREAMING SCRIPT ============== #}
+<script>
+(function() {
+  const card    = document.getElementById('shift-card');
+  const stateEl = document.getElementById('shift-state');
+  const metaEl  = document.getElementById('shift-meta');
+  const btn     = document.getElementById('shift-toggle');
+  const statusEl= document.getElementById('gps-status');
+
+  let onShift = card.dataset.onShift === '1';
+  let watchId = null;
+  let wakeLock = null;
+  let lastSentAt = null;
+  let lastSentLat = null, lastSentLng = null;
+  let postCount = 0;
+
+  // Don't POST every fix — only if moved ~10m or 30s since last
+  const MIN_DISTANCE_M = 10;
+  const MAX_INTERVAL_S = 30;
+
+  function setUI(state, msg) {
+    if (state === 'on') {
+      stateEl.textContent = 'On shift';
+      stateEl.style.color = '#7bb87b';
+      btn.textContent = 'End shift';
+      btn.style.background = '#c0392b';
+    } else {
+      stateEl.textContent = 'Off shift';
+      stateEl.style.color = 'rgba(255,255,255,0.55)';
+      btn.textContent = 'Start shift';
+      btn.style.background = 'rgba(232,122,62,0.85)';
+    }
+    if (msg !== undefined) metaEl.textContent = msg;
+  }
+
+  function distanceM(la1, ln1, la2, ln2) {
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(la2 - la1);
+    const dLng = toRad(ln2 - ln1);
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(toRad(la1)) * Math.cos(toRad(la2)) * Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try { wakeLock = await navigator.wakeLock.request('screen'); }
+      catch (e) { /* user can deny — not fatal */ }
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+
+  async function postPosition(pos) {
+    const c = pos.coords;
+    const now = Date.now();
+    if (lastSentAt !== null && lastSentLat !== null) {
+      const elapsedS = (now - lastSentAt) / 1000;
+      const movedM   = distanceM(lastSentLat, lastSentLng, c.latitude, c.longitude);
+      if (movedM < MIN_DISTANCE_M && elapsedS < MAX_INTERVAL_S) {
+        statusEl.textContent = `idle · ${Math.round(movedM)}m moved · accuracy ${Math.round(c.accuracy)}m`;
+        return;
+      }
+    }
+    try {
+      const res = await fetch('/driver/track', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          lat: c.latitude,
+          lng: c.longitude,
+          accuracy_m: c.accuracy,
+          speed_mps: c.speed,
+          heading_deg: c.heading,
+        }),
+      });
+      if (res.ok) {
+        lastSentAt = now; lastSentLat = c.latitude; lastSentLng = c.longitude; postCount++;
+        statusEl.textContent = `streamed · ${postCount} fix${postCount === 1 ? '' : 'es'} · accuracy ${Math.round(c.accuracy)}m`;
+      } else if (res.status === 409) {
+        statusEl.textContent = 'shift closed on server — refresh page';
+        stopStreaming();
+      } else {
+        statusEl.textContent = `server ${res.status}`;
+      }
+    } catch (e) {
+      statusEl.textContent = `network error: ${e.message || e}`;
+    }
+  }
+
+  function startStreaming() {
+    if (!('geolocation' in navigator)) {
+      statusEl.textContent = 'this device has no GPS';
+      return;
+    }
+    requestWakeLock();
+    watchId = navigator.geolocation.watchPosition(
+      postPosition,
+      (err) => { statusEl.textContent = `GPS error: ${err.message}`; },
+      {enableHighAccuracy: true, maximumAge: 0, timeout: 30000}
+    );
+    statusEl.textContent = 'requesting GPS…';
+  }
+
+  function stopStreaming() {
+    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    releaseWakeLock();
+    statusEl.textContent = '';
+  }
+
+  async function startShift() {
+    btn.disabled = true;
+    try {
+      const res = await fetch('/driver/shift/start', {method: 'POST'});
+      if (!res.ok) throw new Error(`server ${res.status}`);
+      const data = await res.json();
+      onShift = true;
+      setUI('on', `Started at ${new Date(data.started_at).toLocaleTimeString()}`);
+      startStreaming();
+    } catch (e) {
+      statusEl.textContent = `failed to start: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function endShift() {
+    btn.disabled = true;
+    stopStreaming();
+    try {
+      await fetch('/driver/shift/end', {method: 'POST'});
+      onShift = false;
+      setUI('off', 'Tap Start when you begin a delivery — your phone will share its location with the manager until you tap End.');
+    } catch (e) {
+      statusEl.textContent = `failed to end: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  btn.addEventListener('click', () => {
+    if (onShift) endShift(); else startShift();
+  });
+
+  // If page loads with an open shift (e.g. driver re-opened the tab), resume streaming
+  if (onShift) startStreaming();
+
+  // Re-acquire wake lock if it gets released by tab going visible again
+  document.addEventListener('visibilitychange', () => {
+    if (onShift && document.visibilityState === 'visible' && !wakeLock) {
+      requestWakeLock();
+    }
+  });
+})();
+</script>
+
 {% endblock %}

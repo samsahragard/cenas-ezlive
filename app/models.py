@@ -263,6 +263,38 @@ class DriverLog(Base):
     logged_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
+class DriverShift(Base):
+    """An on-clock period for a driver. GPS streaming runs only while ended_at
+    is NULL — drivers explicitly tap Start/End in the portal."""
+    __tablename__ = "driver_shift"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="CASCADE"),
+                                           nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DriverLocation(Base):
+    """One GPS fix from the driver's phone, FK'd to its shift so the route
+    can be replayed (Phase C)."""
+    __tablename__ = "driver_location"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_id: Mapped[int] = mapped_column(ForeignKey("driver_shift.id", ondelete="CASCADE"),
+                                          nullable=False, index=True)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="CASCADE"),
+                                           nullable=False, index=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                  nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
+    accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    speed_mps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    heading_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class ProducePriceSnapshot(Base):
     """One row per (vendor, item, snapshot_date) — captures the price the
     vendor quoted in their weekly price sheet. Populated by produce_ingest

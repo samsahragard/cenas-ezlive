@@ -1,0 +1,158 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'drivers_live' %}
+{% block title %}Drivers Live — {{ store_label }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Drivers Live{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {% if current_location == 'both' %}All locations · live GPS{% else %}<span class="location-badge">{{ store_label }}</span> · live GPS{% endif %}
+    · auto-refresh every 5s
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  #drivers-map { height: 70vh; min-height: 480px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); }
+  .driver-marker {
+    background: rgba(232, 122, 62, 0.9);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    white-space: nowrap;
+  }
+  .driver-marker.stale { background: rgba(140, 140, 140, 0.85); }
+  .driver-list-row { display:flex; align-items:center; gap:10px; padding: 8px 12px; border-radius: 8px;
+                     background: rgba(0,0,0,0.30); margin-bottom: 6px; font-size: 13px; }
+  .driver-list-row .dot { width: 10px; height: 10px; border-radius: 50%; background: #7bb87b; }
+  .driver-list-row .dot.stale { background: #c0a850; }
+  .driver-list-row .name { font-weight: 600; }
+  .driver-list-row .meta { color: rgba(255,255,255,0.55); font-size: 12px; margin-left: auto; }
+  #drivers-empty { color: rgba(255,255,255,0.55); font-style: italic; padding: 14px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="drivers-map"></div>
+
+<div style="margin-top:16px;">
+  <div id="drivers-empty">No drivers on shift right now.</div>
+  <div id="drivers-list"></div>
+</div>
+
+<p style="margin-top:14px;font-size:12px;color:var(--text-3);">
+  Drivers must be logged in and tap "Start shift" in the Driver Portal for their location to appear here. Markers turn grey if a position is &gt;2 min stale.
+</p>
+
+<script>
+(function() {
+  const FEED_URL    = '{{ url_for("store.drivers_live_positions") }}';
+  const REFRESH_MS  = 5000;
+  const CENTRE      = [{{ centre_lat }}, {{ centre_lng }}];
+
+  const map = L.map('drivers-map', { zoomControl: true }).setView(CENTRE, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(map);
+
+  // driver_id → {marker, accuracyCircle}
+  const markers = {};
+  const listEl  = document.getElementById('drivers-list');
+  const emptyEl = document.getElementById('drivers-empty');
+  let firstLoad = true;
+
+  function fmtSeconds(s) {
+    if (s < 60)  return `${s}s ago`;
+    if (s < 3600) return `${Math.round(s/60)}m ago`;
+    return `${Math.round(s/3600)}h ago`;
+  }
+
+  function updateOne(d) {
+    const latlng = [d.lat, d.lng];
+    const html   = `<div class="driver-marker${d.stale ? ' stale' : ''}">${d.name}</div>`;
+    const icon   = L.divIcon({ html, className: '', iconSize: null });
+
+    if (markers[d.driver_id]) {
+      markers[d.driver_id].marker.setLatLng(latlng).setIcon(icon);
+      if (d.accuracy_m && markers[d.driver_id].accuracy) {
+        markers[d.driver_id].accuracy.setLatLng(latlng).setRadius(d.accuracy_m);
+      }
+    } else {
+      const m = L.marker(latlng, { icon }).addTo(map);
+      let circle = null;
+      if (d.accuracy_m) {
+        circle = L.circle(latlng, {
+          radius: d.accuracy_m,
+          color: 'rgba(232,122,62,0.4)', fillColor: 'rgba(232,122,62,0.10)', weight: 1,
+        }).addTo(map);
+      }
+      m.bindPopup(`<strong>${d.name}</strong><br>${d.location}<br>updated ${fmtSeconds(d.seconds_ago)}`);
+      markers[d.driver_id] = { marker: m, accuracy: circle };
+    }
+  }
+
+  function removeOne(driverId) {
+    const m = markers[driverId];
+    if (!m) return;
+    map.removeLayer(m.marker);
+    if (m.accuracy) map.removeLayer(m.accuracy);
+    delete markers[driverId];
+  }
+
+  function rebuildList(drivers) {
+    listEl.innerHTML = '';
+    if (drivers.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    drivers.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'driver-list-row';
+      row.innerHTML = `
+        <div class="dot${d.stale ? ' stale' : ''}"></div>
+        <div class="name">${d.name}</div>
+        <div style="color:rgba(255,255,255,0.55);">${d.location}</div>
+        <div class="meta">${fmtSeconds(d.seconds_ago)} · ±${Math.round(d.accuracy_m || 0)}m</div>
+      `;
+      row.addEventListener('click', () => {
+        map.setView([d.lat, d.lng], Math.max(map.getZoom(), 15));
+        if (markers[d.driver_id]) markers[d.driver_id].marker.openPopup();
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch(FEED_URL, { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const seen = new Set();
+      data.drivers.forEach(d => { updateOne(d); seen.add(d.driver_id); });
+      Object.keys(markers).forEach(id => { if (!seen.has(parseInt(id))) removeOne(id); });
+      rebuildList(data.drivers);
+      if (firstLoad && data.drivers.length > 0) {
+        // Centre on the active drivers' bbox on first load
+        const bounds = L.latLngBounds(data.drivers.map(d => [d.lat, d.lng]));
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        firstLoad = false;
+      }
+    } catch (e) {
+      // Silent — next tick will retry
+    }
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+})();
+</script>
+{% endblock %}

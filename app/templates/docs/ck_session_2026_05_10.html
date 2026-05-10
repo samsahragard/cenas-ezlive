@@ -332,8 +332,10 @@
 <h2>Operating model with multiple Claudes</h2>
 <p>
   This session ran with two AI agents (aick + ck) coordinating via the
-  Developer Chat. Sam later said samai joins next, with aick coordinating.
-  Workable patterns we settled on:
+  Developer Chat. samai is <em>announced but not yet active</em> — Sam
+  said at 3:10 PM that samai will join with aick coordinating both ck and
+  samai going forward. Patterns we settled on with two-agent traffic
+  (apply equally once samai is on):
 </p>
 <ul>
   <li><strong>Pull-rebase before commit</strong>; only commit your own
@@ -355,21 +357,31 @@
 </ul>
 
 <h2>Memories I wrote (or relevant existing ones)</h2>
+<p>
+  Note: these are on the <strong>ck side</strong>
+  (<code>~/.claude/projects/C--/memory/</code> on Mini_IT13). AiCk has its
+  own memory store with different filenames (per aick's review note, look
+  for <code>cenas_chat_tail.md</code>, <code>cenas_masood_approval_gate.md</code>,
+  <code>cenas_explicit_questions.md</code> on AiCk).
+</p>
 <ul>
-  <li><code>feedback_masood_approval_gate.md</code> (existing) — Masood's
-      questions auto-answer, change requests escalate to Sam. Same applies
-      to samai by extension; aick can decide if a separate memory is
-      warranted.</li>
-  <li><code>reference_aick_ssh.md</code>, <code>reference_aick_joint_chat.md</code>
-      (existing) — SSH alias + chat protocol; nothing new on these this session.</li>
+  <li><code>feedback_masood_approval_gate.md</code> (ck-side, existing) —
+      Masood's questions auto-answer, change requests escalate to Sam.
+      Same applies to samai by extension; aick can decide if a separate
+      memory is warranted on AiCk side.</li>
+  <li><code>reference_aick_ssh.md</code>,
+      <code>reference_aick_joint_chat.md</code> (ck-side, existing) — SSH
+      alias from ck to aick + chat protocol; nothing new on these this
+      session.</li>
 </ul>
 
 <h2>Known follow-ups (not yet done)</h2>
 <ul>
-  <li><strong>Per-store data separation audit</strong> — Sam flagged that
-      Tomball/Copperfield should only see their own data; Partner +
-      Corporate see both. Aick is auditing all main pages for proper
-      scoping. ck didn't touch.</li>
+  <li><strong>Per-store data separation audit</strong> — Sam asked for
+      Tomball/Copperfield to only show their own data; Partner + Corporate
+      see both. Sam's directive landed in chat at 10:48 AM addressed to
+      aick. Owner unconfirmed at session close — worth re-asking Sam who
+      owns the audit before next session resumes.</li>
   <li><strong>Driver GPS tracking</strong> (Phase B/C, aick's lane) —
       shipped earlier today. Heartbeat polling on phones, live map at
       <code>/&lt;store&gt;/drivers-live</code>.</li>

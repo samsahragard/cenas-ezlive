@@ -57,12 +57,27 @@ document.addEventListener('click', function (e) {
 });
 
 // Reposition any open flyout on viewport scroll/resize so it stays glued
-// to its toggle button.
+// to its toggle button. Also covers the new hover-open path: the CSS
+// `.nav-group:hover > .nav-group-children` shows the panel, but it still
+// needs JS to set its top/left since position: fixed has no anchor.
 function repositionOpenFlyouts() {
-  document.querySelectorAll('.nav-group.expanded').forEach((g) => positionNavFlyout(g));
+  document.querySelectorAll('.nav-group').forEach((g) => {
+    const flyout = g.querySelector(':scope > .nav-group-children');
+    if (flyout && getComputedStyle(flyout).display !== 'none') {
+      positionNavFlyout(g);
+    }
+  });
 }
 window.addEventListener('scroll', repositionOpenFlyouts, true);
 window.addEventListener('resize', repositionOpenFlyouts);
+
+// Hover-to-open path: position the flyout the moment the cursor enters
+// the group so the CSS-driven display:block reveals it in the right spot.
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.nav-group').forEach((g) => {
+    g.addEventListener('mouseenter', () => positionNavFlyout(g));
+  });
+});
 
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {

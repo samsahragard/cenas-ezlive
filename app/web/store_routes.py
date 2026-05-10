@@ -92,6 +92,129 @@ def home():
     return ezcater_routes.home()
 
 
+# ============== GROUP LANDING PAGES ==============
+# Each top-level sidebar group (Vendors / Ezcater / Schedule / Performance /
+# Sales / Labor) is also clickable from the sidebar — clicking it lands on
+# a per-section page that shows all its options as cards. The same children
+# render in the hover-flyout on the sidebar.
+
+def _render_landing(group_active: str, title: str, subtitle: str, cards: list[dict]):
+    return render_template(
+        "group_landing.html",
+        store_label=g.store_label,
+        group_active=group_active,
+        landing_title=title,
+        landing_subtitle=subtitle,
+        cards=cards,
+    )
+
+
+@store_bp.route("/vendors")
+def vendors_landing():
+    cards = [
+        {"label": "Corporate Order", "icon": "🛒", "href": f"/{g.current_store}/corporate-order",
+         "sub": "Catalog + cart for the marketing-site shop. Submit orders to corporate."},
+        {"label": "Produce — Order", "icon": "🥬", "href": f"/{g.current_store}/produce/",
+         "sub": "Today's order guide with cheaper-vendor pricing + one-click submit."},
+        {"label": "Produce — Price History", "icon": "📈", "href": f"/{g.current_store}/produce/orders",
+         "sub": "Per-item price tracking and biggest-movers callout (Alvarado vs J. Luna)."},
+        {"label": "Webstaurant", "icon": "📦", "disabled": True,
+         "sub": "Restaurant-supply orders. Coming soon."},
+        {"label": "Vendor Performance", "icon": "📊", "disabled": True,
+         "sub": "On-time / accuracy scoring per vendor. Coming soon."},
+        {"label": "Specs", "icon": "📋", "disabled": True,
+         "sub": "Product specs + nutritional info. Coming soon."},
+    ]
+    return _render_landing("vendors", "Vendors", f"{g.store_label} · supply ops & catalogs", cards)
+
+
+@store_bp.route("/ezcater")
+def ezcater_landing():
+    cards = [
+        {"label": "Orders", "icon": "📋", "href": f"/{g.current_store}/orders",
+         "sub": "Today + upcoming catering orders for this store."},
+        {"label": "Order Processor", "icon": "📄", "href": f"/{g.current_store}/orders/processor",
+         "sub": "Upload PDF orders for legacy ingest (webhook is primary now)."},
+        {"label": "Review Queue", "icon": "🔍", "href": f"/{g.current_store}/review",
+         "sub": "Orders flagged for review — extraction warnings, missing fields."},
+        {"label": "Driver Payroll", "icon": "💵", "href": f"/{g.current_store}/driver-tracking",
+         "sub": "Per-driver delivery log: miles / on-time / tracking / 5★ / notes."},
+        {"label": "Driver Portal", "icon": "🚗", "href": f"/{g.current_store}/driver-portal",
+         "sub": "Driver-facing view (login + their own assignments)."},
+        {"label": "Drivers (Admin)", "icon": "👥", "href": f"/{g.current_store}/drivers",
+         "sub": "Add / reset password / deactivate driver accounts."},
+        {"label": "Drivers Live", "icon": "📍", "href": f"/{g.current_store}/drivers-live",
+         "sub": "Live GPS map of all drivers currently on shift."},
+    ]
+    return _render_landing("ezcater_landing", "Ezcater", f"{g.store_label} · catering operations", cards)
+
+
+@store_bp.route("/schedule-overview")
+def schedule_landing():
+    cards = [
+        {"label": "BOH Roster", "icon": "👨‍🍳", "href": f"/{g.current_store}/roster/boh",
+         "sub": "Back-of-house employees on roster (Cooks, Prep, Dishwashers)."},
+        {"label": "FOH Roster", "icon": "🍽", "href": f"/{g.current_store}/roster/foh",
+         "sub": "Front-of-house employees on roster (Servers, Bartenders, Hosts)."},
+        {"label": "All Roster", "icon": "👥", "href": f"/{g.current_store}/roster/all",
+         "sub": "Combined roster across BOH + FOH."},
+        {"label": "Weekly Schedule", "icon": "📅", "href": f"/{g.current_store}/schedule/weekly",
+         "sub": "Sling-sourced schedule for the week — both locations covered."},
+    ]
+    return _render_landing("schedule_landing", "Schedule",
+                           f"{g.store_label} · roster + Sling weekly schedule", cards)
+
+
+@store_bp.route("/performance")
+def performance_landing():
+    cards = [
+        {"label": "Server", "icon": "🍽", "href": f"/{g.current_store}/reports/server-performance/server",
+         "sub": "Per-server tip % + service timing (drink / appetizer / entrée)."},
+        {"label": "Bartenders", "icon": "🍹", "href": f"/{g.current_store}/reports/server-performance/bartenders",
+         "sub": "Bartender-specific performance breakdown."},
+        {"label": "Prep", "icon": "🔪", "disabled": True,
+         "sub": "Prep-side performance metrics. Coming soon."},
+        {"label": "All", "icon": "📊", "href": f"/{g.current_store}/reports/server-performance/all",
+         "sub": "All FOH service performance combined."},
+    ]
+    return _render_landing("perf_landing", "Performance",
+                           f"{g.store_label} · service + prep metrics", cards)
+
+
+@store_bp.route("/sales")
+def sales_landing():
+    cards = [
+        {"label": "Toast (in-store)", "icon": "🏪", "href": f"/{g.current_store}/reports/sales/toast",
+         "sub": "Dine-in revenue from Toast POS."},
+        {"label": "Toast Online Ordering", "icon": "💻", "href": f"/{g.current_store}/reports/sales/online",
+         "sub": "Online orders placed through Toast's own ordering system."},
+        {"label": "DoorDash", "icon": "🚪", "href": f"/{g.current_store}/reports/sales/doordash",
+         "sub": "DoorDash delivery orders (auto-detected from Toast source)."},
+        {"label": "Uber Eats", "icon": "🚕", "href": f"/{g.current_store}/reports/sales/uber",
+         "sub": "Uber Eats orders (auto-detected from Toast source)."},
+        {"label": "ezCater", "icon": "🍱", "href": f"/{g.current_store}/reports/sales/ezcater",
+         "sub": "Catering revenue from ezCater (separate webhook pipeline)."},
+        {"label": "Total", "icon": "Σ", "href": f"/{g.current_store}/reports/sales/total",
+         "sub": "All channels combined — in-store + delivery + catering."},
+    ]
+    return _render_landing("sales_landing", "Sales",
+                           f"{g.store_label} · revenue by channel", cards)
+
+
+@store_bp.route("/labor")
+def labor_landing():
+    cards = [
+        {"label": "BOH Labor", "icon": "👨‍🍳", "href": f"/{g.current_store}/reports/labor/boh",
+         "sub": "Back-of-house labor cost / hours / % of net sales."},
+        {"label": "FOH Labor", "icon": "🍽", "href": f"/{g.current_store}/reports/labor/foh",
+         "sub": "Front-of-house labor cost / hours / % of net sales."},
+        {"label": "All Labor", "icon": "Σ", "href": f"/{g.current_store}/reports/labor/all",
+         "sub": "Combined labor across BOH + FOH, with denominator = ALL revenue (Toast + DoorDash + Uber + ezCater)."},
+    ]
+    return _render_landing("labor_landing", "Labor",
+                           f"{g.store_label} · labor cost + ratio", cards)
+
+
 # ============== OPERATIONS — VENDORS ==============
 
 @store_bp.route("/produce/")

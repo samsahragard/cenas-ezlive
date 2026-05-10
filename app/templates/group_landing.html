@@ -1,0 +1,93 @@
+{% extends "base_dashboard.html" %}
+{% set active = group_active %}
+{% block title %}{{ landing_title }} — {{ store_label }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}{{ landing_title }}{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">{{ landing_subtitle }}</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .landing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 6px;
+  }
+  .landing-card {
+    display: block;
+    text-decoration: none;
+    color: #fff;
+    background: rgba(0,0,0,0.40);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px;
+    padding: 18px 20px;
+    transition: transform 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .landing-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(232, 122, 62, 0.55);
+    background: rgba(0,0,0,0.55);
+  }
+  .landing-card.disabled {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+  .landing-card .lc-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .landing-card .lc-icon {
+    font-size: 20px;
+    width: 28px;
+    text-align: center;
+  }
+  .landing-card .lc-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .landing-card .lc-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    margin: 8px 0 0 0;
+    line-height: 1.4;
+  }
+  .landing-card .lc-soon {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.55);
+    margin-left: auto;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="landing-grid">
+  {% for c in cards %}
+    {% if c.disabled %}
+      <div class="landing-card disabled">
+        <div class="lc-row">
+          <span class="lc-icon">{{ c.icon or '·' }}</span>
+          <span class="lc-title">{{ c.label }}</span>
+          <span class="lc-soon">soon</span>
+        </div>
+        {% if c.sub %}<p class="lc-sub">{{ c.sub }}</p>{% endif %}
+      </div>
+    {% else %}
+      <a class="landing-card" href="{{ c.href }}">
+        <div class="lc-row">
+          <span class="lc-icon">{{ c.icon or '·' }}</span>
+          <span class="lc-title">{{ c.label }}</span>
+        </div>
+        {% if c.sub %}<p class="lc-sub">{{ c.sub }}</p>{% endif %}
+      </a>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

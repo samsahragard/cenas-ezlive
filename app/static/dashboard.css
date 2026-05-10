@@ -932,13 +932,30 @@ input[type=password]:focus, textarea:focus, select:focus {
   border-left: 1px solid rgba(255, 255, 255, 0.10);
 }
 
-.nav-group.expanded > .nav-group-children {
+.nav-group.expanded > .nav-group-children,
+.nav-group:hover > .nav-group-children {
   display: block;
   animation: navFlyOutRight 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+/* Keep the flyout open while the cursor is over its panel — bridges the
+   small gap between the toggle and the panel so the hover doesn't drop. */
+.nav-group-children:hover {
+  display: block;
 }
 .nav-subgroup.expanded > .nav-subgroup-children {
   display: block;
   animation: navDropDown 0.18s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Top-level group toggles are now <a> links (click navigates to the
+   section landing page). Strip default link styling so they look
+   identical to the prior <button> version. */
+a.nav-group-toggle {
+  text-decoration: none;
+  color: var(--text-2);
+}
+a.nav-group-toggle:hover {
+  color: #fff;
 }
 
 @keyframes navFlyOutRight {

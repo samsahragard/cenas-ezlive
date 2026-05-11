@@ -185,10 +185,34 @@ class ToastClient:
 
     def fetch_orders_for_date(self, location: str, restaurant_guid: str,
                               business_date: str, refresh: bool = False) -> list:
-        """business_date is YYYYMMDD."""
+        """business_date is YYYYMMDD.
+
+        Cache invalidation: dates within the last 2 calendar days are
+        treated as not-yet-final — if the cached result is empty OR older
+        than 30 minutes, force a refresh. This catches the bug where an
+        early-morning probe of "today" or "yesterday" cached an empty
+        order list and stuck for the rest of the day. Past dates (>2 days
+        ago) are cached indefinitely since Toast doesn't backfill old days.
+        """
         path = _cache_dir() / f"orders_{business_date}_{location}.json"
         if path.exists() and not refresh:
-            return json.loads(path.read_text(encoding="utf-8"))
+            try:
+                bd_dt = datetime.strptime(business_date, "%Y%m%d").date()
+                # Restaurant runs Central Time; "today" = CT today
+                ct_today = (datetime.utcnow() - timedelta(hours=5)).date()
+                age_days = (ct_today - bd_dt).days
+                cached = json.loads(path.read_text(encoding="utf-8"))
+                # Recent dates: re-fetch if cache is empty or stale (>30m old)
+                if age_days <= 2:
+                    mtime = path.stat().st_mtime
+                    age_min = (time.time() - mtime) / 60
+                    if cached and age_min < 30:
+                        return cached
+                    # else fall through to refetch
+                else:
+                    return cached
+            except Exception:
+                pass  # fall through to refetch on parse error
         log.info("toast: fetching orders for %s %s", location, business_date)
         all_orders: list = []
         page = 1

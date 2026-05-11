@@ -1,0 +1,16 @@
+{
+  "appId": "com.cenaskitchen.driver",
+  "appName": "Cenas Kitchen Driver",
+  "webDir": "www",
+  "server": {
+    "url": "https://app.cenaskitchen.com/driver/login",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "BackgroundGeolocation": {}
+  }
+}

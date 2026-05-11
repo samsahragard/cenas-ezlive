@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cenas Kitchen Driver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    body { background:#0a0604; color:#fff; font-family:system-ui,sans-serif; padding:32px; }
+  </style>
+</head>
+<body>
+  <p>Loading Cenas Kitchen Driver Portal…</p>
+  <script>
+    // capacitor.config.json's server.url normally takes over and loads
+    // https://app.cenaskitchen.com/driver/login directly inside the
+    // native WebView. This file is only reached if that override is
+    // skipped (e.g. dev build w/ server.url commented out).
+    window.location.href = 'https://app.cenaskitchen.com/driver/login';
+  </script>
+</body>
+</html>

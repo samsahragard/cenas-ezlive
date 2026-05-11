@@ -1,0 +1,16 @@
+{
+  "name": "cenas-kitchen-driver",
+  "version": "0.1.0",
+  "description": "Native Android + iOS shell for the Cenas Kitchen Driver Portal",
+  "private": true,
+  "scripts": {
+    "android:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:release": "cap sync android && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.2.21",
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  }
+}

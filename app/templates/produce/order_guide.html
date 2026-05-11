@@ -80,6 +80,7 @@
       <thead>
         <tr>
           <th>Item</th>
+          <th>Date</th>
           <th>Size</th>
           <th>Price</th>
           <th>Vendor</th>
@@ -96,6 +97,9 @@
             data-vendor-label="{{ it.vendor_label or '' }}">
           <td>
             {{ it.canonical_name }}{% if it.marker == 'star' %}<span class="marker marker-star" title="What we want">★</span>{% elif it.marker == 'circle' %}<span class="marker marker-circle" title="If price is better">○</span>{% endif %}
+          </td>
+          <td class="date-col">
+            {% if it.date_range %}<span class="date-range">{{ it.date_range }}</span>{% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td>{{ it.canonical_size }}</td>
           <td class="price">

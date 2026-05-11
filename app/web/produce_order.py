@@ -119,8 +119,14 @@ def load_winners() -> list[dict]:
     Items with no vendor pricing are still returned with `available=False`
     so the template can either hide them or show them as "always_show"."""
     canonical = _read_json(CANONICAL_FILE).get("items", [])
-    alv = _read_json(ALVARADO_FILE, {}).get("items", []) or []
-    jlu = _read_json(JLUNA_FILE, {}).get("items", []) or []
+    alv_doc = _read_json(ALVARADO_FILE, {})
+    jlu_doc = _read_json(JLUNA_FILE, {})
+    alv = alv_doc.get("items", []) or []
+    jlu = jlu_doc.get("items", []) or []
+    # Per-vendor effective-date label (Sam 2026-05-11: surface vendor's
+    # 'good from X to Y' on each row so users see when each price expires).
+    alv_dr = _format_date_range(alv_doc.get("date_range"))
+    jlu_dr = _format_date_range(jlu_doc.get("date_range"))
 
     def index_by_canonical(items):
         # Multiple vendor items can map to the same canonical key (e.g. JLUNA Cabbage Grn.CTN
@@ -168,6 +174,7 @@ def load_winners() -> list[dict]:
             winner_vendor_name, winner_vendor_size = j.get("vendor_name", ""), j.get("vendor_size", "")
 
         always_show = bool(c.get("always_show", False))
+        winner_dr = alv_dr if winner == "alvarado" else (jlu_dr if winner == "jluna" else None)
         out.append({
             "canonical_name": c["name"],
             "canonical_size": c.get("size", ""),
@@ -178,11 +185,45 @@ def load_winners() -> list[dict]:
             "price": winner_price,
             "vendor_name": winner_vendor_name,
             "vendor_size": winner_vendor_size,
+            "date_range": winner_dr,
             "available": winner is not None,
             "show_in_grid": (winner is not None) or always_show,
             "orderable": winner is not None,
         })
     return out
+
+
+def _format_date_range(raw: str | None) -> str | None:
+    """Convert vendor's raw date-range string into a compact 'M/D-M/D' label.
+
+    Vendors send wildly different formats:
+      - '05/10/2026-05/16/2026 REGULAR' (Alvarado)
+      - 'MAY. 8 - 9, 2026' / 'MAY 10-16, 2026' (JLuna)
+      - '5/10/2026 - 5/16/2026' (already-patched JLuna)
+    Output: 'M/D - M/D' if we can extract two dates, else the trimmed raw
+    string, else None. Keep month/day only — Sam reads it at a glance.
+    """
+    if not raw:
+        return None
+    import re
+    s = raw.strip().upper()
+    months = {"JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
+              "JUL":7,"AUG":8,"SEP":9,"SEPT":9,"OCT":10,"NOV":11,"DEC":12}
+    # Numeric 'M/D/Y - M/D/Y' or 'M-D - M-D' style
+    m = re.match(r"(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?\s*-\s*(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?", s)
+    if m:
+        return f"{int(m.group(1))}/{int(m.group(2))} - {int(m.group(3))}/{int(m.group(4))}"
+    # Month-name style: 'MAY. 8 - 9, 2026' or 'MAY 10 - 16'
+    m = re.match(r"([A-Z]{3,4})\.?\s*(\d{1,2})\s*-\s*(\d{1,2})", s)
+    if m and m.group(1) in months:
+        mo = months[m.group(1)]
+        return f"{mo}/{int(m.group(2))} - {mo}/{int(m.group(3))}"
+    # Cross-month: 'MAY 28 - JUN 3'
+    m = re.match(r"([A-Z]{3,4})\.?\s*(\d{1,2})\s*-\s*([A-Z]{3,4})\.?\s*(\d{1,2})", s)
+    if m and m.group(1) in months and m.group(3) in months:
+        return f"{months[m.group(1)]}/{int(m.group(2))} - {months[m.group(3)]}/{int(m.group(4))}"
+    # Fallback: trimmed raw, capped length
+    return raw.strip()[:30]
 
 
 def get_managers() -> dict:

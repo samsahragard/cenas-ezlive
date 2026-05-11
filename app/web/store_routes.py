@@ -82,6 +82,47 @@ def _partner_gate():
         return redirect(url_for("auth.partner_login"))
 
 
+@store_bp.before_request
+def _per_store_gate():
+    """Per-store URL block + Expo-blocks-insights. Sam's 2026-05-11 spec:
+      (1) GM/Manager/Expo with a single-store scope are hard-blocked from
+          the other store's URLs (not just sidebar-hidden). Multi-store
+          users can access each of their assigned stores.
+      (2) Expo gets NO Insights pages — Performance / Sales / Labor /
+          Forecasts return 403 even if URL-hopped.
+    Partner / Corporate are unrestricted.
+
+    NOTE: ck's c2ab56a 'docs' commit silently dropped this hook while
+    committing a stale working copy. Restored 2026-05-11 — if it
+    disappears again, check the most recent diff on store_routes.py."""
+    from app.web.permissions import accessible_store_slugs
+
+    u = getattr(g, "current_user", None)
+    if u is None:
+        return None  # legacy auth_ok sessions (tooling) skip this
+    if u.permission_level in ("partner", "corporate"):
+        return None
+
+    # (2) Expo: deny any Insights-section URL outright.
+    if u.permission_level == "expo":
+        path = (request.path or "").lower()
+        insights_paths = ("/reports/sales", "/reports/labor", "/reports/server-performance",
+                          "/labor", "/sales", "/performance", "/forecast")
+        if any(p in path for p in insights_paths):
+            return ("Forbidden — Expo accounts don't have Insights access.", 403)
+
+    # (1) Per-store scope block.
+    target = getattr(g, "current_store", None)
+    if target is None:
+        return None
+    allowed = accessible_store_slugs(u)
+    if target in allowed:
+        return None
+    if allowed:
+        return redirect(f"/{allowed[0]}/")
+    return ("Forbidden — your account isn't assigned to this store.", 403)
+
+
 # ============== HOME DASHBOARD ==============
 
 @store_bp.route("/")

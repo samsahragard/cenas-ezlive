@@ -216,6 +216,11 @@
       </div>
     </div>
 
+    {# Insights section hidden entirely for expo per Sam's 2026-05-11 spec:
+       expo only needs Operations (Orders / Driver / Schedule / etc.) — no
+       Performance / Sales / Labor / Forecast. Partner / Corporate / GM /
+       Manager all see the full Insights block. #}
+    {% if not (g.current_user and g.current_user.permission_level == 'expo') %}
     <div class="nav-section">Insights</div>
 
     {# Performance group — top-level click jumps to All per Sam 2026-05-11. Order: All / Server / Bartenders / Prep #}
@@ -263,6 +268,7 @@
     </div>
 
     <a class="nav-link disabled"><span class="nav-icon">🎯</span>Forecasts<span class="nav-soon">soon</span></a>
+    {% endif %}
 
     {% if store_slug == 'partner' %}
     {# TEAM management — partner-level only. #}

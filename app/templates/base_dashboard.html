@@ -78,9 +78,17 @@
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
-{# Store context (set by /<store>/... routes via store_routes.py). Falls back to dos for safety. #}
-{% set store_slug = g.current_store or 'dos' %}
-{% set store_label = g.store_label or 'Tomball' %}
+{# Store context (set by /<store>/... routes via store_routes.py). When we're
+   rendering inside a blueprint without a store prefix (e.g. /produce/), fall
+   back in this order: (1) session.last_store_slug remembered by the store
+   url_value_preprocessor; (2) the user's first accessible store from their
+   role; (3) 'dos' as the legacy default. Sam (2026-05-11): without this the
+   sidebar would silently snap to Tomball whenever you click a link that hops
+   into a global blueprint. #}
+{% set _user_slugs = current_user_stores() %}
+{% set store_slug = g.current_store or session.get('last_store_slug') or (_user_slugs[0][0] if _user_slugs else None) or 'dos' %}
+{% set _slug_labels = {'dos': 'Tomball', 'uno': 'Copperfield', 'corporate': 'Corporate', 'partner': 'Partner'} %}
+{% set store_label = g.store_label or _slug_labels.get(store_slug, 'Tomball') %}
 {# Active leaf — pages set `active = '<key>'`. Parent expansion is computed off this.
    _landing keys come from store_routes._render_landing(). Top-level keys (e.g. 'labor',
    'third_party_sales', 'server_perf') come from the leaf reports' default active when

@@ -64,6 +64,13 @@ def _pull_store(endpoint, values):
     g.current_store = slug
     g.current_location = STORE_TO_LOCATION[slug]
     g.store_label = STORE_LABELS[slug]
+    # Remember the user's last-seen store so blueprints with their own
+    # url_prefix (e.g. /produce/, /reports/) can render with the sidebar
+    # still pointing at the right store after a 302 hop. Sam (2026-05-11):
+    # clicking Vendors at /partner/ used to land on Tomball because the
+    # /<store>/produce/ -> /produce/ redirect dropped store context and
+    # base_dashboard.html fell back to 'dos'.
+    session["last_store_slug"] = slug
 
 
 @store_bp.url_defaults

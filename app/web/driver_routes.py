@@ -94,19 +94,19 @@ def driver_login_submit():
         if not found.active:
             return render_template("driver_login.html",
                                    error="This account is deactivated. Contact your manager.",
-                                   prefill_email=email), 403
+                                   prefill_email=raw), 403
         if found.lockout_until and found.lockout_until > now:
             mins = max(1, int((found.lockout_until - now).total_seconds() // 60) + 1)
             return render_template("driver_login.html",
                                    error=f"Too many failed attempts. Try again in {mins} min.",
-                                   prefill_email=email), 429
+                                   prefill_email=raw), 429
         if not check_password_hash(found.password_hash, password):
             found.failed_attempts = (found.failed_attempts or 0) + 1
             if found.failed_attempts >= LOCKOUT_THRESHOLD:
                 found.lockout_until = now + LOCKOUT_DURATION
             db.commit()
             return render_template("driver_login.html", error="Wrong password.",
-                                   prefill_email=email), 401
+                                   prefill_email=raw), 401
         # Success — reset counters, set session
         found.failed_attempts = 0
         found.lockout_until = None

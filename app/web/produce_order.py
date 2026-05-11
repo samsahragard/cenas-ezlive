@@ -686,3 +686,45 @@ def healthz():
         "alvarado_priced_at": _read_json(ALVARADO_FILE, {}).get("parsed_at"),
         "jluna_priced_at": _read_json(JLUNA_FILE, {}).get("parsed_at"),
     })
+
+
+@produce_order.route("/admin/ingest-state")
+def ingest_state():
+    """Diagnostic: dump produce_ingest state file + approved_senders.
+    Lightly gated by INGEST_TOKEN bearer header so only ck/aick can hit it.
+    Transient — remove once produce-ingest debug is over."""
+    from flask import request
+    expected = (os.getenv("INGEST_TOKEN") or "").strip()
+    auth = (request.headers.get("Authorization") or "").strip()
+    token = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
+    if not expected or token != expected:
+        return jsonify({"error": "unauthorized"}), 401
+    state_dir = Path(os.getenv("PRODUCE_STATE_DIR") or (REPO_ROOT / "instance" / "produce"))
+    state_path = state_dir / "ingest_state.json"
+    config_dir = Path(os.getenv("PRODUCE_CONFIG_DIR") or (REPO_ROOT / "data" / "produce"))
+    approved_path = config_dir / "approved_senders.json"
+    out = {
+        "state_path": str(state_path),
+        "state_exists": state_path.exists(),
+        "state": _read_json(state_path, {}) if state_path.exists() else None,
+        "approved_senders_path": str(approved_path),
+        "approved_senders_exists": approved_path.exists(),
+        "approved_senders": _read_json(approved_path, {}) if approved_path.exists() else None,
+    }
+    if request.args.get("reset_last_seen"):
+        try:
+            new_val = int(request.args.get("reset_last_seen"))
+            state = _read_json(state_path, {"last_seen_mid": 0, "processed": {}})
+            state["last_seen_mid"] = new_val
+            # Also clear the processed dict so seen-but-skipped mids get re-evaluated.
+            if request.args.get("clear_processed") == "1":
+                state["processed"] = {}
+            (state_dir).mkdir(parents=True, exist_ok=True)
+            tmp = state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            tmp.replace(state_path)
+            out["reset_to"] = new_val
+            out["state_after"] = state
+        except Exception as e:
+            out["reset_error"] = str(e)
+    return jsonify(out)

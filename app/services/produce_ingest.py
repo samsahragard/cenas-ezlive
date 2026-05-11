@@ -597,6 +597,8 @@ def _poll_once() -> int:
                 from_hdr = _decode_h(msg_hdr.get("From", ""))
                 addr = _extract_email_address(from_hdr)
                 sender_info = senders.get(addr)
+                logger.info("mid=%s from=%r addr=%r approved=%s (senders_loaded=%d)",
+                            mid_str, from_hdr, addr, bool(sender_info), len(senders))
                 if not sender_info:
                     # Unknown sender — skip silently. (The full skill flow Telegram'd Sam if
                     # there were attachments; we omit that here for simplicity.)

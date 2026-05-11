@@ -466,7 +466,7 @@ def driver_tracking():
     from app.models import EzcaterKnownDriver
     from app.services.ezcater_known_drivers_seed import normalize_phone
     from app.services.ezcater_payroll import (
-        period_containing, paycheck_for, normalize_driver_name,
+        period_containing, previous_period, paycheck_for,
     )
     from datetime import date as _date
 
@@ -483,13 +483,18 @@ def driver_tracking():
                             EzcaterKnownDriver.name.asc()).all()
 
         # Match each roster row to a Driver in our DB by phone (for showing
-        # email / address / account status) and to the current pay period's
-        # deliveries (for the at-a-glance count + total).
+        # email / address / account status).
         drivers_by_phone = {}
         for d in db.query(Driver).filter(Driver.phone.isnot(None)).all():
             drivers_by_phone[normalize_phone(d.phone)] = d
 
-        period_start, period_end, check_date = period_containing(_date.today())
+        # Per-period summary: show the JUST-CLOSED period (the one being paid
+        # out next), not the in-progress one. Sam's spec sample shows period
+        # 4/26-5/9 with check date 5/14 — that's the previous period when
+        # today is 5/10 (the new period's first day). The paycheck detail
+        # page still shows full history including the in-progress period.
+        cur_start, _, _ = period_containing(_date.today())
+        period_start, period_end, check_date = previous_period(cur_start)
 
         rows = []
         for kd in roster:

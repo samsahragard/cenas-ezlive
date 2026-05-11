@@ -1,0 +1,411 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Detailed handoff log for the work <strong>ck</strong> shipped during the
+  Mon May 11 2026 session, covering everything from the post-resume bootstrap
+  through the produce-ingest deep dive. Written before Sam restarts the
+  session so a future ck (or any AI picking up cold) has the full picture.
+  Format mirrors <code>ck-session-2026-05-10</code>.
+</p>
+<p>
+  Day in two sentences: shipped the read-only CK WhatsApp inbox at
+  <code>/partner/operations/whatsapp</code> (Phase 1) end-to-end, then spent
+  most of the day chasing real-world bugs Sam surfaced — the Toast cache that
+  ate Sunday's labor + sales numbers, the dashboard sidebar that was
+  bouncing Partner clicks to Tomball, the produce price-list ingest that
+  was matching 11 of 38 canonical items because aliases.json drift, and
+  the missing <code>ANTHROPIC_API_KEY</code> env var that silently broke
+  Alvarado image parsing. Site is now in a much better state than I found
+  it: produce shows real prices for all 38 items with a fresh Date column,
+  Toast caches self-invalidate for recent dates, the partner sidebar
+  navigates correctly, and the dashboard's labor donut shows actual
+  numbers ($1,800 / 169h / 62 shifts as of session close).
+</p>
+
+<h2>Session bootstrap</h2>
+<ul>
+  <li>Picked up after auto-compaction with a session summary covering
+      the recent days' work (Capacitor mobile shell, ezCater tracking
+      research, sidebar polish, etc.). Resumed mid-WhatsApp build.</li>
+  <li>Re-attached to the Developer Chat tail via the
+      <code>Monitor</code> tool; the wrapper restarts the tail every 10 min
+      to recover from stuck IPv6 openers and Render deploy 502s.
+      Halfway through the session I patched
+      <code>chat_tail.py</code> to persist <code>last_id</code> at
+      <code>~/.cenas-chat-last-id</code> so the 10-min refresh no longer
+      replays the full message history each cycle.</li>
+  <li>Filtered the chat-tail Monitor's stdout to drop
+      <code>ERROR: Expecting value</code> spam (intermittent HTML-instead-of-JSON
+      responses during deploys; aick already had a re-auth fix for the
+      underlying behavior in <code>5f0b30e</code>).</li>
+</ul>
+
+<h2>CK WhatsApp inbox — Phase 1 read-only mirror (commit <code>4d8f65f</code>)</h2>
+<p>
+  Sam wants himself + Masood to read every WhatsApp thread on ock's
+  number (+13464620746) from the Partner dashboard without a phone in
+  hand. Phase 1: read-only inbox mirror powered by an ingest endpoint
+  the CK daemon POSTs to.
+</p>
+<ul>
+  <li>New <code>whatsapp_messages</code> table (alembic migration
+      <code>14_whatsapp_messages.py</code>, commit <code>299784b</code>,
+      paired to <code>4d8f65f</code>; table itself in prod via
+      <code>Base.metadata.create_all()</code> on boot since Render's
+      preDeployCommand is unset). Mirrors ock's <code>awareness.db</code>
+      schema 1:1 plus a <code>direction</code> column (inbound / outbound)
+      and <code>sent_by_user</code> for Phase 2 attribution. Dedupes on
+      <code>external_id</code>.</li>
+  <li>New <code>POST /api/inbox/whatsapp</code> endpoint, Bearer-token
+      gated via <code>CK_WHATSAPP_INGEST_TOKEN</code> env var (or fallback
+      file). Idempotent on <code>external_id</code>.</li>
+  <li>New <code>GET /partner/operations/whatsapp</code> page, Partner-gated.
+      Conversation list on the left (latest 60 chats by recency), thread
+      view on the right (latest 500 messages per chat in ascending ts).
+      Auto-refresh every 5s. Group chats included per Sam's spec.</li>
+  <li><strong>Bug I shipped + fixed:</strong> 4d8f65f forgot to add
+      <code>/api/inbox/whatsapp</code> to
+      <code>EXEMPT_PREFIXES</code> in <code>app/web/auth.py</code>, so the
+      global gate intercepted the CK daemon's POSTs and 302'd them to
+      <code>/keypad-login</code>. Discovered when testing with the
+      bearer token. Fixed in commit <code>9604690</code>: one-line
+      addition mirroring the <code>/orders/ingest_structured</code>
+      pattern.</li>
+  <li>CK-side daemon: <code>scripts/whatsapp_inbox_sync.py</code> tails
+      <code>awareness.db</code> (OpenClaw's WhatsApp silent-observer
+      capture) for new <code>channel='whatsapp'</code> rows and POSTs
+      them to the EZLive endpoint every 10s. State at
+      <code>whatsapp_inbox_sync_last_id.txt</code>. On first run after
+      auth fix deployed: <code>[sync] 38 rows posted: inserted=38
+      skipped=0</code> — full backfill of ock's existing WhatsApp
+      history. Running under Monitor task as of session close.</li>
+</ul>
+
+<h2>Reports routing bug — Run button bouncing to Tomball (commit <code>c63df3b</code>)</h2>
+<p>
+  Sam clicked Run on
+  <code>/partner/reports/sales/toast</code> (and every other channel) and
+  ended up on the Tomball dashboard. Same shape on
+  <code>/partner/reports/labor</code>, <code>schedule</code>, <code>roster</code>,
+  <code>server-performance</code>, <code>produce-orders</code>.
+</p>
+<ul>
+  <li>Root cause: the report form action used
+      <code>{{ url_for('reports.X') }}</code>, which always resolves to
+      the global <code>/reports/X</code> (no store_slug). After form
+      submit, the user landed on the global path,
+      <code>base_dashboard.html:82</code> fell back to
+      <code>store_slug = 'dos'</code>, and the sidebar rendered Tomball.</li>
+  <li>Fix: changed all six report templates to
+      <code>action=""</code> (submits to current path) and the
+      period/channel pill <code>base</code> from
+      <code>url_for('reports.X')</code> to <code>request.path</code>.
+      Labor template strips a trailing <code>/boh</code>|<code>/foh</code>
+      from <code>request.path</code> so the All/BOH/FOH pills still
+      build correct sibling URLs.</li>
+</ul>
+
+<h2>Sidebar reorg per Sam (commit <code>889e38e</code>)</h2>
+<ul>
+  <li><strong>Vendors</strong> top-level click → straight to Produce
+      (<code>/&lt;slug&gt;/produce/</code>) instead of the vendors
+      card-grid landing.</li>
+  <li><strong>Ezcater</strong> top-level click → Orders
+      (<code>/&lt;slug&gt;/orders</code>) instead of the ezcater landing.
+      Also extended <code>orders_list</code> in
+      <code>store_routes.py</code> so <code>/partner/orders</code>
+      (location=both) renders a combined Tomball + Copperfield list
+      instead of redirecting to the partner dashboard.</li>
+  <li><strong>Schedule</strong> top-level → All Roster
+      (<code>/&lt;slug&gt;/roster/all</code>). Children reordered:
+      All Roster / BOH Roster / FOH Roster / Weekly.</li>
+  <li><strong>Performance</strong> top-level → All
+      (<code>/&lt;slug&gt;/reports/server-performance/all</code>).
+      Children reordered: All / Server / Bartenders / Prep.</li>
+  <li><strong>Sales</strong> children reordered: All (renamed from
+      Total) / Toast / Online Toast / Ezcater / Door Dash / Uber.
+      Top-level click → <code>/&lt;slug&gt;/reports/sales/total</code>
+      (which renders the "All channels including in-store" view).</li>
+  <li><strong>Ezcater Orders page</strong> was missing the
+      tab strip on top because <code>orders_by_store.html</code> set
+      <code>active = location</code> (raw "tomball"/"copperfield")
+      instead of <code>'ezcater_orders'</code>. Fixed in the same
+      commit — also makes the sidebar Orders link highlight correctly.</li>
+</ul>
+
+<h2>Vendors → Tomball bug (commits <code>eb7727d</code> + aick's <code>6b803cd</code>)</h2>
+<p>
+  Even after the sidebar fix, clicking Vendors on the Partner sidebar
+  still ended up showing Tomball chrome because
+  <code>/&lt;slug&gt;/produce/</code> 302'd to the global
+  <code>/produce/</code>, dropping <code>g.current_store</code>.
+</p>
+<ul>
+  <li><strong>My fix (<code>eb7727d</code>):</strong> render
+      <code>produce_order.index()</code> inline on
+      <code>/&lt;slug&gt;/produce/</code> instead of redirecting (same
+      pattern as <code>orders_processor</code>).</li>
+  <li><strong>Aick's fix (<code>6b803cd</code>) shipped in parallel:</strong>
+      stash <code>session.last_store_slug</code> at every store URL and
+      have <code>base_dashboard.html</code> prefer that over the
+      <code>'dos'</code> fallback. More general — catches any future
+      similar 302-loses-context bug.</li>
+  <li>Both pushed and live. Redundant but harmless.</li>
+</ul>
+
+<h2>Switch-store sidebar hide (commits <code>4735a52</code> + aick's <code>cac743d</code>)</h2>
+<p>
+  Sam: "I should not have a switch store option" when logged in as
+  Partner since Partner is a single-role assignment with both stores.
+</p>
+<ul>
+  <li><strong>My fix (<code>4735a52</code>):</strong> hide the
+      <code>store-switcher</code> link in <code>base_dashboard.html</code>
+      when <code>session.user_id</code> is set (keypad auth). Legacy
+      shared-password sessions (chat-tail tooling) still see it.</li>
+  <li><strong>Aick's follow-up (<code>cac743d</code>):</strong> proper
+      multi-store user model — for users with
+      <code>store_scope=['tomball','copperfield']</code> the switcher
+      becomes a smart dropdown listing both stores. Single-store +
+      Partner: no switcher. ck's hide rule still applies for the no-multi
+      case.</li>
+</ul>
+
+<h2>Dashboard KPI tile removal (commit <code>9a622b4</code>)</h2>
+<p>
+  Sam screenshotted the partner home and circled three tiles — Today's
+  deliveries / Heads to feed / Produce winners — and asked for them
+  gone everywhere. Removed the entire <code>.kpis</code> div from
+  <code>home.html</code>. Dashboards now open straight into the
+  Sales + Labor donut row.
+</p>
+
+<h2>Toast cache: Sunday-zero bug + labor donut $0 (commits <code>5a14d4e</code> + <code>be1d7e1</code>)</h2>
+<p>
+  Sam (correctly) called out that the partner sales report showed $0
+  for Sunday 5/10 even though the restaurant was open and busy. Same
+  shape an hour later: dashboard Labor donut showed $0 / "no labor
+  recorded yet" with 23 shifts logged.
+</p>
+<ul>
+  <li>Root cause: Toast caches on disk under <code>/var/data/toast/</code>.
+      <code>fetch_orders_for_date</code> and
+      <code>fetch_time_entries</code> both wrote
+      <code>orders_YYYYMMDD_&lt;loc&gt;.json</code> /
+      <code>timeentries_…_&lt;loc&gt;.json</code> and read forever from
+      the first cached result. When an early-morning probe hit Toast
+      before sales were finalized for the day, the cache stuck at
+      empty for the rest of the day.</li>
+  <li>Fix pattern (applied to both fetches): for dates within the last
+      2 calendar days, only trust the cache if it has data AND is
+      &lt;30 min old. Otherwise re-fetch from Toast. Past dates
+      (&gt;2 days old) still cache indefinitely since Toast doesn't
+      backfill.</li>
+  <li>Verified post-deploy: sales = $9,048 across 4 channels, labor =
+      $1,800 / 169.1 hrs / 62 shifts / BOH+FOH split. Donuts populate
+      on first dashboard load now.</li>
+  <li>Two other Toast cache files
+      (<code>employees_&lt;loc&gt;.json</code>,
+      <code>jobs_&lt;loc&gt;.json</code>) deliberately untouched —
+      these are slowly-changing rosters/titles where forever-caching
+      is correct.</li>
+</ul>
+
+<h2>Produce ingest pipeline deep-dive</h2>
+<p>
+  Sam: "the prices aren't updated on the app." Took most of the
+  afternoon to root-cause; turned out to be three layered bugs.
+</p>
+
+<h3>Bug 1: stale unfiltered "items not available" wording (commit <code>ce48adf</code>)</h3>
+<p>
+  Old summary text was "X canonical items not currently available
+  from either vendor." Sam: produce items are <em>always</em>
+  available — what's missing is just our current quote. Reworded to
+  "X items missing from the latest vendor price lists — still always
+  available, we just don't have a current quote."
+</p>
+
+<h3>Bug 2: missing ANTHROPIC_API_KEY (env-var fix via Render API)</h3>
+<p>
+  Alvarado emails arrive as JPG images and parse through the Anthropic
+  Vision API (<code>claude-sonnet-4-6</code>) in
+  <code>produce_ingest.extract_from_image</code>. Render's
+  <code>ANTHROPIC_API_KEY</code> env var was unset, so every Alvarado
+  parse threw <code>RuntimeError: missing ANTHROPIC_API_KEY</code> and
+  the email got marked processed with an empty result.
+</p>
+<ul>
+  <li>Set the key via Render API (<code>PUT /v1/services/&lt;id&gt;/env-vars/ANTHROPIC_API_KEY</code>);
+      key sourced from <code>~/.openclaw/.secrets/anthropic_api_key.txt</code>
+      on AiCk. Auto-triggered a redeploy.</li>
+  <li>After the deploy + a forced re-ingest, Alvarado's 5/10–5/16
+      price list parsed successfully (176 line items extracted).</li>
+</ul>
+
+<h3>Bug 3: aliases.json drift + incomplete coverage (commits <code>eaaf493</code> + <code>f9c0eb0</code>)</h3>
+<p>
+  <code>_apply_aliases</code> in <code>produce_ingest.py</code> did
+  exact-string match between vendor item names + aliases.json keys.
+  Vendor strings like <code>'AGUACATE 32 CT # 1|32CT'</code> didn't
+  match aliases like <code>'AGUACATE 32CT #1|32CT'</code> because of
+  trivial whitespace drift (likely Claude Vision output evolving).
+  And the JLuna aliases section only had 14 entries when the vendor
+  sends 114 — many of Sam's canonical items had no bridge at all.
+</p>
+<ul>
+  <li><strong><code>eaaf493</code>:</strong> added
+      <code>_normalize_alias_key</code> that collapses whitespace and
+      joins digit-unit pairs (<code>32 CT</code> → <code>32CT</code>,
+      <code># 1</code> → <code>#1</code>) before match. Both vendor
+      strings and alias keys pass through the normalizer.</li>
+  <li><strong><code>f9c0eb0</code>:</strong> 27 new JLuna alias entries
+      bridging Sam's canonical items (Cabbage Red Ctn, Carrots Jumbo,
+      Eggs Grade AA XL, Ginger, Lett. Iceberg/Romaine/Green Leaf,
+      Lemons 200ct + 140ct, Mangos, Mushroom Gen/Cello, Onions
+      Yel/White/Red Jbo, Oranges Calif/Cal, Pepper Green Bell/Jalapeno/
+      Poblano/Serrano, Potatoes A Red/B Red, Squash Mexican/Zuchinni,
+      Tomates Roma, Tomatillo Pelon).</li>
+  <li>Added a WARNING log when &gt;30% of a vendor's items stay
+      unmapped after normalization — flags alias drift in logs
+      immediately next time a vendor changes their format.</li>
+  <li>Aick was going to do the Alvarado-side new aliases in parallel
+      but it turned out unnecessary: my JLuna entries plus the
+      normalization fix gave each of Sam's 38 canonical items at
+      least one priced match (Alvarado wins on price for Spanish-
+      named items, JLuna wins on the English-named ones).</li>
+</ul>
+
+<h3>Forced re-ingest (transient diagnostic endpoint)</h3>
+<p>
+  To verify the fix without waiting for the next vendor email, I
+  shipped a transient admin endpoint at
+  <code>/produce/admin/ingest-state</code> gated by the
+  <code>INGEST_TOKEN</code> bearer (same token aick uses for ingest
+  endpoints). Supports:
+</p>
+<ul>
+  <li><code>GET</code> — dumps <code>ingest_state.json</code> +
+      <code>approved_senders.json</code>.</li>
+  <li><code>?dump_vendor=alvarado|jluna|canonical</code> — inspects
+      the live vendor JSON files + canonical items list.</li>
+  <li><code>?reset_last_seen=N&amp;clear_processed=1</code> — bumps
+      the poller's <code>last_seen_mid</code> back so it re-evaluates
+      past emails.</li>
+  <li><code>?patch_vendor=jluna&amp;set_date_range=…</code> — manually
+      overrides a vendor's <code>date_range</code> string. Used to
+      mark JLuna's stale 5/8–5/9 list as effective 5/10–5/16 per
+      Sam's "just for this time" directive.</li>
+</ul>
+<p>
+  All four pieces are <strong>transient</strong> — should be reverted
+  before the next deploy round (or kept as a real admin tool if Sam
+  finds it useful). Routing exemption in
+  <code>EXEMPT_PREFIXES</code> covers <code>/produce/admin/</code>.
+</p>
+
+<h3>Per-item Date column (commit <code>01b1f7e</code>)</h3>
+<p>
+  Sam asked for a "Date" column between Item and Size showing the
+  effective date range for each row's winning vendor.
+</p>
+<ul>
+  <li><code>load_winners()</code> now reads
+      <code>date_range</code> from each vendor's top-level JSON and
+      attaches it to the row dict based on which vendor won the
+      price comparison.</li>
+  <li><code>_format_date_range</code> handles the three formats
+      vendors send: <code>'05/10/2026-05/16/2026 REGULAR'</code>
+      (Alvarado), <code>'MAY. 8 - 9, 2026'</code> (JLuna),
+      <code>'5/10/2026 - 5/16/2026'</code> (post-patch). Output:
+      <code>'M/D - M/D'</code>.</li>
+  <li>Cross-month spans like <code>'MAY 28 - JUN 3'</code> handled
+      via a second regex.</li>
+</ul>
+
+<h2>Coordination with aick (mostly translating Sam's voice-to-text)</h2>
+<ul>
+  <li><strong>Keypad-login edge framing</strong> — Sam circled the
+      bar-photo background on the keypad page and asked aick to make
+      it fill the viewport edge-to-edge. Translated his marks for
+      aick (right side + bottom yellow strokes = the outer dark
+      frame where the photo terminates before the viewport).</li>
+  <li><strong>Permissions audit</strong> — Sam's role-scope spec was
+      voice-to-text and bled together as one paragraph. Parsed it
+      into four items for aick:
+      (a) Corporate = Partner minus Admin + Developer;
+      (b) Manager = GM today;
+      (c) Expo = Operations sidebar only, no Insights at all;
+      (d) Per-store hard block via URL (single-store users 403'd on
+      the other store's paths). Aick was acting on each as of session
+      close.</li>
+</ul>
+
+<h2>Adopted feedback (saved to memory)</h2>
+<ul>
+  <li><strong>Test fixes in a real browser before claiming done</strong>
+      (<code>~/.claude/projects/C--/memory/feedback_test_in_chrome_before_claiming_done.md</code>) —
+      Sam called out today that I twice declared fixes "shipped" when
+      the rendered behavior still had the bug. Claude-in-Chrome MCP
+      now part of my verify flow on routing/template/session changes.</li>
+</ul>
+
+<h2>Open / next session</h2>
+<ul>
+  <li><strong>Revert the transient produce-admin endpoint</strong>
+      (commits <code>cb0d482</code>, <code>ea705fb</code>,
+      <code>450290d</code>) once aliases are stable. Keep the
+      coverage-warning + normalization (<code>eaaf493</code>); kill
+      the dump/reset/patch verbs. Note: aick's <code>b0b9307</code>
+      restored an /install route I accidentally deleted while
+      adding /produce/admin/ — verify the restored route survives the
+      revert.</li>
+  <li><strong>Produce: keep-last-known-price fallback</strong> — Sam
+      asked early on: when an item has no current vendor match, show
+      the most recent priced snapshot with an "as of &lt;date&gt;"
+      label instead of hiding the row. Not yet implemented; the
+      37/37 priced rows after the alias fixes deferred urgency.</li>
+  <li><strong>Produce: aggressive mid-cycle pricing</strong> — Sam
+      noted vendors sometimes send a new list on the 13th overriding
+      the previous 10th–15th list. The current pipeline already
+      handles this (newest email wins on
+      <code>parsed_at</code>); just confirm via a manual
+      re-send if a mid-cycle email arrives this week.</li>
+  <li><strong>WhatsApp Phase 2</strong> — outbound replies from the
+      partner inbox. Requires cloudflared tunnel exposing ock's
+      outbound endpoint, narrowing the
+      <code>silentMode</code> patch in <code>@openclaw/whatsapp</code>
+      to allow explicit-send (inbound auto-reply stays blocked per
+      the silent-observer rule), and a reply box on the inbox page.
+      Attribution shows as "sent by Sam via ock".</li>
+  <li><strong>JLuna direct-send</strong> — once JLuna emails their
+      proper 5/10–5/16 list directly (instead of Sam forwarding the
+      old one), the auto-patch we did today becomes redundant.
+      Until then the date_range stays Sam's manual override.</li>
+</ul>
+
+<h2>Where things live (quick reference)</h2>
+<table>
+  <tr><th>Thing</th><th>Path / URL</th></tr>
+  <tr><td>This handoff doc</td><td><code>/partner/developer/app/ck-session-2026-05-11</code></td></tr>
+  <tr><td>CK WhatsApp inbox (partner-only UI)</td><td><code>/partner/operations/whatsapp</code></td></tr>
+  <tr><td>WhatsApp ingest endpoint (Bearer-gated)</td><td><code>POST /api/inbox/whatsapp</code></td></tr>
+  <tr><td>WhatsApp sync daemon (CK-side)</td><td><code>C:\Users\sam\.openclaw\scripts\whatsapp_inbox_sync.py</code></td></tr>
+  <tr><td>WhatsApp ingest token</td><td>env <code>CK_WHATSAPP_INGEST_TOKEN</code> on Render + file <code>~/.openclaw/.secrets/ck_whatsapp_ingest_token.txt</code> on CK</td></tr>
+  <tr><td>Awareness DB (WhatsApp capture source)</td><td><code>C:\Users\sam\.openclaw\workspace\state\awareness.db</code> on CK</td></tr>
+  <tr><td>Produce admin endpoint (transient, INGEST_TOKEN-gated)</td><td><code>GET /produce/admin/ingest-state?dump_vendor=…|reset_last_seen=…|patch_vendor=…</code></td></tr>
+  <tr><td>Produce vendor JSONs (on Render disk)</td><td><code>/var/data/produce/alvarado.json</code>, <code>/var/data/produce/jluna.json</code></td></tr>
+  <tr><td>Produce ingest state</td><td><code>/var/data/produce/ingest_state.json</code></td></tr>
+  <tr><td>Produce approved senders (config, in repo)</td><td><code>data/produce/approved_senders.json</code></td></tr>
+  <tr><td>Produce aliases (config, in repo)</td><td><code>data/produce/aliases.json</code></td></tr>
+  <tr><td>Produce canonical items (config, in repo)</td><td><code>data/produce/canonical_items.json</code></td></tr>
+  <tr><td>Toast cache (on Render disk)</td><td><code>/var/data/toast/orders_*.json</code>, <code>/var/data/toast/timeentries_*.json</code></td></tr>
+  <tr><td>Anthropic API key</td><td>env <code>ANTHROPIC_API_KEY</code> on Render (set this session)</td></tr>
+  <tr><td>chat_tail.py (CK local, patched today)</td><td><code>C:\Users\sam\AppData\Local\Temp\aick-pull\chat_tail.py</code></td></tr>
+  <tr><td>chat_tail last_id persistence</td><td><code>~/.cenas-chat-last-id</code> on CK</td></tr>
+  <tr><td>Render API key (used to set ANTHROPIC_API_KEY)</td><td><code>~/.openclaw/.secrets/render_api_key.txt</code> on AiCk</td></tr>
+</table>
+
+{% endblock %}

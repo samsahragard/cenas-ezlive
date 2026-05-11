@@ -122,3 +122,45 @@ def poll_all_route():
                             success=(f"Polled {result['polled']} orders — "
                                      f"{result['updated']} got fresh data, "
                                      f"{result['no_data']} returned no data.")))
+
+
+@ezc_live.route("/partner/developer/ezcater-tracking/sync", methods=["POST"])
+def sync_from_ezmanage():
+    """Bulk-import tracking URLs from ezManage. Posted by the bookmarklet
+    Sam runs while logged into ezmanage.ezcater.com. JSON body shape:
+        {"updates": [{"order_number": "T4Y-F7J", "tracking_url": "https://..."}]}
+    For each row: find Order by external_order_id (with-dash form), extract
+    UUID from the URL, save, immediately poll. Returns per-row outcome.
+    """
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    from app.services.ezcater_live_tracker import extract_tracking_uuid, poll_one
+    payload = request.get_json(silent=True) or {}
+    updates = payload.get("updates") or []
+    results = {"saved": 0, "polled": 0, "skipped": [], "not_found": []}
+    db = SessionLocal()
+    try:
+        for u in updates:
+            on_raw = (u.get("order_number") or "").strip().upper()
+            url = (u.get("tracking_url") or "").strip()
+            uuid_ = extract_tracking_uuid(url)
+            if not on_raw or not uuid_:
+                results["skipped"].append({"order_number": on_raw, "reason": "missing data"})
+                continue
+            # Try with-dash form first (our DB), fall back to no-dash.
+            with_dash = on_raw if "-" in on_raw else (f"{on_raw[:3]}-{on_raw[3:]}" if len(on_raw) >= 4 else on_raw)
+            o = (db.query(Order).filter(Order.external_order_id == with_dash).first()
+                 or db.query(Order).filter(Order.external_order_id == on_raw).first())
+            if not o:
+                results["not_found"].append(on_raw)
+                continue
+            o.delivery_tracking_id = uuid_
+            body = poll_one(o)
+            results["saved"] += 1
+            if body:
+                results["polled"] += 1
+        db.commit()
+    finally:
+        db.close()
+    return jsonify(results)

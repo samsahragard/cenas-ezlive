@@ -19,10 +19,29 @@
   <div class="banner banner-error" style="margin-bottom:14px;">{{ error }}</div>
 {% endif %}
 
-<div style="margin-bottom:14px;">
+<div style="margin-bottom:14px;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
   <form method="POST" action="{{ url_for('ezcater_live.poll_all_route') }}" style="display:inline;">
     <button type="submit" class="btn-login" style="padding:6px 14px;">Poll all active (up to 25)</button>
   </form>
+  <details style="flex:1;min-width:300px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:8px 12px;">
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;">⚡ Sync tracking URLs from ezManage (bookmarklet)</summary>
+    <div style="margin-top:8px;font-size:12px;color:var(--text-2);line-height:1.5;">
+      <p style="margin:0 0 8px;">
+        Drag this link to your bookmarks bar. Then while logged into
+        <code>ezmanage.ezcater.com</code>, click it to auto-import every
+        upcoming order's tracking URL into the table below in one shot.
+      </p>
+      <a href='javascript:(async()=>{try{const r=await fetch("https://ezmanage-api.ezcater.com/graphql",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:"{ me { catererAccount { orders(limit: 50, filter: UPCOMING) { nodes { orderNumber delivery { tracking { url } } } } } } }"})});const d=await r.json();const nodes=(((d.data||{}).me||{}).catererAccount||{}).orders.nodes||[];const updates=nodes.filter(n=>n.delivery&&n.delivery.tracking&&n.delivery.tracking.url).map(n=>({order_number:n.orderNumber,tracking_url:n.delivery.tracking.url}));const r2=await fetch("https://app.cenaskitchen.com/partner/developer/ezcater-tracking/sync",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({updates})});const out=await r2.json();alert("Cenas sync: "+JSON.stringify(out,null,2));}catch(e){alert("Cenas sync error: "+e.message);}})();'
+         style="display:inline-block;padding:6px 12px;font-size:12px;font-weight:600;
+                background:var(--accent-soft);color:#0a0604;border-radius:6px;text-decoration:none;">
+        🔗 Sync Cenas tracking
+      </a>
+      <p style="margin:8px 0 0;font-size:11px;color:var(--text-3);">
+        Only orders with active tracker URLs are pulled (drivers who hit "start"
+        in the ezCater driver app). Re-click to refresh; idempotent.
+      </p>
+    </div>
+  </details>
 </div>
 
 {% if not orders %}

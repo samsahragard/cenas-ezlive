@@ -43,8 +43,10 @@ ALLOWED_EXTENSIONS = {
     ".pdf",                                              # docs
     ".csv", ".txt", ".md", ".log",                       # text dumps
     ".xlsx", ".xls",                                     # spreadsheets
+    ".webm", ".ogg", ".mp3", ".wav", ".m4a",             # audio (voice msgs)
 }
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
+AUDIO_EXTENSIONS = {".webm", ".ogg", ".mp3", ".wav", ".m4a"}
 
 
 def _attachments_dir() -> Path:
@@ -207,9 +209,12 @@ def download_attachment(att_id: int):
             abort(404)
         if not full.is_file():
             abort(404)
-        # For images, serve inline so the browser can render thumbnails.
-        # For everything else, attach so the browser downloads.
-        as_attachment = not att.is_image
+        # For images and audio, serve inline so the browser can render
+        # thumbnails / play in <audio> tags. For everything else, attach so
+        # the browser downloads.
+        ext = os.path.splitext(att.filename or "")[1].lower()
+        is_audio = (ext in AUDIO_EXTENSIONS) or (att.mime_type or "").startswith("audio/")
+        as_attachment = not att.is_image and not is_audio
         return send_file(
             str(full),
             mimetype=att.mime_type or "application/octet-stream",
@@ -247,18 +252,24 @@ def messages_json():
 def _msg_to_dict(m: DeveloperChatMessage) -> dict:
     atts = []
     for a in m.attachments or []:
+        ext = os.path.splitext(a.filename or "")[1].lower()
+        is_audio = (ext in AUDIO_EXTENSIONS) or (a.mime_type or "").startswith("audio/")
         atts.append({
             "id": a.id,
             "filename": a.filename,
             "mime_type": a.mime_type,
             "size_bytes": a.size_bytes,
             "is_image": a.is_image,
+            "is_audio": is_audio,
             "url": url_for("developer_chat.download_attachment", att_id=a.id),
         })
+    a_low = (m.author or "").lower()
+    is_ai = (a_low == "samai") or ("aick" in a_low) or (a_low == "ck") or (a_low == "ck-claude")
     return {
         "id": m.id,
         "author": m.author,
         "body": m.body,
+        "is_ai": is_ai,
         "created_at_iso": m.created_at.replace(tzinfo=timezone.utc).isoformat(),
         "created_at_display": m.created_at.replace(tzinfo=timezone.utc).astimezone(CT).strftime("%a %b %d, %I:%M %p"),
         "attachments": atts,

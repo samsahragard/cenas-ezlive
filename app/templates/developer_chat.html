@@ -158,6 +158,53 @@
   }
   .msg-attach-link:hover { background: rgba(255,255,255,0.10); }
   .msg-attach-size { color: var(--text-3); font-size: 11px; }
+
+  /* Inline audio attachment (voice msgs) */
+  .msg-attach-audio {
+    width: 280px;
+    max-width: 100%;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.30);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 4px;
+    display: block;
+  }
+
+  /* TTS speaker button on AI bubbles */
+  .tts-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text-3);
+    border-radius: 999px;
+    padding: 0 6px;
+    font-size: 12px;
+    line-height: 1.6;
+    cursor: pointer;
+    margin-left: 4px;
+  }
+  .tts-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+  .tts-btn.tts-playing {
+    color: #fff;
+    background: rgba(232,122,62,0.30);
+    border-color: rgba(232,122,62,0.6);
+  }
+
+  /* Mic recording animation */
+  .mic-btn.recording {
+    background: rgba(232,80,80,0.30) !important;
+    border-color: rgba(232,80,80,0.6) !important;
+    animation: micPulse 1s ease-in-out infinite;
+  }
+  @keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(232,80,80,0.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(232,80,80,0); }
+  }
+  .mic-status {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-left: 4px;
+    align-self: center;
+  }
 </style>
 {% endblock %}
 
@@ -176,7 +223,12 @@
   <div class="chat-list" id="chat-list">
     {% for m in messages %}
     <div class="msg {{ m.css_class }}" data-id="{{ m.id }}">
-      <div class="msg-meta"><strong>{{ m.author }}</strong>{{ m.created_at_display }}</div>
+      <div class="msg-meta">
+        <strong>{{ m.author }}</strong>{{ m.created_at_display }}
+        {% if m.is_ai and m.body %}
+          <button type="button" class="tts-btn" data-tts-text="{{ m.body }}" title="Read aloud">🔊</button>
+        {% endif %}
+      </div>
       {% if m.body %}<div class="msg-body">{{ m.body }}</div>{% endif %}
       {% if m.attachments %}
       <div class="msg-attachments">
@@ -185,6 +237,8 @@
             <a href="{{ a.url }}" target="_blank" rel="noopener" title="{{ a.filename }}">
               <img class="msg-attach-img" src="{{ a.url }}" alt="{{ a.filename }}" loading="lazy">
             </a>
+          {% elif a.is_audio %}
+            <audio controls preload="metadata" class="msg-attach-audio" src="{{ a.url }}"></audio>
           {% else %}
             <a class="msg-attach-link" href="{{ a.url }}" target="_blank" rel="noopener">
               📎 {{ a.filename }}
@@ -210,11 +264,13 @@
         <option value="system">system</option>
       </select>
       <textarea name="body" placeholder="Type a message…"></textarea>
+      <button type="button" id="mic-btn" class="mic-btn" title="Record voice message (auto-transcribes into the box)">🎤</button>
       <button type="button" onclick="document.getElementById('attach-input').click()" title="Attach files (up to {{ max_attachments }})">📎</button>
       <button type="submit">Send</button>
     </div>
-    <input type="file" id="attach-input" name="attachments" multiple accept="image/*,.pdf,.csv,.txt,.md,.log,.xlsx,.xls">
+    <input type="file" id="attach-input" name="attachments" multiple accept="image/*,.pdf,.csv,.txt,.md,.log,.xlsx,.xls,audio/*,.webm,.ogg,.mp3,.wav,.m4a">
     <div class="chat-attach-row" id="attach-preview"></div>
+    <div id="mic-status" class="mic-status"></div>
   </form>
 </div>
 
@@ -255,6 +311,15 @@
     strong.textContent = m.author;
     meta.appendChild(strong);
     meta.appendChild(document.createTextNode(m.created_at_display));
+    if (m.is_ai && m.body) {
+      const tts = document.createElement('button');
+      tts.type = 'button';
+      tts.className = 'tts-btn';
+      tts.dataset.ttsText = m.body;
+      tts.title = 'Read aloud';
+      tts.textContent = '🔊';
+      meta.appendChild(tts);
+    }
     div.appendChild(meta);
 
     if (m.body) {
@@ -277,6 +342,13 @@
           img.src = a.url; img.alt = a.filename; img.loading = 'lazy';
           link.appendChild(img);
           wrap.appendChild(link);
+        } else if (a.is_audio) {
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.preload = 'metadata';
+          audio.className = 'msg-attach-audio';
+          audio.src = a.url;
+          wrap.appendChild(audio);
         } else {
           const link = document.createElement('a');
           link.className = 'msg-attach-link';
@@ -373,6 +445,173 @@
     })
     .catch(e => { status.textContent = 'sync error: ' + e; });
   }
+
+  // ============== TTS — per-message speaker button (click toggles) ==============
+  let activeTtsBtn = null;
+  function stopTts() {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    if (activeTtsBtn) {
+      activeTtsBtn.classList.remove('tts-playing');
+      activeTtsBtn = null;
+    }
+  }
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tts-btn');
+    if (!btn) return;
+    if (!('speechSynthesis' in window)) {
+      alert('TTS not supported in this browser.');
+      return;
+    }
+    if (btn === activeTtsBtn) { stopTts(); return; }
+    stopTts();
+    const text = btn.dataset.ttsText || '';
+    if (!text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1; u.pitch = 1; u.volume = 1;
+    u.onend = () => stopTts();
+    u.onerror = () => stopTts();
+    speechSynthesis.speak(u);
+    btn.classList.add('tts-playing');
+    activeTtsBtn = btn;
+  });
+
+  // ============== Mic — record + Web Speech Recognition transcription ==============
+  const micBtn = document.getElementById('mic-btn');
+  const micStatus = document.getElementById('mic-status');
+  let mediaRecorder = null;
+  let recordChunks = [];
+  let recognizer = null;
+  let recognizingTranscript = '';
+  let activeMicStream = null;
+
+  function micSupported() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  }
+  function speechRecogSupported() {
+    return ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+  }
+
+  async function startRecording() {
+    if (!micSupported()) {
+      alert('Microphone not supported in this browser.');
+      return;
+    }
+    try {
+      activeMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordChunks = [];
+      let mimeType = '';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      else if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+      else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+      mediaRecorder = mimeType ? new MediaRecorder(activeMicStream, { mimeType })
+                               : new MediaRecorder(activeMicStream);
+      mediaRecorder.addEventListener('dataavailable', (ev) => {
+        if (ev.data && ev.data.size > 0) recordChunks.push(ev.data);
+      });
+      mediaRecorder.addEventListener('stop', () => {
+        const fullType = mediaRecorder.mimeType || 'audio/webm';
+        const baseType = fullType.split(';')[0];
+        const ext = baseType === 'audio/mp4' ? 'm4a'
+                  : baseType === 'audio/ogg' ? 'ogg'
+                  : (baseType.split('/')[1] || 'webm');
+        const blob = new Blob(recordChunks, { type: baseType });
+        if (blob.size > MAX_BYTES) {
+          alert('Voice msg over the ' + (MAX_BYTES/1024/1024) + ' MB limit. Try shorter.');
+        } else if (blob.size === 0) {
+          micStatus.textContent = 'no audio captured';
+        } else {
+          const ts = new Date();
+          const stamp = ts.getFullYear()
+                      + ('0' + (ts.getMonth() + 1)).slice(-2)
+                      + ('0' + ts.getDate()).slice(-2)
+                      + '-' + ('0' + ts.getHours()).slice(-2)
+                      + ('0' + ts.getMinutes()).slice(-2)
+                      + ('0' + ts.getSeconds()).slice(-2);
+          const file = new File([blob], 'voice-' + stamp + '.' + ext, { type: baseType });
+          const dt = new DataTransfer();
+          Array.from(attachInput.files || []).forEach(f => dt.items.add(f));
+          if (dt.items.length >= MAX_ATTACHMENTS) {
+            alert('Max ' + MAX_ATTACHMENTS + ' attachments per message — remove one to add the voice msg.');
+          } else {
+            dt.items.add(file);
+            attachInput.files = dt.files;
+            renderPreview();
+            micStatus.textContent = 'voice msg attached (' + Math.round(blob.size / 1024) + ' KB)';
+          }
+        }
+        if (activeMicStream) {
+          activeMicStream.getTracks().forEach(t => t.stop());
+          activeMicStream = null;
+        }
+        micBtn.classList.remove('recording');
+      });
+      mediaRecorder.start();
+      micBtn.classList.add('recording');
+      micStatus.textContent = 'recording… click 🎤 to stop';
+
+      if (speechRecogSupported()) {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognizer = new SR();
+        recognizer.continuous = true;
+        recognizer.interimResults = true;
+        recognizer.lang = 'en-US';
+        const baseText = (bodyTextarea.value || '').replace(/\s+$/, '');
+        recognizingTranscript = baseText ? baseText + ' ' : '';
+        recognizer.addEventListener('result', (ev) => {
+          let final = '';
+          let interim = '';
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            const t = ev.results[i][0].transcript;
+            if (ev.results[i].isFinal) final += t;
+            else interim += t;
+          }
+          if (final) recognizingTranscript += final + ' ';
+          bodyTextarea.value = (recognizingTranscript + interim).replace(/\s+/g, ' ').trimStart();
+        });
+        recognizer.addEventListener('error', (ev) => {
+          if (ev.error && ev.error !== 'no-speech' && ev.error !== 'aborted') {
+            micStatus.textContent = 'transcribe err: ' + ev.error;
+          }
+        });
+        try { recognizer.start(); } catch (_) { /* already started */ }
+      } else {
+        micStatus.textContent = 'recording… (no live transcript in this browser)';
+      }
+    } catch (e) {
+      alert('Mic access denied or unavailable: ' + (e && e.message || e));
+      micBtn.classList.remove('recording');
+      micStatus.textContent = '';
+      if (activeMicStream) {
+        activeMicStream.getTracks().forEach(t => t.stop());
+        activeMicStream = null;
+      }
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { mediaRecorder.stop(); } catch (_) {}
+    }
+    if (recognizer) {
+      try { recognizer.stop(); } catch (_) {}
+      recognizer = null;
+    }
+  }
+
+  if (micBtn) {
+    micBtn.addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
+  }
+
+  // Stop any active TTS / recording when the user submits or leaves
+  form.addEventListener('submit', () => { stopTts(); stopRecording(); });
+  window.addEventListener('beforeunload', () => { stopTts(); stopRecording(); });
+
   // Initial scroll-to-bottom
   setTimeout(() => bottom.scrollIntoView(), 100);
   // Poll every 4s

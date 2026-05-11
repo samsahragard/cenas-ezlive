@@ -1,0 +1,135 @@
+{# Public install/share page. Sam (2026-05-11) wants a single link he can
+   send so people can install the dashboard as a PWA to their phone. Exempt
+   from the auth gate — anyone with the link sees the instructions. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Install Cenas Kitchen</title>
+<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+<meta name="theme-color" content="#0a0604">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cenas Kitchen">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh; background:#0a0604;
+    color:#f4e7d0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    line-height:1.5; padding:24px 18px; position:relative;
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size: cover; background-position: 50% 65%; background-repeat:no-repeat;
+    filter: blur(8px) brightness(0.55) saturate(1.10);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background: radial-gradient(ellipse at 50% 50%, transparent 0%, rgba(10,6,4,0.35) 80%);
+  }
+  .wrap{ position:relative; z-index:1; max-width:520px; margin:0 auto; padding:8px 0 40px; }
+  .logo{ display:block; max-width:340px; width:100%; height:auto; margin:18px auto 26px;
+         filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)); }
+  h1{ font-size:22px; font-weight:700; text-align:center; letter-spacing:1px; margin-bottom:8px; color:#fff; }
+  .sub{ text-align:center; font-size:13px; opacity:0.75; margin-bottom:24px; letter-spacing:1px; }
+  .platform{
+    background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.10);
+    border-radius:14px; padding:18px 18px 16px; margin-bottom:14px;
+    backdrop-filter: blur(10px);
+  }
+  .platform h2{
+    font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color:#e87a3e; margin-bottom:12px; display:flex; align-items:center; gap:8px;
+  }
+  .platform h2 .ic{ font-size:18px; }
+  .platform ol{ padding-left:20px; }
+  .platform li{ margin-bottom:6px; font-size:14px; }
+  .platform .key{
+    display:inline-block; padding:1px 6px; border-radius:5px;
+    background: rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18);
+    font-size:12px; font-weight:600; color:#fff;
+  }
+  .open-btn{
+    display:block; width:100%; padding:14px; margin: 6px 0 18px;
+    background: linear-gradient(180deg, #e87a3e 0%, #c25517 100%);
+    color:#fff; font-weight:700; font-size:15px; letter-spacing:1px;
+    text-align:center; text-decoration:none; border-radius:12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,210,180,0.4);
+    border:none; cursor:pointer;
+  }
+  .open-btn:active{ transform: translateY(1px); }
+  .open-btn.hidden{ display:none; }
+  .url{
+    text-align:center; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size:13px; color:#f4b48a; padding:8px 12px; background: rgba(0,0,0,0.3);
+    border-radius:8px; margin: 4px 0 22px; word-break: break-all;
+  }
+  .note{ font-size:12px; opacity:0.6; text-align:center; margin-top:12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <img class="logo" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <h1>Install the dashboard</h1>
+    <div class="sub">on your phone home screen</div>
+
+    <button class="open-btn hidden" id="installBtn">Install Cenas Kitchen</button>
+    <div class="url">app.cenaskitchen.com</div>
+
+    <div class="platform" id="ios">
+      <h2><span class="ic">🍎</span>iPhone / iPad (Safari)</h2>
+      <ol>
+        <li>Tap the <strong>Share</strong> button at the bottom of Safari.</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+        <li>Tap <strong>Add</strong> in the top-right.</li>
+        <li>Cenas Kitchen now opens like a regular app from your home screen.</li>
+      </ol>
+    </div>
+
+    <div class="platform" id="android">
+      <h2><span class="ic">🤖</span>Android (Chrome)</h2>
+      <ol>
+        <li>Tap the three-dot menu <span class="key">⋮</span> in the top right of Chrome.</li>
+        <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+        <li>Confirm with <strong>Install</strong>.</li>
+        <li>Open Cenas Kitchen from your home screen — it'll act like a native app.</li>
+      </ol>
+    </div>
+
+    <div class="platform" id="desktop">
+      <h2><span class="ic">💻</span>Desktop (Chrome / Edge)</h2>
+      <ol>
+        <li>Open <strong>app.cenaskitchen.com</strong>.</li>
+        <li>Click the install icon (⊕) on the right side of the address bar.</li>
+        <li>Click <strong>Install</strong> in the prompt.</li>
+      </ol>
+    </div>
+
+    <p class="note">After installing, open Cenas Kitchen from your home screen and sign in with the passcode you've been given.</p>
+  </div>
+
+<script>
+  // beforeinstallprompt is Android Chrome (and desktop Chrome/Edge). iOS Safari
+  // doesn't support it — those users follow the manual instructions above.
+  let deferred = null;
+  const btn = document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferred = e;
+    btn.classList.remove('hidden');
+  });
+  btn.addEventListener('click', async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice;
+    deferred = null;
+    btn.classList.add('hidden');
+  });
+</script>
+</body>
+</html>

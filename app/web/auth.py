@@ -36,6 +36,7 @@ EXEMPT_PREFIXES = (
     "/keypad-login",             # 2026-05-11 keypad auth (migration 13)
     "/keypad-logout",
     "/change-passcode",          # post-keypad-login, before main app
+    "/install",                  # public install/share page (PWA instructions)
 )
 
 
@@ -102,6 +103,15 @@ def partner_login():
             return redirect("/partner/")
         return render_template("partner_login.html", error="Wrong password."), 401
     return render_template("partner_login.html", error=None)
+
+
+@auth.route("/install")
+def install_page():
+    """Public install/share page — no auth required so the link works for
+    fresh visitors. The dashboard is already a PWA (manifest.webmanifest +
+    apple-touch-icon + theme-color all wired in base_dashboard.html), so
+    users just need clear instructions to Add-to-Home-Screen."""
+    return render_template("install.html")
 
 
 @auth.route("/")

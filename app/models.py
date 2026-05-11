@@ -447,6 +447,8 @@ class DeveloperChatAttachment(Base):
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     is_image: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    message: Mapped["DeveloperChatMessage"] = relationship(back_populates="attachments")
+
 
 class WhatsAppMessage(Base):
     """Partner-side mirror of ock's WhatsApp inbox. Populated by the
@@ -482,5 +484,3 @@ class WhatsAppMessage(Base):
     raw_metadata: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     # When EZLive received the message (vs `ts` which is when ock saw it).
     ingested_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-    message: Mapped["DeveloperChatMessage"] = relationship(back_populates="attachments")

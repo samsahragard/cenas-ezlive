@@ -18,7 +18,9 @@ from app.web.corporate_order import corp_order as corp_order_bp
 from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
 from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
 from app.web.ck_whatsapp import ck_whatsapp_bp
+from app.web.team_routes import team_bp
 from app.web import auth as ezauth
+from app.web import keypad_auth as ezkeypad
 from app.services import produce_ingest
 
 
@@ -48,6 +50,7 @@ def create_app():
     app.register_blueprint(ezc_import_bp)
     app.register_blueprint(ezc_live_bp)
     app.register_blueprint(ck_whatsapp_bp)
+    app.register_blueprint(team_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")
@@ -56,6 +59,11 @@ def create_app():
     # before_request hook sees their routes. Webhook + ingest endpoints
     # are exempted inside auth.install().
     ezauth.install(app)
+    # Keypad-auth (migration 13) — new per-person 5-digit passcode flow.
+    # Registers /keypad-login, /change-passcode, /keypad-logout and a
+    # before_request that stashes g.current_user. Must come after ezauth so
+    # its EXEMPT_PREFIXES updates win the path-match race for /keypad-login.
+    ezkeypad.install(app)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop
@@ -232,6 +240,35 @@ def create_app():
                         result.get("inserted", 0), result.get("skipped", 0))
     except Exception:
         logging.getLogger(__name__).exception("produce snapshot bootstrap failed (non-fatal)")
+
+    # Seed Sam as partner with passcode "12345" if no User rows exist
+    # (migration 13 keypad auth). Idempotent: only inserts if the table is
+    # empty, so we don't clobber later edits. Sam's first login forces a
+    # passcode-change via first_login_done=False.
+    try:
+        from app.db import SessionLocal
+        from app.models import User
+        from werkzeug.security import generate_password_hash
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                if db.query(User).count() == 0:
+                    db.add(User(
+                        full_name="Sam Sahragard",
+                        email="sam@cenaskitchen.com",
+                        passcode_hash=generate_password_hash("12345"),
+                        permission_level="partner",
+                        store_scope=None,
+                        first_login_done=False,
+                        active=True,
+                    ))
+                    db.commit()
+                    logging.getLogger(__name__).info(
+                        "users: seeded Sam as partner with bootstrap passcode (first_login_done=False)")
+            finally:
+                db.close()
+    except Exception:
+        logging.getLogger(__name__).exception("users seed failed (non-fatal)")
 
     # Start the IMAP poller for produce vendor pricing. No-op unless
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock

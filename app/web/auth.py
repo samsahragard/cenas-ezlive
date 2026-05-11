@@ -32,6 +32,9 @@ EXEMPT_PREFIXES = (
     "/login",
     "/logout",
     "/partner-login",            # second-factor for Partner — still gated by /login
+    "/keypad-login",             # 2026-05-11 keypad auth (migration 13)
+    "/keypad-logout",
+    "/change-passcode",          # post-keypad-login, before main app
 )
 
 
@@ -46,10 +49,14 @@ def install(app):
         path = request.path or "/"
         if any(path.startswith(p) for p in EXEMPT_PREFIXES):
             return None
-        if session.get("auth_ok"):
+        # 2026-05-11: accept either the new keypad session (session.user_id)
+        # OR the legacy shared-password session (session.auth_ok) so the
+        # chat-tail/post tooling keeps working unchanged.
+        if session.get("user_id") or session.get("auth_ok"):
             return None
-        # Preserve the intended destination so we redirect back after login
-        return redirect(url_for("auth.login", next=path))
+        # Human visitors land on the keypad. Tools that want the legacy
+        # password form can hit /login directly.
+        return redirect(url_for("keypad_auth.login", next=path))
 
 
 @auth.route("/login", methods=["GET", "POST"])

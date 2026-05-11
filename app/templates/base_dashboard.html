@@ -231,6 +231,12 @@
     <a class="nav-link disabled"><span class="nav-icon">🎯</span>Forecasts<span class="nav-soon">soon</span></a>
 
     {% if store_slug == 'partner' %}
+    {# TEAM management — partner-level only. #}
+    <div class="nav-section">Admin</div>
+    <a class="nav-link {% if active == 'partner_team' %}active{% endif %}" href="/partner/team">
+      <span class="nav-icon">👥</span>Team
+    </a>
+
     {# DEVELOPER section — Partner-only. Lets Sam + Claude(s) coordinate via persistent chat. #}
     {% set app_doc_open = active in ['doc_readme','doc_architecture','doc_features','doc_tech_stack','doc_deployment','doc_data_sources','doc_ck_session_2026_05_10'] %}
     {% set ez_dev_open = active in ['dev_ezcater_review'] %}

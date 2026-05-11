@@ -1,0 +1,125 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'partner_team' %}
+{% block title %}Team — Cenas Kitchen{% endblock %}
+{% block page_title %}Partner · Team{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    Add, edit, deactivate, and reset passcodes for everyone with login access.
+    Roles from highest privilege: <strong>partner</strong> &gt; corporate &gt; gm &gt; manager &gt; expo &gt; corporate-driver.
+    Newly added or reset users are forced to change their passcode on first login.
+  </p>
+{% endblock %}
+
+{% block content %}
+{% if success %}
+  <div class="banner banner-success" style="margin-bottom:14px;">{{ success }}</div>
+{% endif %}
+{% if error %}
+  <div class="banner banner-error" style="margin-bottom:14px;">{{ error }}</div>
+{% endif %}
+
+<details style="margin-bottom:18px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:8px 14px;">
+  <summary style="cursor:pointer;font-weight:600;font-size:14px;color:var(--accent-soft);">+ Add new user</summary>
+  <form method="POST" action="{{ url_for('team.team_add') }}"
+        style="display:grid;grid-template-columns:1.4fr 1.4fr 1fr 1fr 1fr 0.8fr auto;gap:8px;margin-top:10px;align-items:center;">
+    <input type="text" name="full_name" placeholder="Full name" required
+           style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
+    <input type="email" name="email" placeholder="email (optional)"
+           style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
+    <input type="tel" name="phone" placeholder="phone (optional)"
+           style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
+    <select name="permission_level" required
+            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
+      {% for l in levels %}<option value="{{ l }}" {% if l == 'manager' %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="store_scope"
+            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
+      <option value="">all stores</option>
+      <option value="tomball">tomball</option>
+      <option value="copperfield">copperfield</option>
+      <option value="both">both</option>
+    </select>
+    <input type="text" name="passcode" placeholder="5-digit" pattern="\d{5}" maxlength="5" required
+           style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;">
+    <button type="submit" class="btn-login" style="padding:6px 14px;">Add</button>
+  </form>
+</details>
+
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Level</th>
+        <th>Store</th>
+        <th>Active</th>
+        <th>Last login</th>
+        <th>Reset passcode</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr {% if not u.active %}style="opacity:0.55;"{% endif %}>
+        <td>
+          <details>
+            <summary style="cursor:pointer;font-weight:600;">{{ u.full_name }}{% if not u.first_login_done %} <span style="font-size:10px;background:#d4af37;color:#0a0604;padding:1px 5px;border-radius:4px;letter-spacing:0.5px;">PASSCODE PENDING</span>{% endif %}</summary>
+            <form method="POST" action="{{ url_for('team.team_edit', user_id=u.id) }}"
+                  style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:6px;margin-top:6px;">
+              <input type="text" name="full_name" value="{{ u.full_name }}" required
+                     style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+              <input type="email" name="email" value="{{ u.email or '' }}" placeholder="email"
+                     style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+              <input type="tel" name="phone" value="{{ u.phone or '' }}" placeholder="phone"
+                     style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+              <select name="permission_level" style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+                {% for l in levels %}<option value="{{ l }}" {% if l == u.permission_level %}selected{% endif %}>{{ l }}</option>{% endfor %}
+              </select>
+              <select name="store_scope" style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+                <option value="" {% if not u.store_scope %}selected{% endif %}>all stores</option>
+                <option value="tomball" {% if u.store_scope == 'tomball' %}selected{% endif %}>tomball</option>
+                <option value="copperfield" {% if u.store_scope == 'copperfield' %}selected{% endif %}>copperfield</option>
+                <option value="both" {% if u.store_scope == 'both' %}selected{% endif %}>both</option>
+              </select>
+              <button type="submit" class="btn-login" style="padding:4px 10px;font-size:11px;">Save</button>
+            </form>
+          </details>
+        </td>
+        <td style="font-size:12px;opacity:0.8;">{{ u.email or '—' }}</td>
+        <td style="font-size:12px;opacity:0.8;">{{ u.phone or '—' }}</td>
+        <td><span style="font-weight:600;">{{ u.permission_level }}</span></td>
+        <td style="font-size:12px;opacity:0.7;">{{ u.store_scope or 'all' }}</td>
+        <td>
+          {% if u.active %}<span style="color:#7bb87b;font-weight:600;">active</span>{% else %}<span style="opacity:0.5;">inactive</span>{% endif %}
+        </td>
+        <td style="font-size:11px;opacity:0.7;">
+          {% if u.last_login_at %}{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}
+        </td>
+        <td>
+          <form method="POST" action="{{ url_for('team.team_reset', user_id=u.id) }}" style="display:flex;gap:4px;">
+            <input type="text" name="passcode" placeholder="new" pattern="\d{5}" maxlength="5" required
+                   style="width:70px;padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;font-size:12px;">
+            <button type="submit" class="btn-logout" style="padding:4px 10px;font-size:11px;">Reset</button>
+          </form>
+        </td>
+        <td>
+          <form method="POST" action="{{ url_for('team.team_toggle', user_id=u.id) }}" style="display:inline;">
+            <button type="submit" class="btn-logout" style="padding:4px 10px;font-size:11px;"
+                    {% if g.current_user and g.current_user.id == u.id %}disabled title="Can't deactivate yourself"{% endif %}>
+              {% if u.active %}Deactivate{% else %}Re-activate{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p style="margin-top:18px;font-size:12px;color:var(--text-3);">
+  Passcodes are 5-digit, salted-hashed (werkzeug). Uniqueness enforced across active users.
+  On <strong>PASSCODE PENDING</strong> rows the user must change their temp passcode on first login.
+</p>
+{% endblock %}

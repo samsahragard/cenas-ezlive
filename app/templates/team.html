@@ -1,6 +1,34 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'partner_team' %}
 {% block title %}Team — Cenas Kitchen{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Force the role <select> + its open options to the dashboard font and
+     a dark, readable surface — by default Chrome on Windows opens the
+     option list in the OS system font on a bright white background which
+     clashes with the dashboard chrome. */
+  select.team-select {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(232,122,62,0.85) 50%),
+                      linear-gradient(135deg, rgba(232,122,62,0.85) 50%, transparent 50%);
+    background-position: calc(100% - 14px) center, calc(100% - 8px) center;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 26px;
+  }
+  select.team-select option {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    background: #1a0e08;
+    color: #f4e7d0;
+    padding: 4px 8px;
+  }
+</style>
+{% endblock %}
+
 {% block page_title %}Partner · Team{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
@@ -28,8 +56,8 @@
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
     <input type="tel" name="phone" placeholder="phone (optional)"
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
-    <select name="role" required
-            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
+    <select name="role" required class="team-select"
+            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:inherit;font-size:13px;">
       {% for value, label, _lvl, _sc in role_options %}<option value="{{ value }}" {% if _lvl == 'manager' and _sc == 'tomball' %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select>
     <input type="text" name="passcode" placeholder="5-digit" pattern="[\d*#@+%\-$]{5}" maxlength="5" required
@@ -66,7 +94,7 @@
                      style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
               <input type="tel" name="phone" value="{{ u.phone or '' }}" placeholder="phone"
                      style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
-              <select name="role" style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+              <select name="role" class="team-select" style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:inherit;font-size:12px;">
                 {% set _cur = role_value_for(u) %}
                 {% for value, label, _lvl, _sc in role_options %}<option value="{{ value }}" {% if value == _cur %}selected{% endif %}>{{ label }}</option>{% endfor %}
               </select>

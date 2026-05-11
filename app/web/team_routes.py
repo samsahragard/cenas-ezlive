@@ -31,12 +31,12 @@ PASSCODE_RE = re.compile(r"^[\d*#@+%\-$]{5}$")
 ROLE_OPTIONS = [
     ("partner|",              "Partner",              "partner",          None),
     ("corporate|",            "Corporate",            "corporate",        None),
-    ("gm|tomball",            "GM — Tomball",         "gm",               "tomball"),
-    ("gm|copperfield",        "GM — Copperfield",     "gm",               "copperfield"),
-    ("manager|tomball",       "Manager — Tomball",    "manager",          "tomball"),
-    ("manager|copperfield",   "Manager — Copperfield","manager",          "copperfield"),
-    ("expo|tomball",          "Expo — Tomball",       "expo",             "tomball"),
-    ("expo|copperfield",      "Expo — Copperfield",   "expo",             "copperfield"),
+    ("gm|tomball",            "GM Tomball",           "gm",               "tomball"),
+    ("gm|copperfield",        "GM Copperfield",       "gm",               "copperfield"),
+    ("manager|tomball",       "Manager Tomball",      "manager",          "tomball"),
+    ("manager|copperfield",   "Manager Copperfield",  "manager",          "copperfield"),
+    ("expo|tomball",          "Expo Tomball",         "expo",             "tomball"),
+    ("expo|copperfield",      "Expo Copperfield",     "expo",             "copperfield"),
     ("corporate-driver|",     "Corporate Driver",     "corporate-driver", None),
 ]
 _OPTION_TO_LEVEL_SCOPE = {opt: (lvl, sc) for opt, _label, lvl, sc in ROLE_OPTIONS}

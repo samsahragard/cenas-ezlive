@@ -711,6 +711,15 @@ def ingest_state():
         "approved_senders_exists": approved_path.exists(),
         "approved_senders": _read_json(approved_path, {}) if approved_path.exists() else None,
     }
+    # Optional: dump a vendor json (alvarado/jluna) or canonical_items
+    if request.args.get("dump_vendor"):
+        v = request.args["dump_vendor"]
+        if v == "canonical":
+            cp = config_dir / "canonical_items.json"
+            out["canonical_items"] = _read_json(cp, {}) if cp.exists() else None
+        else:
+            vp = state_dir / f"{v}.json"
+            out[f"{v}.json"] = _read_json(vp, {}) if vp.exists() else None
     if request.args.get("reset_last_seen"):
         try:
             new_val = int(request.args.get("reset_last_seen"))

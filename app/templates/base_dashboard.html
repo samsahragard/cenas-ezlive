@@ -107,11 +107,22 @@
   <aside class="sidebar">
     <div class="brand"><div class="brand-mark"></div></div>
 
-    {# Store switcher — back to picker #}
+    {# Store switcher — only shown for users with >1 store assignment.
+       Currently the User model is single-permission so this is hidden for all
+       keypad-logged-in users; when aick ships multi-role assignment the
+       template can flip on len(session.store_scopes) > 1 (or whatever shape
+       lands). Legacy shared-password sessions (no user_id) still see it for
+       backwards-compat with the chat-tail/post tooling. #}
+    {% if not session.get('user_id') %}
     <a class="store-switcher" href="/" title="Switch store">
       <div class="store-switcher-label">{{ store_label }}</div>
       <div class="store-switcher-sub">switch store ↗</div>
     </a>
+    {% else %}
+    <div class="store-switcher" style="cursor:default;" title="Your assigned location">
+      <div class="store-switcher-label">{{ store_label }}</div>
+    </div>
+    {% endif %}
 
     <div class="nav-section">Today</div>
     <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/{{ store_slug }}/">

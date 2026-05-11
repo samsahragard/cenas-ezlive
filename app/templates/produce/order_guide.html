@@ -118,7 +118,7 @@
 
 {% if unavailable %}
 <details class="unavailable-section">
-  <summary>{{ unavailable|length }} canonical items not currently available from either vendor</summary>
+  <summary>{{ unavailable|length }} items missing from the latest vendor price lists (still always available — just no current quote)</summary>
   <ul>
     {% for it in unavailable %}<li>{{ it.canonical_name }} ({{ it.canonical_size }})</li>{% endfor %}
   </ul>

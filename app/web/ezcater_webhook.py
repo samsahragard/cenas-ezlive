@@ -247,35 +247,6 @@ def _assign_courier(delivery_uuid: str, courier: dict) -> tuple[bool, str]:
     return True, ""
 
 
-def _unassign_courier(delivery_uuid: str, courier_id: str) -> tuple[bool, str]:
-    """Returns (ok, error_msg). Mirrors _assign_courier — calls courierUnassign
-    on the delivery's currently-assigned courier so the ezCater portal driver
-    field opens up. Used right after _assign_courier in the webhook flow so
-    managers don't have to manually click "Unassign Courier" in the kitchen
-    UI before going to the ezCater portal to set the real driver."""
-    res = _ez_gql("""
-    mutation Unassign($input: CourierUnassignInput!) {
-      courierUnassign(input: $input) {
-        delivery { id }
-        userErrors {
-          __typename
-          ... on UserError { message }
-        }
-      }
-    }
-    """, {"input": {"deliveryId": delivery_uuid, "courierId": courier_id}})
-    if "_http_error" in res:
-        return False, f"HTTP {res['_http_error']}: {res.get('_body', '')[:120]}"
-    if "errors" in res:
-        return False, "; ".join(e.get("message", "?") for e in res["errors"])[:200]
-    payload = (res.get("data") or {}).get("courierUnassign") or {}
-    user_errors = payload.get("userErrors") or []
-    if user_errors:
-        msgs = [e.get("message", "?") for e in user_errors if isinstance(e, dict)]
-        return False, "; ".join(msgs)[:200]
-    return True, ""
-
-
 def _ingest_into_ezlive(raw_order_payload: dict) -> tuple[bool, dict]:
     """POST to local /orders/ingest_structured. Returns (ok, response_dict)."""
     try:
@@ -510,26 +481,11 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     exception_flag = bool(dist and dist.get("exception"))
 
     # Step 3: assign courier (skip if delivery_uuid was missing — handled below)
-    # Then immediately unassign so the ezCater portal driver field is open
-    # for the manager to set the real driver, eliminating the manual unhook.
     if delivery_missing:
         assign_ok = False
         assign_err = "skipped — ezCater hadn't populated deliveryId after 3 retries"
-        unassign_ok = False
-        unassign_err = "skipped (assign skipped)"
     else:
         assign_ok, assign_err = _assign_courier(delivery_uuid, driver)
-        if assign_ok:
-            unassign_ok, unassign_err = _unassign_courier(delivery_uuid, driver["id"])
-            if not unassign_ok:
-                logger.warning("auto-unassign failed for %s: %s — manager will need to click Unassign Courier manually",
-                               delivery_uuid[:8], unassign_err[:200])
-            else:
-                logger.info("auto-unassigned %s from delivery %s — portal driver field is open",
-                            driver["id"], delivery_uuid[:8])
-        else:
-            unassign_ok = False
-            unassign_err = "skipped (assign failed)"
 
     # Step 4: ingest into EZLive
     raw_order = map_to_raw_order(api_order)

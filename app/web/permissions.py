@@ -41,7 +41,9 @@ def current_user_id() -> int | None:
 
 def load_current_user():
     """Stash the current User on g.current_user (or None if no session).
-    Cheap to call in before_request; SQLAlchemy session is closed after."""
+    Force-logs-out the session if the user is inactive OR if their
+    session_version has been bumped since login (passcode reset / admin
+    deactivate)."""
     from app.db import SessionLocal
     from app.models import User
 
@@ -52,8 +54,17 @@ def load_current_user():
     db = SessionLocal()
     try:
         u = db.query(User).filter(User.id == uid).first()
-        g.current_user = u if (u and u.active) else None
-        return g.current_user
+        if (u is None or not u.active
+                or session.get("user_session_version") != u.session_version):
+            # Stale or revoked session — clear it.
+            session.pop("user_id", None)
+            session.pop("user_session_version", None)
+            session.pop("auth_ok", None)
+            session.pop("partner_auth_ok", None)
+            g.current_user = None
+            return None
+        g.current_user = u
+        return u
     finally:
         db.close()
 

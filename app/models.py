@@ -427,6 +427,11 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_login_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Bumped on passcode reset / deactivation to force-invalidate all live
+    # sessions for this user. Sessions stamp this value at login; each request
+    # re-checks it and signs the user out on mismatch.
+    session_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
 
 class DeveloperChatAttachment(Base):
     """Files attached to a Developer Chat message. Up to 5 per message,

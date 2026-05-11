@@ -166,6 +166,10 @@ def login_submit():
 
         session.permanent = True
         session["user_id"] = u.id
+        # Stamp the session with the user's current version. Any later
+        # passcode reset or deactivation bumps User.session_version, which
+        # makes load_current_user kick stale sessions on the next request.
+        session["user_session_version"] = u.session_version
         # Legacy shims so partner-gated routes keep working under the new auth.
         session["auth_ok"] = True
         if u.permission_level in ("partner", "corporate"):

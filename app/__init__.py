@@ -241,6 +241,23 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("produce snapshot bootstrap failed (non-fatal)")
 
+    # Idempotent column backfill for users.session_version (added 2026-05-11
+    # for the force-logout-on-reset feature). create_all only creates missing
+    # tables — adding a column on an existing one requires this ALTER.
+    try:
+        from sqlalchemy import inspect as _sa_inspect3, text as _sa_text3
+        from app.db import engine as _eng3
+        if _eng3 is not None:
+            insp = _sa_inspect3(_eng3)
+            if "users" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("users")}
+                if "session_version" not in existing:
+                    with _eng3.begin() as conn:
+                        conn.execute(_sa_text3("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1"))
+                    logging.getLogger(__name__).info("users: backfilled session_version column")
+    except Exception:
+        logging.getLogger(__name__).exception("users.session_version backfill failed (non-fatal)")
+
     # Seed Sam as partner with passcode "12345" if no User rows exist
     # (migration 13 keypad auth). Idempotent: only inserts if the table is
     # empty, so we don't clobber later edits. Sam's first login forces a

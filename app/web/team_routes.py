@@ -25,6 +25,33 @@ team_bp = Blueprint("team", __name__)
 
 PASSCODE_RE = re.compile(r"^[\d*#@+%\-$]{5}$")
 
+# UI dropdown collapses level + store into one. Format: "<level>|<store>".
+# Sam (2026-05-11): the GM/Manager/Expo options should say "GM Copperfield"
+# etc. so it's obvious the access is location-specific.
+ROLE_OPTIONS = [
+    ("partner|",              "Partner",              "partner",          None),
+    ("corporate|",            "Corporate",            "corporate",        None),
+    ("gm|tomball",            "GM — Tomball",         "gm",               "tomball"),
+    ("gm|copperfield",        "GM — Copperfield",     "gm",               "copperfield"),
+    ("manager|tomball",       "Manager — Tomball",    "manager",          "tomball"),
+    ("manager|copperfield",   "Manager — Copperfield","manager",          "copperfield"),
+    ("expo|tomball",          "Expo — Tomball",       "expo",             "tomball"),
+    ("expo|copperfield",      "Expo — Copperfield",   "expo",             "copperfield"),
+    ("corporate-driver|",     "Corporate Driver",     "corporate-driver", None),
+]
+_OPTION_TO_LEVEL_SCOPE = {opt: (lvl, sc) for opt, _label, lvl, sc in ROLE_OPTIONS}
+
+
+def _parse_role(role_value: str) -> tuple[str | None, str | None]:
+    """Return (level, store_scope) from a 'level|scope' dropdown value, or
+    (None, None) if invalid. Plain 'partner' / 'corporate' use empty scope."""
+    return _OPTION_TO_LEVEL_SCOPE.get((role_value or "").strip(), (None, None))
+
+
+def _role_value_for(u) -> str:
+    """Build the 'level|scope' string a user's current row corresponds to."""
+    return f"{u.permission_level}|{u.store_scope or ''}"
+
 
 def _norm_phone(s: str | None) -> str | None:
     if not s:
@@ -63,7 +90,8 @@ def team_page():
         return render_template(
             "team.html",
             users=users,
-            levels=LEVELS,
+            role_options=ROLE_OPTIONS,
+            role_value_for=_role_value_for,
             success=request.args.get("success"),
             error=request.args.get("error"),
         )
@@ -77,14 +105,14 @@ def team_add():
     full_name = (request.form.get("full_name") or "").strip()
     email = (request.form.get("email") or "").strip() or None
     phone = _norm_phone(request.form.get("phone"))
-    level = (request.form.get("permission_level") or "manager").strip()
-    store_scope = (request.form.get("store_scope") or "").strip() or None
+    role = (request.form.get("role") or "").strip()
+    level, store_scope = _parse_role(role)
     passcode = (request.form.get("passcode") or "").strip()
 
     if not full_name:
         return redirect(url_for("team.team_page", error="Full name is required."))
-    if level not in LEVELS:
-        return redirect(url_for("team.team_page", error=f"Invalid level: {level}"))
+    if level is None:
+        return redirect(url_for("team.team_page", error=f"Invalid role: {role!r}"))
     if not PASSCODE_RE.match(passcode):
         return redirect(url_for("team.team_page",
                                 error="Passcode must be exactly 5 characters (digits or * # @ + % - $)."))
@@ -138,9 +166,12 @@ def team_reset(user_id: int):
         u.first_login_done = False
         u.failed_attempts = 0
         u.lockout_until = None
+        # Bump session_version so any active session for this user is
+        # force-logged-out on its next request.
+        u.session_version = (u.session_version or 1) + 1
         db.commit()
         return redirect(url_for("team.team_page",
-                                success=f"Reset {u.full_name}'s passcode to {passcode}. They'll be forced to change it on next login."))
+                                success=f"Reset {u.full_name}'s passcode to {passcode}. They were logged out everywhere and will be forced to change it on next login."))
     finally:
         db.close()
 
@@ -157,9 +188,12 @@ def team_toggle(user_id: int):
             return redirect(url_for("team.team_page",
                                     error="You can't deactivate yourself."))
         u.active = not u.active
+        # Bump version so an active session is invalidated immediately.
+        u.session_version = (u.session_version or 1) + 1
         db.commit()
         state = "activated" if u.active else "deactivated"
-        return redirect(url_for("team.team_page", success=f"{u.full_name} {state}."))
+        return redirect(url_for("team.team_page",
+                                success=f"{u.full_name} {state}{' (logged out everywhere)' if not u.active else ''}."))
     finally:
         db.close()
 
@@ -170,13 +204,13 @@ def team_edit(user_id: int):
     full_name = (request.form.get("full_name") or "").strip()
     email = (request.form.get("email") or "").strip() or None
     phone = _norm_phone(request.form.get("phone"))
-    level = (request.form.get("permission_level") or "manager").strip()
-    store_scope = (request.form.get("store_scope") or "").strip() or None
+    role = (request.form.get("role") or "").strip()
+    level, store_scope = _parse_role(role)
 
     if not full_name:
         return redirect(url_for("team.team_page", error="Full name is required."))
-    if level not in LEVELS:
-        return redirect(url_for("team.team_page", error=f"Invalid level: {level}"))
+    if level is None:
+        return redirect(url_for("team.team_page", error=f"Invalid role: {role!r}"))
 
     db = SessionLocal()
     try:
@@ -190,12 +224,19 @@ def team_edit(user_id: int):
             if db.query(User).filter(User.phone == phone, User.id != u.id).first():
                 return redirect(url_for("team.team_page", error=f"Phone {phone} already in use."))
 
+        role_changed = (u.permission_level != level or (u.store_scope or "") != (store_scope or ""))
         u.full_name = full_name
         u.email = email
         u.phone = phone
         u.permission_level = level
         u.store_scope = store_scope
+        # Force-logout the user if their role moved — their authority just
+        # changed and their existing session may have stale partner_auth_ok
+        # or store_scope state.
+        if role_changed:
+            u.session_version = (u.session_version or 1) + 1
         db.commit()
-        return redirect(url_for("team.team_page", success=f"Updated {full_name}."))
+        suffix = " (logged out everywhere)" if role_changed else ""
+        return redirect(url_for("team.team_page", success=f"Updated {full_name}.{suffix}"))
     finally:
         db.close()

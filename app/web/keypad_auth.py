@@ -36,13 +36,43 @@ log = logging.getLogger(__name__)
 keypad_auth = Blueprint("keypad_auth", __name__)
 
 PASSCODE_LEN = 5
-PASSCODE_RE = re.compile(rf"^\d{{{PASSCODE_LEN}}}$")
+# Digits + the special keys on the pad: * # @ + % - $
+PASSCODE_RE = re.compile(rf"^[\d*#@+%\-$]{{{PASSCODE_LEN}}}$")
 MAX_FAILED_ATTEMPTS = 6
 LOCKOUT_MINUTES = 10
 
 
 def _valid_passcode(s: str) -> bool:
     return bool(s and PASSCODE_RE.match(s))
+
+
+# Store slug each scope maps to in store_routes.STORE_TO_LOCATION:
+#   'tomball'     -> 'dos'         (DOS MAS)
+#   'copperfield' -> 'uno'         (UNO MAS)
+#   'both' / NULL -> 'corporate'   (everyone for corporate; partners get partner)
+def _landing_for_user(u) -> str:
+    """Default landing page after a successful login — based on role + store.
+    Sam's 2026-05-11 spec: each role goes straight to their authorized scope
+    instead of the shared /  store picker."""
+    level = u.permission_level
+    scope = (u.store_scope or "").lower()
+    if level == "partner":
+        return "/partner/"
+    if level == "corporate":
+        return "/corporate/"
+    if level in ("gm", "manager", "expo"):
+        if scope == "tomball":
+            return "/dos/"
+        if scope == "copperfield":
+            return "/uno/"
+        if scope == "both":
+            return "/corporate/"
+        # No store assigned — fall back to the picker.
+        return "/"
+    if level == "corporate-driver":
+        # Drivers get their own portal (driver_routes.driver_portal_redirect).
+        return "/driver/portal"
+    return "/"
 
 
 def _find_user_by_passcode(db, passcode: str) -> User | None:
@@ -101,7 +131,7 @@ def login_submit():
     data = request.get_json(silent=True) or {}
     passcode = (data.get("passcode") or "").strip()
     if not _valid_passcode(passcode):
-        return jsonify({"ok": False, "error": "Passcode must be exactly 5 digits."}), 400
+        return jsonify({"ok": False, "error": "Passcode must be exactly 5 characters (digits or * # @ + % - $)."}), 400
 
     nxt = (data.get("next") or "/").strip()
     if not nxt.startswith("/"):
@@ -128,6 +158,9 @@ def login_submit():
 
         if not u.first_login_done:
             return jsonify({"ok": True, "next": url_for("keypad_auth.change_passcode")})
+        # Bare-login (no specific destination requested) routes by role.
+        if nxt == "/":
+            nxt = _landing_for_user(u)
         return jsonify({"ok": True, "next": nxt})
     finally:
         db.close()
@@ -164,7 +197,7 @@ def change_passcode_submit():
     data = request.get_json(silent=True) or {}
     new = (data.get("new") or "").strip()
     if not _valid_passcode(new):
-        return jsonify({"ok": False, "error": "New passcode must be exactly 5 digits."}), 400
+        return jsonify({"ok": False, "error": "New passcode must be exactly 5 characters (digits or * # @ + % - $)."}), 400
 
     db = SessionLocal()
     try:
@@ -181,7 +214,8 @@ def change_passcode_submit():
         u.passcode_hash = generate_password_hash(new)
         u.first_login_done = True
         db.commit()
-        return jsonify({"ok": True, "next": url_for("auth.store_picker")})
+        # Route by role straight into their default landing page.
+        return jsonify({"ok": True, "next": _landing_for_user(u)})
     finally:
         db.close()
 

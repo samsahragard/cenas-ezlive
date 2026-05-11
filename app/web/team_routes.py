@@ -23,7 +23,7 @@ from app.web.permissions import LEVELS, require_level
 
 team_bp = Blueprint("team", __name__)
 
-PASSCODE_RE = re.compile(r"^\d{5}$")
+PASSCODE_RE = re.compile(r"^[\d*#@+%\-$]{5}$")
 
 
 def _norm_phone(s: str | None) -> str | None:
@@ -86,7 +86,8 @@ def team_add():
     if level not in LEVELS:
         return redirect(url_for("team.team_page", error=f"Invalid level: {level}"))
     if not PASSCODE_RE.match(passcode):
-        return redirect(url_for("team.team_page", error="Passcode must be exactly 5 digits."))
+        return redirect(url_for("team.team_page",
+                                error="Passcode must be exactly 5 characters (digits or * # @ + % - $)."))
 
     db = SessionLocal()
     try:
@@ -123,7 +124,8 @@ def team_add():
 def team_reset(user_id: int):
     passcode = (request.form.get("passcode") or "").strip()
     if not PASSCODE_RE.match(passcode):
-        return redirect(url_for("team.team_page", error="Passcode must be exactly 5 digits."))
+        return redirect(url_for("team.team_page",
+                                error="Passcode must be exactly 5 characters (digits or * # @ + % - $)."))
     db = SessionLocal()
     try:
         u = db.query(User).filter(User.id == user_id).first()

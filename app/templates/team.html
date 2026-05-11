@@ -39,7 +39,7 @@
       <option value="copperfield">copperfield</option>
       <option value="both">both</option>
     </select>
-    <input type="text" name="passcode" placeholder="5-digit" pattern="\d{5}" maxlength="5" required
+    <input type="text" name="passcode" placeholder="5-digit" pattern="[\d*#@+%\-$]{5}" maxlength="5" required
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;">
     <button type="submit" class="btn-login" style="padding:6px 14px;">Add</button>
   </form>
@@ -99,7 +99,7 @@
         </td>
         <td>
           <form method="POST" action="{{ url_for('team.team_reset', user_id=u.id) }}" style="display:flex;gap:4px;">
-            <input type="text" name="passcode" placeholder="new" pattern="\d{5}" maxlength="5" required
+            <input type="text" name="passcode" placeholder="new" pattern="[\d*#@+%\-$]{5}" maxlength="5" required
                    style="width:70px;padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;font-size:12px;">
             <button type="submit" class="btn-logout" style="padding:4px 10px;font-size:11px;">Reset</button>
           </form>

@@ -310,10 +310,9 @@
       const v = key.dataset.val;
       if (v === 'BACK'){
         passcode = passcode.slice(0, -1);
-      } else if (passcode.length < PASSCODE_LENGTH && /^\d$/.test(v)){
+      } else if (passcode.length < PASSCODE_LENGTH && /^[\d*#@+%\-$]$/.test(v)){
         passcode += v;
-      } else if (passcode.length < PASSCODE_LENGTH){
-        // Non-digit special key on the login screen — ignore.
+      } else {
         return;
       }
       renderDots();

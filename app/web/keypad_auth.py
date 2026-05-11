@@ -162,8 +162,14 @@ def login_submit():
         session["user_session_version"] = u.session_version
         # Legacy shims so partner-gated routes keep working under the new auth.
         session["auth_ok"] = True
-        if u.permission_level in ("partner", "corporate"):
+        # Sam (2026-05-11): only partner gets the partner_auth_ok flag — that
+        # unlocks /partner/team (Admin) and /partner/developer/* (Chat,
+        # Ezcater Review, App docs). Corporate sees the same operational
+        # dashboards as partner but NOT those owner-private sections.
+        if u.permission_level == "partner":
             session["partner_auth_ok"] = True
+        else:
+            session.pop("partner_auth_ok", None)
 
         if not u.first_login_done:
             return jsonify({"ok": True, "next": url_for("keypad_auth.change_passcode")})

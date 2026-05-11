@@ -107,17 +107,30 @@
   <aside class="sidebar">
     <div class="brand"><div class="brand-mark"></div></div>
 
-    {# Store switcher — only shown for users with >1 store assignment.
-       Currently the User model is single-permission so this is hidden for all
-       keypad-logged-in users; when aick ships multi-role assignment the
-       template can flip on len(session.store_scopes) > 1 (or whatever shape
-       lands). Legacy shared-password sessions (no user_id) still see it for
-       backwards-compat with the chat-tail/post tooling. #}
+    {# Store switcher — visible only when the user has access to >1 store.
+       Legacy shared-password sessions (no user_id) keep the link for tool
+       compat. Multi-store keypad users get a dropdown listing their
+       assigned stores; single-store users see just the label. #}
+    {% set _accessible = current_user_stores() %}
     {% if not session.get('user_id') %}
     <a class="store-switcher" href="/" title="Switch store">
       <div class="store-switcher-label">{{ store_label }}</div>
       <div class="store-switcher-sub">switch store ↗</div>
     </a>
+    {% elif _accessible|length > 1 %}
+    <div class="store-switcher" style="position:relative;" title="Switch store">
+      <details style="cursor:pointer;">
+        <summary style="list-style:none;outline:none;">
+          <div class="store-switcher-label">{{ store_label }}</div>
+          <div class="store-switcher-sub">switch store ↗</div>
+        </summary>
+        <div style="position:absolute;top:100%;left:14px;right:14px;background:rgba(20,12,8,0.97);border:1px solid var(--glass-border);border-radius:8px;padding:6px;margin-top:4px;z-index:50;backdrop-filter:blur(10px);">
+          {% for slug, label in _accessible %}
+            <a class="nav-link" href="/{{ slug }}/" style="padding:6px 10px;border-radius:6px;{% if slug == store_slug %}background:rgba(232,122,62,0.18);{% endif %}">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
     {% else %}
     <div class="store-switcher" style="cursor:default;" title="Your assigned location">
       <div class="store-switcher-label">{{ store_label }}</div>

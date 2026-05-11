@@ -26,7 +26,23 @@
     color: #f4e7d0;
     padding: 4px 8px;
   }
+  .store-checks.is-disabled { opacity: 0.35; pointer-events: none; }
 </style>
+<script>
+  // Disable the store checkboxes when the selected role doesn't use stores
+  // (partner / corporate / corporate-driver). Re-evaluated on change.
+  const STORE_SCOPED = new Set(['gm', 'manager', 'expo']);
+  function syncStoreChecks(){
+    document.querySelectorAll('[data-role-select]').forEach(sel => {
+      const stores = sel.closest('form').querySelector('.store-checks');
+      if (!stores) return;
+      if (STORE_SCOPED.has(sel.value)) stores.classList.remove('is-disabled');
+      else stores.classList.add('is-disabled');
+    });
+  }
+  document.addEventListener('change', e => { if (e.target.matches('[data-role-select]')) syncStoreChecks(); });
+  document.addEventListener('DOMContentLoaded', syncStoreChecks);
+</script>
 {% endblock %}
 
 {% block page_title %}Partner · Team{% endblock %}
@@ -49,17 +65,24 @@
 <details style="margin-bottom:18px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:8px 14px;">
   <summary style="cursor:pointer;font-weight:600;font-size:14px;color:var(--accent-soft);">+ Add new user</summary>
   <form method="POST" action="{{ url_for('team.team_add') }}"
-        style="display:grid;grid-template-columns:1.4fr 1.4fr 1fr 1.4fr 0.8fr auto;gap:8px;margin-top:10px;align-items:center;">
+        style="display:grid;grid-template-columns:1.3fr 1.3fr 1fr 1.1fr 1.1fr 0.8fr auto;gap:8px;margin-top:10px;align-items:center;">
     <input type="text" name="full_name" placeholder="Full name" required
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
     <input type="email" name="email" placeholder="email (optional)"
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
     <input type="tel" name="phone" placeholder="phone (optional)"
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
-    <select name="role" required class="team-select"
+    <select name="permission_level" required class="team-select" data-role-select
             style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:inherit;font-size:13px;">
-      {% for value, label, _lvl, _sc in role_options %}<option value="{{ value }}" {% if _lvl == 'manager' and _sc == 'tomball' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      {% for value, label in level_options %}<option value="{{ value }}" {% if value == 'manager' %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select>
+    <div class="store-checks" style="display:flex;flex-direction:column;gap:2px;font-size:12px;">
+      {% for value, label in store_options %}
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+        <input type="checkbox" name="stores" value="{{ value }}" {% if value == 'tomball' %}checked{% endif %}> {{ label }}
+      </label>
+      {% endfor %}
+    </div>
     <input type="text" name="passcode" placeholder="5-digit" pattern="[\d*#@+%\-$]{5}" maxlength="5" required
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;">
     <button type="submit" class="btn-login" style="padding:6px 14px;">Add</button>
@@ -87,17 +110,24 @@
           <details>
             <summary style="cursor:pointer;font-weight:600;">{{ u.full_name }}{% if not u.first_login_done %} <span style="font-size:10px;background:#d4af37;color:#0a0604;padding:1px 5px;border-radius:4px;letter-spacing:0.5px;">PASSCODE PENDING</span>{% endif %}</summary>
             <form method="POST" action="{{ url_for('team.team_edit', user_id=u.id) }}"
-                  style="display:grid;grid-template-columns:1fr 1fr 1fr 1.3fr auto;gap:6px;margin-top:6px;">
+                  style="display:grid;grid-template-columns:1fr 1fr 1fr 0.9fr 0.9fr auto;gap:6px;margin-top:6px;">
               <input type="text" name="full_name" value="{{ u.full_name }}" required
                      style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
               <input type="email" name="email" value="{{ u.email or '' }}" placeholder="email"
                      style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
               <input type="tel" name="phone" value="{{ u.phone or '' }}" placeholder="phone"
                      style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
-              <select name="role" class="team-select" style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:inherit;font-size:12px;">
-                {% set _cur = role_value_for(u) %}
-                {% for value, label, _lvl, _sc in role_options %}<option value="{{ value }}" {% if value == _cur %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              <select name="permission_level" class="team-select" data-role-select style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:inherit;font-size:12px;">
+                {% for value, label in level_options %}<option value="{{ value }}" {% if value == u.permission_level %}selected{% endif %}>{{ label }}</option>{% endfor %}
               </select>
+              {% set _user_stores = user_stores_set(u) %}
+              <div class="store-checks" style="display:flex;flex-direction:column;gap:1px;font-size:11px;">
+                {% for value, label in store_options %}
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                  <input type="checkbox" name="stores" value="{{ value }}" {% if value in _user_stores %}checked{% endif %}> {{ label }}
+                </label>
+                {% endfor %}
+              </div>
               <button type="submit" class="btn-login" style="padding:4px 10px;font-size:11px;">Save</button>
             </form>
           </details>
@@ -106,7 +136,7 @@
         <td style="font-size:12px;opacity:0.8;">{{ u.phone or '—' }}</td>
         <td>
           <span style="font-weight:600;">{{ u.permission_level }}</span>
-          {% if u.store_scope %}<br><span style="font-size:11px;opacity:0.7;">{{ u.store_scope }}</span>{% endif %}
+          {% if u.store_scope %}<br><span style="font-size:11px;opacity:0.7;">{{ u.store_scope.replace(',', ' + ') }}</span>{% endif %}
         </td>
         <td>
           {% if u.active %}<span style="color:#7bb87b;font-weight:600;">active</span>{% else %}<span style="opacity:0.5;">inactive</span>{% endif %}

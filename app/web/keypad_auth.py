@@ -53,26 +53,16 @@ def _valid_passcode(s: str) -> bool:
 def _landing_for_user(u) -> str:
     """Default landing page after a successful login — based on role + store.
     Sam's 2026-05-11 spec: each role goes straight to their authorized scope
-    instead of the shared /  store picker."""
-    level = u.permission_level
-    scope = (u.store_scope or "").lower()
-    if level == "partner":
-        return "/partner/"
-    if level == "corporate":
-        return "/corporate/"
-    if level in ("gm", "manager", "expo"):
-        if scope == "tomball":
-            return "/dos/"
-        if scope == "copperfield":
-            return "/uno/"
-        if scope == "both":
-            return "/corporate/"
-        # No store assigned — fall back to the picker.
-        return "/"
-    if level == "corporate-driver":
-        # Drivers get their own portal (driver_routes.driver_portal_redirect).
+    instead of the shared /  store picker. Multi-store users land on the
+    first store in their list; the sidebar lets them switch."""
+    from app.web.permissions import accessible_store_slugs
+
+    if u.permission_level == "corporate-driver":
         return "/driver/portal"
-    return "/"
+    slugs = accessible_store_slugs(u)
+    if not slugs:
+        return "/"
+    return f"/{slugs[0]}/"
 
 
 def _find_user_by_passcode(db, passcode: str) -> User | None:
@@ -249,7 +239,9 @@ def logout():
 
 def install(app):
     """Register the blueprint and the load-current-user before_request hook."""
-    from app.web.permissions import load_current_user
+    from app.web.permissions import (
+        accessible_store_slugs, load_current_user,
+    )
 
     app.register_blueprint(keypad_auth)
 
@@ -260,4 +252,15 @@ def install(app):
             load_current_user()
         else:
             g.current_user = None
+
+    # The sidebar (base_dashboard.html) calls current_user_stores() to decide
+    # whether to render the switch-store dropdown. Lift it into the Jinja
+    # globals so templates don't need to import anything.
+    from app.web.store_routes import STORE_LABELS
+
+    def _current_user_stores():
+        slugs = accessible_store_slugs(getattr(g, "current_user", None))
+        return [(s, STORE_LABELS.get(s, s.title())) for s in slugs]
+
+    app.jinja_env.globals["current_user_stores"] = _current_user_stores
 

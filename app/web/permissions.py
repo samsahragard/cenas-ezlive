@@ -19,6 +19,38 @@ from flask import g, redirect, request, session, url_for
 LEVELS = ("partner", "corporate", "gm", "manager", "expo", "corporate-driver")
 _LEVEL_IDX = {name: i for i, name in enumerate(LEVELS)}
 
+# Levels that are scoped to one or more stores (vs everywhere).
+STORE_SCOPED_LEVELS = ("gm", "manager", "expo")
+
+# Maps the User.store_scope CSV value to the store_slug each scope owns.
+SCOPE_TO_SLUG = {
+    "tomball":     "dos",
+    "copperfield": "uno",
+}
+
+
+def accessible_store_slugs(user) -> list[str]:
+    """Return the store slugs ('dos' / 'uno' / 'corporate' / 'partner') this
+    user can access. Partner and corporate see everything via their own
+    slug; store-scoped roles (gm/manager/expo) get one entry per assigned
+    store. Order is stable so the sidebar dropdown is consistent."""
+    if user is None:
+        return []
+    level = user.permission_level
+    if level == "partner":
+        return ["partner"]
+    if level == "corporate":
+        return ["corporate"]
+    if level == "corporate-driver":
+        return []
+    # gm / manager / expo: split the CSV store_scope into slugs.
+    out: list[str] = []
+    for scope in (user.store_scope or "").split(","):
+        slug = SCOPE_TO_SLUG.get(scope.strip())
+        if slug and slug not in out:
+            out.append(slug)
+    return out
+
 
 def level_rank(level: str | None) -> int:
     """Lower number = higher privilege. Unknown levels rank last."""

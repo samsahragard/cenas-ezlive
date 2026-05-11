@@ -19,38 +19,47 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
 from app.models import User
-from app.web.permissions import LEVELS, require_level
+from app.web.permissions import LEVELS, STORE_SCOPED_LEVELS, require_level
 
 team_bp = Blueprint("team", __name__)
 
 PASSCODE_RE = re.compile(r"^[\d*#@+%\-$]{5}$")
 
-# UI dropdown collapses level + store into one. Format: "<level>|<store>".
-# Sam (2026-05-11): the GM/Manager/Expo options should say "GM Copperfield"
-# etc. so it's obvious the access is location-specific.
-ROLE_OPTIONS = [
-    ("partner|",              "Partner",              "partner",          None),
-    ("corporate|",            "Corporate",            "corporate",        None),
-    ("gm|tomball",            "GM Tomball",           "gm",               "tomball"),
-    ("gm|copperfield",        "GM Copperfield",       "gm",               "copperfield"),
-    ("manager|tomball",       "Manager Tomball",      "manager",          "tomball"),
-    ("manager|copperfield",   "Manager Copperfield",  "manager",          "copperfield"),
-    ("expo|tomball",          "Expo Tomball",         "expo",             "tomball"),
-    ("expo|copperfield",      "Expo Copperfield",     "expo",             "copperfield"),
-    ("corporate-driver|",     "Corporate Driver",     "corporate-driver", None),
+# Levels shown in the Team admin dropdown.
+LEVEL_OPTIONS = [
+    ("partner",          "Partner"),
+    ("corporate",        "Corporate"),
+    ("gm",               "GM"),
+    ("manager",          "Manager"),
+    ("expo",             "Expo"),
+    ("corporate-driver", "Corporate Driver"),
 ]
-_OPTION_TO_LEVEL_SCOPE = {opt: (lvl, sc) for opt, _label, lvl, sc in ROLE_OPTIONS}
+# Stores the Team admin can assign for store-scoped levels.
+STORE_OPTIONS = [
+    ("tomball",     "Tomball"),
+    ("copperfield", "Copperfield"),
+]
 
 
-def _parse_role(role_value: str) -> tuple[str | None, str | None]:
-    """Return (level, store_scope) from a 'level|scope' dropdown value, or
-    (None, None) if invalid. Plain 'partner' / 'corporate' use empty scope."""
-    return _OPTION_TO_LEVEL_SCOPE.get((role_value or "").strip(), (None, None))
+def _parse_role_form(form) -> tuple[str | None, str | None]:
+    """Pull (level, store_scope_csv) out of a Team form submission. The
+    stores come from one or more 'stores' checkboxes; for store-scoped
+    levels (gm/manager/expo) at least one is required. Non-store levels
+    get None."""
+    level = (form.get("permission_level") or "").strip()
+    if level not in [lvl for lvl, _ in LEVEL_OPTIONS]:
+        return None, None
+    if level in STORE_SCOPED_LEVELS:
+        stores = [s for s in form.getlist("stores") if s in [k for k, _ in STORE_OPTIONS]]
+        if not stores:
+            return level, None  # signal: scoped level needs at least one store
+        return level, ",".join(stores)
+    return level, None
 
 
-def _role_value_for(u) -> str:
-    """Build the 'level|scope' string a user's current row corresponds to."""
-    return f"{u.permission_level}|{u.store_scope or ''}"
+def _user_stores_set(u) -> set[str]:
+    """Set of store keys (tomball/copperfield) currently on this user."""
+    return {s.strip() for s in (u.store_scope or "").split(",") if s.strip()}
 
 
 def _norm_phone(s: str | None) -> str | None:
@@ -90,8 +99,10 @@ def team_page():
         return render_template(
             "team.html",
             users=users,
-            role_options=ROLE_OPTIONS,
-            role_value_for=_role_value_for,
+            level_options=LEVEL_OPTIONS,
+            store_options=STORE_OPTIONS,
+            user_stores_set=_user_stores_set,
+            store_scoped_levels=STORE_SCOPED_LEVELS,
             success=request.args.get("success"),
             error=request.args.get("error"),
         )
@@ -105,14 +116,16 @@ def team_add():
     full_name = (request.form.get("full_name") or "").strip()
     email = (request.form.get("email") or "").strip() or None
     phone = _norm_phone(request.form.get("phone"))
-    role = (request.form.get("role") or "").strip()
-    level, store_scope = _parse_role(role)
+    level, store_scope = _parse_role_form(request.form)
     passcode = (request.form.get("passcode") or "").strip()
 
     if not full_name:
         return redirect(url_for("team.team_page", error="Full name is required."))
     if level is None:
-        return redirect(url_for("team.team_page", error=f"Invalid role: {role!r}"))
+        return redirect(url_for("team.team_page", error="Pick a role."))
+    if level in STORE_SCOPED_LEVELS and not store_scope:
+        return redirect(url_for("team.team_page",
+                                error=f"{level.upper()} needs at least one assigned store."))
     if not PASSCODE_RE.match(passcode):
         return redirect(url_for("team.team_page",
                                 error="Passcode must be exactly 5 characters (digits or * # @ + % - $)."))
@@ -204,13 +217,15 @@ def team_edit(user_id: int):
     full_name = (request.form.get("full_name") or "").strip()
     email = (request.form.get("email") or "").strip() or None
     phone = _norm_phone(request.form.get("phone"))
-    role = (request.form.get("role") or "").strip()
-    level, store_scope = _parse_role(role)
+    level, store_scope = _parse_role_form(request.form)
 
     if not full_name:
         return redirect(url_for("team.team_page", error="Full name is required."))
     if level is None:
-        return redirect(url_for("team.team_page", error=f"Invalid role: {role!r}"))
+        return redirect(url_for("team.team_page", error="Pick a role."))
+    if level in STORE_SCOPED_LEVELS and not store_scope:
+        return redirect(url_for("team.team_page",
+                                error=f"{level.upper()} needs at least one assigned store."))
 
     db = SessionLocal()
     try:

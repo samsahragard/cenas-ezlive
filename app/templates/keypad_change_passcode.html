@@ -65,7 +65,7 @@
       0 14px 28px rgba(0,0,0,0.65), 0 6px 12px rgba(0,0,0,0.5);
   }
   .passcode-label{
-    color: var(--red); font-size:13px; font-weight:800; letter-spacing:3px;
+    color: var(--red); font-size:18px; font-weight:800; letter-spacing:3px;
     text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
   }
   .dots{ display:flex; gap:18px; }
@@ -148,7 +148,7 @@
 <div class="wrap">
   <div class="welcome">{% if forced %}WELCOME, <strong>{{ user.full_name|upper }}</strong> — SET YOUR PASSCODE{% else %}CHANGE PASSCODE FOR <strong>{{ user.full_name|upper }}</strong>{% endif %}</div>
   <div class="passcode-header">
-    <div class="passcode-label" id="prompt">NEW PASSCODE</div>
+    <div class="passcode-label" id="prompt">SET NEW PASSCODE</div>
     <div class="dots" id="dots">
       {% for _ in range(passcode_len) %}<div class="dot"></div>{% endfor %}
     </div>
@@ -206,7 +206,7 @@
     setTimeout(() => dotsContainer.classList.remove('error'), 450);
     toast.textContent = msg; toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2000);
-    if (resetStage){ stage = 'set'; chosen = ''; prompt.textContent = 'NEW PASSCODE'; }
+    if (resetStage){ stage = 'set'; chosen = ''; prompt.textContent = 'SET NEW PASSCODE'; }
     buffer = ''; renderDots();
   }
   function showInfo(msg){
@@ -248,7 +248,7 @@
           chosen = buffer;
           buffer = '';
           stage = 'confirm';
-          prompt.textContent = 'CONFIRM PASSCODE';
+          prompt.textContent = 'CONFIRM NEW PASSCODE';
           setTimeout(renderDots, 200);
         } else {
           if (buffer === chosen){

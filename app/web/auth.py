@@ -24,6 +24,7 @@ EXEMPT_PREFIXES = (
     "/ezcater/webhook",          # ezCater POSTs here; payload is the auth
     "/orders/ingest",            # legacy PDF ingest (token-protected)
     "/orders/ingest_structured", # API ingest (token-protected)
+    "/api/inbox/whatsapp",       # CK daemon WhatsApp mirror (Bearer-token gated)
     "/produce/confirm/",         # Sam's tap-from-Telegram links (random order_id is the auth)
     "/produce/cancel/",          # Sam's tap-from-Telegram links (random order_id is the auth)
     "/produce/healthz",          # public liveness check

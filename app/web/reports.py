@@ -47,12 +47,15 @@ def _period_to_dates(period: str) -> tuple[datetime | None, datetime | None, str
                 datetime.combine(d, datetime.min.time()),
                 d.strftime("%a, %b %d").replace(" 0", " "))
     if period == "week":
-        start = today - timedelta(days=today.weekday())
+        # Sun -> today (Sam 2026-05-11 — week starts on Sunday for sales/labor).
+        start = today - timedelta(days=(today.weekday() + 1) % 7)
         return (datetime.combine(start, datetime.min.time()),
                 datetime.combine(today, datetime.min.time()),
                 f"{start.strftime('%b %d')} – {today.strftime('%b %d')}".replace(" 0", " "))
     if period == "prev_week":
-        end = today - timedelta(days=today.weekday() + 1)
+        # Last full Sun -> Sat.
+        this_sun = today - timedelta(days=(today.weekday() + 1) % 7)
+        end = this_sun - timedelta(days=1)
         start = end - timedelta(days=6)
         return (datetime.combine(start, datetime.min.time()),
                 datetime.combine(end, datetime.min.time()),

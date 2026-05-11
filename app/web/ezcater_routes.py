@@ -313,13 +313,15 @@ def dashboard_summary():
         start = end = today
         label = today.strftime("%a, %b %d").replace(" 0", " ")
     elif period == "week":
-        # Current week: Monday → today
-        start = today - timedelta(days=today.weekday())
+        # Current week: Sun → today (Sam 2026-05-11 — week starts on Sunday).
+        # Offset back to most-recent Sun is (weekday()+1) % 7 days.
+        start = today - timedelta(days=(today.weekday() + 1) % 7)
         end = today
         label = f"{start.strftime('%b %d')} – {end.strftime('%b %d')}".replace(" 0", " ")
     elif period == "prev_week":
-        # Last Mon → last Sun
-        end = today - timedelta(days=today.weekday() + 1)
+        # Last full Sun → Sat (week ending the most recent Saturday).
+        this_sun = today - timedelta(days=(today.weekday() + 1) % 7)
+        end = this_sun - timedelta(days=1)
         start = end - timedelta(days=6)
         label = f"{start.strftime('%b %d')} – {end.strftime('%b %d')}".replace(" 0", " ")
     else:

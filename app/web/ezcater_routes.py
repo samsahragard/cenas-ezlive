@@ -96,20 +96,62 @@ def home():
     Note: the route registration for this view moved out — `/` now serves
     the store picker. The `/<store>/` URL prefix layer (store_routes.py)
     calls this function directly after setting g.current_location."""
-    from datetime import datetime
+    from datetime import datetime, timezone, timedelta
     from pathlib import Path
     import json
     from app.db import get_db
     from app.models import Order
 
-    today_iso = datetime.now().strftime("%Y-%m-%d")
+    # Render runs UTC; without an explicit offset, today_iso flips to
+    # tomorrow after 7pm CT and the dashboard shows the wrong day's deliveries.
+    now_ct = datetime.now(timezone(timedelta(hours=-5)))
+    today_iso = now_ct.strftime("%Y-%m-%d")
     # Per-store filtering: Tomball = stores 2/4, Copperfield = stores 1/3
     location = getattr(g, "current_location", "both")
     tomball_stores = ("store_2", "store_4")
     copperfield_stores = ("store_1", "store_3")
 
+    def _decorate_order(o):
+        origin = o.origin_store_id or ""
+        loc = "Tomball" if origin in tomball_stores else "Copperfield"
+        if not (o.client and o.client.strip()):
+            badge_class, badge_text = "badge-warn", "No customer"
+        elif o.assigned_driver:
+            badge_class, badge_text = "badge-good", "On track"
+        else:
+            badge_class, badge_text = "badge-info", "Unassigned"
+        sub_bits = []
+        if o.assigned_driver:
+            sub_bits.append(f"Driver: {o.assigned_driver}")
+        if o.headcount:
+            sub_bits.append(f"{o.headcount} heads")
+        if o.setup_required:
+            sub_bits.append("Setup required")
+        return {
+            "order_id": o.external_order_id,
+            "time": o.deliver_at or "—",
+            "name": (o.client or "").strip() or f"{loc} delivery",
+            "sub": " · ".join(sub_bits),
+            "location": loc,
+            "badge_class": badge_class,
+            "badge_text": badge_text,
+        }
+
+    def _time_sort_key(t):
+        # deliver_at is stored as text like "11:00 AM" / "5:45 AM"; a plain
+        # lexicographic sort places "5:45 AM" after "12:00 PM". Parse to
+        # minutes-since-midnight so the within-day order is real wall-clock.
+        if not t:
+            return 99999
+        try:
+            dt = datetime.strptime(t.strip(), "%I:%M %p")
+            return dt.hour * 60 + dt.minute
+        except Exception:
+            return 99998
+
     db = next(get_db())
     try:
+        # Strict today — used for KPI tiles and the attention list below.
         today_q = (
             db.query(Order)
             .filter(Order.delivery_date == today_iso)
@@ -119,43 +161,44 @@ def home():
             today_q = today_q.filter(Order.origin_store_id.in_(tomball_stores))
         elif location == "copperfield":
             today_q = today_q.filter(Order.origin_store_id.in_(copperfield_stores))
-
-        today_orders = today_q.order_by(Order.deliver_at).all()
+        today_orders = today_q.all()
         # Review queue retired 2026-05-10 — auto-resolver + Telegram replaces it.
         review_orders = []
 
         # KPI counts
-        tomball_today = sum(1 for o in today_orders if (o.origin_store_id or "") in ("store_2", "store_4"))
+        tomball_today = sum(1 for o in today_orders if (o.origin_store_id or "") in tomball_stores)
         copperfield_today = len(today_orders) - tomball_today
         heads_today = sum((o.headcount or 0) for o in today_orders)
 
-        # Annotate each today order with location label + a status badge.
-        decorated_today = []
-        for o in today_orders:
-            origin = o.origin_store_id or ""
-            loc = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
-            if not (o.client and o.client.strip()):
-                badge_class, badge_text = "badge-warn", "No customer"
-            elif o.assigned_driver:
-                badge_class, badge_text = "badge-good", "On track"
-            else:
-                badge_class, badge_text = "badge-info", "Unassigned"
-            sub_bits = []
-            if o.assigned_driver:
-                sub_bits.append(f"Driver: {o.assigned_driver}")
-            if o.headcount:
-                sub_bits.append(f"{o.headcount} heads")
-            if o.setup_required:
-                sub_bits.append("Setup required")
-            decorated_today.append({
-                "order_id": o.external_order_id,
-                "time": o.deliver_at or "—",
-                "name": (o.client or "").strip() or f"{loc} delivery",
-                "sub": " · ".join(sub_bits),
-                "location": loc,
-                "badge_class": badge_class,
-                "badge_text": badge_text,
-            })
+        # Upcoming (today + future) for the "Upcoming deliveries" card.
+        upcoming_q = (
+            db.query(Order)
+            .filter(Order.delivery_date >= today_iso)
+            .filter(Order.status != "cancelled")
+        )
+        if location == "tomball":
+            upcoming_q = upcoming_q.filter(Order.origin_store_id.in_(tomball_stores))
+        elif location == "copperfield":
+            upcoming_q = upcoming_q.filter(Order.origin_store_id.in_(copperfield_stores))
+        upcoming_orders = upcoming_q.all()
+        upcoming_orders.sort(key=lambda o: (o.delivery_date or "", _time_sort_key(o.deliver_at)))
+
+        # Group by delivery_date. Always seed Today so the card renders
+        # "Today — no deliveries" when empty; future days only appear
+        # if they have orders. Insertion order = today first, then
+        # ascending future dates (upcoming_orders is pre-sorted).
+        upcoming_groups = {today_iso: {"date_iso": today_iso, "label": "Today", "orders": []}}
+        for o in upcoming_orders:
+            d = o.delivery_date or today_iso
+            if d not in upcoming_groups:
+                try:
+                    dt = datetime.strptime(d, "%Y-%m-%d")
+                    label = f"{dt.strftime('%A')} {dt.month}/{dt.day}/{str(dt.year)[2:]}"
+                except Exception:
+                    label = d
+                upcoming_groups[d] = {"date_iso": d, "label": label, "orders": []}
+            upcoming_groups[d]["orders"].append(_decorate_order(o))
+        upcoming_groups_list = list(upcoming_groups.values())
 
         # Attention list. Review-queue items removed (auto-resolver handles
         # extraction warnings now via Telegram alerts). Still flag today's
@@ -221,14 +264,13 @@ def home():
         except Exception:
             pass
 
-    _now = datetime.now()
-    today_long = _now.strftime("%A, %B %d").replace(" 0", " ")
+    today_long = now_ct.strftime("%A, %B %d").replace(" 0", " ")
 
     return render_template(
         "home.html",
         today_iso=today_iso,
         today_long=today_long,
-        today_orders=decorated_today,
+        upcoming_groups=upcoming_groups_list,
         attention=attention[:5],
         tomball_today=tomball_today,
         copperfield_today=copperfield_today,

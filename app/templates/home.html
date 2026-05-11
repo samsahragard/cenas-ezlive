@@ -231,29 +231,32 @@
 })();
 </script>
 
-<!-- Today's deliveries + attention -->
+<!-- Upcoming deliveries + attention -->
 <div class="agenda-grid">
   <div class="card">
     <div class="card-head">
-      <div class="card-title">Today's deliveries</div>
+      <div class="card-title">Upcoming deliveries</div>
       <div>
         <a class="card-link" href="/orders/tomball">Tomball →</a>
         &nbsp;&nbsp;
         <a class="card-link" href="/orders/copperfield">Copperfield →</a>
       </div>
     </div>
-    {% if today_orders %}
-      {% for o in today_orders %}
-      <a class="today-row" href="/orders/view/{{ o.order_id }}" style="text-decoration:none">
-        <span class="today-time">{{ o.time }}</span>
-        <span class="today-name">{{ o.name }} {% if o.order_id %}<span class="sub">{{ o.order_id }}{% if o.sub %} · {{ o.sub }}{% endif %}</span>{% else %}<span class="sub">{{ o.sub }}</span>{% endif %}</span>
-        <span class="today-loc">{{ o.location }}</span>
-        <span><span class="badge {{ o.badge_class }}">{{ o.badge_text }}</span></span>
-      </a>
-      {% endfor %}
-    {% else %}
-      <div class="today-empty">No deliveries today.</div>
-    {% endif %}
+    {% for g in upcoming_groups %}
+      <div class="today-day-header" style="font-weight:600;color:#aaa;padding:8px 0 4px;{% if not loop.first %}border-top:1px solid #2a2a2a;margin-top:8px;{% endif %}">{{ g.label }}</div>
+      {% if g.orders %}
+        {% for o in g.orders %}
+        <a class="today-row" href="/orders/view/{{ o.order_id }}" style="text-decoration:none">
+          <span class="today-time">{{ o.time }}</span>
+          <span class="today-name">{{ o.name }} {% if o.order_id %}<span class="sub">{{ o.order_id }}{% if o.sub %} · {{ o.sub }}{% endif %}</span>{% else %}<span class="sub">{{ o.sub }}</span>{% endif %}</span>
+          <span class="today-loc">{{ o.location }}</span>
+          <span><span class="badge {{ o.badge_class }}">{{ o.badge_text }}</span></span>
+        </a>
+        {% endfor %}
+      {% else %}
+        <div class="today-empty">No deliveries.</div>
+      {% endif %}
+    {% endfor %}
   </div>
 
   <div class="card">

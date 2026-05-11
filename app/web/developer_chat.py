@@ -315,6 +315,7 @@ DOC_PAGES = [
     ("ck-session-2026-05-10",    "ck Session 5/10",   "doc_ck_session_2026_05_10"),
     ("aick-session-2026-05-10",  "aick Session 5/10", "doc_aick_session_2026_05_10"),
     ("ck-session-2026-05-11",    "ck Session 5/11",   "doc_ck_session_2026_05_11"),
+    ("aick-session-2026-05-11",  "aick Session 5/11", "doc_aick_session_2026_05_11"),
 ]
 
 

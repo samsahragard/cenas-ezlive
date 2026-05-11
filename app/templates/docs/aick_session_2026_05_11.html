@@ -1,0 +1,422 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Detailed handoff log for the work <strong>aick</strong> shipped during the
+  Mon May 11 2026 session, written before Sam restarts the session so a
+  future aick (or any AI picking up cold) has the full picture. Format mirrors
+  <a href="/partner/developer/app/aick-session-2026-05-10">aick Session 5/10</a>
+  and runs alongside
+  <a href="/partner/developer/app/ck-session-2026-05-11">ck's session 5/11 log</a>
+  (ck owns CK WhatsApp + Toast cache + produce ingest deep-dive; aick owns the
+  site-wide auth rewrite + permission system + everything below).
+</p>
+<p>
+  Day in two sentences: built and shipped the entire site-wide auth rewrite Sam
+  spec'd at the very start of the day — a 5-digit passcode keypad with Cenas
+  Kitchen branding (cream + red speckles, layered 3D border, bar-photo backdrop,
+  per-key 3D plastic look), a new User model with a 6-level role hierarchy
+  (partner / corporate / gm / manager / expo / corporate-driver), per-location
+  + multi-store assignment, force-logout-on-reset, role-routed landing, Back-
+  button history.replaceState, Logout sidebar link, hard URL gates for store
+  scope and Expo Insights, a Team admin page, a public /install page for the
+  PWA, and a stack of small fixes (cache headers, sidebar context preservation,
+  Corporate-vs-Partner gating). Then live-tested every page on /partner/ via
+  Chrome MCP and caught two regressions ck's commits had silently introduced.
+</p>
+
+<h2>Session bootstrap</h2>
+<ul>
+  <li>Picked up after auto-compaction; the summary mentioned I was mid-flight on
+      the keypad mockup (Sam had just sent his preferred HTML spec). Re-attached
+      to the Developer Chat via <code>Monitor</code> on the new chat-tail patch
+      from earlier (<code>5f0b30e</code>) that re-auths on JSONDecode errors.</li>
+  <li>Halfway through realized the running Monitor's chat-tail was the OLD
+      pre-patch version, so I killed it and started a fresh Monitor with the
+      fixed script. Stopped the 502-spam during Render redeploys after that.</li>
+  <li>Co-ordination model: aick = me, ck = ck-claude, samai = samai. Sam
+      addressed each by name. Multiple times ck pushed local commits and asked
+      me to push them — I owned the git remote ("aick-claude" pushes only;
+      ck doesn't have credentials).</li>
+</ul>
+
+<h2>Site-wide keypad auth (migration 13)</h2>
+<p>
+  Sam's spec at session open: "Aick Regarding the entirety of the site. I want
+  to entirely change how people login" — replace the shared-password Tier 1 /
+  Tier 2 gates with a per-person 5-digit numeric passcode + a real role model.
+</p>
+
+<h3>Schema (migration 13_users_keypad_auth)</h3>
+<ul>
+  <li>New <code>users</code> table:
+    <code>id, created_at, updated_at, full_name, email (unique), phone (unique),
+    passcode_hash (werkzeug), permission_level, store_scope, first_login_done,
+    active, failed_attempts, lockout_until, last_login_at, last_login_ip,
+    session_version</code>.</li>
+  <li>Roles in descending privilege: <strong>partner &gt; corporate &gt; gm
+      &gt; manager &gt; expo &gt; corporate-driver</strong>. Ranks live in
+      <code>permissions.LEVELS</code>; <code>level_at_least(level, min)</code>
+      checks privilege.</li>
+  <li><code>store_scope</code> is a CSV string ('tomball', 'copperfield',
+      'tomball,copperfield') — single-value rows still parse fine, multi-store
+      assignment was Sam's later ask in the same session.</li>
+  <li>Idempotent ALTER block in <code>app/__init__.py</code> creates the table
+      (via <code>Base.metadata.create_all</code>) and back-fills the
+      <code>session_version</code> column on existing prod DBs without
+      needing the alembic migration to run (Render's preDeployCommand is
+      still unset; same pattern as the drivers + orders backfills).</li>
+  <li>Sam seeded on first prod boot as partner with bootstrap passcode
+      <code>12345</code>, <code>first_login_done=False</code> — forced to
+      change on first login.</li>
+</ul>
+
+<h3>Authentication routes (app/web/keypad_auth.py)</h3>
+<ul>
+  <li><code>GET /keypad-login</code> — renders the keypad. If already
+      signed in, redirects to the user's role landing (not the keypad,
+      not the store picker).</li>
+  <li><code>POST /keypad-login</code> — JSON
+      <code>{"passcode":"12345","next":"/"}</code>. Scans all active users with
+      <code>check_password_hash</code>; first match wins. On success bumps
+      <code>last_login_at</code>, stamps <code>session.user_session_version</code>
+      with the user's current version, sets <code>auth_ok=True</code> (legacy
+      shim so partner-gated routes work). Sets <code>partner_auth_ok=True</code>
+      ONLY for partner level (corporate explicitly excluded — see "Permission
+      audit" below).</li>
+  <li><code>GET /change-passcode</code> — forced on first login or admin
+      reset.</li>
+  <li><code>POST /change-passcode</code> — sets a new passcode, marks
+      <code>first_login_done=True</code>, redirects to the user's role
+      landing. Passcode uniqueness enforced across active users at
+      create/change time (no two users can have the same passcode).</li>
+  <li><code>GET /keypad-logout</code> — clears <code>user_id, auth_ok,
+      partner_auth_ok</code> from session, redirects to keypad.</li>
+  <li>Both keypad pages send <code>Cache-Control: no-store</code> so the
+      browser doesn't serve stale HTML after a deploy (Sam hit a passcode
+      issue from cached pre-21e7e17 JS).</li>
+  <li>Passcode regex: <code>^[\d*#@+%\-$]{5}$</code> — digits + every special
+      key on the pad. Sam's spec was "no special characters" first, then
+      revised after he tried <code>#3676</code> and was rejected. The full
+      set <code>* # @ + % - $</code> is now accepted on both login and change.</li>
+</ul>
+
+<h3>Permissions decorator (app/web/permissions.py)</h3>
+<ul>
+  <li><code>require_level(min_level)</code> view decorator: 302's to
+      <code>/keypad-login</code> if no <code>g.current_user</code>, returns
+      403 if the user's level is below the minimum.</li>
+  <li><code>load_current_user()</code> attaches the User on
+      <code>g.current_user</code> and ALSO compares
+      <code>session.user_session_version</code> with
+      <code>User.session_version</code> — mismatch clears the session
+      immediately. That's how admin reset / deactivate
+      force-logs the user out everywhere instantly (bump version → next
+      request anywhere on any device → kicked).</li>
+  <li><code>accessible_store_slugs(user)</code> returns the list of
+      <code>store_slug</code> values this user can access. Partner →
+      <code>['partner']</code>, corporate → <code>['corporate']</code>,
+      gm/manager/expo with single store → <code>['dos']</code> or
+      <code>['uno']</code>, multi-store → both. corporate-driver →
+      <code>[]</code> (driver portal is outside the store_bp).</li>
+</ul>
+
+<h3>Keypad visuals (Sam's iterations v3 → v6)</h3>
+<p>
+  Sam sent a 16KB HTML spec with the Cenas Kitchen palette (deep navy
+  <code>#15205c</code>, saturated red <code>#c8302a</code>, cream
+  <code>#f4e7d0</code>, gold <code>#d9a85a</code>, red shadow), layered 3D
+  border (cream → white → blue-bright → blue-deep → red → red-shadow),
+  per-key 3D plastic buttons, cream-with-red-speckles header. Five iteration
+  cycles before approval:
+</p>
+<ul>
+  <li>v3: applied Sam's HTML 1:1, swapped body bg to <code>bg-tequila.jpg</code>
+      with same blur/brightness/overlay as the dashboard.</li>
+  <li>v4: logo margin cut 50% (36 → 18px), dark <code>.pad</code> panel
+      removed so keys float on the backdrop.</li>
+  <li>v5: logo cut again (18 → 9px), bar photo zoomed to
+      <code>background-position: 50% 65%</code> so the lit TEQUILA marquee +
+      shelves fill the frame instead of dim middle, brightness raised back
+      to 1.0, vignette softened.</li>
+  <li>v6: per Sam's "edges look like a frame" feedback, blur bumped to 14px +
+      zoom to 180%, killing the dark brick-wall corners. Sam chose v5/v6
+      hybrid for the live template (v5 backdrop legibility + the
+      cleaned-up margin).</li>
+</ul>
+<p>
+  Templates: <code>app/templates/keypad_login.html</code> and
+  <code>app/templates/keypad_change_passcode.html</code>.
+  Inline JS calls <code>window.location.replace(next)</code> (not
+  <code>.href = next</code>) so the keypad URL gets replaced in history —
+  Back from inside the app skips past the keypad. Specials get
+  <code>data-val</code> attributes; the JS click handler accepts any char
+  in the passcode regex.
+</p>
+
+<h2>Force-logout on reset / deactivate</h2>
+<p>
+  Sam's mid-session ask: "when a password is reset or a person is deactivated,
+  it should automatically log them out from everywhere." Implemented via
+  <code>User.session_version</code> int (defaults 1). Login stamps it on the
+  session cookie; every request <code>load_current_user</code> re-checks. On
+  mismatch the session is cleared and the user is bounced to /keypad-login on
+  their next page load — works across devices instantly.
+</p>
+<ul>
+  <li><code>team_reset</code> bumps version + sets
+      <code>first_login_done=False</code> (forces the user to change the
+      temp passcode on next login).</li>
+  <li><code>team_toggle</code> (active/inactive) bumps version too — flipping
+      to inactive immediately kicks any live session AND blocks future
+      logins via <code>_find_user_by_passcode</code> filtering on
+      <code>active.is_(True)</code>.</li>
+  <li><code>team_edit</code> bumps version only if the role moved
+      (permission_level or store_scope changed) — name/email edits don't
+      kick the user.</li>
+</ul>
+
+<h2>Multi-store assignment + smart switch-store sidebar</h2>
+<p>
+  Sam's spec: a user can be GM at BOTH stores. Sidebar should only show
+  "switch store" when the user has &gt;1 accessible store. Team admin needs
+  per-store checkboxes for store-scoped roles.
+</p>
+<ul>
+  <li><code>User.store_scope</code> upgraded to CSV. Team admin's role
+      dropdown is now level-only (Partner / Corporate / GM / Manager / Expo
+      / Corporate Driver) plus a separate Tomball/Copperfield checkbox group
+      visible only when level is gm/manager/expo. A small JS toggle disables
+      the checkboxes when a non-store-scoped role is selected.</li>
+  <li>Sidebar (<code>base_dashboard.html</code>): three states for the
+      switcher.
+    <ul>
+      <li>Legacy auth_ok session (tools): clickable link to <code>/</code>
+          for backwards-compat.</li>
+      <li>Keypad session with multiple accessible stores: a
+          <code>&lt;details&gt;</code> dropdown listing each store; current
+          highlighted orange.</li>
+      <li>Keypad session with one store: just the label, non-clickable.</li>
+    </ul>
+  </li>
+  <li>Landing helper <code>_landing_for_user(u)</code> picks the first
+      accessible store. Single-store GMs go to /dos/ or /uno/; multi-store
+      to /dos/ first.</li>
+</ul>
+
+<h2>Permission audit — Sam's spec decoded</h2>
+<p>
+  Sam's 06:14 PM answer (parsed via ck because it was voice-to-text and
+  bled together):
+</p>
+<table style="width:100%; border-collapse:collapse; margin:14px 0;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--glass-border);">
+      <th style="text-align:left; padding:6px;">Role</th>
+      <th style="text-align:left; padding:6px;">Sees</th>
+      <th style="text-align:left; padding:6px;">Doesn't see</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:6px; vertical-align:top;"><strong>Partner</strong></td>
+      <td style="padding:6px; vertical-align:top;">Everything. Operations + Insights + Forecasts + Admin (Team) + Developer (Chat, Ezcater Review, App docs).</td>
+      <td style="padding:6px; vertical-align:top;">—</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:6px; vertical-align:top;"><strong>Corporate</strong></td>
+      <td style="padding:6px; vertical-align:top;">Everything Partner sees EXCEPT Admin and Developer.</td>
+      <td style="padding:6px; vertical-align:top;">/partner/team, /partner/developer/*.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:6px; vertical-align:top;"><strong>GM</strong></td>
+      <td style="padding:6px; vertical-align:top;">All Operations + Insights for their assigned store(s) only.</td>
+      <td style="padding:6px; vertical-align:top;">Admin, Developer, other stores' URLs.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:6px; vertical-align:top;"><strong>Manager</strong></td>
+      <td style="padding:6px; vertical-align:top;">Same as GM today. (Sam reserved future divergence.)</td>
+      <td style="padding:6px; vertical-align:top;">Same as GM.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:6px; vertical-align:top;"><strong>Expo</strong></td>
+      <td style="padding:6px; vertical-align:top;">Operations only — Orders / Order Processor / Driver Payroll / Drivers Admin / Drivers Live / Schedule / Corporate Order / Vendors.</td>
+      <td style="padding:6px; vertical-align:top;">Entire Insights section (Performance / Sales / Labor / Forecast), Admin, Developer, other stores.</td>
+    </tr>
+    <tr>
+      <td style="padding:6px; vertical-align:top;"><strong>Corporate Driver</strong></td>
+      <td style="padding:6px; vertical-align:top;">/driver/portal only.</td>
+      <td style="padding:6px; vertical-align:top;">All dashboards.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Where each rule is enforced</h3>
+<ul>
+  <li><strong>Sidebar visibility</strong>: <code>base_dashboard.html</code>
+    wraps the Admin + Developer blocks in <code>{% if store_slug ==
+    'partner' %}</code>, wraps the Insights block in
+    <code>{% if not (g.current_user and
+    g.current_user.permission_level == 'expo') %}</code>.</li>
+  <li><strong>Route gates</strong>: <code>store_bp._per_store_gate</code>
+    before_request hook (<code>app/web/store_routes.py</code>) does two
+    things — (1) Expo hitting any Insights URL gets a flat 403;
+    (2) GM/Manager/Expo with single store_scope hitting the wrong
+    <code>/&lt;slug&gt;/</code> get 302'd to their own first store.
+    Partner/Corporate skip both checks.</li>
+  <li><strong>Team admin</strong>: <code>require_level('partner')</code>
+    decorator on every team_* route — corporate gets 403 even though they
+    could try to URL-hop to /partner/team. They also can't reach it via
+    sidebar (partner-only block) or via /partner/ (the partner_gate
+    redirects them to /partner-login since corporate users don't get
+    partner_auth_ok at keypad login).</li>
+</ul>
+<p>
+  <strong>Regression watch</strong>: ck's <code>c2ab56a</code> commit
+  (a "docs: ck session 2026-05-11 handoff log" commit) silently dropped
+  the <code>_per_store_gate</code> hook because his working copy was stale.
+  Restored in <code>ebe1e2a</code>. Added an inline comment so future
+  diffs that delete it should raise an eyebrow.
+</p>
+
+<h2>Public /install page (PWA add-to-home)</h2>
+<p>
+  Sam: "is there a link where when i send this, i can give them to install
+  the current app." The dashboard had been a PWA since the original work
+  (<code>manifest.webmanifest</code> + <code>apple-touch-icon</code> +
+  <code>theme-color</code> + <code>display:standalone</code> all in
+  <code>base_dashboard.html</code>), so all that was missing was a clear
+  destination page. <code>/install</code> is exempt from auth so anyone
+  with the link can read the instructions without a passcode.
+</p>
+<ul>
+  <li>Per-platform instructions — iPhone (Share → Add to Home Screen),
+      Android Chrome (⋮ → Install app), Desktop (install icon in address bar).</li>
+  <li>JavaScript: listens for <code>beforeinstallprompt</code> on Android
+      Chrome + desktop and shows a one-tap "Install Cenas Kitchen"
+      button. iOS Safari doesn't support that event, so the manual steps
+      cover them.</li>
+  <li><code>strict_slashes=False</code> so <code>/install</code> AND
+      <code>/install/</code> both work. ck's <code>cb0d482</code> commit
+      silently deleted the route handler AND the EXEMPT_PREFIXES entry while
+      adding <code>/produce/admin/</code>; restored in <code>b0b9307</code>.</li>
+</ul>
+
+<h2>Other fixes in this session</h2>
+<ul>
+  <li><strong>Sidebar Vendors → Tomball bug</strong>: clicking Vendors at
+    /partner/ snapped the whole dashboard to Tomball. Root cause:
+    <code>/&lt;store&gt;/produce/</code> 302'd to <code>/produce/</code>
+    (different blueprint, no store prefix), so <code>g.current_store</code>
+    went None and the sidebar's fallback was hardcoded
+    <code>'dos'</code>. Fixed two ways (my <code>6b803cd</code> + ck's
+    <code>eb7727d</code> complementary): I stash
+    <code>session.last_store_slug</code> at every store URL and make
+    base_dashboard.html prefer that fallback; ck removed the 302 entirely
+    by inlining the produce view.</li>
+  <li><strong>Sidebar Log out</strong>: added a Log out link to
+    <code>base_dashboard.html</code> sidebar footer, just above "Cenas
+    Kitchen · &lt;store&gt; · Operations". Shows user's first name on
+    the right. Wired to /keypad-logout (clears session and bounces
+    to keypad).</li>
+  <li><strong>chat_tail JSON-decode re-auth</strong>: urllib auto-follows
+    302's after a Render redeploy so json.loads chokes on the HTML
+    login page. Patched <code>scripts/chat_tail.py</code> to catch
+    JSONDecodeError, re-login, retry (<code>5f0b30e</code>).</li>
+</ul>
+
+<h2>Live-tested end-to-end</h2>
+<p>
+  After the cac743d → ebe1e2a chain deployed, walked the partner dashboard
+  via Chrome MCP using legacy /login + /partner-login auth (so I didn't
+  consume Sam's keypad session). All real data populating:
+</p>
+<ul>
+  <li>/partner/ dashboard: Sales $9,048, Labor $1,800 / 19.9% / 169.1 hrs.
+      3 KPI tiles at top GONE (ck's 9a622b4 worked).</li>
+  <li>/partner/reports/sales/total: 123 third-party orders, per-channel
+      breakdown intact.</li>
+  <li>/partner/reports/labor/boh: 14.3% ratio, 98.6 hrs, 26 shifts, full
+      per-position breakdown.</li>
+  <li>/partner/produce/: 38 items with prices, Date column showing
+      "5/10 - 5/16" everywhere (ck's 01b1f7e + f9c0eb0 worked).</li>
+  <li>/keypad-login: live render matches the v5/v6 spec.</li>
+</ul>
+<p>
+  Caught 2 regressions during the walk:
+</p>
+<ul>
+  <li>/install was 404 — root caused to ck's <code>cb0d482</code>
+      accidentally deleting the route. Restored in <code>b0b9307</code>.</li>
+  <li>/partner/team route was unreachable from legacy /login auth —
+      not a bug (require_level needs g.current_user from keypad), but
+      flagged so future smoke tests know.</li>
+</ul>
+
+<h2>Commit chain (my pushes)</h2>
+<p>From earliest to most recent — see <code>git log --oneline</code> for the
+  rest of the chain including ck's commits I pushed alongside.</p>
+<ul>
+  <li><code>f550564</code> — Site-wide keypad auth (migration 13).</li>
+  <li><code>5f0b30e</code> — chat_tail re-auth on JSONDecodeError.</li>
+  <li><code>21e7e17</code> — Special chars in passcodes + role-routed
+      landing.</li>
+  <li><code>604abc1</code> — Back-button replaceState + sidebar Log out.</li>
+  <li><code>4d7854f</code> — Cache-Control: no-store on keypad pages.</li>
+  <li><code>5b25bbc</code> — Force-logout on reset/deactivate +
+      per-location GM/Manager/Expo.</li>
+  <li><code>5cbf061</code> — Team dropdown font + dark theme.</li>
+  <li><code>f30fb36</code> — Bigger "SET NEW PASSCODE" / "CONFIRM NEW
+      PASSCODE" labels.</li>
+  <li><code>9ba4659</code> — /install page.</li>
+  <li><code>cac743d</code> — Multi-store roles + smart switch-store
+      sidebar.</li>
+  <li><code>6b803cd</code> — Sidebar context preservation across 302's
+      (Vendors → Tomball fix).</li>
+  <li><code>b0b9307</code> — Restored /install route after ck dropped it
+      + strict_slashes=False.</li>
+  <li><code>fff5178</code> — Corporate doesn't get partner_auth_ok.</li>
+  <li><code>8ea4546</code> — Permission hardening (per-store URL block,
+      Expo no Insights).</li>
+  <li><code>ebe1e2a</code> — Re-restored _per_store_gate after ck's
+      c2ab56a docs commit silently reverted it.</li>
+</ul>
+
+<h2>Open threads for the next aick</h2>
+<ul>
+  <li>Data-fetch scoping for single-store users: Sam mentioned in the
+      audit that when a GM Tomball loads sales/labor reports, the data
+      should auto-scope to Tomball only. Today the routes are gated by
+      URL (so they can't see /uno/anything), but the report views still
+      take a <code>?location=both</code> param that any URL could pass.
+      Tighten the report view handlers to clamp
+      <code>location</code> to the user's <code>accessible_store_slugs</code>
+      before calling toast_reports.</li>
+  <li>Manager vs GM differentiation: Sam said "right now" they're the
+      same — he wants to reserve future divergence. When that lands the
+      sidebar + before_request gate need to learn another condition.</li>
+  <li>Forecast tab: currently a "soon" disabled item in the sidebar.
+      Hide entirely for expo users (the Insights block already does this
+      since Forecasts is inside that conditional).</li>
+  <li>Per-store data-scoping in the dashboard tiles on <code>/dos/</code>
+      vs <code>/uno/</code>: spot-check that the labor / sales / orders
+      donuts are pulling location-filtered data and not showing combined
+      numbers when a GM Tomball is viewing.</li>
+</ul>
+
+<h2>Cross-claude coordination notes</h2>
+<ul>
+  <li><strong>ck's pushes</strong>: ck doesn't have git remote credentials,
+      so he commits locally and asks me to push. I pushed every commit ck
+      shipped (4d8f65f WhatsApp, c63df3b reports routing, 889e38e sidebar
+      reorg, 5a14d4e + ce48adf + 3730bc2 + cb0d482 + ea705fb + 450290d +
+      eaaf493 + f9c0eb0 + 01b1f7e + 9a622b4 + be1d7e1 + c2ab56a). Reasonable
+      pattern but caught the 2 regressions above where ck's working copy
+      was stale.</li>
+  <li><strong>samai</strong>: shipped voice/TTS earlier in the day
+      (214b129); came online late afternoon asking for next task. Was idle
+      most of my visible session.</li>
+</ul>
+
+{% endblock %}

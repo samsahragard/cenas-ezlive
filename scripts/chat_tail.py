@@ -81,18 +81,24 @@ def _login(opener, site_pw: str, partner_pw: str) -> None:
 def _fetch_messages(opener, since_id: int, site_pw: str, partner_pw: str) -> dict:
     url = f"{BASE}/partner/developer/chat/messages.json?since_id={since_id}"
     req = urllib.request.Request(url)
-    try:
+
+    def _try_once():
         with opener.open(req, timeout=20) as r:
-            data = json.loads(r.read())
+            body = r.read()
+        return json.loads(body)
+
+    try:
+        return _try_once()
     except urllib.error.HTTPError as e:
         if e.code in (401, 302):
-            # Re-auth and retry once
             _login(opener, site_pw, partner_pw)
-            with opener.open(req, timeout=20) as r:
-                data = json.loads(r.read())
-        else:
-            raise
-    return data
+            return _try_once()
+        raise
+    except (json.JSONDecodeError, ValueError):
+        # urllib auto-followed a 302 to the HTML login page after the session
+        # expired (common right after a Render redeploy). Re-auth and retry.
+        _login(opener, site_pw, partner_pw)
+        return _try_once()
 
 
 def _post(opener, author: str, body: str, site_pw: str, partner_pw: str) -> None:

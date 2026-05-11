@@ -132,9 +132,9 @@
       </div>
     </div>
 
-    {# Vendors group #}
+    {# Vendors group — top-level click jumps straight to Produce per Sam 2026-05-11 #}
     <div class="nav-group {% if vendors_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/vendors">
+      <a class="nav-group-toggle" href="/{{ store_slug }}/produce/">
         <span class="nav-icon">📦</span>Vendors
         <span class="nav-chevron">▸</span>
       </a>
@@ -155,9 +155,9 @@
       </div>
     </div>
 
-    {# Ezcater group #}
+    {# Ezcater group — top-level click jumps to Orders per Sam 2026-05-11 #}
     <div class="nav-group {% if ezc_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/ezcater">
+      <a class="nav-group-toggle" href="/{{ store_slug }}/orders">
         <span class="nav-icon">▤</span>Ezcater
         <span class="nav-chevron">▸</span>
       </a>
@@ -170,49 +170,51 @@
       </div>
     </div>
 
-    {# Schedule group #}
+    {# Schedule group — top-level click jumps to All Roster per Sam 2026-05-11. Order: All / BOH / FOH / Weekly #}
     <div class="nav-group {% if sched_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/schedule-overview">
+      <a class="nav-group-toggle" href="/{{ store_slug }}/roster/all">
         <span class="nav-icon">📅</span>Schedule
         <span class="nav-chevron">▸</span>
       </a>
       <div class="nav-group-children">
+        <a class="nav-link {% if active == 'all_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/all"><span class="nav-icon">·</span>All Roster</a>
         <a class="nav-link {% if active == 'boh_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/boh"><span class="nav-icon">·</span>BOH Roster</a>
         <a class="nav-link {% if active == 'foh_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/foh"><span class="nav-icon">·</span>FOH Roster</a>
-        <a class="nav-link {% if active == 'all_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/all"><span class="nav-icon">·</span>All Roster</a>
         <a class="nav-link {% if active == 'weekly_schedule' %}active{% endif %}" href="/{{ store_slug }}/schedule"><span class="nav-icon">·</span>Weekly</a>
       </div>
     </div>
 
     <div class="nav-section">Insights</div>
 
-    {# Performance group #}
+    {# Performance group — top-level click jumps to All per Sam 2026-05-11. Order: All / Server / Bartenders / Prep #}
     <div class="nav-group {% if perf_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/performance">
+      <a class="nav-group-toggle" href="/{{ store_slug }}/reports/server-performance/all">
         <span class="nav-icon">🍽</span>Performance
         <span class="nav-chevron">▸</span>
       </a>
       <div class="nav-group-children">
+        <a class="nav-link {% if active == 'perf_all' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/all"><span class="nav-icon">·</span>All</a>
         <a class="nav-link {% if active == 'perf_server' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/server"><span class="nav-icon">·</span>Server</a>
         <a class="nav-link {% if active == 'perf_bartenders' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/bartenders"><span class="nav-icon">·</span>Bartenders</a>
         <a class="nav-link disabled"><span class="nav-icon">·</span>Prep<span class="nav-soon">soon</span></a>
-        <a class="nav-link {% if active == 'perf_all' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/all"><span class="nav-icon">·</span>All</a>
       </div>
     </div>
 
-    {# Sales group #}
+    {# Sales group — top-level click jumps to All (renamed from Total) per Sam 2026-05-11.
+       Order: All / Toast / Online Toast / Ezcater / Door Dash / Uber. "All" is the
+       full-mix view (in-store + every third-party channel), URL still /reports/sales/total. #}
     <div class="nav-group {% if sales_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/sales">
+      <a class="nav-group-toggle" href="/{{ store_slug }}/reports/sales/total">
         <span class="nav-icon">📈</span>Sales
         <span class="nav-chevron">▸</span>
       </a>
       <div class="nav-group-children">
+        <a class="nav-link {% if active == 'sales_total' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/total"><span class="nav-icon">·</span>All</a>
         <a class="nav-link {% if active == 'sales_toast' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/toast"><span class="nav-icon">·</span>Toast</a>
         <a class="nav-link {% if active == 'sales_online' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/online"><span class="nav-icon">·</span>Online Toast</a>
         <a class="nav-link {% if active == 'sales_ezcater' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/ezcater"><span class="nav-icon">·</span>Ezcater</a>
         <a class="nav-link {% if active == 'sales_doordash' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/doordash"><span class="nav-icon">·</span>Door Dash</a>
         <a class="nav-link {% if active == 'sales_uber' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/uber"><span class="nav-icon">·</span>Uber</a>
-        <a class="nav-link {% if active == 'sales_total' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/total"><span class="nav-icon">·</span>Total</a>
       </div>
     </div>
 

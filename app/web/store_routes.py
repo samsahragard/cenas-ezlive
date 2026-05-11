@@ -430,13 +430,28 @@ def produce_orders():
 
 @store_bp.route("/orders")
 def orders_list():
-    """Per-location order list. For partner/corporate (location=both), goes to
-    the store dashboard. For tomball/copperfield, renders the per-location
-    list inline so the sidebar inherits g.current_store from
-    store_bp.url_value_preprocessor (otherwise the bare /orders/<location>
-    URL loses store context — same shape as the driver-tracking bug)."""
+    """Per-location order list. For partner/corporate (location=both), renders
+    a combined view of Tomball + Copperfield orders so Ezcater→Orders is a
+    functional landing for partner-level users. For per-store sidebars,
+    renders just that store's orders. Sidebar context is preserved via
+    store_bp.url_value_preprocessor — without that, bare /orders/<location>
+    would lose store context (same shape as the driver-tracking bug)."""
     if g.current_location == "both":
-        return redirect(url_for("store.home"))
+        from app.web.orders_browse import list_orders_for_location, group_orders_by_date
+        db = next(get_db())
+        try:
+            tom = list_orders_for_location(db, "tomball")
+            cop = list_orders_for_location(db, "copperfield")
+            combined = tom + cop
+            groups = group_orders_by_date(combined)
+            return render_template(
+                "orders_by_store.html",
+                location="both",
+                location_label="All Orders",
+                groups=groups,
+            )
+        finally:
+            db.close()
     from app.web.orders_browse import location_orders
     return location_orders(g.current_location)
 

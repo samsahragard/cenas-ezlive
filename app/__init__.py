@@ -102,8 +102,10 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("drivers column backfill failed (non-fatal)")
 
-    # Idempotent column backfill for orders.total_amount (migration 10).
-    # Same self-healing pattern as the drivers backfill above.
+    # Idempotent column backfill for orders.total_amount (migration 10) AND
+    # the payroll backfill columns from migration 11. Same self-healing
+    # pattern as the drivers backfill above — each ALTER is gated on column
+    # absence so this is safe to run on every boot.
     try:
         from sqlalchemy import inspect as _sa_inspect2, text as _sa_text2
         from app.db import engine as _eng2
@@ -111,12 +113,59 @@ def create_app():
             insp = _sa_inspect2(_eng2)
             if "orders" in insp.get_table_names():
                 existing = {c["name"] for c in insp.get_columns("orders")}
-                if "total_amount" not in existing:
-                    with _eng2.begin() as conn:
+                migration_11_cols = [
+                    ("tracking_status",        "VARCHAR(40)"),
+                    ("ezcater_driver_name",    "VARCHAR(150)"),
+                    ("pickup_kitchen",         "VARCHAR(20)"),
+                    ("pickup_miles",           "FLOAT"),
+                    ("food_total",             "FLOAT"),
+                    ("tip_amount",             "FLOAT"),
+                    ("delivery_fee",           "FLOAT"),
+                    ("caterer_total_due",      "FLOAT"),
+                    ("delivery_result",        "VARCHAR(60)"),
+                    ("delivery_start_time",    "VARCHAR(20)"),
+                    ("delivery_complete_time", "VARCHAR(20)"),
+                ]
+                added = []
+                with _eng2.begin() as conn:
+                    if "total_amount" not in existing:
                         conn.execute(_sa_text2("ALTER TABLE orders ADD COLUMN total_amount FLOAT"))
-                    logging.getLogger(__name__).info("orders table: added total_amount column")
+                        added.append("total_amount")
+                    for col_name, col_def in migration_11_cols:
+                        if col_name not in existing:
+                            conn.execute(_sa_text2(f"ALTER TABLE orders ADD COLUMN {col_name} {col_def}"))
+                            added.append(col_name)
+                if added:
+                    logging.getLogger(__name__).info("orders table: backfilled missing columns %s", added)
     except Exception:
         logging.getLogger(__name__).exception("orders column backfill failed (non-fatal)")
+
+    # Seed ezcater_known_driver from the static roster Sam captured in his
+    # 5/10 screenshots. Idempotent: only inserts rows for phones not already
+    # present, so re-edits in the seed module on later boots add/update
+    # without duplicating. Empty rows can be added manually via a future
+    # admin UI; for now this is the authoritative starting set.
+    try:
+        from app.db import SessionLocal
+        from app.models import EzcaterKnownDriver
+        from app.services.ezcater_known_drivers_seed import seed_roster
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                existing_phones = {p for (p,) in db.query(EzcaterKnownDriver.phone_e164).all()}
+                inserted = 0
+                for row in seed_roster():
+                    if row["phone_e164"] and row["phone_e164"] not in existing_phones:
+                        db.add(EzcaterKnownDriver(**row))
+                        inserted += 1
+                if inserted:
+                    db.commit()
+                    logging.getLogger(__name__).info(
+                        "ezcater_known_driver: seeded %d new rows", inserted)
+            finally:
+                db.close()
+    except Exception:
+        logging.getLogger(__name__).exception("ezcater_known_driver seed failed (non-fatal)")
 
     # One-shot row backfill: compute total_amount for any existing Order rows
     # where it's NULL but items have parseable unit prices. Runs once per boot

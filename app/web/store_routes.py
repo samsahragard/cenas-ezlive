@@ -489,6 +489,8 @@ def drivers_admin():
     Anyone past the site `cenas` gate can reach /uno/, /dos/, /corporate/.
     Partner is additionally gated by the partner-auth before_request hook above.
     """
+    from app.models import EzcaterKnownDriver
+    from app.services.ezcater_known_drivers_seed import normalize_phone
     db = next(get_db())
     try:
         q = db.query(Driver)
@@ -505,10 +507,24 @@ def drivers_admin():
                               .group_by(DriverShift.driver_id)
                               .all()):
                 latest_shift_for[did] = sid
+
+        # Phone-match → "Verified ezCater driver" badge. Sam (2026-05-10):
+        # the green Active badge should reflect whether the driver's signup
+        # phone matches an entry in our seeded ezCater roster, not the
+        # manual on/off toggle alone. The toggle still exists as an override.
+        known_phones = {p for (p,) in db.query(EzcaterKnownDriver.phone_e164).all()}
+        verified_for = {}
+        for d in rows:
+            if d.phone:
+                verified_for[d.id] = normalize_phone(d.phone) in known_phones
+            else:
+                verified_for[d.id] = False
+
         return render_template(
             "driver_admin.html",
             drivers=rows,
             latest_shift_for=latest_shift_for,
+            verified_for=verified_for,
             store_label=g.store_label,
             current_location=g.current_location,
             location_labels=LOCATION_LABELS,

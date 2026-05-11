@@ -70,6 +70,21 @@ class Order(Base):
     # ratio. Nullable for legacy rows; populated by a backfill on first boot.
     total_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Per-order data backfilled from the ezCater Delivery Performance Report
+    # and Order Data XLSX exports (migration 11_payroll_backfill). These back
+    # the driver-payroll page and the per-driver / per-store sales views.
+    tracking_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ezcater_driver_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    pickup_kitchen: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    pickup_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    food_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tip_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
+    caterer_total_due: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_result: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    delivery_start_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    delivery_complete_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # Dispatch result, computed at upload time. Persisted so per-order views
     # can render the Driver / Prep Expo / Master tabs without re-running the
     # Google Maps + dispatch_planner stack.
@@ -341,6 +356,26 @@ class DeveloperChatMessage(Base):
         cascade="all, delete-orphan",
         order_by="DeveloperChatAttachment.id",
     )
+
+
+class EzcaterKnownDriver(Base):
+    """Manager-maintained roster of ezCater drivers we recognize, used to
+    auto-verify Driver signups. When a Driver signs up with a phone that
+    matches a row here, their `Driver.active` reflects 'verified ezCater
+    driver' rather than a manual toggle. Seeded from Sam's 5/10 screenshot
+    roster (CK#1 = Copperfield kitchen, CK#2 = Tomball kitchen)."""
+    __tablename__ = "ezcater_known_driver"
+    __table_args__ = (
+        UniqueConstraint("phone_e164", name="uq_ezcater_known_driver_phone"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    phone_e164: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # 1 = Copperfield kitchen (UNO MAS), 2 = Tomball kitchen (DOS MAS),
+    # NULL = ambiguous (no CK# prefix in source roster).
+    ck_prefix: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class DeveloperChatAttachment(Base):

@@ -47,20 +47,35 @@ def driver_login():
 
 @driver.route("/driver/login", methods=["POST"])
 def driver_login_submit():
-    email = _normalize_email(request.form.get("email"))
+    raw = (request.form.get("email") or "").strip()
     password = request.form.get("password") or ""
-    if not email or not password:
-        return render_template("driver_login.html", error="Email and password required.",
-                               prefill_email=email), 400
+    if not raw or not password:
+        return render_template("driver_login.html", error="Email or phone, plus password, required.",
+                               prefill_email=raw), 400
+    # Sam (2026-05-10): accept either email or phone as the login id. If the
+    # value contains digits but no '@', try the phone path first; otherwise
+    # treat as email.
+    from app.services.ezcater_known_drivers_seed import normalize_phone
     db = next(get_db())
     try:
-        found = db.query(Driver).filter(Driver.email == email).first()
+        found = None
+        if "@" in raw:
+            found = db.query(Driver).filter(Driver.email == _normalize_email(raw)).first()
+        else:
+            digits = normalize_phone(raw)
+            if digits:
+                # Match against any Driver whose stored phone normalizes to the same digits.
+                # Phones are stored loosely (free-text on signup), so we normalize on both sides.
+                for d in db.query(Driver).filter(Driver.phone.isnot(None)).all():
+                    if normalize_phone(d.phone) == digits:
+                        found = d
+                        break
         now = datetime.utcnow()
         if not found or not found.password_hash:
             return render_template("driver_login.html",
                                    error="No account found, or account hasn't been set up yet. "
                                          "Sign up below or contact your manager.",
-                                   prefill_email=email), 401
+                                   prefill_email=raw), 401
         if not found.active:
             return render_template("driver_login.html",
                                    error="This account is deactivated. Contact your manager.",

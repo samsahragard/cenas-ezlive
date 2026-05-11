@@ -143,11 +143,11 @@
 
   <div class="auth-card">
     <h2>Log in</h2>
-    <p class="sub">Use the email + password you signed up with.</p>
+    <p class="sub">Use the email <em>or</em> phone number + password you signed up with.</p>
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
     <form method="POST" action="{{ url_for('driver.driver_login_submit') }}">
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" autocomplete="email"
+      <label for="email">Email or phone</label>
+      <input type="text" id="email" name="email" autocomplete="username"
              required autofocus value="{{ prefill_email or '' }}">
 
       <label for="password">Password</label>

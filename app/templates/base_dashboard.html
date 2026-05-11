@@ -13,6 +13,44 @@
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  <style>
+    /* Persistent category sub-nav (rendered by base_dashboard.html when
+       subnav_for(active, store_slug) returns cards — see store_routes.py). */
+    .subnav-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 18px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.30);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 12px;
+    }
+    .subnav-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.78);
+      text-decoration: none;
+      font-size: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .subnav-pill:hover {
+      background: rgba(255, 255, 255, 0.10);
+      color: #fff;
+      border-color: rgba(232, 122, 62, 0.45);
+    }
+    .subnav-pill.is-active {
+      background: rgba(232, 122, 62, 0.18);
+      color: #fff;
+      border-color: rgba(232, 122, 62, 0.65);
+    }
+    .subnav-pill .sn-icon { font-size: 14px; }
+  </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
@@ -230,6 +268,18 @@
       </div>
     </div>
     {% endblock %}
+
+    {% set _subnav = subnav_for(active|default(none), g.current_store) %}
+    {% if _subnav %}
+    <div class="subnav-row">
+      {% for c in _subnav %}
+        <a href="{{ c.href }}" class="subnav-pill{% if c.active == active %} is-active{% endif %}" title="{{ c.sub or '' }}">
+          <span class="sn-icon">{{ c.icon }}</span>
+          <span>{{ c.label }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {% block content %}{% endblock %}
   </main>

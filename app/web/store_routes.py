@@ -109,6 +109,77 @@ def _render_landing(group_active: str, title: str, subtitle: str, cards: list[di
     )
 
 
+# ============== PERSISTENT CATEGORY SUB-NAV ==============
+# Sam (2026-05-10) wants the options that appear on a category's landing
+# page (Ezcater → Orders / Order Processor / Driver Payroll / Driver Portal
+# / Drivers Admin / Drivers Live) to also persist as a horizontal nav-row
+# at the top of every sub-page in that category. base_dashboard.html calls
+# subnav_for(active, store_slug) via the context processor below.
+#
+# This commit ships the Ezcater proof. Vendors / Schedule / Performance
+# plug in their own builders in a follow-up once Sam signs off on the look.
+
+def _ezcater_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "Orders", "icon": "📋", "href": f"/{store_slug}/orders",
+         "active": "ezcater_orders",
+         "sub": "Today + upcoming catering orders for this store."},
+        {"label": "Order Processor", "icon": "📄", "href": f"/{store_slug}/orders/processor",
+         "active": "processor",
+         "sub": "Upload PDF orders for legacy ingest (webhook is primary now)."},
+        {"label": "Driver Payroll", "icon": "💵", "href": f"/{store_slug}/driver-tracking",
+         "active": "driver_tracking",
+         "sub": "Per-driver delivery log: miles / on-time / tracking / 5★ / notes."},
+        {"label": "Driver Portal", "icon": "🚗", "href": f"/{store_slug}/driver-portal",
+         "active": "driver_portal",
+         "sub": "Driver-facing view (login + their own assignments)."},
+        {"label": "Drivers (Admin)", "icon": "👥", "href": f"/{store_slug}/drivers",
+         "active": "drivers_admin",
+         "sub": "Add / reset password / deactivate driver accounts."},
+        {"label": "Drivers Live", "icon": "📍", "href": f"/{store_slug}/drivers-live",
+         "active": "drivers_live",
+         "sub": "Live GPS map of all drivers currently on shift."},
+    ]
+
+
+# Map each per-page `active` value to its category. Keep in lock-step with
+# the *_open sets in base_dashboard.html. Pages whose active value isn't
+# in this map don't get a sub-nav (None falls through cleanly in the
+# template).
+_ACTIVE_TO_CATEGORY = {
+    # Ezcater (matches ezc_open in base_dashboard.html)
+    "ezcater_landing":  "ezcater",
+    "ezcater_orders":   "ezcater",
+    "processor":        "ezcater",
+    "driver_tracking":  "ezcater",
+    "driver_portal":    "ezcater",
+    "drivers_admin":    "ezcater",
+    "drivers_live":     "ezcater",
+}
+
+_CATEGORY_SUBNAV_BUILDERS = {
+    "ezcater": _ezcater_subnav_cards,
+}
+
+
+def _subnav_for(active, store_slug):
+    if not active:
+        return None
+    category = _ACTIVE_TO_CATEGORY.get(active)
+    if not category:
+        return None
+    builder = _CATEGORY_SUBNAV_BUILDERS.get(category)
+    if not builder:
+        return None
+    return builder(store_slug or "partner")
+
+
+@store_bp.app_context_processor
+def _inject_subnav():
+    """Expose subnav_for() to every template via the base layout."""
+    return {"subnav_for": _subnav_for}
+
+
 @store_bp.route("/vendors")
 def vendors_landing():
     cards = [
@@ -128,20 +199,7 @@ def vendors_landing():
 
 @store_bp.route("/ezcater")
 def ezcater_landing():
-    cards = [
-        {"label": "Orders", "icon": "📋", "href": f"/{g.current_store}/orders",
-         "sub": "Today + upcoming catering orders for this store."},
-        {"label": "Order Processor", "icon": "📄", "href": f"/{g.current_store}/orders/processor",
-         "sub": "Upload PDF orders for legacy ingest (webhook is primary now)."},
-        {"label": "Driver Payroll", "icon": "💵", "href": f"/{g.current_store}/driver-tracking",
-         "sub": "Per-driver delivery log: miles / on-time / tracking / 5★ / notes."},
-        {"label": "Driver Portal", "icon": "🚗", "href": f"/{g.current_store}/driver-portal",
-         "sub": "Driver-facing view (login + their own assignments)."},
-        {"label": "Drivers (Admin)", "icon": "👥", "href": f"/{g.current_store}/drivers",
-         "sub": "Add / reset password / deactivate driver accounts."},
-        {"label": "Drivers Live", "icon": "📍", "href": f"/{g.current_store}/drivers-live",
-         "sub": "Live GPS map of all drivers currently on shift."},
-    ]
+    cards = _ezcater_subnav_cards(g.current_store)
     return _render_landing("ezcater_landing", "Ezcater", f"{g.store_label} · catering operations", cards)
 
 

@@ -4,7 +4,7 @@
 
 {% block page_title %}ezCater Import{% endblock %}
 {% block page_subtitle %}
-  <p class="greeting-sub">Drop the Caterer Portal "Order Data" xlsx export to backfill order totals.</p>
+  <p class="greeting-sub">Two XLSX uploaders — the Order Data export backfills financials, the Delivery Performance Report backfills tracking + driver per delivery.</p>
 {% endblock %}
 
 {% block content %}
@@ -14,7 +14,7 @@
 
 {% if result %}
   <div class="banner banner-success" style="margin-bottom:18px;">
-    <strong>Import complete.</strong>
+    <strong>{{ report_type or 'Order Data' }} import complete.</strong>
     Parsed <strong>{{ result.parsed }}</strong> rows · Updated <strong>{{ result.updated }}</strong> existing orders ·
     Created <strong>{{ result.created }}</strong> stubs · Skipped <strong>{{ result.skipped }}</strong>.
   </div>
@@ -61,21 +61,56 @@
   {% endif %}
 {% endif %}
 
+<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:stretch;">
+  <div class="login-card" style="flex:1 1 360px;max-width:520px;margin-top:18px;">
+    <h3 style="margin:0 0 4px;font-size:15px;">Order Data report</h3>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--text-3);">
+      Backfills Food Total · Tip · Delivery Fee · Caterer Total Due · Driver per order.
+    </p>
+    <form method="POST" action="{{ url_for('ezcater_import.upload') }}" enctype="multipart/form-data">
+      <div class="login-field">
+        <label for="xlsx_order">Order Data XLSX</label>
+        <input type="file" id="xlsx_order" name="xlsx" accept=".xlsx" required
+               style="width:100%;padding:11px 13px;font-size:14px;background:rgba(255,255,255,0.04);
+                      border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;">
+      </div>
+      <button type="submit" class="btn-login" style="margin-top:14px;">Import financials</button>
+    </form>
+  </div>
+
+  <div class="login-card" style="flex:1 1 360px;max-width:520px;margin-top:18px;">
+    <h3 style="margin:0 0 4px;font-size:15px;">Delivery Performance Report</h3>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--text-3);">
+      Backfills tracking status (Tracked / Partial / Untracked) + driver name + start/complete times per delivery. Gates the payroll bonuses.
+    </p>
+    <form method="POST" action="{{ url_for('ezcater_import.upload_performance') }}" enctype="multipart/form-data">
+      <div class="login-field">
+        <label for="xlsx_perf">Performance Report XLSX</label>
+        <input type="file" id="xlsx_perf" name="xlsx" accept=".xlsx" required
+               style="width:100%;padding:11px 13px;font-size:14px;background:rgba(255,255,255,0.04);
+                      border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;">
+      </div>
+      <button type="submit" class="btn-login" style="margin-top:14px;">Import tracking</button>
+    </form>
+  </div>
+</div>
+
 <div class="login-card" style="max-width:520px;margin-top:18px;">
-  <form method="POST" enctype="multipart/form-data">
-    <div class="login-field">
-      <label for="xlsx">Order Data XLSX</label>
-      <input type="file" id="xlsx" name="xlsx" accept=".xlsx" required
-             style="width:100%;padding:11px 13px;font-size:14px;background:rgba(255,255,255,0.04);
-                    border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;">
-    </div>
-    <button type="submit" class="btn-login" style="margin-top:14px;">Import</button>
+  <h3 style="margin:0 0 4px;font-size:15px;">Miles backfill</h3>
+  <p style="margin:0 0 14px;font-size:12px;color:var(--text-3);">
+    For each order with a pickup kitchen + drop-off address but no pickup_miles
+    yet, call Google Routes API for one-way driving distance and store the
+    result. 50 orders per click (~$0.25 in API calls). Click again until done.
+  </p>
+  <form method="POST" action="{{ url_for('ezcater_import.backfill_miles') }}">
+    <button type="submit" class="btn-login">Backfill next 50</button>
   </form>
 </div>
 
 <p style="margin-top:18px;font-size:12px;color:var(--text-3);">
-  Where to get the file: ezCater Caterer Portal → Reports → Order Data (or Sales) → date range → Export to XLSX.
-  We use the <code>Food Total</code> column as the canonical revenue (matches Toast's pre-tax check.amount).
-  <code>Caterer Total Due</code> is also captured for reference.
+  Where to get the files: ezCater Caterer Portal → Reports →
+  <strong>Order Data</strong> (financials) and <strong>Delivery Performance Report</strong> (tracking).
+  Set a date range and export each to XLSX. Re-uploads are idempotent — newer data overwrites older.
+  After uploading at least one Order Data export so drop-off addresses are populated, run the miles backfill above.
 </p>
 {% endblock %}

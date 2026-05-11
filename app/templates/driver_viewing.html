@@ -90,14 +90,18 @@
 
   let onShift = card.dataset.onShift === '1';
   let pollId = null;
+  let tickId = null;
   let wakeLock = null;
   let postCount = 0;
+  let lastPos = null;        // last successful GPS fix; reused as heartbeat when getCurrentPosition fails
+  let lastFixAt = 0;         // wall-clock ms of last successful fix
+  let postQueue = [];        // failed POST bodies, drained on next cycle
+  let permDenied = false;    // sticky: surfaces a permanent banner so driver knows to re-grant
 
-  // Explicit polling beats watchPosition on iOS Safari, which throttles or
-  // pauses the watch callback aggressively when the page isn't actively
-  // moving / screen is dim / etc. setInterval guarantees a fresh fix attempt
-  // every POLL_MS regardless of what the OS thinks the page is doing.
-  const POLL_MS = 5000;
+  // Polling cadence + colour thresholds for the age indicator.
+  const POLL_MS       = 5000;
+  const STALE_AMBER_S = 15;
+  const STALE_RED_S   = 30;
 
   function setUI(state, msg) {
     if (state === 'on') {
@@ -115,41 +119,63 @@
   }
 
   async function requestWakeLock() {
-    if ('wakeLock' in navigator) {
-      try { wakeLock = await navigator.wakeLock.request('screen'); }
-      catch (e) { /* user can deny — not fatal */ }
-    }
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      // OS/browser may release under battery pressure or visibility change.
+      // Auto-renew while on shift + visible so the page keeps polling.
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+        if (onShift && document.visibilityState === 'visible') requestWakeLock();
+      });
+    } catch (e) { /* lock denied — not fatal, polling continues while tab is foreground */ }
   }
 
   function releaseWakeLock() {
     if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   }
 
-  async function postPosition(pos) {
-    const c = pos.coords;
+  async function postOne(body) {
     try {
       const res = await fetch('/driver/track', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          lat: c.latitude,
-          lng: c.longitude,
-          accuracy_m: c.accuracy,
-          speed_mps: c.speed,
-          heading_deg: c.heading,
-        }),
+        body: JSON.stringify(body),
       });
-      if (res.ok) {
-        postCount++;
-        statusEl.textContent = `streamed · ${postCount} fix${postCount === 1 ? '' : 'es'} · accuracy ${Math.round(c.accuracy)}m`;
-      } else if (res.status === 409) {
-        statusEl.textContent = 'shift closed on server — refresh page';
-        stopStreaming();
-      } else {
-        statusEl.textContent = `server ${res.status}`;
-      }
+      if (res.ok) return {ok: true};
+      if (res.status === 409) return {closed: true};
+      return {http: res.status};
     } catch (e) {
-      statusEl.textContent = `network error: ${e.message || e}`;
+      return {network: true};
+    }
+  }
+
+  async function flushQueue() {
+    while (postQueue.length > 0) {
+      const r = await postOne(postQueue[0]);
+      if (r.ok) { postQueue.shift(); postCount++; }
+      else break;  // leave the rest for the next tick
+    }
+  }
+
+  async function postPosition(pos, isHeartbeat) {
+    const c = pos.coords;
+    const body = {
+      lat: c.latitude, lng: c.longitude,
+      accuracy_m: c.accuracy, speed_mps: c.speed, heading_deg: c.heading,
+      is_heartbeat: !!isHeartbeat,
+    };
+    const r = await postOne(body);
+    if (r.ok) {
+      postCount++;
+      if (!isHeartbeat) { lastPos = pos; lastFixAt = Date.now(); }
+      else if (!lastFixAt) { lastFixAt = Date.now(); }  // first heartbeat counts as a touch
+      if (postQueue.length > 0) flushQueue();
+    } else if (r.closed) {
+      statusEl.textContent = 'shift closed on server — refresh page';
+      stopStreaming();
+    } else {
+      postQueue.push(body);
     }
   }
 
@@ -160,10 +186,37 @@
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      postPosition,
-      (err) => { statusEl.textContent = `GPS error: ${err.message}`; },
+      pos => { permDenied = false; postPosition(pos, false); },
+      (err) => {
+        if (err.code === 1 /* PERMISSION_DENIED */) permDenied = true;
+        // Heartbeat-resend: reuse last good fix so the manager-side timestamp
+        // stays fresh while GPS recovers (driver indoors, GPS warming, etc.).
+        if (lastPos) postPosition(lastPos, true);
+      },
       {enableHighAccuracy: true, maximumAge: 0, timeout: 8000}
     );
+  }
+
+  function tickStatus() {
+    if (permDenied) {
+      statusEl.style.color = '#c0392b';
+      statusEl.textContent = '⚠ location permission denied — re-enable in your browser settings, then refresh';
+      return;
+    }
+    if (!lastFixAt) {
+      statusEl.style.color = 'rgba(255,255,255,0.55)';
+      statusEl.textContent = pollId ? 'requesting GPS…' : '';
+      return;
+    }
+    const ageS = Math.round((Date.now() - lastFixAt) / 1000);
+    let color = 'rgba(123,184,123,0.85)';
+    if (ageS >= STALE_AMBER_S) color = '#c0a850';
+    if (ageS >= STALE_RED_S)   color = '#c0392b';
+    statusEl.style.color = color;
+    const fixWord = postCount === 1 ? 'fix' : 'fixes';
+    const qSuffix = postQueue.length > 0 ? ` · ${postQueue.length} queued` : '';
+    const wakeSuffix = (onShift && 'wakeLock' in navigator && !wakeLock) ? ' · screen sleep risk' : '';
+    statusEl.textContent = `streamed · ${postCount} ${fixWord} · last ${ageS}s ago${qSuffix}${wakeSuffix}`;
   }
 
   function startStreaming() {
@@ -172,15 +225,20 @@
       return;
     }
     requestWakeLock();
-    pollOnce();                               // immediate first fix
-    pollId = setInterval(pollOnce, POLL_MS);  // then every POLL_MS
+    pollOnce();                          // immediate first fix
+    pollId = setInterval(pollOnce, POLL_MS);
+    tickId = setInterval(tickStatus, 1000);
     statusEl.textContent = 'requesting GPS…';
   }
 
   function stopStreaming() {
     if (pollId !== null) { clearInterval(pollId); pollId = null; }
+    if (tickId !== null) { clearInterval(tickId); tickId = null; }
     releaseWakeLock();
     statusEl.textContent = '';
+    statusEl.style.color = 'rgba(255,255,255,0.45)';
+    postCount = 0; lastPos = null; lastFixAt = 0;
+    postQueue = []; permDenied = false;
   }
 
   async function startShift() {
@@ -217,13 +275,16 @@
     if (onShift) endShift(); else startShift();
   });
 
-  // If page loads with an open shift (e.g. driver re-opened the tab), resume streaming
+  // If page loads with an open shift (e.g. driver re-opened the tab), resume.
   if (onShift) startStreaming();
 
-  // Re-acquire wake lock if it gets released by tab going visible again
+  // When the tab returns to foreground: re-acquire the wake lock (the OS
+  // commonly releases it when the page is hidden) AND poll immediately so
+  // the manager-side timestamp catches up without waiting for the next tick.
   document.addEventListener('visibilitychange', () => {
-    if (onShift && document.visibilityState === 'visible' && !wakeLock) {
-      requestWakeLock();
+    if (onShift && document.visibilityState === 'visible') {
+      if (!wakeLock) requestWakeLock();
+      pollOnce();
     }
   });
 })();

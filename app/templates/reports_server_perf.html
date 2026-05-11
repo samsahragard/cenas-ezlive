@@ -11,7 +11,7 @@
 
 <!-- Period quick-toggle (Today / This Week / Last Week). Defaults to Today on first load. -->
 <div class="dash-chart-tabs" style="margin-bottom: 12px;">
-  {% set base = url_for('reports.server_performance') %}
+  {% set base = request.path %}
   {% set loc_qs = '&location=' ~ form_location if form_location else '' %}
   <a class="dash-chart-tab {% if active_period == 'today' %}is-active{% endif %}"
      href="{{ base }}?period=today{{ loc_qs }}">Today</a>
@@ -24,7 +24,7 @@
   {% endif %}
 </div>
 
-<form method="GET" action="{{ url_for('reports.server_performance') }}"
+<form method="GET" action=""
       style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
              padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
              display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">

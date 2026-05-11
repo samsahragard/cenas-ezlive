@@ -10,7 +10,12 @@
 
 {% block content %}
 
-{% set base = url_for('reports.labor') %}
+{# Use the current path (stripped of role suffix) so partner/uno/dos scopes are preserved across pill clicks #}
+{% if request.path.endswith('/boh') or request.path.endswith('/foh') %}
+  {% set base = request.path[:-4] %}
+{% else %}
+  {% set base = request.path %}
+{% endif %}
 {% set loc_qs = '&location=' ~ form_location if form_location else '' %}
 {# Carry the role suffix on period clicks so switching time doesn't drop the role #}
 {% set role_path = '/' ~ role_filter if role_filter in ['boh','foh'] else '' %}
@@ -42,7 +47,7 @@
      href="{{ base }}/foh?{{ period_qs.lstrip('&') }}{{ loc_qs }}">FOH</a>
 </div>
 
-<form method="GET" action="{{ url_for('reports.labor') }}"
+<form method="GET" action=""
       style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
              padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
              display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">

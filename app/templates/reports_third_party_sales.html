@@ -11,7 +11,7 @@
 
 {# Build the carry-over query string so period + channel pills don't clobber
    each other. Only carry the params we want to keep — drop ones being clicked. #}
-{% set base = url_for('reports.third_party_sales') %}
+{% set base = request.path %}
 
 {# Channels-CSV used by period pills (preserve current selection across time changes) #}
 {% set channels_param = (selected_channels or ['all']) | join(',') %}
@@ -56,7 +56,7 @@
   {% endfor %}
 </div>
 
-<form method="GET" action="{{ url_for('reports.third_party_sales') }}"
+<form method="GET" action=""
       style="background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px;
              padding: 16px; margin-bottom: 18px; backdrop-filter: blur(12px);
              display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">

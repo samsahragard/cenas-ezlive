@@ -727,4 +727,26 @@ def ingest_state():
             out["state_after"] = state
         except Exception as e:
             out["reset_error"] = str(e)
+    # Optional: patch a vendor's date_range string (Sam's manual override per
+    # 2026-05-11 "change 8 to 9 to 10 to 16, just for this time" — JLuna sent
+    # an old 5/8-5/9 list but the prices are current for 5/10-5/16).
+    if request.args.get("patch_vendor"):
+        try:
+            vendor = request.args["patch_vendor"]
+            new_dr = request.args.get("set_date_range")
+            vendor_path = state_dir / f"{vendor}.json"
+            data = _read_json(vendor_path, {})
+            if not data:
+                out["patch_error"] = f"{vendor}.json not found"
+            elif not new_dr:
+                out["patch_error"] = "set_date_range param missing"
+            else:
+                old_dr = data.get("date_range")
+                data["date_range"] = new_dr
+                tmp = vendor_path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                tmp.replace(vendor_path)
+                out["patch_applied"] = {"vendor": vendor, "old": old_dr, "new": new_dr}
+        except Exception as e:
+            out["patch_error"] = str(e)
     return jsonify(out)

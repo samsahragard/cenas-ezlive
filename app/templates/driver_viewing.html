@@ -97,11 +97,23 @@
   let lastFixAt = 0;         // wall-clock ms of last successful fix
   let postQueue = [];        // failed POST bodies, drained on next cycle
   let permDenied = false;    // sticky: surfaces a permanent banner so driver knows to re-grant
+  let nativeWatcherId = null;
 
   // Polling cadence + colour thresholds for the age indicator.
   const POLL_MS       = 5000;
   const STALE_AMBER_S = 15;
   const STALE_RED_S   = 30;
+
+  // Capacitor native shell detection. When the page is loaded inside the
+  // Cenas Kitchen Driver Android/iOS app (the Capacitor wrapper), we route
+  // GPS through the @capacitor-community/background-geolocation plugin
+  // running as a native foreground service. That survives the WebView
+  // being suspended (Chrome closed, phone in pocket, app-switched away) —
+  // the thing pure-web getCurrentPosition cannot do. The web polling path
+  // below remains as the fallback when the page is loaded in a regular
+  // browser instead of the Capacitor shell.
+  const inCapacitor = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+  const BgGeo = inCapacitor && window.Capacitor.Plugins ? window.Capacitor.Plugins.BackgroundGeolocation : null;
 
   function setUI(state, msg) {
     if (state === 'on') {
@@ -219,10 +231,68 @@
     statusEl.textContent = `streamed · ${postCount} ${fixWord} · last ${ageS}s ago${qSuffix}${wakeSuffix}`;
   }
 
-  function startStreaming() {
+  async function startNativeTracking() {
+    if (!BgGeo) return false;
+    try {
+      nativeWatcherId = await BgGeo.addWatcher({
+        requestPermissions: true,
+        stale: false,
+        backgroundMessage: 'Cenas Kitchen driver tracking active',
+        backgroundTitle: 'On Shift',
+        distanceFilter: 10,   // meters between reports while moving
+      }, async (loc, err) => {
+        if (err) {
+          if (err.code === 'NOT_AUTHORIZED') permDenied = true;
+          return;
+        }
+        const body = {
+          lat: loc.latitude,
+          lng: loc.longitude,
+          accuracy_m: loc.accuracy,
+          speed_mps: loc.speed,
+          heading_deg: loc.bearing,
+          is_native: true,
+        };
+        const r = await postOne(body);
+        if (r.ok) {
+          postCount++;
+          lastPos = {coords: {latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy, speed: loc.speed, heading: loc.bearing}};
+          lastFixAt = Date.now();
+          if (postQueue.length > 0) flushQueue();
+        } else if (r.closed) {
+          stopStreaming();
+        } else {
+          postQueue.push(body);
+        }
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function stopNativeTracking() {
+    if (BgGeo && nativeWatcherId !== null) {
+      try { await BgGeo.removeWatcher({id: nativeWatcherId}); } catch (_) {}
+      nativeWatcherId = null;
+    }
+  }
+
+  async function startStreaming() {
     if (!('geolocation' in navigator)) {
       statusEl.textContent = 'this device has no GPS';
       return;
+    }
+    // Native path: foreground service keeps tracking alive while the WebView
+    // is suspended. Wake Lock isn't requested here — native owns the lifecycle.
+    if (inCapacitor && BgGeo) {
+      const ok = await startNativeTracking();
+      if (ok) {
+        tickId = setInterval(tickStatus, 1000);
+        statusEl.textContent = 'native GPS active (background-safe)';
+        return;
+      }
+      // fall through to web path if plugin refused to start (perms denied, etc.)
     }
     requestWakeLock();
     pollOnce();                          // immediate first fix
@@ -234,6 +304,7 @@
   function stopStreaming() {
     if (pollId !== null) { clearInterval(pollId); pollId = null; }
     if (tickId !== null) { clearInterval(tickId); tickId = null; }
+    stopNativeTracking();
     releaseWakeLock();
     statusEl.textContent = '';
     statusEl.style.color = 'rgba(255,255,255,0.45)';

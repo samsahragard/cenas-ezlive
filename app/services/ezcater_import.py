@@ -385,7 +385,10 @@ def apply_performance_import(rows: list[dict]) -> dict:
             "updated": updated,
             "created": created,
             "skipped": skipped,
-            "examples_updated": examples_updated,
+            # Different example-row shape than the Order Data importer (we have
+            # tracking/driver, not old/new totals), and the result template
+            # currently only knows how to render the Order Data shape — so
+            # skip examples here and just surface the counts banner.
         }
     finally:
         db.close()

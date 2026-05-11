@@ -572,6 +572,7 @@ def _poll_once() -> int:
             return 0
         ids = data[0].split()
         if not ids:
+            logger.info("poll: inbox empty")
             return 0
         max_mid = int(ids[-1])
         if last_seen == 0:
@@ -582,6 +583,8 @@ def _poll_once() -> int:
             return 0
 
         new_ids = [i for i in ids if int(i) > last_seen]
+        logger.info("poll: inbox total=%d last_seen=%d max_mid=%d new=%d",
+                    len(ids), last_seen, max_mid, len(new_ids))
         for nid in new_ids:
             mid_str = nid.decode()
             if mid_str in state.get("processed", {}):

@@ -10,6 +10,9 @@ on:
       - 'mobile/**'
   workflow_dispatch:
 
+permissions:
+  contents: write  # required to create/update the android-debug-latest release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,9 +44,31 @@ jobs:
         working-directory: mobile/android
         run: chmod +x gradlew && ./gradlew assembleDebug
 
-      - name: Upload debug APK
+      - name: Rename APK for distribution
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk mobile/android/app/build/outputs/apk/debug/cenas-driver.apk
+
+      - name: Upload debug APK (workflow artifact, requires GitHub login)
         uses: actions/upload-artifact@v4
         with:
           name: cenas-driver-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: mobile/android/app/build/outputs/apk/debug/cenas-driver.apk
           if-no-files-found: error
+
+      # Publish to a rolling release so /driver/app.apk on the live site
+      # has a stable, no-login-required download URL for drivers to
+      # sideload. Only runs on pushes to main so PR builds don't churn
+      # the release.
+      - name: Publish to android-debug-latest release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-debug-latest
+          name: "Android debug build (latest)"
+          body: |
+            Rolling debug APK from the latest `main` build. Sideload only —
+            not Play-Store signed yet. Drivers fetch this via
+            https://app.cenaskitchen.com/driver/app.apk (302-redirects to
+            the asset below).
+          files: mobile/android/app/build/outputs/apk/debug/cenas-driver.apk
+          prerelease: true
+          make_latest: "false"

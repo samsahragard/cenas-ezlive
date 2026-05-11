@@ -40,6 +40,21 @@ def driver_root():
     return redirect(url_for("driver.driver_login"))
 
 
+# Stable in-app link to the latest Android APK. Redirects to the
+# "android-debug-latest" GitHub Release published by the
+# .github/workflows/mobile-android.yml workflow on each successful
+# build. Drivers hit this from the signup page after creating their
+# account, sideload the APK, then use the app instead of the browser
+# for real background GPS tracking.
+@driver.route("/driver/app.apk", methods=["GET"])
+def driver_app_apk():
+    return redirect(
+        "https://github.com/samsahragard/cenas-ezlive/releases/download/"
+        "android-debug-latest/cenas-driver.apk",
+        code=302,
+    )
+
+
 @driver.route("/driver/login", methods=["GET"])
 def driver_login():
     return render_template("driver_login.html", error=None, prefill_email=request.args.get("email", ""))

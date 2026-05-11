@@ -166,11 +166,32 @@ class ToastClient:
 
     def fetch_time_entries(self, location: str, restaurant_guid: str,
                            start: datetime, end: datetime, refresh: bool = False) -> list:
-        """Pull time entries for [start, end] inclusive (one-shot range)."""
+        """Pull time entries for [start, end] inclusive (one-shot range).
+
+        Same recent-date cache invalidation as fetch_orders_for_date: if
+        the range ends within the last 2 calendar days, only trust the cache
+        when it has data AND is <30 min old, else re-fetch. This catches the
+        bug where an early-morning empty pull (no one clocked in yet) got
+        cached and stuck for the rest of the day, leaving the dashboard
+        Labor donut blank even while staff worked their shifts.
+        """
         key = f"timeentries_{start.strftime('%Y-%m-%d')}_{end.strftime('%Y-%m-%d')}_{location}.json"
         path = _cache_dir() / key
         if path.exists() and not refresh:
-            return json.loads(path.read_text(encoding="utf-8"))
+            try:
+                ct_today = (datetime.utcnow() - timedelta(hours=5)).date()
+                age_days = (ct_today - end.date()).days
+                cached = json.loads(path.read_text(encoding="utf-8"))
+                if age_days <= 2:
+                    mtime = path.stat().st_mtime
+                    age_min = (time.time() - mtime) / 60
+                    if cached and age_min < 30:
+                        return cached
+                    # else fall through to refetch
+                else:
+                    return cached
+            except Exception:
+                pass  # fall through to refetch on parse error
         # CDT (UTC-5). Avoids tzdata issues. Range is inclusive on both ends.
         start_iso = start.strftime("%Y-%m-%dT00:00:00.000-0500")
         end_iso = (end + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00.000-0500")

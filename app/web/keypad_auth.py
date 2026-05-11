@@ -122,11 +122,22 @@ def login():
         if not nxt.startswith("/"):
             nxt = "/"
         return redirect(nxt)
-    return render_template(
+    return _no_store(render_template(
         "keypad_login.html",
         next_url=request.args.get("next") or "/",
         passcode_len=PASSCODE_LEN,
-    )
+    ))
+
+
+def _no_store(body):
+    """Wrap an HTML body so the browser doesn't cache the inline JS — Sam
+    (2026-05-11) was hitting stale templates after deploys because his
+    phone cached the prior keypad HTML (with the old digits-only JS)."""
+    resp = current_app.make_response(body)
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @keypad_auth.route("/keypad-login", methods=["POST"])
@@ -182,12 +193,12 @@ def change_passcode():
         if not u:
             session.pop("user_id", None)
             return redirect(url_for("keypad_auth.login"))
-        return render_template(
+        return _no_store(render_template(
             "keypad_change_passcode.html",
             user=u,
             passcode_len=PASSCODE_LEN,
             forced=not u.first_login_done,
-        )
+        ))
     finally:
         db.close()
 

@@ -122,39 +122,218 @@ def _render_landing(group_active: str, title: str, subtitle: str, cards: list[di
 def _ezcater_subnav_cards(store_slug: str) -> list[dict]:
     return [
         {"label": "Orders", "icon": "📋", "href": f"/{store_slug}/orders",
-         "active": "ezcater_orders",
+         "active": ["ezcater_orders"],
          "sub": "Today + upcoming catering orders for this store."},
         {"label": "Order Processor", "icon": "📄", "href": f"/{store_slug}/orders/processor",
-         "active": "processor",
+         "active": ["processor"],
          "sub": "Upload PDF orders for legacy ingest (webhook is primary now)."},
         {"label": "Driver Payroll", "icon": "💵", "href": f"/{store_slug}/driver-tracking",
-         "active": "driver_tracking",
+         "active": ["driver_tracking"],
          "sub": "Per-driver delivery log: miles / on-time / tracking / 5★ / notes."},
         {"label": "Drivers (Admin)", "icon": "👥", "href": f"/{store_slug}/drivers",
-         "active": "drivers_admin",
+         "active": ["drivers_admin"],
          "sub": "Add / reset password / deactivate driver accounts."},
         {"label": "Drivers Live", "icon": "📍", "href": f"/{store_slug}/drivers-live",
-         "active": "drivers_live",
+         "active": ["drivers_live"],
          "sub": "Live GPS map of all drivers currently on shift."},
     ]
 
 
+def _corporate_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "Order", "icon": "🛒", "href": f"/{store_slug}/corporate-order",
+         "active": ["corporate_order"],
+         "sub": "Catalog + cart for the corporate order surface."},
+        {"label": "Reports", "icon": "📊", "href": f"/{store_slug}/corporate-order/reports",
+         "active": ["corporate_order_reports"],
+         "sub": "Order history + per-store analytics + top products."},
+    ]
+
+
+def _vendors_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "Produce — Order", "icon": "🥬", "href": f"/{store_slug}/produce/",
+         "active": ["produce"],
+         "sub": "Today's order guide with cheaper-vendor pricing + one-click submit."},
+        {"label": "Produce — Price History", "icon": "📈", "href": f"/{store_slug}/produce/orders",
+         "active": ["produce_orders"],
+         "sub": "Per-item price tracking and biggest-movers callout."},
+        {"label": "Webstaurant", "icon": "📦", "disabled": True,
+         "active": ["webstaurant"],
+         "sub": "Restaurant-supply orders. Coming soon."},
+        {"label": "Vendor Performance", "icon": "📊", "disabled": True,
+         "active": ["vendor_perf"],
+         "sub": "On-time / accuracy scoring per vendor. Coming soon."},
+        {"label": "Specs", "icon": "📋", "disabled": True,
+         "active": ["specs"],
+         "sub": "Product specs + nutritional info. Coming soon."},
+    ]
+
+
+def _schedule_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "BOH Roster", "icon": "👨‍🍳", "href": f"/{store_slug}/roster/boh",
+         "active": ["boh_roster"],
+         "sub": "Back-of-house employees on roster."},
+        {"label": "FOH Roster", "icon": "🍽", "href": f"/{store_slug}/roster/foh",
+         "active": ["foh_roster"],
+         "sub": "Front-of-house employees on roster."},
+        {"label": "All Roster", "icon": "👥", "href": f"/{store_slug}/roster/all",
+         "active": ["all_roster"],
+         "sub": "Combined roster across BOH + FOH."},
+        {"label": "Weekly Schedule", "icon": "📅", "href": f"/{store_slug}/schedule/weekly",
+         "active": ["weekly_schedule"],
+         "sub": "Sling-sourced schedule for the week."},
+    ]
+
+
+def _performance_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "Server", "icon": "🍽", "href": f"/{store_slug}/reports/server-performance/server",
+         "active": ["perf_server"],
+         "sub": "Per-server tip % + service timing."},
+        {"label": "Bartenders", "icon": "🍹", "href": f"/{store_slug}/reports/server-performance/bartenders",
+         "active": ["perf_bartenders"],
+         "sub": "Bartender-specific performance breakdown."},
+        {"label": "Prep", "icon": "🔪", "disabled": True,
+         "active": ["perf_prep"],
+         "sub": "Prep-side performance metrics. Coming soon."},
+        {"label": "All", "icon": "📊", "href": f"/{store_slug}/reports/server-performance/all",
+         "active": ["perf_all", "server_perf"],
+         "sub": "All FOH service performance combined."},
+    ]
+
+
+def _sales_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "All", "icon": "📊", "href": f"/{store_slug}/sales",
+         "active": ["sales_landing", "third_party_sales", "sales_total"],
+         "sub": "All channels combined."},
+        {"label": "Toast", "icon": "🍞", "href": f"/{store_slug}/sales?channels=toast",
+         "active": ["sales_toast"],
+         "sub": "Toast in-store sales."},
+        {"label": "Online Toast", "icon": "💻", "href": f"/{store_slug}/sales?channels=toast_online",
+         "active": ["sales_online"],
+         "sub": "Toast online ordering sales."},
+        {"label": "Ezcater", "icon": "📋", "href": f"/{store_slug}/sales?channels=ezcater",
+         "active": ["sales_ezcater"],
+         "sub": "ezCater catering channel."},
+        {"label": "DoorDash", "icon": "🚪", "href": f"/{store_slug}/sales?channels=doordash",
+         "active": ["sales_doordash"],
+         "sub": "DoorDash channel."},
+        {"label": "Uber", "icon": "🚗", "href": f"/{store_slug}/sales?channels=uber",
+         "active": ["sales_uber"],
+         "sub": "Uber Eats channel."},
+    ]
+
+
+def _labor_subnav_cards(store_slug: str) -> list[dict]:
+    return [
+        {"label": "Total", "icon": "📊", "href": f"/{store_slug}/labor",
+         "active": ["labor_landing", "labor"],
+         "sub": "All-roles labor cost vs revenue."},
+        {"label": "BOH Labor", "icon": "👨‍🍳", "href": f"/{store_slug}/labor/boh",
+         "active": ["boh_labor"],
+         "sub": "Back-of-house labor breakdown."},
+        {"label": "FOH Labor", "icon": "🍽", "href": f"/{store_slug}/labor/foh",
+         "active": ["foh_labor"],
+         "sub": "Front-of-house labor breakdown."},
+    ]
+
+
+def _developer_subnav_cards(store_slug: str) -> list[dict]:
+    # Developer routes live under /partner/developer/ — Partner-gated; the
+    # store_slug arg is ignored since the URLs are absolute. The App pill
+    # highlights for any of the doc_* active values so it stays active as
+    # users move between docs.
+    return [
+        {"label": "Chat", "icon": "💬", "href": "/partner/developer/chat",
+         "active": ["dev_chat", "chat"],
+         "sub": "AI + human Developer Chat (DB-backed, attachments)."},
+        {"label": "Ezcater Review", "icon": "⚠", "href": "/partner/developer/ezcater",
+         "active": ["dev_ezcater_review"],
+         "sub": "Partner-only review queue for needs_review orders."},
+        {"label": "App", "icon": "📘", "href": "/partner/developer/app",
+         "active": ["doc_readme", "doc_architecture", "doc_features",
+                    "doc_tech_stack", "doc_deployment", "doc_data_sources",
+                    "doc_ck_session_2026_05_10", "doc_aick_session_2026_05_10",
+                    "doc_agent_bootstrap"],
+         "sub": "App docs hub: README / architecture / features / etc."},
+    ]
+
+
 # Map each per-page `active` value to its category. Keep in lock-step with
-# the *_open sets in base_dashboard.html. Pages whose active value isn't
-# in this map don't get a sub-nav (None falls through cleanly in the
-# template).
+# the *_open sets in base_dashboard.html. Pages whose active isn't here
+# don't get a sub-nav (None falls through cleanly in the template).
 _ACTIVE_TO_CATEGORY = {
-    # Ezcater (matches ezc_open in base_dashboard.html)
+    # Ezcater (matches ezc_open)
     "ezcater_landing":  "ezcater",
     "ezcater_orders":   "ezcater",
     "processor":        "ezcater",
     "driver_tracking":  "ezcater",
     "drivers_admin":    "ezcater",
     "drivers_live":     "ezcater",
+    # Corporate Order (matches corp_open)
+    "corporate_order":         "corporate",
+    "corporate_order_reports": "corporate",
+    # Vendors (matches vendors_open)
+    "vendors":         "vendors",
+    "produce":         "vendors",
+    "produce_orders":  "vendors",
+    "webstaurant":     "vendors",
+    "vendor_perf":     "vendors",
+    "specs":           "vendors",
+    # Schedule (matches sched_open)
+    "schedule_landing":  "schedule",
+    "boh_roster":        "schedule",
+    "foh_roster":        "schedule",
+    "all_roster":        "schedule",
+    "weekly_schedule":   "schedule",
+    # Performance (matches perf_open)
+    "perf_landing":     "performance",
+    "perf_server":      "performance",
+    "perf_bartenders":  "performance",
+    "perf_prep":        "performance",
+    "perf_all":         "performance",
+    "server_perf":      "performance",
+    # Sales (matches sales_open)
+    "sales_landing":      "sales",
+    "third_party_sales":  "sales",
+    "sales_toast":        "sales",
+    "sales_online":       "sales",
+    "sales_ezcater":      "sales",
+    "sales_doordash":     "sales",
+    "sales_uber":         "sales",
+    "sales_total":        "sales",
+    # Labor (matches labor_open)
+    "labor_landing":  "labor",
+    "labor":          "labor",
+    "boh_labor":      "labor",
+    "foh_labor":      "labor",
+    # Developer (matches dev_chat / dev_ezcater_review / app_doc_open)
+    "dev_chat":                     "developer",
+    "chat":                         "developer",
+    "dev_ezcater_review":           "developer",
+    "doc_readme":                   "developer",
+    "doc_architecture":             "developer",
+    "doc_features":                 "developer",
+    "doc_tech_stack":               "developer",
+    "doc_deployment":               "developer",
+    "doc_data_sources":             "developer",
+    "doc_ck_session_2026_05_10":    "developer",
+    "doc_aick_session_2026_05_10":  "developer",
+    "doc_agent_bootstrap":          "developer",
 }
 
 _CATEGORY_SUBNAV_BUILDERS = {
-    "ezcater": _ezcater_subnav_cards,
+    "ezcater":     _ezcater_subnav_cards,
+    "corporate":   _corporate_subnav_cards,
+    "vendors":     _vendors_subnav_cards,
+    "schedule":    _schedule_subnav_cards,
+    "performance": _performance_subnav_cards,
+    "sales":       _sales_subnav_cards,
+    "labor":       _labor_subnav_cards,
+    "developer":   _developer_subnav_cards,
 }
 
 
@@ -178,18 +357,7 @@ def _inject_subnav():
 
 @store_bp.route("/vendors")
 def vendors_landing():
-    cards = [
-        {"label": "Produce — Order", "icon": "🥬", "href": f"/{g.current_store}/produce/",
-         "sub": "Today's order guide with cheaper-vendor pricing + one-click submit."},
-        {"label": "Produce — Price History", "icon": "📈", "href": f"/{g.current_store}/produce/orders",
-         "sub": "Per-item price tracking and biggest-movers callout (Alvarado vs J. Luna)."},
-        {"label": "Webstaurant", "icon": "📦", "disabled": True,
-         "sub": "Restaurant-supply orders. Coming soon."},
-        {"label": "Vendor Performance", "icon": "📊", "disabled": True,
-         "sub": "On-time / accuracy scoring per vendor. Coming soon."},
-        {"label": "Specs", "icon": "📋", "disabled": True,
-         "sub": "Product specs + nutritional info. Coming soon."},
-    ]
+    cards = _vendors_subnav_cards(g.current_store)
     return _render_landing("vendors", "Vendors", f"{g.store_label} · supply ops & catalogs", cards)
 
 
@@ -201,32 +369,14 @@ def ezcater_landing():
 
 @store_bp.route("/schedule-overview")
 def schedule_landing():
-    cards = [
-        {"label": "BOH Roster", "icon": "👨‍🍳", "href": f"/{g.current_store}/roster/boh",
-         "sub": "Back-of-house employees on roster (Cooks, Prep, Dishwashers)."},
-        {"label": "FOH Roster", "icon": "🍽", "href": f"/{g.current_store}/roster/foh",
-         "sub": "Front-of-house employees on roster (Servers, Bartenders, Hosts)."},
-        {"label": "All Roster", "icon": "👥", "href": f"/{g.current_store}/roster/all",
-         "sub": "Combined roster across BOH + FOH."},
-        {"label": "Weekly Schedule", "icon": "📅", "href": f"/{g.current_store}/schedule/weekly",
-         "sub": "Sling-sourced schedule for the week — both locations covered."},
-    ]
+    cards = _schedule_subnav_cards(g.current_store)
     return _render_landing("schedule_landing", "Schedule",
                            f"{g.store_label} · roster + Sling weekly schedule", cards)
 
 
 @store_bp.route("/performance")
 def performance_landing():
-    cards = [
-        {"label": "Server", "icon": "🍽", "href": f"/{g.current_store}/reports/server-performance/server",
-         "sub": "Per-server tip % + service timing (drink / appetizer / entrée)."},
-        {"label": "Bartenders", "icon": "🍹", "href": f"/{g.current_store}/reports/server-performance/bartenders",
-         "sub": "Bartender-specific performance breakdown."},
-        {"label": "Prep", "icon": "🔪", "disabled": True,
-         "sub": "Prep-side performance metrics. Coming soon."},
-        {"label": "All", "icon": "📊", "href": f"/{g.current_store}/reports/server-performance/all",
-         "sub": "All FOH service performance combined."},
-    ]
+    cards = _performance_subnav_cards(g.current_store)
     return _render_landing("perf_landing", "Performance",
                            f"{g.store_label} · service + prep metrics", cards)
 

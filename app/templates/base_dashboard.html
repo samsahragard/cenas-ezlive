@@ -50,6 +50,21 @@
       border-color: rgba(232, 122, 62, 0.65);
     }
     .subnav-pill .sn-icon { font-size: 14px; }
+    .subnav-pill.is-disabled {
+      opacity: 0.40;
+      cursor: not-allowed;
+    }
+    .subnav-pill .sn-soon {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 1px 5px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.10);
+      color: rgba(255, 255, 255, 0.55);
+      margin-left: 2px;
+    }
   </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
@@ -272,10 +287,18 @@
     {% if _subnav %}
     <div class="subnav-row">
       {% for c in _subnav %}
-        <a href="{{ c.href }}" class="subnav-pill{% if c.active == active %} is-active{% endif %}" title="{{ c.sub or '' }}">
+        {% if c.disabled %}
+        <span class="subnav-pill is-disabled" title="{{ c.sub or '' }}">
+          <span class="sn-icon">{{ c.icon }}</span>
+          <span>{{ c.label }}</span>
+          <span class="sn-soon">soon</span>
+        </span>
+        {% else %}
+        <a href="{{ c.href }}" class="subnav-pill{% if active in (c.active or []) %} is-active{% endif %}" title="{{ c.sub or '' }}">
           <span class="sn-icon">{{ c.icon }}</span>
           <span>{{ c.label }}</span>
         </a>
+        {% endif %}
       {% endfor %}
     </div>
     {% endif %}

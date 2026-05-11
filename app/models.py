@@ -85,6 +85,17 @@ class Order(Base):
     delivery_start_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
     delivery_complete_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # ezCater live tracking (migration 12). Their public tracker page calls
+    # delivery-management.ezcater.com/delivery_tracking/v1/delivery/<uuid>
+    # which returns the driver's live GPS + status key. We capture the UUID
+    # per order (manual paste of the tracker URL for now) and cache the
+    # latest poll result inline.
+    delivery_tracking_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    ezcater_status_key: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    ezcater_driver_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ezcater_driver_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ezcater_status_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Dispatch result, computed at upload time. Persisted so per-order views
     # can render the Driver / Prep Expo / Master tabs without re-running the
     # Google Maps + dispatch_planner stack.

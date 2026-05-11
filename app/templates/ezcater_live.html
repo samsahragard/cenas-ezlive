@@ -1,0 +1,124 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'dev_ezcater_live' %}
+{% block title %}Ezcater Live Tracking — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Ezcater · Live Tracking{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    Today + upcoming orders. Paste the ezCater customer-tracker URL
+    (looks like <code>https://delivery-tracking.ezcater.com/delivery/&lt;uuid&gt;</code>)
+    to start pulling driver GPS + status from ezCater's public delivery_tracking API.
+  </p>
+{% endblock %}
+
+{% block content %}
+{% if success %}
+  <div class="banner banner-success" style="margin-bottom:14px;">{{ success }}</div>
+{% endif %}
+{% if error %}
+  <div class="banner banner-error" style="margin-bottom:14px;">{{ error }}</div>
+{% endif %}
+
+<div style="margin-bottom:14px;">
+  <form method="POST" action="{{ url_for('ezcater_live.poll_all_route') }}" style="display:inline;">
+    <button type="submit" class="btn-login" style="padding:6px 14px;">Poll all active (up to 25)</button>
+  </form>
+</div>
+
+{% if not orders %}
+  <p style="opacity:0.7;">No upcoming orders in the next 14 days.</p>
+{% else %}
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Order #</th>
+        <th>Date</th>
+        <th>Deliver by</th>
+        <th>Client</th>
+        <th>Driver (ezC)</th>
+        <th>Tracking URL</th>
+        <th>Status</th>
+        <th>Driver GPS</th>
+        <th>Updated</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+      <tr>
+        <td><a href="/orders/view/{{ o.external_order_id }}" style="color:var(--accent-soft);font-weight:600;">{{ o.external_order_id }}</a></td>
+        <td>{{ o.delivery_date or '—' }}</td>
+        <td>{{ o.deliver_at or '—' }}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ o.client or '—' }}</td>
+        <td>{{ o.ezcater_driver_name or '—' }}</td>
+        <td>
+          {% if o.delivery_tracking_id %}
+            <span title="{{ o.delivery_tracking_id }}" style="font-family:monospace;font-size:11px;opacity:0.7;">{{ o.delivery_tracking_id[:8] }}…</span>
+            <a href="https://delivery-tracking.ezcater.com/delivery/{{ o.delivery_tracking_id }}"
+               target="_blank" rel="noopener"
+               style="margin-left:8px;color:var(--accent-soft);font-size:11px;">open ↗</a>
+          {% else %}
+            <form method="POST" action="{{ url_for('ezcater_live.save_tracking', external_order_id=o.external_order_id) }}" style="display:flex;gap:4px;">
+              <input type="text" name="tracking_url" placeholder="paste tracker URL"
+                     style="flex:1;min-width:140px;padding:4px 8px;font-size:12px;
+                            background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);
+                            border-radius:6px;color:#fff;">
+              <button type="submit" class="btn-login" style="padding:4px 10px;font-size:11px;">Save</button>
+            </form>
+          {% endif %}
+        </td>
+        <td>
+          {% if o.ezcater_status_key == 'driver_en_route_to_pickup' %}
+            <span style="color:#d4af37;font-weight:600;">en route to pickup</span>
+          {% elif o.ezcater_status_key == 'driver_en_route_to_dropoff' %}
+            <span style="color:#f4b48a;font-weight:600;">en route to dropoff</span>
+          {% elif o.ezcater_status_key == 'driver_arrived_at_pickup' %}
+            <span style="color:#7bb87b;font-weight:600;">at pickup</span>
+          {% elif o.ezcater_status_key == 'driver_arrived_at_dropoff' %}
+            <span style="color:#7bb87b;font-weight:600;">at dropoff</span>
+          {% elif o.ezcater_status_key == 'delivered' %}
+            <span style="color:#7bb87b;">delivered</span>
+          {% elif o.ezcater_status_key == 'expired' %}
+            <span style="opacity:0.5;">expired</span>
+          {% elif o.ezcater_status_key %}
+            <span style="opacity:0.7;">{{ o.ezcater_status_key }}</span>
+          {% else %}
+            <span style="opacity:0.4;">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if o.ezcater_driver_lat and o.ezcater_driver_lng %}
+            <a href="https://www.google.com/maps/?q={{ o.ezcater_driver_lat }},{{ o.ezcater_driver_lng }}"
+               target="_blank" rel="noopener"
+               style="font-family:monospace;font-size:11px;color:var(--accent-soft);text-decoration:none;">
+              {{ '%.4f'|format(o.ezcater_driver_lat) }}, {{ '%.4f'|format(o.ezcater_driver_lng) }}
+            </a>
+          {% else %}<span style="opacity:0.4;">—</span>{% endif %}
+        </td>
+        <td>
+          {% if o.ezcater_status_updated_at %}
+            <span style="font-size:11px;opacity:0.7;">{{ o.ezcater_status_updated_at.strftime('%H:%M:%S') }} UTC</span>
+          {% else %}<span style="opacity:0.4;">—</span>{% endif %}
+        </td>
+        <td>
+          {% if o.delivery_tracking_id %}
+            <form method="POST" action="{{ url_for('ezcater_live.poll_one_route', external_order_id=o.external_order_id) }}" style="display:inline;">
+              <button type="submit" class="btn-logout" style="font-size:11px;padding:4px 10px;">Poll</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<p style="margin-top:18px;font-size:12px;color:var(--text-3);">
+  Backed by ezCater's public delivery_tracking endpoint at
+  <code>delivery-management.ezcater.com/delivery_tracking/v1/delivery_refresh/&lt;uuid&gt;</code>.
+  Tracking only returns live data after the driver hits "start" in the ezCater driver app.
+  Phase 2 will auto-capture tracking UUIDs from the order email + portal scrape.
+</p>
+{% endblock %}

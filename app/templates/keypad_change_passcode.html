@@ -227,7 +227,8 @@
         return;
       }
       showInfo('Saved.');
-      setTimeout(() => { window.location.href = data.next || '/'; }, 600);
+      // Replace so Back doesn't return to the change-passcode screen.
+      setTimeout(() => { window.location.replace(data.next || '/'); }, 600);
     } catch (e){
       showError("Network error — try again.", true);
     }

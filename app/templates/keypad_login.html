@@ -299,7 +299,9 @@
         showError(data.error || `Sign-in failed (${r.status}).`);
         return;
       }
-      window.location.href = data.next || '/';
+      // Replace (not push) so Back from inside the app doesn't return to the
+      // keypad — it skips past the keypad to whatever was before it.
+      window.location.replace(data.next || '/');
     } catch (e){
       showError("Network error — try again.");
     }

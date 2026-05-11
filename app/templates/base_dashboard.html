@@ -270,6 +270,14 @@
     </div>
     {% endif %}
 
+    <a class="nav-link" href="/keypad-logout"
+       style="margin: 8px 14px 4px; padding: 8px 12px; border-radius: 8px;
+              background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border);
+              color: rgba(255,255,255,0.75); display: flex; align-items: center; gap: 8px;
+              text-align: left; font-size: 13px;">
+      <span class="nav-icon">⎋</span>Log out{% if g.current_user %} <span style="margin-left:auto;font-size:11px;opacity:0.55;">{{ g.current_user.full_name.split()[0] }}</span>{% endif %}
+    </a>
+
     <div class="sidebar-footer">
       <div class="avatar"></div>
       <div>

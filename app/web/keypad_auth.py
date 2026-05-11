@@ -112,9 +112,13 @@ def _bump_failed_attempts_for_passcode(db, passcode: str) -> None:
 
 @keypad_auth.route("/keypad-login", methods=["GET"])
 def login():
-    """Render the keypad. If already signed in, jump to ?next or /."""
-    if session.get("user_id"):
-        nxt = request.args.get("next") or "/"
+    """Render the keypad. If already signed in, jump straight to their
+    role landing — Sam's 2026-05-11 spec: 'they stay logged in unless
+    logging out'. Back-button after login is solved client-side via
+    history.replaceState (see keypad_login.html JS)."""
+    u = getattr(g, "current_user", None)
+    if u is not None:
+        nxt = request.args.get("next") or _landing_for_user(u)
         if not nxt.startswith("/"):
             nxt = "/"
         return redirect(nxt)
@@ -241,3 +245,4 @@ def install(app):
             load_current_user()
         else:
             g.current_user = None
+

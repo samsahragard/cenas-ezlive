@@ -64,13 +64,6 @@ def _pull_store(endpoint, values):
     g.current_store = slug
     g.current_location = STORE_TO_LOCATION[slug]
     g.store_label = STORE_LABELS[slug]
-    # Remember the user's last-seen store so blueprints with their own
-    # url_prefix (e.g. /produce/, /reports/) can render with the sidebar
-    # still pointing at the right store after a 302 hop. Sam (2026-05-11):
-    # clicking Vendors at /partner/ used to land on Tomball because the
-    # /<store>/produce/ -> /produce/ redirect dropped store context and
-    # base_dashboard.html fell back to 'dos'.
-    session["last_store_slug"] = slug
 
 
 @store_bp.url_defaults
@@ -413,10 +406,19 @@ def labor_landing():
 # ============== OPERATIONS — VENDORS ==============
 
 @store_bp.route("/produce/")
+def produce_root():
+    """Render the produce order guide inline so g.current_store survives.
+    Redirecting to /produce/ would lose the store context and base_dashboard
+    falls back to dos (Tomball) — same shape as the orders_processor fix."""
+    from app.web.produce_order import index as _produce_index
+    return _produce_index()
+
+
 @store_bp.route("/produce/<path:subpath>")
-def produce(subpath: str = ""):
-    """Forward to the existing /produce/ stack. Sub-routes (cart, items, etc.)
-    are reachable via /<store>/produce/<rest>; we 302 to keep behavior simple."""
+def produce_subpath(subpath: str = ""):
+    """Sub-routes (submit, confirm, cancel, etc.) still 302 since they're
+    POST endpoints or terminal pages with their own templates (produce/base
+    extends base_dashboard but those pages don't need the store sidebar)."""
     target = "/produce/" + (subpath or "")
     if request.query_string:
         target += "?" + request.query_string.decode()

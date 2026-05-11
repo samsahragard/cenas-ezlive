@@ -37,6 +37,7 @@ EXEMPT_PREFIXES = (
     "/keypad-login",             # 2026-05-11 keypad auth (migration 13)
     "/keypad-logout",
     "/change-passcode",          # post-keypad-login, before main app
+    "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
 )
 
 
@@ -103,6 +104,19 @@ def partner_login():
             return redirect("/partner/")
         return render_template("partner_login.html", error="Wrong password."), 401
     return render_template("partner_login.html", error=None)
+
+
+@auth.route("/install", strict_slashes=False)
+def install_page():
+    """Public install/share page — no auth required so the link works for
+    fresh visitors. The dashboard is already a PWA (manifest.webmanifest +
+    apple-touch-icon + theme-color all wired in base_dashboard.html), so
+    users just need clear instructions to Add-to-Home-Screen.
+
+    strict_slashes=False so /install AND /install/ both work; Chrome on
+    some devices auto-appends a slash when the URL is retyped.
+    """
+    return render_template("install.html")
 
 
 @auth.route("/")

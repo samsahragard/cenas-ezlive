@@ -1,0 +1,213 @@
+"""Payroll calculation for ezCater drivers.
+
+Sam's rules (2026-05-10):
+    Base:       $25  per delivery (always)
+    Bonus:      $10  per delivery (only if tracking_status == 'Tracked')
+    Extra mi:   $1.50 / mile over 20 (only if 'Tracked', one-way, kitchen
+                -> first drop-off; for multi-stop routes the 1st->2nd leg
+                rarely qualifies because miles reset to 0)
+    5-star:     $5   if the delivery got a 5-star review on ezCater AND
+                tracking_status == 'Tracked'. ezCater's API doesn't expose
+                reviews, so this comes from a manual flag for now.
+
+  Pay period:  bi-weekly. Anchor 2026-04-26 → 2026-05-09; check date
+               5 days after the period end (= 2026-05-14 for the anchor).
+"""
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+from dataclasses import dataclass, field
+import re
+
+from app.db import SessionLocal
+from app.models import Order, DriverLog
+
+# ---- constants ----
+ANCHOR_START = date(2026, 4, 26)    # Sunday
+PERIOD_LENGTH_DAYS = 14
+CHECK_OFFSET_DAYS = 5               # period_end + 5 = check date
+
+BASE_PER_DELIVERY = 25.00
+BONUS_TRACKED = 10.00
+PER_MILE_OVER_20 = 1.50
+FIVE_STAR_BONUS = 5.00
+MILES_THRESHOLD = 20.0
+
+
+# ---- pay period math ----
+
+def period_containing(d: date) -> tuple[date, date, date]:
+    """Return (start, end, check_date) for the bi-weekly period containing d."""
+    delta = (d - ANCHOR_START).days
+    period_index = delta // PERIOD_LENGTH_DAYS
+    start = ANCHOR_START + timedelta(days=period_index * PERIOD_LENGTH_DAYS)
+    end = start + timedelta(days=PERIOD_LENGTH_DAYS - 1)
+    check_date = end + timedelta(days=CHECK_OFFSET_DAYS)
+    return start, end, check_date
+
+
+def previous_period(start: date) -> tuple[date, date, date]:
+    return period_containing(start - timedelta(days=1))
+
+
+# ---- driver name matching ----
+#
+# ezCater driver names ship in messy formats — "CK #1 - Jose Gonzalez",
+# "CK#1 ANA ISA Perez", "Ck #1  Bryan Ruiz", "CK# 1 BRITNEY MATHIS", etc.
+# A signed-up Driver in our DB has a clean `name`. We normalize on both
+# sides for matching:
+#   - lowercase
+#   - drop everything before the CK#X prefix (the prefix tells us the
+#     home kitchen but the rest of the name is what matters for matching)
+#   - collapse whitespace
+#   - drop dashes/underscores
+
+_CK_PREFIX_RE = re.compile(r"^\s*ck\s*#?\s*[12]\s*-?\s*", re.IGNORECASE)
+_WS_RE = re.compile(r"\s+")
+
+
+def normalize_driver_name(raw: str | None) -> str:
+    if not raw:
+        return ""
+    s = raw.lower().strip()
+    s = _CK_PREFIX_RE.sub("", s)        # drop "CK #1 -" / "CK#2 -" / etc.
+    s = s.replace("-", " ").replace("_", " ")
+    s = _WS_RE.sub(" ", s).strip()
+    return s
+
+
+# ---- pay calc ----
+
+@dataclass
+class DeliveryPay:
+    order_number: str
+    delivery_date: str | None
+    tracking_status: str | None
+    pickup_miles: float | None
+    five_star: bool
+    base: float
+    bonus_tracked: float
+    extra_miles: float
+    bonus_miles: float
+    bonus_five_star: float
+    total: float
+    notes: str = ""
+
+
+def _is_tracked(tracking_status: str | None) -> bool:
+    if not tracking_status:
+        return False
+    return tracking_status.strip().lower() == "tracked"
+
+
+def compute_one(order: Order, five_star: bool = False) -> DeliveryPay:
+    tracked = _is_tracked(order.tracking_status)
+    miles = order.pickup_miles or 0.0
+    extra_miles = max(0.0, miles - MILES_THRESHOLD) if tracked else 0.0
+    bonus_miles = round(extra_miles * PER_MILE_OVER_20, 2)
+    bonus_tracked_v = BONUS_TRACKED if tracked else 0.0
+    bonus_five_star = FIVE_STAR_BONUS if (tracked and five_star) else 0.0
+    total = round(BASE_PER_DELIVERY + bonus_tracked_v + bonus_miles + bonus_five_star, 2)
+    return DeliveryPay(
+        order_number=order.external_order_id or "?",
+        delivery_date=order.delivery_date,
+        tracking_status=order.tracking_status,
+        pickup_miles=order.pickup_miles,
+        five_star=five_star,
+        base=BASE_PER_DELIVERY,
+        bonus_tracked=bonus_tracked_v,
+        extra_miles=round(extra_miles, 2),
+        bonus_miles=bonus_miles,
+        bonus_five_star=bonus_five_star,
+        total=total,
+        notes=(order.tracking_status or "—") if not tracked else "",
+    )
+
+
+@dataclass
+class PaycheckPeriod:
+    period_start: date
+    period_end: date
+    check_date: date
+    deliveries: list[DeliveryPay] = field(default_factory=list)
+    grand_total: float = 0.0
+
+
+def _driver_id_from_log(driver_log: DriverLog, db) -> bool:
+    """Look up DriverLog.five_star for an order's date+driver. Returns True
+    if there's a manual flag stored. Imperfect — we match on driver_name +
+    pickup_date string equality; if the log was entered with a different
+    name spelling we miss it. Will replace with a proper join once Driver
+    is linked to Order rows."""
+    return bool(driver_log and driver_log.five_star)
+
+
+def paycheck_for(driver_name: str, period_start: date, period_end: date) -> PaycheckPeriod:
+    """Build a paycheck summary for `driver_name` covering [period_start, period_end]."""
+    db = SessionLocal()
+    try:
+        norm_target = normalize_driver_name(driver_name)
+        start_iso = period_start.isoformat()
+        end_iso = period_end.isoformat()
+
+        # Pull every order in the date window whose ezcater_driver_name
+        # normalizes to the target (covers the half-dozen spelling variants
+        # ezCater ships for the same person).
+        candidates = (db.query(Order)
+                        .filter(Order.delivery_date >= start_iso)
+                        .filter(Order.delivery_date <= end_iso)
+                        .filter(Order.ezcater_driver_name.isnot(None))
+                        .filter(Order.status != "cancelled")
+                        .order_by(Order.delivery_date.asc())
+                        .all())
+        matched = [o for o in candidates if normalize_driver_name(o.ezcater_driver_name) == norm_target]
+
+        # Five-star data: look up DriverLog rows for this driver name + date
+        # to grab any manually-flagged 5★ entries. Imperfect (string match) —
+        # acceptable until we add a proper foreign key.
+        log_lookup = {}
+        if matched:
+            dates = {o.delivery_date for o in matched if o.delivery_date}
+            logs = (db.query(DriverLog)
+                      .filter(DriverLog.pickup_date.in_(dates))
+                      .all())
+            for L in logs:
+                if normalize_driver_name(L.driver_name) == norm_target:
+                    log_lookup[(L.driver_name, L.pickup_date, L.order_link or "")] = L
+
+        rows = []
+        for o in matched:
+            # Best-effort five_star lookup — match the log row by pickup_date
+            # + driver_name. If multiple logs match, pick the one with the
+            # matching order_link (if any), else the first.
+            five_star = False
+            for (lname, ldate, llink), L in log_lookup.items():
+                if ldate == o.delivery_date and (not llink or llink in (o.external_order_id or "")):
+                    five_star = bool(L.five_star)
+                    break
+            rows.append(compute_one(o, five_star=five_star))
+
+        return PaycheckPeriod(
+            period_start=period_start,
+            period_end=period_end,
+            check_date=period_end + timedelta(days=CHECK_OFFSET_DAYS),
+            deliveries=rows,
+            grand_total=round(sum(r.total for r in rows), 2),
+        )
+    finally:
+        db.close()
+
+
+def paycheck_history(driver_name: str, periods: int = 6) -> list[PaycheckPeriod]:
+    """Return the last `periods` bi-weekly paychecks for this driver, newest
+    first. Includes the current period (containing today) at index 0."""
+    today = date.today()
+    current_start, _, _ = period_containing(today)
+    out = []
+    cur = current_start
+    for _ in range(periods):
+        start = cur
+        end = start + timedelta(days=PERIOD_LENGTH_DAYS - 1)
+        out.append(paycheck_for(driver_name, start, end))
+        cur = start - timedelta(days=PERIOD_LENGTH_DAYS)
+    return out

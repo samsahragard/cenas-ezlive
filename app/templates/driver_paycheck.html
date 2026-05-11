@@ -1,0 +1,106 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'driver_tracking' %}
+{% block title %}{{ driver.name }} — Paycheck History — Cenas Kitchen{% endblock %}
+
+{% block page_title %}{{ driver.name }}{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {% if driver.ck_prefix == 1 %}CK #1 · Copperfield kitchen
+    {% elif driver.ck_prefix == 2 %}CK #2 · Tomball kitchen
+    {% else %}Unknown kitchen{% endif %}
+    · Phone {{ driver.phone_e164[:3] }}-{{ driver.phone_e164[3:6] }}-{{ driver.phone_e164[6:] }}
+  </p>
+  <p style="margin-top:6px;font-size:12px;color:var(--text-3);">
+    <a href="{{ url_for('store.driver_tracking') }}"
+       style="color:var(--accent-soft);text-decoration:none;">← back to Driver Payroll list</a>
+  </p>
+{% endblock %}
+
+{% block content %}
+{% for period in history %}
+<section style="margin-bottom:32px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;
+              padding:10px 14px;background:rgba(255,255,255,0.04);
+              border:1px solid var(--glass-border);border-radius:8px;margin-bottom:10px;">
+    <div>
+      <h3 style="margin:0;font-size:15px;color:#fff;">
+        Pay period {{ period.period_start.strftime('%a %m/%d/%Y') }} → {{ period.period_end.strftime('%a %m/%d/%Y') }}
+      </h3>
+      <div style="font-size:12px;color:var(--text-3);margin-top:2px;">
+        Check date <strong>{{ period.check_date.strftime('%a %m/%d/%Y') }}</strong>
+        · {{ period.deliveries|length }} delivery{{ '' if period.deliveries|length == 1 else 'ies' }}
+      </div>
+    </div>
+    <div style="font-size:22px;font-weight:700;color:var(--accent-soft);">
+      ${{ '%.2f'|format(period.grand_total) }}
+    </div>
+  </div>
+
+  {% if period.deliveries %}
+  <div class="table-scroll">
+    <table class="log-table log-table-view">
+      <thead>
+        <tr class="group-header">
+          <th>Date</th>
+          <th>Order #</th>
+          <th>Tracking</th>
+          <th style="text-align:right;">Miles</th>
+          <th style="text-align:right;">$25 base</th>
+          <th style="text-align:right;">$10 bonus</th>
+          <th style="text-align:right;">$1.50/mi (>20)</th>
+          <th style="text-align:right;">$5 (5★)</th>
+          <th style="text-align:right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in period.deliveries %}
+        <tr>
+          <td>{{ d.delivery_date or '—' }}</td>
+          <td>
+            {% if d.order_number and d.order_number != '?' %}
+              <a href="/orders/view/{{ d.order_number }}"
+                 style="color:var(--accent-soft);font-weight:600;text-decoration:none;">{{ d.order_number }}</a>
+            {% else %}{{ d.order_number }}{% endif %}
+          </td>
+          <td>
+            {% if d.tracking_status == 'Tracked' %}
+              <span style="color:#7bb87b;font-weight:600;">{{ d.tracking_status }}</span>
+            {% elif d.tracking_status == 'Partially tracked' %}
+              <span style="color:#d4af37;">{{ d.tracking_status }}</span>
+            {% elif d.tracking_status == 'Untracked' %}
+              <span style="color:#c0392b;">{{ d.tracking_status }}</span>
+            {% else %}<span style="opacity:0.55;">{{ d.tracking_status or '—' }}</span>{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if d.pickup_miles is not none %}{{ '%.1f'|format(d.pickup_miles) }}{% else %}—{% endif %}
+            {% if d.extra_miles > 0 %}<span style="font-size:11px;color:var(--text-3);">  (+{{ '%.1f'|format(d.extra_miles) }})</span>{% endif %}
+          </td>
+          <td style="text-align:right;">${{ '%.2f'|format(d.base) }}</td>
+          <td style="text-align:right;{% if d.bonus_tracked == 0 %}opacity:0.4;{% endif %}">${{ '%.2f'|format(d.bonus_tracked) }}</td>
+          <td style="text-align:right;{% if d.bonus_miles == 0 %}opacity:0.4;{% endif %}">${{ '%.2f'|format(d.bonus_miles) }}</td>
+          <td style="text-align:right;{% if d.bonus_five_star == 0 %}opacity:0.4;{% endif %}">${{ '%.2f'|format(d.bonus_five_star) }}</td>
+          <td style="text-align:right;font-weight:700;">${{ '%.2f'|format(d.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:rgba(255,255,255,0.04);">
+          <td colspan="8" style="text-align:right;font-weight:600;">Period total</td>
+          <td style="text-align:right;font-weight:700;color:var(--accent-soft);">${{ '%.2f'|format(period.grand_total) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <p style="margin:6px 0 0 4px;font-size:13px;color:var(--text-3);">No tracked deliveries in this period.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
+<p style="margin-top:8px;font-size:12px;color:var(--text-3);">
+  Rules: $25 per delivery (always) · $10 + $1.50/mi over 20 + $5/5★ all gated on tracking_status='Tracked'.
+  Miles are one-way from the home kitchen to the first drop-off (Google Routes API).
+  5★ is read from <code>driver_logs.five_star</code> (manager toggles); since ezCater's API doesn't expose reviews,
+  this stays manual until we wire portal scraping or an email-parse path.
+</p>
+{% endblock %}

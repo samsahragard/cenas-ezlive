@@ -1,0 +1,93 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'driver_tracking' %}
+{% block title %}Driver Payroll — {{ g.store_label }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Driver Payroll{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    Current pay period:
+    <strong>{{ current_period_start.strftime('%a %b %d') }} → {{ current_period_end.strftime('%a %b %d, %Y') }}</strong>
+    · Check date <strong>{{ current_check_date.strftime('%a %b %d, %Y') }}</strong>.
+    Click a driver's name to see their per-delivery paycheck.
+  </p>
+{% endblock %}
+
+{% block content %}
+{% if not rows %}
+  <p style="opacity:0.7;">No ezCater drivers in this store's roster yet.</p>
+{% else %}
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Name</th>
+        <th>Kitchen</th>
+        <th>Phone</th>
+        <th>Email</th>
+        <th>Account</th>
+        <th style="text-align:right;">This-period deliveries</th>
+        <th style="text-align:right;">Est. pay so far</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>
+          <a href="{{ url_for('store.driver_paycheck', known_id=r.id) }}"
+             style="color:var(--accent-soft);font-weight:600;text-decoration:none;">
+            {{ r.name }}
+          </a>
+        </td>
+        <td>
+          {% if r.ck_prefix == 1 %}
+            <span style="color:#7bb87b;">CK #1 · Copperfield</span>
+          {% elif r.ck_prefix == 2 %}
+            <span style="color:#f4b48a;">CK #2 · Tomball</span>
+          {% else %}
+            <span style="opacity:0.5;">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set p = r.phone %}
+          {% if p and p|length == 10 %}
+            <a href="tel:+1{{ p }}" style="color:var(--text-2);text-decoration:none;">
+              ({{ p[:3] }}) {{ p[3:6] }}-{{ p[6:] }}
+            </a>
+          {% else %}{{ p or '—' }}{% endif %}
+        </td>
+        <td>
+          {% if r.signed_up_driver and r.signed_up_driver.email %}
+            <a href="mailto:{{ r.signed_up_driver.email }}" style="color:var(--accent-soft);">{{ r.signed_up_driver.email }}</a>
+          {% else %}<span style="opacity:0.5;">—</span>{% endif %}
+        </td>
+        <td>
+          {% if r.signed_up_driver %}
+            {% if r.signed_up_driver.active %}
+              <span style="color:#7bb87b;font-weight:600;">Active</span>
+              <span title="Phone matches ezCater roster" style="margin-left:6px;font-size:10.5px;color:#7bb87b;background:rgba(123,184,123,0.10);border:1px solid rgba(123,184,123,0.35);border-radius:6px;padding:1px 7px;font-weight:600;">
+                ✓ ezCater
+              </span>
+            {% else %}
+              <span style="color:#c0392b;font-weight:600;">Inactive</span>
+            {% endif %}
+          {% else %}
+            <span style="opacity:0.55;">No app account</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right;">{{ r.current_deliveries }}</td>
+        <td style="text-align:right;font-weight:600;">${{ '%.2f'|format(r.current_total) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<p style="margin-top:20px;font-size:12px;color:var(--text-3);">
+  Roster from <code>ezcater_known_driver</code> (seeded from Sam's 5/10 list).
+  This-period numbers are computed live from <code>orders</code> rows where
+  <code>ezcater_driver_name</code> matches (after name normalization) and
+  <code>delivery_date</code> is in the current bi-weekly window.
+  Pay rules: $25/delivery base, $10 + $1.50/mi over 20 + $5/5★ all conditional on tracking_status='Tracked'.
+</p>
+{% endblock %}

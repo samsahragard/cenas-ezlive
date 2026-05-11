@@ -457,21 +457,100 @@ def review_queue():
     return redirect(f"/{g.current_store}/")
 
 
-@store_bp.route("/driver-tracking", methods=["GET", "POST"])
+@store_bp.route("/driver-tracking", methods=["GET"])
 def driver_tracking():
-    """Driver Payroll — manager view of drivers + log form.
+    """Driver Payroll — per-driver list. Each name links to that driver's
+    paycheck-history page. Replaces the old manager_log view at this URL
+    (the old form still lives at /driver-logs for now). Sam's 2026-05-10
+    spec: show name/email/phone/address/account, click name -> paycheck."""
+    from app.models import EzcaterKnownDriver
+    from app.services.ezcater_known_drivers_seed import normalize_phone
+    from app.services.ezcater_payroll import (
+        period_containing, paycheck_for, normalize_driver_name,
+    )
+    from datetime import date as _date
 
-    Render the legacy /manager view inline (not redirect) so the sidebar
-    inherits g.current_store / g.store_label from
-    store_bp.url_value_preprocessor — otherwise /manager has no store
-    context and base_dashboard falls back to Tomball default (same shape
-    as the dd4bede Corporate Order bug).
-    """
-    from flask import session as _session
-    loc_map = {"tomball": "tomball", "copperfield": "copperfield", "both": "corporate"}
-    _session["manager_location"] = loc_map.get(g.current_location, "corporate")
-    from app.web.manager_routes import manager_log
-    return manager_log()
+    db = next(get_db())
+    try:
+        # Scope by current store. /partner + /corporate show all; /dos shows
+        # ck_prefix=2 (Tomball) drivers; /uno shows ck_prefix=1 (Copperfield).
+        q = db.query(EzcaterKnownDriver)
+        if g.current_location == "tomball":
+            q = q.filter(EzcaterKnownDriver.ck_prefix == 2)
+        elif g.current_location == "copperfield":
+            q = q.filter(EzcaterKnownDriver.ck_prefix == 1)
+        roster = q.order_by(EzcaterKnownDriver.ck_prefix.asc(),
+                            EzcaterKnownDriver.name.asc()).all()
+
+        # Match each roster row to a Driver in our DB by phone (for showing
+        # email / address / account status) and to the current pay period's
+        # deliveries (for the at-a-glance count + total).
+        drivers_by_phone = {}
+        for d in db.query(Driver).filter(Driver.phone.isnot(None)).all():
+            drivers_by_phone[normalize_phone(d.phone)] = d
+
+        period_start, period_end, check_date = period_containing(_date.today())
+
+        rows = []
+        for kd in roster:
+            signed_up = drivers_by_phone.get(kd.phone_e164)
+            pp = paycheck_for(kd.name, period_start, period_end)
+            rows.append({
+                "id": kd.id,
+                "name": kd.name,
+                "ck_prefix": kd.ck_prefix,
+                "phone": kd.phone_e164,
+                "signed_up_driver": signed_up,
+                "current_deliveries": len(pp.deliveries),
+                "current_total": pp.grand_total,
+            })
+
+        return render_template(
+            "driver_payroll_list.html",
+            active="driver_tracking",
+            page_title="Driver Payroll",
+            rows=rows,
+            current_period_start=period_start,
+            current_period_end=period_end,
+            current_check_date=check_date,
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/driver-tracking/<int:known_id>", methods=["GET"])
+def driver_paycheck(known_id: int):
+    """Per-driver paycheck history. Shows the current bi-weekly period plus
+    the previous 5, each with one row per delivery (tracking status, ex
+    miles, base, bonuses, total)."""
+    from app.models import EzcaterKnownDriver
+    from app.services.ezcater_payroll import paycheck_history
+
+    db = next(get_db())
+    try:
+        kd = db.get(EzcaterKnownDriver, known_id)
+        if not kd:
+            from flask import abort as _abort
+            _abort(404)
+        # Optional store-scope guard: a /dos manager shouldn't be able to
+        # peek at a CK#1 driver's paycheck. Soft enforcement — only block
+        # cross-store views on per-location store contexts (partner/corp see all).
+        if g.current_location == "tomball" and kd.ck_prefix == 1:
+            from flask import abort as _abort
+            _abort(404)
+        if g.current_location == "copperfield" and kd.ck_prefix == 2:
+            from flask import abort as _abort
+            _abort(404)
+        history = paycheck_history(kd.name, periods=6)
+        return render_template(
+            "driver_paycheck.html",
+            active="driver_tracking",
+            page_title=f"Paycheck — {kd.name}",
+            driver=kd,
+            history=history,
+        )
+    finally:
+        db.close()
 
 
 @store_bp.route("/driver-portal")

@@ -37,7 +37,7 @@ CT = timezone(timedelta(hours=-5))   # Central time for display
 
 # Attachment upload limits
 MAX_ATTACHMENTS_PER_MESSAGE = 5
-MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024   # 10 MB
+MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024   # 20 MB (5/msg => ~100 MB total)
 ALLOWED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic",  # images
     ".pdf",                                              # docs

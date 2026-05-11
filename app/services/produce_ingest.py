@@ -419,16 +419,39 @@ def extract_from_xlsx(xlsx_path: Path) -> dict:
 
 
 # ============ Alias mapping ============
+_ALIAS_NORM_UNIT = re.compile(r"(\d)\s+(CT|LB|LBS|OZ|ONZ|DZ|EA|CS|BX|SK|PZ)\b")
+_ALIAS_NORM_HASH = re.compile(r"#\s+(\d)")
+_ALIAS_NORM_WS = re.compile(r"\s+")
+
+
+def _normalize_alias_key(s: str) -> str:
+    """Collapse whitespace + join digit-unit pairs ('32 CT' -> '32CT') and
+    hash-digit pairs ('# 1' -> '#1') so the alias match is robust to parser
+    output drift between Claude Vision runs / vendor formatting changes."""
+    s = (s or "").upper().strip()
+    s = _ALIAS_NORM_WS.sub(" ", s)
+    s = _ALIAS_NORM_UNIT.sub(r"\1\2", s)
+    s = _ALIAS_NORM_HASH.sub(r"#\1", s)
+    return s
+
+
 def _apply_aliases(vendor_key: str, items: list[dict]) -> tuple[list[dict], list[dict]]:
     """Returns (mapped_items, unmapped_vendor_items).
-    mapped_items have canonical_name + canonical_size populated."""
-    aliases = _read_json(ALIASES_FILE).get(vendor_key, {})
+    mapped_items have canonical_name + canonical_size populated.
+
+    Matching is normalized: 'AGUACATE 32 CT # 1|32CT' now matches the alias
+    key 'AGUACATE 32CT #1|32CT'. The original alias-file keys also pass
+    through the normalizer so old and new entries both work without
+    file changes.
+    """
+    raw_aliases = _read_json(ALIASES_FILE).get(vendor_key, {})
+    aliases = {_normalize_alias_key(k): v for k, v in raw_aliases.items()}
     mapped = []
     unmapped = []
     for it in items:
         v_name = (it.get("vendor_name") or it.get("name") or "").strip()
         v_size = (it.get("vendor_size") or it.get("size") or "").strip()
-        key = f"{v_name}|{v_size}"
+        key = _normalize_alias_key(f"{v_name}|{v_size}")
         alias = aliases.get(key)
         if alias:
             mapped.append({
@@ -440,6 +463,17 @@ def _apply_aliases(vendor_key: str, items: list[dict]) -> tuple[list[dict], list
             })
         else:
             unmapped.append({"vendor_name": v_name, "vendor_size": v_size, "price": it.get("price")})
+    # Coverage warning: log when >30% of vendor lines couldn't be mapped — flags
+    # alias drift early without waiting for Sam to notice blanks on the page.
+    total = len(items)
+    if total >= 20:
+        unmapped_pct = len(unmapped) * 100 / total
+        if unmapped_pct > 30:
+            logger.warning(
+                "alias coverage low: vendor=%s mapped=%d/%d unmapped=%d (%.0f%%) — "
+                "aliases.json likely needs new entries",
+                vendor_key, len(mapped), total, len(unmapped), unmapped_pct,
+            )
     return mapped, unmapped
 
 

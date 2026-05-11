@@ -63,12 +63,12 @@
    no sub-filter is applied — also expand the parent group. #}
 {% set ops_open = active in ['vendors','produce','produce_orders','webstaurant','vendor_perf','specs',
                               'corporate_order','corporate_order_reports',
-                              'ezcater_landing','ezcater_orders','processor','driver_tracking','driver_portal','drivers_admin','drivers_live',
+                              'ezcater_landing','ezcater_orders','processor','driver_tracking','drivers_admin','drivers_live',
                               'schedule_landing','boh_roster','foh_roster','all_roster','weekly_schedule'] %}
 {% set vendors_open = active in ['vendors','produce','produce_orders','webstaurant','vendor_perf','specs'] %}
 {% set corp_open = active in ['corporate_order','corporate_order_reports'] %}
 {% set produce_open = active in ['produce','produce_orders'] %}
-{% set ezc_open = active in ['ezcater_landing','ezcater_orders','processor','driver_tracking','driver_portal','drivers_admin','drivers_live'] %}
+{% set ezc_open = active in ['ezcater_landing','ezcater_orders','processor','driver_tracking','drivers_admin','drivers_live'] %}
 {% set sched_open = active in ['schedule_landing','boh_roster','foh_roster','all_roster','weekly_schedule'] %}
 {% set ins_open = active in ['perf_landing','perf_server','perf_bartenders','perf_prep','perf_all','server_perf',
                              'sales_landing','third_party_sales','sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total',
@@ -141,7 +141,6 @@
         <a class="nav-link {% if active == 'ezcater_orders' %}active{% endif %}" href="/{{ store_slug }}/orders"><span class="nav-icon">·</span>Orders</a>
         <a class="nav-link {% if active == 'processor' %}active{% endif %}" href="/{{ store_slug }}/orders/processor"><span class="nav-icon">·</span>Order Processor</a>
         <a class="nav-link {% if active == 'driver_tracking' %}active{% endif %}" href="/{{ store_slug }}/driver-tracking"><span class="nav-icon">·</span>Driver Payroll</a>
-        <a class="nav-link {% if active == 'driver_portal' %}active{% endif %}" href="/{{ store_slug }}/driver-portal"><span class="nav-icon">·</span>Driver Portal</a>
         <a class="nav-link {% if active == 'drivers_admin' %}active{% endif %}" href="/{{ store_slug }}/drivers"><span class="nav-icon">·</span>Drivers (Admin)</a>
         <a class="nav-link {% if active == 'drivers_live' %}active{% endif %}" href="/{{ store_slug }}/drivers-live"><span class="nav-icon">·</span>Drivers Live</a>
       </div>

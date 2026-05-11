@@ -130,9 +130,6 @@ def _ezcater_subnav_cards(store_slug: str) -> list[dict]:
         {"label": "Driver Payroll", "icon": "💵", "href": f"/{store_slug}/driver-tracking",
          "active": "driver_tracking",
          "sub": "Per-driver delivery log: miles / on-time / tracking / 5★ / notes."},
-        {"label": "Driver Portal", "icon": "🚗", "href": f"/{store_slug}/driver-portal",
-         "active": "driver_portal",
-         "sub": "Driver-facing view (login + their own assignments)."},
         {"label": "Drivers (Admin)", "icon": "👥", "href": f"/{store_slug}/drivers",
          "active": "drivers_admin",
          "sub": "Add / reset password / deactivate driver accounts."},
@@ -152,7 +149,6 @@ _ACTIVE_TO_CATEGORY = {
     "ezcater_orders":   "ezcater",
     "processor":        "ezcater",
     "driver_tracking":  "ezcater",
-    "driver_portal":    "ezcater",
     "drivers_admin":    "ezcater",
     "drivers_live":     "ezcater",
 }

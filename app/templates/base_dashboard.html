@@ -14,42 +14,51 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <style>
-    /* Persistent category sub-nav (rendered by base_dashboard.html when
-       subnav_for(active, store_slug) returns cards — see store_routes.py). */
+    /* Persistent category sub-nav. Tab-strip look: flat tabs in a row,
+       active tab gets a dark recessed bg + an orange bottom-border
+       accent; inactive tabs are flat with subtle hover. */
     .subnav-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin: 14px 0 18px;
-      padding: 10px 12px;
-      background: rgba(0, 0, 0, 0.30);
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      border-radius: 12px;
+      align-items: stretch;
+      gap: 2px;
+      margin: 16px 0 18px;
+      padding: 0 4px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0;
     }
     .subnav-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 7px 12px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.04);
-      color: rgba(255, 255, 255, 0.78);
+      gap: 8px;
+      padding: 10px 16px 12px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.62);
       text-decoration: none;
       font-size: 13px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-weight: 500;
+      border-radius: 8px 8px 0 0;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
+      position: relative;
+      top: 1px;  /* aligns active underline with the row's bottom border */
     }
     .subnav-pill:hover {
-      background: rgba(255, 255, 255, 0.10);
       color: #fff;
-      border-color: rgba(232, 122, 62, 0.45);
+      background: rgba(255, 255, 255, 0.04);
     }
     .subnav-pill.is-active {
-      background: rgba(232, 122, 62, 0.18);
+      background: rgba(0, 0, 0, 0.55);
       color: #fff;
-      border-color: rgba(232, 122, 62, 0.65);
+      border-bottom-color: rgba(232, 122, 62, 0.90);
     }
-    .subnav-pill .sn-icon { font-size: 14px; }
+    .subnav-pill .sn-icon {
+      font-size: 15px;
+      opacity: 0.90;
+    }
     .subnav-pill.is-disabled {
       opacity: 0.40;
       cursor: not-allowed;

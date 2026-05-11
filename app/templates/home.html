@@ -15,27 +15,10 @@
 {% endblock %}
 
 {% block content %}
-<!-- KPI strip -->
-<div class="kpis">
-  <div class="kpi kpi-1">
-    <div class="kpi-icon">📦</div>
-    <div class="kpi-value">{{ today_orders|length }}</div>
-    <div class="kpi-label">Today's deliveries</div>
-    <div class="kpi-meta">{{ tomball_today }} Tomball · {{ copperfield_today }} Copperfield</div>
-  </div>
-  <div class="kpi kpi-2">
-    <div class="kpi-icon">👥</div>
-    <div class="kpi-value">{{ heads_today }}</div>
-    <div class="kpi-label">Heads to feed</div>
-    <div class="kpi-meta">{% if today_orders %}avg {{ (heads_today / today_orders|length)|round(0, 'floor')|int }}/order{% else %}—{% endif %}</div>
-  </div>
-  <div class="kpi kpi-4">
-    <div class="kpi-icon">🥬</div>
-    <div class="kpi-value">{{ produce_winners }}</div>
-    <div class="kpi-label">Produce winners</div>
-    <div class="kpi-meta">{% if produce_last_refresh %}refreshed {{ produce_last_refresh }}{% else %}no data yet{% endif %}</div>
-  </div>
-</div>
+{# KPI strip removed per Sam 2026-05-11 — was the 3 tiles
+   (Today's deliveries, Heads to feed, Produce winners) at the top of every
+   store dashboard. The downstream sections (donuts + Upcoming list) cover
+   the same info more usefully. #}
 
 <!-- Sales + Labor donuts (real data, with Today / This Week / Last Week toggle) -->
 <div class="dash-charts" data-location="{{ dashboard_location|default('both') }}">

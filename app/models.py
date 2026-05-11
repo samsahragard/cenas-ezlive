@@ -389,6 +389,45 @@ class EzcaterKnownDriver(Base):
     ck_prefix: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class User(Base):
+    """Site-wide user account (migration 13). Replaces the shared-password
+    Tier 1/Tier 2 gates with per-person 5-digit numeric passcodes. Roles in
+    descending privilege: partner, corporate, gm, manager, expo, corporate-driver.
+    Sam (2026-05-11): keypad-only login (no username field) — when 5 digits
+    are entered we scan active users for a passcode_hash match; passcode
+    uniqueness is enforced at create/change time."""
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("phone", name="uq_users_phone"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    passcode_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # 'partner' > 'corporate' > 'gm' > 'manager' > 'expo' > 'corporate-driver'
+    permission_level: Mapped[str] = mapped_column(String(30), nullable=False, default="manager")
+    # 'tomball' | 'copperfield' | 'both' | NULL (NULL == all stores, used for partner/corporate)
+    store_scope: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # First-time login forces a passcode change before any other route is reached.
+    first_login_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lockout_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_login_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
 class DeveloperChatAttachment(Base):
     """Files attached to a Developer Chat message. Up to 5 per message,
     enforced at the route layer. Files live under CHAT_ATTACHMENTS_DIR
@@ -407,5 +446,41 @@ class DeveloperChatAttachment(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     is_image: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class WhatsAppMessage(Base):
+    """Partner-side mirror of ock's WhatsApp inbox. Populated by the
+    CK-Mini-PC daemon POSTing to /api/inbox/whatsapp; rendered by the
+    Partner-gated /partner/operations/whatsapp inbox so Sam + Masood can
+    read every thread on ock's number (+13464620746) without a phone in
+    hand. Phase 2 adds the outbound side via the same model + a
+    cloudflared tunnel on CK that hosts ock's send endpoint.
+    """
+    __tablename__ = "whatsapp_messages"
+    __table_args__ = (
+        UniqueConstraint("external_id", name="uq_whatsapp_external_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # ock's awareness.db message id (or whatsapp stanza id) — dedupe key.
+    external_id: Mapped[str | None] = mapped_column(String(120), index=True)
+    # ISO8601 timestamp from ock side (when the channel saw the message).
+    ts: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    # WhatsApp JID (group or DM).
+    chat_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    chat_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'group' | 'dm'
+    chat_name: Mapped[str | None] = mapped_column(String(200))
+    sender_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    sender_name: Mapped[str | None] = mapped_column(String(200))
+    body: Mapped[str | None] = mapped_column(Text)
+    media_kind: Mapped[str | None] = mapped_column(String(30))  # image|video|audio|document|sticker
+    # 'inbound' for messages ock received; 'outbound' once Phase 2 lets
+    # Sam/Masood reply through EZLive.
+    direction: Mapped[str] = mapped_column(String(10), nullable=False, default="inbound")
+    sent_by_user: Mapped[str | None] = mapped_column(String(80))  # 'sam' | 'masood' for outbound
+    reply_to_external_id: Mapped[str | None] = mapped_column(String(120))
+    raw_metadata: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    # When EZLive received the message (vs `ts` which is when ock saw it).
+    ingested_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
     message: Mapped["DeveloperChatMessage"] = relationship(back_populates="attachments")

@@ -1,0 +1,166 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'ck_whatsapp' %}
+{% block title %}CK WhatsApp — Cenas Kitchen{% endblock %}
+
+{% block page_title %}CK WhatsApp{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Inbox mirror of ock's WhatsApp ({{ chats|length }} conversation{{ '' if chats|length == 1 else 's' }})</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .wa-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 14px;
+    height: 70vh;
+    min-height: 480px;
+  }
+  .wa-list {
+    background: rgba(0, 0, 0, 0.30);
+    border-radius: 12px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .wa-row {
+    display: block;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    color: #fff;
+    text-decoration: none;
+    transition: background 0.12s;
+  }
+  .wa-row:hover { background: rgba(255, 255, 255, 0.04); }
+  .wa-row.is-active {
+    background: rgba(232, 122, 62, 0.10);
+    border-left: 3px solid rgba(232, 122, 62, 0.85);
+    padding-left: 11px;
+  }
+  .wa-row-name { font-weight: 600; font-size: 13px; }
+  .wa-row-preview {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wa-row-ts { font-size: 10px; color: rgba(255, 255, 255, 0.45); margin-top: 2px; }
+  .wa-row-type {
+    display: inline-block;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.55);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .wa-thread {
+    background: rgba(0, 0, 0, 0.30);
+    border-radius: 12px;
+    padding: 16px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .wa-thread-head {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .wa-msg { margin-bottom: 12px; max-width: 75%; }
+  .wa-msg.is-in { margin-right: auto; }
+  .wa-msg.is-out { margin-left: auto; text-align: right; }
+  .wa-bubble {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 12px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    word-wrap: break-word;
+  }
+  .wa-msg.is-out .wa-bubble {
+    background: rgba(232, 122, 62, 0.20);
+  }
+  .wa-msg-sender { font-size: 11px; color: rgba(255, 255, 255, 0.55); margin-bottom: 3px; }
+  .wa-msg-ts { font-size: 10px; color: rgba(255, 255, 255, 0.40); margin-top: 3px; }
+  .wa-media { font-style: italic; color: rgba(255, 255, 255, 0.55); }
+  .wa-empty {
+    color: rgba(255, 255, 255, 0.55);
+    padding: 30px;
+    text-align: center;
+    font-style: italic;
+  }
+  .wa-footnote {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-3, rgba(255, 255, 255, 0.45));
+  }
+</style>
+
+<div class="wa-grid">
+  <div class="wa-list">
+    {% if not chats %}
+      <div class="wa-empty">
+        No conversations yet. Once the CK daemon starts POSTing to
+        <code>/api/inbox/whatsapp</code>, messages will appear here.
+      </div>
+    {% endif %}
+    {% for c in chats %}
+      <a class="wa-row{% if c.chat_id == active_chat_id %} is-active{% endif %}"
+         href="{{ url_for('ck_whatsapp.whatsapp_inbox') }}?chat={{ c.chat_id|urlencode }}">
+        <div class="wa-row-name">
+          {{ c.chat_name or c.sender_name or c.chat_id }}
+          {% if c.chat_type == 'group' %}<span class="wa-row-type">group</span>{% endif %}
+        </div>
+        <div class="wa-row-preview">
+          {% if c.body %}{{ c.body }}{% elif c.media_kind %}[{{ c.media_kind }}]{% else %}[no body]{% endif %}
+        </div>
+        <div class="wa-row-ts">{{ c.ts }}</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="wa-thread">
+    {% if not active_chat_id %}
+      <div class="wa-empty">Select a conversation on the left.</div>
+    {% elif not thread %}
+      <div class="wa-empty">No messages in this conversation yet.</div>
+    {% else %}
+      {% set first = thread[0] %}
+      <div class="wa-thread-head">
+        {{ first.chat_name or first.sender_name or first.chat_id }}
+        {% if first.chat_type == 'group' %}<span class="wa-row-type">group</span>{% endif %}
+      </div>
+      {% for m in thread %}
+        <div class="wa-msg {% if m.direction == 'outbound' %}is-out{% else %}is-in{% endif %}">
+          <div class="wa-msg-sender">
+            {{ m.sender_name or m.sender_id }}{% if m.direction == 'outbound' and m.sent_by_user %} · via {{ m.sent_by_user }}{% endif %}
+          </div>
+          <div class="wa-bubble">
+            {% if m.body %}{{ m.body }}{% endif %}
+            {% if m.media_kind %}<div class="wa-media">[{{ m.media_kind }}]</div>{% endif %}
+            {% if not m.body and not m.media_kind %}<span class="wa-media">[empty]</span>{% endif %}
+          </div>
+          <div class="wa-msg-ts">{{ m.ts }}</div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+<p class="wa-footnote">
+  Auto-refresh every 5s. Read-only for now; Phase 2 will add a reply box
+  that routes through ock's WhatsApp (Sam/Masood reply on ock's behalf).
+</p>
+
+<script>
+  setTimeout(() => window.location.reload(), 5000);
+</script>
+{% endblock %}

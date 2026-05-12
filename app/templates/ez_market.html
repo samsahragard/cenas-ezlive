@@ -1,0 +1,208 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Ez Market — Cenas Kitchen{% endblock %}
+{% block page_title %}Ez Market{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">{{ available|length }} orders open for bid · welcome {{ driver.name.split()[0] }}</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .em-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .em-stat {
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .em-stat-label { font-size: 11px; color: rgba(236,227,208,0.6); text-transform: uppercase; letter-spacing: 0.1em; }
+  .em-stat-value { font-size: 22px; font-weight: 500; color: #FFD970; margin-top: 4px; text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
+  .em-stat-sub { font-size: 11px; color: rgba(236,227,208,0.5); margin-top: 2px; }
+
+  .em-disclaimer {
+    background: rgba(40,22,14,0.30); border-left: 2px solid rgba(228,179,64,0.35);
+    padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
+    border-radius: 0 8px 8px 0; margin-bottom: 16px;
+  }
+  .em-disclaimer a { color: #E4B340; text-decoration: none; margin-left: 8px; }
+  .em-disclaimer a:hover { text-decoration: underline; }
+
+  .em-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
+  .em-tab {
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 16px; color: rgba(255,255,255,0.62); cursor: pointer;
+    font-size: 13px; font-weight: 500; border-radius: 8px 8px 0 0; position: relative; top: 1px;
+  }
+  .em-tab.active { color: #fff; background: rgba(0,0,0,0.55); border-bottom-color: rgba(228,179,64,0.9); }
+  .em-tab .em-tab-count { font-size: 11px; opacity: 0.7; margin-left: 4px; }
+
+  .em-cards { display: flex; flex-direction: column; gap: 12px; }
+  .em-card {
+    background: rgba(40,22,14,0.55); border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .em-card.urgent { border-color: rgba(226,100,92,0.5); }
+  .em-card-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+  .em-time { font-size: 18px; font-weight: 500; color: #FAF6EC; }
+  .em-time-sub { font-size: 11px; color: rgba(236,227,208,0.55); }
+  .em-time-sub.urgent { color: #E2645C; font-weight: 500; }
+  .em-payout { font-size: 22px; font-weight: 500; color: #FFD970; text-align: right;
+               text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
+  .em-payout-label { font-size: 10px; color: rgba(236,227,208,0.55); text-align: right;
+                     text-transform: uppercase; letter-spacing: 0.1em; }
+  .em-trip { display: flex; flex-direction: column; gap: 4px; font-size: 12px;
+             color: rgba(236,227,208,0.85); margin: 10px 0; }
+  .em-meta { display: flex; gap: 10px; font-size: 11px; color: rgba(236,227,208,0.55); margin-bottom: 10px; }
+  .em-meta .em-compete-red { color: #E2645C; font-weight: 500; }
+  .em-meta .em-compete-green { color: #9CCB76; font-weight: 500; }
+
+  .em-btn {
+    display: block; width: 100%; padding: 10px;
+    background: #E4B340; color: #140A06; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .em-btn:hover { filter: brightness(1.08); }
+  .em-btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #FAF6EC; }
+  .em-empty { padding: 24px; text-align: center; color: rgba(236,227,208,0.55); }
+  .em-banner { padding: 6px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
+  .em-banner.pending { background: rgba(228,179,64,0.14); color: #E4B340; }
+  .em-banner.approved { background: rgba(156,203,118,0.14); color: #9CCB76; }
+</style>
+<script>
+  // 30s polling refresh (SPEC §4)
+  setInterval(() => location.reload(), 30000);
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="em-stats">
+  <div class="em-stat">
+    <div class="em-stat-label">Potential today</div>
+    <div class="em-stat-value">${{ "%.2f"|format(stat_potential_today) }}</div>
+  </div>
+  <div class="em-stat">
+    <div class="em-stat-label">My queue</div>
+    <div class="em-stat-value">{{ stat_my_queue }}</div>
+  </div>
+  <div class="em-stat">
+    <div class="em-stat-label">Potential week</div>
+    <div class="em-stat-value">${{ "%.2f"|format(stat_potential_week) }}</div>
+  </div>
+</div>
+
+<div class="em-disclaimer">
+  Estimates only — final amounts are set by payroll on Fridays.
+  <a href="{{ url_for('driver_system.pay_history') }}">View past pay checks →</a>
+</div>
+
+<div class="em-tabs">
+  <button class="em-tab active" onclick="showTab('available')">Available <span class="em-tab-count">({{ available|length }})</span></button>
+  <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({{ my_pending_reqs|length + my_active|length }})</span></button>
+  <button class="em-tab" onclick="showTab('history')">History</button>
+</div>
+
+<div id="tab-available" class="em-cards">
+  {% if available %}
+    {% for o in available %}
+    <div class="em-card">
+      <div class="em-card-row">
+        <div>
+          <div class="em-time">{{ o.deliver_at or '—' }}</div>
+          <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
+        </div>
+        <div>
+          <div class="em-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="em-payout-label">Est. earn</div>
+        </div>
+      </div>
+      <div class="em-trip">
+        <div><strong>Pickup:</strong> {{ o.reported_store or '—' }}</div>
+        <div><strong>Drop:</strong> {{ o.delivery_address or '—' }}</div>
+      </div>
+      <div class="em-meta">
+        <span>{{ o.headcount or '—' }} heads</span>
+        <span>${{ "%.0f"|format(o.total_amount or 0) }}</span>
+        {% set comp = competing.get(o.id, 0) %}
+        {% if comp >= 3 %}
+          <span class="em-compete-red">🔥 {{ comp + 1 }} drivers competing</span>
+        {% elif comp >= 1 %}
+          <span class="em-compete-green">✓ {{ comp + 1 }} driver{% if comp > 1 %}s{% endif %} competing</span>
+        {% endif %}
+      </div>
+      <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
+        <button type="submit" class="em-btn">Request delivery</button>
+      </form>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="em-empty">No orders available right now. Refreshing every 30 seconds.</div>
+  {% endif %}
+</div>
+
+<div id="tab-queue" class="em-cards" style="display:none;">
+  {% for req in my_pending_reqs %}
+    {% set o = req.delivery if req.delivery else None %}
+    <div class="em-card">
+      <div class="em-banner pending">Manager reviewing · requested {{ req.requested_at.strftime('%I:%M %p') if req.requested_at else '' }}</div>
+      <div class="em-card-row">
+        <div><div class="em-time">Request #{{ req.id }}</div></div>
+        <div></div>
+      </div>
+      <form method="POST" action="{{ url_for('driver_system.ez_market_cancel_request', request_id=req.id) }}">
+        <button type="submit" class="em-btn ghost">Cancel request</button>
+      </form>
+    </div>
+  {% endfor %}
+  {% for o in my_active %}
+    <div class="em-card">
+      <div class="em-banner approved">Approved · status: {{ o.status }}</div>
+      <div class="em-card-row">
+        <div>
+          <div class="em-time">{{ o.deliver_at or '—' }}</div>
+          <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
+        </div>
+        <div>
+          <div class="em-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="em-payout-label">Est. earn</div>
+        </div>
+      </div>
+      <div class="em-trip">
+        <div><strong>Pickup:</strong> {{ o.reported_store or '—' }}</div>
+        <div><strong>Drop:</strong> {{ o.delivery_address or '—' }}</div>
+      </div>
+    </div>
+  {% endfor %}
+  {% if my_pending_reqs|length == 0 and my_active|length == 0 %}
+    <div class="em-empty">No active or pending deliveries.</div>
+  {% endif %}
+</div>
+
+<div id="tab-history" class="em-cards" style="display:none;">
+  {% for o in my_history %}
+    <div class="em-card">
+      <div class="em-card-row">
+        <div>
+          <div class="em-time">{{ o.delivery_date or '' }}</div>
+          <div class="em-time-sub">{{ o.external_order_id }} · {{ o.reported_store or '—' }}</div>
+        </div>
+        <div>
+          <div class="em-payout">${{ "%.2f"|format(o.paid_payout or o.potential_payout or 0) }}</div>
+          <div class="em-payout-label">{{ 'Paid' if o.paid_payout else 'Est.' }}</div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+  {% if my_history|length == 0 %}
+    <div class="em-empty">No history yet.</div>
+  {% endif %}
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.em-tab').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  ['available', 'queue', 'history'].forEach(n => {
+    document.getElementById('tab-' + n).style.display = (n === name) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

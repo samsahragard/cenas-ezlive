@@ -20,6 +20,7 @@ from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
 from app.web.ck_whatsapp import ck_whatsapp_bp
 from app.web.team_routes import team_bp
 from app.web.legal_routes import legal as legal_bp
+from app.web.driver_system import driver_system_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.services import produce_ingest
@@ -53,6 +54,7 @@ def create_app():
     app.register_blueprint(ck_whatsapp_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(legal_bp)
+    app.register_blueprint(driver_system_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")

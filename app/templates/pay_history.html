@@ -1,0 +1,60 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Pay History — Cenas Kitchen{% endblock %}
+{% block page_title %}Pay History{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">{{ driver.name }} · bi-weekly paychecks · estimates vs verified</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .ph-disclaimer { background: rgba(40,22,14,0.30); border-left: 2px solid rgba(228,179,64,0.35);
+                   padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
+                   border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+  .ph-check { background: rgba(40,22,14,0.55); border: 0.5px solid rgba(217,164,54,0.18);
+              border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .ph-check-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+  .ph-period { font-size: 13px; color: rgba(236,227,208,0.85); font-weight: 500; }
+  .ph-meta { font-size: 11px; color: rgba(236,227,208,0.55); margin-top: 2px; }
+  .ph-amount { font-size: 20px; font-weight: 500; color: #FFD970; text-align: right;
+               text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
+  .ph-amount-label { font-size: 10px; color: rgba(236,227,208,0.55); text-align: right;
+                     text-transform: uppercase; letter-spacing: 0.1em; }
+  .ph-empty { padding: 32px; text-align: center; color: rgba(236,227,208,0.55); font-size: 13px; }
+  .ph-flash { padding: 8px 14px; margin-bottom: 10px; border-radius: 8px; font-size: 13px; }
+  .ph-flash.ok { background: rgba(156,203,118,0.14); color: #9CCB76; }
+  .ph-flash.error { background: rgba(226,100,92,0.18); color: #E2645C; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, msg in messages %}
+    <div class="ph-flash {{ category }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="ph-disclaimer">
+  Verified paychecks. Estimates from your active deliveries become final on Friday after the period closes.
+</div>
+
+{% if checks %}
+  {% for c in checks %}
+    <div class="ph-check">
+      <div class="ph-check-row">
+        <div>
+          <div class="ph-period">{{ c.pay_period_start.strftime('%b %d') }} – {{ c.pay_period_end.strftime('%b %d, %Y') }}</div>
+          <div class="ph-meta">Closed {{ c.closed_at.strftime('%b %d, %Y') }}
+            {% if c.check_reference %}· #{{ c.check_reference }}{% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="ph-amount">${{ "%.2f"|format(c.gross_amount or 0) }}</div>
+          <div class="ph-amount-label">Gross</div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="ph-empty">No closed paychecks yet. Your first paycheck shows here after the period closes.</div>
+{% endif %}
+{% endblock %}

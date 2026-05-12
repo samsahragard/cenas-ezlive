@@ -31,6 +31,34 @@
       <div class="ck-sb-logo-sub" style="margin-top: 2px;">{{ store_label }}</div>
     </a>
 
+    {% if user_role == 'driver' %}
+    {# ==== DRIVER-ONLY menu ==== #}
+    <div class="ck-sb-section" data-id="driver-main">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">My work</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        <a href="/ez-market" class="ck-sb-item{% if active == 'ez_market' %} active{% endif %}">
+          <i class="ti ti-flame ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Ez Market</span>
+        </a>
+        <a href="/my-profile" class="ck-sb-item{% if active == 'my_profile' %} active{% endif %}">
+          <i class="ti ti-user-star ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">My profile</span>
+        </a>
+        <a href="/pay-history" class="ck-sb-item{% if active == 'pay_history' %} active{% endif %}">
+          <i class="ti ti-receipt ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Pay history</span>
+        </a>
+        <a href="/driver/logs" class="ck-sb-item{% if active == 'driver_logs' %} active{% endif %}">
+          <i class="ti ti-map-pin ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Live tracking</span>
+        </a>
+      </div></div>
+    </div>
+    {% else %}
+
     {# ==== TODAY ==== #}
     <div class="ck-sb-section" data-id="today">
       <button class="ck-sb-section-head" aria-expanded="true">
@@ -43,6 +71,14 @@
            {% if active == 'dashboard' %}aria-current="page"{% endif %}>
           <i class="ti ti-layout-dashboard ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">{{ store_label }} Dashboard</span>
+        </a>
+        <a href="/ez-market" class="ck-sb-item{% if active == 'ez_market' %} active{% endif %}">
+          <i class="ti ti-flame ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Ez Market</span>
+        </a>
+        <a href="/ez-manage" class="ck-sb-item{% if active == 'ez_manage' %} active{% endif %}">
+          <i class="ti ti-clipboard-check ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Ez Manage</span>
         </a>
       </div></div>
     </div>
@@ -325,8 +361,10 @@
       </div></div>
     </div>
     {% endif %}
+    {% endif %}{# closes user_role == 'driver' / else #}
 
-    <a href="/keypad-logout" class="ck-sb-logout">
+    <a href="{% if user_role == 'driver' %}/driver/logout{% else %}/keypad-logout{% endif %}" class="ck-sb-logout"
+       {% if user_role == 'driver' %}data-method="post"{% endif %}>
       <i class="ti ti-logout" style="font-size: 16px;" aria-hidden="true"></i>
       <span>Log out</span>
       {% if user_name %}<span class="ck-sb-logout-user">{{ user_name }}</span>{% endif %}

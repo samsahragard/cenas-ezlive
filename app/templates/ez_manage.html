@@ -1,0 +1,145 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Ez Manage — Cenas Kitchen{% endblock %}
+{% block page_title %}Ez Manage{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Approve driver requests · {{ pending_count }} orders waiting</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .ezm-flash { padding: 8px 14px; margin-bottom: 10px; border-radius: 8px; font-size: 13px; }
+  .ezm-flash.ok { background: rgba(156,203,118,0.14); color: #9CCB76; }
+  .ezm-flash.error { background: rgba(226,100,92,0.18); color: #E2645C; }
+
+  .ezm-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
+  .ezm-tab { background: transparent; border: none; border-bottom: 2px solid transparent;
+             padding: 10px 16px; color: rgba(255,255,255,0.62); cursor: pointer;
+             font-size: 13px; font-weight: 500; }
+  .ezm-tab.active { color: #fff; border-bottom-color: rgba(228,179,64,0.9); background: rgba(0,0,0,0.55); }
+
+  .ezm-order {
+    background: rgba(40,22,14,0.55); border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+  }
+  .ezm-order-head { display: flex; justify-content: space-between; align-items: flex-start;
+                    gap: 14px; margin-bottom: 12px; }
+  .ezm-order-info .ezm-time { font-size: 18px; font-weight: 500; color: #FAF6EC; }
+  .ezm-order-info .ezm-route { font-size: 12px; color: rgba(236,227,208,0.75); margin-top: 4px; }
+  .ezm-order-info .ezm-meta { font-size: 11px; color: rgba(236,227,208,0.55); margin-top: 4px; }
+  .ezm-payout { font-size: 22px; font-weight: 500; color: #FFD970;
+                text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); text-align: right; }
+  .ezm-payout-label { font-size: 10px; color: rgba(236,227,208,0.55); text-transform: uppercase;
+                      letter-spacing: 0.1em; text-align: right; }
+
+  .ezm-driver-row { display: flex; gap: 12px; align-items: center; padding: 10px;
+                    border-top: 0.5px solid rgba(255,255,255,0.06); }
+  .ezm-driver-row.recommended { background: rgba(228,179,64,0.08); border-radius: 8px;
+                                border-color: rgba(228,179,64,0.3); }
+  .ezm-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(199,59,54,0.65);
+                color: #FFFAEC; display: flex; align-items: center; justify-content: center;
+                font-weight: 500; font-size: 13px; flex-shrink: 0; }
+  .ezm-driver-info { flex: 1; }
+  .ezm-driver-name { font-size: 14px; font-weight: 500; color: #FAF6EC; }
+  .ezm-driver-stats { font-size: 11px; color: rgba(236,227,208,0.6); margin-top: 2px; }
+  .ezm-driver-stats .tier-new { color: rgba(236,227,208,0.7); }
+  .ezm-driver-stats .tier-trusted { color: #9CCB76; }
+  .ezm-driver-stats .tier-rockstar { color: #E4B340; }
+  .ezm-driver-stats .tier-top_rockstar { color: #FFD970; font-weight: 500; }
+  .ezm-recommended-tag { font-size: 10px; color: #E4B340; text-transform: uppercase;
+                          letter-spacing: 0.1em; margin-bottom: 4px; }
+
+  .ezm-btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+             border: none; cursor: pointer; }
+  .ezm-btn-approve { background: #E4B340; color: #140A06; }
+  .ezm-btn-approve.recommended { padding: 8px 18px; }
+  .ezm-btn-approve:hover { filter: brightness(1.08); }
+  .ezm-btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.2);
+                    color: rgba(236,227,208,0.85); }
+  .ezm-btn-ghost:hover { background: rgba(255,255,255,0.05); }
+
+  .ezm-footer { display: flex; gap: 8px; padding: 10px;
+                border-top: 0.5px solid rgba(255,255,255,0.06); }
+
+  .ezm-empty { padding: 32px; text-align: center; color: rgba(236,227,208,0.55); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, msg in messages %}
+    <div class="ezm-flash {{ category }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="ezm-tabs">
+  <button class="ezm-tab active">Pending <span style="font-size:11px;opacity:0.7;">({{ pending_count }})</span></button>
+  <button class="ezm-tab">Approved today <span style="font-size:11px;opacity:0.7;">({{ approved_today_count }})</span></button>
+</div>
+
+{% if groups %}
+  {% for g in groups %}
+    {% set o = g.order %}
+    <div class="ezm-order">
+      <div class="ezm-order-head">
+        <div class="ezm-order-info">
+          <div class="ezm-time">{{ o.deliver_at or '—' }}</div>
+          <div class="ezm-route">{{ o.reported_store or '—' }} → {{ o.delivery_address or '—' }}</div>
+          <div class="ezm-meta">{{ o.external_order_id }} · {{ o.headcount or '—' }} heads · ${{ "%.0f"|format(o.total_amount or 0) }}</div>
+        </div>
+        <div>
+          <div class="ezm-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="ezm-payout-label">Driver pay</div>
+          <div style="font-size:11px;color:rgba(236,227,208,0.55);text-align:right;margin-top:2px;">
+            {{ g.rows|length }} request{{ 's' if g.rows|length != 1 else '' }}
+          </div>
+        </div>
+      </div>
+
+      {% for row in g.rows %}
+      <div class="ezm-driver-row {% if row.get('recommended') %}recommended{% endif %}">
+        {% if row.get('recommended') %}
+          <div style="position:absolute;margin-top:-32px;"><span class="ezm-recommended-tag">★ Recommended</span></div>
+        {% endif %}
+        {% set d = row.driver %}
+        <div class="ezm-avatar">{{ (d.name or '?')[0:2].upper() }}</div>
+        <div class="ezm-driver-info">
+          <div class="ezm-driver-name">{{ d.name }}
+            <span class="tier-{{ d.current_tier or 'new' }}" style="font-size:11px;font-weight:400;margin-left:4px;">
+              {{ (d.current_tier or 'new').replace('_', ' ').title() }}
+            </span>
+          </div>
+          <div class="ezm-driver-stats">
+            {{ row.load_str }}
+            {% if d.lifetime_delivery_count < 20 %}
+              · {{ d.lifetime_delivery_count }} lifetime · <span style="color:#E4B340;">Still in trial</span>
+            {% else %}
+              · score {{ d.current_score or '—' }}/100
+            {% endif %}
+          </div>
+        </div>
+        <form method="POST" action="{{ url_for('driver_system.ez_manage_approve', request_id=row.request.id) }}" style="display:inline;">
+          <button type="submit" class="ezm-btn ezm-btn-approve {% if row.get('recommended') %}recommended{% endif %}">
+            {% if row.get('recommended') %}Approve {{ (d.name or '').split()[0] }}{% else %}Approve{% endif %}
+          </button>
+        </form>
+        <form method="POST" action="{{ url_for('driver_system.ez_manage_decline', request_id=row.request.id) }}" style="display:inline;">
+          <button type="submit" class="ezm-btn ezm-btn-ghost">Decline</button>
+        </form>
+      </div>
+      {% endfor %}
+
+      <div class="ezm-footer">
+        <form method="POST" action="{{ url_for('driver_system.ez_manage_back_to_bidding', delivery_id=o.id) }}" style="display:inline;">
+          <button type="submit" class="ezm-btn ezm-btn-ghost">Send back to bidding</button>
+        </form>
+        <form method="POST" action="{{ url_for('driver_system.ez_manage_decline_all', delivery_id=o.id) }}" style="display:inline;"
+              onsubmit="return confirm('Decline all and cancel this order?');">
+          <button type="submit" class="ezm-btn ezm-btn-ghost" style="color:#E2645C;">Decline all</button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="ezm-empty">No pending driver requests right now.</div>
+{% endif %}
+{% endblock %}

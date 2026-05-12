@@ -76,6 +76,110 @@
   <button class="ezm-tab">Approved today <span style="font-size:11px;opacity:0.7;">({{ approved_today_count }})</span></button>
 </div>
 
+<dialog id="stack-modal" style="background: rgba(20,12,8,0.97); color: #FAF6EC;
+        border: 0.5px solid rgba(217,164,54,0.3); border-radius: 12px;
+        padding: 0; max-width: 560px; width: 92%;">
+  <div style="padding: 18px 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; gap:10px; margin-bottom:14px;">
+      <div>
+        <div style="font-size:15px;font-weight:500;">Stack a 2nd delivery for <span id="sm-driver-name">—</span>?</div>
+        <div style="font-size:12px;color:rgba(236,227,208,0.6);margin-top:2px;" id="sm-subtitle">Running combined-route check…</div>
+      </div>
+      <button type="button" onclick="document.getElementById('stack-modal').close()"
+              style="background:transparent;border:none;color:rgba(236,227,208,0.6);font-size:20px;cursor:pointer;line-height:1;">×</button>
+    </div>
+    <div id="sm-verdict" style="padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;">…</div>
+    <pre id="sm-details" style="background:rgba(0,0,0,0.30);padding:10px 12px;border-radius:8px;
+         font-family: ui-monospace, monospace; font-size:11px; color:rgba(236,227,208,0.85);
+         white-space:pre-wrap; max-height:240px; overflow-y:auto; margin:0 0 14px;"></pre>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('stack-modal').close()"
+              class="ezm-btn ezm-btn-ghost">Cancel · try another driver</button>
+      <button type="button" id="sm-confirm" class="ezm-btn ezm-btn-approve">Confirm stack</button>
+    </div>
+  </div>
+</dialog>
+<script>
+(function() {
+  const modal = document.getElementById('stack-modal');
+  const smDriver = document.getElementById('sm-driver-name');
+  const smSubtitle = document.getElementById('sm-subtitle');
+  const smVerdict = document.getElementById('sm-verdict');
+  const smDetails = document.getElementById('sm-details');
+  const smConfirm = document.getElementById('sm-confirm');
+  let pendingForm = null;
+
+  document.querySelectorAll('.ezm-approve-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const driverId = form.dataset.driverId;
+      const newDeliveryId = form.dataset.newDeliveryId;
+      const driverName = form.dataset.driverName || 'driver';
+      try {
+        const r = await fetch(`/ez-manage/feasibility-check?driver_id=${driverId}&new_delivery_id=${newDeliveryId}`);
+        const data = await r.json();
+        if (!data.ok) {
+          // Backend error — just submit as-is and let the route handle
+          form.submit();
+          return;
+        }
+        if (!data.stack_needed) {
+          // Driver has no active delivery — straight approve
+          form.submit();
+          return;
+        }
+        // Stack confirmation needed
+        pendingForm = form;
+        smDriver.textContent = driverName;
+        if (data.feasible === false && data.reason) {
+          smSubtitle.textContent = 'Hard filter failed';
+          smVerdict.textContent = '⚠ Cannot combine — ' + data.reason;
+          smVerdict.style.background = 'rgba(226,100,92,0.18)';
+          smVerdict.style.color = '#E2645C';
+          smDetails.textContent = '';
+          smConfirm.textContent = 'Approve anyway';
+          smConfirm.style.background = 'rgba(226,100,92,0.30)';
+        } else {
+          const rr = (data.result && data.result.route_result) || {};
+          const feasible = !!data.feasible;
+          smSubtitle.textContent = 'Combined-route check ran';
+          if (feasible) {
+            smVerdict.textContent = '✓ Feasible — both windows met';
+            smVerdict.style.background = 'rgba(156,203,118,0.18)';
+            smVerdict.style.color = '#9CCB76';
+            smConfirm.textContent = 'Confirm stack';
+            smConfirm.style.background = '#E4B340';
+          } else {
+            smVerdict.textContent = '⚠ Not feasible — driver will miss a window';
+            smVerdict.style.background = 'rgba(226,100,92,0.18)';
+            smVerdict.style.color = '#E2645C';
+            smConfirm.textContent = 'Approve anyway';
+            smConfirm.style.background = 'rgba(226,100,92,0.30)';
+          }
+          const stops = (rr.stops || []).map(s =>
+            `  • ${s.address || s.order_id || '—'}   arrive ${s.arrival || '—'}   ${s.minutes_late > 0 ? '⚠ ' + s.minutes_late + ' min late' : '✓ on time'}`
+          ).join('\n');
+          smDetails.textContent =
+            `Sequence: ${rr.sequence || '—'}\n` +
+            `Total drive: ${rr.total_drive_minutes || '—'} min\n` +
+            `Total late:  ${rr.total_minutes_late || 0} min\n` +
+            (stops ? '\nStops:\n' + stops : '');
+        }
+        modal.showModal();
+      } catch (err) {
+        console.error('feasibility check failed', err);
+        form.submit();  // fall back to direct submission
+      }
+    });
+  });
+
+  smConfirm.addEventListener('click', () => {
+    modal.close();
+    if (pendingForm) pendingForm.submit();
+  });
+})();
+</script>
+
 {% if groups %}
   {% for g in groups %}
     {% set o = g.order %}
@@ -117,7 +221,9 @@
             {% endif %}
           </div>
         </div>
-        <form method="POST" action="{{ url_for('driver_system.ez_manage_approve', request_id=row.request.id) }}" style="display:inline;">
+        <form method="POST" action="{{ url_for('driver_system.ez_manage_approve', request_id=row.request.id) }}"
+              class="ezm-approve-form" data-driver-id="{{ d.id }}" data-new-delivery-id="{{ o.id }}"
+              data-driver-name="{{ d.name }}" style="display:inline;">
           <button type="submit" class="ezm-btn ezm-btn-approve {% if row.get('recommended') %}recommended{% endif %}">
             {% if row.get('recommended') %}Approve {{ (d.name or '').split()[0] }}{% else %}Approve{% endif %}
           </button>

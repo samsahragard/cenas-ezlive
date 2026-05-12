@@ -1,0 +1,336 @@
+{# ============================================================
+   sidebar.html — Cenas Kitchen sidebar partial (responsive)
+   Static on desktop, drawer below 1024px.
+
+   Context expected from base_dashboard.html:
+     store_slug    → 'partner' | 'corporate' | 'dos' | 'uno'
+     store_label   → human label for current store
+     active        → existing per-page active key (used for highlighting)
+     user_role     → 'partner' | 'corporate' | 'gm' | 'expo' (gates Insights/Admin/Developer)
+     user_name     → first name of current user, for the logout badge
+     app_sessions  → optional list[{slug,label}] for dynamic session docs
+   ============================================================ #}
+
+<div class="ck-sidebar-host" data-open="false">
+
+  <button class="ck-mobile-trigger" aria-label="Open menu" aria-expanded="false">
+    <i class="ti ti-menu-2" aria-hidden="true"></i>
+  </button>
+
+  <div class="ck-mobile-backdrop" aria-hidden="true"></div>
+
+  <nav class="ck-sidebar" aria-label="Main navigation" aria-hidden="true">
+
+    <button class="ck-mobile-close" aria-label="Close menu">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+
+    <div class="ck-sb-logo">
+      <div class="ck-sb-logo-mark" aria-hidden="true">CK</div>
+      <div>
+        <div class="ck-sb-logo-name">Cenas Kitchen</div>
+        <div class="ck-sb-logo-sub">{{ store_label }}</div>
+      </div>
+    </div>
+
+    {# ==== TODAY ==== #}
+    <div class="ck-sb-section" data-id="today">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Today</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        <a href="/{{ store_slug }}/"
+           class="ck-sb-item{% if active == 'dashboard' %} active{% endif %}"
+           {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+          <i class="ti ti-layout-dashboard ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">{{ store_label }} Dashboard</span>
+        </a>
+      </div></div>
+    </div>
+
+    {# ==== OPERATIONS ==== #}
+    <div class="ck-sb-section" data-id="operations">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Operations</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+
+        <div class="ck-sb-branch" data-id="ops.corporate_order">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-shopping-cart ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Corporate order</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/corporate-order" class="ck-sb-subitem{% if active == 'corporate_order' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Order</span>
+            </a>
+            <a href="/{{ store_slug }}/corporate-order/reports" class="ck-sb-subitem{% if active == 'corporate_order_reports' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Reports</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ops.vendors">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-truck ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Vendors</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+
+            <div class="ck-sb-branch ck-sb-branch--nested" data-id="ops.vendors.produce">
+              <button class="ck-sb-branch-head">
+                <span class="ck-sb-branch-label">Produce</span>
+                <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+              </button>
+              <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+                <a href="/{{ store_slug }}/produce/" class="ck-sb-subitem ck-sb-subitem--deep{% if active == 'produce' %} active{% endif %}">
+                  <span class="ck-sb-subitem-label">Order</span>
+                </a>
+                <a href="/{{ store_slug }}/produce/orders" class="ck-sb-subitem ck-sb-subitem--deep{% if active == 'produce_orders' %} active{% endif %}">
+                  <span class="ck-sb-subitem-label">Price history</span>
+                </a>
+              </div></div>
+            </div>
+
+            <a href="#" class="ck-sb-subitem" aria-disabled="true">
+              <span class="ck-sb-subitem-label">Webstaurant</span>
+              <span class="ck-sb-soon">soon</span>
+            </a>
+            <a href="#" class="ck-sb-subitem" aria-disabled="true">
+              <span class="ck-sb-subitem-label">Performance</span>
+              <span class="ck-sb-soon">soon</span>
+            </a>
+            <a href="#" class="ck-sb-subitem" aria-disabled="true">
+              <span class="ck-sb-subitem-label">Specs</span>
+              <span class="ck-sb-soon">soon</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ops.ezcater">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-bowl ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">ezCater</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/orders" class="ck-sb-subitem{% if active == 'ezcater_orders' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Orders</span>
+            </a>
+            <a href="/{{ store_slug }}/driver-tracking" class="ck-sb-subitem{% if active == 'driver_tracking' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Driver payroll</span>
+            </a>
+            <a href="/{{ store_slug }}/drivers" class="ck-sb-subitem{% if active == 'drivers_admin' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Drivers (admin)</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ops.schedule">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-calendar ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Schedule</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/roster/all" class="ck-sb-subitem{% if active == 'all_roster' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">All roster</span>
+            </a>
+            <a href="/{{ store_slug }}/roster/boh" class="ck-sb-subitem{% if active == 'boh_roster' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">BOH roster</span>
+            </a>
+            <a href="/{{ store_slug }}/roster/foh" class="ck-sb-subitem{% if active == 'foh_roster' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">FOH roster</span>
+            </a>
+            <a href="/{{ store_slug }}/schedule" class="ck-sb-subitem{% if active == 'weekly_schedule' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Weekly</span>
+            </a>
+          </div></div>
+        </div>
+
+      </div></div>
+    </div>
+
+    {# ==== INSIGHTS — hidden for expo role ==== #}
+    {% if user_role != 'expo' %}
+    <div class="ck-sb-section" data-id="insights">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Insights</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+
+        <div class="ck-sb-branch" data-id="ins.performance">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-trending-up ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Performance</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/reports/server-performance/all" class="ck-sb-subitem{% if active == 'perf_all' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">All</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/server-performance/server" class="ck-sb-subitem{% if active == 'perf_server' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Server</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/server-performance/bartenders" class="ck-sb-subitem{% if active == 'perf_bartenders' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Bartenders</span>
+            </a>
+            <a href="#" class="ck-sb-subitem" aria-disabled="true">
+              <span class="ck-sb-subitem-label">Prep</span>
+              <span class="ck-sb-soon">soon</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ins.sales">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-chart-bar ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Sales</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/reports/sales/total" class="ck-sb-subitem{% if active == 'sales_total' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">All</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/toast" class="ck-sb-subitem{% if active == 'sales_toast' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Toast</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/online" class="ck-sb-subitem{% if active == 'sales_online' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Online Toast</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/ezcater" class="ck-sb-subitem{% if active == 'sales_ezcater' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">ezCater</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/doordash" class="ck-sb-subitem{% if active == 'sales_doordash' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">DoorDash</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/uber" class="ck-sb-subitem{% if active == 'sales_uber' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Uber</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ins.labor">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-clock ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Labor</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/reports/labor/boh" class="ck-sb-subitem{% if active == 'boh_labor' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">BOH labor</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/labor/foh" class="ck-sb-subitem{% if active == 'foh_labor' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">FOH labor</span>
+            </a>
+          </div></div>
+        </div>
+
+        <a href="#" class="ck-sb-item" aria-disabled="true">
+          <i class="ti ti-chart-arcs ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Forecasts</span>
+          <span class="ck-sb-soon">soon</span>
+        </a>
+
+      </div></div>
+    </div>
+    {% endif %}
+
+    {# ==== ADMIN / DEVELOPER — partner only ==== #}
+    {% if user_role == 'partner' %}
+    <div class="ck-sb-section" data-id="admin">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Admin</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        <a href="/partner/team" class="ck-sb-item{% if active == 'partner_team' %} active{% endif %}">
+          <i class="ti ti-users-group ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Team</span>
+        </a>
+      </div></div>
+    </div>
+
+    <div class="ck-sb-section" data-id="developer">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Developer</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+
+        <a href="/partner/developer/chat" class="ck-sb-item{% if active == 'dev_chat' %} active{% endif %}">
+          <i class="ti ti-messages ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Chat</span>
+        </a>
+
+        <div class="ck-sb-branch" data-id="dev.resolver">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-clipboard-check ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Resolver queue</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/partner/developer/ezcater" class="ck-sb-subitem{% if active == 'dev_ezcater_review' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Review queue</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="dev.app">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-app-window ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">App docs</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/partner/developer/app/readme" class="ck-sb-subitem{% if active == 'doc_readme' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">README</span>
+            </a>
+            <a href="/partner/developer/app/architecture" class="ck-sb-subitem{% if active == 'doc_architecture' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Architecture</span>
+            </a>
+            <a href="/partner/developer/app/features" class="ck-sb-subitem{% if active == 'doc_features' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Features</span>
+            </a>
+            <a href="/partner/developer/app/tech-stack" class="ck-sb-subitem{% if active == 'doc_tech_stack' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Tech stack</span>
+            </a>
+            <a href="/partner/developer/app/deployment" class="ck-sb-subitem{% if active == 'doc_deployment' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Deployment</span>
+            </a>
+            <a href="/partner/developer/app/data-sources" class="ck-sb-subitem{% if active == 'doc_data_sources' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Data sources</span>
+            </a>
+            {% for session in app_sessions|default([]) %}
+              <a href="/partner/developer/app/{{ session.slug }}" class="ck-sb-subitem{% if active == 'doc_' ~ session.slug %} active{% endif %}">
+                <span class="ck-sb-subitem-label">{{ session.label }}</span>
+              </a>
+            {% else %}
+              <a href="/partner/developer/app/ck-session-2026-05-10" class="ck-sb-subitem{% if active == 'doc_ck_session_2026_05_10' %} active{% endif %}">
+                <span class="ck-sb-subitem-label">ck Session 5/10</span>
+              </a>
+              <a href="/partner/developer/app/aick-session-2026-05-10" class="ck-sb-subitem{% if active == 'doc_aick_session_2026_05_10' %} active{% endif %}">
+                <span class="ck-sb-subitem-label">aick Session 5/10</span>
+              </a>
+            {% endfor %}
+          </div></div>
+        </div>
+
+      </div></div>
+    </div>
+    {% endif %}
+
+    <a href="/keypad-logout" class="ck-sb-logout">
+      <i class="ti ti-logout" style="font-size: 16px;" aria-hidden="true"></i>
+      <span>Log out</span>
+      {% if user_name %}<span class="ck-sb-logout-user">{{ user_name }}</span>{% endif %}
+    </a>
+
+  </nav>
+
+</div>

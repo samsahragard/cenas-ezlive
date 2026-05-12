@@ -13,6 +13,68 @@
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
+  <style>
+    /* New sidebar (sidebar.css) replaces the inner content of the layout's
+       .sidebar grid column. Neutralize the old .sidebar chrome here so the
+       inner .ck-sidebar's own width/border/padding takes over cleanly. */
+    .layout > .sidebar {
+      background: transparent !important;
+      border: none !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+    .layout > .sidebar > .ck-sidebar-host > .ck-sidebar {
+      width: 100%;
+      border-radius: 0;
+      border: none;
+    }
+    /* Old store-switcher widget — hold position above the new sidebar logo */
+    .ck-store-switcher-strip {
+      padding: 10px 12px;
+      border-bottom: 0.5px solid rgba(217, 164, 54, 0.10);
+      background: rgba(15, 8, 5, 0.85);
+    }
+    .ck-store-switcher-strip .ss-label {
+      font-size: 11px;
+      color: rgba(236,227,208,0.55);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+    .ck-store-switcher-strip .ss-current {
+      font-size: 13px;
+      color: #FAF6EC;
+      font-weight: 500;
+    }
+    .ck-store-switcher-strip a, .ck-store-switcher-strip summary {
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .ck-store-switcher-strip details > summary { list-style: none; outline: none; }
+    .ck-store-switcher-strip details[open] .ss-dropdown {
+      display: block;
+    }
+    .ck-store-switcher-strip .ss-dropdown {
+      display: none;
+      margin-top: 6px;
+      border-radius: 6px;
+      background: rgba(20,12,8,0.97);
+      border: 1px solid rgba(217, 164, 54, 0.20);
+      padding: 4px;
+    }
+    .ck-store-switcher-strip .ss-dropdown a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: rgba(236,227,208,0.85);
+    }
+    .ck-store-switcher-strip .ss-dropdown a:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .ck-store-switcher-strip .ss-dropdown a.is-current { color: #E4B340; background: rgba(228, 179, 64, 0.10); }
+  </style>
   <style>
     /* Persistent category sub-nav. Tab-strip look: flat tabs in a row,
        active tab gets a dark recessed bg + an orange bottom-border
@@ -78,265 +140,54 @@
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
-{# Store context (set by /<store>/... routes via store_routes.py). When we're
-   rendering inside a blueprint without a store prefix (e.g. /produce/), fall
-   back in this order: (1) session.last_store_slug remembered by the store
-   url_value_preprocessor; (2) the user's first accessible store from their
-   role; (3) 'dos' as the legacy default. Sam (2026-05-11): without this the
-   sidebar would silently snap to Tomball whenever you click a link that hops
-   into a global blueprint. #}
+{# Store context (set by /<store>/... routes via store_routes.py). Falls back in this order:
+   (1) session.last_store_slug; (2) the user's first accessible store; (3) 'dos' as the legacy default. #}
 {% set _user_slugs = current_user_stores() %}
 {% set store_slug = g.current_store or session.get('last_store_slug') or (_user_slugs[0][0] if _user_slugs else None) or 'dos' %}
 {% set _slug_labels = {'dos': 'Tomball', 'uno': 'Copperfield', 'corporate': 'Corporate', 'partner': 'Partner'} %}
 {% set store_label = g.store_label or _slug_labels.get(store_slug, 'Tomball') %}
-{# Active leaf — pages set `active = '<key>'`. Parent expansion is computed off this.
-   _landing keys come from store_routes._render_landing(). Top-level keys (e.g. 'labor',
-   'third_party_sales', 'server_perf') come from the leaf reports' default active when
-   no sub-filter is applied — also expand the parent group. #}
-{% set ops_open = active in ['vendors','produce','produce_orders','webstaurant','vendor_perf','specs',
-                              'corporate_order','corporate_order_reports',
-                              'ezcater_landing','ezcater_orders','processor','driver_tracking','drivers_admin','drivers_live',
-                              'schedule_landing','boh_roster','foh_roster','all_roster','weekly_schedule'] %}
-{% set vendors_open = active in ['vendors','produce','produce_orders','webstaurant','vendor_perf','specs'] %}
-{% set corp_open = active in ['corporate_order','corporate_order_reports'] %}
-{% set produce_open = active in ['produce','produce_orders'] %}
-{% set ezc_open = active in ['ezcater_landing','ezcater_orders','processor','driver_tracking','drivers_admin','drivers_live'] %}
-{% set sched_open = active in ['schedule_landing','boh_roster','foh_roster','all_roster','weekly_schedule'] %}
-{% set ins_open = active in ['perf_landing','perf_server','perf_bartenders','perf_prep','perf_all','server_perf',
-                             'sales_landing','third_party_sales','sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total',
-                             'labor_landing','labor','boh_labor','foh_labor'] %}
-{% set perf_open = active in ['perf_landing','perf_server','perf_bartenders','perf_prep','perf_all','server_perf'] %}
-{% set sales_open = active in ['sales_landing','third_party_sales','sales_toast','sales_online','sales_ezcater','sales_doordash','sales_uber','sales_total'] %}
-{% set labor_open = active in ['labor_landing','labor','boh_labor','foh_labor'] %}
+{% set _accessible = current_user_stores() %}
+{# user_role drives which sections show in the new sidebar partial. expo gates Insights; partner gates Admin/Developer. #}
+{% set user_role = 'expo' if (g.current_user and g.current_user.permission_level == 'expo') else ('partner' if store_slug == 'partner' else ('corporate' if store_slug == 'corporate' else 'gm')) %}
+{% set user_name = (g.current_user.full_name.split()[0]) if g.current_user else '' %}
 <body>
 <div class="layout">
 
-  <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <aside class="sidebar">
-    <div class="brand"><div class="brand-mark"></div></div>
-
-    {# Store switcher — visible only when the user has access to >1 store.
-       Legacy shared-password sessions (no user_id) keep the link for tool
-       compat. Multi-store keypad users get a dropdown listing their
-       assigned stores; single-store users see just the label. #}
-    {% set _accessible = current_user_stores() %}
-    {% if not session.get('user_id') %}
-    <a class="store-switcher" href="/" title="Switch store">
-      <div class="store-switcher-label">{{ store_label }}</div>
-      <div class="store-switcher-sub">switch store ↗</div>
-    </a>
-    {% elif _accessible|length > 1 %}
-    <div class="store-switcher" style="position:relative;" title="Switch store">
-      <details style="cursor:pointer;">
-        <summary style="list-style:none;outline:none;">
-          <div class="store-switcher-label">{{ store_label }}</div>
-          <div class="store-switcher-sub">switch store ↗</div>
-        </summary>
-        <div style="position:absolute;top:100%;left:14px;right:14px;background:rgba(20,12,8,0.97);border:1px solid var(--glass-border);border-radius:8px;padding:6px;margin-top:4px;z-index:50;backdrop-filter:blur(10px);">
-          {% for slug, label in _accessible %}
-            <a class="nav-link" href="/{{ slug }}/" style="padding:6px 10px;border-radius:6px;{% if slug == store_slug %}background:rgba(232,122,62,0.18);{% endif %}">{{ label }}</a>
-          {% endfor %}
-        </div>
-      </details>
-    </div>
-    {% else %}
-    <div class="store-switcher" style="cursor:default;" title="Your assigned location">
-      <div class="store-switcher-label">{{ store_label }}</div>
-    </div>
-    {% endif %}
-
-    <div class="nav-section">Today</div>
-    <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/{{ store_slug }}/">
-      <span class="nav-icon">▦</span>{{ store_label }} Dashboard
-    </a>
-
-    <div class="nav-section">Operations</div>
-
-    {# Corporate Order group — top-level under Operations per Sam (was nested under Vendors) #}
-    <div class="nav-group {% if corp_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/corporate-order">
-        <span class="nav-icon">🛒</span>Corporate Order
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'corporate_order' %}active{% endif %}" href="/{{ store_slug }}/corporate-order"><span class="nav-icon">·</span>Order</a>
-        <a class="nav-link {% if active == 'corporate_order_reports' %}active{% endif %}" href="/{{ store_slug }}/corporate-order/reports"><span class="nav-icon">·</span>Reports</a>
-      </div>
-    </div>
-
-    {# Vendors group — top-level click jumps straight to Produce per Sam 2026-05-11 #}
-    <div class="nav-group {% if vendors_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/produce/">
-        <span class="nav-icon">📦</span>Vendors
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <div class="nav-subgroup {% if produce_open %}expanded{% endif %}">
-          <button class="nav-subgroup-toggle" type="button" onclick="toggleNavGroup(this)">
-            <span class="nav-icon">🥬</span>Produce
-            <span class="nav-chevron">▸</span>
-          </button>
-          <div class="nav-subgroup-children">
-            <a class="nav-link" href="/{{ store_slug }}/produce/"><span class="nav-icon">·</span>Order</a>
-            <a class="nav-link {% if active == 'produce_orders' %}active{% endif %}" href="/{{ store_slug }}/produce/orders"><span class="nav-icon">·</span>Price History</a>
+    {# Store switcher strip — kept above the new sidebar logo so Sam can hop between stores. #}
+    <div class="ck-store-switcher-strip">
+      {% if not session.get('user_id') %}
+        <a href="/" title="Switch store">
+          <div class="ss-label">Store</div>
+          <div class="ss-current">{{ store_label }} ↗</div>
+        </a>
+      {% elif _accessible|length > 1 %}
+        <details>
+          <summary>
+            <div class="ss-label">Store</div>
+            <div class="ss-current">{{ store_label }} ▾</div>
+          </summary>
+          <div class="ss-dropdown">
+            {% for slug, label in _accessible %}
+              <a href="/{{ slug }}/" class="{% if slug == store_slug %}is-current{% endif %}">{{ label }}</a>
+            {% endfor %}
           </div>
+        </details>
+      {% else %}
+        <div>
+          <div class="ss-label">Your location</div>
+          <div class="ss-current">{{ store_label }}</div>
         </div>
-        <a class="nav-link disabled"><span class="nav-icon">○</span>Webstaurant<span class="nav-soon">soon</span></a>
-        <a class="nav-link disabled"><span class="nav-icon">○</span>Performance<span class="nav-soon">soon</span></a>
-        <a class="nav-link disabled"><span class="nav-icon">○</span>Specs<span class="nav-soon">soon</span></a>
-      </div>
+      {% endif %}
     </div>
 
-    {# Ezcater group — top-level click jumps to Orders per Sam 2026-05-11 #}
-    <div class="nav-group {% if ezc_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/orders">
-        <span class="nav-icon">▤</span>Ezcater
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'ezcater_orders' %}active{% endif %}" href="/{{ store_slug }}/orders"><span class="nav-icon">·</span>Orders</a>
-        <a class="nav-link {% if active == 'processor' %}active{% endif %}" href="/{{ store_slug }}/orders/processor"><span class="nav-icon">·</span>Order Processor</a>
-        <a class="nav-link {% if active == 'driver_tracking' %}active{% endif %}" href="/{{ store_slug }}/driver-tracking"><span class="nav-icon">·</span>Driver Payroll</a>
-        <a class="nav-link {% if active == 'drivers_admin' %}active{% endif %}" href="/{{ store_slug }}/drivers"><span class="nav-icon">·</span>Drivers (Admin)</a>
-        <a class="nav-link {% if active == 'drivers_live' %}active{% endif %}" href="/{{ store_slug }}/drivers-live"><span class="nav-icon">·</span>Drivers Live</a>
-      </div>
-    </div>
-
-    {# Schedule group — top-level click jumps to All Roster per Sam 2026-05-11. Order: All / BOH / FOH / Weekly #}
-    <div class="nav-group {% if sched_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/roster/all">
-        <span class="nav-icon">📅</span>Schedule
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'all_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/all"><span class="nav-icon">·</span>All Roster</a>
-        <a class="nav-link {% if active == 'boh_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/boh"><span class="nav-icon">·</span>BOH Roster</a>
-        <a class="nav-link {% if active == 'foh_roster' %}active{% endif %}" href="/{{ store_slug }}/roster/foh"><span class="nav-icon">·</span>FOH Roster</a>
-        <a class="nav-link {% if active == 'weekly_schedule' %}active{% endif %}" href="/{{ store_slug }}/schedule"><span class="nav-icon">·</span>Weekly</a>
-      </div>
-    </div>
-
-    {# Insights section hidden entirely for expo per Sam's 2026-05-11 spec:
-       expo only needs Operations (Orders / Driver / Schedule / etc.) — no
-       Performance / Sales / Labor / Forecast. Partner / Corporate / GM /
-       Manager all see the full Insights block. #}
-    {% if not (g.current_user and g.current_user.permission_level == 'expo') %}
-    <div class="nav-section">Insights</div>
-
-    {# Performance group — top-level click jumps to All per Sam 2026-05-11. Order: All / Server / Bartenders / Prep #}
-    <div class="nav-group {% if perf_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/reports/server-performance/all">
-        <span class="nav-icon">🍽</span>Performance
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'perf_all' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/all"><span class="nav-icon">·</span>All</a>
-        <a class="nav-link {% if active == 'perf_server' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/server"><span class="nav-icon">·</span>Server</a>
-        <a class="nav-link {% if active == 'perf_bartenders' %}active{% endif %}" href="/{{ store_slug }}/reports/server-performance/bartenders"><span class="nav-icon">·</span>Bartenders</a>
-        <a class="nav-link disabled"><span class="nav-icon">·</span>Prep<span class="nav-soon">soon</span></a>
-      </div>
-    </div>
-
-    {# Sales group — top-level click jumps to All (renamed from Total) per Sam 2026-05-11.
-       Order: All / Toast / Online Toast / Ezcater / Door Dash / Uber. "All" is the
-       full-mix view (in-store + every third-party channel), URL still /reports/sales/total. #}
-    <div class="nav-group {% if sales_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/reports/sales/total">
-        <span class="nav-icon">📈</span>Sales
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'sales_total' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/total"><span class="nav-icon">·</span>All</a>
-        <a class="nav-link {% if active == 'sales_toast' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/toast"><span class="nav-icon">·</span>Toast</a>
-        <a class="nav-link {% if active == 'sales_online' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/online"><span class="nav-icon">·</span>Online Toast</a>
-        <a class="nav-link {% if active == 'sales_ezcater' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/ezcater"><span class="nav-icon">·</span>Ezcater</a>
-        <a class="nav-link {% if active == 'sales_doordash' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/doordash"><span class="nav-icon">·</span>Door Dash</a>
-        <a class="nav-link {% if active == 'sales_uber' %}active{% endif %}" href="/{{ store_slug }}/reports/sales/uber"><span class="nav-icon">·</span>Uber</a>
-      </div>
-    </div>
-
-    {# Labor group #}
-    <div class="nav-group {% if labor_open %}expanded{% endif %}">
-      <a class="nav-group-toggle" href="/{{ store_slug }}/labor">
-        <span class="nav-icon">⏱</span>Labor
-        <span class="nav-chevron">▸</span>
-      </a>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'boh_labor' %}active{% endif %}" href="/{{ store_slug }}/reports/labor/boh"><span class="nav-icon">·</span>BOH Labor</a>
-        <a class="nav-link {% if active == 'foh_labor' %}active{% endif %}" href="/{{ store_slug }}/reports/labor/foh"><span class="nav-icon">·</span>FOH Labor</a>
-      </div>
-    </div>
-
-    <a class="nav-link disabled"><span class="nav-icon">🎯</span>Forecasts<span class="nav-soon">soon</span></a>
-    {% endif %}
-
-    {% if store_slug == 'partner' %}
-    {# TEAM management — partner-level only. #}
-    <div class="nav-section">Admin</div>
-    <a class="nav-link {% if active == 'partner_team' %}active{% endif %}" href="/partner/team">
-      <span class="nav-icon">👥</span>Team
-    </a>
-
-    {# DEVELOPER section — Partner-only. Lets Sam + Claude(s) coordinate via persistent chat. #}
-    {% set app_doc_open = active in ['doc_readme','doc_architecture','doc_features','doc_tech_stack','doc_deployment','doc_data_sources','doc_ck_session_2026_05_10'] %}
-    {% set ez_dev_open = active in ['dev_ezcater_review'] %}
-    <div class="nav-section">Developer</div>
-    <a class="nav-link {% if active == 'dev_chat' %}active{% endif %}" href="/partner/developer/chat">
-      <span class="nav-icon">💬</span>Chat
-    </a>
-    <div class="nav-group {% if ez_dev_open %}expanded{% endif %}">
-      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
-        <span class="nav-icon">▤</span>Ezcater
-        <span class="nav-chevron">▸</span>
-      </button>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'dev_ezcater_review' %}active{% endif %}" href="/partner/developer/ezcater"><span class="nav-icon">·</span>Review Queue</a>
-      </div>
-    </div>
-    <div class="nav-group {% if app_doc_open %}expanded{% endif %}">
-      <button class="nav-group-toggle" type="button" onclick="toggleNavGroup(this)">
-        <span class="nav-icon">📖</span>App
-        <span class="nav-chevron">▸</span>
-      </button>
-      <div class="nav-group-children">
-        <a class="nav-link {% if active == 'doc_readme' %}active{% endif %}" href="/partner/developer/app/readme"><span class="nav-icon">·</span>README</a>
-        <a class="nav-link {% if active == 'doc_architecture' %}active{% endif %}" href="/partner/developer/app/architecture"><span class="nav-icon">·</span>Architecture</a>
-        <a class="nav-link {% if active == 'doc_features' %}active{% endif %}" href="/partner/developer/app/features"><span class="nav-icon">·</span>Features</a>
-        <a class="nav-link {% if active == 'doc_tech_stack' %}active{% endif %}" href="/partner/developer/app/tech-stack"><span class="nav-icon">·</span>Tech Stack</a>
-        <a class="nav-link {% if active == 'doc_deployment' %}active{% endif %}" href="/partner/developer/app/deployment"><span class="nav-icon">·</span>Deployment</a>
-        <a class="nav-link {% if active == 'doc_data_sources' %}active{% endif %}" href="/partner/developer/app/data-sources"><span class="nav-icon">·</span>Data Sources</a>
-        <a class="nav-link {% if active == 'doc_ck_session_2026_05_10' %}active{% endif %}" href="/partner/developer/app/ck-session-2026-05-10"><span class="nav-icon">·</span>ck Session 5/10</a>
-      </div>
-    </div>
-    {% endif %}
-
-    <a class="nav-link" href="/keypad-logout"
-       style="margin: 8px 14px 4px; padding: 8px 12px; border-radius: 8px;
-              background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border);
-              color: rgba(255,255,255,0.75); display: flex; align-items: center; gap: 8px;
-              text-align: left; font-size: 13px;">
-      <span class="nav-icon">⎋</span>Log out{% if g.current_user %} <span style="margin-left:auto;font-size:11px;opacity:0.55;">{{ g.current_user.full_name.split()[0] }}</span>{% endif %}
-    </a>
-
-    <div class="sidebar-footer">
-      <div class="avatar"></div>
-      <div>
-        <div class="avatar-name">Cenas Kitchen</div>
-        <div class="avatar-role">{{ store_label }} · Operations</div>
-      </div>
-    </div>
+    {% include 'partials/sidebar.html' %}
   </aside>
 
   <main class="main">
     {% block topbar %}
     <div class="topbar">
       <div class="topbar-left">
-        <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Open navigation">
-          <span class="menu-toggle-bars">
-            <span></span><span></span><span></span>
-          </span>
-          <span class="menu-toggle-label">Menu</span>
-        </button>
         <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
         {% block page_subtitle %}{% endblock %}
       </div>

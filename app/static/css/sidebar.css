@@ -1,0 +1,489 @@
+/* ============================================================
+   CENAS KITCHEN — SIDEBAR (responsive: static desktop / drawer mobile)
+
+   Required: Tabler icons webfont
+   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+   ============================================================ */
+
+:root {
+  /* Surfaces */
+  --ck-bg-page:        #140A06;
+  --ck-bg-sidebar:     #0F0805;
+  --ck-border:         rgba(217, 164, 54, 0.10);
+  --ck-border-subtle:  rgba(236, 227, 208, 0.06);
+  --ck-hover:          rgba(236, 227, 208, 0.05);
+
+  /* Brand */
+  --ck-red:            #C73B36;
+  --ck-gold:           #E4B340;
+  --ck-gold-bright:    #FFD970;
+  --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+
+  /* Text */
+  --ck-text:           #FAF6EC;
+  --ck-text-hover:     #FFFFFF;
+  --ck-text-muted:     rgba(236, 227, 208, 0.7);
+  --ck-text-soft:      rgba(236, 227, 208, 0.55);
+  --ck-text-faint:     rgba(236, 227, 208, 0.4);
+
+  /* Lit text recipes */
+  --ck-glow-cream:     0 1px 1px rgba(0,0,0,0.55), 0 0 12px rgba(255,240,215,0.18);
+  --ck-glow-cream-hot: 0 1px 1px rgba(0,0,0,0.55), 0 0 16px rgba(255,245,225,0.32);
+  --ck-glow-gold:      0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5);
+  --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+
+  /* Motion */
+  --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+
+  /* Breakpoint — read by JS */
+  --ck-bp-mobile:      1024px;
+}
+
+/* Container */
+.ck-sidebar {
+  width: 264px;
+  background: var(--ck-bg-sidebar);
+  border: 0.5px solid var(--ck-border);
+  border-radius: 12px;
+  padding: 14px 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.ck-sidebar::-webkit-scrollbar { width: 6px; }
+.ck-sidebar::-webkit-scrollbar-thumb { background: rgba(236,227,208,0.1); border-radius: 3px; }
+
+/* Logo */
+.ck-sb-logo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 6px 8px 14px;
+  border-bottom: 0.5px solid var(--ck-border-subtle);
+  margin-bottom: 8px;
+}
+.ck-sb-logo-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--ck-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFAEC;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 1px rgba(60,10,5,0.7), 0 0 10px rgba(255,200,160,0.25);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    inset 0 -1px 0 rgba(0,0,0,0.35);
+}
+.ck-sb-logo-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #FFFAEC;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-shadow:
+    0 1px 0 rgba(0,0,0,0.65),
+    0 2px 1px rgba(0,0,0,0.4),
+    0 0 14px rgba(255,220,160,0.22);
+}
+.ck-sb-logo-sub {
+  font-size: 11px;
+  color: var(--ck-text-soft);
+  margin-top: 2px;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+
+/* Section */
+.ck-sb-section { margin-top: 10px; }
+.ck-sb-section:first-of-type { margin-top: 4px; }
+
+.ck-sb-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  transition: background 160ms;
+  font-family: inherit;
+}
+.ck-sb-section-head:hover { background: var(--ck-hover); }
+.ck-sb-section-head:focus-visible {
+  outline: 1px solid var(--ck-gold);
+  outline-offset: 2px;
+}
+.ck-sb-section-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ck-gold);
+  font-weight: 500;
+  text-transform: uppercase;
+  text-shadow: var(--ck-glow-gold-soft);
+}
+.ck-sb-chev {
+  font-size: 14px;
+  color: rgba(228,179,64,0.5);
+  transition: transform 300ms var(--ck-ease);
+  text-shadow: 0 0 6px rgba(228,179,64,0.25);
+  flex-shrink: 0;
+}
+.ck-sb-section.collapsed .ck-sb-section-head .ck-sb-chev,
+.ck-sb-branch.collapsed > .ck-sb-branch-head .ck-sb-chev { transform: rotate(-90deg); }
+
+/* Collapsible body */
+.ck-sb-section-body, .ck-sb-branch-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 320ms var(--ck-ease), opacity 220ms;
+  opacity: 1;
+}
+.ck-sb-section.collapsed > .ck-sb-section-body,
+.ck-sb-branch.collapsed > .ck-sb-branch-body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.ck-sb-section-inner, .ck-sb-branch-inner {
+  overflow: hidden;
+  padding: 4px 0 2px;
+}
+
+/* Branch */
+.ck-sb-branch { margin: 1px 0; }
+.ck-sb-branch-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ck-text);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background 160ms, color 160ms, text-shadow 160ms;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  text-shadow: var(--ck-glow-cream);
+}
+.ck-sb-branch-head:hover {
+  background: var(--ck-hover);
+  color: var(--ck-text-hover);
+  text-shadow: var(--ck-glow-cream-hot);
+}
+.ck-sb-branch-head:focus-visible {
+  outline: 1px solid var(--ck-gold);
+  outline-offset: 2px;
+}
+.ck-sb-branch-icon {
+  font-size: 16px;
+  color: rgba(236,227,208,0.72);
+  flex-shrink: 0;
+  text-shadow: 0 0 8px rgba(255,235,200,0.22);
+}
+.ck-sb-branch-head:hover .ck-sb-branch-icon { color: #FFFAEC; }
+.ck-sb-branch-label { flex: 1; }
+
+.ck-sb-branch.has-active > .ck-sb-branch-head {
+  color: var(--ck-gold-bright);
+  text-shadow: var(--ck-glow-gold);
+}
+.ck-sb-branch.has-active > .ck-sb-branch-head .ck-sb-branch-icon {
+  color: var(--ck-gold-bright);
+  text-shadow: 0 0 10px rgba(255,200,80,0.4);
+}
+
+/* Section-level leaf */
+.ck-sb-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ck-text);
+  cursor: pointer;
+  transition: background 160ms, color 160ms, text-shadow 160ms;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 1px 0;
+  text-decoration: none;
+  text-shadow: var(--ck-glow-cream);
+}
+.ck-sb-item:hover {
+  background: var(--ck-hover);
+  color: var(--ck-text-hover);
+  text-shadow: var(--ck-glow-cream-hot);
+}
+.ck-sb-item.active {
+  background: var(--ck-gold-soft);
+  color: var(--ck-gold-bright);
+  text-shadow: var(--ck-glow-gold);
+}
+.ck-sb-item-icon {
+  font-size: 16px;
+  color: rgba(236,227,208,0.72);
+  flex-shrink: 0;
+  text-shadow: 0 0 8px rgba(255,235,200,0.22);
+}
+.ck-sb-item:hover .ck-sb-item-icon { color: #FFFAEC; }
+.ck-sb-item.active .ck-sb-item-icon {
+  color: var(--ck-gold-bright);
+  text-shadow: 0 0 10px rgba(255,200,80,0.5);
+}
+.ck-sb-item-label { flex: 1; }
+
+/* Sub-item (level 2) */
+.ck-sb-subitem {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px 6px 30px;
+  border-radius: 6px;
+  color: var(--ck-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: none;
+  position: relative;
+  transition: background 160ms, color 160ms, text-shadow 160ms;
+  margin: 1px 0;
+}
+.ck-sb-subitem::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(236,227,208,0.3);
+  transition: background 160ms, box-shadow 160ms;
+}
+.ck-sb-subitem:hover {
+  background: var(--ck-hover);
+  color: var(--ck-text-hover);
+  text-shadow: var(--ck-glow-cream);
+}
+.ck-sb-subitem:hover::before { background: rgba(255,245,225,0.6); }
+.ck-sb-subitem.active {
+  background: var(--ck-gold-soft);
+  color: var(--ck-gold-bright);
+  text-shadow: var(--ck-glow-gold);
+}
+.ck-sb-subitem.active::before {
+  background: var(--ck-gold-bright);
+  box-shadow: 0 0 6px rgba(255,200,80,0.6);
+}
+.ck-sb-subitem-label { flex: 1; }
+
+/* Deepest level */
+.ck-sb-subitem--deep { padding-left: 46px; }
+.ck-sb-subitem--deep::before { left: 32px; }
+
+/* Nested branch head */
+.ck-sb-branch--nested > .ck-sb-branch-head {
+  padding: 6px 10px 6px 30px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ck-text-muted);
+  position: relative;
+  text-shadow: none;
+}
+.ck-sb-branch--nested > .ck-sb-branch-head::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(236,227,208,0.3);
+}
+.ck-sb-branch--nested > .ck-sb-branch-head:hover { color: var(--ck-text-hover); }
+.ck-sb-branch--nested > .ck-sb-branch-head .ck-sb-chev {
+  font-size: 12px;
+  color: rgba(236,227,208,0.35);
+}
+
+/* Soon pill */
+.ck-sb-soon {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(236,227,208,0.08);
+  color: var(--ck-text-soft);
+  font-weight: 400;
+  text-shadow: none;
+  margin-left: 8px;
+}
+
+/* Logout */
+.ck-sb-logout {
+  margin-top: 14px;
+  padding: 10px;
+  border-top: 0.5px solid var(--ck-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--ck-text);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 160ms, color 160ms;
+  font-weight: 500;
+  text-decoration: none;
+  text-shadow: var(--ck-glow-cream);
+}
+.ck-sb-logout:hover {
+  background: var(--ck-hover);
+  color: var(--ck-text-hover);
+}
+.ck-sb-logout i { text-shadow: 0 0 8px rgba(255,235,200,0.2); }
+.ck-sb-logout-user {
+  font-size: 11px;
+  color: var(--ck-text-faint);
+  margin-left: auto;
+  font-weight: 400;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+
+/* Mobile-only elements — hidden on desktop */
+.ck-mobile-trigger,
+.ck-mobile-backdrop,
+.ck-mobile-close {
+  display: none;
+}
+
+/* Respect OS-level reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .ck-sb-section-body, .ck-sb-branch-body,
+  .ck-sb-chev, .ck-sb-item, .ck-sb-subitem,
+  .ck-sb-branch-head, .ck-sb-section-head,
+  .ck-sb-logout, .ck-sidebar, .ck-mobile-backdrop {
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   MOBILE — under 1024px the sidebar becomes a drawer
+   ============================================================ */
+@media (max-width: 1023px) {
+
+  /* Fixed hamburger trigger — top-left, respects status bar */
+  .ck-mobile-trigger {
+    display: flex;
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    z-index: 99;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 8, 5, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 10px;
+    color: var(--ck-text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: opacity 200ms, transform 200ms;
+    box-shadow:
+      0 2px 8px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .ck-mobile-trigger i {
+    font-size: 22px;
+    text-shadow: 0 0 8px rgba(255,235,200,0.25);
+  }
+  .ck-mobile-trigger:active { transform: scale(0.94); }
+
+  /* Backdrop — fades in behind drawer */
+  .ck-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.62);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 280ms var(--ck-ease);
+    z-index: 100;
+  }
+
+  /* Sidebar becomes a fixed sliding panel */
+  .ck-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(284px, 86vw);
+    max-height: 100vh;
+    overflow-y: auto;
+    border-radius: 0;
+    border: none;
+    border-right: 0.5px solid var(--ck-border);
+    padding-top: max(14px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    transform: translateX(-100%);
+    transition: transform 280ms var(--ck-ease);
+    z-index: 101;
+    box-shadow: 6px 0 24px rgba(0,0,0,0.5);
+    will-change: transform;
+  }
+
+  /* Close button inside the drawer panel */
+  .ck-mobile-close {
+    display: flex;
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top, 0px));
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 8px;
+    color: var(--ck-text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 160ms, color 160ms, border-color 160ms;
+    z-index: 1;
+  }
+  .ck-mobile-close:hover {
+    background: var(--ck-hover);
+    color: var(--ck-text);
+    border-color: var(--ck-border);
+  }
+  .ck-mobile-close i { font-size: 18px; }
+
+  /* Open state — host attribute toggles everything */
+  .ck-sidebar-host[data-open="true"] .ck-mobile-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .ck-sidebar-host[data-open="true"] .ck-sidebar {
+    transform: translateX(0);
+  }
+  .ck-sidebar-host[data-open="true"] .ck-mobile-trigger {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Hint: leaf items get bigger touch targets on mobile */
+  .ck-sb-item, .ck-sb-branch-head, .ck-sb-logout { padding: 10px; }
+  .ck-sb-subitem { padding-top: 9px; padding-bottom: 9px; }
+}
+
+/* Body scroll lock when drawer open — applied by JS */
+body.ck-drawer-open { overflow: hidden; touch-action: none; }

@@ -311,6 +311,7 @@ DOC_PAGES = [
     ("tech-stack",               "Tech Stack",        "doc_tech_stack"),
     ("deployment",               "Deployment",        "doc_deployment"),
     ("data-sources",             "Data Sources",      "doc_data_sources"),
+    ("ezcater-guidelines",       "ezCater Guidelines", "doc_ezcater_guidelines"),
     ("toast-analytics-api",      "Toast Analytics API", "doc_toast_analytics_api"),
     ("agent-bootstrap",          "Agent Bootstrap",   "doc_agent_bootstrap"),
     ("ck-session-2026-05-10",    "ck Session 5/10",   "doc_ck_session_2026_05_10"),

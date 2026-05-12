@@ -212,6 +212,52 @@
     margin-left: 4px;
     align-self: center;
   }
+
+  /* Meta-row actions (reply + tts) */
+  .msg-meta { display: flex; align-items: center; gap: 4px; }
+  .msg-meta-actions { display: inline-flex; gap: 4px; margin-left: auto; }
+  .msg-action-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text-3);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+  }
+  .msg-action-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+
+  /* Long-message collapse */
+  .msg-body.is-clipped {
+    max-height: 220px;
+    overflow: hidden;
+    position: relative;
+  }
+  .msg-body.is-clipped::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.55));
+    pointer-events: none;
+  }
+  .msg-expand-btn {
+    display: inline-block;
+    margin-top: 6px;
+    background: transparent;
+    border: none;
+    color: var(--accent, #e87a3e);
+    padding: 0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+  }
+  .msg-expand-btn:hover { text-decoration: underline; }
 </style>
 {% endblock %}
 
@@ -232,9 +278,18 @@
     <div class="msg {{ m.css_class }}" data-id="{{ m.id }}">
       <div class="msg-meta">
         <strong>{{ m.author }}</strong>{{ m.created_at_display }}
-        {% if m.is_ai and m.body %}
-          <button type="button" class="tts-btn" data-tts-text="{{ m.body }}" title="Read aloud">🔊</button>
-        {% endif %}
+        <span class="msg-meta-actions">
+          {% if m.is_ai and m.body %}
+            <button type="button" class="tts-btn" data-tts-text="{{ m.body }}" title="Read aloud">🔊</button>
+          {% endif %}
+          {% if m.body %}
+            <button type="button" class="msg-action-btn msg-reply-btn"
+                    data-reply-author="{{ m.author }}"
+                    data-reply-time="{{ m.created_at_display }}"
+                    data-reply-snippet="{{ m.body[:120] }}"
+                    title="Reply (quotes this message)">Reply</button>
+          {% endif %}
+        </span>
       </div>
       {% if m.body %}<div class="msg-body">{{ m.body }}</div>{% endif %}
       {% if m.attachments %}
@@ -318,6 +373,8 @@
     strong.textContent = m.author;
     meta.appendChild(strong);
     meta.appendChild(document.createTextNode(m.created_at_display));
+    const actions = document.createElement('span');
+    actions.className = 'msg-meta-actions';
     if (m.is_ai && m.body) {
       const tts = document.createElement('button');
       tts.type = 'button';
@@ -325,8 +382,20 @@
       tts.dataset.ttsText = m.body;
       tts.title = 'Read aloud';
       tts.textContent = '🔊';
-      meta.appendChild(tts);
+      actions.appendChild(tts);
     }
+    if (m.body) {
+      const reply = document.createElement('button');
+      reply.type = 'button';
+      reply.className = 'msg-action-btn msg-reply-btn';
+      reply.dataset.replyAuthor = m.author;
+      reply.dataset.replyTime = m.created_at_display;
+      reply.dataset.replySnippet = (m.body || '').slice(0, 120);
+      reply.title = 'Reply (quotes this message)';
+      reply.textContent = 'Reply';
+      actions.appendChild(reply);
+    }
+    meta.appendChild(actions);
     div.appendChild(meta);
 
     if (m.body) {
@@ -372,6 +441,22 @@
     }
 
     list.insertBefore(div, bottom);
+    maybeClip(div);
+  }
+
+  // Long-message collapse: clip msg-body past ~220px height with a "Show more" toggle
+  const CLIP_HEIGHT = 220;
+  function maybeClip(msgEl) {
+    const body = msgEl.querySelector('.msg-body');
+    if (!body) return;
+    if (msgEl.querySelector('.msg-expand-btn')) return; // already wired
+    if (body.scrollHeight <= CLIP_HEIGHT + 20) return;
+    body.classList.add('is-clipped');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msg-expand-btn';
+    btn.textContent = 'Show more ↓';
+    msgEl.appendChild(btn);
   }
 
   function renderPreview() {
@@ -572,6 +657,40 @@
     btn.classList.add('tts-playing');
     activeTtsBtn = btn;
   });
+
+  // Show more / less + Reply
+  list.addEventListener('click', (e) => {
+    const expand = e.target.closest('.msg-expand-btn');
+    if (expand) {
+      const msg = expand.closest('.msg');
+      const body = msg && msg.querySelector('.msg-body');
+      if (!body) return;
+      if (body.classList.contains('is-clipped')) {
+        body.classList.remove('is-clipped');
+        expand.textContent = 'Show less ↑';
+      } else {
+        body.classList.add('is-clipped');
+        expand.textContent = 'Show more ↓';
+      }
+      return;
+    }
+    const reply = e.target.closest('.msg-reply-btn');
+    if (reply) {
+      const author = reply.dataset.replyAuthor || '?';
+      const time = reply.dataset.replyTime || '';
+      const raw = (reply.dataset.replySnippet || '').replace(/\s+/g, ' ').trim();
+      const snippet = raw.length > 80 ? raw.slice(0, 80) + '…' : raw;
+      const quote = '> @' + author + (time ? ' (' + time + ')' : '') + ': ' + snippet + '\n\n';
+      const cur = bodyTextarea.value || '';
+      bodyTextarea.value = quote + cur;
+      bodyTextarea.focus();
+      bodyTextarea.setSelectionRange(bodyTextarea.value.length, bodyTextarea.value.length);
+      return;
+    }
+  });
+
+  // Apply collapse to messages rendered on page load
+  list.querySelectorAll('.msg').forEach(maybeClip);
 
   // ============== Mic — Web Speech Recognition transcription (no audio attachment) ==============
   const micBtn = document.getElementById('mic-btn');

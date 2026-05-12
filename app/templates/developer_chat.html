@@ -119,6 +119,13 @@
   }
   .chat-attach-chip .chip-x:hover { opacity: 1; }
 
+  /* Drag-and-drop visual cue on the chat input area */
+  .chat-input.drag-over {
+    background: rgba(232,122,62,0.18);
+    outline: 2px dashed rgba(232,122,62,0.6);
+    outline-offset: -4px;
+  }
+
   .chat-status {
     font-size: 11px; color: var(--text-3); padding: 4px 16px;
     background: rgba(0,0,0,0.20); border-bottom: 1px solid var(--glass-border);
@@ -402,6 +409,58 @@
       }
     }
     renderPreview();
+  });
+
+  // Drag-and-drop files onto the chat input area
+  function addDroppedFiles(droppedFiles) {
+    const existing = Array.from(attachInput.files || []);
+    const droppedArr = Array.from(droppedFiles || []);
+    if (existing.length + droppedArr.length > MAX_ATTACHMENTS) {
+      alert('Max ' + MAX_ATTACHMENTS + ' attachments per message');
+      return;
+    }
+    for (const f of droppedArr) {
+      if (f.size > MAX_BYTES) {
+        alert(f.name + ' is over the ' + (MAX_BYTES/1024/1024) + ' MB limit');
+        return;
+      }
+    }
+    const dt = new DataTransfer();
+    existing.forEach(f => dt.items.add(f));
+    droppedArr.forEach(f => dt.items.add(f));
+    attachInput.files = dt.files;
+    renderPreview();
+  }
+  function isFileDrag(e) {
+    return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  }
+  let dragDepth = 0;
+  form.addEventListener('dragenter', (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    form.classList.add('drag-over');
+  });
+  form.addEventListener('dragover', (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+  });
+  form.addEventListener('dragleave', (e) => {
+    if (!isFileDrag(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) form.classList.remove('drag-over');
+  });
+  form.addEventListener('drop', (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    form.classList.remove('drag-over');
+    addDroppedFiles(e.dataTransfer.files);
+  });
+  // Prevent the browser from opening files dropped outside the chat input
+  window.addEventListener('dragover', (e) => { if (isFileDrag(e)) e.preventDefault(); });
+  window.addEventListener('drop', (e) => {
+    if (isFileDrag(e) && !form.contains(e.target)) e.preventDefault();
   });
 
   // Allow empty body if attachments present

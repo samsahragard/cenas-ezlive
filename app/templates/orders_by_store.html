@@ -97,13 +97,7 @@
                 </select>
               {% endif %}
             </td>
-            <td>
-              {% if o.needs_review %}
-                <span class="pill pill-review">Needs review</span>
-              {% else %}
-                <span class="pill pill-ok">Processed</span>
-              {% endif %}
-            </td>
+            <td></td>{# Status column intentionally blank — Sam will tell us what to render here. #}
           </tr>
           {% endfor %}
           <tr class="all-row" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">

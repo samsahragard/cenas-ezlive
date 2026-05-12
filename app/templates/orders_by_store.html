@@ -8,8 +8,9 @@
 {% endblock %}
 
 {% block content %}
-<div style="margin: 0 0 16px;">
+<div style="margin: 0 0 16px; display: flex; gap: 10px; flex-wrap: wrap;">
   <a class="btn-portal" href="/orders">Manually Processed PDF</a>
+  <a class="btn-portal" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
 </div>
 {% if not groups %}
   <div class="empty-state">

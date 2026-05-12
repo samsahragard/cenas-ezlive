@@ -53,7 +53,10 @@
 <div class="order-view-actions">
   {% if mode == 'single' %}
     <a href="/orders/view/{{ external_order_id }}/xlsx" class="btn-download">Download Excel</a>
-    {% if order and order.external_delivery_id %}
+    {% if order %}
+      {# Always show the button — if external_delivery_id isn't stored, the
+         endpoint auto-looks it up via api.ezcater.com (handles xlsx-imported
+         orders and any caterer that bypassed the webhook auto-assign). #}
       <button id="unassignBtn" type="button" class="btn-download" style="background:rgba(220,38,38,0.30); border-color:rgba(239,68,68,0.5); color:#fecaca;"
               data-order="{{ external_order_id }}"
               onclick="unassignCourier(this)">

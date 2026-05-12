@@ -221,6 +221,36 @@ mutation Unassign($input: CourierUnassignInput!) {
 """
 
 
+_DELIVERY_LOOKUP_QUERY = """
+query OrderDeliveryLookup($id: ID!) {
+  order(id: $id) {
+    uuid
+    orderNumber
+    deliveryId
+    caterer { name uuid }
+  }
+}
+"""
+
+
+def _fetch_delivery_id_for_order(external_order_id: str) -> str | None:
+    """Look up the ezCater deliveryId for an order_number using api.ezcater.com.
+    Tries both the as-stored form (with dash) and the dash-stripped form
+    since ezCater's `order(id:)` lookup accepts only the no-dash variant.
+    Returns the deliveryId UUID or None.
+    """
+    candidates = [external_order_id]
+    if "-" in external_order_id:
+        candidates.append(external_order_id.replace("-", ""))
+    for cand in candidates:
+        res = _ezcater_gql(_DELIVERY_LOOKUP_QUERY, {"id": cand})
+        order = (res.get("data") or {}).get("order") or {}
+        delivery_id = order.get("deliveryId")
+        if delivery_id:
+            return delivery_id
+    return None
+
+
 def _try_unassign(delivery_id: str, courier_id: str) -> tuple[bool, str]:
     """Returns (ok, error_msg). ok=True means courierUnassign returned no errors."""
     res = _ezcater_gql(_UNASSIGN_MUTATION,
@@ -252,29 +282,42 @@ def unassign_courier(external_order_id: str):
         order = db.query(Order).filter_by(external_order_id=external_order_id).first()
         if not order:
             return jsonify({"ok": False, "error": "order not found"}), 404
+        # If delivery_id wasn't captured at ingest time (xlsx-import orders,
+        # Cenas Fajitas orders that bypass the webhook, anything pre-dating
+        # the webhook flow), look it up on the fly via the api.ezcater.com
+        # order(id:) query and backfill the row so subsequent operations work.
         if not order.external_delivery_id:
-            return jsonify({
-                "ok": False,
-                "error": ("This order doesn't have a stored ezCater delivery ID. "
-                          "Either it pre-dates the API ingest pipeline or wasn't "
-                          "auto-assigned. Use the ezCater portal directly.")
-            }), 400
+            looked_up = _fetch_delivery_id_for_order(external_order_id)
+            if not looked_up:
+                return jsonify({
+                    "ok": False,
+                    "error": ("ezCater API didn't return a deliveryId for this order. "
+                              "It may not exist on ezCater's side, or our API token "
+                              "isn't authorized for this caterer.")
+                }), 400
+            order.external_delivery_id = looked_up
+            db.commit()
+            logger.info("backfilled external_delivery_id=%s for order %s",
+                        looked_up, external_order_id)
+        # Determine which courier id to unassign. The static store map covers
+        # Cenas Kitchen origin stores; for unmapped origins (Cenas Fajitas etc.)
+        # we try every known courier id so the right one wins regardless of
+        # which Cenas brand auto-assigned.
         primary = _COURIER_ID_FOR_STORE.get(order.origin_store_id)
         legacy = _LEGACY_COURIER_ID_FOR_STORE.get(order.origin_store_id)
-        if not primary:
-            return jsonify({
-                "ok": False,
-                "error": f"unknown origin_store_id={order.origin_store_id!r}"
-            }), 400
-
-        ok, err = _try_unassign(order.external_delivery_id, primary)
-        unassigned = primary
-        if not ok and legacy and legacy != primary:
-            logger.info("primary unassign of %s failed (%s); retrying with legacy id %s",
-                        primary, err[:80], legacy)
-            ok, err = _try_unassign(order.external_delivery_id, legacy)
+        if primary:
+            candidates = [primary] + ([legacy] if legacy and legacy != primary else [])
+        else:
+            candidates = ["sam-ck-1", "sam-ck-2", "masood-ck-1", "masood-ck-2"]
+            logger.info("origin_store_id=%r not in static map; trying all couriers",
+                        order.origin_store_id)
+        ok, err, unassigned = False, "", None
+        for cid in candidates:
+            ok, err = _try_unassign(order.external_delivery_id, cid)
             if ok:
-                unassigned = legacy
+                unassigned = cid
+                break
+            logger.info("unassign of %s failed (%s); trying next courier", cid, err[:80])
         if not ok:
             return jsonify({"ok": False, "error": err}), 502
 

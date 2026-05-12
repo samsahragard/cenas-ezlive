@@ -24,21 +24,21 @@
 {% set drivers = drivers_ck1 if location == 'copperfield' else drivers_ck2 %}
 
 <style>
-  .driver-cell { min-width: 220px; }
+  .driver-cell { min-width: 240px; }
+  .driver-cell .driver-current { font-weight: 500; margin-bottom: 4px; }
+  .driver-cell .driver-actions {
+    display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+  }
   .driver-cell .select-driver {
-    width: 100%; padding: 4px 6px; border-radius: 6px;
+    flex: 1; min-width: 0; padding: 4px 6px; border-radius: 6px;
     background: rgba(255,255,255,0.06); color: #fff;
     border: 1px solid rgba(255,255,255,0.15); font-size: 12px;
   }
   .driver-cell .select-driver option { background: #1f1f24; color: #fff; }
-  .driver-cell .driver-assigned {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  }
-  .driver-cell .driver-name { font-weight: 500; }
   .driver-cell .btn-driver {
     cursor: pointer; padding: 3px 8px; border-radius: 5px; font-size: 11px;
     background: rgba(220,38,38,0.30); border: 1px solid rgba(239,68,68,0.5);
-    color: #fecaca;
+    color: #fecaca; white-space: nowrap;
   }
   .driver-cell .btn-driver:disabled { opacity: 0.5; cursor: progress; }
 </style>
@@ -75,16 +75,8 @@
             <td>{{ o.delivery_address or '—' }}</td>
             <td>{{ o.reported_store or '—' }}</td>
             <td class="driver-cell" onclick="event.stopPropagation()">
-              {% if o.assigned_driver %}
-                <div class="driver-assigned">
-                  <span class="driver-name">{{ o.assigned_driver }}</span>
-                  <button type="button" class="btn-driver btn-driver-unassign"
-                          data-order="{{ o.external_order_id }}"
-                          onclick="unassignDriver(this); event.stopPropagation();">
-                    Unassign
-                  </button>
-                </div>
-              {% else %}
+              <div class="driver-current">{{ o.assigned_driver or '—' }}</div>
+              <div class="driver-actions">
                 <select class="select-driver"
                         data-order="{{ o.external_order_id }}"
                         onchange="assignDriver(this)"
@@ -95,7 +87,12 @@
                     <option value="{{ d.name }}">{{ d.name }}</option>
                   {% endfor %}
                 </select>
-              {% endif %}
+                <button type="button" class="btn-driver btn-driver-unassign"
+                        data-order="{{ o.external_order_id }}"
+                        onclick="unassignDriver(this); event.stopPropagation();">
+                  Unassign
+                </button>
+              </div>
             </td>
             <td></td>{# Status column intentionally blank — Sam will tell us what to render here. #}
           </tr>

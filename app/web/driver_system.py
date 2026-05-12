@@ -153,18 +153,22 @@ def _potential_week(db, driver_id: int, today: date) -> float:
 # ============================================================
 
 @driver_system_bp.route("/ez-market", methods=["GET"])
-@require_driver
 def ez_market():
+    # Per Sam 2026-05-12: Ez Market is viewable by drivers AND by any
+    # non-driver permission (partner / corporate / gm / manager / expo) —
+    # they get a read-only view (no Request buttons, no personal stats).
     driver = _current_driver()
-    if not driver:
-        return redirect(url_for("driver.driver_login"))
+    keypad_user = getattr(g, "current_user", None)
+    if not driver and not keypad_user:
+        return redirect(url_for("keypad_auth.login", next=request.path))
     today = date.today()
     db = SessionLocal()
     try:
         # "Available" = status='available', no driver assigned.
         # Premium gate (<= $50 for New tier) keeps tier-locked orders hidden.
+        # For non-driver viewers, no premium gate — they see everything.
         max_premium = None
-        if (driver.current_tier or "new") == scoring.TIER_NEW:
+        if driver and (driver.current_tier or "new") == scoring.TIER_NEW:
             max_premium = 50.0
         avail_q = (
             db.query(Order)
@@ -179,41 +183,43 @@ def ez_market():
                 (Order.potential_payout <= max_premium)
             )
         available = avail_q.limit(50).all()
-        # Filter out orders this driver already has a pending request on
-        existing_pending = {
-            r.delivery_id for r in
-            db.query(DeliveryRequest)
-              .filter(DeliveryRequest.driver_id == driver.id)
-              .filter(DeliveryRequest.status == "pending")
-              .all()
-        }
-        available = [o for o in available if o.id not in existing_pending]
-
-        # My Queue = my pending requests + my active deliveries
-        my_pending_reqs = (
-            db.query(DeliveryRequest)
-            .filter(DeliveryRequest.driver_id == driver.id)
-            .filter(DeliveryRequest.status == "pending")
-            .all()
-        )
-        my_active = (
-            db.query(Order)
-            .filter(Order.assigned_driver_id == driver.id)
-            .filter(Order.status.in_(["approved", "picked_up", "en_route"]))
-            .all()
-        )
-
-        # History — last 30 days delivered
-        thirty_ago = (today - timedelta(days=30)).isoformat()
-        my_history = (
-            db.query(Order)
-            .filter(Order.assigned_driver_id == driver.id)
-            .filter(Order.status == "delivered")
-            .filter(Order.delivery_date >= thirty_ago)
-            .order_by(desc(Order.delivery_date))
-            .limit(50)
-            .all()
-        )
+        my_pending_reqs = []
+        my_active = []
+        my_history = []
+        if driver:
+            # Filter out orders this driver already has a pending request on
+            existing_pending = {
+                r.delivery_id for r in
+                db.query(DeliveryRequest)
+                  .filter(DeliveryRequest.driver_id == driver.id)
+                  .filter(DeliveryRequest.status == "pending")
+                  .all()
+            }
+            available = [o for o in available if o.id not in existing_pending]
+            # My Queue = my pending requests + my active deliveries
+            my_pending_reqs = (
+                db.query(DeliveryRequest)
+                .filter(DeliveryRequest.driver_id == driver.id)
+                .filter(DeliveryRequest.status == "pending")
+                .all()
+            )
+            my_active = (
+                db.query(Order)
+                .filter(Order.assigned_driver_id == driver.id)
+                .filter(Order.status.in_(["approved", "picked_up", "en_route"]))
+                .all()
+            )
+            # History — last 30 days delivered
+            thirty_ago = (today - timedelta(days=30)).isoformat()
+            my_history = (
+                db.query(Order)
+                .filter(Order.assigned_driver_id == driver.id)
+                .filter(Order.status == "delivered")
+                .filter(Order.delivery_date >= thirty_ago)
+                .order_by(desc(Order.delivery_date))
+                .limit(50)
+                .all()
+            )
 
         # Competition count per available order (number of other drivers requesting)
         competing = {}
@@ -232,15 +238,16 @@ def ez_market():
         ctx = {
             "active": "ez_market",
             "driver": driver,
+            "viewer_is_driver": bool(driver),
             "available": available,
             "competing": competing,
             "my_pending_reqs": my_pending_reqs,
             "my_active": my_active,
             "my_history": my_history,
-            "stat_potential_today": _potential_today(db, driver.id, today),
-            "stat_my_queue": _my_queue_count(db, driver.id),
-            "stat_potential_week": _potential_week(db, driver.id, today),
-            "current_tier": driver.current_tier or "new",
+            "stat_potential_today": _potential_today(db, driver.id, today) if driver else 0.0,
+            "stat_my_queue": _my_queue_count(db, driver.id) if driver else 0,
+            "stat_potential_week": _potential_week(db, driver.id, today) if driver else 0.0,
+            "current_tier": (driver.current_tier or "new") if driver else None,
         }
         return render_template("ez_market.html", **ctx)
     finally:

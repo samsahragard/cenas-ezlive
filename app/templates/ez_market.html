@@ -2,7 +2,7 @@
 {% block title %}Ez Market — Cenas Kitchen{% endblock %}
 {% block page_title %}Ez Market{% endblock %}
 {% block page_subtitle %}
-  <p class="greeting-sub">{{ available|length }} orders open for bid · welcome {{ driver.name.split()[0] }}</p>
+  <p class="greeting-sub">{{ available|length }} orders open for bid{% if viewer_is_driver %} · welcome {{ driver.name.split()[0] }}{% else %} · viewing as manager (read-only){% endif %}</p>
 {% endblock %}
 
 {% block head_extra %}
@@ -74,6 +74,7 @@
 {% endblock %}
 
 {% block content %}
+{% if viewer_is_driver %}
 <div class="em-stats">
   <div class="em-stat">
     <div class="em-stat-label">Potential today</div>
@@ -93,11 +94,14 @@
   Estimates only — final amounts are set by payroll on Fridays.
   <a href="{{ url_for('driver_system.pay_history') }}">View past pay checks →</a>
 </div>
+{% endif %}
 
 <div class="em-tabs">
   <button class="em-tab active" onclick="showTab('available')">Available <span class="em-tab-count">({{ available|length }})</span></button>
+  {% if viewer_is_driver %}
   <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({{ my_pending_reqs|length + my_active|length }})</span></button>
   <button class="em-tab" onclick="showTab('history')">History</button>
+  {% endif %}
 </div>
 
 <div id="tab-available" class="em-cards">
@@ -128,9 +132,13 @@
           <span class="em-compete-green">✓ {{ comp + 1 }} driver{% if comp > 1 %}s{% endif %} competing</span>
         {% endif %}
       </div>
-      <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
-        <button type="submit" class="em-btn">Request delivery</button>
-      </form>
+      {% if viewer_is_driver %}
+        <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
+          <button type="submit" class="em-btn">Request delivery</button>
+        </form>
+      {% else %}
+        <div style="text-align:center; font-size:11px; color:rgba(236,227,208,0.5); padding:8px 0;">Driver-only action</div>
+      {% endif %}
     </div>
     {% endfor %}
   {% else %}

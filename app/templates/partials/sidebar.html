@@ -72,14 +72,6 @@
           <i class="ti ti-layout-dashboard ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">{{ store_label }} Dashboard</span>
         </a>
-        <a href="/ez-market" class="ck-sb-item{% if active == 'ez_market' %} active{% endif %}">
-          <i class="ti ti-flame ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Ez Market</span>
-        </a>
-        <a href="/ez-manage" class="ck-sb-item{% if active == 'ez_manage' %} active{% endif %}">
-          <i class="ti ti-clipboard-check ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Ez Manage</span>
-        </a>
       </div></div>
     </div>
 
@@ -148,12 +140,18 @@
         <div class="ck-sb-branch" data-id="ops.ezcater">
           <button class="ck-sb-branch-head">
             <i class="ti ti-bowl ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">ezCater</span>
+            <span class="ck-sb-branch-label">Ez Cater</span>
             <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
           </button>
           <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
             <a href="/{{ store_slug }}/orders" class="ck-sb-subitem{% if active == 'ezcater_orders' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Orders</span>
+            </a>
+            <a href="/ez-market" class="ck-sb-subitem{% if active == 'ez_market' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Ez Market</span>
+            </a>
+            <a href="/ez-manage" class="ck-sb-subitem{% if active == 'ez_manage' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Ez Manage</span>
             </a>
             <a href="/{{ store_slug }}/driver-tracking" class="ck-sb-subitem{% if active == 'driver_tracking' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Driver payroll</span>
@@ -238,7 +236,7 @@
               <span class="ck-sb-subitem-label">Online Toast</span>
             </a>
             <a href="/{{ store_slug }}/reports/sales/ezcater" class="ck-sb-subitem{% if active == 'sales_ezcater' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">ezCater</span>
+              <span class="ck-sb-subitem-label">Ez Cater</span>
             </a>
             <a href="/{{ store_slug }}/reports/sales/doordash" class="ck-sb-subitem{% if active == 'sales_doordash' %} active{% endif %}">
               <span class="ck-sb-subitem-label">DoorDash</span>
@@ -341,7 +339,7 @@
               <span class="ck-sb-subitem-label">Data sources</span>
             </a>
             <a href="/partner/developer/app/ezcater-guidelines" class="ck-sb-subitem{% if active == 'doc_ezcater_guidelines' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">ezCater guidelines</span>
+              <span class="ck-sb-subitem-label">Ez Cater guidelines</span>
             </a>
             {% for session in app_sessions|default([]) %}
               <a href="/partner/developer/app/{{ session.slug }}" class="ck-sb-subitem{% if active == 'doc_' ~ session.slug %} active{% endif %}">

@@ -18,33 +18,6 @@
   </div>
 {% endif %}
 
-{# Roster per kitchen. NULL ck_prefix (Angelica, James) already included
-   in both lists. We pick per-ORDER below using origin_store_id so the
-   combined /partner/orders view (which mixes both kitchens) shows the
-   right list on every row. #}
-{% set drivers_ck1 = drivers_ck1 or [] %}
-{% set drivers_ck2 = drivers_ck2 or [] %}
-
-<style>
-  .driver-cell { min-width: 240px; }
-  .driver-cell .driver-current { font-weight: 500; margin-bottom: 4px; }
-  .driver-cell .driver-actions {
-    display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
-  }
-  .driver-cell .select-driver {
-    flex: 1; min-width: 0; padding: 4px 6px; border-radius: 6px;
-    background: rgba(255,255,255,0.06); color: #fff;
-    border: 1px solid rgba(255,255,255,0.15); font-size: 12px;
-  }
-  .driver-cell .select-driver option { background: #1f1f24; color: #fff; }
-  .driver-cell .btn-driver {
-    cursor: pointer; padding: 3px 8px; border-radius: 5px; font-size: 11px;
-    background: rgba(220,38,38,0.30); border: 1px solid rgba(239,68,68,0.5);
-    color: #fecaca; white-space: nowrap;
-  }
-  .driver-cell .btn-driver:disabled { opacity: 0.5; cursor: progress; }
-</style>
-
 {% for grp in groups %}
   <section class="day-section">
     <div class="day-header">
@@ -76,29 +49,14 @@
             <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
             <td>{{ o.delivery_address or '—' }}</td>
             <td>{{ o.reported_store or '—' }}</td>
-            {# Pick the right roster for this order's kitchen: store_1/3 = CK#1 (Copperfield), store_2/4 = CK#2 (Tomball). #}
-            {% set row_drivers = drivers_ck1 if o.origin_store_id in ('store_1', 'store_3') else drivers_ck2 %}
-            <td class="driver-cell" onclick="event.stopPropagation()">
-              <div class="driver-current">{{ o.assigned_driver or '—' }}</div>
-              <div class="driver-actions">
-                <select class="select-driver"
-                        data-order="{{ o.external_order_id }}"
-                        onchange="assignDriver(this)"
-                        onclick="event.stopPropagation();"
-                        onmousedown="event.stopPropagation();">
-                  <option value="">— Assign driver —</option>
-                  {% for d in row_drivers %}
-                    <option value="{{ d.name }}">{{ d.name }}</option>
-                  {% endfor %}
-                </select>
-                <button type="button" class="btn-driver btn-driver-unassign"
-                        data-order="{{ o.external_order_id }}"
-                        onclick="unassignDriver(this); event.stopPropagation();">
-                  Unassign
-                </button>
-              </div>
+            <td>{{ o.assigned_driver or '—' }}</td>
+            <td>
+              {% if o.needs_review %}
+                <span class="pill pill-review">Needs review</span>
+              {% else %}
+                <span class="pill pill-ok">Processed</span>
+              {% endif %}
             </td>
-            <td></td>{# Status column intentionally blank — Sam will tell us what to render here. #}
           </tr>
           {% endfor %}
           <tr class="all-row" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">
@@ -109,60 +67,4 @@
     </div>
   </section>
 {% endfor %}
-{% endblock %}
-
-{% block scripts %}
-<script>
-  async function assignDriver(sel) {
-    const name = sel.value;
-    if (!name) return;
-    sel.disabled = true;
-    sel.style.opacity = "0.6";
-    try {
-      const r = await fetch(`/orders/view/${encodeURIComponent(sel.dataset.order)}/assign-driver`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await r.json();
-      if (r.ok && data.ok) {
-        window.location.reload();
-      } else {
-        alert("Assign failed: " + (data.error || `HTTP ${r.status}`));
-        sel.disabled = false;
-        sel.style.opacity = "1";
-        sel.value = "";
-      }
-    } catch (e) {
-      alert("Network error: " + e);
-      sel.disabled = false;
-      sel.style.opacity = "1";
-      sel.value = "";
-    }
-  }
-
-  async function unassignDriver(btn) {
-    if (!confirm("Unassign this driver from the order on ezCater?")) return;
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Working…";
-    try {
-      const r = await fetch(`/orders/view/${encodeURIComponent(btn.dataset.order)}/unassign-courier`, {
-        method: "POST",
-      });
-      const data = await r.json();
-      if (r.ok && data.ok) {
-        window.location.reload();
-      } else {
-        alert("Unassign failed: " + (data.error || `HTTP ${r.status}`));
-        btn.disabled = false;
-        btn.textContent = original;
-      }
-    } catch (e) {
-      alert("Network error: " + e);
-      btn.disabled = false;
-      btn.textContent = original;
-    }
-  }
-</script>
 {% endblock %}

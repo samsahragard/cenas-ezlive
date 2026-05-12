@@ -489,9 +489,7 @@ def orders_list():
     store_bp.url_value_preprocessor — without that, bare /orders/<location>
     would lose store context (same shape as the driver-tracking bug)."""
     if g.current_location == "both":
-        from app.web.orders_browse import (
-            list_orders_for_location, group_orders_by_date, _drivers_for_kitchen,
-        )
+        from app.web.orders_browse import list_orders_for_location, group_orders_by_date
         db = next(get_db())
         try:
             tom = list_orders_for_location(db, "tomball")
@@ -503,8 +501,6 @@ def orders_list():
                 location="both",
                 location_label="All Orders",
                 groups=groups,
-                drivers_ck1=_drivers_for_kitchen(1),
-                drivers_ck2=_drivers_for_kitchen(2),
             )
         finally:
             db.close()

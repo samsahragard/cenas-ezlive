@@ -53,6 +53,16 @@
 <div class="order-view-actions">
   {% if mode == 'single' %}
     <a href="/orders/view/{{ external_order_id }}/xlsx" class="btn-download">Download Excel</a>
+    {% if order %}
+      {# Always show the button — if external_delivery_id isn't stored, the
+         endpoint auto-looks it up via api.ezcater.com (handles xlsx-imported
+         orders and any caterer that bypassed the webhook auto-assign). #}
+      <button id="unassignBtn" type="button" class="btn-download" style="background:rgba(220,38,38,0.30); border-color:rgba(239,68,68,0.5); color:#fecaca;"
+              data-order="{{ external_order_id }}"
+              onclick="unassignCourier(this)">
+        Free up ezCater driver field
+      </button>
+    {% endif %}
   {% elif mode == 'combined' %}
     <a href="/orders/{{ location }}/{{ date }}/xlsx{% if collapse_empty_rows %}?collapse_empty_rows=1{% endif %}" class="btn-download">Download Excel</a>
   {% endif %}
@@ -102,6 +112,36 @@
 {% endblock %}
 
 {% block scripts %}
+{% if mode == 'single' %}
+<script>
+  async function unassignCourier(btn) {
+    if (!confirm("Unassign the auto-assigned courier from this order on ezCater? After this, the ezCater portal will let you assign a real driver.")) {
+      return;
+    }
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "Working…";
+    try {
+      const r = await fetch(`/orders/view/${encodeURIComponent(btn.dataset.order)}/unassign-courier`, { method: "POST" });
+      const data = await r.json();
+      if (r.ok && data.ok) {
+        btn.textContent = "Unassigned ✓ — refresh ezCater";
+        btn.style.background = "rgba(34, 197, 94, 0.30)";
+        btn.style.borderColor = "rgba(74, 222, 128, 0.5)";
+        btn.style.color = "#d4ffd0";
+      } else {
+        alert("Unassign failed: " + (data.error || `HTTP ${r.status}`));
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    } catch (e) {
+      alert("Network error: " + e);
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  }
+</script>
+{% endif %}
 <script>
   function showView(viewName) {
     document.querySelectorAll(".grid-view").forEach(el => { el.style.display = "none"; });

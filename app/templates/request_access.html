@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Request Access — Cenas Kitchen</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; }
+  body {
+    background: #0a0604;
+    color: rgba(255,255,255,0.88);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    font-size: 15px;
+    padding: 32px 16px 60px;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { color: #fff; font-size: 24px; margin: 4px 0 6px; }
+  .brand { color: #c8302a; font-weight: 700; letter-spacing: 1px; font-size: 12px; margin-bottom: 8px; }
+  p.sub { color: rgba(255,255,255,0.68); font-size: 13px; margin: 0 0 22px; }
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px;
+    padding: 20px 18px;
+  }
+  label { display: block; font-size: 12px; color: rgba(255,255,255,0.62); text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 4px; }
+  input, select, textarea {
+    width: 100%; padding: 10px 12px;
+    background: rgba(0,0,0,0.30);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px;
+    color: #fff; font-size: 15px;
+    font-family: inherit;
+  }
+  textarea { min-height: 80px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid rgba(232,122,62,0.55); border-color: transparent; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .btn-row { margin-top: 20px; display: flex; gap: 10px; }
+  button[type=submit] {
+    flex: 1;
+    background: linear-gradient(180deg, #e54a3f 0%, #c8302a 100%);
+    color: #fff; border: none; border-radius: 10px;
+    padding: 12px; font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-back {
+    background: transparent; color: rgba(255,255,255,0.65);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 10px; padding: 12px 16px;
+    text-decoration: none; font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .alert {
+    padding: 10px 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;
+  }
+  .alert-ok    { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.30); color: #c2f6cf; }
+  .alert-error { background: rgba(220,38,38,0.12); border: 1px solid rgba(239,68,68,0.30); color: #fecaca; }
+  small.help { display: block; font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">CENAS KITCHEN</div>
+  <h1>Request access</h1>
+  <p class="sub">
+    Don't have an account yet? Fill this out and an admin will review.
+    You'll get a 5-digit passcode (and a phone call/text from us with it)
+    once approved.
+  </p>
+
+  {% if success %}
+    <div class="alert alert-ok">{{ success }}{% if submitted_name %} Thanks, {{ submitted_name }}.{% endif %}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/request-access" class="card" autocomplete="on">
+    <label for="full_name">Full name</label>
+    <input id="full_name" name="full_name" type="text" required maxlength="150" autofocus />
+
+    <div class="row2">
+      <div>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" maxlength="200" autocomplete="email" />
+      </div>
+      <div>
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" maxlength="50" autocomplete="tel" />
+      </div>
+    </div>
+    <small class="help">At least one of email or phone is required so we can reach you with your passcode.</small>
+
+    <label for="requested_role">What role do you need?</label>
+    <select id="requested_role" name="requested_role">
+      <option value="">Pick one</option>
+      {% for k, label in role_options %}
+        <option value="{{ k }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <small class="help">An admin picks the final role on approval — this just tells us what you think you need.</small>
+
+    <label for="reason">Anything else? <small style="color:rgba(255,255,255,0.45)">(optional)</small></label>
+    <textarea id="reason" name="reason" maxlength="1000" placeholder="e.g. I'm the new GM at Tomball starting Monday"></textarea>
+
+    <div class="btn-row">
+      <a href="/keypad-login" class="btn-back">← Back</a>
+      <button type="submit">Request access</button>
+    </div>
+  </form>
+
+  <p style="text-align:center; margin-top:24px; font-size:12px; color:rgba(255,255,255,0.45);">
+    Already have an account? <a href="/keypad-login" style="color:#e87a3e;">Sign in →</a>
+  </p>
+  <p style="text-align:center; margin-top:8px; font-size:11px; color:rgba(255,255,255,0.35);">
+    <a href="/privacy" style="color:rgba(255,255,255,0.55);">Privacy policy</a>
+  </p>
+</div>
+</body>
+</html>

@@ -18,7 +18,7 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import User
+from app.models import User, AccessRequest
 from app.web.permissions import LEVELS, STORE_SCOPED_LEVELS, require_level
 
 team_bp = Blueprint("team", __name__)
@@ -93,12 +93,17 @@ def team_page():
         users = (db.query(User)
                    .order_by(User.active.desc(), User.permission_level.asc(), User.full_name.asc())
                    .all())
+        pending_requests = (db.query(AccessRequest)
+                              .filter(AccessRequest.status == "pending")
+                              .order_by(AccessRequest.created_at.desc())
+                              .all())
         g.current_store = "partner"
         g.store_label = "Partner"
         g.current_location = "both"
         return render_template(
             "team.html",
             users=users,
+            pending_requests=pending_requests,
             level_options=LEVEL_OPTIONS,
             store_options=STORE_OPTIONS,
             user_stores_set=_user_stores_set,

@@ -667,3 +667,44 @@ class ManagerMessage(Base):
     replied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     replied_within_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     during_active_delivery: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class AccessRequest(Base):
+    """A 'Request Access' submission from /request-access — used by the
+    Cenas Kitchen Employee mobile app's first-launch flow and by web
+    visitors who try to sign in without an account.
+
+    Sam (or Masood, once they have Partner) sees pending rows in
+    /partner/team and clicks Approve to convert them into a real User
+    row (with an auto-generated temp passcode shown back to Sam to relay
+    to the requester). Decline marks the row as rejected, no User
+    created.
+
+    Identifying fields are duplicated with what the eventual User row
+    will hold, so we can build the User from this row alone on approve
+    without asking the requester anything new."""
+    __tablename__ = "access_request"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    requested_role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 'pending' | 'approved' | 'declined'
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    # If approved, points at the created User row so we can show
+    # 'approved → created John Smith on 5/12' in the admin view.
+    created_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    # Auto-generated temp passcode at approve time, shown ONCE to the
+    # admin who approved (no plaintext stored after relay; this column
+    # is a convenience while the row is fresh). NULL once dismissed.
+    temp_passcode_one_shot: Mapped[str | None] = mapped_column(String(10), nullable=True)

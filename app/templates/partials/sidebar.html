@@ -25,13 +25,11 @@
       <i class="ti ti-x" aria-hidden="true"></i>
     </button>
 
-    <div class="ck-sb-logo">
-      <div class="ck-sb-logo-mark" aria-hidden="true">CK</div>
-      <div>
-        <div class="ck-sb-logo-name">Cenas Kitchen</div>
-        <div class="ck-sb-logo-sub">{{ store_label }}</div>
-      </div>
-    </div>
+    <a href="/" class="ck-sb-logo" style="flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px 16px; text-decoration: none; cursor: pointer;" title="Switch store">
+      <img src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="" style="width: 96px; height: auto;">
+      <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" style="height: 32px; width: auto;">
+      <div class="ck-sb-logo-sub" style="margin-top: 2px;">{{ store_label }}</div>
+    </a>
 
     {# ==== TODAY ==== #}
     <div class="ck-sb-section" data-id="today">

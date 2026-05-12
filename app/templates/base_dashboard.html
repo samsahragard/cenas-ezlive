@@ -154,33 +154,6 @@
 <div class="layout">
 
   <aside class="sidebar">
-    {# Store switcher strip — kept above the new sidebar logo so Sam can hop between stores. #}
-    <div class="ck-store-switcher-strip">
-      {% if not session.get('user_id') %}
-        <a href="/" title="Switch store">
-          <div class="ss-label">Store</div>
-          <div class="ss-current">{{ store_label }} ↗</div>
-        </a>
-      {% elif _accessible|length > 1 %}
-        <details>
-          <summary>
-            <div class="ss-label">Store</div>
-            <div class="ss-current">{{ store_label }} ▾</div>
-          </summary>
-          <div class="ss-dropdown">
-            {% for slug, label in _accessible %}
-              <a href="/{{ slug }}/" class="{% if slug == store_slug %}is-current{% endif %}">{{ label }}</a>
-            {% endfor %}
-          </div>
-        </details>
-      {% else %}
-        <div>
-          <div class="ss-label">Your location</div>
-          <div class="ss-current">{{ store_label }}</div>
-        </div>
-      {% endif %}
-    </div>
-
     {% include 'partials/sidebar.html' %}
   </aside>
 

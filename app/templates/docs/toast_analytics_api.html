@@ -1,0 +1,217 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Reference + recommendation on the <strong>Toast Analytics API</strong> Sam
+  subscribed to on 2026-05-12 for the Copperfield location only. This is a
+  <em>different</em> Toast API from the <code>ws-api.toasttab.com</code>
+  Web/Partner API we already use in
+  <a href="https://github.com/leverr18/cenas-ezlive/blob/main/app/services/toast_client.py"><code>app/services/toast_client.py</code></a> — different
+  credentials, different host (<code>api.toasttab.com</code> via the
+  <code>/era/v1</code> path), different access-type, different rate limits,
+  different shape of data.
+</p>
+<p>
+  Source docs: <a href="https://doc.toasttab.com/doc/devguide/apiAnalyticsAccessOverview.html">Analytics API Access overview</a>,
+  <a href="https://doc.toasttab.com/doc/devguide/apiAnalyticsOverview.html">Analytics API overview</a>,
+  <a href="https://doc.toasttab.com/doc/devguide/apiAnalyticsRateLimiting.html">rate-limiting</a>,
+  plus the per-endpoint pages quoted inline below.
+</p>
+
+<h2>How it differs from our current Toast integration</h2>
+<table>
+  <tr><th>Aspect</th><th>Current (Toast Web/Partner API)</th><th>NEW (Analytics API)</th></tr>
+  <tr><td>Auth host</td><td><code>ws-api.toasttab.com</code></td><td><code>api.toasttab.com</code> (per Sam's credentials screen)</td></tr>
+  <tr><td>Access type</td><td><code>TOAST_RESTAURANT_EXTERNAL_API</code> (typical Web client)</td><td><code>TOAST_MACHINE_CLIENT</code></td></tr>
+  <tr><td>Auth body</td><td><code>{clientId, clientSecret, userAccessType}</code></td><td>same shape; analytics credentials are separate</td></tr>
+  <tr><td>Data path</td><td><code>/orders/v2/ordersBulk</code>, <code>/labor/v1/timeEntries</code>, <code>/labor/v1/employees</code>, etc.</td><td><code>/era/v1/metrics</code>, <code>/era/v1/labor</code>, <code>/era/v1/check</code>, <code>/era/v1/payout</code>, <code>/era/v1/menu</code>, <code>/era/v1/restaurants-information</code></td></tr>
+  <tr><td>Data granularity</td><td>Per-order, per-employee, per-shift — we aggregate locally</td><td>Pre-aggregated by Toast (by business date / time-range / employee / job / channel)</td></tr>
+  <tr><td>Request model</td><td>Synchronous: ask, get JSON</td><td>Async: <code>POST</code> creates a report request → returns <code>reportRequestGuid</code> → <code>GET</code> the GUID later for results</td></tr>
+  <tr><td>Subscription needed</td><td>Standard Toast (any tier)</td><td>Restaurant Management Suite <strong>Pro</strong> or higher (Sam has this for Copperfield)</td></tr>
+  <tr><td>Per-restaurant scoping</td><td>Per-call <code>Toast-Restaurant-External-ID</code> header</td><td>Token grants management-group access; <code>restaurantIds</code> body field filters per-call</td></tr>
+  <tr><td>Cost</td><td>Free with Toast subscription</td><td>"Included with RMS Pro" — Sam is paying the higher Pro tier, so no marginal API cost</td></tr>
+  <tr><td>Cenas Kitchen coverage</td><td>Both Tomball + Copperfield (separate restaurant GUIDs)</td><td><strong>Copperfield only</strong> for now (only that location is on RMS Pro)</td></tr>
+</table>
+
+<h2>Endpoints worth knowing</h2>
+<table>
+  <tr><th>Endpoint</th><th>What it returns</th><th>Async?</th></tr>
+  <tr>
+    <td><code>GET /era/v1/restaurants-information</code></td>
+    <td>Per-restaurant: <code>restaurantGuid</code>, <code>restaurantName</code>, <code>active</code>, <code>testMode</code>, <code>archived</code></td>
+    <td>No (immediate)</td>
+  </tr>
+  <tr>
+    <td><code>POST /era/v1/metrics</code> or <code>/era/v1/metrics/{day|week|month|year}</code></td>
+    <td>Aggregated sales: orders, labor, channel splits. Body: <code>{startBusinessDate (YYYYMMDD), endBusinessDate, restaurantIds[], excludedRestaurantIds[], groupBy[]}</code>. <code>groupBy</code>: dining option, order source, revenue center, or combos. Returns a <code>reportRequestGuid</code></td>
+    <td>Yes — fetch via <code>GET /era/v1/metrics/{reportRequestGuid}</code></td>
+  </tr>
+  <tr>
+    <td><code>POST /era/v1/labor/{day|week|month|year}</code></td>
+    <td>Aggregated labor by <code>EMPLOYEE</code> OR <code>JOB</code> (only one). Returns <code>reportRequestGuid</code> → fetch fields including employee/job ids, hours, costs (full schema TBD on first call). Body: <code>{startBusinessDate, endBusinessDate, restaurantIds, excludedRestaurantIds, groupBy:["EMPLOYEE"]}</code></td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td><code>POST /era/v1/check/{day|week|month|year}</code> then <code>GET /era/v1/check/{reportRequestGuid}?fetchRestaurantNames=true</code></td>
+    <td>Per-check: <code>orderNumber/Guid</code>, <code>checkNumber/Guid</code>, <code>orderOpenedDate</code>, <code>checkPaidDateTime</code>, <code>serverName</code>, <code>checkTotalAmount</code>, <code>checkDiscountAmount</code>, <code>checkTaxAmount</code>, <code>checkTipAmount</code>, <code>checkGratuityAmount</code>, <code>checkRefundAmount</code>, <code>diningOption</code>, <code>revenueCenter</code>, <code>checkStatus</code>, <code>checkVoidedStatus</code>. <strong>No line items.</strong></td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td><code>POST /era/v1/payout</code>, <code>/era/v1/payout/payments</code>, <code>/era/v1/payout/sales-date</code></td>
+    <td>Deposits to bank — by payout date, per-payment, or by sales date. (Full schema not on overview page — needs first call to capture.)</td>
+    <td>Yes</td>
+  </tr>
+</table>
+
+<h2>Authentication flow (inferred from credentials shape)</h2>
+<p>
+  The credentials Sam was given are in this shape (values redacted):
+</p>
+<pre>{
+  "userAccessType": "TOAST_MACHINE_CLIENT",
+  "userId":         "ssr-...",
+  "clientId":       "...",
+  "clientSecret":   "...",
+  "apiAccessUrl":   "https://api.toasttab.com/..."
+}</pre>
+<p>
+  Token-acquisition flow follows the standard Toast OAuth client-credentials
+  grant the existing <code>toast_client.py</code> already implements — same
+  body shape (<code>clientId</code> + <code>clientSecret</code> +
+  <code>userAccessType</code>), different host + different access type.
+  Toast's own auth-doc page returns 403 to anonymous WebFetch, but the
+  pattern is the same. Token TTL on the existing API is ~24h; expect similar.
+</p>
+<p>
+  Use the returned bearer in <code>Authorization: Bearer &lt;token&gt;</code>
+  on every <code>/era/v1/...</code> call. <strong>Don't reuse</strong> the
+  token from <code>toast_client.py</code> — the access type is different and
+  the scope of the analytics token won't cover the standard endpoints (and
+  vice-versa).
+</p>
+
+<h2>Rate limits (per docs, 2026-05-12)</h2>
+<table>
+  <tr><th>Endpoint family</th><th>Limit</th></tr>
+  <tr><td><code>POST /era/v1/metrics</code> + <code>POST /era/v1/menu</code> (custom range)</td><td>10 / hour</td></tr>
+  <tr><td><code>POST /era/v1/metrics/{day|week}</code></td><td>10 / minute, 60 / hour</td></tr>
+  <tr><td><code>POST /era/v1/metrics/{month|year}</code></td><td>10 / hour</td></tr>
+  <tr><td><code>POST /era/v1/check/{timeRange}</code></td><td><strong>5 / minute, 60 / day</strong></td></tr>
+  <tr><td><code>POST /era/v1/payout/payments/{timeRange}</code></td><td><strong>5 / minute, 60 / day</strong></td></tr>
+  <tr><td>All GET (retrieval) endpoints</td><td>5 / second, 30 / minute</td></tr>
+</table>
+<p>
+  The 60-per-day cap on check + payout-payments is the tightest constraint.
+  For Copperfield it means we can't poll those endpoints from a live UI on
+  every page load — they'd burn the daily budget in minutes. Cache the
+  results on disk same way <code>toast_client.py</code> already does for
+  the Web API.
+</p>
+
+<h2>Does it have value vs what we already have?</h2>
+<p>
+  <strong>Short answer: yes — modest value, not a replacement.</strong>
+  Specifics:
+</p>
+<ul>
+  <li>
+    <strong>Worth wiring up:</strong>
+    <ul>
+      <li><code>POST /era/v1/metrics</code> for aggregated daily / weekly /
+          monthly sales — replaces our local channel-detection +
+          summation logic. Less code, fewer edge cases, and the
+          dashboard donut would only need a single call instead of
+          scanning every order in the date range.</li>
+      <li><code>POST /era/v1/payout/*</code> — <em>new capability</em>,
+          nothing equivalent in the current code. Lets us build a
+          "deposits this week" tile or a payout-vs-sales reconciliation
+          view. Useful for Sam.</li>
+      <li><code>GET /era/v1/restaurants-information</code> — handy as a
+          health-check / restaurant-discovery endpoint.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Not worth replacing:</strong>
+    <ul>
+      <li>Server-performance report (per-server tip %) — our current code
+          uses the standard Web API's per-order tip details which the
+          analytics <code>/era/v1/check</code> endpoint also exposes, BUT
+          the 5/min + 60/day limit makes it impractical for a live UI
+          refresh. Keep the Web API version.</li>
+      <li>Labor cost report — our current code already pulls
+          <code>/labor/v1/timeEntries</code> + classifies BOH/FOH locally.
+          The analytics <code>/era/v1/labor</code> endpoint adds groupBy
+          conveniences but only EMPLOYEE or JOB (not both at once), and
+          our existing classifier handles BOH/FOH split. Not enough lift
+          to migrate.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Cost vs value:</strong> Sam is paying the RMS Pro tier
+    regardless. The analytics-API access is bundled — no marginal API cost.
+    The "higher cost" Sam mentioned is the Pro subscription itself, not a
+    per-call fee. Since Pro is sunk, using the API just recoups some of
+    that spend.
+  </li>
+</ul>
+
+<h2>Recommended integration plan (when Sam greenlights)</h2>
+<ol>
+  <li>
+    Add four env vars on Render (Copperfield-only):
+    <code>TOAST_ANALYTICS_CLIENT_ID</code>,
+    <code>TOAST_ANALYTICS_CLIENT_SECRET</code>,
+    <code>TOAST_ANALYTICS_USER_ID</code>,
+    <code>TOAST_ANALYTICS_API_HOST</code> (default
+    <code>https://api.toasttab.com</code>).
+  </li>
+  <li>
+    New module <code>app/services/toast_analytics_client.py</code>
+    mirroring the shape of <code>toast_client.py</code>: in-process token
+    cache, disk cache for report-request results, two-step async helper
+    (<code>create_report</code> → poll <code>get_report</code> by GUID).
+  </li>
+  <li>
+    Wire <code>/era/v1/payout</code> into a new
+    <code>/reports/payouts</code> view first — it's pure addition, no
+    existing code to disturb.
+  </li>
+  <li>
+    Then layer <code>/era/v1/metrics</code> behind a feature flag in
+    <code>third_party_sales_report</code> so we can A/B compare the
+    pre-aggregated numbers against our current per-order summation. Switch
+    fully if numbers reconcile for a week.
+  </li>
+  <li>
+    Hard cap analytics-API calls in code with a per-day counter to stay
+    inside the 60/day budget on check + payout-payments.
+  </li>
+</ol>
+
+<h2>Open items / cautions</h2>
+<ul>
+  <li>
+    Copperfield-only for now. If Sam wants Tomball on the same stack,
+    Tomball needs to be upgraded to RMS Pro first.
+  </li>
+  <li>
+    Auth-doc page was not fetchable anonymously (403 from
+    <code>apiAnalyticsAccessOAuth.html</code> + the
+    <code>apiAnalyticsAuthentication.html</code> alias). Confirm the
+    exact auth body shape on first live call before promoting beyond a
+    test endpoint.
+  </li>
+  <li>
+    The async POST→GUID→GET pattern means our existing "fetch sales for
+    today" code can't be a drop-in replacement. Plan for a small
+    background worker (Flask CLI or daemon thread) that fires the POSTs
+    and writes the results to disk cache.
+  </li>
+  <li>
+    Rate-limit headroom is tight on check + payout-payments. Don't put
+    these behind a user-triggered button without caching.
+  </li>
+</ul>
+
+{% endblock %}

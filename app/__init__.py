@@ -160,6 +160,67 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("orders column backfill failed (non-fatal)")
 
+    # Idempotent column backfill for the driver-system additions (migration 15).
+    # Adds the delivery state-machine + payout snapshot columns on `orders`
+    # and the tier/score/lifetime/status columns on `drivers`. Same gated-
+    # absence pattern as the older backfills above.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_15, text as _sa_text_15
+        from app.db import engine as _eng_15
+        if _eng_15 is not None:
+            insp = _sa_inspect_15(_eng_15)
+            bool_false = "0" if _eng_15.dialect.name == "sqlite" else "FALSE"
+            orders_additions = [
+                ("delivery_window_start",   "TIMESTAMP"),
+                ("delivery_window_end",     "TIMESTAMP"),
+                ("customer_rating",         "INTEGER"),
+                ("setup_photo_url",         "VARCHAR(500)"),
+                ("setup_photo_uploaded_at", "TIMESTAMP"),
+                ("potential_payout",        "FLOAT"),
+                ("paid_payout",             "FLOAT"),
+                ("paycheck_id",             "INTEGER"),
+                ("assigned_driver_id",      "INTEGER"),
+                ("approved_by_user_id",     "INTEGER"),
+                ("approved_at",             "TIMESTAMP"),
+                ("pickup_actual_at",        "TIMESTAMP"),
+                ("en_route_at",             "TIMESTAMP"),
+                ("delivered_actual_at",     "TIMESTAMP"),
+            ]
+            drivers_additions = [
+                ("status",                  "VARCHAR(20) NOT NULL DEFAULT 'active'"),
+                ("terminated_at",           "TIMESTAMP"),
+                ("termination_reason",      "VARCHAR(200)"),
+                ("joined_at",               "DATE"),
+                ("lifetime_delivery_count", "INTEGER NOT NULL DEFAULT 0"),
+                ("current_score",           "INTEGER"),
+                ("current_tier",            "VARCHAR(20)"),
+                ("home_store_id",           "VARCHAR(20)"),
+                ("last_known_lat",          "FLOAT"),
+                ("last_known_lng",          "FLOAT"),
+                ("last_location_at",        "TIMESTAMP"),
+                ("photo_url",               "VARCHAR(500)"),
+            ]
+            added_orders, added_drivers = [], []
+            with _eng_15.begin() as conn:
+                if "orders" in insp.get_table_names():
+                    existing = {c["name"] for c in insp.get_columns("orders")}
+                    for col_name, col_def in orders_additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_15(f"ALTER TABLE orders ADD COLUMN {col_name} {col_def}"))
+                            added_orders.append(col_name)
+                if "drivers" in insp.get_table_names():
+                    existing = {c["name"] for c in insp.get_columns("drivers")}
+                    for col_name, col_def in drivers_additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_15(f"ALTER TABLE drivers ADD COLUMN {col_name} {col_def}"))
+                            added_drivers.append(col_name)
+            if added_orders:
+                logging.getLogger(__name__).info("orders table (migration 15): backfilled %s", added_orders)
+            if added_drivers:
+                logging.getLogger(__name__).info("drivers table (migration 15): backfilled %s", added_drivers)
+    except Exception:
+        logging.getLogger(__name__).exception("driver-system column backfill failed (non-fatal)")
+
     # Seed ezcater_known_driver from the static roster Sam captured in his
     # 5/10 screenshots. Idempotent: only inserts rows for phones not already
     # present, so re-edits in the seed module on later boots add/update

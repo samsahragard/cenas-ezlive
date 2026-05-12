@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from sqlalchemy import (
     String,
     Integer,
@@ -104,6 +104,37 @@ class Order(Base):
     assigned_driver: Mapped[str | None] = mapped_column(String(50), nullable=True)
     route_group_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     route_stop_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # ---- Driver-system / delivery state-machine columns (migration 15) ----
+    # Order is the Delivery in SPEC.md terms — same row, just with the
+    # bid/approval/lifecycle tracking added on top of the existing
+    # ingest fields. status reuses the existing column; new values:
+    # available | requested | approved | picked_up | en_route | delivered |
+    # cancelled | no_show. Old ingest values ('new', etc) continue to work.
+    delivery_window_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    delivery_window_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    customer_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    setup_photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    setup_photo_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # potential_payout is the estimated total computed at delivery creation
+    # via app.services.ezcater_payroll.compute_one(). Snapshotted so pay-
+    # structure changes don't retroactively change quoted earnings.
+    potential_payout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # paid_payout is set when payroll closes a PayCheck; nullable until then.
+    paid_payout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    paycheck_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # FK to Driver (the integer ID). Distinct from the legacy assigned_driver
+    # string field which captured ezCater's freeform driver name.
+    assigned_driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("drivers.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    approved_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pickup_actual_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    en_route_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    delivered_actual_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order",
@@ -268,6 +299,33 @@ class Driver(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     lockout_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ---- Driver-system fields (migration 15) ----
+    # status replaces the legacy `active` boolean over time. `active` stays
+    # for backwards compat; new code should read `status`. Values:
+    # 'active' | 'suspended' | 'terminated'.
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, index=True)
+    terminated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    termination_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # joined_at is the day they signed up (Date — no time component needed).
+    joined_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Lifetime delivery count is the cumulative number of `delivered` orders
+    # this driver completed. Used for the "20 lifetime" New-tier exit threshold.
+    lifetime_delivery_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # current_score / current_tier are snapshots of the latest DriverScore
+    # row, denormalized here for fast read-side queries (Ez Manage row sort,
+    # tier-cap enforcement). Updated by the nightly recompute job.
+    current_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_tier: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    # Default origin store for this driver (e.g. 'dos' / 'uno'). Distinct
+    # from the legacy `location` field which doubled as auth + display.
+    home_store_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Latest GPS fix (cached, written from /driver/track). DriverLocation
+    # remains the canonical trail; these are read-side conveniences.
+    last_known_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_known_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_location_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class DriverLog(Base):
@@ -489,3 +547,123 @@ class WhatsAppMessage(Base):
     raw_metadata: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     # When EZLive received the message (vs `ts` which is when ock saw it).
     ingested_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+# ============================================================
+# Driver system (migration 15) — see SPEC.md sections 15-16
+# ============================================================
+
+class DeliveryRequest(Base):
+    """One driver's request to take a delivery, with manager decision tracking.
+    Unique on (delivery_id, driver_id) — a given driver can request each
+    order at most once. status walks: pending → approved | declined |
+    cancelled_by_driver. The approving manager FK's to users via
+    decided_by_user_id."""
+    __tablename__ = "delivery_request"
+    __table_args__ = (
+        UniqueConstraint("delivery_id", "driver_id", name="uq_delivery_request_delivery_driver"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    delivery_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # 'pending' | 'approved' | 'declined' | 'cancelled_by_driver'
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
+class DriverScore(Base):
+    """One snapshot per nightly recompute (4am cron). Latest row per driver
+    is what My Profile reads. Each metric_pts column is the breakdown so
+    drivers can see exactly which metric is pulling them up/down. Score
+    is the sum of the six pts columns."""
+    __tablename__ = "driver_score"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    window_start: Mapped[date] = mapped_column(Date, nullable=False)
+    window_end: Mapped[date] = mapped_column(Date, nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 'new' | 'trusted' | 'rockstar' | 'top_rockstar'
+    tier: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Component breakdown — sums to `score`
+    tracking_pts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    on_time_pts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cancellation_pts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    photo_pts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    response_pts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    star_pts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class PayCheck(Base):
+    """A closed bi-weekly paycheck. When payroll closes a period, each
+    delivery in that window gets paid_payout + paycheck_id stamped on it.
+    Driver's view at /pay-history reads from this table."""
+    __tablename__ = "paycheck"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    pay_period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    pay_period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    closed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    gross_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    net_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    check_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class Cancellation(Base):
+    """Log of driver-initiated cancellations after manager approval. Used
+    for the 30-day / 90-day cancel-threshold rules in SPEC § 13:
+      - 1 in 30d: score deduction, no admin action
+      - 2 in 30d: flag for manager check-in
+      - 3 in 90d: auto account review event"""
+    __tablename__ = "cancellation"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    delivery_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE"), nullable=False,
+    )
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    cancelled_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # 'driver' | 'manager' | 'customer' | 'system'
+    cancelled_by: Mapped[str] = mapped_column(String(20), default="driver", nullable=False)
+
+
+class ManagerMessage(Base):
+    """Outbound manager→driver messages during an active delivery. The
+    reply latency from each message feeds the 'Manager response time'
+    scoring metric (10 pts). Messages sent outside an active delivery
+    don't count for that metric (during_active_delivery=False)."""
+    __tablename__ = "manager_message"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sender_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    delivery_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    replied_within_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    during_active_delivery: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

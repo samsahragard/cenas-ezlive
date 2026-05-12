@@ -1,17 +1,25 @@
-# Cenas Kitchen Driver (mobile shell)
+# Cenas Kitchen Employee (mobile shell)
 
-Capacitor-based native wrapper for the Driver Portal at
-<https://app.cenaskitchen.com/driver/login>.
+Capacitor-based native wrapper for the full Cenas Kitchen Employee
+site at <https://app.cenaskitchen.com>. The first screen is the
+shared keypad-login; after sign-in the wrapper role-routes users
+(partner / corporate / gm / manager / expo / corporate-driver) into
+their dashboard, exactly the same as the website does.
+
+Play Console listing: **Cenas Kitchen Employee**
+Package id: `com.cenaskitchen.app`
 
 ## What this is for
 
-The web-only Driver Portal stops tracking GPS the moment Chrome is
+The web-only experience stops tracking driver GPS the moment Chrome is
 backgrounded / closed / the phone goes in a pocket. This mobile shell
-wraps the same web pages in a native iOS + Android app, with
+wraps the same web pages in a native Android (and later iOS) app, with
 `@capacitor-community/background-geolocation` running as a native
 foreground service that POSTs to `/driver/track` regardless of what
 the WebView is doing. That gives us real background tracking that
-survives Chrome closed, app-switched, screen off.
+survives Chrome closed, app-switched, screen off — but only the
+drivers see the location prompt (gated by role on the page that
+calls the plugin).
 
 ## Layout
 
@@ -65,3 +73,80 @@ Requires:
 
 Or use a CI service (Codemagic / Ionic Appflow) for iOS builds
 without owning a Mac.
+
+## Play Store release build (signed AAB)
+
+The CI workflow ships a SIGNED Android App Bundle to the
+`cenas-kitchen-employee-release-aab` workflow artifact whenever the
+keystore secrets are configured. The job is conditional — if the
+secrets aren't set, the workflow logs a notice and skips the release
+step (debug APK still builds).
+
+### One-time keystore setup
+
+```bash
+# On a trusted machine (AiCk works; needs Java JDK on PATH for keytool)
+cd cenas-kitchen-claude/mobile/scripts
+chmod +x generate_upload_keystore.sh
+./generate_upload_keystore.sh upload-keystore.jks
+# Follow the on-screen prompts — choose strong passwords for both
+# the keystore and the key alias.
+```
+
+Then add 4 GitHub Secrets on the repo
+(Settings → Secrets and variables → Actions):
+
+| Secret name                      | Value                                            |
+|----------------------------------|--------------------------------------------------|
+| `ANDROID_UPLOAD_KEYSTORE_B64`    | `base64 -w0 upload-keystore.jks` output          |
+| `ANDROID_KEYSTORE_PASSWORD`      | the keystore password you entered                |
+| `ANDROID_KEY_ALIAS`              | the key alias (`upload` is the suggested value)  |
+| `ANDROID_KEY_PASSWORD`           | the key password                                 |
+
+**Back up the keystore file itself somewhere safe** (1Password, encrypted
+USB, AiCk's secrets folder). If you lose it you need Google's
+key-reset process (1-2 weeks) to upload further releases.
+
+We use **Play App Signing**: this keystore is your "upload key" — the
+key that proves to Play that the upload came from you. Play re-signs
+the AAB with their own production signing key for distribution. If
+your upload key is ever compromised you can rotate it through Play
+Console without invalidating installed copies of the app.
+
+### Building the signed AAB
+
+```bash
+git commit --allow-empty -m "trigger mobile build"  # or any push touching mobile/**
+git push
+# Watch https://github.com/samsahragard/cenas-ezlive/actions
+# The `release-aab` job runs after the debug build. ~3-4 min.
+```
+
+Download the artifact `cenas-kitchen-employee-release-aab` from the
+workflow run — it contains `cenas-kitchen-employee.aab`.
+
+### Uploading to Play Console (Internal Testing)
+
+1. https://play.google.com/console → Cenas Kitchen Employee → Test and release → Internal testing.
+2. Create a new release. Upload the `cenas-kitchen-employee.aab`
+   downloaded from the GitHub Actions artifact.
+3. First-time only: Play asks whether to opt into Play App Signing.
+   **Opt in.** Play generates the production signing key and stores it.
+4. Add testers (Settings → Test → Internal testing → Testers tab).
+   Either upload a Google Group of tester Gmails, or paste one email
+   per line directly. Initially add Sam + Masood + one driver.
+5. After Play processes the AAB, the release page shows a "Copy link"
+   button. That's the install link to send to testers. They open it
+   on Android (must be the same Gmail they were invited with), tap
+   "Become a tester", install via Play.
+6. Verify on a test phone: app opens to the keypad-login screen,
+   accepts a valid 5-digit passcode, role-routes the user to their
+   dashboard. For driver-role users, the BackgroundGeolocation
+   permission prompt appears the first time they open a driver page.
+
+### Promoting to Closed Testing → Production
+
+Per Play's gating: you need at least 12 testers opted into a Closed
+Testing track for 14 days before you can apply for Production access.
+Plan that as a separate two-week loop after Internal Testing is
+stable.

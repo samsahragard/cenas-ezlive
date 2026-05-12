@@ -62,7 +62,7 @@ def require_driver(fn: Callable):
     @wraps(fn)
     def wrapped(*args, **kwargs):
         if not session.get("driver_id"):
-            return redirect(url_for("driver.driver_login_get", next=request.path))
+            return redirect(url_for("driver.driver_login", next=request.path))
         return fn(*args, **kwargs)
     return wrapped
 
@@ -72,7 +72,7 @@ def require_manager(fn: Callable):
     def wrapped(*args, **kwargs):
         user = getattr(g, "current_user", None)
         if not user or user.permission_level not in MANAGER_ROLES:
-            return redirect(url_for("keypad_auth.keypad_login_get", next=request.path))
+            return redirect(url_for("keypad_auth.login", next=request.path))
         return fn(*args, **kwargs)
     return wrapped
 
@@ -157,7 +157,7 @@ def _potential_week(db, driver_id: int, today: date) -> float:
 def ez_market():
     driver = _current_driver()
     if not driver:
-        return redirect(url_for("driver.driver_login_get"))
+        return redirect(url_for("driver.driver_login"))
     today = date.today()
     db = SessionLocal()
     try:
@@ -252,7 +252,7 @@ def ez_market():
 def ez_market_request(delivery_id: int):
     driver = _current_driver()
     if not driver:
-        return redirect(url_for("driver.driver_login_get"))
+        return redirect(url_for("driver.driver_login"))
     db = SessionLocal()
     try:
         order = db.get(Order, delivery_id)
@@ -292,7 +292,7 @@ def ez_market_request(delivery_id: int):
 def ez_market_cancel_request(request_id: int):
     driver = _current_driver()
     if not driver:
-        return redirect(url_for("driver.driver_login_get"))
+        return redirect(url_for("driver.driver_login"))
     db = SessionLocal()
     try:
         req = db.get(DeliveryRequest, request_id)
@@ -535,7 +535,7 @@ def ez_manage_feasibility_check():
 def my_profile():
     driver = _current_driver()
     if not driver:
-        return redirect(url_for("driver.driver_login_get"))
+        return redirect(url_for("driver.driver_login"))
     today = date.today()
     db = SessionLocal()
     try:
@@ -570,7 +570,7 @@ def my_profile():
 def pay_history():
     driver = _current_driver()
     if not driver:
-        return redirect(url_for("driver.driver_login_get"))
+        return redirect(url_for("driver.driver_login"))
     db = SessionLocal()
     try:
         checks = (
@@ -593,7 +593,7 @@ def pay_history():
 def pay_history_flag(delivery_id: int):
     driver = _current_driver()
     if not driver:
-        return redirect(url_for("driver.driver_login_get"))
+        return redirect(url_for("driver.driver_login"))
     db = SessionLocal()
     try:
         order = db.get(Order, delivery_id)

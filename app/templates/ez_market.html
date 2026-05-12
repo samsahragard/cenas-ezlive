@@ -140,11 +140,10 @@
 
 <div id="tab-queue" class="em-cards" style="display:none;">
   {% for req in my_pending_reqs %}
-    {% set o = req.delivery if req.delivery else None %}
     <div class="em-card">
       <div class="em-banner pending">Manager reviewing · requested {{ req.requested_at.strftime('%I:%M %p') if req.requested_at else '' }}</div>
       <div class="em-card-row">
-        <div><div class="em-time">Request #{{ req.id }}</div></div>
+        <div><div class="em-time">Request #{{ req.id }} on delivery {{ req.delivery_id }}</div></div>
         <div></div>
       </div>
       <form method="POST" action="{{ url_for('driver_system.ez_market_cancel_request', request_id=req.id) }}">

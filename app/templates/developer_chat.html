@@ -473,6 +473,45 @@
     }
   });
 
+  // Enter to submit, Shift+Enter for newline
+  bodyTextarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.submit();
+    }
+  });
+
+  // Paste image (or any file) from clipboard → attach via the shared addDroppedFiles path
+  bodyTextarea.addEventListener('paste', (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const pasted = [];
+    for (const it of items) {
+      if (it.kind === 'file') {
+        const f = it.getAsFile();
+        if (f) pasted.push(f);
+      }
+    }
+    if (pasted.length === 0) return; // text-only paste: let default behavior insert text
+    e.preventDefault();
+    // Give unnamed/auto-named files a unique timestamped name so they don't collide
+    const ts = new Date();
+    const stamp = ts.getFullYear()
+                + ('0' + (ts.getMonth() + 1)).slice(-2)
+                + ('0' + ts.getDate()).slice(-2)
+                + '-' + ('0' + ts.getHours()).slice(-2)
+                + ('0' + ts.getMinutes()).slice(-2)
+                + ('0' + ts.getSeconds()).slice(-2);
+    const named = pasted.map((f, i) => {
+      const generic = !f.name || f.name === 'image.png' || /^image\.[a-z0-9]+$/i.test(f.name);
+      if (!generic) return f;
+      const ext = (f.type.split('/')[1] || 'bin').replace(/[^a-z0-9]/g, '');
+      const suffix = pasted.length > 1 ? '-' + (i + 1) : '';
+      return new File([f], 'pasted-' + stamp + suffix + '.' + ext, { type: f.type });
+    });
+    addDroppedFiles(named);
+  });
+
   function poll() {
     fetch('{{ url_for("developer_chat.messages_json") }}?since_id=' + lastId, {
       credentials: 'same-origin',

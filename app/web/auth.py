@@ -121,11 +121,26 @@ def install_page():
 
 @auth.route("/")
 def store_picker():
-    """Landing page: pick which store/scope to enter.
+    """Bare-URL landing. Sam's 2026-05-11 spec: nobody should ever see the
+    4-dashboard picker — every visitor either gets bounced to /keypad-login
+    (no session) or auto-routed to their role landing (signed in).
 
-    All four entry points use the shared `EZLIVE_PASSWORD` gate (already
-    enforced by the global before_request). Tomball = DOS MAS, Copperfield
-    = UNO MAS. Corporate + Partner show both locations combined; Partner
-    is reserved for owners (Sam + Masood) and will gain private legal/financial
-    sections later — for now mirrors Corporate."""
-    return render_template("store_picker.html")
+    The before_request gate handles the unauthed case by redirecting to
+    /keypad-login. When this view actually runs, the user is authenticated
+    one way or another:
+      • Keypad session (session.user_id + g.current_user) → role landing.
+      • Legacy auth_ok-only session (chat tools / etc.) → Partner if
+        partner_auth_ok, otherwise we fall through to /partner-login.
+    """
+    from flask import g, redirect
+    from app.web.keypad_auth import _landing_for_user
+
+    u = getattr(g, "current_user", None)
+    if u is not None:
+        return redirect(_landing_for_user(u))
+    # Legacy tool session — keep prior behavior of letting them through to
+    # /partner/ since that's what tools target.
+    if session.get("partner_auth_ok"):
+        return redirect("/partner/")
+    # Tier-1 only (auth_ok without partner) — go through partner-login.
+    return redirect(url_for("auth.partner_login"))

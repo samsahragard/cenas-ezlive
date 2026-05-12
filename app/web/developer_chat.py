@@ -41,7 +41,7 @@ MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024   # 20 MB (5/msg => ~100 MB total)
 ALLOWED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic",  # images
     ".pdf",                                              # docs
-    ".csv", ".txt", ".md", ".log",                       # text dumps
+    ".csv", ".txt", ".md", ".log", ".html",              # text dumps + saved HTML
     ".xlsx", ".xls",                                     # spreadsheets
     ".webm", ".ogg", ".mp3", ".wav", ".m4a",             # audio (voice msgs)
 }

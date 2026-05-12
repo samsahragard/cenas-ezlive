@@ -6,11 +6,11 @@
 {% block page_subtitle %}
   <p class="greeting-sub">{{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries · today and upcoming</p>
 {% endblock %}
-{% block topbar_right %}
-  <a class="btn-portal" href="/orders">+ Process new PDFs</a>
-{% endblock %}
 
 {% block content %}
+<div style="margin: 0 0 16px;">
+  <a class="btn-portal" href="/orders">Manually Processed PDF</a>
+</div>
 {% if not groups %}
   <div class="empty-state">
     <p style="margin:0 0 12px;font-size:15px;color:#fff;">No processed orders for {{ location_label }} yet.</p>

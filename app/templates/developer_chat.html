@@ -264,7 +264,7 @@
         <option value="system">system</option>
       </select>
       <textarea name="body" placeholder="Type a message…"></textarea>
-      <button type="button" id="mic-btn" class="mic-btn" title="Record voice message (auto-transcribes into the box)">🎤</button>
+      <button type="button" id="mic-btn" class="mic-btn" title="Voice-to-text — click to start dictating, click again to stop">🎤</button>
       <button type="button" onclick="document.getElementById('attach-input').click()" title="Attach files (up to {{ max_attachments }})">📎</button>
       <button type="submit">Send</button>
     </div>
@@ -475,142 +475,83 @@
     activeTtsBtn = btn;
   });
 
-  // ============== Mic — record + Web Speech Recognition transcription ==============
+  // ============== Mic — Web Speech Recognition transcription (no audio attachment) ==============
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
-  let mediaRecorder = null;
-  let recordChunks = [];
   let recognizer = null;
   let recognizingTranscript = '';
-  let activeMicStream = null;
 
-  function micSupported() {
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
-  }
   function speechRecogSupported() {
     return ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
   }
 
-  async function startRecording() {
-    if (!micSupported()) {
-      alert('Microphone not supported in this browser.');
+  function startTranscribing() {
+    if (!speechRecogSupported()) {
+      alert('Voice transcription not supported in this browser. Use Chrome, Edge, or Safari iOS 15+.');
       return;
     }
-    try {
-      activeMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      recordChunks = [];
-      let mimeType = '';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
-      else if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
-      else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
-      mediaRecorder = mimeType ? new MediaRecorder(activeMicStream, { mimeType })
-                               : new MediaRecorder(activeMicStream);
-      mediaRecorder.addEventListener('dataavailable', (ev) => {
-        if (ev.data && ev.data.size > 0) recordChunks.push(ev.data);
-      });
-      mediaRecorder.addEventListener('stop', () => {
-        const fullType = mediaRecorder.mimeType || 'audio/webm';
-        const baseType = fullType.split(';')[0];
-        const ext = baseType === 'audio/mp4' ? 'm4a'
-                  : baseType === 'audio/ogg' ? 'ogg'
-                  : (baseType.split('/')[1] || 'webm');
-        const blob = new Blob(recordChunks, { type: baseType });
-        if (blob.size > MAX_BYTES) {
-          alert('Voice msg over the ' + (MAX_BYTES/1024/1024) + ' MB limit. Try shorter.');
-        } else if (blob.size === 0) {
-          micStatus.textContent = 'no audio captured';
-        } else {
-          const ts = new Date();
-          const stamp = ts.getFullYear()
-                      + ('0' + (ts.getMonth() + 1)).slice(-2)
-                      + ('0' + ts.getDate()).slice(-2)
-                      + '-' + ('0' + ts.getHours()).slice(-2)
-                      + ('0' + ts.getMinutes()).slice(-2)
-                      + ('0' + ts.getSeconds()).slice(-2);
-          const file = new File([blob], 'voice-' + stamp + '.' + ext, { type: baseType });
-          const dt = new DataTransfer();
-          Array.from(attachInput.files || []).forEach(f => dt.items.add(f));
-          if (dt.items.length >= MAX_ATTACHMENTS) {
-            alert('Max ' + MAX_ATTACHMENTS + ' attachments per message — remove one to add the voice msg.');
-          } else {
-            dt.items.add(file);
-            attachInput.files = dt.files;
-            renderPreview();
-            micStatus.textContent = 'voice msg attached (' + Math.round(blob.size / 1024) + ' KB)';
-          }
-        }
-        if (activeMicStream) {
-          activeMicStream.getTracks().forEach(t => t.stop());
-          activeMicStream = null;
-        }
-        micBtn.classList.remove('recording');
-      });
-      mediaRecorder.start();
-      micBtn.classList.add('recording');
-      micStatus.textContent = 'recording… click 🎤 to stop';
-
-      if (speechRecogSupported()) {
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognizer = new SR();
-        recognizer.continuous = true;
-        recognizer.interimResults = true;
-        recognizer.lang = 'en-US';
-        const baseText = (bodyTextarea.value || '').replace(/\s+$/, '');
-        recognizingTranscript = baseText ? baseText + ' ' : '';
-        recognizer.addEventListener('result', (ev) => {
-          let final = '';
-          let interim = '';
-          for (let i = ev.resultIndex; i < ev.results.length; i++) {
-            const t = ev.results[i][0].transcript;
-            if (ev.results[i].isFinal) final += t;
-            else interim += t;
-          }
-          if (final) recognizingTranscript += final + ' ';
-          bodyTextarea.value = (recognizingTranscript + interim).replace(/\s+/g, ' ').trimStart();
-        });
-        recognizer.addEventListener('error', (ev) => {
-          if (ev.error && ev.error !== 'no-speech' && ev.error !== 'aborted') {
-            micStatus.textContent = 'transcribe err: ' + ev.error;
-          }
-        });
-        try { recognizer.start(); } catch (_) { /* already started */ }
-      } else {
-        micStatus.textContent = 'recording… (no live transcript in this browser)';
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognizer = new SR();
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+    recognizer.lang = 'en-US';
+    const baseText = (bodyTextarea.value || '').replace(/\s+$/, '');
+    recognizingTranscript = baseText ? baseText + ' ' : '';
+    recognizer.addEventListener('result', (ev) => {
+      let final = '';
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) final += t;
+        else interim += t;
       }
-    } catch (e) {
-      alert('Mic access denied or unavailable: ' + (e && e.message || e));
+      if (final) recognizingTranscript += final + ' ';
+      bodyTextarea.value = (recognizingTranscript + interim).replace(/\s+/g, ' ').trimStart();
+    });
+    recognizer.addEventListener('error', (ev) => {
+      if (ev.error && ev.error !== 'no-speech' && ev.error !== 'aborted') {
+        micStatus.textContent = 'transcribe err: ' + ev.error;
+      }
+    });
+    recognizer.addEventListener('end', () => {
+      // recognition ended (user stop, browser timeout, or error) — reset UI
+      recognizer = null;
       micBtn.classList.remove('recording');
-      micStatus.textContent = '';
-      if (activeMicStream) {
-        activeMicStream.getTracks().forEach(t => t.stop());
-        activeMicStream = null;
+      if (!micStatus.textContent.startsWith('transcribe err')) {
+        micStatus.textContent = '';
       }
+    });
+    try {
+      recognizer.start();
+      micBtn.classList.add('recording');
+      micStatus.textContent = 'listening… click 🎤 to stop';
+    } catch (e) {
+      alert('Could not start transcription: ' + (e && e.message || e));
+      recognizer = null;
+      micBtn.classList.remove('recording');
     }
   }
 
-  function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      try { mediaRecorder.stop(); } catch (_) {}
-    }
+  function stopTranscribing() {
     if (recognizer) {
       try { recognizer.stop(); } catch (_) {}
-      recognizer = null;
+      // 'end' handler resets state
     }
   }
 
   if (micBtn) {
     micBtn.addEventListener('click', () => {
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        stopRecording();
+      if (recognizer) {
+        stopTranscribing();
       } else {
-        startRecording();
+        startTranscribing();
       }
     });
   }
 
-  // Stop any active TTS / recording when the user submits or leaves
-  form.addEventListener('submit', () => { stopTts(); stopRecording(); });
-  window.addEventListener('beforeunload', () => { stopTts(); stopRecording(); });
+  // Stop any active TTS / transcription when the user submits or leaves
+  form.addEventListener('submit', () => { stopTts(); stopTranscribing(); });
+  window.addEventListener('beforeunload', () => { stopTts(); stopTranscribing(); });
 
   // Initial scroll-to-bottom
   setTimeout(() => bottom.scrollIntoView(), 100);

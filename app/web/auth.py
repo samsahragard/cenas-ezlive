@@ -38,6 +38,7 @@ EXEMPT_PREFIXES = (
     "/keypad-logout",
     "/change-passcode",          # post-keypad-login, before main app
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
+    "/privacy",                  # public privacy policy (Play Store + general audit requirement)
 )
 
 

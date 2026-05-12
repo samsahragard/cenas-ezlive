@@ -1,9 +1,9 @@
 {
-  "appId": "com.cenaskitchen.driver",
-  "appName": "Cenas Kitchen Driver",
+  "appId": "com.cenaskitchen.app",
+  "appName": "Cenas Kitchen Employee",
   "webDir": "www",
   "server": {
-    "url": "https://app.cenaskitchen.com/driver/login",
+    "url": "https://app.cenaskitchen.com/",
     "cleartext": false,
     "androidScheme": "https"
   },

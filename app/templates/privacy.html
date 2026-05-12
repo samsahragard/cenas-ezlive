@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — Cenas Kitchen Employee</title>
+  <meta name="robots" content="index, follow">
+  <style>
+    body {
+      margin: 0;
+      background: #0e0c0a;
+      color: rgba(255,255,255,0.82);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .priv {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .priv h1 { color: #fff; font-size: 28px; margin: 12px 0 4px; }
+    .priv h2 { color: #fff; font-size: 18px; margin: 28px 0 8px;
+               border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 4px; }
+    .priv p, .priv ul { color: rgba(255,255,255,0.78); }
+    .priv ul { padding-left: 22px; }
+    .priv li { margin: 4px 0; }
+    .priv .updated { color: rgba(255,255,255,0.55); font-size: 13px; margin: 0 0 12px; }
+    .priv a { color: #e87a3e; text-decoration: underline; }
+    .priv .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .priv .brand-mark { color: #c8302a; font-weight: 700; letter-spacing: 1px; font-size: 14px; }
+  </style>
+</head>
+<body>
+<div class="priv">
+  <div class="brand"><span class="brand-mark">CENAS KITCHEN</span></div>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Cenas Kitchen Employee · Last updated: 2026-05-12</p>
+
+  <p>
+    This Privacy Policy describes how Cenas Kitchen, LLC ("we", "our",
+    "Cenas Kitchen") collects, uses, and protects information when you
+    use the <strong>Cenas Kitchen Employee</strong> application and the
+    related website at <a href="https://app.cenaskitchen.com">app.cenaskitchen.com</a>
+    (collectively, the "Service"). The Service is provided to employees,
+    contractors, and authorized partners of Cenas Kitchen for internal
+    restaurant operations only. It is not intended for the general public.
+  </p>
+
+  <h2>1. Information we collect</h2>
+  <p>We collect only information needed to run restaurant operations and
+     pay our team. Specifically:</p>
+  <ul>
+    <li><strong>Account info</strong> — your full name, work email, work
+        phone number, address, role, and home location (Tomball or
+        Copperfield). Provided when an authorized manager adds your
+        account.</li>
+    <li><strong>Authentication credentials</strong> — a 5-digit passcode
+        you create. Stored only as a one-way salted hash; we never see
+        your plaintext passcode. Used to sign in to the Service.</li>
+    <li><strong>Shift &amp; payroll data</strong> — work hours, breaks,
+        roles, and computed pay totals. Read from our Toast POS
+        integration for shifts you actually worked.</li>
+    <li><strong>Driver GPS location</strong> — <em>only if your role is
+        "Corporate Driver".</em> While you have an active delivery shift
+        open, the app captures location every ~5 seconds and uploads it
+        to our servers. Used to provide live delivery tracking to the
+        dispatch manager and to compute mileage-based pay for routes
+        over 20 miles one-way. Location is NOT captured outside of an
+        active shift, and is NEVER captured for non-driver roles.</li>
+    <li><strong>Delivery performance data</strong> — for drivers, per-
+        delivery records including on-time status, tracked status,
+        five-star reviews, and verified mileage. Used to compute
+        delivery bonuses and the per-mile-over-20 pay tier.</li>
+    <li><strong>App diagnostics</strong> — basic crash logs, error
+        messages, and request timing. No screen content, no
+        keystrokes, no microphone.</li>
+  </ul>
+
+  <h2>2. How we use the information</h2>
+  <ul>
+    <li>To sign you in and route you to the right dashboard for your
+        role.</li>
+    <li>To compute your paycheck (base per-delivery rate, on-time
+        bonus, mileage tier, five-star bonus per the published
+        ezCater Guidelines).</li>
+    <li>To dispatch and monitor in-progress deliveries (live driver
+        location map for active shifts).</li>
+    <li>To audit restaurant operations and labor cost.</li>
+    <li>To respond to your questions or service requests.</li>
+  </ul>
+  <p>We do <strong>not</strong> sell, rent, or trade your personal
+     information. We do not use the data for advertising. We do not
+     share it with third parties except as described in §3.</p>
+
+  <h2>3. Third-party processors</h2>
+  <p>We use a small number of vendors to run the Service. Each receives
+     only the minimum information necessary:</p>
+  <ul>
+    <li><strong>Render</strong> — application hosting (our servers run on
+        Render's infrastructure).</li>
+    <li><strong>Toast, Inc.</strong> — point-of-sale data, time entries,
+        and payroll inputs.</li>
+    <li><strong>Sling (Toolbox by Toast)</strong> — scheduling and
+        roster data.</li>
+    <li><strong>ezCater, Inc.</strong> — catering order data for
+        deliveries dispatched through their platform.</li>
+    <li><strong>Google Maps / OpenStreetMap</strong> — distance lookups
+        for route planning and live driver map rendering.</li>
+    <li><strong>Anthropic</strong> — AI-assisted PDF extraction for
+        catering orders and AI-assisted resolution of ingest warnings.</li>
+    <li><strong>SiteGround</strong> — email transport for order
+        notifications.</li>
+  </ul>
+
+  <h2>4. How we protect your information</h2>
+  <ul>
+    <li>All connections to the Service use TLS encryption.</li>
+    <li>Passcodes are stored as one-way salted hashes (Werkzeug
+        pbkdf2:sha256, the OWASP-recommended pattern).</li>
+    <li>Roles are enforced server-side. Only Partner-level accounts can
+        see management labor costs; only your own GMs or Sam can reset
+        your passcode.</li>
+    <li>Driver location data is retained for 90 days for payroll audit,
+        then deleted.</li>
+    <li>If a passcode is reset or your account is deactivated, all your
+        sessions on every device are immediately invalidated.</li>
+  </ul>
+
+  <h2>5. Your choices and rights</h2>
+  <ul>
+    <li><strong>Access &amp; correction</strong> — ask your manager or
+        email <a href="mailto:samsahragard@gmail.com">samsahragard@gmail.com</a>
+        to view, correct, or update your profile information.</li>
+    <li><strong>Deletion</strong> — request that we remove your account
+        and personal records by emailing the same address. We will
+        remove your account within 30 days. Note that some data may be
+        retained as required by tax or payroll law (typically 4 years
+        for payroll records in Texas).</li>
+    <li><strong>Stop tracking</strong> — drivers can revoke the location
+        permission in their phone's Settings → Apps → Cenas Kitchen
+        Employee → Permissions, or simply end their shift in the app.
+        Location is never captured outside of an active shift.</li>
+  </ul>
+
+  <h2>6. Children</h2>
+  <p>The Service is intended for use by Cenas Kitchen employees and
+     authorized adult partners only. We do not knowingly collect
+     personal information from anyone under 16.</p>
+
+  <h2>7. Changes to this policy</h2>
+  <p>We may update this Privacy Policy from time to time. The "Last
+     updated" date at the top reflects the most recent change. Material
+     changes will also be announced via the app's developer chat for
+     authorized staff.</p>
+
+  <h2>8. Contact</h2>
+  <p>
+    Cenas Kitchen, LLC<br>
+    27727 Tomball Pkwy, Tomball, TX 77377<br>
+    Email: <a href="mailto:samsahragard@gmail.com">samsahragard@gmail.com</a><br>
+    Phone: (713) 366-1208
+  </p>
+</div>
+</body>
+</html>

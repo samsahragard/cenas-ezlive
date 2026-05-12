@@ -405,6 +405,126 @@ def dashboard_summary():
     })
 
 
+@cater.route("/dashboard/analytics-summary", methods=["GET"])
+def dashboard_analytics_summary():
+    """JSON feed for the Toast-Analytics-only donut block on the Partner
+    dashboard. Different API + scope from /dashboard/summary above:
+      - /dashboard/summary uses the standard Toast Web/Partner API (both
+        stores)
+      - /dashboard/analytics-summary uses the new Analytics API (Copperfield
+        only — Tomball is not on the RMS Pro plan)
+
+    Query params:
+        period   = today | week | last_week (default 'today')
+
+    Reference: /partner/developer/app/toast-analytics-api
+    """
+    from flask import request, jsonify
+    from app.services.toast_analytics_client import (
+        ToastAnalyticsClient, ToastAnalyticsError, period_to_ymd_range,
+    )
+
+    period = (request.args.get("period") or "today").lower()
+    if period not in ("today", "week", "last_week"):
+        return jsonify({"error": f"invalid period {period!r}"}), 400
+
+    try:
+        start_ymd, end_ymd, label = period_to_ymd_range(period)
+        client = ToastAnalyticsClient.shared()
+
+        metrics = client.metrics(start_ymd, end_ymd, [])
+        labor_rows = client.labor(start_ymd, end_ymd, [], group_by=["JOB"])
+        menu_rows = client.menu(start_ymd, end_ymd, [])
+    except ToastAnalyticsError as e:
+        logger.exception("dashboard_analytics_summary: analytics fetch failed")
+        return jsonify({
+            "error": "toast_analytics_fetch_failed",
+            "detail": str(e)[:240],
+            "period": period,
+        }), 502
+    except Exception as e:
+        logger.exception("dashboard_analytics_summary: unexpected error")
+        return jsonify({"error": "unexpected", "detail": str(e)[:240]}), 500
+
+    # ---- sales totals (sum across days/restaurants) ----
+    net_sales = sum(float(m.get("netSalesAmount") or 0) for m in metrics)
+    gross_sales = sum(float(m.get("grossSalesAmount") or 0) for m in metrics)
+    discount_amt = sum(float(m.get("discountAmount") or 0) for m in metrics)
+    void_amt = sum(float(m.get("voidOrdersAmount") or 0) for m in metrics)
+    refund_amt = sum(float(m.get("refundAmount") or 0) for m in metrics)
+    orders_count = sum(int(m.get("ordersCount") or 0) for m in metrics)
+    guest_count = sum(int(m.get("guestCount") or 0) for m in metrics)
+    labor_hours = sum(float(m.get("hourlyJobTotalHours") or 0) for m in metrics)
+    labor_pay = sum(float(m.get("hourlyJobTotalPay") or 0) for m in metrics)
+    avg_order = (net_sales / orders_count) if orders_count else 0.0
+    sales_per_labor_hour = (net_sales / labor_hours) if labor_hours else 0.0
+    labor_ratio_pct = (labor_pay / net_sales * 100.0) if net_sales else 0.0
+
+    # ---- labor mix by job (sum cost per job title) ----
+    by_job: dict[str, dict] = {}
+    for row in labor_rows:
+        title = (row.get("jobTitle") or "Other").strip() or "Other"
+        if title not in by_job:
+            by_job[title] = {"label": title, "value": 0.0, "hours": 0.0}
+        by_job[title]["value"] += float(row.get("totalCost") or 0)
+        by_job[title]["hours"] += float(row.get("totalHours") or 0)
+    labor_by_job = sorted(
+        [v for v in by_job.values() if v["value"] > 0],
+        key=lambda r: -r["value"],
+    )
+
+    # ---- menu summary (sum across days) ----
+    menu_qty = sum(float(r.get("quantitySold") or 0) for r in menu_rows)
+    menu_avg_price = (
+        sum(float(r.get("netSalesAmount") or 0) for r in menu_rows) / menu_qty
+        if menu_qty else 0.0
+    )
+    menu_waste_amount = sum(float(r.get("wasteAmount") or 0) for r in menu_rows)
+    menu_waste_count = sum(float(r.get("wasteCount") or 0) for r in menu_rows)
+
+    # restaurant scope note — analytics token can see both but data only
+    # flows for RMS-Pro-subscribed locations. Today: Copperfield only.
+    restaurants_in_data = sorted({m.get("restaurantGuid") for m in metrics if m.get("restaurantGuid")})
+    scope_note = (
+        "Copperfield only — Tomball is not on the Toast Analytics plan."
+        if len(restaurants_in_data) <= 1 else
+        f"{len(restaurants_in_data)} locations included."
+    )
+
+    return jsonify({
+        "period": period,
+        "label": label,
+        "date_range": {"start": start_ymd, "end": end_ymd},
+        "scope_note": scope_note,
+        "sales": {
+            "net": round(net_sales, 2),
+            "gross": round(gross_sales, 2),
+            "discount": round(discount_amt, 2),
+            "void": round(void_amt, 2),
+            "refund": round(refund_amt, 2),
+            "avg_order": round(avg_order, 2),
+            "sales_per_labor_hour": round(sales_per_labor_hour, 2),
+            "orders": orders_count,
+            "guests": guest_count,
+        },
+        "labor": {
+            "hours": round(labor_hours, 2),
+            "cost": round(labor_pay, 2),
+            "ratio_pct": round(labor_ratio_pct, 1),
+            "by_job": [
+                {"label": r["label"], "value": round(r["value"], 2), "hours": round(r["hours"], 2)}
+                for r in labor_by_job
+            ],
+        },
+        "menu": {
+            "quantity_sold": round(menu_qty, 0),
+            "avg_price": round(menu_avg_price, 2),
+            "waste_amount": round(menu_waste_amount, 2),
+            "waste_count": round(menu_waste_count, 0),
+        },
+    })
+
+
 @cater.route("/orders", methods=["GET", "POST"])
 def orders():
     if request.method == "GET":

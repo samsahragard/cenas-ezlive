@@ -214,6 +214,249 @@
 })();
 </script>
 
+{% if g.current_store == 'partner' %}
+<!-- Toast Analytics (Partner-only). Different API from the donuts above —
+     uses the Analytics-only /era/v1/* endpoints. See
+     /partner/developer/app/toast-analytics-api for full reference. -->
+<div class="dash-charts dash-charts-analytics" data-loaded="false">
+  <div class="dash-chart-tabs">
+    <div style="font-weight:600; color:#fff; margin-right:auto;">Toast Analytics <span id="ta-scope" style="font-weight:400;color:#aaa;font-size:12px;"></span></div>
+    <button type="button" class="dash-chart-tab is-active" data-ta-period="today">Today</button>
+    <button type="button" class="dash-chart-tab" data-ta-period="week">This Week</button>
+    <button type="button" class="dash-chart-tab" data-ta-period="last_week">Last Week</button>
+    <span class="dash-chart-range" id="ta-range"></span>
+  </div>
+
+  <div class="charts-grid">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Sales breakdown</div>
+          <div class="card-sub" id="ta-sales-sub">loading…</div>
+        </div>
+        <div class="card-total" id="ta-sales-total">—</div>
+      </div>
+      <div class="donut-wrap">
+        <canvas id="ta-sales-donut" width="180" height="180"></canvas>
+        <div class="donut-legend" id="ta-sales-legend"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Labor by job</div>
+          <div class="card-sub" id="ta-labor-sub">loading…</div>
+        </div>
+        <div class="card-total" id="ta-labor-total">—</div>
+      </div>
+      <div class="donut-wrap">
+        <canvas id="ta-labor-donut" width="180" height="180"></canvas>
+        <div class="donut-legend" id="ta-labor-legend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI tile row -->
+  <div class="ta-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;">
+    <div class="ta-kpi card" style="padding:10px 14px;">
+      <div style="font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Orders</div>
+      <div id="ta-kpi-orders" style="font-size:22px; font-weight:600; color:#fff;">—</div>
+      <div id="ta-kpi-orders-sub" style="font-size:11px; color:#aaa;">avg —</div>
+    </div>
+    <div class="ta-kpi card" style="padding:10px 14px;">
+      <div style="font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Guests</div>
+      <div id="ta-kpi-guests" style="font-size:22px; font-weight:600; color:#fff;">—</div>
+      <div id="ta-kpi-guests-sub" style="font-size:11px; color:#aaa;">— per order</div>
+    </div>
+    <div class="ta-kpi card" style="padding:10px 14px;">
+      <div style="font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Sales / Labor hr</div>
+      <div id="ta-kpi-splh" style="font-size:22px; font-weight:600; color:#fff;">—</div>
+      <div id="ta-kpi-splh-sub" style="font-size:11px; color:#aaa;">— hrs labor</div>
+    </div>
+    <div class="ta-kpi card" style="padding:10px 14px;">
+      <div style="font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Items sold</div>
+      <div id="ta-kpi-items" style="font-size:22px; font-weight:600; color:#fff;">—</div>
+      <div id="ta-kpi-items-sub" style="font-size:11px; color:#aaa;">avg $— per item</div>
+    </div>
+    <div class="ta-kpi card" style="padding:10px 14px;">
+      <div style="font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Voids</div>
+      <div id="ta-kpi-voids" style="font-size:22px; font-weight:600; color:#fff;">$—</div>
+      <div id="ta-kpi-voids-sub" style="font-size:11px; color:#aaa;">— refunded</div>
+    </div>
+    <div class="ta-kpi card" style="padding:10px 14px;">
+      <div style="font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Discounts</div>
+      <div id="ta-kpi-discounts" style="font-size:22px; font-weight:600; color:#fff;">$—</div>
+      <div id="ta-kpi-discounts-sub" style="font-size:11px; color:#aaa;">—% of net</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const root = document.querySelector('.dash-charts-analytics');
+  if (!root) return;
+  const COLORS = ['#6dd16d', '#e87a3e', '#4080e8', '#b46ee8', '#f0c060', '#e85d8e', '#5dd4d4', '#999', '#c08be0', '#80c08e'];
+  const tabs = root.querySelectorAll('[data-ta-period]');
+  const get = id => document.getElementById(id);
+  let salesChart = null, laborChart = null;
+
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) return '$0';
+    return '$' + Math.round(n).toLocaleString();
+  }
+  function fmtPct(n, d) { return (n == null || isNaN(n)) ? '—' : (n).toFixed(d ?? 1) + '%'; }
+  function fmtInt(n) { return (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString(); }
+
+  function makeDonut(canvas, slices, totalForPct) {
+    const ctx = canvas.getContext('2d');
+    return new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: slices.map(s => s.label),
+        datasets: [{
+          data: slices.map(s => s.value),
+          backgroundColor: slices.map((_, i) => COLORS[i % COLORS.length]),
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: false,
+        cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed;
+                const pct = totalForPct > 0 ? (v / totalForPct * 100).toFixed(1) + '%' : '';
+                return `${ctx.label}: ${fmtMoney(v)} (${pct})`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  function renderLegend(elId, slices, totalForPct) {
+    const el = get(elId);
+    el.innerHTML = '';
+    if (!slices.length) {
+      el.innerHTML = '<div class="donut-empty">no data for this period</div>';
+      return;
+    }
+    slices.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'donut-row';
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = COLORS[i % COLORS.length];
+      const lbl = document.createElement('span');
+      lbl.textContent = s.label;
+      const pct = document.createElement('span');
+      pct.className = 'pct';
+      pct.textContent = totalForPct > 0
+        ? `${fmtPct(s.value / totalForPct * 100)} · ${fmtMoney(s.value)}`
+        : fmtMoney(s.value);
+      row.appendChild(sw); row.appendChild(lbl); row.appendChild(pct);
+      el.appendChild(row);
+    });
+  }
+
+  function setLoading() {
+    get('ta-sales-sub').textContent = 'loading…';
+    get('ta-labor-sub').textContent = 'loading…';
+    get('ta-sales-total').textContent = '—';
+    get('ta-labor-total').textContent = '—';
+    get('ta-sales-legend').innerHTML = '';
+    get('ta-labor-legend').innerHTML = '';
+    if (salesChart) { salesChart.destroy(); salesChart = null; }
+    if (laborChart) { laborChart.destroy(); laborChart = null; }
+  }
+
+  function fetchPeriod(period) {
+    setLoading();
+    fetch(`/dashboard/analytics-summary?period=${encodeURIComponent(period)}`, {
+      credentials: 'same-origin', headers: { 'Accept': 'application/json' },
+    })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j)))
+    .then(d => {
+      get('ta-range').textContent = d.label || '';
+      get('ta-scope').textContent = d.scope_note ? ` — ${d.scope_note}` : '';
+
+      const sales = d.sales || {};
+      // Sales breakdown: Net + Discount + Void + Refund (gross = net + discount + void + refund roughly)
+      const salesSlices = [];
+      if (sales.net > 0) salesSlices.push({ label: 'Net sales', value: sales.net });
+      if (sales.discount > 0) salesSlices.push({ label: 'Discounts', value: sales.discount });
+      if (sales.void > 0) salesSlices.push({ label: 'Voids', value: sales.void });
+      if (sales.refund > 0) salesSlices.push({ label: 'Refunds', value: sales.refund });
+      const salesTotalNum = salesSlices.reduce((a, s) => a + s.value, 0);
+      get('ta-sales-total').textContent = fmtMoney(sales.net || 0);
+      get('ta-sales-sub').textContent = sales.net > 0
+        ? `${fmtMoney(sales.gross)} gross`
+        : 'no sales yet';
+      salesChart = makeDonut(get('ta-sales-donut'), salesSlices, salesTotalNum);
+      renderLegend('ta-sales-legend', salesSlices, salesTotalNum);
+
+      const labor = d.labor || {};
+      // Top-N by_job slices, group the rest as "Other"
+      const TOP = 6;
+      let laborSlices = labor.by_job || [];
+      if (laborSlices.length > TOP) {
+        const top = laborSlices.slice(0, TOP);
+        const otherCost = laborSlices.slice(TOP).reduce((a, s) => a + s.value, 0);
+        if (otherCost > 0) top.push({ label: `Other (${laborSlices.length - TOP})`, value: otherCost });
+        laborSlices = top;
+      }
+      const laborTotalNum = labor.cost || laborSlices.reduce((a, s) => a + s.value, 0);
+      get('ta-labor-total').textContent = fmtMoney(laborTotalNum);
+      get('ta-labor-sub').textContent = laborTotalNum > 0
+        ? `${fmtPct(labor.ratio_pct)} of net · ${(labor.hours || 0).toFixed(1)} hrs`
+        : 'no labor recorded yet';
+      laborChart = makeDonut(get('ta-labor-donut'), laborSlices, laborTotalNum);
+      renderLegend('ta-labor-legend', laborSlices, laborTotalNum);
+
+      // KPI tiles
+      get('ta-kpi-orders').textContent = fmtInt(sales.orders);
+      get('ta-kpi-orders-sub').textContent = `avg ${fmtMoney(sales.avg_order)} / order`;
+      get('ta-kpi-guests').textContent = fmtInt(sales.guests);
+      get('ta-kpi-guests-sub').textContent = sales.orders > 0
+        ? `${(sales.guests / sales.orders).toFixed(2)} per order` : '— per order';
+      get('ta-kpi-splh').textContent = fmtMoney(sales.sales_per_labor_hour);
+      get('ta-kpi-splh-sub').textContent = `${(labor.hours || 0).toFixed(1)} hrs labor`;
+      const menu = d.menu || {};
+      get('ta-kpi-items').textContent = fmtInt(menu.quantity_sold);
+      get('ta-kpi-items-sub').textContent = `avg ${fmtMoney(menu.avg_price)} per item`;
+      get('ta-kpi-voids').textContent = fmtMoney(sales.void);
+      get('ta-kpi-voids-sub').textContent = `${fmtMoney(sales.refund)} refunded`;
+      get('ta-kpi-discounts').textContent = fmtMoney(sales.discount);
+      get('ta-kpi-discounts-sub').textContent = sales.net > 0
+        ? `${fmtPct(sales.discount / sales.net * 100)} of net` : '—% of net';
+
+      root.dataset.loaded = 'true';
+    })
+    .catch(err => {
+      const msg = (err && (err.error || err.detail)) || 'fetch failed';
+      get('ta-sales-sub').textContent = msg;
+      get('ta-labor-sub').textContent = msg;
+    });
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      fetchPeriod(t.dataset.taPeriod);
+    });
+  });
+
+  fetchPeriod('today');
+})();
+</script>
+{% endif %}
+
 <!-- Upcoming deliveries + attention -->
 <div class="agenda-grid">
   <div class="card">

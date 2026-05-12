@@ -18,6 +18,31 @@
   </div>
 {% endif %}
 
+{# Roster filtered to this kitchen. Page is scoped to one location, so all
+   orders share the same dropdown list. NULL ck_prefix (Angelica, James)
+   already included in both lists. #}
+{% set drivers = drivers_ck1 if location == 'copperfield' else drivers_ck2 %}
+
+<style>
+  .driver-cell { min-width: 220px; }
+  .driver-cell .select-driver {
+    width: 100%; padding: 4px 6px; border-radius: 6px;
+    background: rgba(255,255,255,0.06); color: #fff;
+    border: 1px solid rgba(255,255,255,0.15); font-size: 12px;
+  }
+  .driver-cell .select-driver option { background: #1f1f24; color: #fff; }
+  .driver-cell .driver-assigned {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .driver-cell .driver-name { font-weight: 500; }
+  .driver-cell .btn-driver {
+    cursor: pointer; padding: 3px 8px; border-radius: 5px; font-size: 11px;
+    background: rgba(220,38,38,0.30); border: 1px solid rgba(239,68,68,0.5);
+    color: #fecaca;
+  }
+  .driver-cell .btn-driver:disabled { opacity: 0.5; cursor: progress; }
+</style>
+
 {% for grp in groups %}
   <section class="day-section">
     <div class="day-header">
@@ -49,7 +74,29 @@
             <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
             <td>{{ o.delivery_address or '—' }}</td>
             <td>{{ o.reported_store or '—' }}</td>
-            <td>{{ o.assigned_driver or '—' }}</td>
+            <td class="driver-cell" onclick="event.stopPropagation()">
+              {% if o.assigned_driver %}
+                <div class="driver-assigned">
+                  <span class="driver-name">{{ o.assigned_driver }}</span>
+                  <button type="button" class="btn-driver btn-driver-unassign"
+                          data-order="{{ o.external_order_id }}"
+                          onclick="unassignDriver(this); event.stopPropagation();">
+                    Unassign
+                  </button>
+                </div>
+              {% else %}
+                <select class="select-driver"
+                        data-order="{{ o.external_order_id }}"
+                        onchange="assignDriver(this)"
+                        onclick="event.stopPropagation();"
+                        onmousedown="event.stopPropagation();">
+                  <option value="">— Assign driver —</option>
+                  {% for d in drivers %}
+                    <option value="{{ d.name }}">{{ d.name }}</option>
+                  {% endfor %}
+                </select>
+              {% endif %}
+            </td>
             <td>
               {% if o.needs_review %}
                 <span class="pill pill-review">Needs review</span>
@@ -67,4 +114,60 @@
     </div>
   </section>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function assignDriver(sel) {
+    const name = sel.value;
+    if (!name) return;
+    sel.disabled = true;
+    sel.style.opacity = "0.6";
+    try {
+      const r = await fetch(`/orders/view/${encodeURIComponent(sel.dataset.order)}/assign-driver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await r.json();
+      if (r.ok && data.ok) {
+        window.location.reload();
+      } else {
+        alert("Assign failed: " + (data.error || `HTTP ${r.status}`));
+        sel.disabled = false;
+        sel.style.opacity = "1";
+        sel.value = "";
+      }
+    } catch (e) {
+      alert("Network error: " + e);
+      sel.disabled = false;
+      sel.style.opacity = "1";
+      sel.value = "";
+    }
+  }
+
+  async function unassignDriver(btn) {
+    if (!confirm("Unassign this driver from the order on ezCater?")) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Working…";
+    try {
+      const r = await fetch(`/orders/view/${encodeURIComponent(btn.dataset.order)}/unassign-courier`, {
+        method: "POST",
+      });
+      const data = await r.json();
+      if (r.ok && data.ok) {
+        window.location.reload();
+      } else {
+        alert("Unassign failed: " + (data.error || `HTTP ${r.status}`));
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    } catch (e) {
+      alert("Network error: " + e);
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+</script>
 {% endblock %}

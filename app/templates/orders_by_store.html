@@ -18,10 +18,12 @@
   </div>
 {% endif %}
 
-{# Roster filtered to this kitchen. Page is scoped to one location, so all
-   orders share the same dropdown list. NULL ck_prefix (Angelica, James)
-   already included in both lists. #}
-{% set drivers = drivers_ck1 if location == 'copperfield' else drivers_ck2 %}
+{# Roster per kitchen. NULL ck_prefix (Angelica, James) already included
+   in both lists. We pick per-ORDER below using origin_store_id so the
+   combined /partner/orders view (which mixes both kitchens) shows the
+   right list on every row. #}
+{% set drivers_ck1 = drivers_ck1 or [] %}
+{% set drivers_ck2 = drivers_ck2 or [] %}
 
 <style>
   .driver-cell { min-width: 240px; }
@@ -74,6 +76,8 @@
             <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
             <td>{{ o.delivery_address or '—' }}</td>
             <td>{{ o.reported_store or '—' }}</td>
+            {# Pick the right roster for this order's kitchen: store_1/3 = CK#1 (Copperfield), store_2/4 = CK#2 (Tomball). #}
+            {% set row_drivers = drivers_ck1 if o.origin_store_id in ('store_1', 'store_3') else drivers_ck2 %}
             <td class="driver-cell" onclick="event.stopPropagation()">
               <div class="driver-current">{{ o.assigned_driver or '—' }}</div>
               <div class="driver-actions">
@@ -83,7 +87,7 @@
                         onclick="event.stopPropagation();"
                         onmousedown="event.stopPropagation();">
                   <option value="">— Assign driver —</option>
-                  {% for d in drivers %}
+                  {% for d in row_drivers %}
                     <option value="{{ d.name }}">{{ d.name }}</option>
                   {% endfor %}
                 </select>

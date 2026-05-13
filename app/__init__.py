@@ -24,6 +24,7 @@ from app.web.access_request_routes import access_req as access_req_bp
 from app.web.driver_system import driver_system_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
+from app.web import anomaly_routes as ezanomaly
 from app.services import produce_ingest
 
 
@@ -126,6 +127,11 @@ def create_app():
     # before_request that stashes g.current_user. Must come after ezauth so
     # its EXEMPT_PREFIXES updates win the path-match race for /keypad-login.
     ezkeypad.install(app)
+    # Anomaly blueprint + Jinja global `anomaly_signals_for(page_slug)`.
+    # Phase 1 / Block 3 (ck 2026-05-13). Templates opt in by setting
+    # `anomaly_page_slug = '<slug>'` before {% block content %} — the
+    # base layout's partial picks it up and renders cards.
+    ezanomaly.install(app)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop

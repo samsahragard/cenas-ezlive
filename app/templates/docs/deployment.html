@@ -188,6 +188,8 @@ curl -X POST -H "X-Cron-Token: $(cat ~/.openclaw/.secrets/cron_token.txt)" \
       <td>morning brief composition (Block 6) + daily rules</td></tr>
   <tr><td><code>weekly</code></td><td><code>crn-d82filvavr4c73dqsi00</code></td><td><code>0 13 * * 1</code> (Mon 8 AM CT)</td>
       <td>calibration footer + weekly rules</td></tr>
+  <tr><td><code>brief</code></td><td><code>crn-d82gacd0lvsc738ef110</code></td><td><code>30 12 * * *</code> (7:30 AM CT daily)</td>
+      <td>morning brief composer (Phase 1 / Block 6)</td></tr>
 </table>
 <p>
   Manual fire (handy for catching mid-run bugs in any single bucket):

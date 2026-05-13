@@ -1021,6 +1021,34 @@ class SignalAck(Base):
     note: Mapped[str | None] = mapped_column(String(400), nullable=True)
 
 
+class MorningBrief(Base):
+    """One row per (audience_user_id, brief_date). Body is the composed
+    JSON from app.services.brief_composer matching the spec at
+    /partner/developer/app/morning-brief-composer-spec §3. Composer is
+    read-only against Signal; persists here after composition + dispatch.
+    """
+    __tablename__ = "morning_briefs"
+    __table_args__ = (
+        UniqueConstraint("audience_user_id", "brief_date",
+                         name="uq_morning_briefs_user_date"),
+        Index("ix_morning_briefs_date_role", "brief_date", "audience_role"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    brief_id: Mapped[str] = mapped_column(String(40), nullable=False,
+                                          unique=True)
+    audience_role: Mapped[str] = mapped_column(String(30), nullable=False)
+    audience_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False)
+    brief_date: Mapped[date] = mapped_column(Date, nullable=False)
+    body: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    composed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    composer_model: Mapped[str] = mapped_column(String(60), nullable=False)
+    fallback_used: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False)
+
+
 class RuleOverride(Base):
     """Per-rule threshold + severity edits applied by a partner via
     /partner/anomalies/rules. Engine consults overrides at run start;

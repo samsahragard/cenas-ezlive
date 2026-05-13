@@ -764,3 +764,22 @@ def cron_anomaly_eval():
     from app.services.anomaly_engine import run_bucket
     summary = run_bucket(bucket)
     return jsonify({"ok": True, **summary})
+
+
+@driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])
+def cron_anomaly_brief():
+    """Phase 1 / Block 6: compose one morning brief per enrolled
+    audience for today (or ?date=YYYY-MM-DD). Token-gated like the
+    other cron endpoints."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from datetime import date as _date
+    bd = request.args.get("date")
+    try:
+        brief_date = _date.fromisoformat(bd) if bd else _date.today()
+    except ValueError:
+        return jsonify({"ok": False, "error": "bad date"}), 400
+    from app.services.brief_composer import compose_all_briefs
+    summary = compose_all_briefs(brief_date)
+    return jsonify({"ok": True, "brief_date": brief_date.isoformat(), **summary})

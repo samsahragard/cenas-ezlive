@@ -145,6 +145,37 @@ def _project_payout(order: Order) -> float:
     return round(25.00 + 10.00 + bonus_miles, 2)
 
 
+# origin_store_id -> kitchen slug used by ezcater_miles.KITCHEN_ADDRESSES
+_ORIGIN_TO_KITCHEN = {
+    "store_1": "copperfield",
+    "store_3": "copperfield",
+    "store_2": "tomball",
+    "store_4": "tomball",
+}
+
+
+def _ensure_miles_for_visible(db, orders: list[Order], cap: int = 8) -> None:
+    """Backfill pickup_kitchen + pickup_miles via Google Routes API for any
+    orders that are missing the data (Sam 2026-05-12: 'correct location so
+    we can properly pay the driver'). Capped per render to keep latency +
+    API cost predictable — subsequent refreshes catch up the rest."""
+    from app.services.ezcater_miles import compute_one_way_miles
+    # Fill in pickup_kitchen from origin_store_id where possible (cheap).
+    for o in orders:
+        if not o.pickup_kitchen and o.origin_store_id in _ORIGIN_TO_KITCHEN:
+            o.pickup_kitchen = _ORIGIN_TO_KITCHEN[o.origin_store_id]
+    # Pick the orders still missing miles + with the inputs needed to compute.
+    needs_call = [
+        o for o in orders
+        if o.pickup_miles is None and o.pickup_kitchen and o.delivery_address
+    ]
+    for o in needs_call[:cap]:
+        miles = compute_one_way_miles(o.pickup_kitchen, o.delivery_address)
+        if miles is not None:
+            o.pickup_miles = miles
+    db.commit()
+
+
 def _potential_week(db, driver_id: int, today: date) -> float:
     """Running sum across the current bi-weekly pay period."""
     # Reuse the ezcater_payroll anchor math for period bounds.
@@ -241,6 +272,12 @@ def ez_market():
                 .all()
             )
             competing = dict(rows)
+
+        # Backfill miles via Google Routes API for any visible orders that
+        # are missing them — accurate miles drive the payout formula
+        # (Sam 2026-05-12: 'correct location so we can properly pay the
+        # driver'). Capped per render so a single page load is bounded.
+        _ensure_miles_for_visible(db, available, cap=8)
 
         # Group available by delivery_date with the same helper the
         # /orders/<location> page uses, and projected payouts for the card

@@ -1,0 +1,465 @@
+{# Driver two-step login pad: phone-number entry on screen 1, PIN entry
+   on screen 2 (Sam, 2026-05-13). The phone is the first factor — it
+   discriminates which driver row we hit, so the bcrypt is a single
+   check instead of a linear scan across the whole driver pool. The
+   PIN screen reuses the existing keypad styling from /keypad-login.
+
+   Both screens live in one document; JS swaps which one's visible.
+   Submit is a single POST {phone, pin} once the PIN's complete.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Driver Sign In — Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:           #15205c;
+    --blue-bright:    #1d2a70;
+    --blue-deep:      #0a1340;
+    --red:            #c8302a;
+    --red-bright:     #e54a3f;
+    --red-deep:       #8a1d18;
+    --red-shadow:     #3d0a08;
+    --cream:          #f4e7d0;
+    --cream-soft:     #ebd9bc;
+    --num-color:      #f4e7d0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh;
+    background: #0a0604;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    padding:24px; position:relative;
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter: blur(5px) brightness(0.82) saturate(1.10);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.10), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.08), transparent 50%),
+      linear-gradient(180deg, rgba(10,6,4,0.20) 0%, rgba(10,6,4,0.30) 100%);
+  }
+  .wrap{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; }
+
+  /* Header capsule — same recipe as /keypad-login */
+  .header-cap{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    margin: 22px 22px 28px; padding: 10px 36px; border-radius:14px;
+    background-image:
+      radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 32% 68%, rgba(138,29,24,0.35) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 86% 80%, rgba(138,29,24,0.3) 0.7px, transparent 1.5px),
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 40%, var(--cream-soft) 100%);
+    background-size: 20px 20px, 26px 26px, 17px 17px, 30px 30px, 100% 100%;
+    background-position: 2px 1px, 7px 9px, 13px 4px, 4px 15px, 0 0;
+    box-shadow:
+      inset 0 2px 1px rgba(255,255,255,0.9),
+      inset 0 -3px 6px rgba(150,110,70,0.3),
+      0 0 0 2px var(--cream),
+      0 0 0 2.5px rgba(255,255,255,0.7),
+      0 0 0 7.5px var(--blue-bright),
+      0 2px 0 7.5px var(--blue-deep),
+      0 0 0 10.5px var(--red),
+      0 3px 0 10.5px var(--red-shadow),
+      0 14px 28px rgba(0,0,0,0.65),
+      0 6px 12px rgba(0,0,0,0.5);
+  }
+  .header-label{
+    color: var(--red); font-size:14px; font-weight:800; letter-spacing:4px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
+    text-transform: uppercase;
+  }
+
+  /* Phone display strip — formatted (XXX) XXX-XXXX. Uses dot recipe
+     from /keypad-login but bigger so all 10 digits fit. */
+  .phone-strip{
+    display:flex; gap:8px; align-items:center; justify-content:center;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 22px; font-weight: 600;
+    color: var(--blue-deep);
+    letter-spacing: 1.5px;
+    min-height: 28px;
+  }
+  .phone-strip .ph-sep { color: rgba(20,32,92,0.4); margin: 0 2px; }
+  .phone-strip .ph-empty { color: rgba(20,32,92,0.25); }
+
+  /* PIN dots — matches /keypad-login exactly */
+  .dots{ display:flex; gap:20px; }
+  .dot{
+    width:26px; height:26px; border-radius:50%;
+    background: radial-gradient(circle at 30% 25%, #d4bfa0 0%, #b89b78 70%, #95764f 100%);
+    box-shadow: inset 0 2px 3px rgba(80,50,30,0.65), inset 0 -1px 1px rgba(255,255,255,0.4), 0 1px 0 rgba(255,255,255,0.5);
+    transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  }
+  .dot.filled{
+    background: radial-gradient(circle at 30% 25%, #8a9ddf 0%, #4a5db8 35%, var(--blue-bright) 75%, var(--blue-deep) 100%);
+    box-shadow:
+      inset 0 1px 2px rgba(180,200,255,0.7),
+      inset 0 -1px 2px rgba(10,20,60,0.6),
+      0 0 0 1px var(--blue-deep),
+      0 0 12px rgba(74,93,184,0.7),
+      0 0 4px rgba(138,157,223,0.6),
+      0 1px 2px rgba(0,0,0,0.5);
+    transform: scale(1.08);
+  }
+  .dots.error .dot, .phone-strip.error{ animation: shake 0.4s ease; }
+  @keyframes shake{
+    0%, 100%{ transform: translateX(0); }
+    20%, 60%{ transform: translateX(-6px); }
+    40%, 80%{ transform: translateX(6px); }
+  }
+
+  /* The two screens — only one is visible at a time. */
+  .screen{ display:none; flex-direction:column; align-items:center; }
+  .screen.active{ display:flex; }
+
+  /* "Back to phone" subtle link on the PIN screen */
+  .back-row{
+    margin-top: 14px; display:flex; align-items:center;
+    color: rgba(244,231,208,0.55); font-size: 13px;
+  }
+  .back-row a{
+    color: rgba(244,231,208,0.78); text-decoration: underline;
+    cursor:pointer; padding: 4px 8px;
+  }
+  .back-row a:hover{ color: var(--cream); }
+
+  /* Brand logo + signup link — same recipe as /keypad-login */
+  .brand-logo{
+    display:block; width:100%; max-width:460px; height:auto;
+    margin: 9px auto 0;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+  .signup-link{
+    margin-top:14px; font-size:13px; color:rgba(244,231,208,0.78);
+    text-decoration:underline; text-align:center;
+  }
+  .signup-link:hover{ color: var(--cream); }
+
+  /* Keypad — same as /keypad-login but variant for the phone screen
+     uses only 0-9 + Backspace */
+  .pad{
+    --gap:14px; --key:78px;
+    display:grid; grid-template-columns: repeat(5, var(--key)); grid-auto-rows: var(--key);
+    gap: var(--gap); padding: 0; background: transparent; border-radius: 0;
+    box-shadow: none; position:relative; margin:22px;
+  }
+  .pad.phone-pad{
+    /* 3-column layout for the phone screen — cleaner look since we
+       only need 0-9 + back. */
+    grid-template-columns: repeat(3, var(--key));
+  }
+  .key{
+    position:relative; border-radius:14px;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(244,231,208,0.55) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 78% 32%, rgba(244,231,208,0.4) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 35% 65%, rgba(244,231,208,0.5) 0.5px, transparent 1.2px),
+      radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 40%, var(--red-deep) 100%);
+    background-size: 22px 22px, 28px 28px, 18px 18px, 100% 100%;
+    background-position: 0 0, 5px 8px, 12px 3px, 0 0;
+    border: 3px solid var(--blue-bright);
+    box-shadow:
+      inset 0 2px 1px rgba(255,210,200,0.55),
+      inset 2px 3px 6px rgba(255,180,160,0.15),
+      inset 0 -4px 8px rgba(40,5,3,0.7),
+      inset -3px -2px 5px rgba(40,5,3,0.55),
+      0 0 0 0.5px rgba(120,150,230,0.6),
+      0 0 6px rgba(90,108,200,0.35),
+      0 6px 10px rgba(0,0,0,0.6),
+      0 2px 3px rgba(0,0,0,0.7);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  .key:hover{ filter: brightness(1.08); }
+  .key:active, .key.pressed{
+    transform: translateY(2px) scale(0.985);
+    box-shadow:
+      inset 0 3px 6px rgba(40,5,3,0.85),
+      inset 0 -1px 0 rgba(255,200,180,0.15),
+      inset 2px 2px 4px rgba(40,5,3,0.6),
+      0 0 0 0.5px rgba(120,150,230,0.6),
+      0 0 4px rgba(90,108,200,0.25),
+      0 1px 2px rgba(0,0,0,0.5);
+  }
+  .key.special{
+    background-image:
+      radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 32% 68%, rgba(138,29,24,0.35) 0.5px, transparent 1.2px),
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 40%, var(--cream-soft) 100%);
+    background-size: 20px 20px, 26px 26px, 17px 17px, 100% 100%;
+    background-position: 2px 1px, 7px 9px, 13px 4px, 0 0;
+    border: 3px solid var(--blue-bright);
+    box-shadow:
+      inset 0 2px 1px rgba(255,255,255,0.9),
+      inset 2px 3px 6px rgba(255,255,255,0.4),
+      inset 0 -4px 8px rgba(150,110,70,0.4),
+      inset -3px -2px 5px rgba(150,110,70,0.3),
+      0 0 0 0.5px rgba(120,150,230,0.6),
+      0 0 6px rgba(90,108,200,0.35),
+      0 6px 10px rgba(0,0,0,0.6),
+      0 2px 3px rgba(0,0,0,0.7);
+  }
+  .key .label{
+    font-size:30px; font-weight:700; letter-spacing:0.3px; color: var(--num-color);
+    text-shadow: 0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,200,180,0.15);
+    line-height:1; pointer-events:none;
+  }
+  .key.special .label{
+    color: var(--red);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
+    font-weight:800;
+  }
+  .key.wide{ grid-column: span 2; }
+  .key svg{
+    width:28px; height:28px; fill:none; stroke: var(--red); stroke-width:2.2;
+    stroke-linecap:round; stroke-linejoin:round;
+    filter: drop-shadow(0 1px 0 rgba(255,255,255,0.8));
+    pointer-events:none;
+  }
+
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background: rgba(20,8,8,0.92); color:#fff; padding:10px 18px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.12); font-size:13px; letter-spacing:0.5px;
+    opacity:0; transition: opacity 0.2s ease; pointer-events:none; z-index:10;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  {# ============== SCREEN 1 — Phone number ============== #}
+  <div class="screen active" id="screen-phone">
+    <div class="header-cap">
+      <div class="header-label">DRIVER PHONE</div>
+      <div class="phone-strip" id="phone-strip" aria-live="polite"></div>
+    </div>
+
+    <div class="pad phone-pad" id="pad-phone">
+      <div class="key" data-val="1"><span class="label">1</span></div>
+      <div class="key" data-val="2"><span class="label">2</span></div>
+      <div class="key" data-val="3"><span class="label">3</span></div>
+
+      <div class="key" data-val="4"><span class="label">4</span></div>
+      <div class="key" data-val="5"><span class="label">5</span></div>
+      <div class="key" data-val="6"><span class="label">6</span></div>
+
+      <div class="key" data-val="7"><span class="label">7</span></div>
+      <div class="key" data-val="8"><span class="label">8</span></div>
+      <div class="key" data-val="9"><span class="label">9</span></div>
+
+      <div class="key special" data-val="BACK" aria-label="backspace">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
+          <line x1="11" y1="9" x2="17" y2="15"/>
+          <line x1="17" y1="9" x2="11" y2="15"/>
+        </svg>
+      </div>
+      <div class="key" data-val="0"><span class="label">0</span></div>
+      <div class="key special" data-val="NEXT" id="next-btn" aria-label="next">
+        <span class="label" style="font-size: 14px; letter-spacing: 2px;">NEXT</span>
+      </div>
+    </div>
+
+    <a class="signup-link" href="{{ signup_url|default('/driver/signup') }}">No account yet? Sign up →</a>
+  </div>
+
+  {# ============== SCREEN 2 — PIN ============== #}
+  <div class="screen" id="screen-pin">
+    <div class="header-cap">
+      <div class="header-label">ENTER PIN</div>
+      <div class="dots" id="dots">
+        {% for _ in range(passcode_len) %}<div class="dot"></div>{% endfor %}
+      </div>
+    </div>
+
+    <div class="pad" id="pad-pin">
+      <div class="key special" data-val="*"><span class="label">*</span></div>
+      <div class="key" data-val="1"><span class="label">1</span></div>
+      <div class="key" data-val="2"><span class="label">2</span></div>
+      <div class="key" data-val="3"><span class="label">3</span></div>
+      <div class="key special" data-val="#"><span class="label">#</span></div>
+
+      <div class="key special" data-val="@"><span class="label">@</span></div>
+      <div class="key" data-val="4"><span class="label">4</span></div>
+      <div class="key" data-val="5"><span class="label">5</span></div>
+      <div class="key" data-val="6"><span class="label">6</span></div>
+      <div class="key special" data-val="+"><span class="label">+</span></div>
+
+      <div class="key special" data-val="%"><span class="label">%</span></div>
+      <div class="key" data-val="7"><span class="label">7</span></div>
+      <div class="key" data-val="8"><span class="label">8</span></div>
+      <div class="key" data-val="9"><span class="label">9</span></div>
+      <div class="key special" data-val="-"><span class="label">-</span></div>
+
+      <div class="key special" data-val="$"><span class="label">$</span></div>
+      <div class="key wide" data-val="0"><span class="label">0</span></div>
+      <div class="key special" data-val="BACK" aria-label="backspace">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
+          <line x1="11" y1="9" x2="17" y2="15"/>
+          <line x1="17" y1="9" x2="11" y2="15"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="back-row">
+      <a id="back-to-phone">← back to phone</a>
+    </div>
+  </div>
+
+  <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
+       alt="Cenas Kitchen" class="brand-logo" />
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const PIN_LENGTH = {{ passcode_len }};
+  const NEXT_URL = {{ next_url|tojson }};
+  const SUBMIT_URL = {{ submit_url|tojson }};
+  const PREFILL_PHONE = {{ prefill_phone|tojson }};
+
+  let phoneDigits = (PREFILL_PHONE || '').replace(/\D/g, '').slice(0, 10);
+  let pin = '';
+
+  const phoneStrip = document.getElementById('phone-strip');
+  const dotsContainer = document.getElementById('dots');
+  const dots = dotsContainer.querySelectorAll('.dot');
+  const toast = document.getElementById('toast');
+  const screenPhone = document.getElementById('screen-phone');
+  const screenPin = document.getElementById('screen-pin');
+
+  function formatPhone(d){
+    if (!d) return '<span class="ph-empty">(___) ___-____</span>';
+    const a = d.slice(0,3).padEnd(3, '_');
+    const b = d.slice(3,6).padEnd(3, '_');
+    const c = d.slice(6,10).padEnd(4, '_');
+    return `(${a})<span class="ph-sep">&nbsp;</span>${b}<span class="ph-sep">-</span>${c}`;
+  }
+  function renderPhone(){ phoneStrip.innerHTML = formatPhone(phoneDigits); }
+  function renderDots(){ dots.forEach((d, i) => d.classList.toggle('filled', i < pin.length)); }
+
+  function showError(msg, where){
+    if (where === 'phone'){
+      phoneStrip.classList.add('error');
+      setTimeout(() => phoneStrip.classList.remove('error'), 450);
+    } else {
+      dotsContainer.classList.add('error');
+      setTimeout(() => dotsContainer.classList.remove('error'), 450);
+      pin = ''; renderDots();
+    }
+    toast.textContent = msg; toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+
+  function goToPin(){
+    screenPhone.classList.remove('active');
+    screenPin.classList.add('active');
+  }
+  function goToPhone(){
+    pin = ''; renderDots();
+    screenPin.classList.remove('active');
+    screenPhone.classList.add('active');
+  }
+
+  async function submitLogin(){
+    try{
+      const r = await fetch(SUBMIT_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({phone: phoneDigits, pin, next: NEXT_URL}),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok){
+        showError(data.error || `Sign-in failed (${r.status}).`, 'pin');
+        return;
+      }
+      window.location.replace(data.next || '/driver/logs');
+    } catch (e){
+      showError("Network error — try again.", 'pin');
+    }
+  }
+
+  // Phone pad clicks
+  document.querySelectorAll('#pad-phone .key').forEach(key => {
+    key.addEventListener('click', () => {
+      const v = key.dataset.val;
+      if (v === 'BACK'){
+        phoneDigits = phoneDigits.slice(0, -1);
+      } else if (v === 'NEXT'){
+        if (phoneDigits.length === 10){ goToPin(); }
+        else { showError("Enter a 10-digit phone number.", 'phone'); }
+        return;
+      } else if (/^[0-9]$/.test(v) && phoneDigits.length < 10){
+        phoneDigits += v;
+      } else { return; }
+      renderPhone();
+      if (phoneDigits.length === 10){ setTimeout(goToPin, 200); }
+    });
+  });
+
+  // PIN pad clicks
+  document.querySelectorAll('#pad-pin .key').forEach(key => {
+    key.addEventListener('click', () => {
+      const v = key.dataset.val;
+      if (v === 'BACK'){
+        pin = pin.slice(0, -1);
+      } else if (pin.length < PIN_LENGTH && /^[\d*#@+%\-$]$/.test(v)){
+        pin += v;
+      } else { return; }
+      renderDots();
+      if (pin.length === PIN_LENGTH){ setTimeout(submitLogin, 180); }
+    });
+  });
+
+  // Back-to-phone link
+  document.getElementById('back-to-phone').addEventListener('click', goToPhone);
+
+  // Keyboard input — works on both screens
+  document.addEventListener('keydown', e => {
+    const onPhone = screenPhone.classList.contains('active');
+    if (/^[0-9]$/.test(e.key)){
+      const pad = onPhone ? 'pad-phone' : 'pad-pin';
+      const k = document.querySelector(`#${pad} .key[data-val="${e.key}"]`);
+      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
+      e.preventDefault();
+    } else if (e.key === 'Backspace'){
+      const pad = onPhone ? 'pad-phone' : 'pad-pin';
+      const k = document.querySelector(`#${pad} .key[data-val="BACK"]`);
+      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
+      e.preventDefault();
+    } else if (e.key === 'Enter' && onPhone && phoneDigits.length === 10){
+      goToPin();
+      e.preventDefault();
+    } else if (onPhone && /^[*#@+%\-$]$/.test(e.key) === false) {
+      // Allow special pin chars only on PIN screen — handled below if on PIN
+    }
+    if (!onPhone && /^[*#@+%\-$]$/.test(e.key)){
+      const k = document.querySelector(`#pad-pin .key[data-val="${e.key}"]`);
+      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
+      e.preventDefault();
+    }
+  });
+
+  // Initial render
+  renderPhone();
+  renderDots();
+  // If prefill phone was complete, jump straight to PIN screen.
+  if (phoneDigits.length === 10){ goToPin(); }
+</script>
+</body>
+</html>

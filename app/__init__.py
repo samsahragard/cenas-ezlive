@@ -437,6 +437,71 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("users seed failed (non-fatal)")
 
+    # Idempotent column backfill for legal_matters.key_dates (added
+    # 2026-05-13 Phase 0 Block 3 follow-up). create_all only creates
+    # missing tables, not new columns on existing ones.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_legal, text as _sa_text_legal
+        from app.db import engine as _eng_legal
+        if _eng_legal is not None:
+            insp = _sa_inspect_legal(_eng_legal)
+            if "legal_matters" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("legal_matters")}
+                if "key_dates" not in existing:
+                    with _eng_legal.begin() as conn:
+                        # Cross-dialect JSON: Postgres has native JSON,
+                        # SQLite falls back to TEXT — SQLAlchemy reads
+                        # both via its JSON type.
+                        json_type = "JSONB" if _eng_legal.dialect.name == "postgresql" else "TEXT"
+                        conn.execute(_sa_text_legal(f"ALTER TABLE legal_matters ADD COLUMN key_dates {json_type}"))
+                    logging.getLogger(__name__).info(
+                        "legal_matters: backfilled key_dates column")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "legal_matters.key_dates backfill failed (non-fatal)")
+
+    # One-shot migration: any LegalMatter that has a non-empty `notes`
+    # text field but no LegalMatterNote rows yet gets a single 'first
+    # note' inserted from the legacy text. Idempotent — runs once per
+    # matter (skip if at least one note already exists).
+    try:
+        from app.db import SessionLocal
+        from app.models import LegalMatter, LegalMatterNote
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                migrated = 0
+                # Only inspect matters with non-empty notes (cheap filter).
+                candidates = (db.query(LegalMatter)
+                                .filter(LegalMatter.notes.isnot(None))
+                                .all())
+                for m in candidates:
+                    if not (m.notes and m.notes.strip()):
+                        continue
+                    has_note = (db.query(LegalMatterNote)
+                                  .filter(LegalMatterNote.matter_id == m.id)
+                                  .first())
+                    if has_note is not None:
+                        continue
+                    db.add(LegalMatterNote(
+                        matter_id=m.id,
+                        body=m.notes.strip(),
+                        actor_label="(migrated from legacy notes field)",
+                        # Inherit the matter's creation time so the
+                        # timeline starts when the matter started.
+                        created_at=m.created_at,
+                    ))
+                    migrated += 1
+                if migrated:
+                    db.commit()
+                    logging.getLogger(__name__).info(
+                        "legal_matter_note: migrated %d legacy notes", migrated)
+            finally:
+                db.close()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "legal_matter_note migration failed (non-fatal)")
+
     # Start the IMAP poller for produce vendor pricing. No-op unless
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock
     # ensures only one gunicorn worker actually polls.

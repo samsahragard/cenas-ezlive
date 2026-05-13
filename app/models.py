@@ -762,6 +762,142 @@ class LegalMatter(Base):
     next_action_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Arbitrary named dates beyond opened_on / closed_on / next_action_on.
+    # JSON shape: {"filed_on": "2026-05-01", "mediation_on": "2026-06-15",
+    # "settlement_on": null, "hearing_on": "2026-07-30", ...}
+    # The fixed columns above stay as denormalized convenience for sort +
+    # the overview "next action" panel; key_dates absorbs everything else.
+    # (Phase 0 / Block 3 cleanup, 2026-05-13.)
+    key_dates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
+class LegalMatterNote(Base):
+    """Append-only timeline entries on a single LegalMatter. Replaces
+    the role the old LegalMatter.notes text field used to play — that
+    column is kept for backwards-compat but reads should pull from this
+    table (most-recent first). Boot backfill migrates any non-empty
+    legacy LegalMatter.notes into a 'first-note' row.
+
+    Append-only by ORM listener (same pattern as LegalAccessLog) so a
+    note can never silently disappear from the matter's history.
+    Editing a note means appending a new one.
+    """
+    __tablename__ = "legal_matter_note"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    matter_id: Mapped[int] = mapped_column(
+        ForeignKey("legal_matters.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    actor_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class LegalDocument(Base):
+    """A file uploaded to the Legal section — either pinned to a Matter
+    (matter_id set) or filed globally (matter_id NULL). Storage path
+    points at /var/data/legal-attachments/<id>/<safe_filename> on
+    Render, mirroring the chat-attachments pattern from
+    developer_chat_attachment.
+
+    Append-only at the ORM layer for now — once the file is uploaded
+    it stays in the history. If a file shouldn't be there anymore,
+    we'll surface a redaction flag on the row but keep the bytes.
+    """
+    __tablename__ = "legal_document"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    matter_id: Mapped[int | None] = mapped_column(
+        ForeignKey("legal_matters.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    actor_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class LegalCompanyStructure(Base):
+    """The /partner/legal/structure page is a single-row record describing
+    the company entity layout — LLC / Corp + ownership splits + EINs +
+    registered agent + registered office. Inline-editable; no notes
+    timeline (changes are captured in LegalAccessLog).
+    """
+    __tablename__ = "legal_company_structure"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 onupdate=datetime.utcnow, nullable=False)
+
+    entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # 'LLC' | 'C-Corp' | 'S-Corp' | 'Partnership' | other
+    legal_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    dba: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    state_of_formation: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    ein: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    formed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    registered_agent: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    registered_office_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    principal_office_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Ownership as JSON list of {name, role, ownership_pct, notes}.
+    # Plain JSON so a partner can add/remove members without a schema change.
+    ownership: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
+class LegalInsurancePolicy(Base):
+    """One row per active policy on /partner/legal/insurance. Renewal
+    date drives an overview-page banner when within 30 days.
+    """
+    __tablename__ = "legal_insurance_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 onupdate=datetime.utcnow, nullable=False)
+
+    carrier: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    policy_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    # 'general-liability' | 'property' | 'workers-comp' | 'auto' |
+    # 'cyber' | 'umbrella' | 'BOP' | 'other'
+    policy_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    coverage_limit: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    deductible: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    premium: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Strings (not Float) so users can type "$5,000,000 per occurrence"
+    # without us trying to parse currency.
+
+    effective_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    renewal_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    broker_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    broker_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    broker_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 'active' | 'lapsed' | 'cancelled'
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False,
+                                        index=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
@@ -807,5 +943,24 @@ def _no_delete_legal_log(mapper, connection, target):
         "If a record needs redaction, append a new audit row "
         "describing the redaction request and resolve it through "
         "a Matter; the underlying row stays."
+    )
+
+
+@_sa_event.listens_for(LegalMatterNote, 'before_delete')
+def _no_delete_legal_matter_note(mapper, connection, target):
+    raise RuntimeError(
+        "LegalMatterNote is append-only — to update a note, append a "
+        "new one. The old one stays so the matter's timeline reads "
+        "true even when an earlier read of the situation was wrong."
+    )
+
+
+@_sa_event.listens_for(LegalDocument, 'before_delete')
+def _no_delete_legal_document(mapper, connection, target):
+    raise RuntimeError(
+        "LegalDocument rows are append-only at the ORM layer. The bytes "
+        "on disk stay too — if a file should not be there anymore, "
+        "flag it via the matter audit + Sam handles removal manually "
+        "(both the row and the file) outside the app."
     )
 

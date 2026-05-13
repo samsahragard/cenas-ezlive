@@ -132,6 +132,19 @@ def _my_queue_count(db, driver_id: int) -> int:
     return pending + active
 
 
+def _project_payout(order: Order) -> float:
+    """Best-case potential payout for an unbid order so the card always shows
+    a number. Assumes the driver will track the delivery; same formula as
+    ezcater_payroll.compute_one with tracking forced on. Returns the stored
+    potential_payout if it's already been snapshotted (open_for_bidding)."""
+    if order.potential_payout is not None:
+        return order.potential_payout
+    miles = order.pickup_miles or 0.0
+    extra_miles = max(0.0, miles - 20.0)
+    bonus_miles = round(extra_miles * 1.50, 2)
+    return round(25.00 + 10.00 + bonus_miles, 2)
+
+
 def _potential_week(db, driver_id: int, today: date) -> float:
     """Running sum across the current bi-weekly pay period."""
     # Reuse the ezcater_payroll anchor math for period bounds.
@@ -229,6 +242,13 @@ def ez_market():
             )
             competing = dict(rows)
 
+        # Group available by delivery_date with the same helper the
+        # /orders/<location> page uses, and projected payouts for the card
+        # display (Sam 2026-05-12: every card needs a $ figure visible).
+        from app.services.orders_query import group_orders_by_date
+        available_groups = group_orders_by_date(available)
+        projected_payouts = {o.id: _project_payout(o) for o in available}
+
         # Header greeting — show the viewer's name regardless of role
         # (Sam 2026-05-12: "for a partner it would just say my name").
         viewer_name = "there"
@@ -253,6 +273,8 @@ def ez_market():
             "viewer_is_driver": bool(driver),
             "viewer_name": viewer_name,
             "available": available,
+            "available_groups": available_groups,
+            "projected_payouts": projected_payouts,
             "competing": competing,
             "my_pending_reqs": my_pending_reqs,
             "my_active": my_active,

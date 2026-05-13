@@ -14,26 +14,57 @@
     border-radius: 12px;
     padding: 14px 16px;
   }
-  .em-stat-label { font-size: 11px; color: rgba(236,227,208,0.6); text-transform: uppercase; letter-spacing: 0.1em; }
-  .em-stat-value { font-size: 22px; font-weight: 500; color: #FFD970; margin-top: 4px; text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
+  .em-stat-label { font-size: 11px; color: #E4B340; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .em-stat-value { font-size: 24px; font-weight: 600; color: #FFD970; margin-top: 4px; text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 18px rgba(255,200,80,0.65); }
   .em-stat-sub { font-size: 11px; color: rgba(236,227,208,0.5); margin-top: 2px; }
 
   .em-disclaimer {
-    background: rgba(40,22,14,0.30); border-left: 2px solid rgba(228,179,64,0.35);
+    background: rgba(40,22,14,0.30); border-left: 2px solid rgba(228,179,64,0.55);
     padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
     border-radius: 0 8px 8px 0; margin-bottom: 16px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
   }
-  .em-disclaimer a { color: #E4B340; text-decoration: none; margin-left: 8px; }
+  .em-disclaimer a { color: #FFD970; text-decoration: none; font-weight: 500;
+    text-shadow: 0 0 10px rgba(255,200,80,0.45); }
   .em-disclaimer a:hover { text-decoration: underline; }
 
   .em-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
   .em-tab {
     background: transparent; border: none; border-bottom: 2px solid transparent;
-    padding: 10px 16px; color: rgba(255,255,255,0.62); cursor: pointer;
-    font-size: 13px; font-weight: 500; border-radius: 8px 8px 0 0; position: relative; top: 1px;
+    padding: 10px 16px; color: rgba(236,227,208,0.72); cursor: pointer;
+    font-size: 13px; font-weight: 600; border-radius: 8px 8px 0 0; position: relative; top: 1px;
   }
-  .em-tab.active { color: #fff; background: rgba(0,0,0,0.55); border-bottom-color: rgba(228,179,64,0.9); }
-  .em-tab .em-tab-count { font-size: 11px; opacity: 0.7; margin-left: 4px; }
+  .em-tab.active { color: #FFD970; background: rgba(0,0,0,0.55); border-bottom-color: #FFD970;
+    text-shadow: 0 0 10px rgba(255,200,80,0.45); }
+  .em-tab .em-tab-count { font-size: 11px; opacity: 0.85; margin-left: 4px; color: #E4B340; }
+
+  /* Date header — mirrors /orders/<location> day-section pattern */
+  .em-day { margin-bottom: 18px; }
+  .em-day-header {
+    font-size: 20px; font-weight: 600; color: #FFD970; padding: 8px 2px 10px;
+    border-bottom: 1px solid rgba(228,179,64,0.22); margin-bottom: 12px;
+    text-shadow: 0 0 12px rgba(255,200,80,0.35);
+  }
+  .em-day-header-count {
+    font-size: 12px; font-weight: 500; color: rgba(236,227,208,0.55); margin-left: 8px;
+  }
+
+  /* Trip section — icons + dashed connector between pickup & dropoff */
+  .em-trip { position: relative; margin: 10px 0; padding-left: 26px; }
+  .em-trip::before {
+    content: ''; position: absolute; left: 9px; top: 20px; bottom: 20px;
+    border-left: 1px dashed rgba(228,179,64,0.55);
+  }
+  .em-trip-leg { display: flex; align-items: flex-start; gap: 10px;
+    margin-left: -26px; padding: 4px 0; }
+  .em-trip-icon {
+    width: 18px; font-size: 14px; color: #E4B340; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    text-shadow: 0 0 8px rgba(255,200,80,0.35);
+  }
+  .em-trip-text { flex: 1; }
+  .em-trip-name { font-size: 13px; color: #FAF6EC; font-weight: 500; }
+  .em-trip-sub { font-size: 11px; color: rgba(236,227,208,0.55); margin-top: 2px; }
 
   .em-cards { display: flex; flex-direction: column; gap: 12px; }
   .em-card {
@@ -106,42 +137,62 @@
   <button class="em-tab" onclick="showTab('history')">History</button>
 </div>
 
-<div id="tab-available" class="em-cards">
-  {% if available %}
-    {% for o in available %}
-    <div class="em-card">
-      <div class="em-card-row">
-        <div>
-          <div class="em-time">{{ o.deliver_at or '—' }}</div>
-          <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
+<div id="tab-available">
+  {% if available_groups %}
+    {% for grp in available_groups %}
+    <section class="em-day">
+      <div class="em-day-header">
+        {{ grp.display }}
+        <span class="em-day-header-count">{{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }}</span>
+      </div>
+      <div class="em-cards">
+        {% for o in grp.orders %}
+        <div class="em-card">
+          <div class="em-card-row">
+            <div>
+              <div class="em-time">{{ o.deliver_at or '—' }}</div>
+              <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
+            </div>
+            <div>
+              <div class="em-payout">${{ "%.0f"|format(projected_payouts.get(o.id, 35)) }}</div>
+              <div class="em-payout-label">Est. earn</div>
+            </div>
+          </div>
+          <div class="em-trip">
+            <div class="em-trip-leg">
+              <span class="em-trip-icon"><i class="ti ti-building-store" aria-hidden="true"></i></span>
+              <div class="em-trip-text">
+                <div class="em-trip-name">{{ o.reported_store or 'n/a' }}</div>
+              </div>
+            </div>
+            <div class="em-trip-leg">
+              <span class="em-trip-icon"><i class="ti ti-map-pin" aria-hidden="true"></i></span>
+              <div class="em-trip-text">
+                <div class="em-trip-name">{{ o.delivery_address or 'n/a' }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="em-meta">
+            <span>{{ o.headcount or '—' }} heads</span>
+            {% set comp = competing.get(o.id, 0) %}
+            {% if comp >= 3 %}
+              <span class="em-compete-red">🔥 {{ comp }} drivers competing</span>
+            {% elif comp >= 1 %}
+              <span class="em-compete-green">👤 {{ comp }} driver{% if comp > 1 %}s{% endif %} competing</span>
+            {% else %}
+              <span>0 drivers competing</span>
+            {% endif %}
+          </div>
+          <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
+            <button type="submit" class="em-btn">Request delivery</button>
+          </form>
         </div>
-        <div>
-          <div class="em-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
-          <div class="em-payout-label">Est. earn</div>
-        </div>
+        {% endfor %}
       </div>
-      <div class="em-trip">
-        <div><strong>Pickup:</strong> {{ o.reported_store or '—' }}</div>
-        <div><strong>Drop:</strong> {{ o.delivery_address or '—' }}</div>
-      </div>
-      <div class="em-meta">
-        <span>{{ o.headcount or '—' }} heads</span>
-        {% set comp = competing.get(o.id, 0) %}
-        {% if comp >= 3 %}
-          <span class="em-compete-red">🔥 {{ comp }} drivers competing</span>
-        {% elif comp >= 1 %}
-          <span class="em-compete-green">✓ {{ comp }} driver{% if comp > 1 %}s{% endif %} competing</span>
-        {% else %}
-          <span>0 drivers competing</span>
-        {% endif %}
-      </div>
-      <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
-        <button type="submit" class="em-btn">Request delivery</button>
-      </form>
-    </div>
+    </section>
     {% endfor %}
   {% else %}
-    <div class="em-empty">No orders available right now. Refreshing every 30 seconds.</div>
+    <div class="em-empty">No upcoming orders right now. Refreshing every 30 seconds.</div>
   {% endif %}
 </div>
 

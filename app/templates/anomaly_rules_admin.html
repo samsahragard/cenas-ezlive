@@ -1,0 +1,307 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Anomaly rules — Cenas Kitchen{% endblock %}
+{% block page_title %}Anomaly rules{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub" style="color: var(--ck-text-soft);">
+    Every rule registered with the engine.
+    Edit severity or threshold inline — your override wins over the
+    default in code, and takes effect on the rule's next bucket run.
+    Defaults stay in source so we always have a baseline to compare.
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .ar-card {
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+    transition: all 240ms var(--ck-ease, ease);
+  }
+  .ar-row-head {
+    display: grid;
+    grid-template-columns: 1.4fr 80px 110px 120px 120px;
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 1024px) {
+    .ar-row-head { grid-template-columns: 1fr 80px 110px; }
+    .ar-row-head .ar-fires, .ar-row-head .ar-ack { display: none; }
+  }
+  .ar-name {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 13.5px;
+    color: var(--ck-text);
+    font-weight: 500;
+    text-shadow: var(--ck-glow-cream);
+  }
+  .ar-desc {
+    font-size: 11.5px;
+    color: var(--ck-text-soft);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .ar-bucket {
+    font-size: 11px;
+    color: var(--ck-text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(255,255,255,0.04);
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 0.5px solid var(--ck-border);
+    text-align: center;
+    display: inline-block;
+    align-self: center;
+  }
+  .ar-sev {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 0.5px solid var(--ck-border);
+    text-align: center;
+    align-self: center;
+    display: inline-block;
+  }
+  .ar-sev.sev-info  { color: var(--ck-status-open);   background: rgba(156,203,118,0.10); border-color: rgba(156,203,118,0.30); }
+  .ar-sev.sev-warn  { color: var(--ck-status-active); background: rgba(228,179,64,0.10); border-color: rgba(228,179,64,0.30); }
+  .ar-sev.sev-alert { color: var(--ck-status-warn);   background: rgba(226,100,92,0.10); border-color: rgba(226,100,92,0.30); }
+  .ar-fires, .ar-ack {
+    font-size: 11px;
+    color: var(--ck-text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: right;
+  }
+  .ar-fires-val, .ar-ack-val {
+    font-size: 22px;
+    color: var(--ck-text);
+    font-weight: 500;
+    margin-top: 4px;
+    text-shadow: var(--ck-glow-cream);
+  }
+  .ar-ack-val.gold { color: var(--ck-status-active); text-shadow: var(--ck-glow-gold); }
+  .ar-ack-val.warn { color: var(--ck-status-warn); }
+  .ar-divider {
+    height: 0.5px;
+    background: var(--ck-border-subtle);
+    margin: 14px 0;
+  }
+  .ar-form { display: grid; gap: 14px; grid-template-columns: 200px 1fr auto; align-items: end; }
+  @media (max-width: 768px) {
+    .ar-form { grid-template-columns: 1fr; }
+  }
+  .ar-form label {
+    display: block;
+    font-size: 11px;
+    color: var(--ck-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+  .ar-form select,
+  .ar-form textarea,
+  .ar-form input {
+    width: 100%;
+    padding: 9px 12px;
+    background: rgba(0,0,0,0.30);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 8px;
+    color: var(--ck-text);
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: border-color 180ms var(--ck-ease, ease),
+                box-shadow 180ms var(--ck-ease, ease);
+  }
+  .ar-form textarea {
+    min-height: 72px;
+    resize: vertical;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 12px;
+  }
+  .ar-form select:focus, .ar-form textarea:focus, .ar-form input:focus {
+    outline: none;
+    border-color: var(--ck-gold);
+    box-shadow: 0 0 0 3px rgba(228,179,64,0.16);
+  }
+  .ar-form select option { background: var(--ck-bg-deep); color: var(--ck-text); }
+  .ar-save {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 16px;
+    background: var(--ck-gold);
+    color: var(--ck-bg-deep);
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 200ms var(--ck-ease, ease);
+    box-shadow: 0 2px 8px rgba(228,179,64,0.25);
+    align-self: end;
+  }
+  .ar-save:hover {
+    background: var(--ck-gold-bright);
+    box-shadow: 0 4px 16px rgba(255,217,112,0.40);
+  }
+  .ar-override-flag {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--ck-status-active);
+    background: rgba(228,179,64,0.10);
+    border: 0.5px solid rgba(228,179,64,0.30);
+  }
+  .ar-banner-success { border-left: 3px solid var(--ck-status-open); background: rgba(156,203,118,0.06); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; margin-bottom: 16px; }
+  .ar-banner-error   { border-left: 3px solid var(--ck-status-warn); background: rgba(226,100,92,0.06); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; margin-bottom: 16px; }
+  .ar-meta-line {
+    font-size: 10.5px;
+    color: var(--ck-text-faint);
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if success %}
+  <div class="ar-banner-success">
+    <i class="ti ti-check" aria-hidden="true"></i>&nbsp;{{ success }}
+  </div>
+{% endif %}
+{% if error %}
+  <div class="ar-banner-error">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>&nbsp;{{ error }}
+  </div>
+{% endif %}
+
+{% if not rules %}
+  <div style="padding: 40px; text-align: center; color: var(--ck-text-soft);
+              background: rgba(40,22,14,0.40); border: 0.5px dashed var(--ck-border);
+              border-radius: 12px;">
+    <i class="ti ti-radar" style="font-size: 28px; color: var(--ck-gold);" aria-hidden="true"></i>
+    <div style="margin-top: 10px; font-size: 14px;">
+      No rules registered yet. Once aick lands the Block 5 rule
+      implementations they'll appear here.
+    </div>
+  </div>
+{% else %}
+
+  <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
+              font-size: 12px; color: var(--ck-text-soft);">
+    <span><i class="ti ti-radar" aria-hidden="true"></i>&nbsp;
+      <strong style="color: var(--ck-text);">{{ rules|length }}</strong> rules registered</span>
+    {% set _ovr_count = rules|selectattr('override')|list|length %}
+    {% if _ovr_count %}
+      <span><i class="ti ti-edit" aria-hidden="true"></i>&nbsp;
+        <strong style="color: var(--ck-status-active);">{{ _ovr_count }}</strong> with active overrides</span>
+    {% endif %}
+    {% set _fires_total = rules|sum(attribute='fires_7d') %}
+    <span style="margin-left: auto;">
+      <strong style="color: var(--ck-text);">{{ _fires_total }}</strong>
+      fire{{ '' if _fires_total == 1 else 's' }} last 7 days
+    </span>
+  </div>
+
+  {% for r in rules %}
+    <div class="ar-card">
+      <div class="ar-row-head">
+        <div>
+          <div class="ar-name">
+            {{ r.name }}
+            {% if r.override %}<span class="ar-override-flag">override</span>{% endif %}
+            {% if r.store_overrides_count %}
+              <span class="ar-override-flag" style="color: var(--ck-text-soft);">
+                +{{ r.store_overrides_count }} per-store
+              </span>
+            {% endif %}
+          </div>
+          <div class="ar-desc">{{ r.spec.action_text }}</div>
+          <div class="ar-meta-line">
+            surfaces: {{ r.spec.surfaces|join(', ') or '(none)' }}
+            &nbsp;·&nbsp;
+            audience: {{ r.spec.audience_roles|join(', ') or '(everyone)' }}
+            &nbsp;·&nbsp;
+            llm: {{ r.spec.llm_route }}
+          </div>
+        </div>
+
+        <span class="ar-bucket">{{ r.spec.bucket }}</span>
+
+        {% set _eff_sev = (r.override.severity_override if r.override and r.override.severity_override else r.spec.severity_default) %}
+        <span class="ar-sev sev-{{ _eff_sev }}">{{ _eff_sev }}{% if r.override and r.override.severity_override %} *{% endif %}</span>
+
+        <div class="ar-fires">
+          fires (7d / total)
+          <div class="ar-fires-val">{{ r.fires_7d }} / {{ r.total_fires }}</div>
+        </div>
+
+        <div class="ar-ack">
+          ack rate (7d)
+          {% if r.ack_rate_7d is none %}
+            <div class="ar-ack-val" style="color: var(--ck-text-faint);">—</div>
+          {% elif r.ack_rate_7d >= 0.5 %}
+            <div class="ar-ack-val gold">{{ (r.ack_rate_7d * 100)|round(0)|int }}%</div>
+          {% else %}
+            <div class="ar-ack-val warn">{{ (r.ack_rate_7d * 100)|round(0)|int }}%</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="ar-divider"></div>
+
+      <form method="POST"
+            action="{{ url_for('anomaly.rules_admin_save', rule_name=r.name) }}"
+            class="ar-form">
+
+        <div>
+          <label for="sev-{{ r.name }}">Severity override</label>
+          <select id="sev-{{ r.name }}" name="severity_override">
+            <option value=""
+              {% if not (r.override and r.override.severity_override) %}selected{% endif %}>
+              (default: {{ r.spec.severity_default }})
+            </option>
+            <option value="info"
+              {% if r.override and r.override.severity_override == 'info' %}selected{% endif %}>info</option>
+            <option value="warn"
+              {% if r.override and r.override.severity_override == 'warn' %}selected{% endif %}>warn</option>
+            <option value="alert"
+              {% if r.override and r.override.severity_override == 'alert' %}selected{% endif %}>alert</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="thr-{{ r.name }}">Threshold (JSON object)</label>
+          <textarea id="thr-{{ r.name }}" name="threshold"
+                    placeholder='{"minutes_before": 30}'>{% if r.override and r.override.threshold %}{{ r.override.threshold|tojson }}{% endif %}</textarea>
+        </div>
+
+        <button type="submit" class="ar-save">
+          <i class="ti ti-device-floppy" aria-hidden="true"></i>&nbsp;Save
+        </button>
+      </form>
+
+      {% if r.override and r.override.updated_at %}
+        <div class="ar-meta-line" style="margin-top: 10px;">
+          Override last updated {{ r.override.updated_at.strftime('%b %d, %Y %H:%M') }} UTC
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+{% endif %}
+
+{% endblock %}

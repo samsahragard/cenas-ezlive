@@ -697,6 +697,11 @@
   const micStatus = document.getElementById('mic-status');
   let recognizer = null;
   let recognizingTranscript = '';
+  // Snapshot of the last value we wrote to the textarea from a recognition
+  // result. Used to detect manual edits made by the user mid-dictation so
+  // those edits survive subsequent result events instead of getting
+  // overwritten by the cached transcript (Sam, 2026-05-12).
+  let lastSelfWritten = '';
 
   function speechRecogSupported() {
     return ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
@@ -714,6 +719,7 @@
     recognizer.lang = 'en-US';
     const baseText = (bodyTextarea.value || '').replace(/\s+$/, '');
     recognizingTranscript = baseText ? baseText + ' ' : '';
+    lastSelfWritten = bodyTextarea.value;
     recognizer.addEventListener('result', (ev) => {
       let final = '';
       let interim = '';
@@ -722,8 +728,17 @@
         if (ev.results[i].isFinal) final += t;
         else interim += t;
       }
+      // If the user manually edited the textarea since our last write,
+      // rebase the buffer onto their corrected text so the edit survives
+      // the next result event instead of getting clobbered by the cache.
+      if (bodyTextarea.value !== lastSelfWritten) {
+        const corrected = (bodyTextarea.value || '').replace(/\s+$/, '');
+        recognizingTranscript = corrected ? corrected + ' ' : '';
+      }
       if (final) recognizingTranscript += final + ' ';
-      bodyTextarea.value = (recognizingTranscript + interim).replace(/\s+/g, ' ').trimStart();
+      const next = (recognizingTranscript + interim).replace(/\s+/g, ' ').trimStart();
+      bodyTextarea.value = next;
+      lastSelfWritten = next;
     });
     recognizer.addEventListener('error', (ev) => {
       if (ev.error && ev.error !== 'no-speech' && ev.error !== 'aborted') {

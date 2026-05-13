@@ -513,6 +513,21 @@ def create_app():
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
 
+    # Phase 1 / Block 5: register all anomaly rules. Module-level
+    # @anomaly_rule decorators populate app.services.anomaly_engine.REGISTRY
+    # at import time. Importing here means the engine + cron + admin
+    # all see every rule on boot. Failure to import is non-fatal: the
+    # engine still runs with whatever the import managed before the
+    # raise (each rule registers independently).
+    try:
+        import app.services.anomaly_rules  # noqa: F401
+        from app.services.anomaly_engine import REGISTRY as _ANOM_REG
+        logging.getLogger(__name__).info(
+            "anomaly_rules registered: %d rules", len(_ANOM_REG))
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "anomaly_rules import failed (non-fatal)")
+
     @app.cli.command("create-driver")
     @click.argument("name")
     @click.argument("location")

@@ -273,7 +273,7 @@
     </div>
     {% endif %}
 
-    {# ==== ADMIN / DEVELOPER — partner only ==== #}
+    {# ==== ADMIN / LEGAL / DEVELOPER — partner only ==== #}
     {% if user_role == 'partner' %}
     <div class="ck-sb-section" data-id="admin">
       <button class="ck-sb-section-head" aria-expanded="true">
@@ -284,6 +284,30 @@
         <a href="/partner/team" class="ck-sb-item{% if active == 'partner_team' %} active{% endif %}">
           <i class="ti ti-users-group ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Team</span>
+        </a>
+      </div></div>
+    </div>
+
+    <div class="ck-sb-section" data-id="legal">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Legal</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        <a href="/partner/legal"
+           class="ck-sb-item{% if active == 'legal_overview' %} active{% endif %}">
+          <i class="ti ti-gavel ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Overview</span>
+        </a>
+        <a href="/partner/legal/matters"
+           class="ck-sb-item{% if active in ('legal_matters', 'legal_matter_new') %} active{% endif %}">
+          <i class="ti ti-folders ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Matters</span>
+        </a>
+        <a href="/partner/legal/audit"
+           class="ck-sb-item{% if active == 'legal_audit' %} active{% endif %}">
+          <i class="ti ti-shield-lock ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Audit log</span>
         </a>
       </div></div>
     </div>

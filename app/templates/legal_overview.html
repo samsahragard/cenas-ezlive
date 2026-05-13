@@ -1,0 +1,164 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "Overview" %}
+
+{% block legal_body %}
+
+<div class="lg-grid-stats">
+  <div class="lg-stat">
+    <div class="lg-stat-label">Open</div>
+    <div class="lg-stat-value gold">{{ counts.get('open', 0) }}</div>
+  </div>
+  <div class="lg-stat">
+    <div class="lg-stat-label">In review</div>
+    <div class="lg-stat-value">{{ counts.get('in-review', 0) }}</div>
+  </div>
+  <div class="lg-stat">
+    <div class="lg-stat-label">Resolved</div>
+    <div class="lg-stat-value">{{ counts.get('resolved', 0) }}</div>
+  </div>
+  <div class="lg-stat">
+    <div class="lg-stat-label">{% if overdue %}Overdue actions{% else %}Archived{% endif %}</div>
+    <div class="lg-stat-value {% if overdue %}warn{% endif %}">
+      {{ overdue|length if overdue else counts.get('archived', 0) }}
+    </div>
+  </div>
+</div>
+
+<div class="lg-card lg-card-padded">
+  <div class="lg-section-label">
+    <i class="ti ti-calendar-event" aria-hidden="true"></i>
+    &nbsp;Next actions
+  </div>
+  {% if upcoming %}
+    <table class="lg-table">
+      <thead>
+        <tr><th>Due</th><th>Matter</th><th>Action</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+      {% for m in upcoming %}
+        <tr>
+          <td>
+            <span style="color: {% if m.next_action_on < today_date %}#E2645C{% else %}var(--ck-gold-bright){% endif %};
+                         font-weight: 500;">
+              {{ m.next_action_on.strftime('%b %d') }}
+            </span>
+          </td>
+          <td>
+            <a href="{{ url_for('legal.legal_matter_detail', matter_id=m.id) }}">
+              {{ m.title }}
+            </a>
+            <div style="font-size: 11px; color: var(--ck-text-faint); margin-top: 2px;">
+              {{ m.category|title }}
+              {% if m.counterparty %}· {{ m.counterparty }}{% endif %}
+            </div>
+          </td>
+          <td style="color: var(--ck-text-soft);">
+            {{ m.next_action_text or '—' }}
+          </td>
+          <td>
+            <span class="lg-pill status-{{ m.status }}">
+              {{ m.status.replace('-', ' ') }}
+            </span>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="lg-empty">
+      <i class="ti ti-circle-check" style="font-size: 24px; color: #9CCB76;" aria-hidden="true"></i>
+      <div style="margin-top: 8px;">No upcoming actions. All clear.</div>
+    </div>
+  {% endif %}
+</div>
+
+<div class="lg-detail-grid" style="margin-top: 16px;">
+  <div class="lg-card lg-card-padded">
+    <div class="lg-section-label">
+      <i class="ti ti-clock-edit" aria-hidden="true"></i>
+      &nbsp;Recently updated
+    </div>
+    {% if recent %}
+      <table class="lg-table">
+        <thead>
+          <tr><th>Title</th><th>Status</th><th style="text-align:right;">Updated</th></tr>
+        </thead>
+        <tbody>
+        {% for m in recent %}
+          <tr>
+            <td>
+              <a href="{{ url_for('legal.legal_matter_detail', matter_id=m.id) }}">
+                {{ m.title }}
+              </a>
+              <div style="font-size: 11px; color: var(--ck-text-faint); margin-top: 2px;">
+                {{ m.category|title }}
+              </div>
+            </td>
+            <td>
+              <span class="lg-pill status-{{ m.status }}">
+                {{ m.status.replace('-', ' ') }}
+              </span>
+            </td>
+            <td style="text-align: right; color: var(--ck-text-soft); font-size: 12px;">
+              {{ m.updated_at.strftime('%b %d') }}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="lg-empty">
+        <i class="ti ti-file-text-off" style="font-size: 24px;" aria-hidden="true"></i>
+        <div style="margin-top: 8px;">No matters yet.</div>
+        <a href="{{ url_for('legal.legal_matter_new') }}"
+           class="lg-btn" style="margin-top: 14px;">
+          <i class="ti ti-plus" aria-hidden="true"></i> Add one
+        </a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="lg-card lg-card-padded">
+    <div class="lg-section-label">
+      <i class="ti ti-shield-lock" aria-hidden="true"></i>
+      &nbsp;Recent audit
+    </div>
+    {% if recent_audit %}
+      {% for r in recent_audit %}
+        <div style="display: flex; gap: 10px; padding: 8px 0;
+                    border-bottom: 0.5px solid var(--ck-border-subtle); font-size: 12.5px;">
+          <div style="color: var(--ck-text-faint); white-space: nowrap; min-width: 64px;">
+            {{ r.created_at.strftime('%b %d %H:%M') }}
+          </div>
+          <div style="flex: 1;">
+            <span style="color: var(--ck-gold-bright);">{{ r.actor_label or '—' }}</span>
+            <span style="color: var(--ck-text-soft); margin: 0 4px;">·</span>
+            <span style="color: var(--ck-text);">{{ r.action.replace('_', ' ') }}</span>
+            {% if r.target_id %}
+              <span style="color: var(--ck-text-faint); margin-left: 4px;">
+                #{{ r.target_id }}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+      <a href="{{ url_for('legal.legal_audit') }}"
+         style="display: block; text-align: center; margin-top: 10px;
+                font-size: 12px; color: var(--ck-gold-bright); text-decoration: none;
+                letter-spacing: 0.08em; text-transform: uppercase;">
+        See full log →
+      </a>
+    {% else %}
+      <div class="lg-empty" style="padding: 18px;">
+        <span style="color: var(--ck-text-soft);">No audit entries yet.</span>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{# Pull today's date into the template so the overdue check above can compare #}
+<script>
+  // No-op — today_date is read by Jinja from request scope below.
+</script>
+
+{% endblock %}

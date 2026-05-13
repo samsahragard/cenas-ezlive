@@ -716,3 +716,96 @@ class AccessRequest(Base):
     # admin who approved (no plaintext stored after relay; this column
     # is a convenience while the row is fresh). NULL once dismissed.
     temp_passcode_one_shot: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+# ============================================================
+# Legal — Matters + Access Log (Phase 0 / Block 3, 2026-05-13)
+# ============================================================
+
+class LegalMatter(Base):
+    """Open / in-review / resolved legal records the partners track —
+    contracts, employment matters, compliance items, IP, litigation,
+    counsel correspondence. Plain text only; signed PDFs etc. live on
+    SiteGround/Drive, not in this table.
+
+    Append-mostly: rows are kept after a matter closes (status flips
+    to 'resolved' / 'archived' instead of deletion) so the audit
+    history stays whole. UI does not expose a delete button.
+    """
+    __tablename__ = "legal_matters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 onupdate=datetime.utcnow, nullable=False)
+
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # 'contract' | 'employment' | 'compliance' | 'litigation' | 'ip' |
+    # 'corporate' | 'real-estate' | 'other'
+    category: Mapped[str] = mapped_column(String(40), nullable=False, default="other",
+                                          index=True)
+    # 'open' | 'in-review' | 'resolved' | 'archived'
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open",
+                                        index=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    counterparty: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    counsel_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    counsel_firm: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    counsel_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    counsel_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    matter_ref: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+
+    opened_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_action_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    next_action_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
+class LegalAccessLog(Base):
+    """Append-only audit trail for the Legal section. Every view of a
+    matter, every edit, every status change, every audit-page visit
+    inserts a row. Deletions are blocked at the ORM layer via a
+    before_delete event listener (see _no_delete_legal_log below) so
+    no application code path — even an admin tool — can wipe entries.
+    """
+    __tablename__ = "legal_access_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    # Cached display name in case the User row is later deactivated or
+    # removed; the audit row still attributes the action to a human.
+    actor_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # 'view_overview' | 'view_matters' | 'view_matter' | 'create_matter' |
+    # 'edit_matter' | 'status_change' | 'view_audit'
+    action: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    target_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+# No-delete enforcement at the ORM layer. The 'before_delete' event fires
+# inside the SQLAlchemy unit-of-work flush before the SQL DELETE is sent,
+# so any code path that does db.delete(row) or cascades through a parent
+# delete will raise here. Phase 0 / Block 3 (Sam: 2026-05-13).
+from sqlalchemy import event as _sa_event
+
+@_sa_event.listens_for(LegalAccessLog, 'before_delete')
+def _no_delete_legal_log(mapper, connection, target):
+    raise RuntimeError(
+        "LegalAccessLog is append-only — rows cannot be deleted. "
+        "If a record needs redaction, append a new audit row "
+        "describing the redaction request and resolve it through "
+        "a Matter; the underlying row stays."
+    )
+

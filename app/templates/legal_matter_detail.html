@@ -1,0 +1,221 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = matter.title %}
+
+{% block legal_body %}
+
+{% if success %}
+  <div class="lg-banner success">
+    <i class="ti ti-check" aria-hidden="true"></i>&nbsp;{{ success }}
+  </div>
+{% endif %}
+
+<div class="lg-detail-grid">
+
+  {# Left column — header + form #}
+  <div>
+    <div class="lg-card lg-card-padded">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+        <h2 style="margin: 0; font-size: 20px; color: var(--ck-text);
+                   text-shadow: var(--ck-glow-cream); flex: 1;">
+          {{ matter.title }}
+        </h2>
+        <span class="lg-pill cat">{{ matter.category|replace('-', ' ')|title }}</span>
+        <span class="lg-pill status-{{ matter.status }}">
+          {{ matter.status.replace('-', ' ') }}
+        </span>
+      </div>
+
+      <div style="display: flex; gap: 14px; flex-wrap: wrap;
+                  font-size: 12px; color: var(--ck-text-soft);">
+        {% if matter.matter_ref %}
+          <span><i class="ti ti-hash" aria-hidden="true"></i>&nbsp;{{ matter.matter_ref }}</span>
+        {% endif %}
+        {% if matter.opened_on %}
+          <span><i class="ti ti-calendar-event" aria-hidden="true"></i>&nbsp;Opened {{ matter.opened_on.strftime('%b %d, %Y') }}</span>
+        {% endif %}
+        {% if matter.closed_on %}
+          <span><i class="ti ti-calendar-check" aria-hidden="true"></i>&nbsp;Closed {{ matter.closed_on.strftime('%b %d, %Y') }}</span>
+        {% endif %}
+        {% if creator %}
+          <span><i class="ti ti-user" aria-hidden="true"></i>&nbsp;Filed by {{ creator.full_name }}</span>
+        {% endif %}
+      </div>
+
+      <div class="lg-divider"></div>
+
+      <form method="POST"
+            action="{{ url_for('legal.legal_matter_update', matter_id=matter.id) }}"
+            class="lg-form">
+
+        <div class="row-2">
+          <div>
+            <label for="title">Title</label>
+            <input type="text" id="title" name="title" required
+                   maxlength="200" value="{{ matter.title }}" />
+          </div>
+          <div>
+            <label for="matter_ref">Reference</label>
+            <input type="text" id="matter_ref" name="matter_ref" maxlength="80"
+                   value="{{ matter.matter_ref or '' }}" />
+          </div>
+        </div>
+
+        <div class="row-3">
+          <div>
+            <label for="category">Category</label>
+            <select id="category" name="category">
+              {% for slug, label in categories %}
+                <option value="{{ slug }}"
+                        {% if matter.category == slug %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              {% for slug, label in statuses %}
+                <option value="{{ slug }}"
+                        {% if matter.status == slug %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="counterparty">Counterparty</label>
+            <input type="text" id="counterparty" name="counterparty"
+                   maxlength="200" value="{{ matter.counterparty or '' }}" />
+          </div>
+        </div>
+
+        <div>
+          <label for="summary">Summary</label>
+          <textarea id="summary" name="summary">{{ matter.summary or '' }}</textarea>
+        </div>
+
+        <div class="lg-divider"></div>
+
+        <div class="row-2">
+          <div>
+            <label for="counsel_name">Counsel</label>
+            <input type="text" id="counsel_name" name="counsel_name"
+                   maxlength="150" value="{{ matter.counsel_name or '' }}" />
+          </div>
+          <div>
+            <label for="counsel_firm">Firm</label>
+            <input type="text" id="counsel_firm" name="counsel_firm"
+                   maxlength="200" value="{{ matter.counsel_firm or '' }}" />
+          </div>
+        </div>
+        <div class="row-2">
+          <div>
+            <label for="counsel_email">Email</label>
+            <input type="email" id="counsel_email" name="counsel_email"
+                   maxlength="200" value="{{ matter.counsel_email or '' }}" />
+          </div>
+          <div>
+            <label for="counsel_phone">Phone</label>
+            <input type="tel" id="counsel_phone" name="counsel_phone"
+                   maxlength="50" value="{{ matter.counsel_phone or '' }}" />
+          </div>
+        </div>
+
+        <div class="lg-divider"></div>
+
+        <div class="row-3">
+          <div>
+            <label for="opened_on">Opened on</label>
+            <input type="date" id="opened_on" name="opened_on"
+                   value="{{ matter.opened_on.isoformat() if matter.opened_on else '' }}" />
+          </div>
+          <div>
+            <label for="next_action_on">Next action by</label>
+            <input type="date" id="next_action_on" name="next_action_on"
+                   value="{{ matter.next_action_on.isoformat() if matter.next_action_on else '' }}" />
+          </div>
+          <div>
+            <label for="next_action_text">Next action</label>
+            <input type="text" id="next_action_text" name="next_action_text"
+                   maxlength="300" value="{{ matter.next_action_text or '' }}" />
+          </div>
+        </div>
+
+        <div>
+          <label for="notes">Private notes</label>
+          <textarea id="notes" name="notes">{{ matter.notes or '' }}</textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 6px;">
+          <button type="submit" class="lg-btn">
+            <i class="ti ti-device-floppy" aria-hidden="true"></i>
+            Save changes
+          </button>
+          <a href="{{ url_for('legal.legal_matters') }}" class="lg-btn subtle">
+            Back to list
+          </a>
+          <span style="margin-left: auto; font-size: 11px; color: var(--ck-text-faint);
+                       text-transform: uppercase; letter-spacing: 0.08em;">
+            Edit logged to audit
+          </span>
+        </div>
+      </form>
+    </div>
+
+    {# Quick status change pills — single-column row that just flips status without rerunning the full edit form #}
+    <div class="lg-card lg-card-tight" style="margin-top: 12px; display: flex; gap: 10px;
+                                              flex-wrap: wrap; align-items: center;">
+      <span class="lg-section-label" style="margin: 0;">
+        <i class="ti ti-progress" aria-hidden="true"></i>&nbsp;Quick status
+      </span>
+      {% for slug, label in statuses %}
+        {% if slug != matter.status %}
+          <form method="POST"
+                action="{{ url_for('legal.legal_matter_status', matter_id=matter.id) }}"
+                style="display: inline;">
+            <input type="hidden" name="status" value="{{ slug }}" />
+            <button type="submit" class="lg-btn subtle"
+                    style="padding: 6px 12px; font-size: 11px;
+                           text-transform: uppercase; letter-spacing: 0.08em;">
+              → {{ label }}
+            </button>
+          </form>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Right column — audit history for this matter #}
+  <div class="lg-card lg-card-padded" style="height: fit-content;">
+    <div class="lg-section-label">
+      <i class="ti ti-shield-lock" aria-hidden="true"></i>&nbsp;This matter's audit trail
+    </div>
+    {% if history %}
+      {% for r in history %}
+        <div style="padding: 8px 0; border-bottom: 0.5px solid var(--ck-border-subtle);
+                    font-size: 12px;">
+          <div style="display: flex; gap: 8px; align-items: baseline;">
+            <span style="color: var(--ck-gold-bright); font-weight: 500;">
+              {{ r.actor_label or '—' }}
+            </span>
+            <span style="color: var(--ck-text-soft); margin-left: auto;
+                         font-size: 11px;">
+              {{ r.created_at.strftime('%b %d %H:%M') }}
+            </span>
+          </div>
+          <div style="color: var(--ck-text); margin-top: 2px;">
+            {{ r.action.replace('_', ' ') }}
+            {% if r.details %}
+              <span style="color: var(--ck-text-soft); margin-left: 6px;">
+                — {{ r.details }}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="lg-empty" style="padding: 18px;">
+        <span style="color: var(--ck-text-soft);">No history yet.</span>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

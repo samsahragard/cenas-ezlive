@@ -1,0 +1,135 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "New matter" %}
+
+{% block legal_body %}
+
+{% if error %}
+  <div class="lg-banner warn">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>&nbsp;{{ error }}
+  </div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('legal.legal_matter_create') }}"
+      class="lg-card lg-card-padded lg-form">
+
+  <div class="lg-section-label">
+    <i class="ti ti-file-plus" aria-hidden="true"></i>
+    &nbsp;Matter
+  </div>
+
+  <div class="row-2">
+    <div>
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" required maxlength="200"
+             placeholder="e.g. CK1 Tomball lease renewal 2027"
+             autofocus />
+    </div>
+    <div>
+      <label for="matter_ref">Reference / file number (optional)</label>
+      <input type="text" id="matter_ref" name="matter_ref" maxlength="80"
+             placeholder="e.g. CK-2026-018" />
+    </div>
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        {% for slug, label in categories %}
+          <option value="{{ slug }}" {% if slug == 'other' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        {% for slug, label in statuses %}
+          <option value="{{ slug }}" {% if slug == 'open' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="counterparty">Counterparty (optional)</label>
+      <input type="text" id="counterparty" name="counterparty" maxlength="200"
+             placeholder="Landlord / vendor / opposing party" />
+    </div>
+  </div>
+
+  <div>
+    <label for="summary">Summary</label>
+    <textarea id="summary" name="summary" placeholder="Two or three sentences for the partners' future selves."></textarea>
+  </div>
+
+  <div class="lg-divider"></div>
+
+  <div class="lg-section-label">
+    <i class="ti ti-user-circle" aria-hidden="true"></i>
+    &nbsp;Counsel (optional)
+  </div>
+
+  <div class="row-2">
+    <div>
+      <label for="counsel_name">Counsel name</label>
+      <input type="text" id="counsel_name" name="counsel_name" maxlength="150" />
+    </div>
+    <div>
+      <label for="counsel_firm">Firm</label>
+      <input type="text" id="counsel_firm" name="counsel_firm" maxlength="200" />
+    </div>
+  </div>
+  <div class="row-2">
+    <div>
+      <label for="counsel_email">Email</label>
+      <input type="email" id="counsel_email" name="counsel_email" maxlength="200" />
+    </div>
+    <div>
+      <label for="counsel_phone">Phone</label>
+      <input type="tel" id="counsel_phone" name="counsel_phone" maxlength="50" />
+    </div>
+  </div>
+
+  <div class="lg-divider"></div>
+
+  <div class="lg-section-label">
+    <i class="ti ti-calendar" aria-hidden="true"></i>
+    &nbsp;Timeline + actions
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="opened_on">Opened on</label>
+      <input type="date" id="opened_on" name="opened_on" />
+    </div>
+    <div>
+      <label for="next_action_on">Next action by</label>
+      <input type="date" id="next_action_on" name="next_action_on" />
+    </div>
+    <div>
+      <label for="next_action_text">Next action</label>
+      <input type="text" id="next_action_text" name="next_action_text" maxlength="300"
+             placeholder="e.g. Counter-offer due" />
+    </div>
+  </div>
+
+  <div>
+    <label for="notes">Private notes</label>
+    <textarea id="notes" name="notes" placeholder="Anything you want logged but not in the summary."></textarea>
+  </div>
+
+  <div style="display: flex; gap: 10px; align-items: center; margin-top: 6px;">
+    <button type="submit" class="lg-btn">
+      <i class="ti ti-check" aria-hidden="true"></i>
+      Create matter
+    </button>
+    <a href="{{ url_for('legal.legal_matters') }}" class="lg-btn subtle">
+      Cancel
+    </a>
+    <span style="margin-left: auto; font-size: 11px; color: var(--ck-text-faint);
+                 text-transform: uppercase; letter-spacing: 0.08em;">
+      Logged to audit on save
+    </span>
+  </div>
+
+</form>
+
+{% endblock %}

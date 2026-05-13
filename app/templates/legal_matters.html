@@ -1,0 +1,129 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "Matters" %}
+
+{% block legal_body %}
+
+<div class="lg-card lg-card-padded" style="margin-bottom: 14px;">
+  <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+    <span class="lg-section-label" style="margin: 0; flex-shrink: 0;">
+      <i class="ti ti-filter" aria-hidden="true"></i>
+      &nbsp;Filter
+    </span>
+
+    {# Status pills — query-string driven so the URL is shareable #}
+    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+      <a href="{{ url_for('legal.legal_matters', category=category_filter) }}"
+         class="lg-pill {% if status_filter == 'all' %}status-open{% else %}cat{% endif %}"
+         style="text-decoration: none; cursor: pointer;">All</a>
+      {% for slug, label in statuses %}
+        <a href="{{ url_for('legal.legal_matters', status=slug, category=category_filter) }}"
+           class="lg-pill {% if status_filter == slug %}status-{{ slug }}{% else %}cat{% endif %}"
+           style="text-decoration: none; cursor: pointer;">{{ label }}</a>
+      {% endfor %}
+    </div>
+
+    <span style="opacity: 0.3; padding: 0 4px;">|</span>
+
+    {# Category dropdown — fewer items so it's a real select #}
+    <form method="get" action="{{ url_for('legal.legal_matters') }}"
+          style="display: inline-flex; gap: 6px; align-items: center;">
+      <input type="hidden" name="status" value="{{ status_filter }}">
+      <select name="category" onchange="this.form.submit()"
+              style="padding: 7px 12px; font-size: 12px; min-width: 160px;
+                     background: rgba(0,0,0,0.3); border: 0.5px solid var(--ck-border);
+                     border-radius: 14px; color: var(--ck-text); cursor: pointer;">
+        <option value="all" {% if category_filter == 'all' %}selected{% endif %}>All categories</option>
+        {% for slug, label in categories %}
+          <option value="{{ slug }}"
+                  {% if category_filter == slug %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </form>
+
+    <span style="margin-left: auto; flex-shrink: 0;">
+      <a href="{{ url_for('legal.legal_matter_new') }}" class="lg-btn">
+        <i class="ti ti-plus" aria-hidden="true"></i> New matter
+      </a>
+    </span>
+  </div>
+</div>
+
+<div class="lg-card" style="padding: 0;">
+  {% if matters %}
+    <table class="lg-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Status</th>
+          <th>Counterparty</th>
+          <th>Next action</th>
+          <th style="text-align: right;">Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for m in matters %}
+        <tr>
+          <td>
+            <a href="{{ url_for('legal.legal_matter_detail', matter_id=m.id) }}"
+               style="font-weight: 500;">
+              {{ m.title }}
+            </a>
+            {% if m.matter_ref %}
+              <div style="font-size: 11px; color: var(--ck-text-faint); margin-top: 2px;">
+                Ref {{ m.matter_ref }}
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="lg-pill cat">{{ m.category|replace('-', ' ')|title }}</span>
+          </td>
+          <td>
+            <span class="lg-pill status-{{ m.status }}">
+              {{ m.status.replace('-', ' ') }}
+            </span>
+          </td>
+          <td style="color: var(--ck-text-soft);">
+            {{ m.counterparty or '—' }}
+          </td>
+          <td>
+            {% if m.next_action_on %}
+              <span style="color: var(--ck-gold-bright); font-weight: 500;">
+                {{ m.next_action_on.strftime('%b %d') }}
+              </span>
+              {% if m.next_action_text %}
+                <div style="font-size: 11px; color: var(--ck-text-soft); margin-top: 2px;
+                            max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+                            white-space: nowrap;">
+                  {{ m.next_action_text }}
+                </div>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--ck-text-faint);">—</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right; color: var(--ck-text-soft); font-size: 12px;
+                     white-space: nowrap;">
+            {{ m.updated_at.strftime('%b %d') }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="lg-empty">
+      <i class="ti ti-file-text-off" style="font-size: 24px;" aria-hidden="true"></i>
+      <div style="margin-top: 8px;">
+        No matters
+        {% if status_filter != 'all' %}with status <strong>{{ status_filter }}</strong>{% endif %}
+        {% if category_filter != 'all' %}in <strong>{{ category_filter }}</strong>{% endif %}.
+      </div>
+      <a href="{{ url_for('legal.legal_matter_new') }}"
+         class="lg-btn" style="margin-top: 14px;">
+        <i class="ti ti-plus" aria-hidden="true"></i> Add the first one
+      </a>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

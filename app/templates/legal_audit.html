@@ -1,0 +1,85 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "Audit log" %}
+
+{% block legal_body %}
+
+<div class="lg-banner">
+  <i class="ti ti-shield-check" aria-hidden="true"></i>&nbsp;
+  Append-only. Every row here was written by a code path that touched a
+  legal matter — there's no UI or admin tool that can delete entries
+  (the ORM blocks <code>db.delete()</code> against this table).
+  Viewing this page is itself logged.
+</div>
+
+<div class="lg-card" style="padding: 0; margin-bottom: 12px;">
+  {% if rows %}
+    <table class="lg-table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Who</th>
+          <th>Action</th>
+          <th>Target</th>
+          <th>Details</th>
+          <th style="text-align: right;">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td style="white-space: nowrap; color: var(--ck-text-soft); font-size: 12px;">
+            {{ r.created_at.strftime('%b %d, %Y %H:%M') }}
+          </td>
+          <td>
+            <span style="color: var(--ck-gold-bright);">{{ r.actor_label or '—' }}</span>
+          </td>
+          <td>
+            <span class="lg-pill cat">{{ r.action.replace('_', ' ') }}</span>
+          </td>
+          <td>
+            {% if r.target_type == 'legal_matter' and r.target_id %}
+              <a href="{{ url_for('legal.legal_matter_detail', matter_id=r.target_id) }}"
+                 style="color: var(--ck-text);">
+                Matter #{{ r.target_id }}
+              </a>
+            {% elif r.target_type %}
+              <span style="color: var(--ck-text-soft);">
+                {{ r.target_type }}{% if r.target_id %}#{{ r.target_id }}{% endif %}
+              </span>
+            {% else %}
+              <span style="color: var(--ck-text-faint);">—</span>
+            {% endif %}
+          </td>
+          <td style="color: var(--ck-text-soft); font-size: 12.5px; max-width: 360px;">
+            {{ r.details or '—' }}
+          </td>
+          <td style="text-align: right; color: var(--ck-text-faint); font-size: 11px;
+                     font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+                     white-space: nowrap;">
+            {{ r.ip or '—' }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="lg-empty">
+      <i class="ti ti-shield-off" style="font-size: 24px;" aria-hidden="true"></i>
+      <div style="margin-top: 8px;">No audit entries yet.</div>
+    </div>
+  {% endif %}
+</div>
+
+<div style="display: flex; gap: 10px; align-items: center; padding: 0 4px;
+            font-size: 12px; color: var(--ck-text-soft);">
+  <span>Showing {{ rows|length }} of last {{ limit }} rows.</span>
+  <span style="margin-left: auto;">
+    {% for n in [50, 100, 250, 500] %}
+      <a href="{{ url_for('legal.legal_audit', limit=n) }}"
+         class="lg-pill {% if limit == n %}status-open{% else %}cat{% endif %}"
+         style="text-decoration: none; cursor: pointer;">{{ n }}</a>
+    {% endfor %}
+  </span>
+</div>
+
+{% endblock %}

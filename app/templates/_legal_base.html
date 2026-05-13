@@ -1,0 +1,267 @@
+{# Shared base for /partner/legal/* pages. Each child sets {% block legal_body %}.
+   Carries the Ez Market / Ez Manage / My Profile design system end-to-end:
+     - glass cards (rgba(40,22,14,0.55), 0.5px gold border, 12px radius)
+     - gold uppercase section labels (letter-spacing 0.12em)
+     - cubic-bezier(0.22, 0.8, 0.24, 1) motion (--ck-ease)
+     - Tabler icons via the ti ti-* classes
+     - --ck-* color tokens, no inline hex
+#}
+{% extends "base_dashboard.html" %}
+{% block title %}{{ legal_page_title|default('Legal') }} — Cenas Kitchen{% endblock %}
+{% block page_title %}Legal · {{ legal_page_title|default('Overview') }}{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub" style="color: var(--ck-text-soft);">
+    Partner-only legal workspace. Every view + edit is logged to an
+    append-only audit trail at <a href="/partner/legal/audit"
+       style="color: var(--ck-gold-bright); text-decoration: none;">Audit log</a>.
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Legal section — design system tokens carried from sidebar.css. All
+     visual styling routed through the --ck-* variables; no inline hex. */
+  .lg-nav {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 0.5px solid var(--ck-border);
+  }
+  .lg-nav a {
+    font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    padding: 7px 14px; border-radius: 14px;
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid var(--ck-border);
+    color: var(--ck-text-soft);
+    text-decoration: none;
+    transition: all 200ms var(--ck-ease, ease);
+  }
+  .lg-nav a:hover {
+    color: var(--ck-text);
+    border-color: var(--ck-gold-soft);
+    background: rgba(228,179,64,0.06);
+  }
+  .lg-nav a.active {
+    color: var(--ck-bg-page, #140A06);
+    background: var(--ck-gold);
+    border-color: var(--ck-gold-bright);
+    font-weight: 600;
+    box-shadow: 0 0 14px rgba(255,200,80,0.32);
+  }
+
+  .lg-card {
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 240ms var(--ck-ease, ease);
+  }
+  .lg-card + .lg-card { margin-top: 12px; }
+  .lg-card-padded { padding: 16px 18px; }
+  .lg-card-tight  { padding: 12px 14px; }
+
+  .lg-section-label {
+    font-size: 11px;
+    color: var(--ck-gold);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin: 0 0 10px;
+    text-shadow: var(--ck-glow-gold-soft);
+  }
+
+  .lg-grid-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 1024px) {
+    .lg-grid-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  .lg-stat {
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .lg-stat-label {
+    font-size: 10.5px;
+    color: var(--ck-text-soft);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .lg-stat-value {
+    font-size: 26px; font-weight: 500;
+    color: var(--ck-text);
+    margin-top: 6px;
+    text-shadow: var(--ck-glow-cream);
+  }
+  .lg-stat-value.gold {
+    color: var(--ck-gold-bright);
+    text-shadow: var(--ck-glow-gold);
+  }
+  .lg-stat-value.warn { color: #E2645C; text-shadow: 0 0 12px rgba(226,100,92,0.4); }
+
+  .lg-pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    border: 0.5px solid var(--ck-border);
+  }
+  .lg-pill.status-open      { color: #9CCB76; background: rgba(156,203,118,0.10); border-color: rgba(156,203,118,0.30); }
+  .lg-pill.status-in-review { color: #FFD970; background: rgba(228,179,64,0.10); border-color: rgba(228,179,64,0.30); }
+  .lg-pill.status-resolved  { color: var(--ck-text-soft); background: rgba(255,255,255,0.04); }
+  .lg-pill.status-archived  { color: var(--ck-text-faint); background: rgba(255,255,255,0.03); }
+  .lg-pill.cat              { color: var(--ck-text-soft); background: rgba(255,255,255,0.04); }
+
+  .lg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .lg-table th {
+    text-align: left;
+    padding: 10px 12px;
+    color: var(--ck-gold);
+    border-bottom: 0.5px solid var(--ck-gold-soft);
+    font-weight: 500;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .lg-table td {
+    padding: 12px;
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    vertical-align: top;
+    color: var(--ck-text);
+  }
+  .lg-table tr:last-child td { border-bottom: none; }
+  .lg-table tr:hover td { background: rgba(228,179,64,0.04); }
+  .lg-table a { color: var(--ck-text); text-decoration: none; }
+  .lg-table a:hover { color: var(--ck-gold-bright); text-shadow: var(--ck-glow-gold-soft); }
+
+  .lg-form { display: grid; gap: 14px; }
+  .lg-form .row-2, .lg-form .row-3 { display: grid; gap: 12px; }
+  .lg-form .row-2 { grid-template-columns: 1fr 1fr; }
+  .lg-form .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 768px) {
+    .lg-form .row-2, .lg-form .row-3 { grid-template-columns: 1fr; }
+  }
+  .lg-form label {
+    display: block;
+    font-size: 11px;
+    color: var(--ck-gold);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+  .lg-form input, .lg-form select, .lg-form textarea {
+    width: 100%;
+    padding: 11px 13px;
+    background: rgba(0,0,0,0.30);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 8px;
+    color: var(--ck-text);
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 180ms var(--ck-ease, ease),
+                box-shadow 180ms var(--ck-ease, ease);
+    box-sizing: border-box;
+  }
+  .lg-form textarea { min-height: 90px; resize: vertical; }
+  .lg-form input:focus, .lg-form select:focus, .lg-form textarea:focus {
+    outline: none;
+    border-color: var(--ck-gold);
+    box-shadow: 0 0 0 3px rgba(228,179,64,0.16);
+  }
+  .lg-form select option { background: #140A06; color: var(--ck-text); }
+
+  .lg-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 10px;
+    background: var(--ck-gold);
+    color: #140A06; border: none;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    cursor: pointer; text-decoration: none;
+    transition: all 200ms var(--ck-ease, ease);
+    box-shadow: 0 2px 8px rgba(228,179,64,0.25);
+  }
+  .lg-btn:hover {
+    background: var(--ck-gold-bright);
+    box-shadow: 0 4px 16px rgba(255,217,112,0.40);
+    transform: translateY(-1px);
+  }
+  .lg-btn.subtle {
+    background: rgba(40,22,14,0.55);
+    color: var(--ck-text);
+    border: 0.5px solid var(--ck-border);
+    box-shadow: none;
+  }
+  .lg-btn.subtle:hover {
+    background: rgba(228,179,64,0.08);
+    border-color: var(--ck-gold-soft);
+    transform: none;
+    box-shadow: none;
+  }
+  .lg-btn.danger {
+    background: rgba(199,59,54,0.18);
+    color: #E2645C;
+    border: 0.5px solid rgba(199,59,54,0.40);
+    box-shadow: none;
+  }
+  .lg-btn .ti { font-size: 16px; }
+
+  .lg-banner {
+    border-left: 3px solid var(--ck-gold);
+    background: rgba(228,179,64,0.06);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13px;
+    color: var(--ck-text);
+    margin-bottom: 16px;
+  }
+  .lg-banner.success { border-left-color: #9CCB76; background: rgba(156,203,118,0.06); }
+  .lg-banner.warn    { border-left-color: #E2645C; background: rgba(226,100,92,0.06); }
+
+  .lg-empty {
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--ck-text-soft);
+    font-size: 13px;
+    background: rgba(40,22,14,0.30);
+    border: 0.5px dashed var(--ck-border);
+    border-radius: 12px;
+  }
+
+  .lg-divider {
+    height: 0.5px;
+    background: var(--ck-border-subtle);
+    margin: 16px 0;
+  }
+
+  .lg-detail-grid {
+    display: grid; grid-template-columns: 1fr 320px; gap: 16px;
+  }
+  @media (max-width: 1024px) {
+    .lg-detail-grid { grid-template-columns: 1fr; }
+  }
+  .lg-kv { display: grid; grid-template-columns: 140px 1fr; gap: 10px 14px;
+           font-size: 13px; }
+  .lg-kv dt { color: var(--ck-text-soft); text-transform: uppercase;
+              letter-spacing: 0.08em; font-size: 11px; padding-top: 1px; }
+  .lg-kv dd { color: var(--ck-text); margin: 0; }
+  .lg-kv dd .muted { color: var(--ck-text-faint); font-style: italic; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lg-nav">
+  <a href="{{ url_for('legal.legal_overview') }}"
+     class="{% if active == 'legal_overview' %}active{% endif %}">
+    Overview
+  </a>
+  <a href="{{ url_for('legal.legal_matters') }}"
+     class="{% if active == 'legal_matters' %}active{% endif %}">
+    Matters
+  </a>
+  <a href="{{ url_for('legal.legal_matter_new') }}"
+     class="{% if active == 'legal_matter_new' %}active{% endif %}">
+    + New matter
+  </a>
+  <a href="{{ url_for('legal.legal_audit') }}"
+     class="{% if active == 'legal_audit' %}active{% endif %}">
+    Audit log
+  </a>
+</div>
+
+{% block legal_body %}{% endblock %}
+{% endblock %}

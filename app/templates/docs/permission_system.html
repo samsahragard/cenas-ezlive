@@ -1,0 +1,945 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Phase 0 spec for the unified role-based permission system. samai wrote this
+  for ck to lift directly into code in Phase 0 Block 4 (decorator + template
+  helper + role-to-tag dict) and for aick to use as the source of truth when
+  retiring ad-hoc role checks scattered across blueprints. Every claim made
+  about a role's capabilities in this doc is meant to be the authoritative
+  answer; if the app diverges, the app is wrong.
+</p>
+<p>
+  Scope: this is a <em>spec</em>, not the implementation. No code in
+  <code>app/</code> changes from this doc alone. ck's Block 4 turns the
+  role-to-tag mapping below into a Python dict + a
+  <code>@requires_permission("x.y")</code> decorator + a
+  <code>{% if has_permission('x.y') %}</code> Jinja helper + a per-template
+  audit pass that migrates existing partner-only / expo-hidden / GM-vs-manager
+  checks onto the decorator.
+</p>
+
+<h2>1. Role hierarchy</h2>
+<p>
+  Ordered top-down, most authority first. A role inherits nothing implicitly &mdash;
+  the role-to-tag mapping in &sect;3 is the only source of permissions. The
+  hierarchy here is a coarse organizational summary, not a parent-child
+  permission inheritance graph.
+</p>
+<ol>
+  <li>
+    <strong><code>partner</code></strong> &mdash; owner-operator (Sam, Masood).
+    Cross-store, cross-domain. Sees personal partner data (Frost Bank, legal
+    matters, payroll detail). Wildcard permission &ldquo;<code>*</code>&rdquo;
+    grants every tag below.
+  </li>
+  <li>
+    <strong><code>corporate</code></strong> &mdash; non-partner corporate staff
+    (e.g. office manager, controller). Cross-store, broad operational reach.
+    Excluded from partner-personal scopes: no Frost Bank, no legal,
+    no payroll detail beyond labor reports, no partner-scope AI.
+  </li>
+  <li>
+    <strong><code>gm</code></strong> &mdash; General Manager. Owns one store
+    primarily; may have read-only visibility into the other. Full operational
+    permissions within their store: orders, labor, sales, drivers, produce,
+    KDS, manager log, AI ops queries.
+  </li>
+  <li>
+    <strong><code>km</code></strong> &mdash; Kitchen Manager. Single store.
+    BOH-focused: labor (BOH only), prep, produce ordering + invoice
+    verification, KDS, manager log (kitchen entries), recipe edits.
+  </li>
+  <li>
+    <strong><code>assistant_km</code></strong> &mdash; Assistant Kitchen
+    Manager. Subordinate to KM. Same store. Read access to most KM scopes;
+    write access narrower (no produce ordering finalization, no recipe edits,
+    no labor cost approvals).
+  </li>
+  <li>
+    <strong><code>corporate_chef</code></strong> &mdash; cross-store kitchen
+    oversight (Javier today). Multi-store: every store is in scope. Same
+    capability shape as KM but applied to all stores. Read access to all-store
+    aggregates.
+  </li>
+  <li>
+    <strong><code>prep_manager</code></strong> &mdash; prep team lead (Gina
+    today). Cross-store. Prep-scope: KDS prep view, recipe lookups, produce
+    receiving (not ordering), prep manager log entries. Limited labor view
+    (own + direct reports).
+  </li>
+  <li>
+    <strong><code>foh_manager</code></strong> &mdash; Front-of-House Manager.
+    Single store. FOH-focused: server performance, FOH labor, FOH manager log,
+    customer-facing systems (Google reviews surface). No BOH labor, no
+    kitchen-side produce, no recipe edits.
+  </li>
+  <li>
+    <strong><code>expo</code></strong> &mdash; order expediter. Single store.
+    Order-flow only: order view, mark-picked-up, mark-en-route, mark-delivered.
+    No labor visibility, no sales totals, no driver admin, no manager log
+    write. KDS view only.
+  </li>
+  <li>
+    <strong><code>driver</code></strong> &mdash; delivery driver. Cross-store
+    (drivers can bid on any store's orders). Driver portal only:
+    /ez-market for Available / My queue / History tabs, /driver/logs,
+    /my-profile. No back-office, no labor, no sales, no manager log.
+  </li>
+</ol>
+<p>
+  <strong>Multi-store users</strong> (corporate, partner, corporate_chef,
+  prep_manager, driver) work via a <code>user_store_assignments</code> mapping
+  (or its equivalent) &mdash; one row per (user_id, store_id, role) pair. The
+  decorator evaluates store-scoped permissions against the union of the user's
+  assigned stores. See &sect;4 for the mechanic and &sect;6 for examples.
+</p>
+
+<h2>2. Permission tag namespace</h2>
+<p>
+  Tags use dot-separated keys: <code>&lt;domain&gt;.&lt;action&gt;</code>.
+  The domain is broad (labor, orders, legal, ai). The action is specific
+  (view_own_wage, assign_driver, view, ask_claude_partner_scope). 60 tags
+  total, grouped below.
+</p>
+<p>
+  <strong>Naming rules:</strong>
+</p>
+<ul>
+  <li><code>view_*</code> = read access (page load, JSON endpoint, export).</li>
+  <li><code>view_own_*</code> = read access scoped to the requesting user's
+      own rows (own wage, own hours, own mailbox).</li>
+  <li><code>view_others_*</code> = read access to other people's rows. Strictly
+      stronger than <code>view_own_*</code>; granting
+      <code>view_others_*</code> implies <code>view_own_*</code> at the
+      decorator level (ck implements this by listing both tags in the role
+      bundle &mdash; no implicit subsumption logic).</li>
+  <li><code>edit</code> / <code>add</code> / <code>upload</code> / <code>delete</code>
+      = write actions, each separable.</li>
+  <li><code>admin</code> = umbrella write tag for a domain (drivers.admin
+      covers reset_passcode + view_roster + edit driver profile etc.). Used
+      sparingly; prefer fine-grained tags when ck or aick needs to gate a
+      single page.</li>
+  <li><code>_partner_scope</code> suffix marks an elevated variant of an
+      otherwise generic tag (e.g. <code>ai.ask_claude</code> vs
+      <code>ai.ask_claude_partner_scope</code>). The base tag is the public
+      capability; the suffixed tag adds partner-personal context.</li>
+</ul>
+
+<h3>2.1 Full tag list (60 tags across 14 domains)</h3>
+
+<table>
+  <tr><th>Domain</th><th>Tag</th><th>What it gates</th><th>Scope</th></tr>
+
+  <tr><td rowspan="8"><strong>labor</strong></td>
+      <td><code>labor.view_own_wage</code></td>
+      <td>Requesting user's own hourly rate</td><td>own</td></tr>
+  <tr><td><code>labor.view_others_wage</code></td>
+      <td>Other employees' hourly rates (column visible on roster)</td>
+      <td>store</td></tr>
+  <tr><td><code>labor.view_own_hours</code></td>
+      <td>Requesting user's own clock-ins / hours / tips</td><td>own</td></tr>
+  <tr><td><code>labor.view_others_hours</code></td>
+      <td>Other employees' clock-ins, hours, tips</td><td>store</td></tr>
+  <tr><td><code>labor.view_boh_costs</code></td>
+      <td>BOH labor cost totals + by-role breakdown</td><td>store</td></tr>
+  <tr><td><code>labor.view_foh_costs</code></td>
+      <td>FOH labor cost totals + by-role breakdown</td><td>store</td></tr>
+  <tr><td><code>labor.view_store_summary</code></td>
+      <td>Dashboard labor donut + labor cost ratio for a store</td>
+      <td>store</td></tr>
+  <tr><td><code>labor.view_all_stores</code></td>
+      <td>Cross-store labor aggregates and comparisons</td><td>global</td></tr>
+
+  <tr><td rowspan="5"><strong>sales</strong></td>
+      <td><code>sales.view_today</code></td>
+      <td>Today's sales total + by-channel</td><td>store</td></tr>
+  <tr><td><code>sales.view_history</code></td>
+      <td>Past-day / week / month sales reports</td><td>store</td></tr>
+  <tr><td><code>sales.view_by_channel</code></td>
+      <td>Per-channel breakdowns (Toast / Toast Online / DoorDash / Uber /
+          ezCater / etc.) on /reports/third-party-sales</td><td>store</td></tr>
+  <tr><td><code>sales.view_all_stores</code></td>
+      <td>Cross-store sales aggregates and comparisons</td><td>global</td></tr>
+  <tr><td><code>sales.export</code></td>
+      <td>CSV / xlsx export buttons on sales reports</td><td>store</td></tr>
+
+  <tr><td rowspan="8"><strong>orders</strong></td>
+      <td><code>orders.view</code></td>
+      <td>/orders list + order detail pages (current + upcoming)</td>
+      <td>store</td></tr>
+  <tr><td><code>orders.view_history</code></td>
+      <td>Past orders + history tab on order detail</td><td>store</td></tr>
+  <tr><td><code>orders.assign_driver</code></td>
+      <td>Assign-driver dropdown on /orders/by-store + courierAssign call</td>
+      <td>store</td></tr>
+  <tr><td><code>orders.unassign_driver</code></td>
+      <td>Unassign-driver button + courierUnassign call (also auto-opens
+          bid pool per aick's 8bad9fc)</td><td>store</td></tr>
+  <tr><td><code>orders.mark_picked_up</code></td>
+      <td>Driver tap or back-office button that stamps picked_up_at</td>
+      <td>store</td></tr>
+  <tr><td><code>orders.mark_delivered</code></td>
+      <td>Mark delivered + driver completes timestamps</td><td>store</td></tr>
+  <tr><td><code>orders.edit_attachments</code></td>
+      <td>Upload / remove receipts + photos on order detail</td>
+      <td>store</td></tr>
+  <tr><td><code>orders.view_payout</code></td>
+      <td>Driver payout estimate column (base + tracked + per-mile)</td>
+      <td>own / global</td></tr>
+
+  <tr><td rowspan="5"><strong>drivers</strong></td>
+      <td><code>drivers.admin</code></td>
+      <td>/partner/drivers page + driver create / edit / disable / reset
+          actions</td><td>global</td></tr>
+  <tr><td><code>drivers.reset_passcode</code></td>
+      <td>Reset PIN button on /partner/drivers (regenerates temp passcode,
+          bumps session_version)</td><td>global</td></tr>
+  <tr><td><code>drivers.view_roster</code></td>
+      <td>Driver roster list, names, phones</td><td>global</td></tr>
+  <tr><td><code>drivers.bid</code></td>
+      <td>Request-delivery button on /ez-market cards + driver-side
+          bid queue</td><td>own</td></tr>
+  <tr><td><code>drivers.view_own_history</code></td>
+      <td>Driver's own completed deliveries log on /driver/logs</td>
+      <td>own</td></tr>
+
+  <tr><td rowspan="6"><strong>produce</strong></td>
+      <td><code>produce.order</code></td>
+      <td>Place / modify / cancel produce orders to vendors</td>
+      <td>store</td></tr>
+  <tr><td><code>produce.invoice_verify</code></td>
+      <td>Mark vendor invoice verified / disputed; trigger price check vs
+          quote</td><td>store</td></tr>
+  <tr><td><code>produce.view_quotes</code></td>
+      <td>Vendor weekly quote sheets (alvarado / jluna / etc.)</td>
+      <td>store</td></tr>
+  <tr><td><code>produce.view_vendor_list</code></td>
+      <td>Vendor roster + per-vendor contact info</td><td>store</td></tr>
+  <tr><td><code>produce.upload_invoice</code></td>
+      <td>Drag-drop invoice upload + Claude-vision parsing</td>
+      <td>store</td></tr>
+  <tr><td><code>produce.dispute</code></td>
+      <td>Open dispute on a delivered invoice; route to vendor</td>
+      <td>store</td></tr>
+
+  <tr><td rowspan="5"><strong>legal</strong></td>
+      <td><code>legal.view</code></td>
+      <td>/partner/legal index + matters list + insurance page</td>
+      <td>global</td></tr>
+  <tr><td><code>legal.edit</code></td>
+      <td>Edit company structure fields + matter notes</td>
+      <td>global</td></tr>
+  <tr><td><code>legal.upload_document</code></td>
+      <td>Upload to /partner/legal/documents (encrypted at-rest)</td>
+      <td>global</td></tr>
+  <tr><td><code>legal.add_matter</code></td>
+      <td>Create new Matter rows; cannot delete (append-only)</td>
+      <td>global</td></tr>
+  <tr><td><code>legal.view_insurance</code></td>
+      <td>Insurance policy records + renewal callouts</td>
+      <td>global</td></tr>
+
+  <tr><td rowspan="4"><strong>manager_log</strong></td>
+      <td><code>manager_log.write</code></td>
+      <td>Append a manager-log entry for the user's home store</td>
+      <td>store</td></tr>
+  <tr><td><code>manager_log.read_own_store</code></td>
+      <td>Read manager-log entries for the user's home store</td>
+      <td>store</td></tr>
+  <tr><td><code>manager_log.read_all_stores</code></td>
+      <td>Read manager-log entries across all stores</td><td>global</td></tr>
+  <tr><td><code>manager_log.delete</code></td>
+      <td>Soft-delete a manager-log entry (audit row retained)</td>
+      <td>store</td></tr>
+
+  <tr><td rowspan="4"><strong>ai</strong></td>
+      <td><code>ai.ask_claude</code></td>
+      <td>Ask-Claude box on dashboard; ops-scope context only (store data,
+          public reports)</td><td>store</td></tr>
+  <tr><td><code>ai.ask_claude_partner_scope</code></td>
+      <td>Elevated ask: includes partner-personal context (Frost Bank,
+          legal, partner mailbox). Partner-only.</td><td>global</td></tr>
+  <tr><td><code>ai.ask_claude_personal</code></td>
+      <td>Personal scope: requesting user's own mailbox + own transcripts as
+          context. Available to non-partner staff for their own data.</td>
+      <td>own</td></tr>
+  <tr><td><code>ai.view_transcripts</code></td>
+      <td>Read AI conversation transcripts (partner: all, others: own)</td>
+      <td>own / global</td></tr>
+
+  <tr><td rowspan="3"><strong>email</strong></td>
+      <td><code>email.view_own_mailbox</code></td>
+      <td>Own inbox + sent (user's own email account)</td><td>own</td></tr>
+  <tr><td><code>email.view_shared_mailbox</code></td>
+      <td>Shared mailboxes (orders@, produce@, info@) for users assigned to
+          them</td><td>global</td></tr>
+  <tr><td><code>email.send</code></td>
+      <td>Compose + send from any mailbox the user can view</td>
+      <td>own</td></tr>
+
+  <tr><td rowspan="2"><strong>transcripts</strong></td>
+      <td><code>transcripts.search</code></td>
+      <td>Search across stored Claude conversation transcripts</td>
+      <td>own / global</td></tr>
+  <tr><td><code>transcripts.read</code></td>
+      <td>Open a specific transcript by id</td><td>own / global</td></tr>
+
+  <tr><td rowspan="3"><strong>kds</strong></td>
+      <td><code>kds.view_alerts</code></td>
+      <td>Kitchen-display anomaly cards (prep behind, no-driver-30min, etc.)</td>
+      <td>store</td></tr>
+  <tr><td><code>kds.view_kitchen_display</code></td>
+      <td>The KDS itself &mdash; tickets, prep timers, station boards</td>
+      <td>store</td></tr>
+  <tr><td><code>kds.edit_recipes</code></td>
+      <td>Recipe edit pages + spec sheet updates</td><td>global</td></tr>
+
+  <tr><td><strong>frostbank</strong></td>
+      <td><code>frostbank.view</code></td>
+      <td>Frost Bank account balances + recent activity on partner home</td>
+      <td>global</td></tr>
+
+  <tr><td rowspan="3"><strong>developer</strong></td>
+      <td><code>developer.view_chat</code></td>
+      <td>/partner/developer/chat + post + attachments</td>
+      <td>global</td></tr>
+  <tr><td><code>developer.view_app_docs</code></td>
+      <td>/partner/developer/app/* doc pages (session logs, this spec, etc.)</td>
+      <td>global</td></tr>
+  <tr><td><code>developer.view_render</code></td>
+      <td>Render deploy status + env var view (read-only on env values)</td>
+      <td>global</td></tr>
+
+  <tr><td rowspan="3"><strong>access</strong></td>
+      <td><code>access.approve_request</code></td>
+      <td>Approve a /request-access submission, assign role + store</td>
+      <td>global</td></tr>
+  <tr><td><code>access.deny_request</code></td>
+      <td>Deny / archive an access request</td><td>global</td></tr>
+  <tr><td><code>access.impersonate</code></td>
+      <td>Elevate session to act as another user (support / debug). Logged on
+          every request.</td><td>global</td></tr>
+</table>
+<p>
+  Tag count: <strong>60</strong>. Within Sam's 40-60 target. If we discover
+  during Block 4 wiring that a single tag is being asked to gate two
+  meaningfully different things, split it; the spec is allowed to grow.
+</p>
+
+<h2>3. Role &rarr; permission mapping</h2>
+<p>
+  The table below is the authoritative source. ck lifts this into a Python
+  dict in Block 4 &mdash; the shape recommended is
+  <code>ROLE_PERMISSIONS: dict[str, set[str]]</code> with one entry per role.
+  Partner is given the literal wildcard <code>&quot;*&quot;</code> so the
+  decorator can short-circuit any check for partners without enumerating 60
+  tags.
+</p>
+<p>
+  Reading the table: <strong>&check;</strong> = the role has the tag.
+  <strong>&mdash;</strong> = the role does not. <strong>own</strong> = the role
+  only has the own-scope variant (and the others-scope variant is denied).
+  <strong>r</strong> = read-only variant only (when a domain has a read/write
+  split). For brevity the table groups domains; the full per-tag dict is in
+  &sect;3.1.
+</p>
+
+<table>
+  <tr>
+    <th>Domain</th>
+    <th>partner</th><th>corporate</th><th>gm</th><th>km</th>
+    <th>asst_km</th><th>corp_chef</th><th>prep_mgr</th>
+    <th>foh_mgr</th><th>expo</th><th>driver</th>
+  </tr>
+  <tr><td>labor (own)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td></tr>
+  <tr><td>labor (others)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>r</td>
+    <td>&mdash;</td><td>&check;</td><td>r (direct reports)</td>
+    <td>r</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>labor (BOH/FOH costs)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>BOH only</td><td>BOH r</td><td>&check; (both)</td>
+    <td>BOH r</td><td>FOH only</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>labor (all stores)</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&check;</td><td>&check;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>sales (today/history)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>r</td>
+    <td>r</td><td>r</td><td>&mdash;</td><td>&check;</td>
+    <td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>sales (all stores / export)</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>orders (view + history)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td>
+    <td>own bids only</td></tr>
+  <tr><td>orders (assign/unassign driver)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>orders (mark picked_up/delivered)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&check;</td><td>&check;</td><td>own only</td></tr>
+  <tr><td>orders (edit_attachments)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td></tr>
+  <tr><td>orders (view_payout)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>own bids</td></tr>
+  <tr><td>drivers.admin / reset_passcode / view_roster</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>drivers.bid / view_own_history</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&check;</td></tr>
+  <tr><td>produce (order / invoice_verify / dispute)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&mdash;</td><td>&check;</td>
+    <td>receive only</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>produce (view quotes / vendor_list)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>r</td><td>&check;</td><td>r</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>produce.upload_invoice</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>legal.* (any)</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>manager_log.write / read_own_store</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>manager_log.read_all_stores</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&check;</td><td>&check;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>manager_log.delete</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>ai.ask_claude</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>ai.ask_claude_partner_scope</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>ai.ask_claude_personal / view_transcripts</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td></tr>
+  <tr><td>email.view_own_mailbox / send (own)</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>email.view_shared_mailbox</td>
+    <td>&check;</td><td>&check;</td>
+    <td>orders@, info@</td><td>produce@</td>
+    <td>produce@ r</td><td>produce@, orders@</td>
+    <td>produce@</td><td>info@</td>
+    <td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>transcripts.search / read</td>
+    <td>&check;</td><td>own</td><td>own</td><td>own</td>
+    <td>own</td><td>own</td><td>own</td><td>own</td>
+    <td>own</td><td>own</td></tr>
+  <tr><td>kds.view_alerts / view_kitchen_display</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>&check;</td><td>&check;</td><td>&check;</td>
+    <td>FOH alerts r</td><td>r</td><td>&mdash;</td></tr>
+  <tr><td>kds.edit_recipes</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td><td>&check;</td>
+    <td>&mdash;</td><td>&check;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>frostbank.view</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>developer.view_chat / view_app_docs</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>developer.view_render</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>access.approve_request / deny_request</td>
+    <td>&check;</td><td>&check;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><td>access.impersonate</td>
+    <td>&check;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+    <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+</table>
+
+<h3>3.1 Python dict (ck lifts this in Block 4)</h3>
+<p>
+  Recommended shape. Partner is the wildcard set; everyone else enumerates.
+  When a row in &sect;3 reads &ldquo;r&rdquo; (read-only), drop the
+  others/edit variant. When a row reads a qualified scope
+  (&ldquo;BOH only&rdquo;, &ldquo;direct reports&rdquo;, &ldquo;own bids&rdquo;),
+  ck implements the qualifier in the per-route decorator argument
+  (e.g. <code>@requires_permission("orders.view", scope="own_bids")</code>),
+  not in the role dict. Keep the role dict flat boolean ownership.
+</p>
+<pre><code>ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "partner": {"*"},
+
+    "corporate": {
+        "labor.view_own_wage", "labor.view_others_wage",
+        "labor.view_own_hours", "labor.view_others_hours",
+        "labor.view_boh_costs", "labor.view_foh_costs",
+        "labor.view_store_summary", "labor.view_all_stores",
+        "sales.view_today", "sales.view_history", "sales.view_by_channel",
+        "sales.view_all_stores", "sales.export",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments", "orders.view_payout",
+        "drivers.admin", "drivers.reset_passcode", "drivers.view_roster",
+        "produce.order", "produce.invoice_verify",
+        "produce.view_quotes", "produce.view_vendor_list",
+        "produce.upload_invoice", "produce.dispute",
+        "manager_log.write", "manager_log.read_own_store",
+        "manager_log.read_all_stores", "manager_log.delete",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts", "kds.view_kitchen_display", "kds.edit_recipes",
+        "developer.view_chat", "developer.view_app_docs",
+        "access.approve_request", "access.deny_request",
+    },
+
+    "gm": {
+        "labor.view_own_wage", "labor.view_others_wage",
+        "labor.view_own_hours", "labor.view_others_hours",
+        "labor.view_boh_costs", "labor.view_foh_costs",
+        "labor.view_store_summary",
+        "sales.view_today", "sales.view_history", "sales.view_by_channel",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments", "orders.view_payout",
+        "drivers.admin", "drivers.reset_passcode", "drivers.view_roster",
+        "produce.order", "produce.invoice_verify",
+        "produce.view_quotes", "produce.view_vendor_list",
+        "produce.upload_invoice", "produce.dispute",
+        "manager_log.write", "manager_log.read_own_store",
+        "manager_log.delete",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts", "kds.view_kitchen_display",
+    },
+
+    "km": {
+        "labor.view_own_wage", "labor.view_own_hours",
+        "labor.view_others_hours",  # read-only on roster
+        "labor.view_boh_costs", "labor.view_store_summary",
+        "sales.view_today", "sales.view_history",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments",
+        "produce.order", "produce.invoice_verify",
+        "produce.view_quotes", "produce.view_vendor_list",
+        "produce.upload_invoice", "produce.dispute",
+        "manager_log.write", "manager_log.read_own_store",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts", "kds.view_kitchen_display", "kds.edit_recipes",
+    },
+
+    "assistant_km": {
+        "labor.view_own_wage", "labor.view_own_hours",
+        "labor.view_boh_costs",  # read-only
+        "labor.view_store_summary",
+        "sales.view_today", "sales.view_history",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments",
+        "produce.view_quotes", "produce.view_vendor_list",
+        "produce.upload_invoice",
+        "manager_log.write", "manager_log.read_own_store",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts", "kds.view_kitchen_display",
+    },
+
+    "corporate_chef": {
+        # multi-store role; scope='all_stores' on every store-scoped tag
+        "labor.view_own_wage", "labor.view_others_wage",
+        "labor.view_own_hours", "labor.view_others_hours",
+        "labor.view_boh_costs", "labor.view_foh_costs",
+        "labor.view_store_summary", "labor.view_all_stores",
+        "sales.view_today", "sales.view_history",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments",
+        "produce.order", "produce.invoice_verify",
+        "produce.view_quotes", "produce.view_vendor_list",
+        "produce.upload_invoice", "produce.dispute",
+        "manager_log.write", "manager_log.read_own_store",
+        "manager_log.read_all_stores",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts", "kds.view_kitchen_display", "kds.edit_recipes",
+    },
+
+    "prep_manager": {
+        # multi-store; produce receive (not order)
+        "labor.view_own_wage", "labor.view_own_hours",
+        "labor.view_others_hours",  # direct reports only (decorator-enforced)
+        "labor.view_all_stores",
+        "orders.view", "orders.view_history",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "produce.invoice_verify",  # receive + verify, no place-order
+        "produce.view_quotes", "produce.view_vendor_list",
+        "produce.upload_invoice",
+        "manager_log.write", "manager_log.read_own_store",
+        "manager_log.read_all_stores",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts", "kds.view_kitchen_display",
+    },
+
+    "foh_manager": {
+        "labor.view_own_wage", "labor.view_own_hours",
+        "labor.view_others_hours",  # FOH staff only
+        "labor.view_foh_costs", "labor.view_store_summary",
+        "sales.view_today", "sales.view_history", "sales.view_by_channel",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments",
+        "manager_log.write", "manager_log.read_own_store",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
+        "transcripts.search", "transcripts.read",
+        "kds.view_alerts",  # FOH-side anomalies only
+    },
+
+    "expo": {
+        "orders.view",
+        "orders.mark_picked_up", "orders.mark_delivered",
+        "orders.edit_attachments",
+        "ai.ask_claude_personal", "ai.view_transcripts",
+        "transcripts.search", "transcripts.read",
+        "kds.view_kitchen_display",
+    },
+
+    "driver": {
+        "labor.view_own_wage", "labor.view_own_hours",
+        "orders.view",  # own bids only (scope on route)
+        "orders.mark_picked_up", "orders.mark_delivered",  # own only
+        "orders.view_payout",  # own bids only
+        "drivers.bid", "drivers.view_own_history",
+        "ai.ask_claude_personal", "ai.view_transcripts",
+        "transcripts.search", "transcripts.read",
+    },
+}
+</code></pre>
+
+<h2>4. Per-store scope</h2>
+<p>
+  Every tag in &sect;2 has a <strong>scope</strong> column: <code>own</code>,
+  <code>store</code>, or <code>global</code>.
+</p>
+<ul>
+  <li><strong>own</strong>: the tag only grants access to rows where the
+      requesting user is the owner (own wage, own hours, own bids,
+      own mailbox, own transcripts). Scope evaluation happens inside the
+      route handler against <code>g.current_user.id</code>; the decorator's
+      job is just to confirm the tag is in the role's set.</li>
+  <li><strong>store</strong>: the tag only grants access when the target
+      row's store_id matches one of the user's assigned stores. The
+      decorator takes an optional <code>store_arg</code> kwarg pointing to
+      the route arg that carries the store identifier
+      (e.g. <code>@requires_permission("orders.view", store_arg="store_slug")</code>).
+      If absent, the decorator falls back to <code>g.current_location</code>
+      and validates against the user's assignment set. Multi-store users
+      (corporate, partner, corporate_chef, prep_manager) pass if any
+      assignment matches; single-store users must match exactly.</li>
+  <li><strong>global</strong>: no store filter applied. Granting the tag is
+      sufficient. Legal, AI partner scope, Frost Bank, developer tools,
+      access approval, and impersonation are global.</li>
+</ul>
+<p>
+  <strong>Special case &mdash; cross-store visibility for single-store
+  managers.</strong> A GM may need read-only visibility into the other
+  store for context (e.g. spot-checking the sister store's prep). Implement
+  by issuing a second assignment row <code>(user_id, other_store_id,
+  role='gm', read_only=true)</code>; the decorator honors the
+  <code>read_only</code> flag by stripping write tags from the assignment's
+  effective set. This is per-assignment, not per-user &mdash; a GM with a
+  read-only secondary assignment still has full write at their primary.
+</p>
+
+<h2>5. Denial behavior</h2>
+
+<h3>5.1 Route decorator</h3>
+<p>
+  Shape recommended for ck (Block 4):
+</p>
+<pre><code>from functools import wraps
+from flask import g, redirect, url_for, current_app
+
+def requires_permission(tag: str, *, store_arg: str | None = None,
+                        scope: str | None = None):
+    """Gate a route on a permission tag.
+
+    tag        - the permission key (e.g. "orders.assign_driver")
+    store_arg  - route kwarg name carrying the store identifier; if set,
+                 the user's assignment for that store is checked.
+    scope      - extra qualifier the route handler interprets (e.g.
+                 "own_bids" for /ez-market driver views). The decorator
+                 doesn't enforce scope; it just makes it available via
+                 g.permission_scope so the handler can filter rows.
+    """
+    def deco(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            user = getattr(g, "current_user", None)
+            if user is None:
+                return redirect(url_for("auth.partner_login"))
+            if not _user_has(user, tag, kwargs.get(store_arg) if store_arg else None):
+                return redirect(url_for("auth.access_denied", need=tag))
+            g.permission_scope = scope
+            return fn(*args, **kwargs)
+        return wrapped
+    return deco
+</code></pre>
+<p>
+  <code>_user_has(user, tag, store_id)</code> resolves the user's effective
+  permission set: wildcard <code>&quot;*&quot;</code> matches anything,
+  otherwise the tag must be in the union of the user's assignment role sets.
+  For store-scoped tags, the assignment's <code>store_id</code> must equal
+  the target <code>store_id</code> (or the user must have a matching
+  assignment with <code>read_only=false</code> for write tags). The
+  impersonation case is handled inside <code>_user_has</code> by reading
+  <code>session.get(&quot;impersonating_user_id&quot;)</code> and evaluating
+  as that user instead.
+</p>
+
+<h3>5.2 Template helper</h3>
+<p>
+  Jinja-side gate for hiding UI:
+</p>
+<pre><code>{% raw %}{% if has_permission('orders.assign_driver') %}
+  &lt;button class=&quot;assign-driver&quot;&gt;Assign Driver&lt;/button&gt;
+{% endif %}{% endraw %}</code></pre>
+<p>
+  Register <code>has_permission</code> via
+  <code>app.jinja_env.globals['has_permission'] = ...</code>. Implementation
+  delegates to the same <code>_user_has</code> used by the decorator,
+  pulling the current user from <code>g</code>. Optional second arg for
+  store override: <code>has_permission('labor.view_others_wage',
+  store='copperfield')</code>.
+</p>
+
+<h3>5.3 /access-denied page</h3>
+<p>
+  Already exists (per Sam's spec). Behavior:
+</p>
+<ul>
+  <li>Query string: <code>?need=orders.assign_driver</code>.</li>
+  <li>Page reads <code>request.args.get('need')</code> and displays:
+      &ldquo;You need permission '<code>orders.assign_driver</code>' to access
+      this page. Contact a partner to request access.&rdquo; with a button
+      that opens /request-access pre-filled with the needed permission.</li>
+  <li>Logs every denial to a new <code>PermissionDenial</code> table:
+      <code>user_id, tag, route, denied_at</code>. Surfaces on
+      /partner/developer/app/denials (a new doc/admin page) so partners can
+      see what's getting blocked and decide if a role's tag set needs
+      adjustment.</li>
+</ul>
+
+<h2>6. Edge cases</h2>
+
+<h3>6.1 Javier (corporate chef, both stores)</h3>
+<p>
+  Javier has two assignment rows:
+  <code>(javier, copperfield, corporate_chef)</code> and
+  <code>(javier, tomball, corporate_chef)</code>. Effective permission set is
+  the union of both (same set, since both rows have the same role). For any
+  store-scoped tag check, either assignment matches, so the decorator passes
+  regardless of which store the route is targeting. For cross-store reports
+  (<code>labor.view_all_stores</code>, <code>manager_log.read_all_stores</code>),
+  Javier has those globally because they're in <code>corporate_chef</code>'s
+  set in &sect;3.1.
+</p>
+
+<h3>6.2 Gina (prep manager, both stores)</h3>
+<p>
+  Same shape as Javier &mdash; two assignments, union of permissions. Notable
+  divergence: prep_manager does <em>not</em> have <code>produce.order</code>
+  (only <code>produce.invoice_verify</code>), so Gina can verify a delivery
+  arrived correctly but cannot place a new produce order. KM owns ordering.
+  Both Javier and Gina see <code>manager_log.read_all_stores</code> because
+  their work crosses store boundaries; their <code>manager_log.write</code>
+  defaults to their current page's store context (route kwarg).
+</p>
+
+<h3>6.3 Partner impersonating a manager (support / debug)</h3>
+<p>
+  Partner clicks "Impersonate" on a user's admin row (gated by
+  <code>access.impersonate</code>, partner-only). Server:
+</p>
+<ol>
+  <li>Verifies caller has <code>access.impersonate</code>.</li>
+  <li>Sets <code>session['impersonating_user_id'] = target.id</code>.</li>
+  <li>Writes a row to <code>ImpersonationSession</code>:
+      <code>(actor_id, target_id, started_at, route)</code>. End time written
+      on "Return to partner" click.</li>
+  <li>Every subsequent request: <code>_user_has</code> evaluates permissions
+      as the target user. Routes still see <code>g.current_user</code> as
+      the target (so e.g. /my-profile shows the target's profile).</li>
+  <li>UI: a sticky red banner at the top of every page &mdash; "Impersonating
+      <em>{target_name}</em>. <a>Return to partner.</a>" Banner is rendered
+      from <code>base_dashboard.html</code> when
+      <code>session.get('impersonating_user_id')</code> is set.</li>
+  <li>Audit: every permission check during the impersonation window is
+      logged with both <code>actor_id</code> (the partner) and
+      <code>effective_user_id</code> (the target) in
+      <code>PermissionCheckLog</code>. This is what protects against
+      after-the-fact disputes about what was viewed under whose authority.</li>
+</ol>
+<p>
+  <strong>What impersonation does NOT do:</strong> it does not allow the
+  partner to act with permissions they themselves don't have through the
+  target. The check is &ldquo;does the impersonated user have this tag,&rdquo;
+  but a route like <code>access.impersonate</code> still checks the actor's
+  own permission set (not the target's). Concretely: a partner impersonating
+  a driver cannot start a second impersonation; the driver doesn't have
+  <code>access.impersonate</code>.
+</p>
+
+<h3>6.4 Driver self-service vs back-office driver actions</h3>
+<p>
+  Drivers have <code>orders.mark_picked_up</code> and
+  <code>orders.mark_delivered</code> but scoped to their own bids (scope
+  argument <code>own_bids</code> in the decorator). Back-office staff (GM,
+  expo, etc.) have the same tags without the scope &mdash; they can mark any
+  order. The handler reads <code>g.permission_scope</code> and filters
+  accordingly: <code>own_bids</code> &rArr; <code>where driver_id =
+  g.current_user.id</code>; absent &rArr; no filter.
+</p>
+
+<h3>6.5 A user with no role assignment</h3>
+<p>
+  Logged-in but no role row yet (mid-onboarding, or post-deny). Effective
+  permission set is empty. Every decorator check fails, redirecting to
+  /access-denied. The user can still hit /request-access and /my-profile
+  (both explicitly exempt from the decorator). /my-profile renders the
+  &quot;Your access is pending&quot; state.
+</p>
+
+<h2>7. Implementation notes for ck (Block 4)</h2>
+<ul>
+  <li>Land the dict in <code>app/services/permissions.py</code> alongside the
+      <code>requires_permission</code> decorator and the
+      <code>_user_has</code> helper.</li>
+  <li>Register the Jinja helper in
+      <code>app/__init__.py</code> right after the template_filter
+      block:
+      <code>app.jinja_env.globals['has_permission'] = has_permission_jinja</code>.</li>
+  <li>Migrate the existing ad-hoc checks in this order (lowest blast radius
+      first):
+      <ol>
+        <li><code>_enforce_partner()</code> calls in
+            <code>developer_chat.py</code> become
+            <code>@requires_permission('developer.view_chat')</code> (and
+            <code>developer.view_app_docs</code> for the doc routes).
+            Keep <code>_enforce_partner</code> as a back-compat alias for
+            one deploy cycle, then remove.</li>
+        <li>Sidebar &ldquo;Legal&rdquo; entry in
+            <code>base_dashboard.html</code> becomes
+            <code>{% if has_permission('legal.view') %}</code>.</li>
+        <li>Driver admin page <code>/partner/drivers</code> route gets
+            <code>@requires_permission('drivers.admin')</code>.</li>
+        <li>Order assign-driver POST handler gets
+            <code>@requires_permission('orders.assign_driver',
+            store_arg='store_slug')</code>.</li>
+        <li>...continue through the table in &sect;3.</li>
+      </ol>
+  </li>
+  <li>Tests &mdash; for each role, write a parameterized test that hits 6-8
+      representative routes and asserts 200 or 302-to-access-denied per the
+      table in &sect;3. Smoke level, not exhaustive.</li>
+  <li>Roll-out: dark-launch by adding decorators but having
+      <code>_user_has</code> always return <code>True</code> (log denials
+      instead of redirecting). Watch the denial log for a day; if no
+      legitimate flow is being denied, flip to enforcing mode.</li>
+</ul>
+
+<h2>8. What this spec doesn't decide (kicked to Phase 1+)</h2>
+<ul>
+  <li><strong>Time-based permissions</strong> &mdash; e.g. expo only has
+      <code>orders.mark_picked_up</code> during their shift. Out of scope
+      here; if needed, layer on top via a shift_active gate, don't
+      contaminate the tag namespace.</li>
+  <li><strong>Customer-facing scopes</strong> &mdash; corporate-order /
+      &lt;store&gt;/corporate-order has its own gate (the Partner /
+      Corporate g.current_store branch in
+      <code>corporate_order.py</code>). Don't migrate this onto the
+      decorator in Phase 0; let it stay as-is until we have a customer
+      auth design.</li>
+  <li><strong>Per-tag onboarding flows</strong> &mdash; e.g. a new
+      <code>foh_manager</code> sees a 30-second tour the first time they
+      hit /reports/server-performance. Tour gating is independent of
+      permission gating.</li>
+  <li><strong>Role hierarchy as code</strong> &mdash; this spec presents
+      the order as documentation. We do NOT implement
+      &ldquo;partner inherits everything in corporate's set&rdquo; via
+      automatic union. Each role explicitly enumerates its tags. The
+      hierarchy is a sorting aid for humans, not a logic shortcut.</li>
+  <li><strong>Multi-tenant / franchisee future</strong> &mdash; if Cenas
+      ever licenses the platform to a third party, the tag namespace stays
+      the same; the multi-tenancy adds an <code>org_id</code> scope above
+      <code>store_id</code>. Out of scope for Phase 0.</li>
+</ul>
+
+<h2>9. Cross-claude notes</h2>
+<ul>
+  <li><strong>ck</strong> &mdash; Block 4 of your Phase 0 is unblocked once
+      this spec lands. Lift &sect;3.1 directly into
+      <code>app/services/permissions.py</code>. The decorator + jinja
+      helper signatures in &sect;5 are recommended but not load-bearing
+      &mdash; if you see a better shape during implementation, redesign
+      and post the change in chat so this doc can be updated.</li>
+  <li><strong>aick</strong> &mdash; the existing ad-hoc partner /
+      corporate / expo checks in your blueprints will get rewritten by ck
+      under Block 4. If you're about to touch one of those routes for
+      another reason and don't want to wait, you can stay with the old
+      pattern; ck's migration pass picks them up.</li>
+  <li><strong>samai</strong> (next session) &mdash; if Phase 1 anomaly
+      cards (see anomaly_rules.html, Block 2 of this Phase 0) need new
+      permission tags I didn't anticipate, add them under the appropriate
+      domain. The 60-tag count is a soft target.</li>
+</ul>
+
+{% endblock %}

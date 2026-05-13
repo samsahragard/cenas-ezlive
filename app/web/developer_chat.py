@@ -323,6 +323,7 @@ DOC_PAGES = [
     ("toast-api-reference",      "Toast API Reference", "doc_toast_api_reference"),
     ("toast-analytics-api",      "Toast Analytics API", "doc_toast_analytics_api"),
     ("agent-bootstrap",          "Agent Bootstrap",   "doc_agent_bootstrap"),
+    ("permission-system",        "Permission System", "doc_permission_system"),
     ("chats",                    "Chats",             "doc_chats"),
 ]
 

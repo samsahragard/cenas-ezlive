@@ -91,3 +91,5 @@ Visit http://localhost:5000/
 - All 4 web blueprints (`ezcater_routes`, `manager_routes`, `driver_routes`, `review_routes`)
 - Google Maps Distance Matrix client (`app/infra/geo.py`) — kept for distance accuracy
 - Postgres / Render compatibility (just also runs on SQLite now)
+
+<!-- PR preview test 2026-05-13, will be reverted -->

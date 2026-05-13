@@ -321,11 +321,17 @@ def driver_logs():
         db.close()
 
 
-@driver.route("/driver/logout", methods=["POST"])
+@driver.route("/driver/logout", methods=["GET", "POST"])
 def driver_logout():
+    # Accept GET as well as POST — sidebar logout links are plain anchors,
+    # and a POST-only logout would 405 white-screen on click. Same shape
+    # as /keypad-logout. The keypad_auth after_request hook adds
+    # Cache-Control: no-store to this response so the Capacitor WebView
+    # can't serve a cached dashboard on app restart.
     session.pop("driver_id", None)
     session.pop("driver_name", None)
     session.pop("driver_location", None)
+    session.pop("driver_session_version", None)
     return redirect(url_for("driver.driver_login"))
 
 

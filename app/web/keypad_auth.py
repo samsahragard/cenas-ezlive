@@ -237,10 +237,14 @@ def change_passcode_submit():
 
 @keypad_auth.route("/keypad-logout", methods=["GET", "POST"])
 def logout():
-    session.pop("user_id", None)
-    session.pop("auth_ok", None)
-    session.pop("partner_auth_ok", None)
-    return redirect(url_for("keypad_auth.login"))
+    # session.clear() instead of per-key pop so any future session keys
+    # (auth flags, feature toggles, etc) get wiped too. Sam (2026-05-13):
+    # logout from the Capacitor mobile app wasn't "sticking" — root cause
+    # was the WebView caching the post-login dashboard HTML, but we also
+    # belt-and-suspenders the cookie clear here.
+    session.clear()
+    resp = _no_store(redirect(url_for("keypad_auth.login")))
+    return resp
 
 
 def install(app):
@@ -258,6 +262,40 @@ def install(app):
             load_current_user()
         else:
             g.current_user = None
+
+    @app.after_request
+    def _no_store_when_authed(resp):
+        """Force Cache-Control: no-store on all auth-state-sensitive
+        responses — the Capacitor mobile app's WebView was caching the
+        logged-in dashboard HTML and serving it back on app restart
+        after a logout, making logout appear to "not stick" (Sam,
+        2026-05-13). The cookie WAS being cleared; the cache was the
+        problem.
+
+        Targets:
+          - any HTML response for an authenticated session
+            (user_id, driver_id, or admin tier-2 partner_auth_ok)
+          - login/logout endpoints regardless of session state
+        """
+        path = (request.path or "")
+        auth_paths = {
+            "/keypad-login", "/keypad-logout",
+            "/change-passcode",
+            "/driver/login", "/driver/logout", "/driver/signup",
+            "/driver/change-passcode",
+            "/login", "/logout", "/partner-login",
+        }
+        is_auth_html = (
+            resp.mimetype == "text/html"
+            and (session.get("user_id")
+                 or session.get("driver_id")
+                 or session.get("partner_auth_ok"))
+        )
+        if path in auth_paths or is_auth_html:
+            resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers["Expires"] = "0"
+        return resp
 
     # The sidebar (base_dashboard.html) calls current_user_stores() to decide
     # whether to render the switch-store dropdown. Lift it into the Jinja

@@ -29,9 +29,17 @@
   .store-checks.is-disabled { opacity: 0.35; pointer-events: none; }
 </style>
 <script>
-  // Disable the store checkboxes when the selected role doesn't use stores
-  // (partner / corporate / corporate-driver). Re-evaluated on change.
-  const STORE_SCOPED = new Set(['gm', 'manager', 'expo']);
+  // Disable the store checkboxes when the selected role doesn't use stores.
+  // Store-scoped roles need at least one store; partner + corporate get
+  // every store implicitly so their checkboxes are inert. Mirrors
+  // STORE_SCOPED_LEVELS in app/web/permissions.py — keep in sync.
+  const STORE_SCOPED = new Set([
+    'gm', 'manager',
+    'km', 'assistant_km',
+    'corporate_chef', 'prep_manager', 'foh_manager',
+    'expo',
+    'driver', 'corporate-driver',
+  ]);
   function syncStoreChecks(){
     document.querySelectorAll('[data-role-select]').forEach(sel => {
       const stores = sel.closest('form').querySelector('.store-checks');
@@ -49,12 +57,24 @@
 {% block page_subtitle %}
   <p class="greeting-sub">
     Add, edit, deactivate, and reset passcodes for everyone with login access.
-    Roles from highest privilege: <strong>partner</strong> &gt; corporate &gt; gm &gt; manager &gt; expo &gt; corporate-driver.
-    Newly added or reset users are forced to change their passcode on first login.
+    Ten roles from samai's permission_system spec —
+    <strong>partner</strong> &gt; corporate &gt; corporate chef &gt; gm &gt;
+    km &gt; assistant km &gt; prep manager &gt; foh manager &gt; expo &gt; driver.
+    Newly added or reset users get a 5-digit temp PIN (read aloud to them — won't
+    be shown again) and are forced to change it on first login.
   </p>
 {% endblock %}
 
 {% block content %}
+{% if temp_pw %}
+  <div class="banner banner-success" style="margin-bottom:18px;">
+    <strong>Temp PIN for {{ temp_for }}:</strong>
+    <code style="font-size:18px;letter-spacing:1px;background:rgba(0,0,0,0.35);padding:4px 10px;border-radius:6px;margin-left:8px;">{{ temp_pw }}</code>
+    <span style="display:block;margin-top:6px;font-size:12px;opacity:0.7;">
+      Read this to {{ temp_for }} — it won't be shown again. They'll be forced to pick a new PIN on first login.
+    </span>
+  </div>
+{% endif %}
 {% if success %}
   <div class="banner banner-success" style="margin-bottom:14px;">{{ success }}</div>
 {% endif %}
@@ -123,8 +143,12 @@
 
 <details style="margin-bottom:18px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:8px 14px;">
   <summary style="cursor:pointer;font-weight:600;font-size:14px;color:var(--accent-soft);">+ Add new user</summary>
+  <p style="margin:8px 0 6px;font-size:12px;color:rgba(255,255,255,0.55);">
+    A 5-digit temp PIN is auto-generated on add — you read it to the new
+    user once and they pick their real PIN on first login.
+  </p>
   <form method="POST" action="{{ url_for('team.team_add') }}"
-        style="display:grid;grid-template-columns:1.3fr 1.3fr 1fr 1.1fr 1.1fr 0.8fr auto;gap:8px;margin-top:10px;align-items:center;">
+        style="display:grid;grid-template-columns:1.3fr 1.3fr 1fr 1.1fr 1.1fr auto;gap:8px;margin-top:10px;align-items:center;">
     <input type="text" name="full_name" placeholder="Full name" required
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
     <input type="email" name="email" placeholder="email (optional)"
@@ -133,7 +157,7 @@
            style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;">
     <select name="permission_level" required class="team-select" data-role-select
             style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:inherit;font-size:13px;">
-      {% for value, label in level_options %}<option value="{{ value }}" {% if value == 'manager' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      {% for value, label in level_options %}<option value="{{ value }}" {% if value == 'gm' %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select>
     <div class="store-checks" style="display:flex;flex-direction:column;gap:2px;font-size:12px;">
       {% for value, label in store_options %}
@@ -142,8 +166,6 @@
       </label>
       {% endfor %}
     </div>
-    <input type="text" name="passcode" placeholder="5-digit" pattern="[\d*#@+%\-$]{5}" maxlength="5" required
-           style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;">
     <button type="submit" class="btn-login" style="padding:6px 14px;">Add</button>
   </form>
 </details>
@@ -204,10 +226,11 @@
           {% if u.last_login_at %}{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}
         </td>
         <td>
-          <form method="POST" action="{{ url_for('team.team_reset', user_id=u.id) }}" style="display:flex;gap:4px;">
-            <input type="text" name="passcode" placeholder="new" pattern="[\d*#@+%\-$]{5}" maxlength="5" required
-                   style="width:70px;padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-family:ui-monospace,monospace;font-size:12px;">
-            <button type="submit" class="btn-logout" style="padding:4px 10px;font-size:11px;">Reset</button>
+          <form method="POST" action="{{ url_for('team.team_reset', user_id=u.id) }}"
+                onsubmit="return confirm('Generate a new temp PIN for {{ u.full_name|e }}? They will be logged out everywhere and must change the PIN on next login.');">
+            <button type="submit" class="btn-logout" style="padding:4px 10px;font-size:11px;" title="Auto-generate a 5-digit temp PIN, read it aloud to the user">
+              Generate
+            </button>
           </form>
         </td>
         <td>
@@ -225,7 +248,11 @@
 </div>
 
 <p style="margin-top:18px;font-size:12px;color:var(--text-3);">
-  Passcodes are 5-digit, salted-hashed (werkzeug). Uniqueness enforced across active users.
-  On <strong>PASSCODE PENDING</strong> rows the user must change their temp passcode on first login.
+  Passcodes are 5-digit numeric on add/reset (auto-generated, read aloud to the
+  user — never shown a second time), salted-hashed (werkzeug). Uniqueness enforced
+  across active users. On <strong>PASSCODE PENDING</strong> rows the user must
+  change their temp passcode on first keypad login.
+  Every add / edit / role change / activate / deactivate / passcode reset is
+  written to UserAuditLog (append-only).
 </p>
 {% endblock %}

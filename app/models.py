@@ -500,6 +500,48 @@ class User(Base):
     session_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
 
+class UserAuditLog(Base):
+    """Append-only audit trail for Team admin (User table) mutations.
+    Every create / edit / role_change / activate / deactivate / passcode_reset
+    inserts a row. Deletions are blocked at the ORM layer (see the
+    before_delete listener at the bottom of this file) so role-change
+    history reads true even if a row is later challenged or redacted.
+
+    Phase 0 / Block 4 follow-up — Team UI commit (Sam: 2026-05-13). Mirrors
+    the LegalAccessLog pattern: actor_label cached so the trail still names
+    a human even if the actor row is later deactivated; action enum-style;
+    before/after values stored as plain text so a role-change diff is
+    self-describing without joining other tables.
+    """
+    __tablename__ = "user_audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True,
+    )
+    # Target = the user whose row was mutated. SET NULL on delete so audit
+    # rows survive a (hypothetical) hard-delete of the user row; in practice
+    # we archive (active=False), not delete, but the FK is defensive.
+    target_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    target_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Actor = the partner-level user who performed the mutation.
+    actor_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    actor_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # 'create' | 'edit' | 'role_change' | 'deactivate' | 'reactivate' | 'passcode_reset'
+    action: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    # For role_change: "old_role|old_store_scope" / "new_role|new_store_scope".
+    # For create: after_value carries the initial "role|store_scope".
+    # For edit (non-role): details lists which fields changed.
+    before_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
 class DeveloperChatAttachment(Base):
     """Files attached to a Developer Chat message. Up to 5 per message,
     enforced at the route layer. Files live under CHAT_ATTACHMENTS_DIR
@@ -963,6 +1005,16 @@ def _no_delete_legal_document(mapper, connection, target):
         "on disk stay too — if a file should not be there anymore, "
         "flag it via the matter audit + Sam handles removal manually "
         "(both the row and the file) outside the app."
+    )
+
+
+@_sa_event.listens_for(UserAuditLog, 'before_delete')
+def _no_delete_user_audit_log(mapper, connection, target):
+    raise RuntimeError(
+        "UserAuditLog is append-only — rows cannot be deleted. "
+        "Role-change history is the authoritative record of who got "
+        "promoted/demoted and when; redacting a row would break the "
+        "trail that the audit is for."
     )
 
 

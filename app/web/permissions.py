@@ -1,7 +1,17 @@
 """Permission helpers for the User-based keypad auth.
 
-Hierarchy (high → low privilege):
-    partner > corporate > gm > manager > expo > corporate-driver
+Hierarchy (high → low privilege, post-Block-4 Team-UI expansion 2026-05-13):
+    partner > corporate > corporate_chef > gm > km > assistant_km
+    > prep_manager > foh_manager > expo > driver
+
+Two legacy aliases ('manager' = gm, 'corporate-driver' = driver) are
+retained as a safety net so any stale rows that pre-date samai's
+permission_system spec still pass require_level checks. The aliases are
+ranked alongside their canonical counterpart. Phase 2 cleanup drops them
+once we confirm zero stale rows survive in production. See the
+ROLE_PERMISSIONS dict in app/services/permissions.py for the
+tag-based check that supersedes this ladder once PERMISSION_ENFORCE=1
+flips on.
 
 `require_level(min_level)` is a Flask view decorator that 302's
 to /keypad-login (saving ?next=) if no user is signed in, returns 403
@@ -16,11 +26,37 @@ from typing import Callable
 
 from flask import g, redirect, request, session, url_for
 
-LEVELS = ("partner", "corporate", "gm", "manager", "expo", "corporate-driver")
+# Canonical ranking (high → low privilege). New roles slot in alongside
+# their nearest legacy peer; legacy aliases sit immediately after their
+# canonical replacement so old User rows keep their effective rank.
+LEVELS = (
+    "partner",
+    "corporate",
+    "corporate_chef",
+    "gm",
+    "manager",         # legacy alias for gm — remove in Phase 2 cleanup
+    "km",
+    "assistant_km",
+    "prep_manager",
+    "foh_manager",
+    "expo",
+    "driver",
+    "corporate-driver",  # legacy alias for driver — remove in Phase 2 cleanup
+)
 _LEVEL_IDX = {name: i for i, name in enumerate(LEVELS)}
 
-# Levels that are scoped to one or more stores (vs everywhere).
-STORE_SCOPED_LEVELS = ("gm", "manager", "expo")
+# Levels that are scoped to one or more stores (vs everywhere). Partner
+# and corporate are intentionally absent — they see every store implicitly
+# and their store_scope column stays NULL. Everyone else must carry at
+# least one store assignment in User.store_scope (CSV: "tomball" /
+# "copperfield" / "tomball,copperfield").
+STORE_SCOPED_LEVELS = (
+    "gm", "manager",
+    "km", "assistant_km",
+    "corporate_chef", "prep_manager", "foh_manager",
+    "expo",
+    "driver", "corporate-driver",
+)
 
 # Maps the User.store_scope CSV value to the store_slug each scope owns.
 SCOPE_TO_SLUG = {
@@ -32,8 +68,10 @@ SCOPE_TO_SLUG = {
 def accessible_store_slugs(user) -> list[str]:
     """Return the store slugs ('dos' / 'uno' / 'corporate' / 'partner') this
     user can access. Partner and corporate see everything via their own
-    slug; store-scoped roles (gm/manager/expo) get one entry per assigned
-    store. Order is stable so the sidebar dropdown is consistent."""
+    slug; store-scoped roles (gm, manager, km, assistant_km, corporate_chef,
+    prep_manager, foh_manager, expo, driver, corporate-driver) get one entry
+    per assigned store, derived from the User.store_scope CSV. Order is
+    stable so the sidebar dropdown is consistent."""
     if user is None:
         return []
     level = user.permission_level
@@ -43,7 +81,8 @@ def accessible_store_slugs(user) -> list[str]:
         return ["corporate"]
     if level == "corporate-driver":
         return []
-    # gm / manager / expo: split the CSV store_scope into slugs.
+    # Everyone else (gm/manager/km/assistant_km/corporate_chef/prep_manager/
+    # foh_manager/expo/driver): split the CSV store_scope into slugs.
     out: list[str] = []
     for scope in (user.store_scope or "").split(","):
         slug = SCOPE_TO_SLUG.get(scope.strip())

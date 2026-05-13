@@ -27,6 +27,36 @@ from app.web import keypad_auth as ezkeypad
 from app.services import produce_ingest
 
 
+def _init_sentry() -> None:
+    """Initialize Sentry SDK if SENTRY_DSN is set in env (production only).
+    No-op otherwise so local dev + chat tools stay quiet. Done BEFORE Flask
+    init so exceptions during startup are captured too. Phase 0 / Block 2
+    (2026-05-13)."""
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        environment = (
+            "production" if os.getenv("RENDER")
+            else os.getenv("FLASK_ENV", "development")
+        )
+        sentry_sdk.init(
+            dsn=dsn,
+            integrations=[FlaskIntegration()],
+            environment=environment,
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+            send_default_pii=False,  # don't ship form bodies / cookies
+            release=os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT"),
+        )
+        logging.getLogger(__name__).info(
+            "Sentry initialized — environment=%s, release=%s",
+            environment, (os.getenv("RENDER_GIT_COMMIT") or "(unset)")[:7])
+    except Exception:
+        logging.getLogger(__name__).exception("Sentry init failed (non-fatal)")
+
+
 def create_app():
     load_dotenv(override=True)
 
@@ -36,6 +66,10 @@ def create_app():
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    # Sentry — only activates when SENTRY_DSN is set in env (Phase 0 / Block 2).
+    # Local dev + chat tools stay quiet.
+    _init_sentry()
 
     app = Flask(__name__)
     # SECRET_KEY: fail loud if unset (Phase 0, 2026-05-13 — closes the
@@ -407,6 +441,22 @@ def create_app():
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
+
+    # ==== Phase 0 / Block 2 Sentry verification route — temporary ====
+    # Hit with Partner cookie + the cron token to trigger an unhandled
+    # exception so we can confirm Sentry is catching them. Remove this
+    # route once verified in the Sentry dashboard.
+    @app.route("/partner/developer/sentry-test", methods=["GET"])
+    def _sentry_test():  # pragma: no cover - removed after verify
+        from flask import session, request, abort, redirect, url_for
+        if not session.get("partner_auth_ok"):
+            return redirect(url_for("auth.partner_login"))
+        if request.args.get("token") != os.getenv("CRON_TOKEN"):
+            abort(403)
+        raise RuntimeError(
+            "Sentry test exception — Phase 0 / Block 2 verification "
+            "(2026-05-13). Safe to ignore; the route will be removed."
+        )
 
     @app.cli.command("create-driver")
     @click.argument("name")

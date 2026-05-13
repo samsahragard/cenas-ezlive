@@ -325,6 +325,7 @@ DOC_PAGES = [
     ("agent-bootstrap",          "Agent Bootstrap",   "doc_agent_bootstrap"),
     ("permission-system",        "Permission System", "doc_permission_system"),
     ("anomaly-rules",            "Anomaly Rules",     "doc_anomaly_rules"),
+    ("anomaly-service-spec",     "Anomaly Service Spec", "doc_anomaly_service_spec"),
     ("chats",                    "Chats",             "doc_chats"),
 ]
 

@@ -105,6 +105,35 @@ Body: {"value":"&lt;new value&gt;"}
 <h3>Tail logs</h3>
 <pre>GET https://api.render.com/v1/logs?ownerId=&lt;owner&gt;&resource=srv-d7ue6ivlk1mc73aaka20&limit=100&direction=backward</pre>
 
+<h2>Render Cron Jobs</h2>
+<p>
+  Two scheduled jobs wired via the Render API (2026-05-13). Each is a
+  standalone <code>cron_job</code> service in the same Render team
+  (<code>tea-d28frq1r0fns73dcuueg</code>); the start command shells out
+  to <code>curl</code> against the corresponding <code>/cron/*</code>
+  endpoint on <code>app.cenaskitchen.com</code>. Token check is on the
+  app side (<code>CRON_TOKEN</code> header).
+</p>
+<table>
+  <tr><th>Cron job</th><th>Service ID</th><th>Schedule (UTC)</th><th>Endpoint</th></tr>
+  <tr><td>no-show sweep</td><td><code>crn-d82e5ivaqgkc7393acsg</code></td><td><code>*/5 * * * *</code> (every 5 min)</td><td><code>POST /cron/no-show-sweep</code></td></tr>
+  <tr><td>recompute scores</td><td><code>crn-d82e5jcvikkc73a7d50g</code></td><td><code>0 9 * * *</code> (4 AM CT / 9 AM UTC daily)</td><td><code>POST /cron/recompute-scores</code></td></tr>
+</table>
+<p>
+  Each cron job has its own <code>CRON_TOKEN</code> env var (mirrors the
+  one set on the web service). The web app's <code>/cron/*</code> handlers
+  reject anything without a matching header (returns 403). Auth gate
+  (<code>app/web/auth.py</code>) exempts <code>/cron/</code> so the
+  token check actually runs.
+</p>
+<p><strong>Manual fire (token from <code>~/.openclaw/.secrets/cron_token.txt</code>):</strong></p>
+<pre>curl -X POST -H "X-Cron-Token: $(cat ~/.openclaw/.secrets/cron_token.txt)" \
+  https://app.cenaskitchen.com/cron/no-show-sweep
+# {"flagged_count":0,"ok":true}
+curl -X POST -H "X-Cron-Token: $(cat ~/.openclaw/.secrets/cron_token.txt)" \
+  https://app.cenaskitchen.com/cron/recompute-scores
+# {"ok":true,"scored":2,"tier_changes":0}</pre>
+
 <h2>Local development</h2>
 <ol>
   <li>Clone <code>github.com/leverr18/cenas-ezlive</code> to <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code></li>

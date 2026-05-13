@@ -360,30 +360,75 @@ def dashboard_summary():
         key=lambda r: -r["value"],
     )
 
-    # Labor: total + BOH/FOH donut slices
+    # Labor: source = Toast ANALYTICS API (the /era/v1/* endpoints). The
+    # legacy labor_report path uses Toast Web API's /labor/v1/timeEntries
+    # which only includes CLOSED shifts — drastically under-counts during
+    # active service hours. Analytics gives us Toast's pre-aggregated daily
+    # totals including in-progress shifts, matching what the Toast Web UI
+    # shows. Per Sam 2026-05-12.
     from app.services.role_classifier import classify_role
-    boh_cost = foh_cost = 0.0
-    for row in labor_rep.get("by_position") or []:
-        cost = row.get("labor_cost")
-        if cost is None:
-            # Management redaction returns None for cost; fall back to derived
-            # value: pct_net_sales * net_sales / 100. (Aggregate-only — never
-            # exposes individuals.)
-            pct = row.get("pct_net_sales") or 0.0
-            cost = (pct / 100.0) * sales_total
-        role = classify_role(row.get("title") or "")
-        if role == "boh":
-            boh_cost += cost
-        else:
-            foh_cost += cost
-    labor_total = float((labor_rep.get("totals") or {}).get("labor_cost") or 0.0)
-    if labor_total <= 0 and (boh_cost + foh_cost) > 0:
-        labor_total = boh_cost + foh_cost
-    labor_roles = []
-    if boh_cost > 0:
-        labor_roles.append({"key": "boh", "label": "BOH (Kitchen)", "value": boh_cost})
-    if foh_cost > 0:
-        labor_roles.append({"key": "foh", "label": "FOH (Service)", "value": foh_cost})
+    from app.services.toast_analytics_client import ToastAnalyticsClient, ToastAnalyticsError
+    _LOC_TO_GUID = {
+        "tomball":     os.getenv("TOAST_RESTAURANT_GUID_TOMBALL", ""),
+        "copperfield": os.getenv("TOAST_RESTAURANT_GUID_COPPERFIELD", ""),
+    }
+    if location == "both":
+        ana_restaurant_ids = [g for g in _LOC_TO_GUID.values() if g]
+    elif location in _LOC_TO_GUID and _LOC_TO_GUID[location]:
+        ana_restaurant_ids = [_LOC_TO_GUID[location]]
+    else:
+        ana_restaurant_ids = []  # empty = all accessible
+    start_ymd = start.strftime("%Y%m%d")
+    end_ymd = end.strftime("%Y%m%d")
+    labor_total = 0.0
+    labor_hours = 0.0
+    labor_roles: list[dict] = []
+    labor_warnings: list[str] = []
+    try:
+        ana = ToastAnalyticsClient.shared()
+        metrics_rows = ana.metrics(start_ymd, end_ymd, ana_restaurant_ids)
+        labor_total = sum(float(m.get("hourlyJobTotalPay") or 0) for m in metrics_rows)
+        labor_hours = sum(float(m.get("hourlyJobTotalHours") or 0) for m in metrics_rows)
+        # BOH/FOH split via classify_role on the by-job analytics rows.
+        labor_by_job = ana.labor(start_ymd, end_ymd, ana_restaurant_ids, group_by=["JOB"])
+        boh_cost = foh_cost = 0.0
+        for row in labor_by_job:
+            cost = float(row.get("totalCost") or 0)
+            role = classify_role(row.get("jobTitle") or "")
+            if role == "boh":
+                boh_cost += cost
+            else:
+                foh_cost += cost
+        if boh_cost > 0:
+            labor_roles.append({"key": "boh", "label": "BOH (Kitchen)", "value": round(boh_cost, 2)})
+        if foh_cost > 0:
+            labor_roles.append({"key": "foh", "label": "FOH (Service)", "value": round(foh_cost, 2)})
+    except ToastAnalyticsError as e:
+        logger.exception("dashboard_summary: Toast Analytics labor fetch failed; falling back to labor_report")
+        labor_warnings.append("Toast Analytics labor failed; numbers may be lower (in-progress shifts excluded).")
+        # Fall back to the old labor_report path so the dashboard still
+        # renders something useful even when the Analytics API is down.
+        boh_cost = foh_cost = 0.0
+        for row in labor_rep.get("by_position") or []:
+            cost = row.get("labor_cost")
+            if cost is None:
+                pct = row.get("pct_net_sales") or 0.0
+                cost = (pct / 100.0) * sales_total
+            role = classify_role(row.get("title") or "")
+            if role == "boh":
+                boh_cost += cost
+            else:
+                foh_cost += cost
+        labor_total = float((labor_rep.get("totals") or {}).get("labor_cost") or 0.0)
+        labor_hours = float((labor_rep.get("totals") or {}).get("hours") or 0.0)
+        if labor_total <= 0 and (boh_cost + foh_cost) > 0:
+            labor_total = boh_cost + foh_cost
+        if boh_cost > 0:
+            labor_roles.append({"key": "boh", "label": "BOH (Kitchen)", "value": boh_cost})
+        if foh_cost > 0:
+            labor_roles.append({"key": "foh", "label": "FOH (Service)", "value": foh_cost})
+
+    labor_ratio_pct = (labor_total / sales_total * 100.0) if sales_total > 0 else 0.0
 
     return jsonify({
         "period": period,
@@ -395,13 +440,13 @@ def dashboard_summary():
             "by_channel": sales_channels,
         },
         "labor": {
-            "total_cost": labor_total,
-            "hours": float((labor_rep.get("totals") or {}).get("hours") or 0.0),
+            "total_cost": round(labor_total, 2),
+            "hours": round(labor_hours, 2),
             "shifts": int((labor_rep.get("totals") or {}).get("shifts") or 0),
-            "ratio_pct": float((labor_rep.get("totals") or {}).get("labor_pct_of_sales") or 0.0),
+            "ratio_pct": round(labor_ratio_pct, 1),
             "by_role": labor_roles,
         },
-        "warnings": labor_rep.get("warnings") or [],
+        "warnings": (labor_rep.get("warnings") or []) + labor_warnings,
     })
 
 

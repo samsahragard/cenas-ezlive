@@ -128,7 +128,15 @@ def acknowledge_signal(signal_id: int):
     Signal.acknowledged_by + Signal.acknowledged_at. Idempotent — if the
     signal is already acked we still write a new SignalAck row (so a
     repeated click captures the second interaction) but the signal's
-    acknowledged_at sticks at the first ack."""
+    acknowledged_at sticks at the first ack.
+
+    Authorization: the caller must be in the signal's audience (role
+    overlap with audience_roles AND store scope matches store_id).
+    Partner-tier sessions pass the audience check trivially (their
+    role set is a superset of all in-app roles). This closes the
+    authorization gap samai caught in her Block 3 review — without
+    the check, any keypad-authed user could ack any signal they
+    happen to know the id of."""
     # Gate on partner-tier or a signed-in keypad user. Driver portal has
     # its own surface and shouldn't ack via this URL.
     u = getattr(g, "current_user", None)
@@ -141,6 +149,32 @@ def acknowledge_signal(signal_id: int):
         sig = db.get(Signal, signal_id)
         if sig is None:
             return jsonify({"ok": False, "error": "signal not found"}), 404
+
+        # Audience-eligibility check BEFORE mutation. Partner-Tier-2-only
+        # sessions (no User in g.current_user) are treated as partner +
+        # see everything; otherwise we apply the same role-set / store-
+        # scope filter the read-side uses to decide whether to render
+        # this signal as a card. Mismatched user → 403.
+        if u is not None:
+            user_roles = _user_role_set()
+            aud = sig.audience_roles or []
+            if aud and not (user_roles & set(aud)):
+                return jsonify({
+                    "ok": False,
+                    "error": "not in this signal's audience",
+                }), 403
+            # Store scope: NULL store_id = global signal, ack OK from any
+            # store context. Otherwise the user's current store has to
+            # match — partner / corporate views are cross-store so the
+            # _current_store_id helper returns None for them and we let
+            # those through.
+            scope = _current_store_id()
+            if sig.store_id and scope and sig.store_id != scope:
+                return jsonify({
+                    "ok": False,
+                    "error": "signal is scoped to a different store",
+                }), 403
+
         now = datetime.utcnow()
         actor_id = u.id if u else None
         if actor_id is None:

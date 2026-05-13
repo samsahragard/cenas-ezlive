@@ -300,6 +300,14 @@ class Driver(Base):
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     lockout_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # 5-digit PIN keypad auth (2026-05-12 — migrating drivers off email+password
+    # to email+PIN, mirroring the User keypad pattern in app/web/keypad_auth.py).
+    # password_hash is retained for backwards compat: legacy accounts log in via
+    # the fallback path until an admin reset moves them onto passcode_hash.
+    passcode_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    first_login_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    session_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
     # ---- Driver-system fields (migration 15) ----
     # status replaces the legacy `active` boolean over time. `active` stays
     # for backwards compat; new code should read `status`. Values:

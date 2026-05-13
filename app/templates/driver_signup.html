@@ -156,7 +156,7 @@
 
   <div class="auth-card">
     <h2>Create your driver account</h2>
-    <p class="sub">Pick your store, fill in the basics, choose a password.</p>
+    <p class="sub">Pick your store, fill in the basics, choose a 5-digit PIN.</p>
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
     <form method="POST" action="{{ url_for('driver.driver_signup_submit') }}">
       <label for="location">Location</label>
@@ -187,12 +187,14 @@
         </div>
       </div>
 
-      <label for="password">Password (8+ chars)</label>
-      <input type="password" id="password" name="password" minlength="8"
+      <label for="pin">PIN (5 characters — digits or * # @ + % - $)</label>
+      <input type="password" id="pin" name="pin" inputmode="numeric"
+             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
              autocomplete="new-password" required>
 
-      <label for="password_confirm">Confirm password</label>
-      <input type="password" id="password_confirm" name="password_confirm" minlength="8"
+      <label for="pin_confirm">Confirm PIN</label>
+      <input type="password" id="pin_confirm" name="pin_confirm" inputmode="numeric"
+             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
              autocomplete="new-password" required>
 
       <button class="submit" type="submit">Create account</button>

@@ -143,15 +143,16 @@
 
   <div class="auth-card">
     <h2>Log in</h2>
-    <p class="sub">Use the email <em>or</em> phone number + password you signed up with.</p>
+    <p class="sub">Use the email <em>or</em> phone you signed up with, plus your 5-digit PIN.</p>
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
     <form method="POST" action="{{ url_for('driver.driver_login_submit') }}">
       <label for="email">Email or phone</label>
       <input type="text" id="email" name="email" autocomplete="username"
              required autofocus value="{{ prefill_email or '' }}">
 
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password"
+      <label for="pin">PIN (5 characters)</label>
+      <input type="password" id="pin" name="pin" inputmode="numeric"
+             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
              autocomplete="current-password" required>
 
       <button class="submit" type="submit">Log in</button>

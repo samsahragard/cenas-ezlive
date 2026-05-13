@@ -325,6 +325,33 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("users.session_version backfill failed (non-fatal)")
 
+    # Idempotent column backfill for drivers PIN-keypad columns (2026-05-12 —
+    # migrating drivers off email+password to email+PIN, mirroring the User
+    # keypad pattern).
+    try:
+        from sqlalchemy import inspect as _sa_inspect_pin, text as _sa_text_pin
+        from app.db import engine as _eng_pin
+        if _eng_pin is not None:
+            insp = _sa_inspect_pin(_eng_pin)
+            if "drivers" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("drivers")}
+                bool_false = "0" if _eng_pin.dialect.name == "sqlite" else "FALSE"
+                pin_additions = [
+                    ("passcode_hash",     "VARCHAR(200)"),
+                    ("first_login_done",  f"BOOLEAN NOT NULL DEFAULT {bool_false}"),
+                    ("session_version",   "INTEGER NOT NULL DEFAULT 1"),
+                ]
+                added = []
+                with _eng_pin.begin() as conn:
+                    for col_name, col_def in pin_additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_pin(f"ALTER TABLE drivers ADD COLUMN {col_name} {col_def}"))
+                            added.append(col_name)
+                if added:
+                    logging.getLogger(__name__).info("drivers table: backfilled PIN-auth columns %s", added)
+    except Exception:
+        logging.getLogger(__name__).exception("drivers PIN-auth column backfill failed (non-fatal)")
+
     # Seed Sam as partner with passcode "12345" if no User rows exist
     # (migration 13 keypad auth). Idempotent: only inserts if the table is
     # empty, so we don't clobber later edits. Sam's first login forces a

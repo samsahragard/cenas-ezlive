@@ -16,10 +16,10 @@
 {% block content %}
 {% if temp_pw %}
   <div class="banner banner-success" style="margin-bottom:18px;">
-    <strong>Temp password for {{ temp_for }}:</strong>
+    <strong>Temp PIN for {{ temp_for }}:</strong>
     <code style="font-size:18px;letter-spacing:1px;background:rgba(0,0,0,0.35);padding:4px 10px;border-radius:6px;margin-left:8px;">{{ temp_pw }}</code>
     <span style="display:block;margin-top:6px;font-size:12px;opacity:0.7;">
-      Read this to the driver — it won't be shown again. They can log in with it and use the password they want to keep.
+      Read this to the driver — it won't be shown again. They'll be forced to pick a new PIN on first login.
     </span>
   </div>
 {% endif %}
@@ -48,8 +48,8 @@
           <td>
             {% if not d.active %}
               <span style="color:#c0392b;font-weight:600;">Inactive</span>
-            {% elif not d.password_hash %}
-              <span style="color:#d4af37;font-weight:600;">No password</span>
+            {% elif not d.passcode_hash and not d.password_hash %}
+              <span style="color:#d4af37;font-weight:600;">No PIN</span>
             {% elif d.lockout_until %}
               <span style="color:#d4af37;font-weight:600;">Locked out</span>
             {% elif latest_shift_for.get(d.id) %}
@@ -78,7 +78,7 @@
           <td>{{ d.phone or '—' }}</td>
           <td>{{ d.address or '—' }}</td>
           <td>
-            {% if d.password_hash %}set{% else %}—{% endif %}
+            {% if d.passcode_hash %}PIN set{% elif d.password_hash %}legacy{% else %}—{% endif %}
             {% if d.failed_attempts and d.failed_attempts > 0 %}
               <span style="color:#d4af37;font-size:11px;display:block;">{{ d.failed_attempts }} failed</span>
             {% endif %}
@@ -86,8 +86,8 @@
           <td>
             <form action="{{ url_for('store.drivers_reset', driver_id=d.id) }}" method="POST"
                   style="display:inline-block;margin-right:6px;"
-                  onsubmit="return confirm('Reset password for {{ d.name }}? You’ll get a new temp password to read to them.');">
-              <button type="submit" class="btn-logout" style="background:rgba(232,122,62,0.85);color:#fff;font-size:11px;padding:5px 10px;">Reset PW</button>
+                  onsubmit="return confirm('Reset PIN for {{ d.name }}? You’ll get a new temp PIN to read to them.');">
+              <button type="submit" class="btn-logout" style="background:rgba(232,122,62,0.85);color:#fff;font-size:11px;padding:5px 10px;">Reset PIN</button>
             </form>
             <form action="{{ url_for('store.drivers_toggle_active', driver_id=d.id) }}" method="POST"
                   style="display:inline-block;margin-right:6px;"
@@ -117,6 +117,6 @@
 </div>
 
 <p style="margin-top:18px;font-size:12px;color:var(--text-3);">
-  Drivers self-sign-up from the main page. Reset issues a one-time temp password — read it to them; they can log in and create the password they want.
+  Drivers self-sign-up from the main page with email + 5-digit PIN. Reset issues a one-time temp PIN — read it to them; they'll be forced to set a new PIN on first login.
 </p>
 {% endblock %}

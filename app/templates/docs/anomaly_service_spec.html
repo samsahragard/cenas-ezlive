@@ -1,0 +1,636 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Implementation spec for the anomaly-detection service. Counterpart to
+  samai's <a href="/partner/developer/app/anomaly-rules">anomaly_rules</a>
+  rule library (32 rules across 10 domains). That doc answers "what does
+  the system surface, to whom, how loudly". This doc answers "how do we
+  build it" — the data model SQLAlchemy decl, the rule-engine architecture,
+  cron bucket assignments, dedup + auto-clear logic, LLM routing per rule,
+  the morning brief composer, the anomaly-card render path, and the
+  Telegram alert surface.
+</p>
+<p>
+  <strong>Scope:</strong> code-ready spec — no work in <code>app/</code>
+  changes from this doc alone, but every section is a single PR away from
+  shipping. Phase 1 / Block 1 picks this up.
+</p>
+
+<!-- Mermaid for the architecture graphs -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true, theme: 'dark',
+    themeVariables: {
+      primaryColor: '#28160e', primaryTextColor: '#FAF6EC',
+      primaryBorderColor: '#E4B340', lineColor: '#E4B340',
+      fontFamily: 'inherit', fontSize: '13px',
+    },
+    flowchart: { curve: 'basis', padding: 10 },
+  });
+</script>
+<style>
+  .as-pre {
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(228,179,64,0.18);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #ccd;
+    overflow-x: auto;
+  }
+  .as-pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+  table.as-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.as-tbl th { color: #E4B340; padding: 6px 8px; border-bottom: 1px solid rgba(228,179,64,0.3);
+    text-align: left; font-weight: 600; }
+  table.as-tbl td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    vertical-align: top; }
+  table.as-tbl td code { color: #FFD970; }
+  .mermaid { background: rgba(0,0,0,0.25); border-radius: 10px;
+    padding: 12px; margin: 8px 0; overflow-x: auto; }
+</style>
+
+<!-- ============================================================ -->
+<h2>1. Top-level architecture</h2>
+<div class="mermaid">
+flowchart LR
+  subgraph TRIGGERS [Triggers]
+    CRON5["Render Cron<br/>every 5 min"]
+    CRON15["Render Cron<br/>every 15 min"]
+    CRON_H["Render Cron<br/>hourly"]
+    CRON_D["Render Cron<br/>daily 4 AM CT"]
+    CRON_W["Render Cron<br/>weekly Mon 8 AM CT"]
+    EVT[on-write event hooks<br/>invoice / kds / mgr_log / toast wh]
+  end
+
+  subgraph APP [Flask app — cenas-ezlive]
+    EVAL["/cron/anomaly-eval?bucket=&lt;b&gt;<br/>bucket-runner endpoint"]
+    REG[Rule registry<br/>app.services.anomaly_engine]
+    ENG[Rule engine<br/>run_rule per rule]
+    DEDUP[Dedup + auto-clear<br/>per (rule_name, subject_id, store_id)]
+    DB[(Signal table)]
+    BRIEF[Morning brief composer<br/>Opus daily]
+    TG[Telegram alert path<br/>severity=alert only]
+    UI_CARD[Anomaly card slot<br/>renders on surfaces]
+  end
+
+  CRON5 -. POST .-> EVAL
+  CRON15 -. POST .-> EVAL
+  CRON_H -. POST .-> EVAL
+  CRON_D -. POST .-> EVAL
+  CRON_W -. POST .-> EVAL
+  EVT --> ENG
+  EVAL --> REG --> ENG --> DEDUP --> DB
+  DEDUP -- severity=alert --> TG
+  CRON_D -. compose .-> BRIEF
+  BRIEF --> DB
+  UI_CARD -. query .- DB
+</div>
+
+<!-- ============================================================ -->
+<h2>2. Data model</h2>
+<p>
+  Three tables. <code>signals</code> holds the events, <code>signal_ack</code>
+  is the acknowledgment audit log, <code>rule_overrides</code> stores
+  per-rule threshold edits a partner has made via
+  <code>/partner/anomalies/rules</code>.
+</p>
+
+<h3>2.1 SQLAlchemy declaration (<code>app/models.py</code>)</h3>
+<pre class="as-pre"><code>class Signal(Base):
+    __tablename__ = "signals"
+    __table_args__ = (
+        Index("ix_signals_rule_subject_store",
+              "rule_name", "subject_id", "store_id"),
+        Index("ix_signals_unresolved_by_surface",
+              "resolved_at", "acknowledged_at"),
+        Index("ix_signals_trigger_at", "trigger_at"),
+    )
+
+    id:           Mapped[int]      = mapped_column(primary_key=True)
+    rule_name:    Mapped[str]      = mapped_column(String(80), nullable=False)
+    severity:     Mapped[str]      = mapped_column(String(10), nullable=False)
+    store_id:     Mapped[str|None] = mapped_column(String(20), nullable=True)
+    subject_id:   Mapped[str|None] = mapped_column(String(120), nullable=True)
+    subject_label:Mapped[str]      = mapped_column(String(200), nullable=False)
+    trigger_at:   Mapped[datetime] = mapped_column(DateTime, nullable=False,
+                                                   default=datetime.utcnow)
+    payload:      Mapped[dict]     = mapped_column(JSON, nullable=False, default=dict)
+    action_text:  Mapped[str]      = mapped_column(String(400), nullable=False)
+    surfaces:     Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    audience_roles: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    acknowledged_by: Mapped[int|None]  = mapped_column(ForeignKey("users.id"), nullable=True)
+    acknowledged_at: Mapped[datetime|None] = mapped_column(DateTime, nullable=True)
+    resolved_at:  Mapped[datetime|None]   = mapped_column(DateTime, nullable=True)
+
+
+class SignalAck(Base):
+    __tablename__ = "signal_acks"
+    id:        Mapped[int]    = mapped_column(primary_key=True)
+    signal_id: Mapped[int]    = mapped_column(ForeignKey("signals.id"), nullable=False)
+    user_id:   Mapped[int]    = mapped_column(ForeignKey("users.id"), nullable=False)
+    acked_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False,
+                                                default=datetime.utcnow)
+    note:      Mapped[str|None] = mapped_column(String(400), nullable=True)
+
+
+class RuleOverride(Base):
+    __tablename__ = "rule_overrides"
+    __table_args__ = (UniqueConstraint("rule_name", "store_id",
+                                       name="uq_rule_override"),)
+    id:        Mapped[int]      = mapped_column(primary_key=True)
+    rule_name: Mapped[str]      = mapped_column(String(80), nullable=False)
+    store_id:  Mapped[str|None] = mapped_column(String(20), nullable=True)
+    threshold: Mapped[dict]     = mapped_column(JSON, nullable=False)
+    severity_override: Mapped[str|None] = mapped_column(String(10), nullable=True)
+    updated_by: Mapped[int]     = mapped_column(ForeignKey("users.id"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
+                                                 onupdate=datetime.utcnow)
+</code></pre>
+
+<h3>2.2 Idempotent boot backfill (<code>app/__init__.py</code>)</h3>
+<p>
+  Same gated-absence ALTER pattern as the existing migration-8/10/11/15
+  backfills, since Render's <code>preDeployCommand</code> is unset.
+  <code>create_all()</code> creates the new tables wholesale; this block
+  only handles the case where the tables exist but need a new column
+  (e.g. a future Signal column added in a later commit). One block per
+  new table:
+</p>
+<pre class="as-pre"><code># inside create_app(), after the migration-15 backfill block:
+try:
+    from sqlalchemy import inspect as _i, text as _t
+    from app.db import engine as _e
+    if _e is not None:
+        insp = _i(_e)
+        for name in ("signals", "signal_acks", "rule_overrides"):
+            if name in insp.get_table_names():
+                pass  # column-level adds slot in here as the schema grows
+except Exception:
+    logging.getLogger(__name__).exception(
+        "anomaly tables backfill failed (non-fatal)")
+</code></pre>
+
+<!-- ============================================================ -->
+<h2>3. Rule registry + engine</h2>
+
+<h3>3.1 Registry pattern</h3>
+<p>
+  Every rule is a Python function decorated with
+  <code>@anomaly_rule(...)</code>. The decorator registers the rule into
+  a module-level dict keyed by <code>rule_name</code>:
+</p>
+<pre class="as-pre"><code># app/services/anomaly_engine.py
+
+from dataclasses import dataclass
+from typing import Callable
+
+@dataclass
+class SignalDraft:
+    """What a rule emits. Engine handles dedup + write."""
+    rule_name: str
+    severity: str            # "info" | "warn" | "alert"
+    store_id: str | None
+    subject_id: str | None
+    subject_label: str
+    payload: dict
+    action_text: str
+    surfaces: list[str]
+    audience_roles: list[str]
+
+
+@dataclass
+class RuleSpec:
+    name: str
+    bucket: str              # "every_5m" | "every_15m" | "hourly" | "daily" | "weekly" | "on_write"
+    severity_default: str
+    surfaces: list[str]
+    audience_roles: list[str]
+    action_text: str
+    fn: Callable             # (db: Session) -> list[SignalDraft]
+    llm_route: str           # "sql" | "haiku" | "opus"
+
+
+REGISTRY: dict[str, RuleSpec] = {}
+
+
+def anomaly_rule(*, name, bucket, severity, surfaces, audience_roles,
+                 action_text, llm_route="sql"):
+    def deco(fn):
+        REGISTRY[name] = RuleSpec(name=name, bucket=bucket,
+                                  severity_default=severity,
+                                  surfaces=surfaces,
+                                  audience_roles=audience_roles,
+                                  action_text=action_text,
+                                  fn=fn, llm_route=llm_route)
+        return fn
+    return deco
+
+
+# Example rule
+@anomaly_rule(
+    name="orders.no_driver_30min_before",
+    bucket="every_5m",
+    severity="alert",
+    surfaces=["orders.by_store", "partner.anomalies", "home"],
+    audience_roles=["partner", "gm", "km"],
+    action_text="Assign a driver via /orders/view/&lt;id&gt; immediately.",
+    llm_route="sql",
+)
+def no_driver_30min_before(db) -> list[SignalDraft]:
+    from app.models import Order
+    from datetime import datetime, timedelta
+    cutoff = datetime.utcnow() + timedelta(minutes=30)
+    rows = (db.query(Order)
+            .filter(Order.status.in_(("available", "requested")))
+            .filter(Order.delivery_window_start &lt;= cutoff)
+            .all())
+    return [SignalDraft(
+        rule_name="orders.no_driver_30min_before",
+        severity="alert",
+        store_id=o.origin_store_id,
+        subject_id=o.external_order_id,
+        subject_label=f"Order {o.external_order_id}",
+        payload={"deliver_at": o.deliver_at,
+                 "minutes_until": int((cutoff - datetime.utcnow()).total_seconds()/60)},
+        action_text=REGISTRY["orders.no_driver_30min_before"].action_text,
+        surfaces=REGISTRY["orders.no_driver_30min_before"].surfaces,
+        audience_roles=REGISTRY["orders.no_driver_30min_before"].audience_roles,
+    ) for o in rows]
+</code></pre>
+
+<h3>3.2 Engine loop</h3>
+<pre class="as-pre"><code>def run_bucket(bucket: str) -> dict:
+    """Run every rule belonging to a bucket. Returns summary stats."""
+    db = SessionLocal()
+    fired = saved = updated = resolved = 0
+    try:
+        for spec in REGISTRY.values():
+            if spec.bucket != bucket:
+                continue
+            try:
+                drafts = spec.fn(db)
+                seen_keys = set()
+                for d in drafts:
+                    fired += 1
+                    key = (d.rule_name, d.subject_id, d.store_id)
+                    seen_keys.add(key)
+                    if _upsert_signal(db, d):
+                        saved += 1
+                    else:
+                        updated += 1
+                # Auto-clear: any open Signal for this rule whose subject
+                # didn't appear in this run gets resolved_at stamped.
+                resolved += _auto_clear(db, spec.name, seen_keys)
+            except Exception:
+                logger.exception("anomaly rule %s crashed (non-fatal)", spec.name)
+        db.commit()
+    finally:
+        db.close()
+    return {"bucket": bucket, "fired": fired, "saved": saved,
+            "updated": updated, "resolved": resolved}
+</code></pre>
+
+<!-- ============================================================ -->
+<h2>4. Cron buckets</h2>
+<p>
+  Five Render <code>cron_job</code> services, mirroring the pattern of
+  the existing <code>crn-d82e5ivaqgkc7393acsg</code> +
+  <code>crn-d82e5jcvikkc73a7d50g</code> from Phase 0 / Block 1. Each
+  curls <code>POST /cron/anomaly-eval?bucket=&lt;b&gt;</code> with
+  <code>Authorization: Bearer $CRON_TOKEN</code>.
+</p>
+<table class="as-tbl">
+  <tr><th>Bucket</th><th>Schedule (UTC)</th><th>Render cron name</th><th>Rules in bucket (samples)</th></tr>
+  <tr><td><code>every_5m</code></td><td><code>*/5 * * * *</code></td>
+      <td><code>cenas-cron-anomaly-5m</code></td>
+      <td>orders.no_driver_30min_before, kds.station_red, kds.expedite_late, driver.no_show_window</td></tr>
+  <tr><td><code>every_15m</code></td><td><code>*/15 * * * *</code></td>
+      <td><code>cenas-cron-anomaly-15m</code></td>
+      <td>labor.running_hot, server_perf.tip_rate_dropping, attendance.no_clock_in</td></tr>
+  <tr><td><code>hourly</code></td><td><code>0 * * * *</code></td>
+      <td><code>cenas-cron-anomaly-hourly</code></td>
+      <td>sales.daily_vs_forecast, customer.review_complaint, vendor.delivery_window_missed</td></tr>
+  <tr><td><code>daily</code></td><td><code>0 13 * * *</code> (8 AM CT)</td>
+      <td><code>cenas-cron-anomaly-daily</code></td>
+      <td>vendor.invoice_over_quoted_price (overnight batches), produce.shrinkage_high, customer.repeat_complaints, morning_brief composition</td></tr>
+  <tr><td><code>weekly</code></td><td><code>0 13 * * 1</code> (Mon 8 AM CT)</td>
+      <td><code>cenas-cron-anomaly-weekly</code></td>
+      <td>system.uncategorized_orders, kitchen.menu_attach_rate, brief calibration footer</td></tr>
+  <tr><td><code>on_write</code></td><td>n/a (event hook)</td>
+      <td>n/a — handler-side hooks</td>
+      <td>orders.no_driver_30min_before partial check at ingest; invoice ingest rules at upload; kds rules on state update</td></tr>
+</table>
+
+<h3>4.1 Render handler — <code>/cron/anomaly-eval</code></h3>
+<pre class="as-pre"><code>@driver_system_bp.route("/cron/anomaly-eval", methods=["POST"])
+def cron_anomaly_eval():
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    bucket = request.args.get("bucket", "")
+    if bucket not in {"every_5m","every_15m","hourly","daily","weekly"}:
+        return jsonify({"ok": False, "error": "bad bucket"}), 400
+    from app.services.anomaly_engine import run_bucket
+    summary = run_bucket(bucket)
+    return jsonify({"ok": True, **summary})
+</code></pre>
+
+<!-- ============================================================ -->
+<h2>5. Dedup + auto-clear</h2>
+
+<h3>5.1 Upsert algorithm</h3>
+<pre class="as-pre"><code>def _upsert_signal(db, d: SignalDraft) -> bool:
+    """Returns True if a new row was inserted; False if an open one was updated."""
+    existing = (db.query(Signal)
+                .filter(Signal.rule_name == d.rule_name)
+                .filter(Signal.subject_id == d.subject_id)
+                .filter(Signal.store_id == d.store_id)
+                .filter(Signal.resolved_at.is_(None))
+                .filter(Signal.acknowledged_at.is_(None))
+                .first())
+    if existing:
+        existing.trigger_at = datetime.utcnow()
+        existing.payload = {**(existing.payload or {}), **d.payload}
+        existing.severity = d.severity   # severity can change between fires
+        return False
+    db.add(Signal(rule_name=d.rule_name, severity=d.severity,
+                  store_id=d.store_id, subject_id=d.subject_id,
+                  subject_label=d.subject_label,
+                  trigger_at=datetime.utcnow(),
+                  payload=d.payload,
+                  action_text=d.action_text,
+                  surfaces=d.surfaces,
+                  audience_roles=d.audience_roles))
+    return True
+
+
+def _auto_clear(db, rule_name: str, seen_keys: set) -> int:
+    """Stamp resolved_at on any open Signal whose subject didn't appear
+    in this run — only applies to rules with reversible triggers."""
+    if rule_name not in REVERSIBLE_RULES:
+        return 0
+    open_rows = (db.query(Signal)
+                 .filter(Signal.rule_name == rule_name)
+                 .filter(Signal.resolved_at.is_(None))
+                 .filter(Signal.acknowledged_at.is_(None))
+                 .all())
+    cleared = 0
+    for r in open_rows:
+        if (r.rule_name, r.subject_id, r.store_id) not in seen_keys:
+            r.resolved_at = datetime.utcnow()
+            cleared += 1
+    return cleared
+
+
+REVERSIBLE_RULES = {
+    "orders.no_driver_30min_before",
+    "orders.late_delivery",
+    "kds.station_red",
+    "kds.expedite_late",
+    "equipment.down",
+    "attendance.no_clock_in",
+}
+</code></pre>
+
+<h3>5.2 Calibration / noise cap (from anomaly_rules &sect;2)</h3>
+<p>
+  Implemented as a nightly job that walks the last 7 days of Signals,
+  computes <code>fire_count_per_store_per_day</code> per rule, and writes
+  <code>severity_override</code> entries to <code>rule_overrides</code>
+  for rules that exceed the &gt;3/store/day threshold (downgrade by one).
+  The engine's <code>run_bucket</code> consults
+  <code>rule_overrides</code> first, falling back to
+  <code>spec.severity_default</code>.
+</p>
+
+<!-- ============================================================ -->
+<h2>6. LLM routing per rule</h2>
+<p>
+  Most rules are pure SQL — pattern detection over the existing tables.
+  Some need LLM help. The <code>llm_route</code> field on
+  <code>RuleSpec</code> decides:
+</p>
+<table class="as-tbl">
+  <tr><th>Route</th><th>Model</th><th>Use case</th><th>Latency budget</th></tr>
+  <tr><td><code>sql</code></td><td>(no LLM)</td>
+      <td>Threshold checks, time-windows, count comparisons. ~28 of 32 rules.</td>
+      <td>&lt; 1s per rule</td></tr>
+  <tr><td><code>haiku</code></td><td>claude-haiku-4-5-20251001</td>
+      <td>Narrative summarization on a single Signal payload (per-row enrichment of <code>subject_label</code>, free-text customer-review classification, ambiguous shrinkage cause). ~4 rules.</td>
+      <td>&lt; 3s per rule fire</td></tr>
+  <tr><td><code>opus</code></td><td>claude-opus-4-1-20250805</td>
+      <td>Daily morning brief composition — reads ALL last-24h Signals + the rule library + the day-ahead calendar, writes the narrative brief per audience role. One call per role per day.</td>
+      <td>&lt; 30s per role</td></tr>
+</table>
+<p>
+  Cost guardrails: rule engine logs a per-rule
+  <code>llm_call_count</code> + <code>llm_token_count</code>. If a haiku
+  rule exceeds <code>HAIKU_DAILY_BUDGET</code> tokens (default 1M),
+  subsequent fires fall back to pure SQL emission (no enrichment) and
+  log a warning.
+</p>
+
+<!-- ============================================================ -->
+<h2>7. Morning brief composer</h2>
+<p>
+  Triggered by the <code>daily</code> bucket. One Opus call per audience
+  role (<code>partner</code>, <code>gm</code>, <code>km</code>).
+</p>
+<h3>7.1 Composer input</h3>
+<pre class="as-pre"><code>{
+  "for_role": "partner",
+  "for_store": null,                       # role-dependent; partner sees all
+  "window_start_iso": "...",
+  "window_end_iso":   "...",
+  "signals_unresolved": [...],             # Signal rows where audience_roles ∋ role
+  "signals_resolved_24h": [...],
+  "rule_library_excerpt": { ... },         # rule_name → {severity, action_text, …}
+  "lookahead_calendar": [...]              # next-24h orders + scheduled shifts
+}
+</code></pre>
+<h3>7.2 Composer output</h3>
+<pre class="as-pre"><code>{
+  "headline": "3 alerts open + $612 cost variance day-over-day",
+  "alerts": [{ "rule_name": "...", "subject": "...", "action": "..." }],
+  "warns": [...],
+  "info_count": 12,
+  "calibration_footer": "downgraded: vendor.invoice_over_quoted_price (fired 18× yesterday)"
+}
+</code></pre>
+<p>
+  Output stored on a new <code>MorningBrief</code> row keyed by
+  <code>(role, store_id, brief_date)</code>; the
+  <code>/partner/morning-brief</code> route reads it. Telegram + email
+  surfaces also pull from this row.
+</p>
+
+<!-- ============================================================ -->
+<h2>8. Anomaly card surface (per-page)</h2>
+<p>
+  Pages opt in by including a partial:
+</p>
+<pre class="as-pre"><code>{% raw %}{% include "partials/anomaly_cards.html"
+   with surface="orders.by_store" %}{% endraw %}
+</code></pre>
+<p>
+  Partial calls a context helper <code>visible_signals(surface)</code>
+  that runs the query in samai's
+  <a href="/partner/developer/app/anomaly-rules">anomaly_rules</a> §5
+  (filters by surface, audience-role membership, store-scope, and
+  unresolved+unacked). Renders up to 5 cards. Each card has an
+  <code>Acknowledge</code> button POSTing to
+  <code>/partner/anomalies/ack/&lt;signal_id&gt;</code>.
+</p>
+
+<h3>8.1 Acknowledge endpoint</h3>
+<pre class="as-pre"><code>@anomalies_bp.route("/anomalies/ack/&lt;int:sid&gt;", methods=["POST"])
+@require_user
+def ack(sid: int):
+    db = SessionLocal()
+    try:
+        sig = db.get(Signal, sid)
+        if not sig:
+            abort(404)
+        sig.acknowledged_by = g.current_user.id
+        sig.acknowledged_at = datetime.utcnow()
+        db.add(SignalAck(signal_id=sid, user_id=g.current_user.id,
+                         note=request.form.get("note")))
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+</code></pre>
+
+<!-- ============================================================ -->
+<h2>9. Telegram alert path (severity=alert)</h2>
+<p>
+  Inside the engine, after a new alert-severity Signal is inserted (not
+  on updates of an open one — that would re-fire on every poll). Reuse
+  the existing <code>_tg_send</code> helper from
+  <code>ezcater_webhook.py</code>:
+</p>
+<pre class="as-pre"><code>def _alert_tg_send(s: Signal) -> None:
+    from app.web.ezcater_webhook import _tg_send  # existing helper
+    text = (
+        f"🚨 {s.severity.upper()} · {s.rule_name}\n"
+        f"{s.subject_label}\n"
+        f"{s.action_text}\n"
+        f"Acknowledge: https://app.cenaskitchen.com/partner/anomalies"
+    )
+    _tg_send(text)
+</code></pre>
+<p>
+  De-duplicated by <code>_upsert_signal</code>: only fires on NEW rows,
+  not updates to existing open ones, so the same alert doesn't ping every
+  5 min. Channel binding: same <code>SAM_TG_CHAT_ID</code> for now;
+  Phase 2 introduces per-role chat ids.
+</p>
+
+<!-- ============================================================ -->
+<h2>10. API contract (signal &harr; consumers)</h2>
+<table class="as-tbl">
+  <tr><th>Producer</th><th>Consumer</th><th>Contract</th></tr>
+  <tr><td>Rule engine</td><td>signals table</td>
+      <td>Always upsert via <code>_upsert_signal</code> + <code>_auto_clear</code> within one tx.</td></tr>
+  <tr><td>signals table</td><td>Per-page anomaly card slot</td>
+      <td><code>visible_signals(surface)</code> helper. Filters by surface ∈ surfaces, audience_roles ∋ user.role, unresolved + unacked, store scope.</td></tr>
+  <tr><td>signals table</td><td>Morning brief composer</td>
+      <td>Window: last 24h ending at today 08:00 CT. Filters audience_roles ∋ role.</td></tr>
+  <tr><td>signals table</td><td>Telegram alerter</td>
+      <td>Only NEW alert-severity insertions (not updates).</td></tr>
+  <tr><td>signal_acks</td><td>Rule tuning admin</td>
+      <td><code>/partner/anomalies/rules</code> aggregates ack rates over 7d.</td></tr>
+  <tr><td>rule_overrides</td><td>Rule engine</td>
+      <td>Engine consults overrides at run start; falls back to <code>spec.severity_default</code>.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>11. Failure handling</h2>
+<ul>
+  <li><strong>Single rule crashes</strong> — caught inside the engine loop,
+      logged, never propagates. The bucket run continues with the next
+      rule. Sentry captures the traceback.</li>
+  <li><strong>DB write fails</strong> — the entire bucket rolls back (one
+      tx per bucket run). The next run picks up where we left off; no
+      partial signals shipped.</li>
+  <li><strong>LLM call fails</strong> — rule falls back to its pure-SQL
+      emission (no enrichment). The Signal still lands.</li>
+  <li><strong>Cron job fails to fire</strong> — Render notifies via the
+      cron-failure email; Sentry doesn't see it (the cron service is
+      separate from the web service). Worth wiring Render → Sentry via a
+      heartbeat ping per bucket later.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>12. Test plan</h2>
+<table class="as-tbl">
+  <tr><th>Test file</th><th>What it asserts</th></tr>
+  <tr><td><code>tests/test_anomaly_engine_dedup.py</code></td>
+      <td><code>_upsert_signal</code> creates a new row on first fire, updates the same row on second fire with the same key, leaves resolved/acked rows alone.</td></tr>
+  <tr><td><code>tests/test_anomaly_engine_autoclear.py</code></td>
+      <td><code>_auto_clear</code> stamps resolved_at when a reversible rule no longer sees the subject. Non-reversible rules stay open.</td></tr>
+  <tr><td><code>tests/test_anomaly_rule_registry.py</code></td>
+      <td>Every registered rule has a valid bucket value, severity in {info,warn,alert}, non-empty surfaces + audience_roles + action_text.</td></tr>
+  <tr><td><code>tests/test_anomaly_calibration.py</code></td>
+      <td>The nightly calibration job writes a severity_override when a rule exceeds the noise threshold; the engine consults overrides at run start.</td></tr>
+  <tr><td>Per-rule integration tests</td>
+      <td>Each new rule ships with one or two test cases using the in-memory SQLite fixture from <code>tests/conftest.py</code>.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>13. Phase 1 build order</h2>
+<ol>
+  <li><strong>Block 1</strong> — Schema (Signal + SignalAck + RuleOverride),
+      <code>anomaly_engine</code> skeleton, <code>/cron/anomaly-eval</code>
+      handler, two seed rules (<code>orders.no_driver_30min_before</code> +
+      <code>orders.late_delivery</code>) so we can fire the engine end-to-end
+      on safe data.</li>
+  <li><strong>Block 2</strong> — Cron Job resources via Render API
+      (mirroring Phase 0 / Block 1). Five buckets.</li>
+  <li><strong>Block 3</strong> — Anomaly card partial +
+      <code>visible_signals</code> helper + acknowledge endpoint.
+      Hook into existing pages (<code>orders.by_store</code> +
+      <code>home</code>).</li>
+  <li><strong>Block 4</strong> — Telegram alerter path. Hook on new
+      alert-severity insert.</li>
+  <li><strong>Block 5</strong> — Remaining 30 rules from samai's library.
+      Slot into their declared buckets.</li>
+  <li><strong>Block 6</strong> — Morning brief composer (Opus). One call
+      per role, written to <code>MorningBrief</code> table,
+      <code>/partner/morning-brief</code> route + Telegram + email
+      surfaces.</li>
+  <li><strong>Block 7</strong> — <code>/partner/anomalies/rules</code>
+      admin (rule library + 7d ack rates + threshold edit form +
+      calibration job).</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2>14. Cross-claude notes</h2>
+<ul>
+  <li><strong>samai</strong> — your <code>anomaly_rules</code> doc is the
+      source of truth for what each rule does. This spec only defines
+      <em>how</em>. If the rule library changes (add / remove / threshold
+      adjust), update <code>anomaly_rules</code> and the engine picks up
+      the new <code>RuleSpec</code> automatically.</li>
+  <li><strong>ck</strong> — Block 3 of this spec depends on the
+      permission system (your Phase 1 / Block 4). The
+      <code>visible_signals</code> helper calls <code>_user_has(tag)</code>
+      indirectly via <code>audience_roles ∋ user.role_set</code>; if
+      your permission model shifts from role-strings to tags, adjust the
+      query at that point.</li>
+  <li><strong>aick</strong> — the cron buckets are direct extensions of
+      Phase 0 / Block 1. Reuse the same Render API path I built
+      (<code>POST /v1/services</code> with cron_job type +
+      <code>envSpecificDetails.startCommand</code>). Same
+      <code>CRON_TOKEN</code> env var + same <code>Authorization: Bearer</code>
+      pattern. Consider consolidating
+      <code>cenas-cron-no-show-sweep</code> into
+      <code>cenas-cron-anomaly-5m</code> once
+      <code>orders.no_driver_30min_before</code> ships — same condition,
+      same cadence.</li>
+</ul>
+
+{% endblock %}

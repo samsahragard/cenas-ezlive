@@ -527,8 +527,18 @@ def create_app():
     # all see every rule on boot. Failure to import is non-fatal: the
     # engine still runs with whatever the import managed before the
     # raise (each rule registers independently).
+    # IMPORTANT: must use `from app.services import ...` (or
+    # importlib.import_module) here, NOT `import app.services.anomaly_rules`.
+    # The bare-`import a.b.c` form creates a LOCAL binding for the name `a`
+    # — inside this function that shadows the Flask instance assigned at
+    # `app = Flask(__name__)` above, and `@app.cli.command(...)` two
+    # lines below then raises:
+    #   AttributeError: module 'app' has no attribute 'cli'
+    # Hit twice already: 324dd2f (Block 5) + 44cc72b (Block 4 merge
+    # reintroduced it). Leave the comment so the next agent doesn't
+    # reintroduce a third time.
     try:
-        import app.services.anomaly_rules  # noqa: F401
+        from app.services import anomaly_rules as _anom_rules  # noqa: F401
         from app.services.anomaly_engine import REGISTRY as _ANOM_REG
         logging.getLogger(__name__).info(
             "anomaly_rules registered: %d rules", len(_ANOM_REG))

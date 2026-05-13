@@ -379,6 +379,39 @@ def ezcater_review_queue():
     )
 
 
+@dev_chat.route("/partner/developer/app/download.zip", methods=["GET"])
+def app_doc_download():
+    """Stream a fresh zip of every file under app/templates/docs/ so Sam can
+    download the whole Developer → App docs section in one click. Built
+    in-memory at request time, so what you download always matches what's
+    currently in git/on disk."""
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    import io, zipfile
+    from datetime import datetime
+    from pathlib import Path
+    docs_dir = Path(current_app.root_path) / "templates" / "docs"
+    if not docs_dir.exists():
+        abort(404)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(docs_dir.rglob("*")):
+            if f.is_file():
+                # arcname relative to docs/ so the zip unpacks as "docs/...".
+                rel = f.relative_to(docs_dir.parent)  # → "docs/foo.html"
+                zf.write(f, arcname=str(rel).replace("\\", "/"))
+    buf.seek(0)
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"developer_docs_{stamp}.zip",
+        max_age=0,
+    )
+
+
 # Source-view pages: each entry mirrors one of the visual doc pages above
 # but renders its raw HTML/Mermaid/JS source so Sam can read or copy the
 # code without view-source-ing the rendered page. The source is read from

@@ -231,14 +231,21 @@ def ez_market():
 
         # Header greeting — show the viewer's name regardless of role
         # (Sam 2026-05-12: "for a partner it would just say my name").
+        viewer_name = "there"
         if driver and driver.name:
             viewer_name = driver.name.split()[0]
-        elif keypad_user and getattr(keypad_user, "first_name", None):
-            viewer_name = keypad_user.first_name
-        elif keypad_user and getattr(keypad_user, "name", None):
-            viewer_name = keypad_user.name.split()[0]
-        else:
-            viewer_name = "there"
+        elif keypad_user and getattr(keypad_user, "full_name", None):
+            viewer_name = keypad_user.full_name.split()[0]
+        elif session.get("partner_auth_ok"):
+            # Legacy partner-password gate (no keypad user). Look up the
+            # partner User row for the display name.
+            partner_user = (
+                db.query(User)
+                .filter(User.permission_level == "partner")
+                .first()
+            )
+            if partner_user and partner_user.full_name:
+                viewer_name = partner_user.full_name.split()[0]
 
         ctx = {
             "active": "ez_market",

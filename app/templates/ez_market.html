@@ -126,12 +126,13 @@
       </div>
       <div class="em-meta">
         <span>{{ o.headcount or '—' }} heads</span>
-        <span>${{ "%.0f"|format(o.total_amount or 0) }}</span>
         {% set comp = competing.get(o.id, 0) %}
         {% if comp >= 3 %}
-          <span class="em-compete-red">🔥 {{ comp + 1 }} drivers competing</span>
+          <span class="em-compete-red">🔥 {{ comp }} drivers competing</span>
         {% elif comp >= 1 %}
-          <span class="em-compete-green">✓ {{ comp + 1 }} driver{% if comp > 1 %}s{% endif %} competing</span>
+          <span class="em-compete-green">✓ {{ comp }} driver{% if comp > 1 %}s{% endif %} competing</span>
+        {% else %}
+          <span>0 drivers competing</span>
         {% endif %}
       </div>
       <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">

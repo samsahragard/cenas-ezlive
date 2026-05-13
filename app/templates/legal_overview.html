@@ -3,6 +3,25 @@
 
 {% block legal_body %}
 
+{% if renewals %}
+  <div class="lg-banner warn" style="margin-bottom: 18px;">
+    <i class="ti ti-shield-half" aria-hidden="true"></i>&nbsp;
+    <strong>{{ renewals|length }} insurance polic{{ 'y' if renewals|length == 1 else 'ies' }}</strong>
+    renew{{ 's' if renewals|length == 1 else '' }} in the next 30 days:
+    {% for p in renewals[:3] %}
+      <a href="{{ url_for('legal.legal_insurance_edit', policy_id=p.id) }}"
+         style="color: var(--ck-status-active); margin-left: 6px;">
+        {{ p.carrier or 'unnamed' }} ({{ p.renewal_on.strftime('%b %d') }})
+      </a>{% if not loop.last %},{% endif %}
+    {% endfor %}
+    {% if renewals|length > 3 %}
+      <span style="color: var(--ck-text-soft);">+{{ renewals|length - 3 }} more —</span>
+    {% endif %}
+    <a href="{{ url_for('legal.legal_insurance') }}"
+       style="color: var(--ck-gold-bright); margin-left: 6px;">review all →</a>
+  </div>
+{% endif %}
+
 <div class="lg-grid-stats">
   <div class="lg-stat">
     <div class="lg-stat-label">Open</div>

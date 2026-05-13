@@ -1,0 +1,124 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "Documents" %}
+
+{% block legal_body %}
+
+<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            margin-bottom: 14px;">
+  <span class="lg-section-label" style="margin: 0;">
+    <i class="ti ti-files" aria-hidden="true"></i>
+    &nbsp;Scope
+  </span>
+  <div style="display: flex; gap: 6px;">
+    {% for slug, label in [('all','All'), ('library','Library (no matter)'), ('matters','By matter')] %}
+      <a href="{{ url_for('legal.legal_documents', scope=slug) }}"
+         class="lg-pill {% if scope == slug %}status-open{% else %}cat{% endif %}"
+         style="text-decoration: none; cursor: pointer;">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<form method="POST" action="{{ url_for('legal.legal_documents_upload') }}"
+      enctype="multipart/form-data"
+      class="lg-card lg-card-padded lg-form" style="margin-bottom: 14px;">
+
+  <div class="lg-section-label">
+    <i class="ti ti-cloud-upload" aria-hidden="true"></i>
+    &nbsp;Upload to library
+  </div>
+
+  <p style="font-size: 12px; color: var(--ck-text-soft); margin: 0;">
+    Allowed: {{ allowed_extensions|join(', ') }}. Max {{ max_mb }} MB per file.
+    Every upload writes a row to the audit log. To attach a file to a specific
+    matter instead, open the matter and use the upload field there.
+  </p>
+
+  <div class="row-2">
+    <div>
+      <label for="file">File</label>
+      <input type="file" id="file" name="file" required />
+    </div>
+    <div>
+      <label for="notes">Notes (optional)</label>
+      <input type="text" id="notes" name="notes" maxlength="500"
+             placeholder="e.g. Q2 employee handbook revision" />
+    </div>
+  </div>
+  <input type="hidden" name="scope" value="{{ scope }}" />
+
+  <div>
+    <button type="submit" class="lg-btn">
+      <i class="ti ti-upload" aria-hidden="true"></i>&nbsp;Upload
+    </button>
+  </div>
+</form>
+
+<div class="lg-card" style="padding: 0;">
+  {% if documents %}
+    <table class="lg-table">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Matter</th>
+          <th>Uploaded by</th>
+          <th>Notes</th>
+          <th style="text-align: right;">Size</th>
+          <th style="text-align: right;">When</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for d in documents %}
+        <tr>
+          <td style="font-weight: 500;">
+            <i class="ti ti-file" style="color: var(--ck-gold-bright); margin-right: 4px;" aria-hidden="true"></i>
+            {{ d.filename }}
+          </td>
+          <td>
+            {% if d.matter_id and matter_titles.get(d.matter_id) %}
+              <a href="{{ url_for('legal.legal_matter_detail', matter_id=d.matter_id) }}"
+                 style="color: var(--ck-text);">{{ matter_titles[d.matter_id] }}</a>
+            {% elif d.matter_id %}
+              <span style="color: var(--ck-text-soft);">Matter #{{ d.matter_id }}</span>
+            {% else %}
+              <span class="lg-pill cat">library</span>
+            {% endif %}
+          </td>
+          <td style="color: var(--ck-text-soft); font-size: 12px;">
+            {{ d.actor_label or '—' }}
+          </td>
+          <td style="color: var(--ck-text-soft); font-size: 12px; max-width: 240px;">
+            {{ d.notes or '—' }}
+          </td>
+          <td style="text-align: right; color: var(--ck-text-soft); font-size: 12px;
+                     white-space: nowrap;">
+            {% if d.size_bytes %}
+              {% if d.size_bytes < 1024 %}{{ d.size_bytes }} B
+              {% elif d.size_bytes < 1048576 %}{{ '%.1f' % (d.size_bytes / 1024) }} KB
+              {% else %}{{ '%.1f' % (d.size_bytes / 1048576) }} MB
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align: right; color: var(--ck-text-faint); font-size: 12px;
+                     white-space: nowrap;">
+            {{ d.created_at.strftime('%b %d, %Y') }}
+          </td>
+          <td>
+            <a href="{{ url_for('legal.legal_document_download', doc_id=d.id) }}"
+               class="lg-btn subtle" style="padding: 5px 10px; font-size: 11px;">
+              <i class="ti ti-download" aria-hidden="true"></i>
+            </a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="lg-empty">
+      <i class="ti ti-files-off" style="font-size: 24px;" aria-hidden="true"></i>
+      <div style="margin-top: 8px;">No documents yet.</div>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

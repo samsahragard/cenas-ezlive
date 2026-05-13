@@ -1,0 +1,102 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "Insurance" %}
+
+{% block legal_body %}
+
+<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 14px;">
+  <span class="lg-section-label" style="margin: 0;">
+    <i class="ti ti-shield-half" aria-hidden="true"></i>
+    &nbsp;Policies
+  </span>
+  <span style="margin-left: auto;">
+    <a href="{{ url_for('legal.legal_insurance_new') }}" class="lg-btn">
+      <i class="ti ti-plus" aria-hidden="true"></i>&nbsp;New policy
+    </a>
+  </span>
+</div>
+
+<div class="lg-card" style="padding: 0;">
+  {% if policies %}
+    <table class="lg-table">
+      <thead>
+        <tr>
+          <th>Carrier · Policy</th>
+          <th>Type</th>
+          <th>Coverage</th>
+          <th>Effective</th>
+          <th>Renewal</th>
+          <th>Premium</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in policies %}
+        <tr>
+          <td>
+            <a href="{{ url_for('legal.legal_insurance_edit', policy_id=p.id) }}"
+               style="font-weight: 500;">{{ p.carrier or '—' }}</a>
+            {% if p.policy_number %}
+              <div style="font-size: 11px; color: var(--ck-text-faint); margin-top: 2px;
+                          font-family: ui-monospace, 'SF Mono', Menlo, monospace;">
+                {{ p.policy_number }}
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="lg-pill cat">{{ (p.policy_type or 'other')|replace('-', ' ')|title }}</span>
+          </td>
+          <td style="color: var(--ck-text-soft);">
+            {{ p.coverage_limit or '—' }}
+            {% if p.deductible %}
+              <div style="font-size: 11px; color: var(--ck-text-faint); margin-top: 2px;">
+                ded. {{ p.deductible }}
+              </div>
+            {% endif %}
+          </td>
+          <td style="color: var(--ck-text-soft); font-size: 12px;">
+            {{ p.effective_on.strftime('%b %d, %Y') if p.effective_on else '—' }}
+          </td>
+          <td>
+            {% if p.renewal_on %}
+              {% if p.renewal_on <= today_date %}
+                <span style="color: var(--ck-status-warn); font-weight: 500;">
+                  {{ p.renewal_on.strftime('%b %d, %Y') }}
+                </span>
+                <div style="font-size: 11px; color: var(--ck-status-warn);">past renewal</div>
+              {% elif p.renewal_on <= soon_cutoff %}
+                <span style="color: var(--ck-status-active); font-weight: 500;">
+                  {{ p.renewal_on.strftime('%b %d, %Y') }}
+                </span>
+                <div style="font-size: 11px; color: var(--ck-status-active);">renewing soon</div>
+              {% else %}
+                <span style="color: var(--ck-text);">{{ p.renewal_on.strftime('%b %d, %Y') }}</span>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--ck-text-faint);">—</span>
+            {% endif %}
+          </td>
+          <td style="color: var(--ck-text-soft); font-size: 12px;">
+            {{ p.premium or '—' }}
+          </td>
+          <td>
+            <span class="lg-pill {% if p.status == 'active' %}status-open{% else %}cat{% endif %}">
+              {{ p.status }}
+            </span>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="lg-empty">
+      <i class="ti ti-shield-off" style="font-size: 24px;" aria-hidden="true"></i>
+      <div style="margin-top: 8px;">No policies on file.</div>
+      <a href="{{ url_for('legal.legal_insurance_new') }}"
+         class="lg-btn" style="margin-top: 14px;">
+        <i class="ti ti-plus" aria-hidden="true"></i>&nbsp;Add the first policy
+      </a>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

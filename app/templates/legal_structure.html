@@ -1,0 +1,127 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = "Company structure" %}
+
+{% block legal_body %}
+
+{% if success %}
+  <div class="lg-banner success">
+    <i class="ti ti-check" aria-hidden="true"></i>&nbsp;{{ success }}
+  </div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('legal.legal_structure_save') }}"
+      class="lg-card lg-card-padded lg-form">
+
+  <div class="lg-section-label">
+    <i class="ti ti-building" aria-hidden="true"></i>
+    &nbsp;Entity
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="entity_type">Entity type</label>
+      <input type="text" id="entity_type" name="entity_type" maxlength="40"
+             placeholder="LLC / C-Corp / S-Corp / Partnership"
+             value="{{ structure.entity_type if structure and structure.entity_type else '' }}" />
+    </div>
+    <div>
+      <label for="legal_name">Legal name</label>
+      <input type="text" id="legal_name" name="legal_name" maxlength="200"
+             value="{{ structure.legal_name if structure and structure.legal_name else '' }}" />
+    </div>
+    <div>
+      <label for="dba">DBA / trade name</label>
+      <input type="text" id="dba" name="dba" maxlength="200"
+             placeholder="Cenas Kitchen"
+             value="{{ structure.dba if structure and structure.dba else '' }}" />
+    </div>
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="state_of_formation">State of formation</label>
+      <input type="text" id="state_of_formation" name="state_of_formation" maxlength="80"
+             placeholder="Texas"
+             value="{{ structure.state_of_formation if structure and structure.state_of_formation else '' }}" />
+    </div>
+    <div>
+      <label for="ein">EIN</label>
+      <input type="text" id="ein" name="ein" maxlength="30"
+             placeholder="XX-XXXXXXX"
+             value="{{ structure.ein if structure and structure.ein else '' }}" />
+    </div>
+    <div>
+      <label for="formed_on">Formed on</label>
+      <input type="date" id="formed_on" name="formed_on"
+             value="{{ structure.formed_on.isoformat() if structure and structure.formed_on else '' }}" />
+    </div>
+  </div>
+
+  <div class="lg-divider"></div>
+
+  <div class="lg-section-label">
+    <i class="ti ti-mail" aria-hidden="true"></i>
+    &nbsp;Registered agent + offices
+  </div>
+
+  <div>
+    <label for="registered_agent">Registered agent</label>
+    <input type="text" id="registered_agent" name="registered_agent" maxlength="200"
+           placeholder="Name + service"
+           value="{{ structure.registered_agent if structure and structure.registered_agent else '' }}" />
+  </div>
+
+  <div class="row-2">
+    <div>
+      <label for="registered_office_address">Registered office</label>
+      <textarea id="registered_office_address" name="registered_office_address"
+                placeholder="Street, city, state, zip">{{ structure.registered_office_address if structure and structure.registered_office_address else '' }}</textarea>
+    </div>
+    <div>
+      <label for="principal_office_address">Principal office</label>
+      <textarea id="principal_office_address" name="principal_office_address"
+                placeholder="Where the company actually operates">{{ structure.principal_office_address if structure and structure.principal_office_address else '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="lg-divider"></div>
+
+  <div class="lg-section-label">
+    <i class="ti ti-users-group" aria-hidden="true"></i>
+    &nbsp;Ownership
+  </div>
+
+  <p style="font-size: 12px; color: var(--ck-text-soft); margin: 0 0 8px;">
+    One member per line. Pipe-separated: <code>name | role | ownership_pct | notes</code>.
+    Role + percent + notes are optional.
+  </p>
+
+  <div>
+    <textarea name="ownership" rows="6" placeholder="Sam Sahragard | Managing Member | 50 | founder
+Masood Sahragard | Member | 50 | founder">{% if structure and structure.ownership %}{% for o in structure.ownership %}{{ o.name }}{% if o.role %} | {{ o.role }}{% endif %}{% if o.ownership_pct is defined and o.ownership_pct is not none %} | {{ o.ownership_pct }}{% endif %}{% if o.notes %} | {{ o.notes }}{% endif %}
+{% endfor %}{% endif %}</textarea>
+  </div>
+
+  <div class="lg-divider"></div>
+
+  <div>
+    <label for="notes">Internal notes</label>
+    <textarea id="notes" name="notes" placeholder="Anything else partners should know about the entity layout.">{{ structure.notes if structure and structure.notes else '' }}</textarea>
+  </div>
+
+  <div style="display: flex; gap: 10px; align-items: center; margin-top: 6px;">
+    <button type="submit" class="lg-btn">
+      <i class="ti ti-device-floppy" aria-hidden="true"></i>
+      Save structure
+    </button>
+    {% if structure and structure.updated_at %}
+      <span style="margin-left: auto; font-size: 11px; color: var(--ck-text-faint);
+                   text-transform: uppercase; letter-spacing: 0.08em;">
+        Last edit logged to audit · {{ structure.updated_at.strftime('%b %d, %Y %H:%M') }}
+      </span>
+    {% endif %}
+  </div>
+
+</form>
+
+{% endblock %}

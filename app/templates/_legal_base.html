@@ -257,6 +257,18 @@
      class="{% if active == 'legal_matter_new' %}active{% endif %}">
     + New matter
   </a>
+  <a href="{{ url_for('legal.legal_structure') }}"
+     class="{% if active == 'legal_structure' %}active{% endif %}">
+    Structure
+  </a>
+  <a href="{{ url_for('legal.legal_insurance') }}"
+     class="{% if active == 'legal_insurance' %}active{% endif %}">
+    Insurance
+  </a>
+  <a href="{{ url_for('legal.legal_documents') }}"
+     class="{% if active == 'legal_documents' %}active{% endif %}">
+    Documents
+  </a>
   <a href="{{ url_for('legal.legal_audit') }}"
      class="{% if active == 'legal_audit' %}active{% endif %}">
     Audit log

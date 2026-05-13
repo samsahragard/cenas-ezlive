@@ -139,8 +139,21 @@
         </div>
 
         <div>
-          <label for="notes">Private notes</label>
-          <textarea id="notes" name="notes">{{ matter.notes or '' }}</textarea>
+          <label for="key_dates">Key dates</label>
+          <textarea id="key_dates" name="key_dates" rows="4"
+                    placeholder="filed_on: 2026-05-01
+mediation_on: 2026-06-15
+hearing_on: 2026-07-30">{{ key_dates_text or '' }}</textarea>
+          <small style="font-size: 11px; color: var(--ck-text-faint);
+                        margin-top: 4px; display: block;">
+            One per line. Format: <code>label: YYYY-MM-DD</code>. Anything not in
+            that shape is silently ignored.
+          </small>
+        </div>
+
+        <div>
+          <label for="notes">Internal summary (latest)</label>
+          <textarea id="notes" name="notes" placeholder="Optional. The notes timeline below carries the running history; this field is just the latest-snapshot summary that appears on the Matters list.">{{ matter.notes or '' }}</textarea>
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 6px;">
@@ -179,6 +192,96 @@
           </form>
         {% endif %}
       {% endfor %}
+    </div>
+
+    {# Notes timeline — append-only history of running observations.
+       Newest first. Add-note form sits above the list. #}
+    <div class="lg-card lg-card-padded" style="margin-top: 12px;">
+      <div class="lg-section-label">
+        <i class="ti ti-note" aria-hidden="true"></i>&nbsp;Notes
+      </div>
+      <form method="POST"
+            action="{{ url_for('legal.legal_matter_add_note', matter_id=matter.id) }}"
+            class="lg-form" style="margin-bottom: 14px;">
+        <textarea name="body" rows="3" required
+                  placeholder="Add a note. Append-only — once saved, editing means appending another note."></textarea>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button type="submit" class="lg-btn">
+            <i class="ti ti-plus" aria-hidden="true"></i>&nbsp;Add note
+          </button>
+          <span style="margin-left: auto; font-size: 11px; color: var(--ck-text-faint);
+                       text-transform: uppercase; letter-spacing: 0.08em;">
+            Append-only · logged to audit
+          </span>
+        </div>
+      </form>
+      {% if notes %}
+        {% for n in notes %}
+          <div style="padding: 10px 0; border-top: 0.5px solid var(--ck-border-subtle);">
+            <div style="display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px;">
+              <span style="color: var(--ck-gold-bright); font-weight: 500; font-size: 12px;">
+                {{ n.actor_label or '—' }}
+              </span>
+              <span style="margin-left: auto; font-size: 11px; color: var(--ck-text-faint);">
+                {{ n.created_at.strftime('%b %d, %Y %H:%M') }}
+              </span>
+            </div>
+            <div style="color: var(--ck-text); font-size: 13px; line-height: 1.5;
+                        white-space: pre-wrap;">{{ n.body }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="lg-empty" style="padding: 18px;">
+          <span style="color: var(--ck-text-soft);">No notes yet. Add the first one above.</span>
+        </div>
+      {% endif %}
+    </div>
+
+    {# Documents attached to this matter. Upload form above, list below. #}
+    <div class="lg-card lg-card-padded" style="margin-top: 12px;">
+      <div class="lg-section-label">
+        <i class="ti ti-paperclip" aria-hidden="true"></i>&nbsp;Documents
+      </div>
+      <form method="POST"
+            action="{{ url_for('legal.legal_matter_upload', matter_id=matter.id) }}"
+            enctype="multipart/form-data"
+            class="lg-form" style="margin-bottom: 14px;">
+        <div style="display: flex; gap: 10px; align-items: end;">
+          <div style="flex: 1;">
+            <label for="m_file">Upload a file to this matter</label>
+            <input type="file" id="m_file" name="file" required />
+          </div>
+          <button type="submit" class="lg-btn">
+            <i class="ti ti-upload" aria-hidden="true"></i>&nbsp;Attach
+          </button>
+        </div>
+      </form>
+      {% if documents %}
+        {% for d in documents %}
+          <div style="display: flex; gap: 10px; align-items: center;
+                      padding: 8px 0; border-top: 0.5px solid var(--ck-border-subtle);
+                      font-size: 12.5px;">
+            <i class="ti ti-file" style="color: var(--ck-gold-bright); flex-shrink: 0;" aria-hidden="true"></i>
+            <a href="{{ url_for('legal.legal_document_download', doc_id=d.id) }}"
+               style="color: var(--ck-text); font-weight: 500; flex: 1;">
+              {{ d.filename }}
+            </a>
+            <span style="color: var(--ck-text-faint); font-size: 11px;
+                         white-space: nowrap;">
+              {{ d.created_at.strftime('%b %d') }}
+              {% if d.size_bytes %}
+                · {% if d.size_bytes < 1024 %}{{ d.size_bytes }}B
+                {% elif d.size_bytes < 1048576 %}{{ '%.1f' % (d.size_bytes / 1024) }}KB
+                {% else %}{{ '%.1f' % (d.size_bytes / 1048576) }}MB{% endif %}
+              {% endif %}
+            </span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="lg-empty" style="padding: 18px;">
+          <span style="color: var(--ck-text-soft);">No documents attached yet.</span>
+        </div>
+      {% endif %}
     </div>
   </div>
 

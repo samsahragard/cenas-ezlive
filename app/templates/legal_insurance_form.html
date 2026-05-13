@@ -1,0 +1,127 @@
+{% extends "_legal_base.html" %}
+{% set legal_page_title = (policy.carrier or 'Policy') if policy else 'New policy' %}
+
+{% block legal_body %}
+
+{% if error %}
+  <div class="lg-banner warn">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>&nbsp;{{ error }}
+  </div>
+{% endif %}
+
+<form method="POST"
+      action="{% if policy %}{{ url_for('legal.legal_insurance_update', policy_id=policy.id) }}{% else %}{{ url_for('legal.legal_insurance_create') }}{% endif %}"
+      class="lg-card lg-card-padded lg-form">
+
+  <div class="lg-section-label">
+    <i class="ti ti-shield-half" aria-hidden="true"></i>
+    &nbsp;{% if policy %}Edit policy{% else %}New policy{% endif %}
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="carrier">Carrier</label>
+      <input type="text" id="carrier" name="carrier" maxlength="200" required
+             value="{{ policy.carrier if policy and policy.carrier else '' }}" />
+    </div>
+    <div>
+      <label for="policy_number">Policy number</label>
+      <input type="text" id="policy_number" name="policy_number" maxlength="120"
+             value="{{ policy.policy_number if policy and policy.policy_number else '' }}" />
+    </div>
+    <div>
+      <label for="policy_type">Policy type</label>
+      <select id="policy_type" name="policy_type">
+        {% for slug, label in types %}
+          <option value="{{ slug }}"
+                  {% if policy and policy.policy_type == slug %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="coverage_limit">Coverage limit</label>
+      <input type="text" id="coverage_limit" name="coverage_limit" maxlength="80"
+             placeholder="$2M per occurrence / $4M aggregate"
+             value="{{ policy.coverage_limit if policy and policy.coverage_limit else '' }}" />
+    </div>
+    <div>
+      <label for="deductible">Deductible</label>
+      <input type="text" id="deductible" name="deductible" maxlength="80"
+             placeholder="$2,500"
+             value="{{ policy.deductible if policy and policy.deductible else '' }}" />
+    </div>
+    <div>
+      <label for="premium">Premium (annual)</label>
+      <input type="text" id="premium" name="premium" maxlength="80"
+             placeholder="$18,000/yr"
+             value="{{ policy.premium if policy and policy.premium else '' }}" />
+    </div>
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="effective_on">Effective on</label>
+      <input type="date" id="effective_on" name="effective_on"
+             value="{{ policy.effective_on.isoformat() if policy and policy.effective_on else '' }}" />
+    </div>
+    <div>
+      <label for="renewal_on">Renewal on</label>
+      <input type="date" id="renewal_on" name="renewal_on"
+             value="{{ policy.renewal_on.isoformat() if policy and policy.renewal_on else '' }}" />
+    </div>
+    <div>
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="active"   {% if policy and policy.status == 'active' %}selected{% endif %}>Active</option>
+        <option value="lapsed"   {% if policy and policy.status == 'lapsed' %}selected{% endif %}>Lapsed</option>
+        <option value="cancelled" {% if policy and policy.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="lg-divider"></div>
+
+  <div class="lg-section-label">
+    <i class="ti ti-user-circle" aria-hidden="true"></i>
+    &nbsp;Broker (optional)
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label for="broker_name">Broker name</label>
+      <input type="text" id="broker_name" name="broker_name" maxlength="200"
+             value="{{ policy.broker_name if policy and policy.broker_name else '' }}" />
+    </div>
+    <div>
+      <label for="broker_email">Email</label>
+      <input type="email" id="broker_email" name="broker_email" maxlength="200"
+             value="{{ policy.broker_email if policy and policy.broker_email else '' }}" />
+    </div>
+    <div>
+      <label for="broker_phone">Phone</label>
+      <input type="tel" id="broker_phone" name="broker_phone" maxlength="50"
+             value="{{ policy.broker_phone if policy and policy.broker_phone else '' }}" />
+    </div>
+  </div>
+
+  <div>
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes">{{ policy.notes if policy and policy.notes else '' }}</textarea>
+  </div>
+
+  <div style="display: flex; gap: 10px; align-items: center; margin-top: 6px;">
+    <button type="submit" class="lg-btn">
+      <i class="ti ti-check" aria-hidden="true"></i>
+      {% if policy %}Save policy{% else %}Create policy{% endif %}
+    </button>
+    <a href="{{ url_for('legal.legal_insurance') }}" class="lg-btn subtle">
+      Cancel
+    </a>
+  </div>
+
+</form>
+
+{% endblock %}

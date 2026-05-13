@@ -25,6 +25,8 @@
 <ol>
   <li>Pull yesterday's unresolved Signal rows for the requesting audience role +
       store scope.</li>
+  <li>Pull yesterday's wins for the audience (driver / manager / operational /
+      pattern wins per &sect;2.5; sourcing via <code>gather_wins()</code>).</li>
   <li>Pull today's lookahead (signals projected to fire in the next 12h
       based on rule-state + historical pattern).</li>
   <li>Pull yesterday's calibration stats (rules that fired &gt;3&times; per
@@ -101,6 +103,68 @@ class CalibrationStats:
         # [(rule_key, original_severity, downgraded_to), ...]
 </code></pre>
 
+<h3>2.5 Wins (per Sam 2026-05-13)</h3>
+<p>
+  Wins are a separate dataclass &mdash; not a fourth severity tier on
+  SignalForBrief. Rationale: wins have a different lifecycle (no ack, no
+  resolve, no auto-clear), different sourcing (queries against happy-path
+  data, not rule fires), and a different shelf life (only relevant in the
+  morning-after brief, not surfacing on anomaly cards). Folding them into
+  the Signal pipeline would contaminate the anomaly engine with celebratory
+  events it doesn't otherwise produce.
+</p>
+<pre><code>@dataclass
+class WinSignal:
+    category: str             # "driver" | "manager" | "operational" | "pattern"
+    win_key: str              # stable identifier, e.g. "driver.first_paid_delivery"
+    subject_label: str        # person or thing being celebrated (driver/manager/server name)
+    store_id: str | None      # store_1..store_4 or None for cross-store wins
+    store_label: str | None
+    occurred_at: datetime     # when the underlying event happened
+    payload: dict             # category-specific numbers (e.g. {"on_time_pct": 100, "deliveries": 4})
+    one_line_seed: str        # short factual phrase the composer rewrites into prose
+</code></pre>
+
+<p>
+  <strong>What counts as a win &mdash; the 4 categories (Sam, 2026-05-13):</strong>
+</p>
+<ul>
+  <li><strong>driver wins:</strong> 100% tracking-rate for the day, 100%
+      on-time-delivery for the day, first paid delivery for a new driver,
+      tier crossing (New &rarr; Trusted, Trusted &rarr; Rockstar,
+      Rockstar &rarr; Top Rockstar).</li>
+  <li><strong>manager wins:</strong> Google review responded to within 4
+      hours of posting, daily manager log entered on schedule, day closed
+      without labor overage, vendor anomaly caught + resolved (dispute
+      filed or credit secured).</li>
+  <li><strong>operational wins:</strong> produce order placed by deadline,
+      vendor specs invoice came in matching quote (within $1), no comps
+      over $20 across the day, zero no-show shifts.</li>
+  <li><strong>pattern wins:</strong> any tracked metric running 7+ days
+      better than its trailing-4-week baseline &mdash; labor cost %,
+      kitchen ticket times, on-time delivery rate, ezCater accept rate.</li>
+</ul>
+
+<p>
+  <strong>Sourcing:</strong> a <code>gather_wins(audience_context, brief_date)
+  -&gt; list[WinSignal]</code> helper runs the underlying queries against
+  the live tables (driver_score, manager_log, toast_reports,
+  produce_orders, etc.). The helper returns up to 8 candidate wins ordered
+  by recency; the composer picks 3-5 to surface. Wins are NOT persisted to
+  a table; they are recomputed each brief from source data. Cheap (queries
+  finish in &lt;200ms total per audience) and means we can change the win
+  rules without backfill.
+</p>
+
+<p>
+  <strong>Audience filtering:</strong> wins go through the same
+  <code>_user_has(tag)</code> filter as signals. A GM sees their store's
+  driver wins + manager wins + operational wins but not cross-store
+  pattern wins; a partner sees everything; a corporate_chef sees
+  cross-store kitchen-side wins. The category &times; permission map is in
+  &sect;6.
+</p>
+
 <h2>3. Output (the structured brief)</h2>
 <p>
   The composer returns this exact JSON shape. Tested against the schema
@@ -109,7 +173,7 @@ class CalibrationStats:
 </p>
 <pre><code>@dataclass
 class BriefSection:
-    section_kind: str   # "alerts" | "warns" | "lookahead" | "info_aggregate" | "calibration"
+    section_kind: str   # "alerts" | "warns" | "wins" | "lookahead" | "info_aggregate" | "calibration"
     heading: str        # human-readable section header
     intro: str | None   # 1-2 sentence framing (or None)
     items: list[BriefItem]
@@ -133,7 +197,7 @@ class MorningBrief:
     brief_date: date
     greeting: str            # 1 line, addresses the user by first name
     headline: str            # 1-2 sentences; the "if you read nothing else" summary
-    sections: list[BriefSection]   # ordered: alerts -> warns -> lookahead -> info_aggregate -> calibration
+    sections: list[BriefSection]   # ordered: alerts -> warns -> wins -> lookahead -> info_aggregate -> calibration
     closing: str             # 1 line, friendly sign-off
     composed_at: datetime
     composer_model: str      # "claude-haiku-4-5-..." or "claude-opus-4-5-..." (whichever ran)
@@ -199,9 +263,12 @@ STRUCTURE (return JSON exactly matching the MorningBrief schema):
 3. sections, in order:
    a. alerts (red, immediate action needed)
    b. warns (yellow, needs attention soon)
-   c. lookahead (today's projected alerts/warns based on history)
-   d. info_aggregate (a single 1-line count of info-severity signals)
-   e. calibration (only if any rules were downgraded or are silent
+   c. wins (green, yesterday's celebrations — 3-5 items, named where
+      possible; omit entirely if the audience has zero candidate wins
+      for the day; never enumerate beyond 5 even if more were gathered)
+   d. lookahead (today's projected alerts/warns based on history)
+   e. info_aggregate (a single 1-line count of info-severity signals)
+   f. calibration (only if any rules were downgraded or are silent
       enough to mention; otherwise omit entirely — empty section is
       not allowed)
 4. closing — one short line.
@@ -215,6 +282,19 @@ PRIORITY RULES:
   capability (e.g. a driver-bid signal sent to a partner who doesn't
   reassign drivers), keep it but make the action_text "FYI — no action
   required from you."
+
+WINS RULES:
+- Pull from the WinSignal list. Pick 3-5 most resonant items; do NOT
+  exceed 5. Order by category in this priority: driver wins, manager
+  wins, operational wins, pattern wins (people-first, then ops).
+- Name names. "Alejandro hit 100% on-time delivery across 4 stops"
+  beats "A driver hit 100% on-time delivery". When subject_label is
+  missing or anonymized, skip the win rather than substitute a vague
+  phrase.
+- Tone: warm but not gushy. One sentence per win, factual + crediting.
+  Skip emoji even in this section.
+- If gather_wins returns zero items for the audience, omit the wins
+  section entirely.
 
 LOOKAHEAD RULES:
 - Include lookahead items only when projected_trigger_at is within
@@ -237,9 +317,10 @@ CALIBRATION:
   fired in 14 days — consider retiring." Two lines max.
 
 LENGTH BUDGET:
-- Total brief body (excluding greeting + closing): aim 80-180 words
-  for a typical day. Hard cap 300. If you hit the cap, drop the
-  info_aggregate and calibration sections first, then the lookahead.
+- Total brief body (excluding greeting + closing): aim 120-240 words
+  for a typical day with wins. Hard cap 380. If you hit the cap, drop
+  the info_aggregate and calibration sections first, then the lookahead,
+  then trim wins down to 3 (never below 3 if wins exist).
 - Each item's one_line: aim 12-22 words. Hard cap 35.
 
 DO NOT:
@@ -263,6 +344,9 @@ with json.loads() and validates against the dataclass.</code></pre>
 
 SIGNALS (last 24h, after permission filter, sorted severity desc, then trigger_at desc)
 {signals_json}            # list[SignalForBrief]
+
+WINS (yesterday's celebrations, after permission filter, sorted by category then occurred_at desc)
+{wins_json}               # list[WinSignal]
 
 LOOKAHEAD (next 12h projected, after permission filter)
 {lookahead_json}          # list[LookaheadForBrief]
@@ -371,6 +455,43 @@ covering {brief_date}. Return only the JSON object.</code></pre>
           "action": "Respond on Google Business Profile; AI draft at /partner/reviews/draft.",
           "store_label": "Tomball",
           "link_path": "/partner/reviews",
+          "badge": null
+        }
+      ]
+    },
+    {
+      "section_kind": "wins",
+      "heading": "Yesterday's wins",
+      "intro": null,
+      "items": [
+        {
+          "severity": "win",
+          "subject_label": "Alejandro Martinez",
+          "rule_key": "driver.first_paid_delivery",
+          "one_line": "Alejandro completed his first paid delivery — 4 stops, 100% on-time.",
+          "action": "Send a quick congrats via the driver portal if you want.",
+          "store_label": "Copperfield",
+          "link_path": "/partner/drivers",
+          "badge": null
+        },
+        {
+          "severity": "win",
+          "subject_label": "Maria Reyes (FOH manager)",
+          "rule_key": "manager.review_response_4h",
+          "one_line": "Maria responded to all 3 new Google reviews within 90 minutes yesterday.",
+          "action": "FYI — no action required from you.",
+          "store_label": "Tomball",
+          "link_path": "/partner/reviews",
+          "badge": null
+        },
+        {
+          "severity": "win",
+          "subject_label": "Alvarado produce invoice — Tomball",
+          "rule_key": "operational.invoice_matches_quote",
+          "one_line": "Alvarado invoiced 14 of 14 lines within $1 of the weekly quote — clean.",
+          "action": "FYI — no action required from you.",
+          "store_label": "Tomball",
+          "link_path": "/produce/queue",
           "badge": null
         }
       ]
@@ -540,9 +661,12 @@ covering {brief_date}. Return only the JSON object.</code></pre>
   <tr><td>System + user prompt templates (literal strings)</td>
       <td>aick (copies from &sect;5)</td>
       <td><code>app/services/brief_composer/prompts.py</code></td></tr>
-  <tr><td>Dataclasses (AudienceContext / SignalForBrief / etc.)</td>
+  <tr><td>Dataclasses (AudienceContext / SignalForBrief / WinSignal / LookaheadForBrief / CalibrationStats / MorningBrief / BriefSection / BriefItem)</td>
       <td>aick (copies from &sect;2-3)</td>
       <td><code>app/services/brief_composer/types.py</code></td></tr>
+  <tr><td><code>gather_wins(audience_context, brief_date) -&gt; list[WinSignal]</code> helper running per-category SQL queries against driver_score / manager_log / toast_reports / produce_orders</td>
+      <td>aick</td>
+      <td><code>app/services/brief_composer/wins.py</code></td></tr>
   <tr><td>Composer entrypoint <code>compose_brief(ctx) -&gt; MorningBrief</code></td>
       <td>aick</td>
       <td><code>app/services/brief_composer/composer.py</code></td></tr>
@@ -615,6 +739,14 @@ covering {brief_date}. Return only the JSON object.</code></pre>
   <li>Golden tests in <code>tests/fixtures/morning_brief/</code> assert
       schema parse + section ordering + headline length bounds; do NOT
       assert exact LLM output strings.</li>
+  <li><code>gather_wins()</code> implements all 4 categories (driver,
+      manager, operational, pattern) and returns up to 8 candidates
+      ordered by recency. Composer picks 3-5; assert via mock + golden
+      that picking honors the category priority (driver, manager, op,
+      pattern) when 5+ candidates compete.</li>
+  <li>Wins section is omitted entirely when <code>gather_wins()</code>
+      returns zero items for the audience (assert via mock: brief
+      returned has no <code>section_kind == "wins"</code> entry).</li>
 </ol>
 
 <h2>14. Open questions for Sam</h2>

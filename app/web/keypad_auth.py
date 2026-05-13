@@ -273,6 +273,40 @@ def install(app):
         else:
             g.current_user = None
 
+    @app.before_request
+    def _validate_driver_session():
+        """Mirror of load_current_user but for Driver sessions: if the
+        driver_id in the cookie no longer matches the DB row's
+        session_version, force-logout. Closes the open thread from the
+        e1d929d migration — the column was added, admin reset bumps it
+        (dd1d1c7), but until now nothing actually validated it on
+        incoming requests. Phase 0 Block 2 (ck, 2026-05-13).
+
+        Cost: one PK lookup per request that has a driver_id session.
+        Drivers stream GPS every few seconds via /driver/track so this
+        does add load — but the lookup is by primary key, ~1ms, and
+        the alternative (admin reset that doesn't kick active sessions)
+        is a security gap."""
+        if not session.get("driver_id"):
+            return
+        from app.db import SessionLocal
+        from app.models import Driver
+        db = SessionLocal()
+        try:
+            d = db.get(Driver, session["driver_id"])
+            stale = (
+                d is None
+                or not d.active
+                or session.get("driver_session_version") is None
+                or d.session_version != session.get("driver_session_version")
+            )
+            if stale:
+                for _k in ("driver_id", "driver_name", "driver_location",
+                           "driver_session_version"):
+                    session.pop(_k, None)
+        finally:
+            db.close()
+
     @app.after_request
     def _no_store_when_authed(resp):
         """Force Cache-Control: no-store on all auth-state-sensitive

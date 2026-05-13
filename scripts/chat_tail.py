@@ -137,6 +137,35 @@ def main() -> int:
         print(f"posted as {args.author}: {args.post[:80]}")
         return 0
 
+    # Chunk threshold: harness display layers tend to truncate long stdout
+    # lines at ~600 chars when they relay events into the agent context.
+    # Splitting long bodies into multiple "[ts] author (cont N/M): ..."
+    # lines keeps each event under the cap so nothing silently drops.
+    # Set CHAT_TAIL_NO_CHUNK=1 to disable. (Sam, 2026-05-13.)
+    CHUNK_SIZE = 460
+    NO_CHUNK = os.getenv("CHAT_TAIL_NO_CHUNK") == "1"
+
+    def _emit(t: str, a: str, body: str, suffix: str) -> None:
+        if not body:
+            # Attachment-only message — one short line.
+            print(f"[{t}] {a}:{suffix.lstrip()}", flush=True)
+            return
+        if NO_CHUNK or (len(body) + len(suffix) <= CHUNK_SIZE):
+            print(f"[{t}] {a}: {body}{suffix}", flush=True)
+            return
+        # Split body into chunks. Each chunk's print line is roughly
+        # CHUNK_SIZE chars (the prefix is ~40 chars on top, well under
+        # the cap). Suffix (attachments) attaches to the LAST chunk.
+        chunks: list[str] = []
+        i = 0
+        while i < len(body):
+            chunks.append(body[i:i + CHUNK_SIZE])
+            i += CHUNK_SIZE
+        total = len(chunks)
+        for idx, chunk in enumerate(chunks, start=1):
+            tail = suffix if idx == total else ""
+            print(f"[{t}] {a} (cont {idx}/{total}): {chunk}{tail}", flush=True)
+
     last_id = 0
     while True:
         try:
@@ -150,9 +179,7 @@ def main() -> int:
                 if atts:
                     names = ", ".join(x.get("filename", "?") for x in atts)
                     suffix = f"  [\U0001f4ce {len(atts)}: {names}]"
-                # Body might be empty if the message is attachment-only.
-                line = f"[{t}] {a}: {b}{suffix}" if b else f"[{t}] {a}:{suffix.lstrip()}"
-                print(line, flush=True)
+                _emit(t, a, b, suffix)
                 last_id = max(last_id, m.get("id", 0))
             if not d.get("messages"):
                 # Quietly skip — only print initial sync message

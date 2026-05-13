@@ -309,6 +309,7 @@ DOC_PAGES = [
     ("session-closeout",         "Session Closeout",  "doc_session_closeout"),
     ("site-map",                 "Site Map",          "doc_site_map"),
     ("architecture-diagrams",    "Architecture Diagrams", "doc_architecture_diagrams"),
+    ("node-link-diagram",        "Node Link Diagram", "doc_node_link_diagram"),
     ("readme",                   "README",            "doc_readme"),
     ("architecture",             "Architecture",      "doc_architecture"),
     ("features",                 "Features",          "doc_features"),

@@ -307,6 +307,7 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
 DOC_PAGES = [
     ("session-start",            "Session Start",     "doc_session_start"),
     ("session-closeout",         "Session Closeout",  "doc_session_closeout"),
+    ("site-map",                 "Site Map",          "doc_site_map"),
     ("readme",                   "README",            "doc_readme"),
     ("architecture",             "Architecture",      "doc_architecture"),
     ("features",                 "Features",          "doc_features"),

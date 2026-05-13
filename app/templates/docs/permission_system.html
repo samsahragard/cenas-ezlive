@@ -15,7 +15,7 @@
   <code>app/</code> changes from this doc alone. ck's Block 4 turns the
   role-to-tag mapping below into a Python dict + a
   <code>@requires_permission("x.y")</code> decorator + a
-  <code>{% if has_permission('x.y') %}</code> Jinja helper + a per-template
+  <code>{% raw %}{% if has_permission('x.y') %}{% endraw %}</code> Jinja helper + a per-template
   audit pass that migrates existing partner-only / expo-hidden / GM-vs-manager
   checks onto the decorator.
 </p>
@@ -878,7 +878,7 @@ def requires_permission(tag: str, *, store_arg: str | None = None,
             one deploy cycle, then remove.</li>
         <li>Sidebar &ldquo;Legal&rdquo; entry in
             <code>base_dashboard.html</code> becomes
-            <code>{% if has_permission('legal.view') %}</code>.</li>
+            <code>{% raw %}{% if has_permission('legal.view') %}{% endraw %}</code>.</li>
         <li>Driver admin page <code>/partner/drivers</code> route gets
             <code>@requires_permission('drivers.admin')</code>.</li>
         <li>Order assign-driver POST handler gets

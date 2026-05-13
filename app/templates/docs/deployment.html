@@ -105,6 +105,36 @@ Body: {"value":"&lt;new value&gt;"}
 <h3>Tail logs</h3>
 <pre>GET https://api.render.com/v1/logs?ownerId=&lt;owner&gt;&resource=srv-d7ue6ivlk1mc73aaka20&limit=100&direction=backward</pre>
 
+<h2>Render PR Preview Environments</h2>
+<p>
+  Enabled 2026-05-13 (Phase 0 / Block 3). Every pull request opened against
+  <code>main</code> gets an ephemeral preview deploy with its own URL, its
+  own database (fresh / cleared on each rebuild), and the same env vars as
+  prod except for a separate persistent disk. Render tears it down when
+  the PR closes or merges.
+</p>
+<p><strong>URL pattern:</strong></p>
+<pre>https://cenas-ezlive-pr-&lt;PR_NUMBER&gt;.onrender.com</pre>
+<p>
+  e.g., PR #42 lives at <code>https://cenas-ezlive-pr-42.onrender.com</code>.
+  First deploy after the PR is opened takes ~4-5 min (full build + pre-deploy);
+  subsequent pushes to the same PR re-deploy in ~3 min.
+</p>
+<p><strong>How to use:</strong></p>
+<ul>
+  <li>From a feature branch, run <code>gh pr create --title "..." --body "..."</code> (or open via GitHub UI).</li>
+  <li>Render auto-spins the preview; the PR page shows a Render bot comment with the URL.</li>
+  <li>Verify with <code>curl https://cenas-ezlive-pr-&lt;N&gt;.onrender.com/login</code> → 200, or <code>/produce/healthz</code> for a full JSON status line.</li>
+  <li>Sentry events from previews are tagged with environment=<code>development</code> so they don't mix with prod alerts (RENDER env var is unset on preview services).</li>
+  <li>Don't run destructive tests against preview unless you're OK losing its DB — preview disks are not backed up.</li>
+</ul>
+<p>
+  Tunable via API:
+  <code>PATCH /v1/services/srv-d7ue6ivlk1mc73aaka20</code> with
+  <code>serviceDetails.pullRequestPreviewsEnabled = "yes"</code> +
+  <code>serviceDetails.previews = {"generation": "automatic"}</code>.
+</p>
+
 <h2>Render Cron Jobs</h2>
 <p>
   Two scheduled jobs wired via the Render API (2026-05-13). Each is a

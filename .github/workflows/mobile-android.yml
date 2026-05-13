@@ -136,14 +136,18 @@ jobs:
           echo "$KEYSTORE_B64" | base64 --decode > /tmp/upload-keystore.jks
           ls -la /tmp/upload-keystore.jks
 
-      - name: Inject release signing config into Android build
+      - name: Inject release signing config + target SDK 35 + versionCode bump
         if: steps.keystore_check.outputs.configured == 'true'
         working-directory: mobile/android/app
+        env:
+          BUILD_VERSION_CODE: ${{ github.run_number }}
         run: |
-          # Append a signingConfigs.release + buildTypes.release.signingConfig
-          # block to the generated build.gradle. The keystore path + creds
-          # are env-supplied to keep them out of the source tree.
-          cat >> build.gradle <<'GRADLE'
+          # Append signingConfigs.release + buildTypes.release.signingConfig,
+          # PLUS override defaultConfig.targetSdkVersion to 35 (Play requires
+          # 35+ for new internal-test releases as of late 2025) and bump
+          # versionCode = GitHub Actions run_number so every CI build gets
+          # a unique versionCode (Play rejects reuploads with same code).
+          cat >> build.gradle <<GRADLE
 
           android {
               signingConfigs {
@@ -153,6 +157,11 @@ jobs:
                       keyAlias System.getenv("KEY_ALIAS")
                       keyPassword System.getenv("KEY_PASSWORD")
                   }
+              }
+              compileSdkVersion 35
+              defaultConfig {
+                  targetSdkVersion 35
+                  versionCode ${BUILD_VERSION_CODE}
               }
               buildTypes {
                   release {
@@ -164,7 +173,7 @@ jobs:
           }
           GRADLE
           echo "--- tail of build.gradle ---"
-          tail -30 build.gradle
+          tail -36 build.gradle
 
       - name: Build signed release AAB
         if: steps.keystore_check.outputs.configured == 'true'

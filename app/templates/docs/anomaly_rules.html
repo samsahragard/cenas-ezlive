@@ -1,0 +1,676 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Phase 0 spec for the anomaly-detection rule library. Sister doc to
+  <a href="/partner/developer/app/permission-system">permission_system</a>:
+  permissions answer "who can see what"; this answers "what is the system
+  trying to surface, to whom, and how loudly?" Each rule below is a small
+  query against operational data that fires either an
+  <strong>info</strong> / <strong>warn</strong> / <strong>alert</strong>
+  signal. Signals feed two surfaces:
+</p>
+<ul>
+  <li><strong>The Phase 1 morning brief</strong> &mdash; once-a-day digest
+      to partners and GMs covering everything that warned or alerted in
+      the last 24h, plus the day-ahead lookahead.</li>
+  <li><strong>Anomaly cards on relevant pages</strong> &mdash; a small
+      colored card that appears inline on the page the rule is
+      contextually relevant to (e.g. the late-delivery card appears on
+      /orders/by-store, the tip-rate card on /reports/server-performance).
+      Card color tracks severity: blue / yellow / red.</li>
+</ul>
+<p>
+  <strong>Scope of this doc:</strong> the rule library + the data model
+  for signal storage. The implementation (the rule engine, the morning
+  brief composition, the card renderer) is Phase 1 work and lives in
+  separate specs once we cut Phase 0. Nothing in <code>app/</code> changes
+  from this doc alone.
+</p>
+
+<h2>1. Signal data model</h2>
+<p>
+  Every fired rule writes a row to a new <code>Signal</code> table:
+</p>
+<pre><code>class Signal(Base):
+    __tablename__ = "signals"
+    id: int
+    rule_name: str              # e.g. "orders.no_driver_30min_before"
+    severity: str               # "info" | "warn" | "alert"
+    store_id: str | None        # store_1..store_4 or None for cross-store
+    subject_id: str | None      # e.g. external_order_id, employee_id, vendor_id
+    subject_label: str          # human-readable subject (order #65X-814)
+    trigger_at: datetime        # when the rule fired
+    payload: dict               # rule-specific context (JSON column)
+    action_text: str            # the one-line recommended response (copied from rule def)
+    surfaces: list[str]         # which pages should render this card
+    audience_roles: list[str]   # which roles see the card / get the brief mention
+    acknowledged_by: int | None # user_id who clicked "acknowledge" — clears the card
+    acknowledged_at: datetime | None
+    resolved_at: datetime | None  # nullable: rules that auto-clear set this
+</code></pre>
+<p>
+  <strong>Why a Signal row vs computing on the fly:</strong> we want
+  acknowledgments to persist (so a once-cleared card stays gone for the
+  day), the morning brief needs a stable list of what happened, and a
+  partner viewing /partner/anomalies wants history not just current state.
+  Rules with auto-clear logic (e.g. the order got a driver after all)
+  write <code>resolved_at</code> and the card disappears without manager
+  intervention.
+</p>
+<p>
+  <strong>Surfaces vocabulary:</strong> <code>surfaces</code> is a list of
+  page slugs the card renders on. Conventions:
+  <code>"home"</code>, <code>"orders.by_store"</code>,
+  <code>"reports.labor"</code>, <code>"reports.server_perf"</code>,
+  <code>"reports.third_party_sales"</code>, <code>"produce.queue"</code>,
+  <code>"kds.station"</code>, <code>"partner.anomalies"</code>
+  (the dedicated index), <code>"morning_brief"</code> (the daily digest
+  channel). A rule can surface to multiple pages; the renderer
+  de-duplicates based on Signal id.
+</p>
+
+<h2>2. Severity scale</h2>
+<table>
+  <tr><th>Severity</th><th>Color</th><th>What it means</th>
+      <th>Where it surfaces</th><th>Brief inclusion</th></tr>
+  <tr><td><strong>info</strong></td><td>blue</td>
+      <td>FYI &mdash; pattern worth knowing about, no action needed today.
+          Trend signals, soft variances.</td>
+      <td>partner.anomalies index + the rule's contextual page if any.
+          Skipped on home dashboard.</td>
+      <td>Aggregated count only ("12 info signals in the last 24h").</td></tr>
+  <tr><td><strong>warn</strong></td><td>yellow</td>
+      <td>Needs attention soon but not blocking. Outside normal but not
+          a fire.</td>
+      <td>partner.anomalies + the rule's contextual page + home dashboard
+          for partner/GM.</td>
+      <td>Itemized list with subject + action text.</td></tr>
+  <tr><td><strong>alert</strong></td><td>red</td>
+      <td>Immediate action needed. Time-sensitive (e.g. order in 30min
+          with no driver) or financial-impact (e.g. invoice $400 over
+          quote).</td>
+      <td>Same as warn, plus push notification (when push lands), plus
+          banner on home dashboard for the audience role.</td>
+      <td>Top of brief, called out individually.</td></tr>
+</table>
+<p>
+  <strong>Calibration rule:</strong> if a rule fires more than 3 times per
+  store per day on average, downgrade its severity by one notch (alert
+  becomes warn, warn becomes info, info becomes silent). Noise destroys
+  attention. The brief footer shows which rules were downgraded so we
+  can tune thresholds.
+</p>
+
+<h2>3. Rules (32 total across 10 domains)</h2>
+
+<h3>3.1 Vendor / produce (6 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>vendor.invoice_over_quoted_price</code></td>
+      <td>For each line on an invoice, compare unit_price to the vendor's
+          weekly quote (from <code>vendor_quotes</code> JSON). Fire if
+          actual &gt; quoted &times; 1.05 AND absolute variance &gt; $10.</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped), km (store-scoped),
+          corporate_chef (cross-store)</td>
+      <td>Dispute the variance with the vendor. Open <code>/produce/dispute</code>
+          pre-filled with the line.</td>
+      <td>produce.queue, partner.anomalies, morning_brief</td>
+      <td>on-write (invoice ingested)</td></tr>
+
+  <tr><td><code>vendor.invoice_missing_line_items</code></td>
+      <td>Order placed for N items, invoice contains M items (M &lt; N).
+          Fire on the delta when invoice ingest completes.</td>
+      <td>warn</td>
+      <td>partner, gm, km, corporate_chef</td>
+      <td>Vendor short-shipped &mdash; verify with kitchen receiver and
+          request a follow-up delivery or credit.</td>
+      <td>produce.queue, partner.anomalies, morning_brief</td>
+      <td>on-write</td></tr>
+
+  <tr><td><code>vendor.late_delivery</code></td>
+      <td>Order's expected delivery window passed without an invoice
+          ingest event. Window from <code>vendors.delivery_window</code>
+          for the day's vendor.</td>
+      <td>alert</td>
+      <td>partner, gm, km (store-scoped), corporate_chef, prep_manager</td>
+      <td>Call vendor immediately. If &gt;1h late, escalate to backup
+          vendor.</td>
+      <td>produce.queue, home, kds.station, partner.anomalies,
+          morning_brief</td>
+      <td>cron every 15 min during delivery window</td></tr>
+
+  <tr><td><code>vendor.spec_price_anomaly_yoy</code></td>
+      <td>Same item from same vendor: compare current weekly average
+          unit_price to the average from the same calendar week last year
+          (or trailing-52-week average if no prior-year data). Fire on
+          &gt;15% increase.</td>
+      <td>info</td>
+      <td>partner, corporate, km (store-scoped), corporate_chef</td>
+      <td>Pricing trend up &mdash; consider re-quoting with other vendors
+          or hedging supply.</td>
+      <td>produce.queue, partner.anomalies, morning_brief (weekly only)</td>
+      <td>cron weekly, Mon 5am CT</td></tr>
+
+  <tr><td><code>produce.missed_order_window</code></td>
+      <td>Vendor's order-by deadline passed (e.g. alvarado Sun 8pm,
+          jluna Wed 2pm) without an order being placed.</td>
+      <td>alert</td>
+      <td>partner, gm, km (store-scoped), corporate_chef</td>
+      <td>Order is now LATE. Place by phone or move to next delivery
+          window; flag impact on prep.</td>
+      <td>produce.queue, home, partner.anomalies, morning_brief</td>
+      <td>cron 5 min after each window close</td></tr>
+
+  <tr><td><code>produce.dispute_unresolved</code></td>
+      <td><code>ProduceDispute.status = 'open' AND opened_at &lt; now() - 48h</code></td>
+      <td>warn</td>
+      <td>partner, corporate, gm, km</td>
+      <td>Follow up with vendor on the open dispute. Convert to credit
+          memo or escalate if vendor unresponsive.</td>
+      <td>produce.queue, partner.anomalies, morning_brief</td>
+      <td>cron daily 8am CT</td></tr>
+</table>
+
+<h3>3.2 Orders / delivery (5 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>orders.no_driver_30min_before</code></td>
+      <td><code>order.pickup_at &lt; now() + 30min AND
+          assigned_driver IS NULL AND status != 'cancelled'</code>.
+          Auto-clears when a driver is assigned.</td>
+      <td>alert</td>
+      <td>partner, gm, km (store-scoped), foh_manager, expo</td>
+      <td>Assign a driver via /orders/by-store or push the order to
+          Ez Market with <code>orders.unassign_driver</code> (now auto-opens
+          bid pool per aick's 8bad9fc).</td>
+      <td>orders.by_store, home, kds.station, partner.anomalies,
+          morning_brief (next-day lookahead)</td>
+      <td>cron every 5 min</td></tr>
+
+  <tr><td><code>orders.late_delivery</code></td>
+      <td><code>order.delivery_at &lt; now() AND mark_delivered_at IS NULL
+          AND assigned_driver IS NOT NULL</code>.</td>
+      <td>alert</td>
+      <td>partner, gm, expo, the assigned driver (own scope)</td>
+      <td>Contact the driver. If unreachable, mark delivered manually
+          or call the customer to apologize and re-route.</td>
+      <td>orders.by_store, driver.portal, partner.anomalies,
+          morning_brief</td>
+      <td>cron every 5 min</td></tr>
+
+  <tr><td><code>orders.driver_no_show</code></td>
+      <td><code>assigned_driver IS NOT NULL AND pickup_at + 15min &lt; now()
+          AND mark_picked_up_at IS NULL</code>.</td>
+      <td>alert</td>
+      <td>partner, gm, foh_manager, expo</td>
+      <td>Reassign the order &mdash; either back to Ez Market or to a
+          backup driver. Log the no-show against the original driver's
+          reliability score.</td>
+      <td>orders.by_store, home, partner.anomalies, morning_brief</td>
+      <td>cron every 5 min (overlaps no-show-sweep aick wired in Block 1,
+          consider de-dup at the Signal write step)</td></tr>
+
+  <tr><td><code>orders.ezcater_rejection_rate</code></td>
+      <td>Store rejected &ge; 3 ezCater orders in a rolling 24h window
+          (regardless of reason).</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped)</td>
+      <td>Review the rejection reasons. If capacity-driven, adjust the
+          accept-window settings; if menu-driven, fix the menu mapping
+          to avoid future bad orders entering the pipeline.</td>
+      <td>orders.by_store, partner.anomalies, morning_brief</td>
+      <td>cron hourly</td></tr>
+
+  <tr><td><code>orders.high_pickup_lag</code></td>
+      <td>Trailing 5 completed orders: average minutes between
+          assigned_at and mark_picked_up_at &gt; 25 min.</td>
+      <td>info</td>
+      <td>partner, gm</td>
+      <td>Driver fleet running slow &mdash; consider opening the bid pool
+          earlier (raise the unassign-to-bid threshold) or recruiting
+          additional drivers.</td>
+      <td>orders.by_store, partner.anomalies, morning_brief (weekly)</td>
+      <td>cron daily 9am CT</td></tr>
+</table>
+
+<h3>3.3 Sales (4 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>sales.daily_vs_forecast</code></td>
+      <td>At 2pm CT: today's sales-to-date &lt; 70% of expected run-rate
+          for the same hour vs trailing 4-week same-day-of-week average.</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped), foh_manager</td>
+      <td>Slow day &mdash; consider a happy-hour push (toast online promo,
+          ezCater promoted listing). Check if a competitor / event is
+          drawing traffic.</td>
+      <td>home, reports.third_party_sales, partner.anomalies,
+          morning_brief</td>
+      <td>cron 2pm CT daily</td></tr>
+
+  <tr><td><code>sales.channel_divergence</code></td>
+      <td>Per-channel weekly sales (last 7 days) vs trailing 4-week
+          average for the same channel: down &gt; 25%.</td>
+      <td>warn</td>
+      <td>partner, corporate, gm</td>
+      <td>Channel underperforming &mdash; check ratings / wait time / menu
+          freshness on that channel (e.g. DoorDash menu may have items
+          marked unavailable).</td>
+      <td>reports.third_party_sales, partner.anomalies,
+          morning_brief (weekly)</td>
+      <td>cron Mon 5am CT</td></tr>
+
+  <tr><td><code>sales.refund_spike</code></td>
+      <td>Today's refunds (Toast voids + refund-class transactions) &gt;
+          2% of today's gross sales (baseline ~0.5%).</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped), foh_manager</td>
+      <td>Investigate the refund reasons via Toast back-office. If
+          food-quality driven, surface to KM. If POS-error driven,
+          surface to FOH manager.</td>
+      <td>home, reports.third_party_sales, partner.anomalies,
+          morning_brief</td>
+      <td>cron hourly</td></tr>
+
+  <tr><td><code>sales.weekly_pace_divergence</code></td>
+      <td>Week-to-date sales (Mon-Sun, including today) &lt; 90% of
+          trailing 4-week WTD average for the same weekday.</td>
+      <td>info</td>
+      <td>partner, corporate, gm</td>
+      <td>Soft week &mdash; consider whether to extend specials or pull
+          marketing levers. Check labor scheduling for next week against
+          adjusted forecast.</td>
+      <td>home, partner.anomalies, morning_brief (Fri only)</td>
+      <td>cron Fri 9am CT</td></tr>
+</table>
+
+<h3>3.4 Labor (4 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>labor.percent_running_hot</code></td>
+      <td>Today's labor-cost-to-sales ratio &gt; 115% of the store's
+          forecast/target ratio (e.g. target 22%, actual &gt; 25.3%).
+          Only fires after 6pm CT to allow normalization through the
+          dinner rush.</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped)</td>
+      <td>Send a clock-out wave home if FOH; or revisit the schedule
+          for the rest of the week if pattern persists.</td>
+      <td>home, reports.labor, partner.anomalies, morning_brief</td>
+      <td>cron 6pm + 9pm + 11pm CT</td></tr>
+
+  <tr><td><code>labor.overtime_exceeded</code></td>
+      <td>Per pay-period: any employee with &gt; 8 hours of overtime
+          (hours_worked &gt; 48 in the week).</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped), the affected employee
+          (own scope)</td>
+      <td>Adjust the employee's schedule for the rest of the pay-period.
+          If structural, surface to scheduling.</td>
+      <td>reports.labor, partner.anomalies, morning_brief (weekly)</td>
+      <td>cron Sun 10pm CT (close of pay-period)</td></tr>
+
+  <tr><td><code>labor.unscheduled_clockin</code></td>
+      <td>Employee clocked in without an active scheduled shift in
+          Sling (15 min grace window).</td>
+      <td>info</td>
+      <td>gm (store-scoped), foh_manager (FOH only), km (BOH only)</td>
+      <td>Confirm the employee was needed today (e.g. coverage). If not,
+          ask them to clock out.</td>
+      <td>reports.labor, partner.anomalies</td>
+      <td>cron every 15 min</td></tr>
+
+  <tr><td><code>labor.manager_absent</code></td>
+      <td>No manager (KM, GM, FOH manager, asst KM) clocked in by
+          30 min after the first front-line clock-in of the day.</td>
+      <td>alert</td>
+      <td>partner, corporate, all on-shift managers</td>
+      <td>Confirm coverage. If unplanned, contact the missing manager
+          and arrange backup.</td>
+      <td>home, partner.anomalies, morning_brief</td>
+      <td>cron every 30 min during business hours</td></tr>
+</table>
+
+<h3>3.5 Attendance (2 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>attendance.employee_pattern</code></td>
+      <td>Same employee no-call-no-show 2+ times in 30 days. (No-show =
+          scheduled shift without a clock-in by start + 30 min and no
+          time-off request.)</td>
+      <td>warn</td>
+      <td>partner, gm (store-scoped), the affected employee's manager
+          chain</td>
+      <td>Coaching conversation. Document in manager_log. Decide if
+          progressive discipline applies.</td>
+      <td>reports.labor, partner.anomalies, morning_brief (weekly)</td>
+      <td>cron weekly Mon 7am CT</td></tr>
+
+  <tr><td><code>attendance.callout_spike</code></td>
+      <td>&gt; 2 callouts (time-off requests filed within 4h of shift
+          start OR shift no-show) on the same shift-day.</td>
+      <td>warn</td>
+      <td>partner, gm (store-scoped), all on-shift managers</td>
+      <td>Find coverage from cross-trained staff. If kitchen-side,
+          alert corporate_chef for backup. Adjust shift-end if
+          unrecoverable.</td>
+      <td>home, partner.anomalies, morning_brief</td>
+      <td>cron 1h before each shift block</td></tr>
+</table>
+
+<h3>3.6 Server performance (1 rule)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>server_perf.tip_rate_low</code></td>
+      <td>Per server, trailing 5 shifts: average tip percent &lt; 12%.
+          Only fires if the server has &ge; 5 qualifying shifts (so we
+          don't pile on new hires).</td>
+      <td>info</td>
+      <td>partner, gm (store-scoped), foh_manager (store-scoped),
+          the server (own scope)</td>
+      <td>Coaching opportunity &mdash; review service patterns, check
+          table assignments, consider pairing with a high-tip server
+          for a shift.</td>
+      <td>reports.server_perf, partner.anomalies,
+          morning_brief (weekly)</td>
+      <td>cron weekly Mon 7am CT</td></tr>
+</table>
+
+<h3>3.7 Kitchen (4 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>kitchen.prep_behind</code></td>
+      <td>KDS prep station progress (tickets remaining / tickets
+          completed) &gt; 15 min behind the rolling production target for
+          that station.</td>
+      <td>warn</td>
+      <td>partner, gm (store-scoped), km (store-scoped), prep_manager
+          (cross-store)</td>
+      <td>Shift bodies onto the lagging station. If structural, surface
+          to recipe-yield or schedule.</td>
+      <td>kds.station, home, partner.anomalies</td>
+      <td>on-write (KDS state updates)</td></tr>
+
+  <tr><td><code>kitchen.recipe_yield_variance</code></td>
+      <td>For a prepped recipe, actual yield (logged at end of prep)
+          &lt; 90% of the recipe's target yield.</td>
+      <td>info</td>
+      <td>partner, km (store-scoped), corporate_chef</td>
+      <td>Investigate &mdash; recipe needs update? Ingredient quality? Prep
+          process drift?</td>
+      <td>kds.station, partner.anomalies, morning_brief (weekly)</td>
+      <td>on-write (recipe completion logged)</td></tr>
+
+  <tr><td><code>kitchen.ingredient_oos</code></td>
+      <td>Front-end OOS marker set on an ingredient (manager taps "out of
+          stock" on a KDS / inventory pane).</td>
+      <td>alert</td>
+      <td>partner, gm, km, expo, foh_manager (so they know what's 86'd
+          for guest-facing communication)</td>
+      <td>86 affected menu items in Toast immediately. Place an emergency
+          order with backup vendor if same-day-recoverable.</td>
+      <td>kds.station, home, orders.by_store (cancelable lookahead),
+          partner.anomalies</td>
+      <td>on-write</td></tr>
+
+  <tr><td><code>kitchen.equipment_down</code></td>
+      <td>Manager_log entry tagged <code>equipment_down</code> with
+          status <code>open</code>.</td>
+      <td>alert (first 4h) &rarr; warn (after 4h)</td>
+      <td>partner, gm, km, corporate_chef</td>
+      <td>Call repair. Adjust prep plan to route around the equipment.
+          Update the open log entry when fixed (auto-clears the signal).</td>
+      <td>kds.station, partner.anomalies, morning_brief</td>
+      <td>on-write + cron every 30 min until resolved</td></tr>
+</table>
+
+<h3>3.8 Customer (3 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>customer.review_unanswered</code></td>
+      <td>Google review on the store's listing without an owner response
+          &gt; 24h old.</td>
+      <td>warn</td>
+      <td>partner, corporate, gm (store-scoped), foh_manager</td>
+      <td>Respond on Google Business Profile. Use AI-assisted draft
+          available at /partner/reviews/draft if helpful.</td>
+      <td>home, partner.anomalies, morning_brief</td>
+      <td>cron every 4h during business hours</td></tr>
+
+  <tr><td><code>customer.review_negative</code></td>
+      <td>Any 1-star or 2-star Google review posted in the last 6h.</td>
+      <td>alert</td>
+      <td>partner, gm (store-scoped), foh_manager</td>
+      <td>Read, then respond same-day. Internal: trace the review to a
+          ticket / visit if possible and surface to the affected staff.</td>
+      <td>home, partner.anomalies, morning_brief (top of brief)</td>
+      <td>cron hourly</td></tr>
+
+  <tr><td><code>customer.complaint_trend</code></td>
+      <td>&gt; 2 logged customer complaints (manager_log tagged
+          <code>complaint</code> OR Toast guest_complaint tag) on the
+          same shift.</td>
+      <td>warn</td>
+      <td>partner, gm (store-scoped), foh_manager, km</td>
+      <td>Identify the pattern (food quality? service speed? specific
+          item?). Address mid-shift if possible; debrief at shift-end.</td>
+      <td>home, partner.anomalies, morning_brief</td>
+      <td>on-write (each complaint logged re-evaluates)</td></tr>
+</table>
+
+<h3>3.9 System / ops (3 rules)</h3>
+<table>
+  <tr><th>Rule</th><th>Trigger</th><th>Sev</th><th>Audience</th>
+      <th>Action</th><th>Surfaces</th><th>Runs</th></tr>
+
+  <tr><td><code>system.deploy_failed</code></td>
+      <td>Render deploy status = <code>failed</code> (poll Render API) on
+          the cenas-ezlive service within the last 30 min.</td>
+      <td>alert</td>
+      <td>partner (only)</td>
+      <td>Surface the failed deploy URL and the failing commit; aick
+          investigates.</td>
+      <td>home, partner.anomalies</td>
+      <td>cron every 10 min</td></tr>
+
+  <tr><td><code>system.backup_missing</code></td>
+      <td>No backup artifact present in <code>cenas_ezlive_backups</code>
+          bucket / disk for the prior day, checked at 10am CT.</td>
+      <td>alert</td>
+      <td>partner (only)</td>
+      <td>Trigger manual backup. Investigate cron schedule on AiCk or
+          Render scheduled job.</td>
+      <td>partner.anomalies, morning_brief</td>
+      <td>cron 10am CT daily</td></tr>
+
+  <tr><td><code>system.api_key_expiring</code></td>
+      <td>Env var holding an external API key (Google Routes, Toast, OAuth
+          refresh tokens) with metadata indicating expiration in &lt; 14
+          days.</td>
+      <td>warn</td>
+      <td>partner (only)</td>
+      <td>Rotate the key. Update Render env var via aick's Render API
+          path.</td>
+      <td>partner.anomalies, morning_brief (weekly Mon)</td>
+      <td>cron daily 9am CT</td></tr>
+</table>
+
+<p>
+  <strong>Total: 32 rules across 9 domains.</strong> Within Sam's 25-35
+  target band.
+</p>
+
+<h2>4. Morning brief composition</h2>
+<p>
+  Generated daily at 7:30am CT. One brief per audience role
+  (partner, gm-per-store, km-per-store, corporate_chef, etc.). Sent via
+  email + posted to the user's <code>/partner/briefs</code> inbox surface.
+  Composition:
+</p>
+<ol>
+  <li><strong>Header.</strong> Date, store(s) in scope, sleep-quality
+      cheek (signal count by severity since yesterday's brief).</li>
+  <li><strong>Alerts (red).</strong> Itemized list of alert signals
+      from the last 24h that are still open (not <code>resolved_at</code>
+      or <code>acknowledged_by</code>). One per line: subject + action
+      text + link to the surface page.</li>
+  <li><strong>Warns (yellow).</strong> Same shape as alerts.</li>
+  <li><strong>Today's lookahead.</strong> Predicted alerts based on
+      same-rule history (e.g. "no driver assigned" rule projected to fire
+      between 11am-1pm if pending orders stay unassigned).</li>
+  <li><strong>Info aggregate.</strong> "N info signals in the last 24h"
+      with a link to the full list.</li>
+  <li><strong>Calibration footer.</strong> Rules downgraded for noise
+      yesterday + any rules that fired zero times this week (candidates
+      for retirement or threshold adjustment).</li>
+</ol>
+<p>
+  The brief is generated by a Claude call with the Signal table + the
+  rule definitions as context (similar pattern to the ezcater resolver
+  ck shipped). Each role gets only their permission-tag-visible signals
+  (the brief composer enforces the same <code>_user_has</code> check that
+  the decorator uses).
+</p>
+
+<h2>5. Anomaly cards on pages</h2>
+<p>
+  When a page renders, the layout includes an anomaly-card slot that
+  queries:
+</p>
+<pre><code>SELECT * FROM signals
+WHERE 'page.slug' IN unnest(surfaces)
+  AND (acknowledged_by IS NULL AND resolved_at IS NULL)
+  AND audience_roles &amp;&amp; user.role_set
+  AND (store_id IS NULL OR store_id = current_store_id)
+ORDER BY severity DESC, trigger_at DESC
+LIMIT 5;</code></pre>
+<p>
+  Cards render colored by severity (blue/yellow/red), with the action_text
+  prominent and a single &ldquo;Acknowledge&rdquo; button. Acknowledging
+  marks the row's <code>acknowledged_by</code> for the user; the card
+  disappears for that role going forward (or until the rule re-fires for
+  a new subject_id). Audit log: every acknowledgment writes to a
+  <code>SignalAck</code> table for after-the-fact reviewability.
+</p>
+
+<h2>6. Threshold tuning</h2>
+<p>
+  Every rule's threshold above is a <em>starting point</em>, not a
+  contract. Each fires into a Signal row with the raw measured value in
+  <code>payload</code>; after two weeks of operation we tune by:
+</p>
+<ul>
+  <li>Rules that fired &gt;3&times; per store per day on average &mdash;
+      raise threshold or downgrade severity.</li>
+  <li>Rules that fired zero times in two weeks &mdash; consider lowering
+      threshold, or retire (the trigger condition may never actually
+      occur in practice).</li>
+  <li>Rules where the recommended action was rarely taken (the
+      <code>SignalAck</code> table can show ack-without-action by
+      cross-referencing manager_log entries) &mdash; rework the action
+      text or downgrade severity.</li>
+</ul>
+<p>
+  A simple admin page at <code>/partner/anomalies/rules</code> exposes
+  the rule library with per-rule fire counts and last-7-day acknowledgment
+  rates. Partner can edit thresholds inline (writes to
+  <code>rule_overrides</code> table, takes effect on next rule run; the
+  defaults in code stay; overrides win).
+</p>
+
+<h2>7. Implementation notes (for whoever picks up Phase 1)</h2>
+<ul>
+  <li>Rule engine lives in <code>app/services/anomaly_engine.py</code>.
+      Each rule is a function returning a list of
+      <code>SignalDraft</code> objects. The engine runs on the cadence
+      specified per rule (cron-driven or on-write hooks).</li>
+  <li>Cron rules slot into the Render Cron Jobs aick wired in Phase 0
+      Block 1 (crn-d82e5ivaqgkc7393acsg pattern). One Render cron entry
+      per cadence (every-5-min / every-15-min / hourly / daily / weekly),
+      each calling <code>/cron/anomaly-eval?bucket=&lt;cadence&gt;</code>.
+      The handler reads which rules belong to that bucket and runs them.
+  </li>
+  <li>On-write rules wire into existing event paths: invoice ingest,
+      KDS state update, manager_log insert, Toast webhook receipt. Each
+      writes Signal rows in the same transaction so a partial failure
+      rolls back.</li>
+  <li>Push notifications (alerts only, partner phone) require a separate
+      Phase 1 deliverable &mdash; out of scope here. For now alerts surface
+      via the home dashboard banner + the morning brief.</li>
+  <li>De-duplication: when a rule re-evaluates the same subject_id, look
+      for an open Signal with the same (rule_name, subject_id, store_id).
+      If found, update <code>trigger_at</code> and merge payload; do not
+      create a duplicate row.</li>
+  <li>Auto-clear: rules with reversible triggers (no_driver_30min_before,
+      late_delivery, equipment_down, missed_order_window) re-check on
+      every run cycle and write <code>resolved_at</code> when the
+      condition no longer holds. Manager doesn't have to ack a resolved
+      signal &mdash; the card disappears on its own.</li>
+</ul>
+
+<h2>8. What this spec doesn't decide (kicked to Phase 1+)</h2>
+<ul>
+  <li><strong>Push channel.</strong> Where alerts land in real time (SMS,
+      WhatsApp via ock's existing connection, Telegram, push to the
+      Capacitor app). Pick during Phase 1 build.</li>
+  <li><strong>Cross-rule correlation.</strong> e.g. labor_running_hot +
+      sales_daily_vs_forecast firing together implies different action
+      than each alone. Phase 2 layer that reads the Signal table and
+      proposes consolidated narratives.</li>
+  <li><strong>Predictive signals.</strong> Forecasted alerts (today's
+      sales projected to miss forecast by 4pm) are noted in the brief's
+      lookahead section but not implemented in Phase 1; come back to this
+      when we have enough signal history to train a simple model.</li>
+  <li><strong>Self-tuning thresholds.</strong> The two-week tuning pass
+      above is human-in-loop. A future enhancement is to learn the
+      threshold band per rule per store from the first month of data.</li>
+  <li><strong>Custom rules per user.</strong> No mechanism for a partner
+      to write their own one-off rule yet. Workaround: file an issue in
+      the developer chat, samai or aick adds it to this spec.</li>
+</ul>
+
+<h2>9. Cross-claude notes</h2>
+<ul>
+  <li><strong>aick</strong> &mdash; the cron buckets in
+      &sect;7 build on your Block 1 work (crn-d82e5ivaqgkc7393acsg
+      no-show-sweep is already a close cousin to
+      <code>orders.no_driver_30min_before</code>; consider whether to
+      consolidate when the rule engine lands so we don't have two
+      different paths firing on the same condition).</li>
+  <li><strong>ck</strong> &mdash; the brief composer in &sect;4 calls
+      <code>_user_has</code> from the permission system, so it inherits
+      whatever you build in Block 4. Specifically: the audience_roles
+      filter in &sect;5's query is a coarse first pass; the real per-user
+      filter is the same <code>_user_has(tag)</code> call you wire for
+      route gating. A signal carries the permission tag of the surface
+      page (the page-side anomaly query already restricts to surfaces
+      the user can see), but the brief composer needs to re-derive what
+      a role would see and skip everything else.</li>
+  <li><strong>samai</strong> (next session) &mdash; Phase 1 build is
+      probably split: aick builds the Render-cron + Render-API plumbing
+      for /cron/anomaly-eval, ck builds the rule engine + Signal model
+      + page-side card renderer, samai writes the Claude prompts for
+      the morning brief composer + handles tuning passes. Roles can
+      flex when the work actually starts.</li>
+</ul>
+
+{% endblock %}

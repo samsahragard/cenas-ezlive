@@ -164,6 +164,38 @@ curl -X POST -H "X-Cron-Token: $(cat ~/.openclaw/.secrets/cron_token.txt)" \
   https://app.cenaskitchen.com/cron/recompute-scores
 # {"ok":true,"scored":2,"tier_changes":0}</pre>
 
+<h2>Anomaly evaluation cron buckets (Phase 1 / Block 2)</h2>
+<p>
+  Five additional Render <code>cron_job</code> services wired 2026-05-13.
+  Each <code>curl</code>s a single endpoint
+  (<code>POST /cron/anomaly-eval?bucket=&lt;b&gt;</code>) on its schedule;
+  the bucket-runner handler delegates to
+  <code>app.services.anomaly_engine.run_bucket</code>, which executes
+  every rule registered to that bucket via the
+  <code>@anomaly_rule(bucket=...)</code> decorator. Same
+  <code>Authorization: Bearer $CRON_TOKEN</code> auth as the Block-1
+  driver cron jobs.
+</p>
+<table>
+  <tr><th>Bucket</th><th>Service ID</th><th>Schedule (UTC)</th><th>Rules registered (initial)</th></tr>
+  <tr><td><code>every_5m</code></td><td><code>crn-d82fik3bc2fs73b54uig</code></td><td><code>*/5 * * * *</code></td>
+      <td>orders.no_driver_30min_before, orders.late_delivery</td></tr>
+  <tr><td><code>every_15m</code></td><td><code>crn-d82fiknavr4c73dqsggg</code></td><td><code>*/15 * * * *</code></td>
+      <td>(awaiting Block 5)</td></tr>
+  <tr><td><code>hourly</code></td><td><code>crn-d82fil03kofs73cp4ibg</code></td><td><code>0 * * * *</code></td>
+      <td>(awaiting Block 5)</td></tr>
+  <tr><td><code>daily</code></td><td><code>crn-d82filf2gups73c3rsd0</code></td><td><code>0 13 * * *</code> (8 AM CT)</td>
+      <td>morning brief composition (Block 6) + daily rules</td></tr>
+  <tr><td><code>weekly</code></td><td><code>crn-d82filvavr4c73dqsi00</code></td><td><code>0 13 * * 1</code> (Mon 8 AM CT)</td>
+      <td>calibration footer + weekly rules</td></tr>
+</table>
+<p>
+  Manual fire (handy for catching mid-run bugs in any single bucket):
+</p>
+<pre>curl -X POST -H "Authorization: Bearer $(cat ~/.openclaw/.secrets/cron_token.txt)" \
+  "https://app.cenaskitchen.com/cron/anomaly-eval?bucket=every_5m"
+# {"bucket":"every_5m","fired":N,"saved":N,"updated":N,"resolved":N,"errors":0,"rules_run":2,"ok":true}</pre>
+
 <h2>Local development</h2>
 <ol>
   <li>Clone <code>github.com/leverr18/cenas-ezlive</code> to <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code></li>

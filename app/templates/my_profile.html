@@ -74,6 +74,61 @@
   .mp-pay-row { display: flex; justify-content: space-between; padding: 6px 0;
                 font-size: 13px; color: rgba(236,227,208,0.85); }
   .mp-pay-row strong { color: #FFD970; }
+
+  /* Tier ladder stepper (Phase 0 Block 4, 2026-05-13) — visualizes the
+     4 tier stages with connecting lines, current tier highlighted. */
+  .mp-ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+               position: relative; margin: 18px 0 4px; }
+  .mp-ladder::before {
+    content: ''; position: absolute; top: 18px; left: 12.5%; right: 12.5%;
+    height: 2px; background: rgba(255,255,255,0.10); z-index: 0;
+  }
+  .mp-step { display: flex; flex-direction: column; align-items: center;
+             gap: 6px; position: relative; z-index: 1; }
+  .mp-step-circle {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(40,22,14,0.85); border: 1.5px solid rgba(255,255,255,0.12);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; color: rgba(236,227,208,0.55);
+    transition: all 0.2s ease;
+  }
+  .mp-step.done .mp-step-circle {
+    background: rgba(228,179,64,0.18); border-color: #E4B340; color: #FFD970;
+  }
+  .mp-step.current .mp-step-circle {
+    background: #E4B340; border-color: #FFD970; color: #28160e;
+    box-shadow: 0 0 0 3px rgba(228,179,64,0.18), 0 0 18px rgba(255,200,80,0.5);
+  }
+  .mp-step-label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: rgba(236,227,208,0.55); text-align: center;
+  }
+  .mp-step.current .mp-step-label { color: #FFD970; font-weight: 500; }
+  .mp-step.done .mp-step-label { color: rgba(255,217,112,0.75); }
+  .mp-step-threshold { font-size: 9.5px; color: rgba(236,227,208,0.45);
+                       text-align: center; margin-top: 1px; }
+
+  /* Privilege comparison columns: "What you have" / "Unlock at <next>" */
+  .mp-privs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+              margin-top: 12px; }
+  .mp-priv-col { background: rgba(40,22,14,0.40);
+                 border: 0.5px solid rgba(255,255,255,0.06);
+                 border-radius: 12px; padding: 14px 16px; }
+  .mp-priv-col.unlock { border-color: rgba(228,179,64,0.30);
+                        background: rgba(228,179,64,0.04); }
+  .mp-priv-head { font-size: 11px; text-transform: uppercase;
+                  letter-spacing: 0.12em; color: rgba(236,227,208,0.55);
+                  margin-bottom: 10px; }
+  .mp-priv-col.unlock .mp-priv-head { color: #FFD970; }
+  .mp-priv-item { display: flex; gap: 8px; padding: 6px 0;
+                  font-size: 12.5px; color: rgba(236,227,208,0.78);
+                  line-height: 1.45; }
+  .mp-priv-item .ico { flex-shrink: 0; color: #9CCB76; font-weight: 700; }
+  .mp-priv-col.unlock .mp-priv-item .ico { color: #FFD970; }
+  .mp-priv-col.unlock .mp-priv-item .ico.locked { color: rgba(236,227,208,0.30); }
+  @media (max-width: 640px) {
+    .mp-privs { grid-template-columns: 1fr; }
+  }
 </style>
 {% endblock %}
 
@@ -110,6 +165,82 @@
       {{ 'Trusted' if next_threshold == 60 else ('Rockstar' if next_threshold == 80 else 'Top Rockstar') }}
     </div>
   {% endif %}
+</div>
+
+{# Tier ladder stepper (Phase 0 Block 4, Sam's 5/12 mockup). 4 circles
+   New → Trusted → Rockstar → Top Rockstar, current step lit, prior
+   steps marked as done. Each step shows its score threshold underneath. #}
+{% set _tier_order = ['new', 'trusted', 'rockstar', 'top_rockstar'] %}
+{% set _tier_index = _tier_order.index(current_tier) if current_tier in _tier_order else 0 %}
+<div class="mp-ladder">
+  {% for slug, label, threshold in [
+        ('new',          'New',          '0+'),
+        ('trusted',      'Trusted',      '60+'),
+        ('rockstar',     'Rockstar',     '80+'),
+        ('top_rockstar', 'Top Rockstar', '95+'),
+      ] %}
+    {% set _idx = loop.index0 %}
+    {% set _class = 'done' if _idx < _tier_index else ('current' if _idx == _tier_index else 'todo') %}
+    <div class="mp-step {{ _class }}">
+      <div class="mp-step-circle">
+        {% if _idx < _tier_index %}✓{% else %}{{ _idx + 1 }}{% endif %}
+      </div>
+      <div class="mp-step-label">{{ label }}</div>
+      <div class="mp-step-threshold">{{ threshold }}</div>
+    </div>
+  {% endfor %}
+</div>
+
+{# Side-by-side privileges: "What you have" vs "Unlock at <next>". When
+   the driver is at Top Rockstar, the second column flips to a "Max tier
+   reached" celebration. #}
+{% set _next_slug = _tier_order[_tier_index + 1] if _tier_index + 1 < _tier_order|length else None %}
+{% set _next_label = {'trusted': 'Trusted', 'rockstar': 'Rockstar', 'top_rockstar': 'Top Rockstar'}.get(_next_slug) %}
+{% set _privs_by_tier = {
+  'new': [
+    ('Standard bid pool access (read-only on Ez Market)', True),
+    ('Up to 1 active delivery at a time', True),
+    ('Lifetime delivery counter on profile', True),
+  ],
+  'trusted': [
+    ('All "New" perks', True),
+    ('Request deliveries on Ez Market', True),
+    ('Up to 2 active deliveries (stack approval)', True),
+    ('Per-metric breakdown shown on profile', True),
+  ],
+  'rockstar': [
+    ('All "Trusted" perks', True),
+    ('Priority on manager-approval sort (above Trusted)', True),
+    ('Up to 3 active deliveries', True),
+    ('Eligible for the Top Rockstar promotion at 95+', True),
+  ],
+  'top_rockstar': [
+    ('All "Rockstar" perks', True),
+    ('Top of every manager recommendation list', True),
+    ('First-look access to high-value deliveries (TBD)', True),
+    ('Additional privileges TBD by Sam', True),
+  ],
+} %}
+{% set _have = _privs_by_tier.get(current_tier or 'new', []) %}
+{% set _unlock = _privs_by_tier.get(_next_slug, []) if _next_slug else [] %}
+<div class="mp-privs">
+  <div class="mp-priv-col">
+    <div class="mp-priv-head">What you have ({{ (current_tier or 'new').replace('_', ' ').title() }})</div>
+    {% for text, _ in _have %}
+      <div class="mp-priv-item"><span class="ico">✓</span><span>{{ text }}</span></div>
+    {% endfor %}
+  </div>
+  <div class="mp-priv-col unlock">
+    {% if _next_slug %}
+      <div class="mp-priv-head">Unlock at {{ _next_label }}</div>
+      {% for text, _ in _unlock %}
+        <div class="mp-priv-item"><span class="ico locked">●</span><span>{{ text }}</span></div>
+      {% endfor %}
+    {% else %}
+      <div class="mp-priv-head">Top tier reached</div>
+      <div class="mp-priv-item"><span class="ico">★</span><span>You're at the top of the ladder. Keep your score above 95 to stay here — drops below 95 demote you back to Rockstar on the next nightly recompute.</span></div>
+    {% endif %}
+  </div>
 </div>
 
 <div class="mp-stats">

@@ -370,7 +370,11 @@ def driver_logout():
     session.clear()
     if auth_ok:
         session["auth_ok"] = auth_ok
-    return redirect(url_for("driver.driver_login"))
+    # Add ?_clear=1 so the driver_keypad_login JS wipes the persisted
+    # phone in localStorage. Logout means "this person is done on this
+    # device" — force re-entry on next login. Banking pattern (Sam
+    # 2026-05-13).
+    return redirect(url_for("driver.driver_login", _clear=1))
 
 
 @driver.route("/driver/shift/start", methods=["POST"])

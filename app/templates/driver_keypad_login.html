@@ -275,6 +275,13 @@
     </div>
 
     <a class="signup-link" href="{{ signup_url|default('/driver/signup') }}">No account yet? Sign up →</a>
+
+    {# "Not you? Tap to clear" — only shown when the pad was prefilled
+       from localStorage. JS toggles its visibility on init. #}
+    <a class="signup-link" id="not-me-link" style="display:none; margin-top: 8px;
+                                                    color: rgba(244,231,208,0.55);">
+      Not you? Tap to clear
+    </a>
   </div>
 
   {# ============== SCREEN 2 — PIN ============== #}
@@ -332,7 +339,59 @@
   const SUBMIT_URL = {{ submit_url|tojson }};
   const PREFILL_PHONE = {{ prefill_phone|tojson }};
 
+  // localStorage-based phone persistence (Sam, 2026-05-13). Same model
+  // as banking apps: remember the identifier, never the PIN. Three
+  // safeguards:
+  //   1. show "Not you? Tap to clear" link when the pad is prefilled
+  //   2. /driver/logout adds ?_clear=1 to the redirect → we wipe here
+  //   3. auto-clear after 14 days of inactivity (lastUsedTs check)
+  const STORAGE_KEY = 'ck-driver-phone-v1';
+  const MAX_AGE_DAYS = 14;
+  function readPersistedPhone() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return '';
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.phone) return '';
+      const ageDays = (Date.now() - (obj.lastUsedTs || 0)) / (1000 * 60 * 60 * 24);
+      if (ageDays > MAX_AGE_DAYS) {
+        localStorage.removeItem(STORAGE_KEY);
+        return '';
+      }
+      return String(obj.phone).replace(/\D/g, '').slice(0, 10);
+    } catch (_) { return ''; }
+  }
+  function writePersistedPhone(phone) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        phone: String(phone).replace(/\D/g, '').slice(0, 10),
+        lastUsedTs: Date.now(),
+      }));
+    } catch (_) {}
+  }
+  function clearPersistedPhone() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  }
+
+  // /driver/logout redirects here with ?_clear=1 to wipe the device.
+  // Same param survives a back-button into the keypad.
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('_clear') === '1') {
+    clearPersistedPhone();
+    // Strip the param so a refresh doesn't keep clearing.
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+  }
+
   let phoneDigits = (PREFILL_PHONE || '').replace(/\D/g, '').slice(0, 10);
+  let fromStorage = false;
+  if (!phoneDigits) {
+    const stored = readPersistedPhone();
+    if (stored.length === 10) {
+      phoneDigits = stored;
+      fromStorage = true;
+    }
+  }
   let pin = '';
 
   const phoneStrip = document.getElementById('phone-strip');
@@ -388,10 +447,28 @@
         showError(data.error || `Sign-in failed (${r.status}).`, 'pin');
         return;
       }
+      // Successful login → remember the phone for next time on this
+      // device. Banking-app pattern: identifier persists, PIN never.
+      writePersistedPhone(phoneDigits);
       window.location.replace(data.next || '/driver/logs');
     } catch (e){
       showError("Network error — try again.", 'pin');
     }
+  }
+
+  // "Not you? Tap to clear" — wipes the persisted phone + resets the pad
+  // back to empty. Only attached if we prefilled from storage.
+  const notMeLink = document.getElementById('not-me-link');
+  if (fromStorage && notMeLink) {
+    notMeLink.style.display = '';
+    notMeLink.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      clearPersistedPhone();
+      phoneDigits = '';
+      fromStorage = false;
+      notMeLink.style.display = 'none';
+      renderPhone();
+    });
   }
 
   // Phone pad clicks

@@ -206,13 +206,22 @@ def legal_matter_new():
     if gate is not None:
         return gate
     _set_partner_g()
+    # Even GETs on /partner/legal/* go in the audit. The new-matter
+    # form is a 'view_new_matter_form' event so we have visibility into
+    # who opened the form even if they cancelled before submitting.
+    db = SessionLocal()
+    try:
+        _log_access(db, "view_new_matter_form")
+        db.commit()
+    finally:
+        db.close()
     return render_template(
         "legal_matter_form.html",
         matter=None,
         statuses=_STATUSES,
         categories=_CATEGORIES,
         error=request.args.get("error"),
-        active="legal_matters",
+        active="legal_matter_new",
     )
 
 

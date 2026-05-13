@@ -32,6 +32,16 @@
   --ck-glow-gold:      0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5);
   --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
 
+  /* Semantic status — promoted from inline hex on 2026-05-13 so any
+     page using these can re-skin without touching CSS one file at a time.
+     Visual base tokens stay above; these reference them where they happen
+     to overlap today (active/deep) and have their own values where they
+     don't (open/warn). */
+  --ck-status-open:    #9CCB76;
+  --ck-status-warn:    #E2645C;
+  --ck-status-active:  var(--ck-gold-bright);
+  --ck-bg-deep:        var(--ck-bg-page);
+
   /* Motion */
   --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
 

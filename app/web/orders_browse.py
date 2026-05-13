@@ -268,6 +268,90 @@ def _try_unassign(delivery_id: str, courier_id: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _open_for_bidding(order: Order) -> bool:
+    """Flip an order into the Ez Market bid pool: status='available' plus
+    delivery_window_start/_end derived from the existing time fields.
+
+    Returns True if anything changed (caller should commit + log). Skips
+    silently if the order is already past 'available' (requested, approved,
+    delivered, etc.) — re-opening would lose pending state.
+
+    Window derivation priority:
+      1. existing order.delivery_window JSON dict (from ezCater payload —
+         keys like {'start': iso, 'end': iso} or {'startTime', 'endTime'})
+      2. order.deliver_at parsed as datetime ± 30 min cushion
+      3. delivery_date midnight ± nothing (no time precision) so the
+         order at least sorts by day on Ez Market
+    """
+    from datetime import datetime, timedelta
+    # Only re-open orders in pre-bid states. Don't clobber requested/
+    # approved/picked_up/etc.
+    if order.status not in ("new", "available", "cancelled"):
+        return False
+
+    changed = False
+
+    if order.status != "available":
+        order.status = "available"
+        changed = True
+
+    if order.delivery_window_start is None or order.delivery_window_end is None:
+        start, end = None, None
+        # 1. ezCater JSON
+        dw = order.delivery_window or {}
+        if isinstance(dw, dict):
+            for sk in ("start", "startTime", "startsAt"):
+                if dw.get(sk):
+                    try:
+                        start = datetime.fromisoformat(str(dw[sk]).replace("Z", "+00:00"))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+            for ek in ("end", "endTime", "endsAt"):
+                if dw.get(ek):
+                    try:
+                        end = datetime.fromisoformat(str(dw[ek]).replace("Z", "+00:00"))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+        # 2. deliver_at + 30 min cushion either side
+        if start is None and order.deliver_at:
+            for fmt_tries in (
+                lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
+                lambda s: datetime.strptime(s, "%Y-%m-%dT%H:%M:%S"),
+                lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M:%S"),
+            ):
+                try:
+                    mid = fmt_tries(order.deliver_at)
+                    start = mid - timedelta(minutes=30)
+                    end = mid + timedelta(minutes=30)
+                    break
+                except (ValueError, TypeError, AttributeError):
+                    continue
+        # 3. delivery_date midnight, no precision
+        if start is None and order.delivery_date:
+            try:
+                start = datetime.fromisoformat(order.delivery_date)
+                end = start + timedelta(hours=12)
+            except (ValueError, TypeError):
+                pass
+
+        if start is not None:
+            order.delivery_window_start = start
+            order.delivery_window_end = end or (start + timedelta(hours=1))
+            changed = True
+
+    # NOTE: potential_payout snapshot intentionally left unset here. The
+    # Ez Market template falls back to the in-template formula (base $25 +
+    # tracked $10 + distance) when potential_payout is None, which keeps
+    # the display correct without coupling this route to the full payroll
+    # computation. A separate Phase-0 block can wire compute_one() through
+    # once aick's Routes API miles-backfill (d9c58c2) has populated
+    # pickup_miles for every visible order.
+
+    return changed
+
+
 @browse.route("/orders/view/<external_order_id>/unassign-courier", methods=["POST"])
 def unassign_courier(external_order_id: str):
     """Free up the ezCater portal driver field so a manager can manually
@@ -323,11 +407,30 @@ def unassign_courier(external_order_id: str):
 
         logger.info("unassigned courier %s from delivery %s (order %s)",
                     unassigned, order.external_delivery_id, external_order_id)
+
+        # Phase 0 Block 3 (ck, 2026-05-13): auto-open the order to the Ez
+        # Market bid pool now that no driver is assigned. Option A from
+        # the ck-2026-05-12 open thread: unassign-courier auto-flips
+        # status='available' + populates delivery_window_start/_end so
+        # the order shows up on /ez-market for drivers to request.
+        _opened = _open_for_bidding(order)
+        if _opened:
+            db.commit()
+            logger.info("opened order %s for bidding (window=%s..%s)",
+                        external_order_id,
+                        order.delivery_window_start, order.delivery_window_end)
+
         return jsonify({
             "ok": True,
             "unassigned": unassigned,
             "delivery_id": order.external_delivery_id,
-            "note": "Refresh the ezCater portal — the driver field should now be open for manual assignment.",
+            "opened_for_bidding": _opened,
+            "note": ("Refresh the ezCater portal — the driver field should "
+                     "now be open for manual assignment. The order is also "
+                     "now visible in Ez Market for driver bidding."
+                     if _opened else
+                     "Refresh the ezCater portal — the driver field should "
+                     "now be open for manual assignment."),
         })
     finally:
         db.close()

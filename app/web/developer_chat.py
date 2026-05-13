@@ -28,6 +28,10 @@ from werkzeug.utils import secure_filename
 
 from app.db import SessionLocal
 from app.models import DeveloperChatMessage, DeveloperChatAttachment
+# Phase 0 Block 4: gate routes on the permission system. Decorator
+# runs first; the in-handler _enforce_partner() helper stays as
+# belt-and-suspenders during dark-launch.
+from app.services.permissions import requires_permission
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +75,7 @@ def _enforce_partner():
 
 
 @dev_chat.route("/partner/developer/chat", methods=["GET"])
+@requires_permission("developer.view_chat")
 def chat_page():
     gate = _enforce_partner()
     if gate is not None:
@@ -106,6 +111,7 @@ def chat_page():
 
 
 @dev_chat.route("/partner/developer/chat/post", methods=["POST"])
+@requires_permission("developer.view_chat")
 def post_message():
     gate = _enforce_partner()
     if gate is not None:
@@ -190,6 +196,7 @@ def _post_error(msg: str):
 
 
 @dev_chat.route("/partner/developer/chat/attachment/<int:att_id>", methods=["GET"])
+@requires_permission("developer.view_chat")
 def download_attachment(att_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -227,6 +234,7 @@ def download_attachment(att_id: int):
 
 
 @dev_chat.route("/partner/developer/chat/messages.json", methods=["GET"])
+@requires_permission("developer.view_chat")
 def messages_json():
     """Poll endpoint for the chat UI's JS auto-refresh AND for AI agents
     using a `chat_tail.py` style script."""
@@ -349,6 +357,7 @@ CHAT_PAGES = [
 
 @dev_chat.route("/partner/developer/ezcater")
 @dev_chat.route("/partner/developer/ezcater/review")
+@requires_permission("developer.view_chat")
 def ezcater_review_queue():
     """Partner-only Ezcater review queue. Lists orders the auto-resolver
     couldn't auto-clear (Claude flagged at least one warning as real).
@@ -384,6 +393,7 @@ def ezcater_review_queue():
 
 
 @dev_chat.route("/partner/developer/app/download.zip", methods=["GET"])
+@requires_permission("developer.view_app_docs")
 def app_doc_download():
     """Stream a fresh zip of every file under app/templates/docs/ so Sam can
     download the whole Developer → App docs section in one click. Built
@@ -431,6 +441,7 @@ SOURCE_PAGES = {
 
 @dev_chat.route("/partner/developer/app")
 @dev_chat.route("/partner/developer/app/<page>")
+@requires_permission("developer.view_app_docs")
 def app_doc(page: str = "readme"):
     gate = _enforce_partner()
     if gate is not None:

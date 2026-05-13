@@ -109,6 +109,24 @@ def partner_login():
     return render_template("partner_login.html", error=None)
 
 
+@auth.route("/access-denied")
+def access_denied():
+    """Generic permission-denied landing. requires_permission redirects
+    here with ?need=<tag>&next=<path> when the user lacks the required
+    permission AND PERMISSION_ENFORCE=1. Dark-launch (the default) logs
+    denials instead of redirecting, so this page only renders once the
+    enforcing flag flips on.
+
+    The page reads the query string and tells the user which tag they
+    need + offers a link to /request-access pre-filled. Phase 0 Block 4
+    (ck, 2026-05-13)."""
+    need = (request.args.get("need") or "").strip()[:80] or None
+    nxt = (request.args.get("next") or "").strip()[:200] or None
+    return render_template(
+        "access_denied.html", need=need, next_path=nxt,
+    ), 403
+
+
 @auth.route("/install", strict_slashes=False)
 def install_page():
     """Public install/share page — no auth required so the link works for

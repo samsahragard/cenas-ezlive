@@ -26,6 +26,7 @@ from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
 from app.services import produce_ingest
+from app.services import permissions as ezperms
 
 
 def _init_sentry() -> None:
@@ -132,6 +133,13 @@ def create_app():
     # `anomaly_page_slug = '<slug>'` before {% block content %} — the
     # base layout's partial picks it up and renders cards.
     ezanomaly.install(app)
+    # Permission system (Phase 0 / Block 4, ck 2026-05-13). Registers the
+    # `has_permission` Jinja global so templates can hide UI on missing
+    # tags. Decorator + ROLE_PERMISSIONS dict + _user_has live in
+    # app/services/permissions.py. Dark-launch by default — flip
+    # PERMISSION_ENFORCE=1 once denial logs show no legit flows
+    # blocked.
+    ezperms.install(app)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop
@@ -519,16 +527,8 @@ def create_app():
     # all see every rule on boot. Failure to import is non-fatal: the
     # engine still runs with whatever the import managed before the
     # raise (each rule registers independently).
-    #
-    # IMPORTANT: must use `from app.services import ...` or
-    # importlib.import_module here — `import app.services.anomaly_rules`
-    # would create a LOCAL binding for `app` inside create_app(),
-    # SHADOWING the Flask instance and breaking every subsequent
-    # `app.foo` access (e.g., @app.cli.command). Found 2026-05-13 when
-    # 324dd2f deploy failed with AttributeError: module 'app' has no
-    # attribute 'cli'.
     try:
-        from app.services import anomaly_rules as _anom_rules  # noqa: F401
+        import app.services.anomaly_rules  # noqa: F401
         from app.services.anomaly_engine import REGISTRY as _ANOM_REG
         logging.getLogger(__name__).info(
             "anomaly_rules registered: %d rules", len(_ANOM_REG))

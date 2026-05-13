@@ -1,0 +1,82 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Access denied — Cenas Kitchen{% endblock %}
+{% block page_title %}Access denied{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub" style="color: var(--ck-text-soft);">
+    Your role doesn't include the permission this page needs.
+    Ask a partner to add it to your role's set.
+  </p>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 560px; margin: 24px auto;">
+  <div style="background: rgba(40,22,14,0.55);
+              border: 0.5px solid var(--ck-status-warn);
+              border-left: 3px solid var(--ck-status-warn);
+              border-radius: 12px;
+              padding: 20px 22px;">
+
+    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+      <i class="ti ti-shield-x" style="font-size: 28px; color: var(--ck-status-warn);" aria-hidden="true"></i>
+      <h2 style="margin: 0; color: var(--ck-text); font-size: 18px; font-weight: 500;
+                 text-shadow: var(--ck-glow-cream);">
+        Permission missing
+      </h2>
+    </div>
+
+    {% if need %}
+      <p style="color: var(--ck-text-muted); font-size: 14px; line-height: 1.55; margin: 0 0 14px;">
+        You need permission
+        <code style="background: rgba(0,0,0,0.35); padding: 2px 8px; border-radius: 6px;
+                     border: 0.5px solid var(--ck-border); color: var(--ck-gold-bright);
+                     font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px;">
+          {{ need }}
+        </code>
+        to access this page.
+      </p>
+    {% else %}
+      <p style="color: var(--ck-text-muted); font-size: 14px; line-height: 1.55; margin: 0 0 14px;">
+        Your role doesn't have access to this page.
+      </p>
+    {% endif %}
+
+    <p style="color: var(--ck-text-soft); font-size: 12.5px; line-height: 1.55; margin: 0 0 18px;">
+      Permissions are tied to your role. A partner can add this
+      permission to your role's set on
+      <a href="/partner/developer/app/permission-system"
+         style="color: var(--ck-gold-bright);">the permission spec page</a>,
+      or assign you to a different role with that tag included.
+    </p>
+
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <a href="/request-access{% if need %}?reason={{ ('Need permission ' + need)|urlencode }}{% endif %}"
+         style="display: inline-flex; align-items: center; gap: 6px;
+                padding: 10px 18px; border-radius: 10px;
+                background: var(--ck-gold); color: var(--ck-bg-deep);
+                text-decoration: none; font-size: 13px; font-weight: 600;
+                letter-spacing: 0.06em; text-transform: uppercase;
+                box-shadow: 0 2px 8px rgba(228,179,64,0.25);
+                transition: all 200ms var(--ck-ease, ease);">
+        <i class="ti ti-key" aria-hidden="true"></i>&nbsp;Request access
+      </a>
+      <a href="/"
+         style="display: inline-flex; align-items: center; gap: 6px;
+                padding: 10px 18px; border-radius: 10px;
+                background: rgba(40,22,14,0.55); color: var(--ck-text);
+                border: 0.5px solid var(--ck-border);
+                text-decoration: none; font-size: 13px; font-weight: 600;
+                letter-spacing: 0.06em; text-transform: uppercase;
+                transition: all 200ms var(--ck-ease, ease);">
+        Back to store picker
+      </a>
+    </div>
+
+    {% if next_path %}
+      <p style="font-size: 11px; color: var(--ck-text-faint); margin: 14px 0 0;
+                letter-spacing: 0.04em;">
+        Requested path: <code>{{ next_path }}</code>
+      </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

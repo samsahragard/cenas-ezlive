@@ -288,6 +288,13 @@
       </div></div>
     </div>
 
+    {# Phase 0 Block 4 (ck 2026-05-13): Legal section now gated by the
+       permission helper instead of the user_role==partner enum check.
+       has_permission('legal.view') is True for partner (wildcard *) +
+       any future role we add legal.view to. Dark-launch alongside the
+       outer user_role=='partner' block — once PERMISSION_ENFORCE flips
+       on, this becomes the only gate. #}
+    {% if has_permission('legal.view') %}
     <div class="ck-sb-section" data-id="legal">
       <button class="ck-sb-section-head" aria-expanded="true">
         <span class="ck-sb-section-label">Legal</span>
@@ -326,6 +333,7 @@
         </a>
       </div></div>
     </div>
+    {% endif %}{# end has_permission('legal.view') #}
 
     <div class="ck-sb-section" data-id="anomalies">
       <button class="ck-sb-section-head" aria-expanded="true">

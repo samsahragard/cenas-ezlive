@@ -25,6 +25,8 @@ from datetime import datetime, timedelta
 from app.db import get_db
 from app.models import Driver, DriverShift, DriverLocation
 from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
+# Phase 0 Block 4 (ck, 2026-05-13): permission gating per samai's spec.
+from app.services.permissions import requires_permission
 
 # slug → location filter for downstream report functions
 STORE_TO_LOCATION = {
@@ -633,6 +635,7 @@ def driver_portal():
 # ============== OPERATIONS — DRIVERS ADMIN ==============
 
 @store_bp.route("/drivers", methods=["GET"])
+@requires_permission("drivers.admin")
 def drivers_admin():
     """Per-store driver admin: list / reset PW / deactivate.
 
@@ -689,6 +692,7 @@ def drivers_admin():
 
 
 @store_bp.route("/drivers/<int:driver_id>/reset", methods=["POST"])
+@requires_permission("drivers.reset_passcode")
 def drivers_reset(driver_id: int):
     db = next(get_db())
     try:

@@ -38,7 +38,29 @@ def create_app():
     )
 
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret")
+    # SECRET_KEY: fail loud if unset (Phase 0, 2026-05-13 — closes the
+    # regression risk Sam flagged in ck-2026-05-12). The legacy fallback
+    # ('dev-secret') silently shipped to Render until the 2026-05-12
+    # rotation — anyone who knew the fallback could have forged Flask
+    # session cookies against production. We now hard-fail at startup
+    # so a future deploy can't silently regress. Local dev that
+    # deliberately wants the fallback can set ALLOW_DEV_SECRET=1.
+    _secret = os.getenv("SECRET_KEY")
+    if not _secret:
+        if os.getenv("ALLOW_DEV_SECRET") == "1":
+            _secret = "dev-secret"
+            logging.getLogger(__name__).warning(
+                "SECRET_KEY not set — falling back to 'dev-secret' because "
+                "ALLOW_DEV_SECRET=1. NEVER do this in production."
+            )
+        else:
+            raise RuntimeError(
+                "SECRET_KEY env var is not set. Set it in the environment "
+                "(Render: Service → Environment; local: .env or shell). "
+                "For deliberate local-dev use the literal fallback, set "
+                "ALLOW_DEV_SECRET=1."
+            )
+    app.config["SECRET_KEY"] = _secret
 
     app.register_blueprint(ezc)
     app.register_blueprint(mngr)

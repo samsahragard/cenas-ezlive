@@ -331,6 +331,7 @@ CHAT_PAGES = [
     ("aick-session-2026-05-11",  "aick — 5/11",  "doc_aick_session_2026_05_11"),
     ("samai-session-2026-05-11", "samai — 5/11", "doc_samai_session_2026_05_11"),
     ("ck-session-2026-05-12",    "ck — 5/12",    "doc_ck_session_2026_05_12"),
+    ("aick-session-2026-05-12",  "aick — 5/12",  "doc_aick_session_2026_05_12"),
     ("samai-session-2026-05-12", "samai — 5/12", "doc_samai_session_2026_05_12"),
 ]
 

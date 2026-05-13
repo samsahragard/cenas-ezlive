@@ -1,0 +1,280 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Handoff log for the work <strong>aick</strong> shipped during the Tue May
+  12 2026 session. Written before Sam restarts the session so a future
+  aick (or any AI picking up cold) has the full picture. Format mirrors
+  <code>aick_session_2026_05_11.html</code> per the
+  <a href="/partner/developer/app/session-closeout">Session Closeout</a>
+  routine. aick runs on the AiCk mini PC (Windows) with wincredman-backed
+  GitHub creds &mdash; the only Claude that can push, so the de-facto
+  push-orchestrator for ck + samai today.
+</p>
+<p>
+  Day in two sentences: front half was an ezCater + Toast Analytics
+  block (VT5-MRR date fix, 19 driver bulk-unassigns, full Toast Analytics
+  client + docs page, then switching the dashboard top labor donut to
+  Analytics API to fix the mid-shift undercount); back half was the Play
+  Store push end-to-end &mdash; release-AAB CI job, keystore generation,
+  Java 21 + SDK 35 + auto-versionCode wiring, two AAB uploads to Play
+  Console, Internal Testing track configured with testers, plus the
+  Request Access public form so non-keypad-having users can ask to be
+  added.
+</p>
+
+<h2>Session bootstrap</h2>
+<ul>
+  <li>Re-attached to Developer Chat via the standard
+      <code>Monitor</code> tool recipe in
+      <code>cenas_chat_tail.md</code> &mdash; <code>chat_tail.py
+      --interval 6 2&gt;&amp;1 | grep -E --line-buffered "^\[|ERROR"</code>,
+      persistent=true, timeout 1h. Task id <code>b2ovw6e4u</code>.
+      Survived a context-window compaction mid-session and stayed
+      live throughout; new aick at session start should re-arm it
+      first thing.</li>
+  <li>Naming unchanged: aick on AiCk desktop (this machine), ck on CK
+      Mini PC, samai on Sam's laptop SSH'd to AiCk.</li>
+  <li>Reviewed prior-session handoffs (<code>aick-session-2026-05-11</code>,
+      <code>ck-session-2026-05-11</code>, <code>samai-session-2026-05-11</code>)
+      to inherit open threads &mdash; the biggest carry-over was the
+      Play Store push (CI job had been added but the keystore wasn't
+      generated yet) and the Toast Analytics API research (URLs +
+      auth verified by ck/samai but no client written yet).</li>
+</ul>
+
+<h2>ezCater audit + bulk unassign (no commit — data-only)</h2>
+<p>
+  Sam asked for a date audit of upcoming orders against ezCater web
+  source-of-truth.  Audited 27 future orders;
+  found one mis-stored date: <code>VT5-MRR</code> was on the books as
+  May 13 but ezCater showed today (May 12). Re-pulled via
+  <code>gql_pull</code> and re-ingested via
+  <code>/orders/ingest_structured</code> &mdash; <code>_persist_order</code>
+  deletes-and-recreates by external_order_id so the date corrects
+  cleanly with no schema work.
+</p>
+<p>
+  Bulk-unassigned all drivers from ezCater for today's 19 orders. First
+  pass cleared 9 of 19; remaining 10 returned <em>"Another courier is
+  currently assigned"</em>. ck identified MARKETPLACE-source orders had
+  layered assignments (seed driver + sam/masood). Two-pass strategy that
+  worked: try slugged-from-name courier IDs FIRST, then fall back to the
+  Partner-default. Final result: 19/19 cleared.
+</p>
+
+<h2>Toast Analytics API — client + docs + dashboard switchover</h2>
+<p>
+  Three commits across the back half of the morning:
+</p>
+<ul>
+  <li><strong>New client</strong> &mdash;
+      <code>app/services/toast_analytics_client.py</code>. Handles auth
+      against <code>/usermgmt/v1/oauth/token</code> with
+      <code>TOAST_MACHINE_CLIENT</code> access type +
+      <code>enterprise-metrics:read</code> scope, on-disk JWT cache
+      (24h TTL), per-day-bucket selection (POST for custom ranges,
+      GET for fixed buckets), classify-by-job for BOH/FOH split.
+      Endpoints wrapped: <code>/era/v1/metrics</code>,
+      <code>/era/v1/labor</code>, <code>/era/v1/menu</code>.</li>
+  <li><strong>New doc page</strong> &mdash;
+      <code>/partner/developer/app/toast-analytics-api</code>
+      (commit <code>d4a0a8b</code> includes Toast API Reference;
+      Analytics API doc shipped earlier). Covers auth flow + 6 endpoint
+      families + the gotchas (start==end required for
+      <code>/metrics/day</code>; no custom-range
+      <code>/labor</code> endpoint, must pick day/week/month/year
+      bucket; empty arrays required for all 5 body fields).</li>
+  <li><strong>Dashboard labor donut switchover</strong> &mdash;
+      <code>923f4d7</code>. <code>/dashboard/summary</code>'s labor
+      block now sources from Toast Analytics API instead of the Web
+      API <code>/labor/v1/timeEntries</code> endpoint. The old path
+      only included <em>closed</em> shifts and undercounted mid-shift
+      labor by ~50%; Analytics API includes in-progress shifts so the
+      donut matches reality at 11am. Tomball started flowing through
+      ~30 min after the RMS Pro upgrade propagated.</li>
+</ul>
+
+<h2>Play Store push — Cenas Kitchen Employee</h2>
+<p>
+  Multi-commit thread to get the app into Play Console Internal Testing:
+</p>
+<ul>
+  <li><code>97511c0</code> &mdash; <strong>Capacitor 6 → 7</strong>
+      bump. Required for Play late-2025's SDK 35 mandate.</li>
+  <li><code>9f7d2dc</code> &mdash; <strong>Java 17 → 21</strong> in
+      mobile-android.yml. Capacitor 7's gradle/AGP requirement.</li>
+  <li><code>3bb8db7</code> &mdash; <strong>release-AAB CI job</strong>
+      (signed bundle) gated on the keystore secret being present.
+      Includes keystore helper script
+      <code>mobile/scripts/generate_upload_keystore.sh</code>; ended
+      up running keytool myself since Sam didn't have it on PATH.
+      Keystore stored in
+      <code>~/.openclaw/.secrets/android_keystore_b64.txt</code>
+      (base64-encoded), four GitHub Secrets configured:
+      <code>ANDROID_UPLOAD_KEYSTORE_B64</code>,
+      <code>ANDROID_KEYSTORE_PASSWORD</code>,
+      <code>ANDROID_KEY_ALIAS</code> (=<code>upload</code>),
+      <code>ANDROID_KEY_PASSWORD</code>.</li>
+  <li><code>81021f2</code> &mdash; Also build release AAB on
+      <code>workflow_dispatch</code> so Sam can re-trigger from the
+      Actions UI without a code push.</li>
+  <li><code>4400411</code> &mdash; <strong>force
+      targetSdkVersion=35</strong> + auto-bump
+      <code>versionCode</code> from <code>${{ github.run_number }}</code>.
+      Play rejected the first AAB for SDK 34 (Capacitor 7's default);
+      second AAB rejected for versionCode reuse. Auto-bump means every
+      CI build gets a unique code.</li>
+  <li><strong>Play Console</strong> &mdash; created
+      <code>com.cenaskitchen.app</code> as "Cenas Kitchen Employee",
+      uploaded the v8 signed AAB to Internal Testing track. Release 1
+      (1.0), versionCode 8, Target SDK 35. App publish completed at
+      ~8:14 PM CT. Testers list ("sam sahragard", 2 users) saved.
+      Install URL:
+      <code>https://play.google.com/apps/internaltest/4701526863099196443</code>.</li>
+  <li><code>d8b877a</code> &mdash; <strong>Request Access flow</strong>.
+      New public <code>/request-access</code> form + Partner-admin
+      approve/decline endpoints in
+      <code>app/web/access_request_routes.py</code>. AccessRequest
+      model added to <code>app/models.py</code> (auto-created on boot
+      via <code>Base.metadata.create_all</code>, no migration).
+      Auto-generates a 5-digit temp passcode on approve. Privacy policy
+      page <code>/privacy</code> shipped alongside (Play Console
+      requirement).</li>
+</ul>
+
+<h2>Mobile glue</h2>
+<ul>
+  <li><code>capacitor.config.json</code>: <code>appId</code> renamed to
+      <code>com.cenaskitchen.app</code> (was the placeholder), app name
+      "Cenas Kitchen Employee", server URL points at
+      <code>https://app.cenaskitchen.com/</code>.</li>
+  <li>Hamburger menu regression fix was ck's
+      (<code>ca841af</code>) &mdash; sidebar slid offscreen with the
+      parent transform on Capacitor wrapper.</li>
+</ul>
+
+<h2>Driver dropdown UI — built then reverted</h2>
+<p>
+  Started a per-order Assign Driver / Unassign Driver dropdown on
+  <code>orders_by_store.html</code> at Sam's request, shipped, then Sam
+  decided he preferred the old per-order "Free up driver field" button
+  and asked to revert. Did
+  <code>git checkout 39f2199 -- &lt;4 files&gt;</code> to restore in
+  commit <code>2e41498</code>. Also cleared the Status column body
+  (header retained) on the orders list page per a separate ask.
+</p>
+
+<h2>End-of-day organizing</h2>
+<ul>
+  <li><code>922f0f5</code> &mdash; <strong>Chats folder reorg</strong>.
+      Pulled all 5 prior session docs out of the top doc nav into a
+      new <code>CHAT_PAGES</code> list. New
+      <code>/partner/developer/app/chats</code> index renders them as a
+      card grid. Direct deep-links still resolve.</li>
+  <li><code>0bf5f7d</code> &mdash; <strong>Session Closeout doc</strong>
+      added as first tab in app docs (above README). Verbatim from
+      Sam's screenshot.</li>
+  <li><code>e3afa49</code> &mdash; Closeout step 2 updated to point at
+      <code>CHAT_PAGES</code> instead of <code>DOC_PAGES</code> (Sam
+      delegated the call to me; chose CHAT_PAGES to keep top nav short).</li>
+  <li><code>991e2fc</code> &mdash; Registered ck + samai 5/12 session
+      logs in <code>CHAT_PAGES</code> (they wrote files on AiCk, I
+      committed + pushed since they have no remote creds).</li>
+</ul>
+
+<h2>Live-tested</h2>
+<ul>
+  <li><strong>ezCater bulk unassign</strong> &mdash; verified 19/19 of
+      today's orders show no driver in the Partner GraphQL response
+      after the two-pass strategy.</li>
+  <li><strong>VT5-MRR date</strong> &mdash; re-fetched via
+      <code>/orders/ingest_structured</code>, confirmed the row shows
+      delivery_date = 2026-05-12 in the orders table.</li>
+  <li><strong>Toast Analytics API client</strong> &mdash; pulled real
+      labor data for today's window, summed to a non-zero hourly pay
+      total. Sanity-checked against the Toast Web UI's labor screen,
+      numbers in the same ballpark.</li>
+  <li><strong>Dashboard labor donut switchover</strong> &mdash;
+      <code>/dashboard/summary</code> response now shows the
+      analytics-API-sourced labor numbers; mid-shift undercount no
+      longer visible at the 11am dashboard refresh.</li>
+  <li><strong>Play Console</strong> &mdash; signed AAB uploaded
+      successfully, app status "Available for testing" once propagated
+      &mdash; Sam saved testers, opt-in URL copied + sent.</li>
+  <li><strong>Chats folder</strong> &mdash; <code>/partner/developer/app/chats</code>
+      renders the 5 prior + 2 new (ck/samai 5/12) cards. Direct deep-links
+      to e.g. <code>aick-session-2026-05-11</code> still load.</li>
+</ul>
+
+<h2>Commit chain (my pushes)</h2>
+<pre>97511c0  mobile: bump Capacitor 6 -> 7 (targets SDK 35 per Play requirement)
+9f7d2dc  mobile-ci: bump Java 17 -> 21 for Capacitor 7 (gradle/AGP requirement)
+3bb8db7  Mobile: add release-AAB CI job + keystore helper + Play upload docs
+81021f2  mobile-ci: also build release AAB on workflow_dispatch (manual trigger)
+4400411  mobile-ci: force targetSdkVersion=35 + auto-bump versionCode per build
+d4a0a8b  Docs: Toast API Reference doc page + sidebar link
+923f4d7  Dashboard: switch top labor donut to Toast Analytics API (Path A)
+d8b877a  Request Access flow (Task B) — public form + Partner-admin approval
+ca841af  (ck) Mobile: restore hamburger menu trigger
+2e41498  Revert driver-dropdown UI on orders_by_store.html
+922f0f5  Docs: group per-session chat handoffs under new /chats index page
+0bf5f7d  Docs: add Session Closeout doc as first tab — verbatim 6-step routine
+e3afa49  Docs: closeout step 2 now points at CHAT_PAGES (matches the chats folder)
+991e2fc  Docs: register ck + samai session 5/12 handoff logs under /chats
+(this commit) Docs: aick session 5/12 handoff log + CHAT_PAGES entry</pre>
+
+<h2>Open threads for the next aick</h2>
+<ul>
+  <li><strong>Internal Testing install confirmation</strong>. As of
+      8:14 PM CT the v8 AAB was live in Play Internal Testing, testers
+      saved, opt-in URL sent
+      (<code>https://play.google.com/apps/internaltest/4701526863099196443</code>).
+      <em>Not yet confirmed</em> any tester has actually opened it on a
+      phone and gone through "Become a tester" → install → keypad-login
+      → role-routing inside the Capacitor wrapper. Sam asked about the
+      kinemaster install confusion earlier &mdash; that was a sideload
+      misfire, NOT the Play install path. Verify on a real device
+      before signing off the Play push.</li>
+  <li><strong>Toast Analytics API — Path B (Live)</strong> not yet
+      built. Path A (Web/UI replacement) shipped today. Path B would
+      switch real-time dashboard queries to Analytics too; spec is in
+      the doc page but no code yet.</li>
+  <li><strong>Driver→keypad-auth migration</strong> &mdash; ck's
+      thread; not aick's to drive but worth knowing about. See ck's
+      5/12 log.</li>
+  <li><strong>chat_tail filter</strong> &mdash; samai's 5/11 log
+      mentions <code>^\[|ERROR</code> rate-limit-killed the Monitor on
+      2026-05-10; samai's filter is just <code>^\[</code>. My filter
+      (per my memory) is still <code>^\[|ERROR</code>. Sam typed the
+      <code>^\[|ERROR</code> recipe to me today as the canonical
+      version, so we may have diverged. Reconcile before next session;
+      pick one + update both memories.</li>
+  <li><strong>Render deploy storms</strong> &mdash; multiple commits in
+      rapid succession (5 in a row at end-of-day) backed up Render's
+      queue and produced ~5-minute 502 windows. If shipping more than
+      2 commits, batch them with <code>git push</code> once at the end
+      rather than per-commit.</li>
+</ul>
+
+<h2>Cross-claude coordination notes</h2>
+<ul>
+  <li><strong>To ck:</strong> chat-UX polish (commits f49b1dd → f3ddcdf
+      in your 5/12 log) plus the driver system migration looks clean
+      and shipped. I pushed your end-of-day handoff under
+      <code>991e2fc</code>.</li>
+  <li><strong>To samai:</strong> your 5/12 log + 4 protocol memories
+      are shipped; pushed under <code>991e2fc</code>. Your
+      <code>^\[</code> filter (no ERROR) is probably the right call
+      given the 502 storm I just saw &mdash; flagged it under
+      open-threads.</li>
+  <li><strong>Push orchestrator note for tomorrow:</strong> if I'm
+      offline, ck/samai can commit locally on AiCk but need someone
+      with remote creds to push. Sam may want to add a deploy-bot key
+      so ck/samai can push directly &mdash; the current "send the sha
+      to aick" handshake is reliable but introduces a serialization
+      point.</li>
+</ul>
+
+{% endblock %}

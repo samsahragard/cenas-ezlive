@@ -1,8 +1,8 @@
 {% extends "base_dashboard.html" %}
 {% block title %}Ez Market — Cenas Kitchen{% endblock %}
-{% block page_title %}Ez Market{% endblock %}
+{% block page_title %}Hi {{ viewer_name }}{% endblock %}
 {% block page_subtitle %}
-  <p class="greeting-sub">{{ available|length }} orders open for bid{% if viewer_is_driver %} · welcome {{ driver.name.split()[0] }}{% else %} · viewing as manager (read-only){% endif %}</p>
+  <p class="greeting-sub">{{ available|length }} upcoming orders · last refreshed just now</p>
 {% endblock %}
 
 {% block head_extra %}
@@ -74,34 +74,36 @@
 {% endblock %}
 
 {% block content %}
-{% if viewer_is_driver %}
+{# Stats + tabs shown to everyone (Sam 2026-05-12). For non-drivers,
+   driver-only values render as 'n/a' but the category stays visible. #}
 <div class="em-stats">
   <div class="em-stat">
     <div class="em-stat-label">Potential today</div>
-    <div class="em-stat-value">${{ "%.2f"|format(stat_potential_today) }}</div>
+    <div class="em-stat-value">{% if stat_potential_today is none %}n/a{% else %}${{ "%.2f"|format(stat_potential_today) }}{% endif %}</div>
   </div>
   <div class="em-stat">
     <div class="em-stat-label">My queue</div>
-    <div class="em-stat-value">{{ stat_my_queue }}</div>
+    <div class="em-stat-value">{% if stat_my_queue is none %}n/a{% else %}{{ stat_my_queue }}{% endif %}</div>
   </div>
   <div class="em-stat">
     <div class="em-stat-label">Potential week</div>
-    <div class="em-stat-value">${{ "%.2f"|format(stat_potential_week) }}</div>
+    <div class="em-stat-value">{% if stat_potential_week is none %}n/a{% else %}${{ "%.2f"|format(stat_potential_week) }}{% endif %}</div>
   </div>
 </div>
 
 <div class="em-disclaimer">
   Estimates only — final amounts are set by payroll on Fridays.
-  <a href="{{ url_for('driver_system.pay_history') }}">View past pay checks →</a>
+  {% if viewer_is_driver %}
+    <a href="{{ url_for('driver_system.pay_history') }}">View past pay checks →</a>
+  {% else %}
+    <span style="color: rgba(236,227,208,0.45);">View past pay checks → n/a</span>
+  {% endif %}
 </div>
-{% endif %}
 
 <div class="em-tabs">
   <button class="em-tab active" onclick="showTab('available')">Available <span class="em-tab-count">({{ available|length }})</span></button>
-  {% if viewer_is_driver %}
-  <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({{ my_pending_reqs|length + my_active|length }})</span></button>
+  <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({% if viewer_is_driver %}{{ my_pending_reqs|length + my_active|length }}{% else %}n/a{% endif %})</span></button>
   <button class="em-tab" onclick="showTab('history')">History</button>
-  {% endif %}
 </div>
 
 <div id="tab-available" class="em-cards">
@@ -132,13 +134,9 @@
           <span class="em-compete-green">✓ {{ comp + 1 }} driver{% if comp > 1 %}s{% endif %} competing</span>
         {% endif %}
       </div>
-      {% if viewer_is_driver %}
-        <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
-          <button type="submit" class="em-btn">Request delivery</button>
-        </form>
-      {% else %}
-        <div style="text-align:center; font-size:11px; color:rgba(236,227,208,0.5); padding:8px 0;">Driver-only action</div>
-      {% endif %}
+      <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
+        <button type="submit" class="em-btn">Request delivery</button>
+      </form>
     </div>
     {% endfor %}
   {% else %}
@@ -179,7 +177,7 @@
     </div>
   {% endfor %}
   {% if my_pending_reqs|length == 0 and my_active|length == 0 %}
-    <div class="em-empty">No active or pending deliveries.</div>
+    <div class="em-empty">{% if viewer_is_driver %}No active or pending deliveries.{% else %}n/a — driver feature.{% endif %}</div>
   {% endif %}
 </div>
 
@@ -199,7 +197,7 @@
     </div>
   {% endfor %}
   {% if my_history|length == 0 %}
-    <div class="em-empty">No history yet.</div>
+    <div class="em-empty">{% if viewer_is_driver %}No history yet.{% else %}n/a — driver feature.{% endif %}</div>
   {% endif %}
 </div>
 

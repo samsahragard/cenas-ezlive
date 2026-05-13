@@ -164,25 +164,19 @@ def ez_market():
     today = date.today()
     db = SessionLocal()
     try:
-        # "Available" = status='available', no driver assigned.
-        # Premium gate (<= $50 for New tier) keeps tier-locked orders hidden.
-        # For non-driver viewers, no premium gate — they see everything.
-        max_premium = None
-        if driver and (driver.current_tier or "new") == scoring.TIER_NEW:
-            max_premium = 50.0
+        # Per Sam 2026-05-12: all upcoming orders flow into Ez Market regardless
+        # of status — same listing as /orders/<location> (today + future,
+        # excluding cancelled), but cross-store. The legacy status='available'
+        # bid-pool gate + per-tier premium cap are dropped here; the future
+        # request flow will layer on top.
         avail_q = (
             db.query(Order)
-            .filter(Order.status == "available")
             .filter(Order.delivery_date >= today.isoformat())
-            .order_by(Order.delivery_window_start.asc().nullslast(),
-                      Order.delivery_date.asc())
+            .filter(Order.status != "cancelled")
+            .order_by(Order.delivery_date.asc(),
+                      Order.deliver_at.asc().nullslast())
         )
-        if max_premium is not None:
-            avail_q = avail_q.filter(
-                (Order.potential_payout == None) |  # noqa: E711
-                (Order.potential_payout <= max_premium)
-            )
-        available = avail_q.limit(50).all()
+        available = avail_q.limit(200).all()
         my_pending_reqs = []
         my_active = []
         my_history = []
@@ -235,18 +229,32 @@ def ez_market():
             )
             competing = dict(rows)
 
+        # Header greeting — show the viewer's name regardless of role
+        # (Sam 2026-05-12: "for a partner it would just say my name").
+        if driver and driver.name:
+            viewer_name = driver.name.split()[0]
+        elif keypad_user and getattr(keypad_user, "first_name", None):
+            viewer_name = keypad_user.first_name
+        elif keypad_user and getattr(keypad_user, "name", None):
+            viewer_name = keypad_user.name.split()[0]
+        else:
+            viewer_name = "there"
+
         ctx = {
             "active": "ez_market",
             "driver": driver,
             "viewer_is_driver": bool(driver),
+            "viewer_name": viewer_name,
             "available": available,
             "competing": competing,
             "my_pending_reqs": my_pending_reqs,
             "my_active": my_active,
             "my_history": my_history,
-            "stat_potential_today": _potential_today(db, driver.id, today) if driver else 0.0,
-            "stat_my_queue": _my_queue_count(db, driver.id) if driver else 0,
-            "stat_potential_week": _potential_week(db, driver.id, today) if driver else 0.0,
+            # None means "n/a" — template renders the category label but
+            # substitutes 'n/a' for the value (Sam 2026-05-12).
+            "stat_potential_today": _potential_today(db, driver.id, today) if driver else None,
+            "stat_my_queue": _my_queue_count(db, driver.id) if driver else None,
+            "stat_potential_week": _potential_week(db, driver.id, today) if driver else None,
             "current_tier": (driver.current_tier or "new") if driver else None,
         }
         return render_template("ez_market.html", **ctx)

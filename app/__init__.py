@@ -442,6 +442,51 @@ def create_app():
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
 
+    # ==== Phase 0 diagnostic — Block 1 Item 9 (driver_score rows) ====
+    # Per Sam 2026-05-13: dump actual prod DB state for the DriverScore
+    # table so we can reconcile samai's "0 rows" check (which was against
+    # her local DB instance, not Render prod). Partner+CRON_TOKEN gated.
+    # Remove after the diagnostic is reported in chat.
+    @app.route("/partner/developer/diag-driver-scores", methods=["GET"])
+    def _diag_driver_scores():  # pragma: no cover - removed after reporting
+        from flask import session, request, abort, jsonify, redirect, url_for
+        from datetime import datetime, timedelta
+        if not session.get("partner_auth_ok"):
+            return redirect(url_for("auth.partner_login"))
+        if request.args.get("token") != os.getenv("CRON_TOKEN"):
+            abort(403)
+        from app.db import SessionLocal
+        from app.models import DriverScore, Driver
+        db = SessionLocal()
+        try:
+            cutoff = datetime.utcnow() - timedelta(days=1)
+            total = db.query(DriverScore).count()
+            last_24h = db.query(DriverScore).filter(DriverScore.computed_at > cutoff).count()
+            recent = (
+                db.query(DriverScore)
+                .order_by(DriverScore.computed_at.desc())
+                .limit(3)
+                .all()
+            )
+            active_drivers = db.query(Driver).filter(Driver.status == "active").count()
+            return jsonify({
+                "driver_score_total_rows": total,
+                "driver_score_rows_last_24h": last_24h,
+                "active_drivers_count": active_drivers,
+                "recent_rows": [
+                    {
+                        "id": r.id,
+                        "driver_id": r.driver_id,
+                        "computed_at_iso": r.computed_at.isoformat() if r.computed_at else None,
+                        "score": r.score,
+                        "tier": r.tier,
+                    }
+                    for r in recent
+                ],
+            })
+        finally:
+            db.close()
+
     @app.cli.command("create-driver")
     @click.argument("name")
     @click.argument("location")

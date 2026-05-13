@@ -736,3 +736,31 @@ def cron_recompute_scores():
         abort(403)
     result = scoring.recompute_all_driver_scores()
     return jsonify({"ok": True, **result})
+
+
+# ============================================================
+# Anomaly bucket runner (Phase 1 / Block 1)
+# Five cron buckets call POST /cron/anomaly-eval?bucket=<b> on their
+# schedule. The handler delegates to anomaly_engine.run_bucket which
+# runs every rule registered to that bucket.
+# ============================================================
+
+_VALID_ANOMALY_BUCKETS = {"every_5m", "every_15m", "hourly", "daily", "weekly"}
+
+
+@driver_system_bp.route("/cron/anomaly-eval", methods=["POST"])
+def cron_anomaly_eval():
+    """Run all rules in a single bucket. Token-gated via CRON_TOKEN env var.
+    Accepts Authorization: Bearer (spec), X-Cron-Token, or ?token= ."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    bucket = (request.args.get("bucket") or "").strip()
+    if bucket not in _VALID_ANOMALY_BUCKETS:
+        return jsonify({
+            "ok": False,
+            "error": f"bad bucket; expected one of {sorted(_VALID_ANOMALY_BUCKETS)}",
+        }), 400
+    from app.services.anomaly_engine import run_bucket
+    summary = run_bucket(bucket)
+    return jsonify({"ok": True, **summary})

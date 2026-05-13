@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     JSON,
+    Index,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -963,4 +964,83 @@ def _no_delete_legal_document(mapper, connection, target):
         "flag it via the matter audit + Sam handles removal manually "
         "(both the row and the file) outside the app."
     )
+
+
+# ============================================================
+# Anomaly service (Phase 1 / Block 1, 2026-05-13)
+# Companion to app/templates/docs/anomaly_service_spec.html.
+# ============================================================
+
+class Signal(Base):
+    """One fired anomaly rule. Engine upserts on
+    (rule_name, subject_id, store_id) — see app.services.anomaly_engine
+    for the dedup + auto-clear flow.
+    """
+    __tablename__ = "signals"
+    __table_args__ = (
+        Index("ix_signals_rule_subject_store",
+              "rule_name", "subject_id", "store_id"),
+        Index("ix_signals_unresolved",
+              "resolved_at", "acknowledged_at"),
+        Index("ix_signals_trigger_at", "trigger_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    store_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    subject_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    subject_label: Mapped[str] = mapped_column(String(200), nullable=False)
+    trigger_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    action_text: Mapped[str] = mapped_column(String(400), nullable=False)
+    # Stored as JSON arrays so SQLite can hold them natively.
+    surfaces: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    audience_roles: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    acknowledged_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SignalAck(Base):
+    """Acknowledgment audit log. One row per click of the Ack button on
+    a Signal card — outlives the Signal row going resolved, so we can
+    after-the-fact see who saw what + when.
+    """
+    __tablename__ = "signal_acks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    signal_id: Mapped[int] = mapped_column(
+        ForeignKey("signals.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False)
+    acked_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
+
+class RuleOverride(Base):
+    """Per-rule threshold + severity edits applied by a partner via
+    /partner/anomalies/rules. Engine consults overrides at run start;
+    falls back to RuleSpec.severity_default + the code defaults if
+    nothing's stored. One row per (rule_name, store_id) — global
+    overrides have store_id IS NULL.
+    """
+    __tablename__ = "rule_overrides"
+    __table_args__ = (
+        UniqueConstraint("rule_name", "store_id", name="uq_rule_override"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    store_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    threshold: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    severity_override: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    updated_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
 

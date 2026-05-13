@@ -442,22 +442,6 @@ def create_app():
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
 
-    # ==== Phase 0 / Block 2 Sentry verification route — temporary ====
-    # Hit with Partner cookie + the cron token to trigger an unhandled
-    # exception so we can confirm Sentry is catching them. Remove this
-    # route once verified in the Sentry dashboard.
-    @app.route("/partner/developer/sentry-test", methods=["GET"])
-    def _sentry_test():  # pragma: no cover - removed after verify
-        from flask import session, request, abort, redirect, url_for
-        if not session.get("partner_auth_ok"):
-            return redirect(url_for("auth.partner_login"))
-        if request.args.get("token") != os.getenv("CRON_TOKEN"):
-            abort(403)
-        raise RuntimeError(
-            "Sentry test exception — Phase 0 / Block 2 verification "
-            "(2026-05-13). Safe to ignore; the route will be removed."
-        )
-
     @app.cli.command("create-driver")
     @click.argument("name")
     @click.argument("location")

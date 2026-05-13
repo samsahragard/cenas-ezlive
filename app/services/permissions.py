@@ -21,9 +21,17 @@ Three things this module gives the rest of the app:
      {% if has_permission('legal.view') %}…{% endif %} to hide UI
      elements the user can't operate.
 
-Dark-launch:
-  Default mode logs denials but still routes the request through. Flip
-  to enforcing by setting PERMISSION_ENFORCE=1 in the environment.
+Enforcement mode (flipped 2026-05-13 per Sam's option-(b) directive, after
+Team UI populated the User table — distinct-risk-surface commit from the
+Team UI itself, samai re-runs her checklist on this commit specifically):
+  Default is now ENFORCING — a denial redirects the request to
+  auth.access_denied with the missing tag in the query string. To
+  temporarily disable enforcement (e.g. during a future schema migration
+  where role mappings are mid-flux), set PERMISSION_ENFORCE=0 in env;
+  the module falls back to the original dark-launch log-and-permit
+  behavior. Any value other than the literal "0" — including unset —
+  means enforcement is on.
+
   Logged denials go to the standard logger at WARN level so they're
   visible in Sentry / stdout without spamming.
 
@@ -307,10 +315,16 @@ def _user_has(user, tag: str, store_id: str | None = None) -> bool:
 
 
 def _enforcing() -> bool:
-    """Dark-launch toggle. Default False = log + permit. Flip via
-    PERMISSION_ENFORCE=1 in env once we've watched the denial log for
-    a day and confirmed no legitimate flow is being denied."""
-    return os.getenv("PERMISSION_ENFORCE") == "1"
+    """Enforcement toggle. Default True = deny + redirect to /access-denied.
+    Set PERMISSION_ENFORCE=0 in env to fall back to dark-launch
+    (log + permit) — useful during a role-schema migration where a
+    transient mismatch might deny legitimate users until the new mappings
+    settle. Any non-"0" value (including unset) means enforce.
+
+    Default flipped 2026-05-13 per Sam (option-(b) of the timing question
+    asked in 8b5b32b commit-post — wait for team populated, then ship the
+    flip as its own commit + review surface)."""
+    return os.getenv("PERMISSION_ENFORCE", "1") != "0"
 
 
 def _log_denial(user, tag: str, store_id: str | None, route: str) -> None:

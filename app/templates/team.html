@@ -40,6 +40,13 @@
     'expo',
     'driver', 'corporate-driver',
   ]);
+  // Sam 2026-05-13: corporate_chef + prep_manager default to BOTH stores
+  // pre-checked when the role is picked (samai's spec section 4 calls them
+  // multi-store by intent — Javier the corporate chef covers Tomball +
+  // Copperfield, Gina the prep manager same). The partner can still
+  // uncheck one if a future hire focuses on a single store; this is a
+  // soft default, not a hard requirement.
+  const MULTI_STORE_DEFAULT_BOTH = new Set(['corporate_chef', 'prep_manager']);
   function syncStoreChecks(){
     document.querySelectorAll('[data-role-select]').forEach(sel => {
       const stores = sel.closest('form').querySelector('.store-checks');
@@ -48,7 +55,20 @@
       else stores.classList.add('is-disabled');
     });
   }
-  document.addEventListener('change', e => { if (e.target.matches('[data-role-select]')) syncStoreChecks(); });
+  function handleRoleChange(e){
+    if (!e.target.matches('[data-role-select]')) return;
+    // Soft default: when the user lands on a multi-store role, pre-check
+    // both store boxes. Fires only on user-initiated 'change' events, so
+    // editing an existing row preserves its saved store_scope unless the
+    // partner re-picks the role.
+    if (MULTI_STORE_DEFAULT_BOTH.has(e.target.value)) {
+      e.target.closest('form')
+        .querySelectorAll('.store-checks input[name="stores"]')
+        .forEach(cb => { cb.checked = true; });
+    }
+    syncStoreChecks();
+  }
+  document.addEventListener('change', handleRoleChange);
   document.addEventListener('DOMContentLoaded', syncStoreChecks);
 </script>
 {% endblock %}

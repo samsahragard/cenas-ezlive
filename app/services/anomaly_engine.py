@@ -191,28 +191,64 @@ def _auto_clear(db: Session, rule_name: str,
 
 # ---- engine entrypoints ----
 
+def _maybe_telegram_alert(signal: Signal) -> None:
+    """Phase 1 / Block 4: fire Telegram on the initial creation of an
+    alert-severity Signal. NEVER fires on:
+      - severity != 'alert' (warn / info / WinSignal stay in UI)
+      - updates to an existing open row (avoids re-pinging while the
+        condition persists — _upsert_signal returns was_new=False)
+      - if anything inside the send path raises (alerter is best-effort,
+        must not bring down the engine)
+
+    Reuses _tg_send from ezcater_webhook (existing Telegram bot creds
+    via TELEGRAM_BOT_TOKEN env var; recipient is SAM_TG_CHAT_ID for
+    now — both Sam and Masood want all-stores alerts at this tier).
+
+    Phase 2 layer: per-recipient routing (GMs get their own store's
+    alerts, not the cross-store firehose). Hold for permission system
+    landing in ck Block 4.
+    """
+    if signal.severity != "alert":
+        return
+    try:
+        from app.web.ezcater_webhook import _tg_send
+        text = (
+            f"🚨 ALERT · {signal.rule_name}\n"
+            f"{signal.subject_label}\n"
+            f"{signal.action_text}\n"
+            f"Ack: https://app.cenaskitchen.com/partner/anomalies"
+        )
+        _tg_send(text)
+    except Exception:
+        logger.exception("anomaly telegram alert failed (non-fatal)")
+
+
 def run_rule(db: Session, spec: RuleSpec) -> dict:
     """Run a single rule. Returns counts. Crashes are caught + logged."""
-    fired = saved = updated = resolved = 0
+    fired = saved = updated = resolved = alerted = 0
     seen_keys: set[tuple] = set()
     try:
         drafts = spec.fn(db) or []
     except Exception:
         logger.exception("anomaly rule %s crashed (non-fatal)", spec.name)
         return {"fired": 0, "saved": 0, "updated": 0, "resolved": 0,
-                "error": True}
+                "alerted": 0, "error": True}
     for d in drafts:
         fired += 1
         key = (d.rule_name, d.subject_id, d.store_id)
         seen_keys.add(key)
-        was_new, _ = _upsert_signal(db, d)
+        was_new, row = _upsert_signal(db, d)
         if was_new:
             saved += 1
+            if row.severity == "alert":
+                _maybe_telegram_alert(row)
+                alerted += 1
         else:
             updated += 1
     resolved = _auto_clear(db, spec.name, seen_keys)
     return {"fired": fired, "saved": saved,
-            "updated": updated, "resolved": resolved, "error": False}
+            "updated": updated, "resolved": resolved,
+            "alerted": alerted, "error": False}
 
 
 def run_bucket(bucket: str) -> dict:
@@ -227,7 +263,7 @@ def run_bucket(bucket: str) -> dict:
                 "resolved": 0, "errors": 0, "rules_run": 0}
 
     totals = {"fired": 0, "saved": 0, "updated": 0, "resolved": 0,
-              "errors": 0, "rules_run": 0}
+              "alerted": 0, "errors": 0, "rules_run": 0}
     try:
         for spec in list(REGISTRY.values()):
             if spec.bucket != bucket:
@@ -238,6 +274,7 @@ def run_bucket(bucket: str) -> dict:
             totals["saved"] += stats["saved"]
             totals["updated"] += stats["updated"]
             totals["resolved"] += stats["resolved"]
+            totals["alerted"] += stats.get("alerted", 0)
             if stats.get("error"):
                 totals["errors"] += 1
         db.commit()

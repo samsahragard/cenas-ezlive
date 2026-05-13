@@ -1,0 +1,95 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  End-of-day routine for every Claude on the project (aick, ck, samai).
+  Each of you does all six steps in order before Sam restarts the session
+  — so the next instance picking up cold has the full picture and the
+  conversation transcript is archived locally.
+</p>
+
+<h2>1) Write your session log</h2>
+<p>
+  <strong>File:</strong>
+  <code>app/templates/docs/&lt;your-name&gt;_session_&lt;YYYY&gt;_&lt;MM&gt;_&lt;DD&gt;.html</code>
+  &nbsp;(e.g. <code>ck_session_2026_05_12.html</code>,
+  <code>aick_session_2026_05_12.html</code>,
+  <code>samai_session_2026_05_12.html</code>)
+</p>
+<p>
+  <strong>Format:</strong> copy <code>ck_session_2026_05_11.html</code> as
+  your template.
+</p>
+<p><strong>Required sections in this order:</strong></p>
+<ul>
+  <li><strong>"What this page is"</strong> — one paragraph + day-in-two-sentences</li>
+  <li><strong>"Session bootstrap"</strong> — how you re-attached, monitor setup, naming</li>
+  <li>One section per major thing you shipped, with commit hashes</li>
+  <li><strong>"Live-tested"</strong> — what you actually verified end-to-end</li>
+  <li><strong>"Commit chain (your pushes)"</strong> — list with one-line summaries</li>
+  <li><strong>"Open threads for the next &lt;your-name&gt;"</strong> — what's unfinished or about to land. Specific. Files + line numbers if possible.</li>
+  <li><strong>"Cross-claude coordination notes"</strong> — what you handed back/forth with the other claudes</li>
+</ul>
+
+<h2>2) Register your log in the sidebar</h2>
+<p>Edit <code>app/web/developer_chat.py</code> — append a tuple to <code>DOC_PAGES</code>:</p>
+<pre>("&lt;your-name&gt;-session-&lt;YYYY&gt;-&lt;MM&gt;-&lt;DD&gt;",  "&lt;Your-Name&gt; Session M/D",
+ "doc_&lt;your_name&gt;_session_&lt;YYYY&gt;_&lt;MM&gt;_&lt;DD&gt;"),</pre>
+
+<h2>3) Copy your conversation jsonl</h2>
+<p>
+  <strong>Source:</strong>
+  <code>C:\Users\sam\.claude\projects\C--Users-sam\&lt;your-session-uuid&gt;.jsonl</code>
+</p>
+<p>
+  <strong>Destination:</strong>
+  <code>C:\Users\sam\Desktop\claude conversations\conversations\&lt;YYYY&gt;-&lt;MM&gt;-&lt;DD&gt;-&lt;your-name&gt;.jsonl</code>
+</p>
+<p>
+  e.g. <code>2026-05-12-aick.jsonl</code>,
+  <code>2026-05-12-ck.jsonl</code>,
+  <code>2026-05-12-samai.jsonl</code>
+</p>
+<p>If your session is still active find the uuid via:</p>
+<pre>ls -lat C:\Users\sam\.claude\projects\C--Users-sam\*.jsonl</pre>
+<p>The most-recent jsonl is yours.</p>
+
+<h2>4) Git — stage + commit + push</h2>
+<ul>
+  <li><strong>CK and SAMAI:</strong> commit locally (do <strong>NOT</strong> push — you don't have remote creds). Tell aick the sha in chat and ask "aick please push &lt;sha&gt;".</li>
+  <li><strong>AICK:</strong> pull, then push. After CK/SAMAI ping you, push their commits too.</li>
+</ul>
+<p><strong>Commit message format:</strong></p>
+<pre>docs: &lt;name&gt; session &lt;YYYY&gt;-&lt;MM&gt;-&lt;DD&gt; handoff log
+
+&lt;one-paragraph summary&gt;
+
+Reachable at /partner/developer/app/&lt;name&gt;-session-&lt;YYYY&gt;-&lt;MM&gt;-&lt;DD&gt;.</pre>
+
+<h2>5) Post to chat</h2>
+<pre>&lt;name&gt; session-restart prep (&lt;sha&gt; deploying):
+  1) Session log: /partner/developer/app/&lt;name&gt;-session-&lt;date&gt;
+  2) Conversation jsonl: copied to Desktop\claude conversations\conversations\&lt;date&gt;-&lt;name&gt;.jsonl
+  3) Open threads: &lt;one-line summary of biggest thing still in flight&gt;
+
+Ready for session restart whenever you give the word.</pre>
+
+<h2>6) Stop your background tasks <span style="font-weight:400; color: var(--text-3, #888);">(only if Sam tells you to)</span></h2>
+<ul>
+  <li>Kill any Monitor running chat_tail.</li>
+  <li>Kill any local <code>http.server</code> / dev server you started.</li>
+  <li>Tell Sam which task ids you stopped.</li>
+</ul>
+
+<h2>Checklist for Sam to verify (before saying "restart")</h2>
+<ul style="list-style:none; padding-left: 6px;">
+  <li>☐ Three new files in <code>app/templates/docs/</code> (one per AI)</li>
+  <li>☐ Three new <code>DOC_PAGES</code> entries</li>
+  <li>☐ Three new files in <code>Desktop\claude conversations\conversations\</code></li>
+  <li>☐ <code>git log</code> shows 3 new commits with your-name session handoff</li>
+  <li>☐ Render shows the latest deploy as live</li>
+  <li>☐ <code>/partner/developer/app/&lt;name&gt;-session-&lt;date&gt;</code> renders for each</li>
+</ul>
+
+{% endblock %}

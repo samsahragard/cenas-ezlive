@@ -23,7 +23,7 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, abort, g, send_file
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, abort, g, send_file, current_app
 from werkzeug.utils import secure_filename
 
 from app.db import SessionLocal
@@ -308,8 +308,11 @@ DOC_PAGES = [
     ("session-start",            "Session Start",     "doc_session_start"),
     ("session-closeout",         "Session Closeout",  "doc_session_closeout"),
     ("site-map",                 "Site Map",          "doc_site_map"),
+    ("site-code",                "Site Code",         "doc_site_code"),
     ("architecture-diagrams",    "Architecture Diagrams", "doc_architecture_diagrams"),
+    ("arc-code",                 "Arc Code",          "doc_arc_code"),
     ("node-link-diagram",        "Node Link Diagram", "doc_node_link_diagram"),
+    ("node-map",                 "Node Map",          "doc_node_map"),
     ("readme",                   "README",            "doc_readme"),
     ("architecture",             "Architecture",      "doc_architecture"),
     ("features",                 "Features",          "doc_features"),
@@ -376,6 +379,19 @@ def ezcater_review_queue():
     )
 
 
+# Source-view pages: each entry mirrors one of the visual doc pages above
+# but renders its raw HTML/Mermaid/JS source so Sam can read or copy the
+# code without view-source-ing the rendered page. The source is read from
+# disk at request time, so it always matches the live template (no manual
+# snapshot to keep in sync).
+SOURCE_PAGES = {
+    # url-slug:         (mirrored-doc-slug,       label-on-rendered-link)
+    "arc-code":          ("architecture-diagrams", "Architecture Diagrams"),
+    "site-code":         ("site-map",              "Site Map"),
+    "node-map":          ("node-link-diagram",     "Node Link Diagram"),
+}
+
+
 @dev_chat.route("/partner/developer/app")
 @dev_chat.route("/partner/developer/app/<page>")
 def app_doc(page: str = "readme"):
@@ -393,6 +409,32 @@ def app_doc(page: str = "readme"):
     g.current_store = "partner"
     g.store_label = "Partner"
     g.current_location = "both"
+
+    # Source-view pages share a single template; the underlying file is read
+    # from disk at request time so the rendered code matches the live page.
+    if slug in SOURCE_PAGES:
+        mirrored_slug, mirrored_label = SOURCE_PAGES[slug]
+        from pathlib import Path
+        source_filename = f"docs/{mirrored_slug.replace('-', '_')}.html"
+        source_path = Path(current_app.root_path) / "templates" / source_filename
+        try:
+            source_text = source_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            abort(404)
+        return render_template(
+            "docs/_source_view.html",
+            active=active_key,
+            page_title=label,
+            mirrored_slug=mirrored_slug,
+            mirrored_label=mirrored_label,
+            source_filename=source_filename,
+            source_text=source_text,
+            source_len=len(source_text),
+            doc_pages=DOC_PAGES,
+            chat_pages=CHAT_PAGES,
+            current_doc_slug=slug,
+        )
+
     template_name = f"docs/{slug.replace('-', '_')}.html"
     return render_template(
         template_name,

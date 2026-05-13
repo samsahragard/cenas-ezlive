@@ -1,0 +1,78 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>{{ page_title }}</h2>
+<p>
+  Raw source of the
+  <a href="{{ url_for('developer_chat.app_doc', page=mirrored_slug) }}"
+     style="color:#FFD970;">{{ mirrored_label }}</a> doc page —
+  HTML + Jinja + inline JS/CSS, read straight off disk so what you see
+  here is always what's currently rendered.
+</p>
+<p style="font-size: 12px; color: rgba(236,227,208,0.55); margin-bottom: 18px;">
+  <strong>File:</strong> <code>app/templates/{{ source_filename }}</code>
+  &nbsp;·&nbsp; <strong>Size:</strong> {{ '{:,}'.format(source_len) }} chars
+  &nbsp;·&nbsp;
+  <a href="javascript:void(0)" onclick="(function(){
+       const t = document.getElementById('source-text');
+       if (!t) return;
+       const r = document.createRange(); r.selectNodeContents(t);
+       const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+       try { document.execCommand('copy'); }
+       catch(e) {}
+       s.removeAllRanges();
+       const btn = event.target; const orig = btn.textContent;
+       btn.textContent = 'copied'; setTimeout(()=>{btn.textContent=orig;}, 1200);
+     })()" style="color:#FFD970;">Select &amp; copy all</a>
+</p>
+
+<style>
+  .src-wrap {
+    background: rgba(0,0,0,0.45);
+    border: 0.5px solid rgba(228,179,64,0.15);
+    border-radius: 10px;
+    padding: 0;
+    overflow: hidden;
+  }
+  .src-wrap pre {
+    margin: 0;
+    padding: 16px 18px;
+    overflow-x: auto;
+    max-height: 80vh;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: #FAF6EC;
+    white-space: pre;
+    counter-reset: line;
+  }
+  .src-wrap pre code { display: block; }
+  /* Tab-like header strip */
+  .src-tabs {
+    display: flex;
+    gap: 0;
+    background: rgba(0,0,0,0.7);
+    border-bottom: 1px solid rgba(228,179,64,0.18);
+    padding: 0;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+  }
+  .src-tabs .tab {
+    padding: 8px 14px;
+    border-right: 1px solid rgba(228,179,64,0.10);
+    user-select: none;
+  }
+  .src-tabs .tab.active { color: #FFD970; background: rgba(228,179,64,0.08); }
+</style>
+
+<div class="src-wrap">
+  <div class="src-tabs">
+    <span class="tab active">{{ source_filename }}</span>
+    <span class="tab" style="margin-left:auto; border-right:none; opacity:0.55;">read-only</span>
+  </div>
+  <pre><code id="source-text">{{ source_text }}</code></pre>
+</div>
+
+{% endblock %}

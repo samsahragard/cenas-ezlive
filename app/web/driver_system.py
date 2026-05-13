@@ -701,12 +701,22 @@ def pay_history_flag(delivery_id: int):
 # Cron entrypoints (no-show detection, nightly scoring)
 # ============================================================
 
+def _extract_cron_token() -> str | None:
+    """Pull the CRON token from any of three places: an Authorization: Bearer
+    header (Phase 0 spec), an X-Cron-Token header (legacy), or a ?token=
+    query param. Returns the raw token string or None."""
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return request.headers.get("X-Cron-Token") or request.args.get("token")
+
+
 @driver_system_bp.route("/cron/no-show-sweep", methods=["POST"])
 def cron_no_show_sweep():
-    """Trigger no-show detection. Token-gated via CRON_TOKEN env var."""
+    """Trigger no-show detection. Token-gated via CRON_TOKEN env var.
+    Accepts Authorization: Bearer (spec), X-Cron-Token, or ?token= ."""
     import os
-    token = request.headers.get("X-Cron-Token") or request.args.get("token")
-    if token != os.getenv("CRON_TOKEN"):
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
         abort(403)
     db = SessionLocal()
     try:
@@ -719,10 +729,10 @@ def cron_no_show_sweep():
 
 @driver_system_bp.route("/cron/recompute-scores", methods=["POST"])
 def cron_recompute_scores():
-    """Trigger nightly driver-score recompute. Token-gated via CRON_TOKEN env var."""
+    """Trigger nightly driver-score recompute. Token-gated via CRON_TOKEN env var.
+    Accepts Authorization: Bearer (spec), X-Cron-Token, or ?token= ."""
     import os
-    token = request.headers.get("X-Cron-Token") or request.args.get("token")
-    if token != os.getenv("CRON_TOKEN"):
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
         abort(403)
     result = scoring.recompute_all_driver_scores()
     return jsonify({"ok": True, **result})

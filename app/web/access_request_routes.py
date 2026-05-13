@@ -52,6 +52,7 @@ def _check_rate(ip: str) -> bool:
 
 
 _ROLE_OPTIONS = [
+    ("driver",           "Driver"),
     ("corporate-driver", "Corporate Driver"),
     ("expo",             "Expo"),
     ("manager",          "Manager"),
@@ -59,6 +60,11 @@ _ROLE_OPTIONS = [
     ("corporate",        "Corporate"),
     ("partner",          "Partner / Owner"),
 ]
+
+# Drivers don't go through the admin-approval AccessRequest flow — they
+# self-sign-up at /driver/signup with email + 5-digit PIN. Picking "Driver"
+# on this form short-circuits to that page (with name/email/phone prefilled).
+_DRIVER_ROLE = "driver"
 
 
 @access_req.route("/request-access", methods=["GET"])
@@ -98,6 +104,17 @@ def request_access_submit():
         return redirect(url_for(
             "access_request.request_access_page",
             error="Provide at least one of email or phone so we can contact you.",
+        ))
+
+    # Drivers self-sign-up — no admin approval needed. Hand off to
+    # /driver/signup with the info they already typed pre-filled so they
+    # only have to add location + PIN.
+    if requested_role == _DRIVER_ROLE:
+        return redirect(url_for(
+            "driver.driver_signup",
+            name=full_name,
+            email=email or "",
+            phone=phone or "",
         ))
 
     db = SessionLocal()

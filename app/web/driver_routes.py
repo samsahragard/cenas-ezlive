@@ -154,7 +154,14 @@ def driver_login_submit():
 
 @driver.route("/driver/signup", methods=["GET"])
 def driver_signup():
-    return render_template("driver_signup.html", error=None, form={})
+    # Pre-fill from query string so a user redirected from /request-access
+    # (when they pick the "Driver" role) doesn't have to retype their info.
+    form = {
+        "name":  (request.args.get("name") or "").strip(),
+        "email": _normalize_email(request.args.get("email")),
+        "phone": (request.args.get("phone") or "").strip(),
+    }
+    return render_template("driver_signup.html", error=None, form=form)
 
 
 @driver.route("/driver/signup", methods=["POST"])

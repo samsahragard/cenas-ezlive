@@ -326,6 +326,7 @@ DOC_PAGES = [
     ("permission-system",        "Permission System", "doc_permission_system"),
     ("anomaly-rules",            "Anomaly Rules",     "doc_anomaly_rules"),
     ("anomaly-service-spec",     "Anomaly Service Spec", "doc_anomaly_service_spec"),
+    ("morning-brief-composer-spec", "Morning Brief Composer Spec", "doc_morning_brief_composer_spec"),
     ("chats",                    "Chats",             "doc_chats"),
 ]
 

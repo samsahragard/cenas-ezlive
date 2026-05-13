@@ -513,6 +513,45 @@ def create_app():
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
 
+    # ==== Phase 1 inline diag — Drivers audit (2026-05-13) ====
+    # Per Sam: dump every Driver row across stores so he can mark which
+    # to keep / archive / hold for Playwright reconciliation. Removed
+    # in the next commit after the audit list is posted in chat.
+    @app.route("/partner/developer/diag-drivers", methods=["GET"])
+    def _diag_drivers():  # pragma: no cover - removed after audit
+        from flask import session, request, abort, jsonify, redirect, url_for
+        if not session.get("partner_auth_ok"):
+            return redirect(url_for("auth.partner_login"))
+        if request.args.get("token") != os.getenv("CRON_TOKEN"):
+            abort(403)
+        from app.db import SessionLocal
+        from app.models import Driver
+        db = SessionLocal()
+        try:
+            rows = db.query(Driver).order_by(Driver.id.asc()).all()
+            out = []
+            for d in rows:
+                out.append({
+                    "id": d.id,
+                    "name": getattr(d, "name", None),
+                    "phone": getattr(d, "phone", None),
+                    "email": getattr(d, "email", None),
+                    "status": getattr(d, "status", None),
+                    "active": getattr(d, "active", None),
+                    "created_at_iso": (d.created_at.isoformat()
+                                       if getattr(d, "created_at", None) else None),
+                    "lifetime_delivery_count": getattr(d, "lifetime_delivery_count", None),
+                    "last_login_at_iso": (d.last_login_at.isoformat()
+                                          if getattr(d, "last_login_at", None) else None),
+                    "has_passcode_hash": bool(getattr(d, "passcode_hash", None)),
+                    "has_password_hash": bool(getattr(d, "password_hash", None)),
+                    "location": getattr(d, "location", None),
+                    "home_store_id": getattr(d, "home_store_id", None),
+                })
+            return jsonify({"count": len(out), "drivers": out})
+        finally:
+            db.close()
+
     @app.cli.command("create-driver")
     @click.argument("name")
     @click.argument("location")

@@ -32,10 +32,21 @@
   <li><strong>"Cross-claude coordination notes"</strong> — what you handed back/forth with the other claudes</li>
 </ul>
 
-<h2>2) Register your log in the sidebar</h2>
-<p>Edit <code>app/web/developer_chat.py</code> — append a tuple to <code>DOC_PAGES</code>:</p>
-<pre>("&lt;your-name&gt;-session-&lt;YYYY&gt;-&lt;MM&gt;-&lt;DD&gt;",  "&lt;Your-Name&gt; Session M/D",
+<h2>2) Register your log under the Chats folder</h2>
+<p>
+  Edit <code>app/web/developer_chat.py</code> — append a tuple to
+  <code>CHAT_PAGES</code> (not <code>DOC_PAGES</code> — chats live in
+  their own folder so the top doc nav stays short; see commit
+  <code>922f0f5</code>):
+</p>
+<pre>("&lt;your-name&gt;-session-&lt;YYYY&gt;-&lt;MM&gt;-&lt;DD&gt;",  "&lt;your-name&gt; — M/D",
  "doc_&lt;your_name&gt;_session_&lt;YYYY&gt;_&lt;MM&gt;_&lt;DD&gt;"),</pre>
+<p style="font-size: 12.5px; color: var(--text-3, #888);">
+  The log will then show as a card on
+  <code>/partner/developer/app/chats</code> and a direct deep-link at
+  <code>/partner/developer/app/&lt;your-name&gt;-session-&lt;date&gt;</code>
+  keeps working.
+</p>
 
 <h2>3) Copy your conversation jsonl</h2>
 <p>
@@ -85,7 +96,7 @@ Ready for session restart whenever you give the word.</pre>
 <h2>Checklist for Sam to verify (before saying "restart")</h2>
 <ul style="list-style:none; padding-left: 6px;">
   <li>☐ Three new files in <code>app/templates/docs/</code> (one per AI)</li>
-  <li>☐ Three new <code>DOC_PAGES</code> entries</li>
+  <li>☐ Three new <code>CHAT_PAGES</code> entries</li>
   <li>☐ Three new files in <code>Desktop\claude conversations\conversations\</code></li>
   <li>☐ <code>git log</code> shows 3 new commits with your-name session handoff</li>
   <li>☐ Render shows the latest deploy as live</li>

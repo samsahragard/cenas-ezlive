@@ -305,6 +305,7 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
 # name or by their secrets-file path, never by value. Updates only via Sam-
 # approved git commits; no edit UI.
 DOC_PAGES = [
+    ("session-start",            "Session Start",     "doc_session_start"),
     ("session-closeout",         "Session Closeout",  "doc_session_closeout"),
     ("readme",                   "README",            "doc_readme"),
     ("architecture",             "Architecture",      "doc_architecture"),

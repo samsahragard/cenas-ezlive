@@ -110,6 +110,75 @@ Step 5 — Render deploys: 30-60s of 502s post-push are normal swap noise.
 Author yourself in chat as 'samai'.
 </pre>
 
+<h2>Shared workflow rules (all three agents)</h2>
+
+<h3>Batch commits, push once per block (Phase 0 / Block 6, 2026-05-13)</h3>
+<p>
+  Convention established after the 2026-05-12 end-of-day deploy storm (five
+  consecutive pushes queued ~5 min of 502s). When working a multi-commit
+  unit of work — a Phase block, a multi-step fix, a doc package — make
+  all the commits first, then do a single <code>git push origin main</code>
+  at the end of the block.
+</p>
+<ul>
+  <li><strong>Why:</strong> every push to <code>main</code> triggers a
+      Render auto-deploy (~2-4 min build + ~30-60s swap). Back-to-back
+      pushes queue serially, each starts a fresh swap window, and the
+      chat tail hits 502 the whole time. One push at the end = one
+      deploy = one swap.</li>
+  <li><strong>Exceptions:</strong> push immediately if the commit fixes
+      something currently broken in production, OR if another agent is
+      waiting on the SHA to land for their own verify step. In those
+      cases the deploy queue cost is justified.</li>
+  <li><strong>When ck / samai are working through aick</strong>
+      (commit locally on AiCk → ask aick to push), bundle the request:
+      "aick — push these N SHAs together: &lt;sha1&gt; &lt;sha2&gt; ...".
+      aick verifies each with <code>git show --stat</code> then a single
+      push.</li>
+  <li><strong>Multi-agent end-of-day</strong>: don't all push at once.
+      aick should batch — e.g., one combined push that covers aick + ck +
+      samai's session-handoff commits. (Same lesson: 3 pushes in 1 min
+      = 3 deploys back-to-back = 502 storm.)</li>
+</ul>
+
+<h3>Pull-rebase before every commit</h3>
+<ul>
+  <li><code>git pull --rebase origin main</code> before staging anything
+      so your local main is current with whatever the other Claudes have
+      shipped in the meantime.</li>
+  <li>If the rebase encounters a conflict, resolve in-place — don't
+      <code>git rebase --abort</code> and silently lose your work.</li>
+</ul>
+
+<h3>Stage files by name, never <code>git add -A</code></h3>
+<ul>
+  <li>Always: <code>git add app/web/foo.py app/templates/foo.html</code>.</li>
+  <li>The repo has many untracked scratch files (introspection scripts,
+      ad-hoc dumps, sidebar mockups) that <code>-A</code> would
+      accidentally sweep in.</li>
+  <li>It also avoids picking up another agent's in-flight edits when two
+      Claudes are working in parallel.</li>
+</ul>
+
+<h3>Announce shared-file edits in chat first</h3>
+<p>
+  Files that any of the three of us might touch in the same session:
+</p>
+<ul>
+  <li><code>app/__init__.py</code> (boot, blueprint registration, idempotent backfills)</li>
+  <li><code>app/web/auth.py</code> and <code>app/web/keypad_auth.py</code> (gates)</li>
+  <li><code>app/web/store_routes.py</code> (per-store URLs)</li>
+  <li><code>app/web/developer_chat.py</code> (DOC_PAGES / CHAT_PAGES / SOURCE_PAGES tuples)</li>
+  <li><code>app/templates/base_dashboard.html</code> + <code>partials/sidebar.html</code></li>
+  <li><code>app/services/permissions.py</code> (once Phase 1 ships)</li>
+  <li><code>app/static/css/sidebar.css</code> and <code>js/sidebar.js</code></li>
+</ul>
+<p>
+  Before starting an edit on any of those, post a one-liner: "ck — about
+  to edit base_dashboard.html, ~10 min". Same goes for sidebar
+  partials, store_routes additions, and anything in <code>app/__init__.py</code>.
+</p>
+
 <h2>When this page changes</h2>
 <p>
   Sam asks aick to update it; aick edits

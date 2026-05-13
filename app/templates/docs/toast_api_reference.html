@@ -1,0 +1,150 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  A complete capture of the Toast developer documentation portal
+  (<a href="https://doc.toasttab.com" target="_blank" rel="noopener">doc.toasttab.com</a>) —
+  every guide page, every release note, every API reference, scraped on 2026-05-12.
+  680 documentation HTML pages + 19 OpenAPI 3.0 specs (126 endpoints, 314 schemas)
+  pulled into a single local archive on Sam's desktop at
+  <code>C:\Users\sam\Desktop\toast-api-docs\</code>.
+</p>
+<p>
+  This page is the navigation hub. The actual scrape lives on Sam's desktop;
+  the per-section index <code>.md</code> files are attached in the Developer Chat
+  for quick reference.
+</p>
+
+<h2>Top-level totals</h2>
+<table>
+  <tr><th>Section</th><th>Page count</th><th>Index file</th></tr>
+  <tr><td>Platform Guide (<code>platformguide</code>)</td><td>431</td><td><code>INDEX_platformguide.md</code></td></tr>
+  <tr><td>Developer Guide (<code>devguide</code>)</td><td>200</td><td><code>INDEX_devguide.md</code></td></tr>
+  <tr><td>Release Notes (<code>relnotes</code>)</td><td>25</td><td><code>INDEX_relnotes.md</code></td></tr>
+  <tr><td>How-to Guides / Cookbook (<code>cookbook</code>)</td><td>19</td><td><code>INDEX_cookbook.md</code></td></tr>
+  <tr><td>Tender API reference (draft)</td><td>3</td><td><code>INDEX_tenderapidraftdoc.md</code></td></tr>
+  <tr><td>Orders webhook reference (draft)</td><td>1</td><td><code>INDEX_apiordersdraftdoc.md</code></td></tr>
+  <tr><td>Documentation home</td><td>1</td><td><code>INDEX_main.md</code></td></tr>
+  <tr><td><strong>Total HTML pages</strong></td><td><strong>680</strong></td><td></td></tr>
+  <tr><td>OpenAPI categories</td><td>19</td><td><code>INDEX_openapi.md</code></td></tr>
+  <tr><td>OpenAPI endpoints (sum)</td><td>126</td><td></td></tr>
+  <tr><td>OpenAPI schemas (sum)</td><td>314</td><td></td></tr>
+</table>
+
+<h2>What is the Toast API and what can it do?</h2>
+<p>
+  Toast is a restaurant management platform — POS, payments, kitchen ops, payroll,
+  online ordering, loyalty, gift cards, reporting. Its developer portal exposes a
+  suite of REST APIs that let third-party integrations and custom apps read/write
+  Toast restaurant data.
+</p>
+
+<h3>Integration types</h3>
+<ul>
+  <li><strong>Standard API access</strong> — read-only credentials any developer can self-generate.
+    No partnership required. Good for analytics, dashboards, exporting your own
+    restaurant's data. <em>Limitations: read-only, no sandbox, no webhooks against
+    arbitrary restaurants.</em></li>
+  <li><strong>Custom integration</strong> — direct integration developer; can use the full API
+    surface (read + write + webhooks) within Toast's developer program.</li>
+  <li><strong>Integration partner</strong> — sanctioned third-party partner; can be discovered
+    in the Toast Partner Connect marketplace; can request full access scopes
+    including write APIs.</li>
+  <li><strong>Analytics API developer</strong> — for data warehousing / BI integrations; uses the
+    dedicated Analytics API for bulk report retrieval.</li>
+</ul>
+
+<h3>What the API surface covers (19 documented API categories)</h3>
+<ul>
+  <li><strong>Authentication</strong> — OAuth 2 client-credentials login; returns a bearer JWT
+      (<code>accessToken</code>) used on every other call.</li>
+  <li><strong>Orders</strong> — Create, read, update orders / checks / selections / payments.
+      The main "point of sale" surface.</li>
+  <li><strong>Menus / Menus V2 / Menus V3</strong> — Read the published menu hierarchy
+      (groups, items, modifier groups, options, prices) for a restaurant.</li>
+  <li><strong>Configuration</strong> — Read configuration entities: dining options, service
+      charges, sales categories, payout methods, etc.</li>
+  <li><strong>Restaurants</strong> — Restaurant location info, hours, etc.</li>
+  <li><strong>Labor</strong> — Employees, jobs, shifts, time entries, breaks.</li>
+  <li><strong>Cash Management</strong> — Cash drawer entries, deposits, payouts.</li>
+  <li><strong>Credit cards</strong> — Card payment data (transaction-level).</li>
+  <li><strong>Stock</strong> — Inventory quantities + 86 / availability flags on menu items.</li>
+  <li><strong>Kitchen</strong> — Kitchen prep stations, ticket routing.</li>
+  <li><strong>Packaging configuration</strong> — Take-out packaging options.</li>
+  <li><strong>Order management configuration</strong> — Dining option / fulfillment configuration.</li>
+  <li><strong>Partners</strong> — Partner connection management for sanctioned integrations.</li>
+  <li><strong>Restaurant availability service</strong> — Whether a restaurant is currently
+      accepting orders.</li>
+  <li><strong>Analytics</strong> — Asynchronous bulk-report requests (large-scale analytics /
+      data warehouse loads). <em>This is what aick wired up for Toast Analytics on Tomball + Copperfield.</em></li>
+  <li><strong>Gift cards integration spec</strong> — Specification third-party gift-card
+      processors must implement to plug into Toast.</li>
+  <li><strong>Loyalty integration spec</strong> — Specification third-party loyalty programs
+      must implement.</li>
+  <li><strong>Tender integration spec</strong> — Specification for custom payment tender
+      integrations.</li>
+</ul>
+
+<h2>How to use the APIs (in one paragraph)</h2>
+<ol>
+  <li><strong>Get credentials.</strong> <em>Standard API access</em>: self-service in the Toast back-office at
+    <a href="https://www.toasttab.com/restaurants/admin/integrations/api-access" target="_blank" rel="noopener">toasttab.com/restaurants/admin/integrations/api-access</a>.
+    <em>Custom / Partner</em>: Toast's integrations team issues a <code>clientId</code> +
+    <code>clientSecret</code> after you join the developer program.</li>
+  <li><strong>Authenticate.</strong>
+    <code>POST https://ws-api.toasttab.com/authentication/v1/authentication/login</code>
+    with <code>{clientId, clientSecret, userAccessType: 'TOAST_MACHINE_CLIENT'}</code>
+    → returns an <code>accessToken</code> JWT, valid for the number of seconds in
+    <code>expiresIn</code>.</li>
+  <li><strong>Call any other API</strong> with <code>Authorization: Bearer &lt;accessToken&gt;</code>
+    <strong>plus</strong> the <code>Toast-Restaurant-External-ID: &lt;restaurantGuid&gt;</code>
+    header — every business-data request is restaurant-scoped.</li>
+  <li><strong>Listen for webhooks.</strong> Toast can push order / payment / employee events
+    to your endpoint. Subscriptions are configured via the dev portal.</li>
+  <li><strong>Scopes are explicit.</strong> Each operation requires specific OAuth scopes
+    (e.g. <code>orders.read</code>, <code>cashManagement:read</code>). Standard API
+    access gets a fixed read-only scope set; partners can request additional scopes.</li>
+</ol>
+
+<h2>Where to start reading</h2>
+<table>
+  <tr><th>Goal</th><th>File on local scrape</th></tr>
+  <tr><td>New to the platform → Getting Started</td><td><code>markdown/devguide/index.md</code></td></tr>
+  <tr><td>Pick your integration type</td><td><code>markdown/devguide/apiIntegrationTypes.md</code></td></tr>
+  <tr><td>Auth basics</td><td><code>markdown/devguide/authentication.md</code> + <code>markdown/openapi/authentication.md</code></td></tr>
+  <tr><td>Orders walkthrough</td><td><code>markdown/devguide/portalOrdersApiOverview.md</code> + <code>markdown/openapi/orders.md</code></td></tr>
+  <tr><td>Menus walkthrough</td><td><code>markdown/devguide/apiGettingMenuInformationFromTheMenusAPI.md</code> + <code>markdown/openapi/menusv3.md</code></td></tr>
+  <tr><td>Specific integration patterns (delivery / loyalty / gift / signage)</td><td><code>INDEX_cookbook.md</code></td></tr>
+  <tr><td>Latest API changes</td><td><code>markdown/relnotes/devPortalApiChangeLog.md</code></td></tr>
+</table>
+
+<h2>Where the scrape lives</h2>
+<ul>
+  <li><strong>Local archive</strong> — <code>C:\Users\sam\Desktop\toast-api-docs\</code> on Sam's
+    desktop. Contains the original HTML in <code>raw/</code>, cleaned markdown in
+    <code>markdown/</code>, OpenAPI JSON in <code>raw/openapi/specs/</code>, and
+    the human-readable per-API reference in <code>markdown/openapi/</code>.</li>
+  <li><strong>Index files</strong> — the eight <code>INDEX_*.md</code> files are attached in
+    the Developer Chat for quick reference (each lists every page in its section
+    with the original URL).</li>
+  <li><strong>Build scripts</strong> — <code>build_index.py</code>, <code>extract_openapi.py</code>,
+    <code>html_to_md.py</code>, <code>openapi_to_md.py</code> in the local archive
+    let the scrape be regenerated.</li>
+  <li>Scraped 2026-05-12 via parallel <code>curl --compressed</code> over every
+    page link extracted from the doc-site sidebar, then a Python BeautifulSoup +
+    markdownify pass for clean text. OpenAPI specs extracted in full from the
+    Gatsby <code>page-data.json</code> payloads served by the Redoc reference.</li>
+</ul>
+
+<h2>Why this matters operationally</h2>
+<p>
+  Cenas Kitchen already uses Toast as the POS at Tomball + Copperfield. The
+  Analytics API is wired (per aick's 5/12 work) for sales / labor donuts on the
+  Partner Dashboard. Future builds — direct order push, write back to Toast's
+  inventory, custom payment tender, deeper kitchen ticket routing — can lean on
+  the relevant API category here without needing to round-trip to the live Toast
+  docs every time.
+</p>
+
+{% endblock %}

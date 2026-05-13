@@ -341,6 +341,9 @@
             <a href="/partner/developer/app/ezcater-guidelines" class="ck-sb-subitem{% if active == 'doc_ezcater_guidelines' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Ez Cater guidelines</span>
             </a>
+            <a href="/partner/developer/app/toast-api-reference" class="ck-sb-subitem{% if active == 'doc_toast_api_reference' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Toast API reference</span>
+            </a>
             {% for session in app_sessions|default([]) %}
               <a href="/partner/developer/app/{{ session.slug }}" class="ck-sb-subitem{% if active == 'doc_' ~ session.slug %} active{% endif %}">
                 <span class="ck-sb-subitem-label">{{ session.label }}</span>

@@ -72,87 +72,98 @@ def driver_app_apk():
     )
 
 
+def _find_driver_by_pin(db, pin: str) -> Driver | None:
+    """Scan active drivers, return the first whose passcode_hash matches.
+    Mirrors keypad_auth._find_user_by_passcode — PIN uniqueness is
+    enforced at signup + admin reset so at most one match is possible.
+    Drivers in lockout window are skipped (treated as no-match)."""
+    now = datetime.utcnow()
+    for d in (db.query(Driver)
+                .filter(Driver.active.is_(True))
+                .filter(Driver.passcode_hash.isnot(None))
+                .all()):
+        if d.lockout_until and d.lockout_until > now:
+            continue
+        if check_password_hash(d.passcode_hash, pin):
+            return d
+    return None
+
+
+def _driver_pin_in_use(db, pin: str, excluding_id: int | None = None) -> bool:
+    """True if some OTHER active driver already has this PIN. Used by
+    signup + admin reset + change-passcode so collisions are rejected
+    before the hash is written."""
+    q = (db.query(Driver)
+           .filter(Driver.active.is_(True))
+           .filter(Driver.passcode_hash.isnot(None)))
+    if excluding_id is not None:
+        q = q.filter(Driver.id != excluding_id)
+    for d in q.all():
+        if check_password_hash(d.passcode_hash, pin):
+            return True
+    return False
+
+
 @driver.route("/driver/login", methods=["GET"])
 def driver_login():
-    return render_template("driver_login.html", error=None, prefill_email=request.args.get("email", ""))
+    """Render the driver keypad pad — same UI as /keypad-login, just
+    POSTs to /driver/login. PIN-only auth: no email/phone field. The
+    user's email is the account ID on signup + recovery, but login
+    matches the PIN against active drivers' passcode_hash (PIN
+    uniqueness enforced on the write side)."""
+    # Already signed in? Jump to the driver portal.
+    if session.get("driver_id"):
+        return redirect(url_for("driver.driver_logs"))
+    return render_template(
+        "keypad_login.html",
+        next_url=request.args.get("next") or url_for("driver.driver_logs"),
+        passcode_len=PIN_LEN,
+        label="DRIVER SIGN IN",
+        submit_url=url_for("driver.driver_login_submit"),
+        signup_url=url_for("driver.driver_signup"),
+        signup_label="No account yet? Sign up →",
+    )
 
 
 @driver.route("/driver/login", methods=["POST"])
 def driver_login_submit():
-    raw = (request.form.get("email") or "").strip()
-    # Accept both 'pin' (new) and 'password' (legacy form field name) so an
-    # in-flight tab from before the deploy doesn't 400 on submit.
-    pin = (request.form.get("pin") or request.form.get("password") or "").strip()
-    if not raw or not pin:
-        return render_template("driver_login.html", error="Email or phone, plus PIN, required.",
-                               prefill_email=raw), 400
-    # Sam (2026-05-10): accept either email or phone as the login id. If the
-    # value contains digits but no '@', try the phone path first; otherwise
-    # treat as email.
-    from app.services.ezcater_known_drivers_seed import normalize_phone
+    """JSON contract matching keypad_auth.login_submit: accept
+    {passcode: '12345'} → return {ok: true, next: '/...'} or
+    {ok: false, error: '...'}. The keypad UI calls this via fetch()."""
+    data = request.get_json(silent=True) or {}
+    pin = (data.get("passcode") or "").strip()
+    if not _valid_pin(pin):
+        return jsonify({
+            "ok": False,
+            "error": f"PIN must be exactly {PIN_LEN} characters (digits or * # @ + % - $).",
+        }), 400
+    nxt = (data.get("next") or "/driver/logs").strip()
+    if not nxt.startswith("/"):
+        nxt = "/driver/logs"
     db = next(get_db())
     try:
-        found = None
-        if "@" in raw:
-            found = db.query(Driver).filter(Driver.email == _normalize_email(raw)).first()
-        else:
-            digits = normalize_phone(raw)
-            if digits:
-                # Match against any Driver whose stored phone normalizes to the same digits.
-                # Phones are stored loosely (free-text on signup), so we normalize on both sides.
-                for d in db.query(Driver).filter(Driver.phone.isnot(None)).all():
-                    if normalize_phone(d.phone) == digits:
-                        found = d
-                        break
-        now = datetime.utcnow()
-        if not found or (not found.passcode_hash and not found.password_hash):
-            return render_template("driver_login.html",
-                                   error="No account found, or account hasn't been set up yet. "
-                                         "Sign up below or contact your manager.",
-                                   prefill_email=raw), 401
-        if not found.active:
-            return render_template("driver_login.html",
-                                   error="This account is deactivated. Contact your manager.",
-                                   prefill_email=raw), 403
-        if found.lockout_until and found.lockout_until > now:
-            mins = max(1, int((found.lockout_until - now).total_seconds() // 60) + 1)
-            return render_template("driver_login.html",
-                                   error=f"Too many failed attempts. Try again in {mins} min.",
-                                   prefill_email=raw), 429
-        # PIN path: check against passcode_hash first. Legacy accounts that
-        # haven't been migrated yet (passcode_hash is NULL, password_hash set)
-        # fall back to the old password check so they can still log in —
-        # they'll be forced through change-passcode immediately on success
-        # because first_login_done defaults to False.
-        match = False
-        if found.passcode_hash and check_password_hash(found.passcode_hash, pin):
-            match = True
-        elif (not found.passcode_hash) and found.password_hash and check_password_hash(found.password_hash, pin):
-            match = True
-        if not match:
-            found.failed_attempts = (found.failed_attempts or 0) + 1
-            if found.failed_attempts >= LOCKOUT_THRESHOLD:
-                found.lockout_until = now + LOCKOUT_DURATION
-            db.commit()
-            return render_template("driver_login.html", error="Wrong PIN.",
-                                   prefill_email=raw), 401
-        # Success — reset counters, set session
+        found = _find_driver_by_pin(db, pin)
+        if found is None:
+            # We can't bump failed_attempts on a user we couldn't identify;
+            # lockout is per-driver so a guesser would have to luck into a
+            # real PIN before they could ever trip the per-driver counter.
+            return jsonify({"ok": False, "error": "Wrong PIN."}), 401
+        # Success path: reset counters, set session.
         found.failed_attempts = 0
         found.lockout_until = None
+        found.last_login_at = datetime.utcnow() if hasattr(found, "last_login_at") else None
         db.commit()
-        # Clear any leftover User-keypad keys so a driver session can't
-        # carry over a manager's role indicators (Sam, 2026-05-13).
-        # partner_auth_ok in particular has to be re-earned via /keypad-login.
+        # Clear any leftover User-keypad keys (mirrors dd1d1c7 fix).
         for _k in ("user_id", "user_session_version", "partner_auth_ok"):
             session.pop(_k, None)
+        session.permanent = True
         session["driver_id"] = found.id
         session["driver_name"] = found.name
         session["driver_location"] = found.location
         session["driver_session_version"] = found.session_version
-        session.permanent = True
         if not found.first_login_done:
-            return redirect(url_for("driver.driver_change_passcode"))
-        return redirect(url_for("driver.driver_logs"))
+            return jsonify({"ok": True, "next": url_for("driver.driver_change_passcode")})
+        return jsonify({"ok": True, "next": nxt})
     finally:
         db.close()
 
@@ -200,6 +211,14 @@ def driver_signup_submit():
         if db.query(Driver).filter(Driver.email == form["email"]).first():
             return render_template("driver_signup.html",
                                    error="That email is already registered. Use login instead.",
+                                   form=form), 409
+        # PIN must be unique across active drivers — the keypad login
+        # identifies you by PIN alone (no email field), so a collision
+        # would silently log the second-comer into the first driver's
+        # account. Reject before write.
+        if _driver_pin_in_use(db, pin):
+            return render_template("driver_signup.html",
+                                   error="That PIN is already taken — pick a different one.",
                                    form=form), 409
         new_driver = Driver(
             name=form["name"],
@@ -285,6 +304,10 @@ def driver_change_passcode_submit():
             return render_template("driver_change_passcode.html",
                                    error="New PIN must be different from your current one.",
                                    driver=found, forced=not found.first_login_done, pin_len=PIN_LEN), 400
+        if _driver_pin_in_use(db, new, excluding_id=found.id):
+            return render_template("driver_change_passcode.html",
+                                   error="That PIN is already taken by another driver — pick a different one.",
+                                   driver=found, forced=not found.first_login_done, pin_len=PIN_LEN), 409
         found.passcode_hash = generate_password_hash(new)
         found.first_login_done = True
         found.failed_attempts = 0
@@ -453,8 +476,22 @@ def issue_temp_passcode(db, driver_row: Driver) -> str:
     plaintext for the manager to read aloud. Mirrors the User keypad reset
     pattern in app/web/team_routes.py:team_reset — sets first_login_done=False
     so the driver is forced to change it on first login, and bumps
-    session_version so any active session is invalidated on next request."""
-    temp = _generate_temp_pin()
+    session_version so any active session is invalidated on next request.
+
+    Retries on PIN-collision: drivers log in by PIN alone now, so the temp
+    must be unique across other active drivers. Brute-force loop because
+    5 digits × ~10 active drivers leaves ~99.99% of the space free."""
+    for _ in range(64):
+        candidate = _generate_temp_pin()
+        if not _driver_pin_in_use(db, candidate, excluding_id=driver_row.id):
+            temp = candidate
+            break
+    else:
+        # Astronomically unlikely with 5 digits; fall back to 6 chars
+        # using the full keypad charset.
+        from secrets import choice as _sec_choice
+        alphabet = "0123456789*#@+%-$"
+        temp = "".join(_sec_choice(alphabet) for _ in range(PIN_LEN + 1))
     driver_row.passcode_hash = generate_password_hash(temp)
     # Clear the legacy password_hash now that this driver is on the PIN flow.
     driver_row.password_hash = None

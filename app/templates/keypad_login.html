@@ -227,7 +227,7 @@
 <body>
 <div class="wrap">
   <div class="passcode-header">
-    <div class="passcode-label">{{ label or 'ENTER PASSCODE' }}</div>
+    <div class="passcode-label">{{ label|default('ENTER PASSCODE', true) }}</div>
     <div class="dots" id="dots">
       {% for _ in range(passcode_len) %}<div class="dot"></div>{% endfor %}
     </div>
@@ -266,8 +266,8 @@
   <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
        alt="Cenas Kitchen" class="brand-logo" />
 
-  <a href="/request-access" style="margin-top:14px; font-size:13px; color:rgba(244,231,208,0.78); text-decoration:underline; text-align:center;">
-    Don't have access? Request it →
+  <a href="{{ signup_url|default('/request-access', true) }}" style="margin-top:14px; font-size:13px; color:rgba(244,231,208,0.78); text-decoration:underline; text-align:center;">
+    {{ signup_label|default("Don't have access? Request it →", true) }}
   </a>
 </div>
 <div class="toast" id="toast"></div>
@@ -275,7 +275,7 @@
 <script>
   const PASSCODE_LENGTH = {{ passcode_len }};
   const NEXT_URL = {{ next_url|tojson }};
-  const SUBMIT_URL = "{{ url_for('keypad_auth.login_submit') }}";
+  const SUBMIT_URL = "{{ submit_url|default(url_for('keypad_auth.login_submit'), true) }}";
   let passcode = '';
   const dotsContainer = document.getElementById('dots');
   const dots = dotsContainer.querySelectorAll('.dot');

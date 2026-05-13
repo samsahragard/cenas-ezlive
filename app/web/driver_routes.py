@@ -140,6 +140,11 @@ def driver_login_submit():
         found.failed_attempts = 0
         found.lockout_until = None
         db.commit()
+        # Clear any leftover User-keypad keys so a driver session can't
+        # carry over a manager's role indicators (Sam, 2026-05-13).
+        # partner_auth_ok in particular has to be re-earned via /keypad-login.
+        for _k in ("user_id", "user_session_version", "partner_auth_ok"):
+            session.pop(_k, None)
         session["driver_id"] = found.id
         session["driver_name"] = found.name
         session["driver_location"] = found.location
@@ -218,6 +223,9 @@ def driver_signup_submit():
                                          "Contact your manager — they may already have started "
                                          "your account.",
                                    form=form), 409
+        # Same role-conflict guard as driver_login_submit.
+        for _k in ("user_id", "user_session_version", "partner_auth_ok"):
+            session.pop(_k, None)
         session["driver_id"] = new_driver.id
         session["driver_name"] = new_driver.name
         session["driver_location"] = new_driver.location
@@ -328,10 +336,18 @@ def driver_logout():
     # as /keypad-logout. The keypad_auth after_request hook adds
     # Cache-Control: no-store to this response so the Capacitor WebView
     # can't serve a cached dashboard on app restart.
-    session.pop("driver_id", None)
-    session.pop("driver_name", None)
-    session.pop("driver_location", None)
-    session.pop("driver_session_version", None)
+    #
+    # Clear EVERY role key (driver + user + partner gate) so app reopen
+    # never lands on a stale dashboard for whichever role is left over.
+    # Sam (2026-05-13) hit this after switching between driver-login and
+    # partner-keypad-login: clicking Log out only cleared the driver_*
+    # keys, so user_id lingered and the partner sidebar kept rendering.
+    # Preserve Tier-1 auth_ok so the user doesn't have to re-type the
+    # site password on re-open.
+    auth_ok = session.get("auth_ok")
+    session.clear()
+    if auth_ok:
+        session["auth_ok"] = auth_ok
     return redirect(url_for("driver.driver_login"))
 
 

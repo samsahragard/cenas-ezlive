@@ -155,6 +155,14 @@ def login_submit():
         db.commit()
 
         session.permanent = True
+        # Clear any leftover driver-portal session keys so the dashboard
+        # sidebar doesn't render the "MY WORK" driver menu over a partner
+        # session (Sam, 2026-05-13: hit this on the Capacitor mobile app
+        # after switching from a driver-login test back to his partner
+        # keypad — sidebar role-detection picks driver_id first).
+        for _k in ("driver_id", "driver_name", "driver_location",
+                   "driver_session_version"):
+            session.pop(_k, None)
         session["user_id"] = u.id
         # Stamp the session with the user's current version. Any later
         # passcode reset or deactivation bumps User.session_version, which
@@ -237,12 +245,14 @@ def change_passcode_submit():
 
 @keypad_auth.route("/keypad-logout", methods=["GET", "POST"])
 def logout():
-    # session.clear() instead of per-key pop so any future session keys
-    # (auth flags, feature toggles, etc) get wiped too. Sam (2026-05-13):
-    # logout from the Capacitor mobile app wasn't "sticking" — root cause
-    # was the WebView caching the post-login dashboard HTML, but we also
-    # belt-and-suspenders the cookie clear here.
+    # Wipe every role key (user, driver, partner gate) so app reopen never
+    # lands on a stale dashboard for the wrong role. Preserve Tier-1
+    # auth_ok so the user doesn't have to re-type the site password on
+    # the way back in — that's a separate gate.
+    auth_ok = session.get("auth_ok")
     session.clear()
+    if auth_ok:
+        session["auth_ok"] = auth_ok
     resp = _no_store(redirect(url_for("keypad_auth.login")))
     return resp
 

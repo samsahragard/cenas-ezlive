@@ -165,6 +165,17 @@
     {% include 'partials/sidebar.html' %}
   </aside>
 
+  {# Mobile hamburger — outside .sidebar so dashboard.css's translateX(-100%) on
+     .sidebar (max-width:900px) doesn't drag it offscreen too. Toggles the new
+     .ck-sidebar-host[data-open] AND the legacy body.sidebar-open class so both
+     sliding mechanisms cooperate. #}
+  <button class="menu-toggle" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation" style="position: fixed; top: 12px; left: 12px; z-index: 250;">
+    <span class="menu-toggle-bars">
+      <span></span><span></span><span></span>
+    </span>
+  </button>
+  <div class="sidebar-overlay" onclick="window.toggleSidebar && window.toggleSidebar();"></div>
+
   <main class="main">
     {% block topbar %}
     <div class="topbar">
@@ -204,6 +215,26 @@
 
 <img class="wordmark" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen">
 
+<script>
+  // Mobile hamburger / sidebar drawer toggle. Bridges the old body.sidebar-open
+  // mechanism (dashboard.css mobile rules) and the new .ck-sidebar-host[data-open]
+  // mechanism (sidebar.css from samai's design package). Sidebar.js exposes
+  // window.ckSidebar.{open,close,isOpen} once initialized; we call those if present.
+  window.toggleSidebar = function () {
+    var isOpen = document.body.classList.contains('sidebar-open');
+    if (isOpen) {
+      document.body.classList.remove('sidebar-open');
+      if (window.ckSidebar) window.ckSidebar.close();
+    } else {
+      document.body.classList.add('sidebar-open');
+      if (window.ckSidebar) window.ckSidebar.open();
+    }
+  };
+  window.closeSidebar = function () {
+    document.body.classList.remove('sidebar-open');
+    if (window.ckSidebar) window.ckSidebar.close();
+  };
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -344,18 +344,10 @@
             <a href="/partner/developer/app/toast-api-reference" class="ck-sb-subitem{% if active == 'doc_toast_api_reference' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Toast API reference</span>
             </a>
-            {% for session in app_sessions|default([]) %}
-              <a href="/partner/developer/app/{{ session.slug }}" class="ck-sb-subitem{% if active == 'doc_' ~ session.slug %} active{% endif %}">
-                <span class="ck-sb-subitem-label">{{ session.label }}</span>
-              </a>
-            {% else %}
-              <a href="/partner/developer/app/ck-session-2026-05-10" class="ck-sb-subitem{% if active == 'doc_ck_session_2026_05_10' %} active{% endif %}">
-                <span class="ck-sb-subitem-label">ck Session 5/10</span>
-              </a>
-              <a href="/partner/developer/app/aick-session-2026-05-10" class="ck-sb-subitem{% if active == 'doc_aick_session_2026_05_10' %} active{% endif %}">
-                <span class="ck-sb-subitem-label">aick Session 5/10</span>
-              </a>
-            {% endfor %}
+            {% set _a = (active or '')|string %}
+            <a href="/partner/developer/app/chats" class="ck-sb-subitem{% if _a == 'doc_chats' or _a.startswith('doc_ck_session') or _a.startswith('doc_aick_session') or _a.startswith('doc_samai_session') %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Chats</span>
+            </a>
           </div></div>
         </div>
 

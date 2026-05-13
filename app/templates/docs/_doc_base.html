@@ -15,12 +15,17 @@
 
 {% block content %}
 
-{# Top sub-nav across all docs — easier than going back to the sidebar #}
+{# Top sub-nav across all docs — easier than going back to the sidebar.
+   The "chats" tab is treated as active whenever you're viewing the chats
+   index or any individual chat page (slug in chat_pages). #}
+{% set _chat_slugs = (chat_pages or [])|map(attribute=0)|list %}
+{% set _on_chat = (current_doc_slug == 'chats') or (current_doc_slug in _chat_slugs) %}
 <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px; padding-bottom:14px; border-bottom: 1px solid var(--glass-border);">
   {% for slug, label, key in doc_pages %}
+    {% set _active = (slug == current_doc_slug) or (slug == 'chats' and _on_chat) %}
     <a href="/partner/developer/app/{{ slug }}"
        style="font-size:12px; padding:6px 12px; border-radius:14px;
-              {% if slug == current_doc_slug %}background:var(--accent, #e87a3e); color:#fff; font-weight:600;{% else %}background:rgba(255,255,255,0.06); color:var(--text-2); border:1px solid var(--glass-border);{% endif %}
+              {% if _active %}background:var(--accent, #e87a3e); color:#fff; font-weight:600;{% else %}background:rgba(255,255,255,0.06); color:var(--text-2); border:1px solid var(--glass-border);{% endif %}
               text-decoration:none;">
       {{ label }}
     </a>

@@ -315,11 +315,20 @@ DOC_PAGES = [
     ("toast-api-reference",      "Toast API Reference", "doc_toast_api_reference"),
     ("toast-analytics-api",      "Toast Analytics API", "doc_toast_analytics_api"),
     ("agent-bootstrap",          "Agent Bootstrap",   "doc_agent_bootstrap"),
-    ("ck-session-2026-05-10",    "ck Session 5/10",   "doc_ck_session_2026_05_10"),
-    ("aick-session-2026-05-10",  "aick Session 5/10", "doc_aick_session_2026_05_10"),
-    ("ck-session-2026-05-11",    "ck Session 5/11",   "doc_ck_session_2026_05_11"),
-    ("aick-session-2026-05-11",  "aick Session 5/11", "doc_aick_session_2026_05_11"),
-    ("samai-session-2026-05-11", "samai Session 5/11", "doc_samai_session_2026_05_11"),
+    ("chats",                    "Chats",             "doc_chats"),
+]
+
+# Per-session chat handoff docs. Lives in its own list (not DOC_PAGES) so the
+# top doc nav stays short — the "Chats" entry in DOC_PAGES is the index page
+# that lists all of these. To add a new chat: create
+# app/templates/docs/<slug>.html and append a tuple here. The /partner/developer/app/<slug>
+# route resolves from both lists, so direct links keep working.
+CHAT_PAGES = [
+    ("ck-session-2026-05-10",    "ck — 5/10",    "doc_ck_session_2026_05_10"),
+    ("aick-session-2026-05-10",  "aick — 5/10",  "doc_aick_session_2026_05_10"),
+    ("ck-session-2026-05-11",    "ck — 5/11",    "doc_ck_session_2026_05_11"),
+    ("aick-session-2026-05-11",  "aick — 5/11",  "doc_aick_session_2026_05_11"),
+    ("samai-session-2026-05-11", "samai — 5/11", "doc_samai_session_2026_05_11"),
 ]
 
 
@@ -365,7 +374,9 @@ def app_doc(page: str = "readme"):
     gate = _enforce_partner()
     if gate is not None:
         return gate
-    page_meta = next(((slug, label, active_key) for slug, label, active_key in DOC_PAGES
+    # Resolve from DOC_PAGES first, then CHAT_PAGES — direct chat slug links
+    # (e.g. /partner/developer/app/aick-session-2026-05-10) keep working.
+    page_meta = next(((slug, label, active_key) for slug, label, active_key in DOC_PAGES + CHAT_PAGES
                       if slug == page), None)
     if page_meta is None:
         abort(404)
@@ -380,5 +391,6 @@ def app_doc(page: str = "readme"):
         active=active_key,
         page_title=label,
         doc_pages=DOC_PAGES,
+        chat_pages=CHAT_PAGES,
         current_doc_slug=slug,
     )

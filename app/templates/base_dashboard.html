@@ -209,6 +209,12 @@
     </div>
     {% endif %}
 
+    {# Anomaly cards (Phase 1 / Block 3): child templates set
+       `anomaly_page_slug = '<slug>'` to opt in; partial is a silent no-op
+       otherwise. Lives above {% block content %} so cards sit between the
+       page title and the body. #}
+    {% include 'partials/_anomaly_cards.html' ignore missing %}
+
     {% block content %}{% endblock %}
   </main>
 </div>

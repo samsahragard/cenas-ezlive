@@ -1,5 +1,10 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'dashboard' %}
+{# Opt in to Phase 1 / Block 3 anomaly cards. Signals with surfaces[]
+   containing 'home' render above the dashboard content; the engine
+   filters by g.current_store so Tomball-only signals don't leak to
+   the Copperfield dashboard. #}
+{% set anomaly_page_slug = 'home' %}
 {% block title %}Cenas Kitchen — Manager Dashboard{% endblock %}
 
 {% block page_title %}Welcome back <span class="wave">👋</span>{% endblock %}

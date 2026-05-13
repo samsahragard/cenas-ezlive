@@ -1,0 +1,155 @@
+{# Phase 1 / Block 3: Anomaly cards partial.
+
+   Opt-in: a parent template sets `anomaly_page_slug = '<slug>'` and this
+   partial renders unresolved Signals tagged with that surface. Silent
+   no-op otherwise. Mounted from base_dashboard.html above the
+   {% block content %} hole so every dashboard page gets cards for free
+   once it opts in.
+
+   Design system tokens (sidebar.css :root):
+     --ck-status-warn   #E2645C  → severity=alert
+     --ck-status-active #FFD970  → severity=warn
+     --ck-status-open   #9CCB76  → severity=info
+   Card uses glass-card recipe (rgba(40,22,14,0.55), 0.5px gold border,
+   12px radius, 14-16px padding) + --ck-ease motion for the
+   acknowledge animation.
+#}
+{% set _slug = anomaly_page_slug|default(none) %}
+{% if _slug %}
+  {% set _sigs = anomaly_signals_for(_slug) %}
+  {% if _sigs %}
+    <div class="anomaly-cards" style="margin-bottom: 16px;">
+      <style>
+        .anomaly-cards { display: grid; gap: 10px; }
+        .anomaly-card {
+          background: rgba(40,22,14,0.55);
+          border: 0.5px solid var(--ck-gold-soft);
+          border-left: 3px solid var(--ck-text-soft);
+          border-radius: 12px;
+          padding: 14px 16px;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 12px;
+          align-items: center;
+          transition: opacity 280ms var(--ck-ease, ease),
+                      transform 280ms var(--ck-ease, ease);
+        }
+        .anomaly-card.severity-info  { border-left-color: var(--ck-status-open); }
+        .anomaly-card.severity-warn  { border-left-color: var(--ck-status-active); }
+        .anomaly-card.severity-alert {
+          border-left-color: var(--ck-status-warn);
+          background: rgba(64,22,18,0.55);
+        }
+        .anomaly-card.dismissed { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+        .anomaly-card .ac-body { min-width: 0; }
+        .anomaly-card .ac-head {
+          display: flex; align-items: center; gap: 8px;
+          font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+          color: var(--ck-text-soft);
+          margin-bottom: 4px;
+        }
+        .anomaly-card.severity-info  .ac-sev { color: var(--ck-status-open); }
+        .anomaly-card.severity-warn  .ac-sev { color: var(--ck-status-active); }
+        .anomaly-card.severity-alert .ac-sev { color: var(--ck-status-warn); }
+        .anomaly-card .ac-sev { font-weight: 600; }
+        .anomaly-card .ac-when {
+          margin-left: auto;
+          color: var(--ck-text-faint);
+          font-size: 10.5px;
+          letter-spacing: 0.04em;
+          text-transform: none;
+        }
+        .anomaly-card .ac-subject {
+          font-size: 14px; color: var(--ck-text); font-weight: 500;
+          margin-bottom: 2px;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          text-shadow: var(--ck-glow-cream);
+        }
+        .anomaly-card .ac-action {
+          font-size: 13px; color: var(--ck-text-muted); line-height: 1.45;
+        }
+        .anomaly-card .ac-ack {
+          padding: 8px 14px;
+          background: rgba(40,22,14,0.55);
+          border: 0.5px solid var(--ck-gold-soft);
+          border-radius: 8px;
+          color: var(--ck-text);
+          font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 200ms var(--ck-ease, ease);
+        }
+        .anomaly-card .ac-ack:hover {
+          background: rgba(228,179,64,0.08);
+          border-color: var(--ck-gold);
+          color: var(--ck-gold-bright);
+          text-shadow: var(--ck-glow-gold-soft);
+        }
+        .anomaly-card .ac-ack:disabled {
+          opacity: 0.55; cursor: default;
+        }
+      </style>
+
+      {% for sig in _sigs %}
+        <div class="anomaly-card severity-{{ sig.severity }}" data-signal-id="{{ sig.id }}">
+          <div class="ac-body">
+            <div class="ac-head">
+              <i class="ti
+                {% if sig.severity == 'alert' %}ti-alert-triangle
+                {% elif sig.severity == 'warn' %}ti-alert-circle
+                {% else %}ti-info-circle{% endif %}" aria-hidden="true"></i>
+              <span class="ac-sev">{{ sig.severity }}</span>
+              <span style="color:var(--ck-text-soft); font-size:10.5px; letter-spacing:0.04em; text-transform:none;">
+                · {{ sig.rule_name.replace('_', ' ') }}
+              </span>
+              <span class="ac-when">
+                {{ sig.trigger_at.strftime('%H:%M') }}
+              </span>
+            </div>
+            <div class="ac-subject">{{ sig.subject_label }}</div>
+            <div class="ac-action">{{ sig.action_text }}</div>
+          </div>
+          <button type="button" class="ac-ack"
+                  data-signal-id="{{ sig.id }}"
+                  aria-label="Acknowledge signal {{ sig.id }}">
+            Acknowledge
+          </button>
+        </div>
+      {% endfor %}
+
+      <script>
+      (function(){
+        document.querySelectorAll('.anomaly-card .ac-ack').forEach(function(btn){
+          btn.addEventListener('click', async function(){
+            var card = btn.closest('.anomaly-card');
+            var sigId = btn.dataset.signalId;
+            btn.disabled = true;
+            btn.textContent = 'Acknowledging…';
+            try {
+              var r = await fetch('/partner/anomalies/' + sigId + '/ack', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json'},
+                body: '{}',
+              });
+              var data = await r.json();
+              if (!r.ok || !data.ok){
+                btn.disabled = false;
+                btn.textContent = 'Acknowledge';
+                console.warn('anomaly ack failed:', data.error || r.status);
+                return;
+              }
+              card.classList.add('dismissed');
+              setTimeout(function(){ card.remove(); }, 320);
+            } catch (e) {
+              btn.disabled = false;
+              btn.textContent = 'Acknowledge';
+              console.warn('anomaly ack network err:', e);
+            }
+          });
+        });
+      })();
+      </script>
+    </div>
+  {% endif %}
+{% endif %}

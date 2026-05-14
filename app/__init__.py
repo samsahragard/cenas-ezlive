@@ -23,6 +23,7 @@ from app.web.legal_routes import legal as legal_bp
 from app.web.access_request_routes import access_req as access_req_bp
 from app.web.driver_system import driver_system_bp
 from app.web.briefs import briefs_bp
+from app.web.tasks import tasks_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
@@ -118,6 +119,11 @@ def create_app():
     app.register_blueprint(access_req_bp)
     app.register_blueprint(driver_system_bp)
     app.register_blueprint(briefs_bp)
+    # Phase 2 / Block 1A — task create + reassign routes
+    # (/partner/tasks/*). Registered directly (not under store_bp), so
+    # not auto-partner-gated; the routes require g.current_user and use
+    # can_assign_to as the authorization gate. See app/web/tasks.py.
+    app.register_blueprint(tasks_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")

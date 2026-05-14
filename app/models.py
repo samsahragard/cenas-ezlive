@@ -1313,6 +1313,179 @@ class ScheduledEvent(Base):
         nullable=False)
 
 
+# Phase 2 / Block 1A (samai spec, 2026-05-14). Valid-value constants for
+# Task — String columns (not native ENUM, same call as ScheduledEvent /
+# BriefFeedback / SalesInsight: SQLite-compat + simpler migrations).
+# The create/reassign routes + the tests validate against these single
+# sources.
+_VALID_STORE_SCOPES = {"tomball", "copperfield", "both", "none"}
+_VALID_CATEGORIES = {
+    "vendor", "catering", "event", "employee",
+    "maintenance", "sales", "general",
+}
+# TaskAuditLog.action values — fully defined in 1A so the table is
+# stable, but 1A's own routes only emit "created" + "reassigned". The
+# other values are emitted by the sub-blocks that own those write paths
+# (completed/dismissed → 1D, escalated → 1E, assigned → Block 3B
+# delegation-approval).
+_VALID_TASK_ACTIONS = {
+    "created", "assigned", "completed",
+    "dismissed", "reassigned", "escalated",
+}
+
+
+class Task(Base):
+    """A unit of operational work — owned, assignable, escalatable,
+    audited. The data foundation of the Block 1 ribbon system.
+
+    Phase 2 / Block 1A (samai spec, 2026-05-14). 1A makes tasks exist,
+    be owned, be reassigned, and be audited; it does NOT render a
+    ribbon (1B), route ribbon content (1C), write the X/Check controls
+    (1D), or run the escalation cron (1E). The completed_at /
+    completed_by_user_id columns are defined here but written by 1D's
+    Check handler; escalated_to_user_id / escalated_at are written by
+    1E's escalation cron.
+
+    No hard-delete path for Task in v1 — tasks are completed
+    (completed_at set), not deleted. There is no DELETE route and no
+    before_delete listener on Task itself, but TaskAuditLog's
+    ondelete=RESTRICT FK makes a Task with audit history effectively
+    undeletable, which is the intended property for an operational
+    audit trail.
+    """
+    __tablename__ = "tasks"
+    __table_args__ = (
+        # The hot ribbon query: "my open tasks" (owner = me AND
+        # completed_at IS NULL). Composite covers it.
+        Index("ix_tasks_owner_open", "owner_user_id", "completed_at"),
+        # 1E's escalation cron scans WHERE deadline_at < now AND
+        # completed_at IS NULL AND escalated_at IS NULL every 5 min.
+        # Lay the index now so 1E doesn't add it as a separate migration.
+        Index("ix_tasks_escalation_scan",
+              "completed_at", "escalated_at", "deadline_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # owner / assigned_by → RESTRICT: NOT NULL, and the codebase follows
+    # archive-not-delete (users deactivated, never hard-deleted), so
+    # RESTRICT should never fire — it's a documented safety net. If a
+    # delete path is ever written it must reassign the task first.
+    owner_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False, index=True)
+    assigned_by_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    # tomball | copperfield | both | none — validated against
+    # _VALID_STORE_SCOPES in the route.
+    store_scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    # vendor | catering | event | employee | maintenance | sales |
+    # general — validated against _VALID_CATEGORIES in the route.
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    deadline_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True)
+    # completed_* written by 1D's Check handler, not 1A's routes.
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True)
+    completed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # escalated_* written by 1E's escalation cron, not 1A's routes.
+    escalated_to_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
+class TaskAuditLog(Base):
+    """Append-only audit trail for Task lifecycle events.
+
+    Phase 2 / Block 1A. One row per state-changing event on a Task.
+    The action enum is fully defined (see _VALID_TASK_ACTIONS) so the
+    table is stable, but 1A's own routes only ever emit "created" and
+    "reassigned" — the other values are emitted by the sub-blocks that
+    own those write paths.
+
+    task_id ondelete=RESTRICT (not CASCADE): a Task with audit rows
+    cannot be DB-deleted — combined with archive-not-delete this makes
+    Tasks immutable-once-audited, the right property for an operational
+    audit trail. RESTRICT also avoids the ORM-event-vs-DB-cascade
+    ambiguity (a DB-level CASCADE would bypass the before_delete event).
+    actor_user_id ondelete=RESTRICT — same archive-not-delete reasoning;
+    the actor on an audit row must stay resolvable.
+
+    Append-only: a before_delete listener (below) raises RuntimeError.
+    UPDATE is not blocked, but no write path UPDATEs an existing audit
+    row — they only INSERT.
+    """
+    __tablename__ = "task_audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"),
+        nullable=False, index=True)
+    actor_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    # created | assigned | completed | dismissed | reassigned |
+    # escalated — see _VALID_TASK_ACTIONS + the spec §7 emission map.
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Per-action JSON payload — shape per spec §7.
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class RibbonItemDismissal(Base):
+    """Per-user, per-day "not now" dismissal of a ribbon item.
+
+    Phase 2 / Block 1A. 1A ships the model + migration only; the
+    POST /partner/ribbon/dismiss + /check write routes are 1D.
+
+    item_id is a POLYMORPHIC reference — it points at tasks.id,
+    signals.id, or sales_insights.id (and scheduled_events.id once 1C's
+    contract change lands) depending on item_type. It is deliberately
+    NOT a DB-level FK (one column can't FK multiple tables);
+    referential integrity is application-enforced in 1D's dismiss
+    handler.
+
+    Daily-reset semantics (the directive flagged this as "samai's
+    call"): dismiss_day is a "YYYY-MM-DD" string, NOT a session_id. A
+    manager X's a ribbon item, it's gone for today, it's back tomorrow
+    morning so they re-triage it — matching the daily operational
+    rhythm. The UniqueConstraint(user_id, item_type, item_id,
+    dismiss_day) makes 1D's dismiss endpoint naturally idempotent
+    (dismissing twice in one day is a harmless no-op).
+
+    user_id ondelete=CASCADE — dismissals are ephemeral per-user UI
+    state, meaningless once the user is gone (unlike Task ownership).
+    """
+    __tablename__ = "ribbon_item_dismissals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "item_type", "item_id", "dismiss_day",
+                         name="uq_ribbon_dismissal_per_day"),
+        Index("ix_ribbon_dismissal_lookup", "user_id", "dismiss_day"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # task | signal | sales_insight (+ scheduled_event once 1C lands).
+    item_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Polymorphic ref — see docstring; not a DB FK.
+    item_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    # "YYYY-MM-DD" — the daily reset boundary. date.today().isoformat()
+    # at write time (1D).
+    dismiss_day: Mapped[str] = mapped_column(String(10), nullable=False)
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+
+
 @_sa_event.listens_for(BriefFeedback, 'before_delete')
 def _no_delete_brief_feedback(mapper, connection, target):
     raise RuntimeError(
@@ -1321,5 +1494,14 @@ def _no_delete_brief_feedback(mapper, connection, target):
         "Round 1 → Round 2 aggregation doc derives from these rows. "
         "Mistakes are corrected by appending a follow-up row "
         "(submitted_via still indicates source), not by deleting."
+    )
+
+
+@_sa_event.listens_for(TaskAuditLog, 'before_delete')
+def _no_delete_task_audit(mapper, connection, target):
+    raise RuntimeError(
+        "TaskAuditLog is append-only — task history cannot be deleted. "
+        "Corrections are made by appending a new audit row, not by "
+        "removing one."
     )
 

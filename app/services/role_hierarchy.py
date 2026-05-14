@@ -117,3 +117,90 @@ def role_domain(role: str | None) -> str:
     if resolved is None:
         return "foh"
     return _ROLE_DOMAIN.get(resolved, "foh")
+
+
+# ---- can_assign_to — the task-assignment helper (Block 1A §5) ----
+
+# Store-unscoped roles skip the store-constraint check in can_assign_to:
+# they have authority across both stores. Everyone else (gm and below)
+# is store-scoped and may only assign to a target in their store.
+_STORE_UNSCOPED_ROLES = frozenset({
+    "partner", "corporate", "corporate_chef", "prep_manager",
+})
+
+# A store_scope value → the set of physical stores it covers. None /
+# unknown → empty set (covers nothing), so the intersection check fails
+# safe-closed. "none" is a Task.store_scope value, not a User one, but
+# handled here for completeness.
+_STORE_SETS: dict[str, frozenset[str]] = {
+    "tomball":     frozenset({"tomball"}),
+    "copperfield": frozenset({"copperfield"}),
+    "both":        frozenset({"tomball", "copperfield"}),
+    "none":        frozenset(),
+}
+
+
+def _store_scopes_intersect(a: str | None, b: str | None) -> bool:
+    """True if two store_scope values share at least one physical store.
+    None / unknown → empty set → no intersection (safe-closed)."""
+    sa = _STORE_SETS.get((a or "").strip().lower(), frozenset())
+    sb = _STORE_SETS.get((b or "").strip().lower(), frozenset())
+    return bool(sa & sb)
+
+
+def can_assign_to(actor, target) -> bool:
+    """True if ``actor`` may assign / reassign a task to ``target``.
+
+    Block 1A spec §5.2 assignment rules:
+      - any role → themselves (actor.id == target.id) — always allowed
+      - partner → anyone strictly below
+      - corporate → gm and every tier below (store-unscoped)
+      - gm → manager-tier + hourly-tier, target in the GM's store
+      - km / assistant_km → hourly-tier KITCHEN staff, target in scope
+      - foh_manager → hourly-tier FOH staff, target in scope
+      - never to a same-tier peer — strictly downward only, except self
+
+    ``actor`` / ``target`` are User rows; this reads only ``.id``,
+    ``.permission_level`` and ``.store_scope`` via attribute access, so
+    the function stays pure (no DB, no Flask) — consistent with the rest
+    of this module.
+    """
+    # 1. Self-assignment — every role, including hourly tier, always.
+    if getattr(actor, "id", None) is not None and actor.id == getattr(target, "id", None):
+        return True
+
+    actor_role = getattr(actor, "permission_level", None)
+    target_role = getattr(target, "permission_level", None)
+    a_tier = role_tier(actor_role)
+    t_tier = role_tier(target_role)
+
+    # 2. Unknown actor role → tier 0 → no authority to assign anyone.
+    if a_tier == 0:
+        return False
+
+    # 3. Strictly downward only — never to a same-tier peer (gm→gm,
+    #    corporate→corporate) or upward. Self already handled above.
+    if a_tier <= t_tier:
+        return False
+
+    # 4. Manager-tier actors (km / assistant_km / foh_manager — tier 2)
+    #    assign ONLY down to the hourly tier, and only within their own
+    #    domain (a KM assigns kitchen staff; an FOH manager assigns FOH
+    #    staff). gm (tier 3) and above cross domains, no restriction.
+    if a_tier == 2:
+        if t_tier != 1:
+            return False
+        if role_domain(actor_role) != role_domain(target_role):
+            return False
+
+    # 5. Store constraint — store-scoped actors (everyone except the
+    #    store-unscoped partner / corporate / corporate_chef /
+    #    prep_manager) may only assign to a target whose store scope
+    #    intersects their own.
+    if _resolve(actor_role) not in _STORE_UNSCOPED_ROLES:
+        if not _store_scopes_intersect(
+                getattr(actor, "store_scope", None),
+                getattr(target, "store_scope", None)):
+            return False
+
+    return True

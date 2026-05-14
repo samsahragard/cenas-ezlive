@@ -1,0 +1,185 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 2I — Recipe Page + Import</h1>
+<p class="doc-meta">
+  Phase 2 / Block 2 / sub-block 2I. samai spec, 2026-05-14.<br>
+  Implementation: ck (models + browse UI) + aick (import script). Review: samai checklist PASS per commit.<br>
+  Source: Phase 2 Directive §BLOCK 2 / 2I.
+</p>
+
+<h2>1. Scope — what 2I is, and the aick / ck split</h2>
+<p>
+  2I is a <strong>read-only browse surface</strong> for the 24 prep recipes
+  Sam previously uploaded — <code>/manager/recipes</code>: a searchable,
+  category-filtered list and a per-recipe detail page showing category code +
+  name, prep time, yield, shelf life, preparation steps, and an ingredients
+  table with SINGLE / DOUBLE quantity columns. It is a clean standalone:
+  <strong>zero dependency on 1A or any Block 1 surface</strong> — pure
+  model + route + template + a one-time import script.
+</p>
+<p>2I is <strong>two commits</strong>, per the directive's aick/ck split:</p>
+<ul>
+  <li><strong>2I-a (ck) — models + browse UI.</strong> The three models (<code>Recipe</code>, <code>RecipeStep</code>, <code>RecipeIngredient</code>) + migration + the <code>/manager/recipes</code> list and detail routes + templates + the <code>recipes.view</code> permission tag + tests. ck owns the UI surface, so ck defines the models (both the UI and the import need them; the UI is the primary surface). <strong>This is the outage-window build-and-hold lane</strong> — 1A-independent, render-contract-independent, nothing about it can ripple into Block 1.</li>
+  <li><strong>2I-b (aick) — the import script.</strong> A one-time, idempotent script that parses the 24 uploaded recipes' extracted text into <code>Recipe</code> + <code>RecipeStep</code> + <code>RecipeIngredient</code> rows. Depends on 2I-a's models existing. Not on 1A's critical path — aick runs it when free.</li>
+</ul>
+<p><strong>2I does NOT ship:</strong> any edit UI (the directive: "Edit access: partner only in v1" — and v1 has <em>no edit route at all</em>, it is read-only browse; a Recipe Editor for the corporate_chef role is explicitly Future); the Portions page (2J — separate sub-block, depends on 2I's <code>Recipe</code> model); any KDS integration.</p>
+
+<h2>2. The three models</h2>
+<h3>2.1 Recipe</h3>
+<pre><code>class Recipe(Base):
+    __tablename__ = "recipes"
+
+    id                 Integer, primary key
+    category_code      String(20),  NOT NULL          # "HOT" | "SAUCE" | ...
+    recipe_number      Integer,     NOT NULL          # the "HOT 1" / "SAUCE 7" id
+    name               String(200), NOT NULL
+    prep_time_minutes  Integer,     nullable          # "LISTO EN"
+    yield_amount       String(60),  nullable          # "4½ GALL", "38 LB" — free text, units vary
+    shelf_life_days    Integer,     nullable          # "DURACION"
+    preparation_steps  Text,        nullable          # multi-paragraph; used when is_multi_step=False
+    is_multi_step      Boolean,     NOT NULL, default=False
+    notes              Text,        nullable
+    source_doc         String(200), nullable          # filename of the original Word doc
+    created_at         DateTime,    NOT NULL, default=utcnow
+    updated_at         DateTime,    NOT NULL, default=utcnow, onupdate=utcnow
+
+    __table_args__ = (
+        UniqueConstraint("category_code", "recipe_number",
+                         name="uq_recipe_category_number"),
+        Index("ix_recipes_category", "category_code"),
+    )</code></pre>
+<ul>
+  <li><code>UniqueConstraint(category_code, recipe_number)</code> — "HOT 1" is one recipe; the import script's idempotency (§4) leans on this to upsert rather than duplicate on re-run.</li>
+  <li><code>ix_recipes_category</code> — the list view's category filter.</li>
+  <li><code>is_multi_step</code> drives the detail-page render: <code>False</code> → render <code>preparation_steps</code> as the body + the ingredients table flat; <code>True</code> → render the <code>RecipeStep</code> rows, each with its own ingredient sub-table.</li>
+  <li><code>yield_amount</code> is free-text <code>String</code> (not Decimal + unit) — the directive is explicit ("4½ GALL" or "38 LB", units vary). Don't try to parse it.</li>
+</ul>
+
+<h3>2.2 RecipeStep</h3>
+<pre><code>class RecipeStep(Base):
+    __tablename__ = "recipe_steps"
+
+    id           Integer, primary key
+    recipe_id    Integer, FK(recipes.id, ondelete="CASCADE"), NOT NULL, indexed
+    step_number  Integer, NOT NULL
+    title        String(200), nullable
+    instructions Text, nullable
+
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "step_number",
+                         name="uq_recipe_step_number"),
+    )</code></pre>
+<ul>
+  <li>Only populated for <code>is_multi_step=True</code> recipes. A single-step recipe has zero <code>RecipeStep</code> rows — its body lives in <code>Recipe.preparation_steps</code>.</li>
+  <li><code>recipe_id</code> ondelete=<code>CASCADE</code> — steps are wholly owned by their recipe; if a recipe is removed (re-import / correction), its steps go with it. Recipes are reference data, not an audit trail — CASCADE is correct here (unlike Block 1A's audit-log RESTRICT).</li>
+</ul>
+
+<h3>2.3 RecipeIngredient</h3>
+<pre><code>class RecipeIngredient(Base):
+    __tablename__ = "recipe_ingredients"
+
+    id              Integer, primary key
+    recipe_id       Integer, FK(recipes.id, ondelete="CASCADE"), NOT NULL, indexed
+    step_id         Integer, FK(recipe_steps.id, ondelete="CASCADE"), nullable
+        # NULL for single-step recipes; set for multi-step (ties the ingredient to its step)
+    ingredient_name String(200), NOT NULL
+    quantity        Numeric(10, 3), nullable          # SINGLE-recipe quantity
+    quantity_double Numeric(10, 3), nullable          # DOUBLE-recipe column, where the source has one
+    unit            String(40),  nullable             # POUNDS / GALLONS / CUPS / OZ / TBSP / BAG / CAN / ...
+    notes           String(200), nullable
+    sort_order      Integer, NOT NULL, default=0      # preserve the source ordering within a recipe/step</code></pre>
+<ul>
+  <li><code>quantity</code> / <code>quantity_double</code> are <code>Numeric</code> (not free-text) — the directive says <code>Decimal</code>. Both nullable: some ingredients in the source are "to taste" / "as needed" with no number, and <code>quantity_double</code> is only present where the source recipe has a DOUBLE column.</li>
+  <li><code>step_id</code>: NULL for single-step recipes (the ingredient hangs directly off the recipe); set for multi-step (the ingredient belongs to a specific step). Both FKs CASCADE — ingredients are wholly owned.</li>
+  <li><code>sort_order</code> — the source recipes list ingredients in a meaningful order; preserve it. The import script sets it; the detail page renders by it. <strong>This is a samai addition beyond the directive's field list</strong> — without it, ingredient order is undefined and the rendered table would scramble vs. the original Word doc. Flagged in §8 Q3 in case Sam wants it dropped, but recommend keeping.</li>
+  <li><code>unit</code> is free-text <code>String</code> — the directive's example list (POUNDS / GALLONS / CUPS / OZ / TBSP / BAG / CAN) is open-ended; don't enum it.</li>
+</ul>
+
+<h2>3. The browse UI (2I-a, ck)</h2>
+<p>Blueprint <code>app/web/recipes.py</code> (<code>recipes_bp</code>), mounted at <code>/manager/recipes</code>, registered in <code>app/__init__.py</code>. Two routes, both <code>GET</code>, both read-only:</p>
+<h3>3.1 GET /manager/recipes — the list</h3>
+<ul>
+  <li>Searchable (by <code>name</code> + <code>category_code</code> — a simple <code>ILIKE</code> substring match is fine for 24 rows; no full-text index needed at this scale).</li>
+  <li>Category filter — a control listing the distinct <code>category_code</code> values; filtering narrows the list. Server-derived filter (a query param is fine here — it is a read-only filter on non-sensitive data, no scope/permission implication, unlike 1G's store-scope param).</li>
+  <li>Each row links to the detail page. Show category code + recipe number + name + yield at the list level.</li>
+  <li><strong>Mobile-friendly</strong> — the directive flags line cooks may reference on tablets. The list + detail must render usably on a tablet/phone width. Exact treatment is ck's call within the templates; the requirement is "usable on a tablet," same bar as 1B's mobile ribbon.</li>
+</ul>
+<h3>3.2 GET /manager/recipes/&lt;id&gt; — the detail</h3>
+<ul>
+  <li>Header: category code + recipe number + name; the metadata strip — prep time ("LISTO EN"), yield ("CANTIDAD" / <code>yield_amount</code>), shelf life ("DURACION").</li>
+  <li>Body — branches on <code>is_multi_step</code>:
+    <ul>
+      <li><code>False</code>: render <code>preparation_steps</code> (multi-paragraph) + one flat ingredients table (the <code>RecipeIngredient</code> rows with <code>step_id IS NULL</code>, ordered by <code>sort_order</code>).</li>
+      <li><code>True</code>: render each <code>RecipeStep</code> in <code>step_number</code> order — its title + instructions + its own ingredient sub-table (the <code>RecipeIngredient</code> rows whose <code>step_id</code> matches).</li>
+    </ul>
+  </li>
+  <li>Ingredients table: <code>ingredient_name</code> | <code>quantity</code> + <code>unit</code> | (<code>quantity_double</code> + <code>unit</code> — <strong>this column renders only if any ingredient in the recipe has a non-null <code>quantity_double</code></strong>; a recipe with no DOUBLE data shows a single quantity column, not an empty one) | <code>notes</code>.</li>
+  <li><code>notes</code> (recipe-level) rendered if present. <code>404</code> on an unknown id.</li>
+</ul>
+
+<h2>4. The import script (2I-b, aick)</h2>
+<ul>
+  <li>A one-time script (<code>scripts/import_recipes.py</code> or a CLI command) that parses the 24 uploaded recipes' extracted text into <code>Recipe</code> + <code>RecipeStep</code> + <code>RecipeIngredient</code> rows.</li>
+  <li><strong>Idempotent:</strong> re-running it must not duplicate. Upsert keyed on <code>(category_code, recipe_number)</code> — if the recipe exists, replace it (delete its <code>RecipeStep</code> + <code>RecipeIngredient</code> rows via CASCADE, re-insert); if not, insert. A re-run after a parser fix should converge, not pile up.</li>
+  <li><strong>Source:</strong> the directive points at extracted text at <code>/home/claude/recipes/*.txt</code> from a prior session, "or Sam re-uploads." <strong>aick — confirm the source files are present + readable before building the parser; if they are not on this AiCk machine, flag it to Sam for re-upload.</strong> The parser's exact logic depends on the actual text format, which this spec cannot pin down without seeing the files — so §4 specs the <em>contract</em> (what rows the import must produce, idempotency, the upsert key), and the parsing detail is aick's to implement against the real source format.</li>
+  <li><strong>Recon output:</strong> the script prints a summary — recipes imported, steps, ingredients, and any recipe it could not fully parse (a malformed source file should be surfaced, not silently skipped — same shape as the Toast pull's recon JSON). 24 recipes in, 24 recipes (or a named list of what failed) out.</li>
+  <li>The import is data-population, not a deploy surface — it runs against the DB directly. It does not need deploy-verify in the route sense; its verification is the recon output + a spot-check that a sampled recipe's rows match its source doc.</li>
+</ul>
+
+<h2>5. Permissions</h2>
+<ul>
+  <li>New tag <strong><code>recipes.view</code></strong> — added to <code>ROLE_PERMISSIONS</code>, granted to the manager tier and above: <code>km</code>, <code>assistant_km</code>, <code>foh_manager</code>, <code>gm</code>, <code>corporate</code>, <code>corporate_chef</code>, <code>prep_manager</code> (partner via wildcard). Both routes carry <code>@requires_permission("recipes.view")</code>; the sidebar link is wrapped in <code>has_permission('recipes.view')</code> (samai rule 4 — both surfaces).</li>
+  <li>Recipes are <strong>operational reference, not sensitive</strong> — the directive is explicit: "No counseling-style cascade." So <code>recipes.view</code> is a flat tag, no store-scope, no tier cascade. It is not a §2.2 global-config tag either — it gates reference content, not a config surface — so granting it to GM + the manager tier is correct and does not violate the §2.2 partner+corporate rule.</li>
+  <li><strong>No edit tag in v1</strong> — there is no edit route, so there is nothing to gate. When the Future corporate_chef Recipe Editor lands, that sub-block adds <code>recipes.edit</code>.</li>
+  <li>The matrix test (2255c1d) auto-extends to <code>recipes.view</code> — one row per role confirms the gate.</li>
+</ul>
+
+<h2>6. Test requirements</h2>
+<p><strong>2I-a</strong> (<code>tests/test_recipes.py</code>):</p>
+<ul>
+  <li><strong>Models:</strong> Recipe / RecipeStep / RecipeIngredient round-trip; the two unique constraints reject duplicates; FK CASCADE declared on <code>recipe_steps.recipe_id</code>, <code>recipe_ingredients.recipe_id</code>, <code>recipe_ingredients.step_id</code>; a single-step recipe (no steps, ingredient <code>step_id</code> NULL) and a multi-step recipe (steps + ingredient <code>step_id</code> set) both round-trip.</li>
+  <li><strong>Routes:</strong> list 200 + renders seeded recipes; category filter narrows correctly; search matches name + category substring; detail 200 for a known id, 404 for unknown; the DOUBLE column renders iff some ingredient has <code>quantity_double</code>; a multi-step recipe renders steps in <code>step_number</code> order with per-step ingredient tables.</li>
+  <li><strong>Permission gating:</strong> the role matrix — manager-tier+ → 200, hourly tier (expo/driver/cook/server/busser/host/bartender) → 403; sidebar link present for the granted roles, absent for the rest.</li>
+</ul>
+<p><strong>2I-b</strong> (<code>tests/test_recipe_import.py</code>):</p>
+<ul>
+  <li><strong>Parse fixture → rows:</strong> a small fixture recipe text (one single-step, one multi-step) parses into the expected Recipe + RecipeStep + RecipeIngredient rows with correct <code>sort_order</code> and SINGLE/DOUBLE quantities.</li>
+  <li><strong>Idempotency:</strong> running the import twice produces the same row count — the second run upserts, does not duplicate (the <code>(category_code, recipe_number)</code> key + CASCADE-delete-then-reinsert).</li>
+  <li><strong>Malformed source:</strong> a deliberately-broken fixture is surfaced in the recon output, not silently dropped.</li>
+</ul>
+
+<h2>7. samai review checklist (run per commit)</h2>
+<ol>
+  <li>Scope: 2I-a touches only the recipe models + migration + <code>recipes_bp</code> + templates + the <code>recipes.view</code> tag + tests — no edit route, no 2J Portions surface, no KDS. 2I-b touches only the import script + its tests.</li>
+  <li>Three models match §2 — types, the two unique constraints, FK CASCADE, the indexes; <code>sort_order</code> present (§8 Q3).</li>
+  <li>List route: searchable (name + category), category filter, mobile-usable; detail route: metadata strip, <code>is_multi_step</code> branch correct, DOUBLE column conditional on actual data, 404 on unknown id.</li>
+  <li><code>recipes.view</code> added to <code>ROLE_PERMISSIONS</code> for manager-tier+; both routes decorated; sidebar gated (rule 4 — both surfaces); matrix test auto-extends green.</li>
+  <li>Import script idempotent (upsert on <code>category_code</code>+<code>recipe_number</code>); recon output surfaces parse failures; aick confirmed the source files exist or flagged Sam for re-upload.</li>
+  <li>Migration present + reversible; tests per §6 green; full suite no regression.</li>
+  <li>Deploy-verify: <strong>BLOCKED-PENDING-RENDER</strong> until the build outage clears (<code>pipeline_minutes_exhausted</code>). When builds resume, deploy-verify is build-specific (rule 2 clause): hit <code>/manager/recipes</code> on prod under an authed manager session and confirm it renders the imported recipes — a route that only exists on this commit.</li>
+</ol>
+
+<h2>8. Open questions for Sam</h2>
+<ol>
+  <li><strong>Q1 — line-cook read access.</strong> The directive says "Read access: all manager-tier + above" <em>and</em> "Mobile-friendly because line cooks may reference on tablets." Those are in tension — a line cook (the new <code>cook</code> role) is hourly tier, below manager. Spec ships the literal directive: <code>recipes.view</code> = manager-tier+ only. The reconciliation is probably that the kitchen tablet runs a shared manager-tier session — but confirm: should <code>cook</code> (and the other hourly kitchen roles) get <code>recipes.view</code> directly, or is the kitchen tablet manager-logged-in?</li>
+  <li><strong>Q2 — import source.</strong> The directive points at <code>/home/claude/recipes/*.txt</code> from a prior session. If those files are not on the current AiCk machine (aick confirms in 2I-b), Sam re-uploads the 24 recipe docs. Flagged so the dependency is visible — 2I-a (models + UI) does <em>not</em> need them and can ship first; 2I-b (import) needs them.</li>
+  <li><strong>Q3 — <code>sort_order</code> on RecipeIngredient.</strong> Not in the directive's field list; samai added it so the rendered ingredient table preserves the source doc's ordering (without it, order is undefined). Recommend keeping. Confirm, or say drop it.</li>
+</ol>
+
+<h2>9. Distinct-commit boundary</h2>
+<p>
+  Two commits. <strong>2I-a (ck):</strong> the three models + migration + the
+  <code>/manager/recipes</code> browse routes + templates + <code>recipes.view</code>
+  + tests — a clean 1A-independent standalone, the right outage-window
+  build-and-hold lane. <strong>2I-b (aick):</strong> the one-time idempotent
+  import script + its tests — depends on 2I-a's models, not on 1A. Whether ck
+  builds 2I-a <em>during</em> the build outage vs. holds until Block 1 closes
+  is Sam's sequencing call (build-and-hold is the sound pattern; opening
+  Block 2 early is Sam's arbitration) — this spec just makes the artifact
+  ready so that decision isn't gated on a missing spec.
+</p>
+
+</div>
+{% endblock %}

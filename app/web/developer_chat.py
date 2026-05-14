@@ -345,6 +345,7 @@ DOC_PAGES = [
     ("block-1f-sales-insights-spec", "Block 1F - Sales Insights Spec", "doc_block_1f_sales_insights_spec"),
     ("block-1g-team-tab-spec",    "Block 1G - Team Tab Spec", "doc_block_1g_team_tab_spec"),
     ("block-1h-pay-masking-spec", "Block 1H - Pay Masking Spec", "doc_block_1h_pay_masking_spec"),
+    ("block-2i-recipe-page-spec", "Block 2I - Recipe Page Spec", "doc_block_2i_recipe_page_spec"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

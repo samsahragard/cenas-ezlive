@@ -179,15 +179,48 @@ def test_task_adapter_escalated_to_gets_todo_escalated():
 # ============================================================
 
 def test_signal_adapter_maps_category_by_prefix():
+    """samai 1C spec §13.1 map: orders.* → caterings (ezCater
+    catering-order fulfillment, NOT vendors — refines the placeholder)."""
     sig = SimpleNamespace(id=5, rule_name="orders.late_delivery",
                           severity="warn", subject_label="Order X",
                           action_text="Call the driver.", store_id="tomball")
     item = _signal_to_item(sig, None)
-    assert item.category == "vendors"   # "orders." prefix
+    assert item.category == "caterings"   # orders.* → caterings (§13.1)
     assert item.item_type == "signal"
     assert item.relation == "observer"
     assert item.can_check is True
     assert item.severity == "warn"
+
+
+@pytest.mark.parametrize("rule_name,expected", [
+    ("vendor.invoice_overdue", "vendors"),
+    ("produce.price_spike", "vendors"),
+    ("orders.ezcater_rejection_rate", "caterings"),
+    ("sales.daily_low", "sales"),
+    ("labor.overtime_spike", "employee"),
+    ("attendance.callout_spike", "employee"),
+    ("server.low_tip_rate", "employee"),
+    ("customer.bad_review", "employee"),
+    ("kitchen.prep_yield_low", "employee"),
+    ("system.deploy_failed", "maintenance"),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_signal_adapter_full_13_1_prefix_map(rule_name, expected):
+    """The full samai §13.1 domain-prefix map — all ten anomaly
+    domains routed to their ribbon category."""
+    sig = SimpleNamespace(id=1, rule_name=rule_name, severity="info",
+                          subject_label="X", action_text=None,
+                          store_id=None)
+    assert _signal_to_item(sig, None).category == expected
+
+
+def test_signal_adapter_full_rulename_override():
+    """§13.1 override: kitchen.equipment_down → maintenance (NOT
+    employee, which the kitchen. prefix would give) — the full
+    rule_name override is checked first."""
+    sig = SimpleNamespace(id=2, rule_name="kitchen.equipment_down",
+                          severity="alert", subject_label="Fryer down",
+                          action_text="Call the tech.", store_id="tomball")
+    assert _signal_to_item(sig, None).category == "maintenance"
 
 
 def test_signal_adapter_unknown_prefix_defaults():

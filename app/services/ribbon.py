@@ -125,22 +125,31 @@ _PAGE_TO_DOMAIN = {
     "ezmarket":     "sales",
 }
 
-# Signal → ribbon category. 1C spec §13 Q3 flags this as not-yet-fully-
-# specced: samai will spec the anomaly-rule-category → ribbon-category
-# map as an addendum once the rule-category taxonomy is confirmed. Until
-# then 1C uses a best-effort prefix map on Signal.rule_name and defaults
-# unknowns to "employee" (operational, low-risk — a mis-binned signal
-# still surfaces, just under a generic section). FLAGGED for samai.
+# Signal → ribbon category. The real map, per samai's 1C spec §13.1
+# addendum (Q3 RESOLVED) — confirmed against the anomaly_rules.py
+# taxonomy: rule_names are `domain.specific` across ten domains.
+# Keyed on the rule_name domain prefix, with full-rule_name overrides
+# (_SIGNAL_RULENAME_OVERRIDES) checked FIRST where a prefix splits.
+# Two open questions stay flagged for Sam in the spec (§13.1 Q4/Q5):
+# customer.* → employee is a least-bad fit; system.* → maintenance is
+# the v1 default but Sam may prefer excluding system.* from the
+# operational ribbon entirely.
 _SIGNAL_PREFIX_TO_RIBBON = {
-    "orders.":   "vendors",
-    "vendor.":   "vendors",
-    "produce.":  "vendors",
-    "labor.":    "employee",
-    "driver":    "employee",
-    "drivers.":  "employee",
-    "sales.":    "sales",
-    "google.":   "sales",
-    "system.":   "employee",
+    "vendor.":     "vendors",
+    "produce.":    "vendors",
+    "orders.":     "caterings",   # ezCater catering-order fulfillment
+    "sales.":      "sales",
+    "labor.":      "employee",
+    "attendance.": "employee",
+    "server.":     "employee",
+    "customer.":   "employee",    # §13.1 Q4 — least-bad fit
+    "kitchen.":    "employee",
+    "system.":     "maintenance",  # §13.1 Q5 — v1 default
+}
+# Full-rule_name overrides — checked before the prefix map (a prefix
+# splits, one specific rule routes differently).
+_SIGNAL_RULENAME_OVERRIDES = {
+    "kitchen.equipment_down": "maintenance",
 }
 _SIGNAL_DEFAULT_RIBBON = "employee"
 
@@ -345,12 +354,18 @@ def _signal_to_item(signal, user) -> RibbonItem:
     owner — always observer-style. category mapped from the signal's
     rule_name prefix (1C spec §13 Q3 — best-effort until samai specs
     the full anomaly-rule-category → ribbon-category map)."""
-    category = _SIGNAL_DEFAULT_RIBBON
     rn = signal.rule_name or ""
-    for prefix, cat in _SIGNAL_PREFIX_TO_RIBBON.items():
-        if rn.startswith(prefix):
-            category = cat
-            break
+    # Full-rule_name override first (a prefix splits — e.g.
+    # kitchen.equipment_down → maintenance, not employee), then the
+    # domain-prefix map, then the low-risk default.
+    if rn in _SIGNAL_RULENAME_OVERRIDES:
+        category = _SIGNAL_RULENAME_OVERRIDES[rn]
+    else:
+        category = _SIGNAL_DEFAULT_RIBBON
+        for prefix, cat in _SIGNAL_PREFIX_TO_RIBBON.items():
+            if rn.startswith(prefix):
+                category = cat
+                break
     severity = signal.severity if signal.severity in _SEVERITY_RANK else "info"
     ctx = {
         "text": signal.subject_label or signal.rule_name or "Signal",

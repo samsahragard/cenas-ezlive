@@ -512,6 +512,25 @@
       </div></div>
     </div>
     {% endif %}{# end has_permission('developer.view_chat') #}
+
+    {# Sam Chat — Sam's personal direct-to-Claude surface. Gated by
+       is_sam_chat_user() (the SAM_CHAT_USER_ID match), NOT by a
+       has_permission tag — so it can never be role-inherited. Renders
+       for nobody until SAM_CHAT_USER_ID is set in Render. #}
+    {% if is_sam_chat_user() %}
+    <div class="ck-sb-section" data-id="sam-chat">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Sam Chat</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        <a href="/sam/chat" class="ck-sb-item{% if active == 'sam_chat' %} active{% endif %}">
+          <i class="ti ti-sparkles ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Claude</span>
+        </a>
+      </div></div>
+    </div>
+    {% endif %}{# end is_sam_chat_user() #}
     {% endif %}{# closes user_role == 'driver' / else #}
 
     <a href="{% if user_role == 'driver' %}/driver/logout{% else %}/keypad-logout{% endif %}" class="ck-sb-logout"

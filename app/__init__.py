@@ -29,6 +29,7 @@ from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
+from app.web import sam_chat as ezsamchat
 from app.services import produce_ingest
 from app.services import permissions as ezperms
 
@@ -165,6 +166,11 @@ def create_app():
     # that _ribbon.html actually calls). The partial is mounted from
     # base_dashboard.html above {% block content %}.
     ezribbon.install(app)
+    # Sam Chat (standalone, Sam request 2026-05-14). Registers /sam/chat
+    # + the is_sam_chat_user Jinja global (the sidebar link uses it).
+    # Hard-gated to SAM_CHAT_USER_ID — dormant/safe-closed until that
+    # env var is set. Deliberately isolated from the agentic pipeline.
+    ezsamchat.install(app)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop

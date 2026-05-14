@@ -1,0 +1,621 @@
+{% extends "base_dashboard.html" %}
+{# Sam Chat — Sam's standalone direct-to-Claude surface (Sam request
+   2026-05-14). Hard-gated to SAM_CHAT_USER_ID by the route + the
+   sidebar link. The big JS body is {% raw %}-wrapped; server data is
+   handed in via a small window.SAM_CHAT_DATA bootstrap script. #}
+{% block title %}Sam Chat — Cenas Kitchen{% endblock %}
+{% block page_title %}Sam Chat{% endblock %}
+
+{% block head_extra %}
+<style>
+  .sc-wrap {
+    display: flex;
+    gap: 14px;
+    height: calc(100vh - 200px);
+    min-height: 460px;
+    margin-top: 6px;
+  }
+  /* ---- history rail ---- */
+  .sc-rail {
+    flex: 0 0 232px;
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 8, 5, 0.85);
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .sc-rail-head {
+    padding: 12px;
+    border-bottom: 0.5px solid rgba(217, 164, 54, 0.12);
+  }
+  .sc-newchat {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(232, 122, 62, 0.45);
+    background: rgba(232, 122, 62, 0.12);
+    color: #FAF6EC;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px; justify-content: center;
+  }
+  .sc-newchat:hover { background: rgba(232, 122, 62, 0.22); }
+  .sc-sessions { flex: 1; overflow-y: auto; padding: 6px; }
+  .sc-session {
+    padding: 9px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: rgba(236, 227, 208, 0.78);
+    font-size: 12.5px;
+    margin-bottom: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sc-session:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+  .sc-session.is-active {
+    background: rgba(228, 179, 64, 0.12);
+    color: #E4B340;
+  }
+  .sc-session .sc-arch {
+    margin-left: auto; opacity: 0; font-size: 13px;
+    color: rgba(236,227,208,0.5);
+  }
+  .sc-session:hover .sc-arch { opacity: 0.8; }
+  .sc-session .sc-arch:hover { color: #E87A3E; }
+  /* ---- chat column ---- */
+  .sc-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 8, 5, 0.85);
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    border-radius: 10px;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .sc-colhead {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 0.5px solid rgba(217, 164, 54, 0.12);
+    background: rgba(20, 12, 8, 0.6);
+  }
+  .sc-colhead select {
+    background: rgba(10, 6, 4, 0.9);
+    color: #FAF6EC;
+    border: 1px solid rgba(217, 164, 54, 0.25);
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+  .sc-cost30 {
+    margin-left: auto;
+    font-size: 11.5px;
+    color: rgba(236, 227, 208, 0.6);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+  .sc-msgs { flex: 1; overflow-y: auto; padding: 18px 16px; }
+  .sc-msg { margin-bottom: 16px; display: flex; flex-direction: column; }
+  .sc-msg.role-user { align-items: flex-end; }
+  .sc-msg.role-assistant { align-items: flex-start; }
+  .sc-bubble {
+    max-width: 78%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .role-user .sc-bubble {
+    background: rgba(232, 122, 62, 0.16);
+    border: 1px solid rgba(232, 122, 62, 0.30);
+    color: #FAF6EC;
+  }
+  .role-assistant .sc-bubble {
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    color: #ECE3D0;
+    white-space: normal;
+  }
+  .role-assistant .sc-bubble.streaming { white-space: pre-wrap; }
+  .sc-bubble p:first-child { margin-top: 0; }
+  .sc-bubble p:last-child { margin-bottom: 0; }
+  .sc-bubble pre {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(217, 164, 54, 0.15);
+    border-radius: 7px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-size: 12px;
+  }
+  .sc-bubble code {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .sc-bubble pre code { background: none; padding: 0; }
+  .sc-msg-foot {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 4px;
+    font-size: 10.5px;
+    color: rgba(236, 227, 208, 0.42);
+  }
+  .sc-copy {
+    cursor: pointer; background: none; border: none;
+    color: rgba(236, 227, 208, 0.5); font-size: 11px;
+    padding: 0; display: flex; align-items: center; gap: 3px;
+  }
+  .sc-copy:hover { color: #E4B340; }
+  /* ---- composer ---- */
+  .sc-warn {
+    display: none;
+    padding: 7px 14px;
+    font-size: 11.5px;
+    color: #E8B765;
+    background: rgba(232, 122, 62, 0.10);
+    border-top: 0.5px solid rgba(232, 122, 62, 0.25);
+  }
+  .sc-warn.show { display: block; }
+  .sc-composer {
+    border-top: 0.5px solid rgba(217, 164, 54, 0.14);
+    padding: 10px 12px;
+    background: rgba(20, 12, 8, 0.6);
+  }
+  .sc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .sc-chip {
+    font-size: 11px; padding: 3px 8px;
+    background: rgba(228, 179, 64, 0.12);
+    border: 1px solid rgba(228, 179, 64, 0.3);
+    border-radius: 10px; color: #ECE3D0;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .sc-chip button {
+    background: none; border: none; color: inherit; cursor: pointer;
+    padding: 0; font-size: 13px; opacity: 0.7;
+  }
+  .sc-chip button:hover { opacity: 1; color: #E87A3E; }
+  .sc-inputrow { display: flex; align-items: flex-end; gap: 8px; }
+  .sc-input {
+    flex: 1;
+    background: rgba(10, 6, 4, 0.9);
+    border: 1px solid rgba(217, 164, 54, 0.25);
+    border-radius: 9px;
+    color: #FAF6EC;
+    font-size: 13.5px;
+    font-family: inherit;
+    padding: 9px 12px;
+    resize: none;
+    max-height: 180px;
+    line-height: 1.5;
+  }
+  .sc-input:focus { outline: none; border-color: rgba(232, 122, 62, 0.55); }
+  .sc-btn {
+    flex: 0 0 auto;
+    width: 38px; height: 38px;
+    border-radius: 9px;
+    border: 1px solid rgba(217, 164, 54, 0.25);
+    background: rgba(10, 6, 4, 0.9);
+    color: #ECE3D0;
+    cursor: pointer;
+    font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sc-btn:hover { border-color: rgba(232, 122, 62, 0.55); color: #fff; }
+  .sc-btn.sc-send {
+    background: rgba(232, 122, 62, 0.85);
+    border-color: rgba(232, 122, 62, 0.85);
+    color: #1a0f08;
+  }
+  .sc-btn.sc-send:hover { background: #E87A3E; }
+  .sc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sc-btn.sc-mic.recording {
+    background: rgba(220, 70, 60, 0.8);
+    border-color: rgba(220, 70, 60, 0.8); color: #fff;
+  }
+  .sc-foot {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 6px;
+    font-size: 10.5px; color: rgba(236, 227, 208, 0.45);
+  }
+  .sc-hint { margin-left: auto; }
+  .sc-empty {
+    color: rgba(236, 227, 208, 0.4);
+    font-size: 13px; text-align: center; margin-top: 40px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sc-wrap">
+
+  <div class="sc-rail">
+    <div class="sc-rail-head">
+      <button class="sc-newchat" id="sc-newchat">
+        <i class="ti ti-plus"></i> New chat
+      </button>
+    </div>
+    <div class="sc-sessions" id="sc-sessions"></div>
+  </div>
+
+  <div class="sc-col">
+    <div class="sc-colhead">
+      <label style="font-size:11.5px;color:rgba(236,227,208,0.55);">Model</label>
+      <select id="sc-model"></select>
+      <span class="sc-cost30" id="sc-cost30">30d: $0.00</span>
+    </div>
+    <div class="sc-msgs" id="sc-msgs"></div>
+    <div class="sc-warn" id="sc-warn"></div>
+    <div class="sc-composer">
+      <div class="sc-chips" id="sc-chips"></div>
+      <div class="sc-inputrow">
+        <button class="sc-btn" id="sc-attach" title="Attach images, PDFs, or text files">
+          <i class="ti ti-paperclip"></i>
+        </button>
+        <button class="sc-btn sc-mic" id="sc-mic" title="Voice dictation">
+          <i class="ti ti-microphone"></i>
+        </button>
+        <textarea class="sc-input" id="sc-input" rows="1"
+                  placeholder="Message Claude…  (Cmd/Ctrl+Enter to send)"></textarea>
+        <button class="sc-btn sc-send" id="sc-send" title="Send">
+          <i class="ti ti-arrow-up"></i>
+        </button>
+      </div>
+      <input type="file" id="sc-files" multiple style="display:none"
+             accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md,.csv,.log,.json,.py,.js,.html,.css,.yaml,.yml,.xml,.tsv,.ini,.cfg,.sql">
+      <div class="sc-foot">
+        <span id="sc-session-cost">Session: $0.0000</span>
+        <span class="sc-hint">Images / PDFs / text · 5MB each, 20MB total</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<script>
+  window.SAM_CHAT_DATA = {
+    sessions: {{ sessions | tojson }},
+    currentSession: {{ current_session | tojson }},
+    messages: {{ messages | tojson }},
+    models: {{ models | tojson }},
+    defaultModel: {{ default_model | tojson }},
+    sessionCost: {{ session_cost | tojson }},
+    cost30d: {{ cost_30d | tojson }},
+    tokenEstimate: {{ token_estimate | tojson }},
+    contextWarnTokens: {{ context_warn_tokens | tojson }}
+  };
+</script>
+<script>
+{% raw %}
+(function () {
+  const D = window.SAM_CHAT_DATA;
+  const $ = (id) => document.getElementById(id);
+  const railEl = $("sc-sessions"), msgsEl = $("sc-msgs"),
+        inputEl = $("sc-input"), modelEl = $("sc-model"),
+        chipsEl = $("sc-chips"), warnEl = $("sc-warn"),
+        cost30El = $("sc-cost30"), sessionCostEl = $("sc-session-cost"),
+        filesEl = $("sc-files"), sendBtn = $("sc-send"), micBtn = $("sc-mic");
+
+  let currentSessionId = D.currentSession ? D.currentSession.id : null;
+  let attachments = [];
+  let streaming = false;
+
+  // ---- model selector ----
+  D.models.forEach((m) => {
+    const o = document.createElement("option");
+    o.value = m.id; o.textContent = m.label;
+    if (m.id === D.defaultModel) o.selected = true;
+    modelEl.appendChild(o);
+  });
+
+  // ---- helpers ----
+  function esc(s) {
+    const d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+  }
+  function fmtCost30(v) { cost30El.textContent = "30d: $" + v; }
+  function fmtSessionCost(v) { sessionCostEl.textContent = "Session: $" + v; }
+  function updateWarn(estTokens) {
+    if (estTokens && estTokens >= D.contextWarnTokens) {
+      warnEl.textContent = "This conversation is getting long (~" +
+        estTokens.toLocaleString() + " tokens). Consider starting a new " +
+        "session — Sam Chat won't auto-summarize past content.";
+      warnEl.classList.add("show");
+    } else {
+      warnEl.classList.remove("show");
+    }
+  }
+
+  // ---- message rendering ----
+  function addMessage(role, content, opts) {
+    opts = opts || {};
+    const wrap = document.createElement("div");
+    wrap.className = "sc-msg role-" + role;
+    const bubble = document.createElement("div");
+    bubble.className = "sc-bubble";
+    if (role === "assistant" && !opts.streaming) {
+      try { bubble.innerHTML = marked.parse(content || ""); }
+      catch (e) { bubble.textContent = content || ""; }
+    } else {
+      bubble.textContent = content || "";
+      if (opts.streaming) bubble.classList.add("streaming");
+    }
+    wrap.appendChild(bubble);
+    const foot = document.createElement("div");
+    foot.className = "sc-msg-foot";
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "sc-copy";
+    copyBtn.innerHTML = '<i class="ti ti-copy"></i> copy';
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(bubble.dataset.raw || bubble.textContent || "");
+      copyBtn.innerHTML = '<i class="ti ti-check"></i> copied';
+      setTimeout(() => { copyBtn.innerHTML = '<i class="ti ti-copy"></i> copy'; }, 1500);
+    };
+    foot.appendChild(copyBtn);
+    if (opts.model) {
+      const m = document.createElement("span");
+      m.textContent = opts.model;
+      foot.appendChild(m);
+    }
+    if (opts.cost) {
+      const c = document.createElement("span");
+      c.textContent = "$" + opts.cost;
+      foot.appendChild(c);
+    }
+    wrap.appendChild(foot);
+    bubble.dataset.raw = content || "";
+    msgsEl.appendChild(wrap);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+    return bubble;
+  }
+  function clearMessages() { msgsEl.innerHTML = ""; }
+  function renderMessages(list) {
+    clearMessages();
+    if (!list || !list.length) {
+      const e = document.createElement("div");
+      e.className = "sc-empty";
+      e.textContent = "New conversation — say anything. No Cenas context is " +
+        "loaded; paste what you need.";
+      msgsEl.appendChild(e);
+      return;
+    }
+    list.forEach((m) => {
+      if (m.role === "system") return;
+      addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });
+    });
+  }
+
+  // ---- session rail ----
+  function renderSessions(list) {
+    railEl.innerHTML = "";
+    (list || []).forEach((s) => {
+      const el = document.createElement("div");
+      el.className = "sc-session" + (s.id === currentSessionId ? " is-active" : "");
+      el.title = s.title;
+      const label = document.createElement("span");
+      label.textContent = s.title;
+      label.style.cssText = "overflow:hidden;text-overflow:ellipsis;";
+      el.appendChild(label);
+      const arch = document.createElement("i");
+      arch.className = "ti ti-archive sc-arch";
+      arch.title = "Archive";
+      arch.onclick = (ev) => { ev.stopPropagation(); archiveSession(s.id); };
+      el.appendChild(arch);
+      el.onclick = () => loadSession(s.id);
+      railEl.appendChild(el);
+    });
+  }
+
+  async function loadSession(id) {
+    if (streaming) return;
+    const r = await fetch("/sam/chat/sessions/" + id);
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j.ok) return;
+    currentSessionId = id;
+    renderMessages(j.messages);
+    fmtSessionCost(j.session_cost);
+    updateWarn(j.token_estimate);
+    document.querySelectorAll(".sc-session").forEach((e) => e.classList.remove("is-active"));
+    refreshSessions();
+  }
+
+  async function refreshSessions() {
+    const r = await fetch("/sam/chat/sessions");
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.ok) renderSessions(j.sessions);
+  }
+
+  async function newSession() {
+    if (streaming) return;
+    const r = await fetch("/sam/chat/sessions", { method: "POST" });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j.ok) return;
+    currentSessionId = j.session.id;
+    renderMessages([]);
+    fmtSessionCost("0.0000");
+    updateWarn(0);
+    await refreshSessions();
+  }
+
+  async function archiveSession(id) {
+    await fetch("/sam/chat/sessions/" + id + "/archive", { method: "POST" });
+    if (id === currentSessionId) {
+      currentSessionId = null;
+      renderMessages([]);
+      fmtSessionCost("0.0000");
+    }
+    await refreshSessions();
+  }
+
+  // ---- attachments ----
+  function renderChips() {
+    chipsEl.innerHTML = "";
+    attachments.forEach((f, i) => {
+      const chip = document.createElement("span");
+      chip.className = "sc-chip";
+      chip.innerHTML = '<i class="ti ti-file"></i>' + esc(f.name);
+      const x = document.createElement("button");
+      x.textContent = "×";
+      x.onclick = () => { attachments.splice(i, 1); renderChips(); };
+      chip.appendChild(x);
+      chipsEl.appendChild(chip);
+    });
+  }
+  filesEl.addEventListener("change", () => {
+    for (const f of filesEl.files) attachments.push(f);
+    filesEl.value = "";
+    renderChips();
+  });
+  $("sc-attach").onclick = () => filesEl.click();
+
+  // ---- send + SSE stream ----
+  function setStreaming(on) {
+    streaming = on;
+    sendBtn.disabled = on;
+    inputEl.disabled = on;
+  }
+
+  async function sendMessage() {
+    if (streaming) return;
+    const text = inputEl.value.trim();
+    if (!text && attachments.length === 0) return;
+
+    addMessage("user", text || "(attachments only)", {});
+    const streamBubble = addMessage("assistant", "", { streaming: true });
+    let acc = "";
+
+    const fd = new FormData();
+    fd.append("message", text);
+    fd.append("model", modelEl.value);
+    if (currentSessionId) fd.append("session_id", String(currentSessionId));
+    attachments.forEach((f) => fd.append("attachments", f));
+
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+    attachments = [];
+    renderChips();
+    setStreaming(true);
+
+    try {
+      const resp = await fetch("/sam/chat/send", { method: "POST", body: fd });
+      if (!resp.ok) {
+        let msg = "request failed (" + resp.status + ")";
+        try { const j = await resp.json(); if (j.error) msg = j.error; }
+        catch (e) {}
+        streamBubble.textContent = "⚠ " + msg;
+        setStreaming(false);
+        return;
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          if (!frame.startsWith("data:")) continue;
+          let evt;
+          try { evt = JSON.parse(frame.slice(5).trim()); }
+          catch (e) { continue; }
+          if (evt.type === "delta") {
+            acc += evt.text;
+            streamBubble.textContent = acc;
+            streamBubble.dataset.raw = acc;
+            msgsEl.scrollTop = msgsEl.scrollHeight;
+          } else if (evt.type === "done") {
+            try { streamBubble.innerHTML = marked.parse(acc); }
+            catch (e) { streamBubble.textContent = acc; }
+            streamBubble.classList.remove("streaming");
+            streamBubble.dataset.raw = acc;
+            currentSessionId = evt.session_id;
+            fmtSessionCost(evt.session_cost);
+            fmtCost30(evt.cost_30d);
+            updateWarn(evt.token_estimate);
+            refreshSessions();
+          } else if (evt.type === "error") {
+            streamBubble.textContent = acc + "\n\n⚠ " + evt.error;
+            streamBubble.classList.remove("streaming");
+          }
+        }
+      }
+    } catch (e) {
+      streamBubble.textContent = acc + "\n\n⚠ connection error: " + e;
+      streamBubble.classList.remove("streaming");
+    } finally {
+      setStreaming(false);
+      inputEl.focus();
+    }
+  }
+
+  sendBtn.onclick = sendMessage;
+  $("sc-newchat").onclick = newSession;
+
+  // ---- textarea: auto-grow + Cmd/Ctrl+Enter ----
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + "px";
+  });
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // ---- voice-to-text (Web Speech API) ----
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    micBtn.disabled = true;
+    micBtn.title = "Voice input not supported in this browser";
+  } else {
+    let recog = null, recording = false;
+    micBtn.onclick = () => {
+      if (recording) { recog && recog.stop(); return; }
+      recog = new SR();
+      recog.continuous = true;
+      recog.interimResults = false;
+      recog.lang = "en-US";
+      recog.onresult = (ev) => {
+        let t = "";
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          t += ev.results[i][0].transcript;
+        }
+        if (t) {
+          inputEl.value = (inputEl.value ? inputEl.value + " " : "") + t.trim();
+          inputEl.dispatchEvent(new Event("input"));
+        }
+      };
+      recog.onerror = () => { recording = false; micBtn.classList.remove("recording"); };
+      recog.onend = () => { recording = false; micBtn.classList.remove("recording"); };
+      recog.start();
+      recording = true;
+      micBtn.classList.add("recording");
+    };
+  }
+
+  // ---- boot ----
+  renderSessions(D.sessions);
+  renderMessages(D.messages);
+  fmtSessionCost(D.sessionCost);
+  fmtCost30(D.cost30d);
+  updateWarn(D.tokenEstimate);
+  inputEl.focus();
+})();
+{% endraw %}
+</script>
+{% endblock %}

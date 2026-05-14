@@ -29,7 +29,7 @@ Check handler. 1A's routes only ever emit the "created" and
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, abort, g, jsonify, request
 
@@ -61,14 +61,27 @@ def _require_user() -> User:
 
 
 def _parse_deadline(raw: str | None) -> datetime:
-    """Parse the deadline_at form value to a datetime, or abort 400.
-    Must parse as ISO 8601 and be present-or-future (spec §6.1)."""
+    """Parse the deadline_at form value to a naive-UTC datetime, or
+    abort 400. Must parse as ISO 8601 and be present-or-future
+    (spec §6.1).
+
+    A timezone-AWARE ISO string (e.g. "...T17:00:00-05:00") is valid
+    input — fromisoformat returns an aware datetime. We convert it to
+    UTC and drop the tzinfo so the comparison against naive
+    datetime.utcnow() below is naive-vs-naive (an aware < naive
+    comparison raises TypeError — samai's 1A review obs C). The rest
+    of the codebase stores naive-UTC, so normalizing here keeps Task
+    deadlines consistent with everything else.
+    """
     if not raw or not raw.strip():
         abort(400, description="deadline_at is required")
     try:
         dt = datetime.fromisoformat(raw.strip())
     except ValueError:
         abort(400, description="deadline_at must be ISO 8601")
+    if dt.tzinfo is not None:
+        # aware → convert to UTC, then strip tzinfo → naive-UTC.
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     if dt < datetime.utcnow():
         abort(400, description="deadline_at must be present or future")
     return dt

@@ -402,6 +402,40 @@ def test_create_task_unparseable_deadline_rejected(app_with_users):
     assert r.status_code == 400
 
 
+def test_create_task_accepts_timezone_aware_deadline(app_with_users):
+    """samai 1A review obs C: a timezone-AWARE ISO deadline must not
+    500 (aware < naive-utcnow() raises TypeError). _parse_deadline
+    normalizes aware → naive-UTC; a future aware deadline is accepted
+    cleanly."""
+    app, client_for, db = app_with_users
+    # 3 days out, expressed in US Central (-05:00) — clearly future.
+    future_aware = (
+        datetime.utcnow() + timedelta(days=3)
+    ).replace(microsecond=0).isoformat() + "-05:00"
+    r = client_for(2).post("/partner/tasks/create", data={
+        "owner_user_id": "3", "title": "tz-aware deadline",
+        "store_scope": "tomball", "category": "general",
+        "deadline_at": future_aware,
+    })
+    assert r.status_code == 200, r.data
+    task = db.get(Task, r.get_json()["task"]["id"])
+    # Stored naive (tzinfo stripped after UTC conversion).
+    assert task.deadline_at.tzinfo is None
+
+
+def test_create_task_past_timezone_aware_deadline_rejected(app_with_users):
+    """A PAST timezone-aware deadline → clean 400, not a 500."""
+    app, client_for, db = app_with_users
+    past_aware = (
+        datetime.utcnow() - timedelta(days=2)
+    ).replace(microsecond=0).isoformat() + "+00:00"
+    r = client_for(2).post("/partner/tasks/create", data={
+        "owner_user_id": "3", "title": "x", "store_scope": "tomball",
+        "category": "general", "deadline_at": past_aware,
+    })
+    assert r.status_code == 400
+
+
 def test_create_task_missing_title_rejected(app_with_users):
     app, client_for, db = app_with_users
     r = client_for(2).post("/partner/tasks/create", data={

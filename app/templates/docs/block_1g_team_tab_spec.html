@@ -1,0 +1,209 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 1G — Team Tab (Task-Based Reports)</h1>
+<p class="doc-meta">
+  Phase 2 / Block 1 / sub-block 1G. samai spec, 2026-05-14.<br>
+  Implementation: ck. Review: samai — <strong>the highest-stakes permission surface in Phase 2 (directive's words). Extra-careful gating review.</strong><br>
+  Source: Phase 2 Directive §BLOCK 1 / 1G.
+</p>
+
+{# Body wrapped in raw — the 1G spec quotes literal {% if has_permission(...) %}
+   Jinja in its gating examples; without the wrap Jinja parses them as live
+   control flow (TemplateSyntaxError). Same 4ace793 / 1B lesson. #}
+{% raw %}
+<h2>1. Scope — what 1G is, and what it is NOT</h2>
+<p>
+  1G is the <strong>task-based</strong> team-reports tab at
+  <code>/partner/team-reports/</code>: per-employee task miss rate, per-manager
+  escalation response time, most-missed task types, and a partner/corporate-only
+  per-store comparison. It is read-only — no mutations — so the entire risk
+  surface is <em>who can see what</em>.
+</p>
+<p><strong>1G ships:</strong></p>
+<ul>
+  <li><code>app/web/team_reports.py</code> — blueprint <code>team_reports_bp</code>, mounted at <code>/partner/team-reports/</code></li>
+  <li>Two new permission tags — <code>team_reports.view</code> and <code>team_reports.view_all_stores</code> — added to <code>ROLE_PERMISSIONS</code> (§8)</li>
+  <li>The four v1 reports (§5), computed from <code>Task</code> + <code>TaskAuditLog</code></li>
+  <li>The sidebar link, gated (§7)</li>
+  <li>One or two templates under <code>app/templates/team_reports/</code></li>
+  <li>Tests: the role-and-scope gating matrix (§9 — the single most important test in this sub-block)</li>
+</ul>
+<p><strong>1G does NOT ship:</strong> the manager-tools reports (attendance miss rates, counseling frequency, training pipeline, maintenance spend) — those are <strong>2H</strong>, a separate sub-block that adds <em>to</em> this tab later. 1G is the task-based reports only. 1G also does not ship any data production — it reads what 1A's tables already hold.</p>
+<p>
+  <strong>Dependency:</strong> HARD dependency on 1A. Every report reads
+  <code>Task</code> + <code>TaskAuditLog</code>. 1G cannot start until 1A is
+  landed + samai-PASSed. (Per the directive's dependency graph, that is the
+  expected sequence — 1G is not on the parallelizable path the way 1B is.)
+</p>
+
+<h2>2. The permission model — the core of this sub-block</h2>
+<p>Gating happens at <strong>four</strong> layers. All four must hold; each is a distinct review item.</p>
+<table>
+  <tr><th>Layer</th><th>Rule</th><th>Mechanism</th></tr>
+  <tr>
+    <td>1. Route access</td>
+    <td>Only partner / corporate / gm reach <code>/partner/team-reports/</code> at all. Everyone else → 403.</td>
+    <td><code>@requires_permission("team_reports.view")</code> on every route in the blueprint.</td>
+  </tr>
+  <tr>
+    <td>2. Sidebar link</td>
+    <td>The nav link renders only for roles that hold <code>team_reports.view</code>. manager / km / assistant_km / foh_manager / expo / driver see no link.</td>
+    <td><code>{% if has_permission('team_reports.view') %}</code> wrapping the sidebar entry.</td>
+  </tr>
+  <tr>
+    <td>3. Store scope (data-level)</td>
+    <td>A GM sees only their own store's team. partner + corporate see all stores. A GM <strong>cannot widen scope by any request parameter</strong> — see §4.</td>
+    <td>Every report query filters by a server-derived store scope (§4). Defense-in-depth: the decorator grants the tab, the query filter enforces the scope — the same layered shape Sam praised in the 251621f unassign-courier review.</td>
+  </tr>
+  <tr>
+    <td>4. Report-level</td>
+    <td>Report #4 (per-store comparison) is partner / corporate only. A GM holding <code>team_reports.view</code> still does <strong>not</strong> see report #4.</td>
+    <td>Report #4's section + its underlying query are gated by the second tag <code>team_reports.view_all_stores</code> (partner + corporate only).</td>
+  </tr>
+</table>
+<p>
+  <strong>Why two tags, not one + a role check:</strong> <code>team_reports.view</code>
+  = the tab + reports 1–3 (store-scoped for GM). <code>team_reports.view_all_stores</code>
+  = report #4 + the unfiltered cross-store view. This mirrors the existing
+  <code>labor.view_store_summary</code> vs <code>labor.view_all_stores</code>
+  split already in <code>ROLE_PERMISSIONS</code> — established precedent, and
+  it makes the distinction matrix-testable (the <code>test_permission_matrix.py</code>
+  from 2255c1d auto-extends to both new tags). Avoid an inline
+  <code>if user.role in (...)</code> — that is exactly the kind of
+  un-matrix-tested gate the permission spec was built to eliminate.
+</p>
+
+<h2>3. The route surface</h2>
+<p>Blueprint <code>app/web/team_reports.py</code>, mounted at <code>/partner/team-reports/</code>, registered in <code>app/__init__.py</code>.</p>
+<ul>
+  <li><code>GET /partner/team-reports/</code> — the tab. Renders reports 1–3 always (store-scoped per §4); renders report #4 only if the viewer holds <code>team_reports.view_all_stores</code>.</li>
+  <li>Every route in the blueprint carries <code>@requires_permission("team_reports.view")</code> — belt-and-suspenders alongside the blueprint-level guard. No route in this blueprint is reachable without the tag.</li>
+  <li>v1 is a single page. If ck splits reports into sub-routes for performance, every sub-route carries the same decorator + the §4 scope derivation — no sub-route may be a gap.</li>
+</ul>
+
+<h2>4. Store-scoping — the defense-in-depth rule</h2>
+<p>
+  This is the rule most likely to be mis-implemented, so it is stated
+  explicitly:
+</p>
+<ul>
+  <li>The store scope for every query is <strong>derived server-side from <code>current_user</code></strong>, never read from a request parameter:
+    <ul>
+      <li>gm → scope = <code>current_user.store_scope</code> (their own store, always — no override path).</li>
+      <li>partner / corporate → scope = all stores (unfiltered), <em>or</em> an optional store filter <em>they</em> choose from a UI control; that control is only rendered for holders of <code>team_reports.view_all_stores</code>.</li>
+    </ul>
+  </li>
+  <li>A GM cannot pass <code>?store=copperfield</code> (or any equivalent) to see another store. If a store parameter is present in the request and the viewer is a GM, it is <strong>ignored</strong> — the scope is still their own store. The route does not 400 on it, it just doesn't honor it (a 400 would leak that the parameter is meaningful).</li>
+  <li>This is the same shape as ck's 251621f cross-check: the decorator gates the tag, the server-derived scope gates the data — a tampered request cannot get past the second layer.</li>
+</ul>
+
+<h2>5. The four v1 reports</h2>
+<p>All four read from <code>Task</code> + <code>TaskAuditLog</code> only. Each is computed over a window (default 30 days, with a 90-day toggle for reports 1 + 3).</p>
+<h3>5.1 Report 1 — Per-employee task miss rate</h3>
+<p>For each employee who owns tasks in scope + window: <code>miss_rate = missed_tasks / total_tasks_owned</code>. "Missed" is defined precisely in §6 — get that definition right, it drives personnel decisions. Show: employee, total tasks, missed count, miss rate %, for both the 30-day and 90-day windows.</p>
+<h3>5.2 Report 2 — Per-manager escalation response time</h3>
+<p>For each manager who has had tasks escalated <em>to</em> them (<code>Task.escalated_to_user_id == manager</code>) in scope + window: the latency from <code>escalated_at</code> to the task's <code>completed_at</code>. Report median + mean latency, and count of still-open escalations (escalated, <code>completed_at IS NULL</code>). Median is the headline number — mean is skewed by a single stale task.</p>
+<h3>5.3 Report 3 — Most-frequently-missed task types</h3>
+<p>Group missed tasks (per §6) by <code>Task.category</code>, count, in scope + window. Which categories get dropped most. 30/90-day toggle.</p>
+<h3>5.4 Report 4 — Per-store comparison (partner / corporate only)</h3>
+<p>Reports 1–3's headline numbers, computed per store, shown side by side (Tomball vs Copperfield). Gated by <code>team_reports.view_all_stores</code> — never rendered, and its queries never run, for a GM.</p>
+
+<h2>6. The "miss" definition — get this exactly right</h2>
+<p>
+  Because miss rate "drives personnel decisions," the definition must be
+  precise and defensible — an employee should never be characterized as
+  having missed a task they actually completed on time.
+</p>
+<p>A task owned by an employee, with <code>deadline_at</code> inside the window, counts as <strong>missed</strong> if either:</p>
+<ul>
+  <li>it was <strong>escalated</strong> — <code>escalated_at IS NOT NULL</code> (it passed its deadline without completion and 1E's cron escalated it), OR</li>
+  <li>it was <strong>completed late</strong> — <code>completed_at IS NOT NULL AND completed_at &gt; deadline_at</code>.</li>
+</ul>
+<p>It counts as <strong>not missed</strong> (a clean task) if:</p>
+<ul>
+  <li><code>completed_at IS NOT NULL AND completed_at &lt;= deadline_at</code> — completed on time.</li>
+</ul>
+<p><strong>Edge cases the spec rules on explicitly:</strong></p>
+<ul>
+  <li>A task still open with <code>deadline_at</code> in the future → <strong>not counted at all</strong> (neither missed nor clean — it's not yet resolvable). Only tasks whose deadline falls in the window <em>and</em> have passed their deadline OR been completed are in the denominator.</li>
+  <li>A task still open, deadline passed, <em>not yet escalated</em> (inside the &lt;5min escalation-cron lag) → counts as <strong>missed</strong> (deadline passed, incomplete — the cron lag shouldn't hide a miss).</li>
+  <li>A reassigned task → the miss is attributed to <strong>the owner at the time the deadline passed</strong>, not whoever owns it now. <code>TaskAuditLog</code>'s <code>reassigned</code> rows carry the ownership history; the report must reconstruct point-in-time ownership from them rather than trusting the current <code>owner_user_id</code>. <strong>This is the subtlest part of the report — flag it in the commit + the review.</strong></li>
+</ul>
+
+<h2>7. Sidebar gating</h2>
+<p>
+  The nav link to <code>/partner/team-reports/</code> is wrapped in
+  <code>{% if has_permission('team_reports.view') %}</code> — so manager / km /
+  assistant_km / foh_manager / expo / driver never see it. Per samai rule 4
+  (doc-registration-checks-both-route-and-sidebar) the review verifies
+  <em>both</em> the route decorator <em>and</em> the sidebar gate are present
+  — a route gated but a link still showing, or a link hidden but the route
+  ungated, are both failures.
+</p>
+
+<h2>8. Permission tag registration</h2>
+<p>Add to <code>app/services/permissions.py</code> <code>ROLE_PERMISSIONS</code>:</p>
+<ul>
+  <li><code>team_reports.view</code> → <code>corporate</code> set + <code>gm</code> set (partner gets it via the <code>"*"</code> wildcard). Colocated comment explaining the partner/corporate/GM audience + that GM access is store-scoped at the query layer.</li>
+  <li><code>team_reports.view_all_stores</code> → <code>corporate</code> set only (partner via wildcard). <strong>Not</strong> in the <code>gm</code> set — this is the line that keeps report #4 + the cross-store view partner/corporate-only.</li>
+</ul>
+<p>
+  Both tags are operational reporting tags, not §2.2 global-config tags — GM
+  legitimately holds <code>team_reports.view</code> because their access is
+  store-scoped (gm operating within their store scope, exactly per §2.2). The
+  <code>test_permission_matrix.py</code> suite from 2255c1d auto-extends to
+  both new tags — a row per role confirms the gate; the spec-drift
+  informational test will list them if they end up partner-only-via-wildcard,
+  which they will not be (corporate holds them explicitly).
+</p>
+
+<h2>9. Test requirements</h2>
+<p>1G's test file: <code>tests/test_team_reports.py</code>. The gating matrix is THE test of this sub-block.</p>
+<ul>
+  <li><strong>Role-and-scope gating matrix:</strong> parameterized over <em>every role</em> × the team-tab route. Assert: partner/corporate/gm → 200; manager/km/assistant_km/foh_manager/expo/driver → 403. Self-describing ids.</li>
+  <li><strong>GM store-scoping:</strong> a Tomball GM's report data contains only Tomball employees; a Copperfield GM's only Copperfield. A Tomball GM passing <code>?store=copperfield</code> still gets <em>Tomball</em> data — the param is ignored, not honored, no 400.</li>
+  <li><strong>Report #4 gating:</strong> partner/corporate see the per-store comparison section; a GM does not — and the GM's request never runs the cross-store query (assert via query observation or the section's absence, not just CSS hiding).</li>
+  <li><strong>Sidebar:</strong> the link renders for partner/corporate/gm, is absent for the other six roles.</li>
+  <li><strong>The "miss" definition (§6):</strong> a table-driven test over every §6 case — on-time completion = clean; late completion = missed; escalated = missed; open-future-deadline = not counted; open-deadline-passed-not-yet-escalated = missed.</li>
+  <li><strong>Point-in-time ownership:</strong> a task created for A, reassigned to B before its deadline, then missed → the miss is attributed to <strong>B</strong> (owner when the deadline passed), not A; and vice-versa if reassigned after. This is the §6 subtle case — it gets its own explicit test.</li>
+</ul>
+
+<h2>10. samai review checklist (run per commit — extra-careful, highest-stakes permission surface in Phase 2)</h2>
+<ol>
+  <li>Scope: only the 1G surfaces — no 2H manager-tools reports, no data production, no mutations anywhere.</li>
+  <li><strong>Layer 1:</strong> every route in <code>team_reports_bp</code> carries <code>@requires_permission("team_reports.view")</code> — no route is a gap.</li>
+  <li><strong>Layer 2:</strong> the sidebar link is wrapped in <code>has_permission('team_reports.view')</code>; absent for the six lower roles (rule 4 — both route and sidebar).</li>
+  <li><strong>Layer 3:</strong> store scope is server-derived from <code>current_user</code>, never from a request parameter; a GM cannot widen scope by any param; a stray <code>store=</code> param from a GM is ignored, not honored, not 400'd.</li>
+  <li><strong>Layer 4:</strong> report #4 + the unfiltered cross-store view are gated by <code>team_reports.view_all_stores</code>; a GM's request never even runs the cross-store query.</li>
+  <li>Both tags added to <code>ROLE_PERMISSIONS</code> correctly: <code>team_reports.view</code> → corporate + gm; <code>team_reports.view_all_stores</code> → corporate only; both reach partner via wildcard; colocated comment present.</li>
+  <li>The "miss" definition matches §6 exactly, including all four edge cases.</li>
+  <li>Point-in-time ownership reconstructed from <code>TaskAuditLog</code> <code>reassigned</code> rows — a reassigned task's miss is attributed to the owner-at-deadline, not the current owner.</li>
+  <li>Median (not just mean) reported for response time.</li>
+  <li>The gating matrix test + the miss-definition test + the point-in-time-ownership test are all present and green.</li>
+  <li>Deploy-verify (rule 3): the tab 200s for partner against prod, 403s for a lower role; verified against prod, not local (rule 2).</li>
+  <li>Full suite no regression; the permission matrix picks up both new tags green.</li>
+</ol>
+
+<h2>11. Open questions for Sam</h2>
+<ol>
+  <li><strong>Q1:</strong> the window toggle — spec assumes 30-day default with a 90-day toggle on reports 1 + 3 (the directive says "last 30 / 90 days" for report 1). Report 2 (response time) and report 4 (comparison) — same 30/90 toggle, or fixed 30? Spec assumes the toggle applies tab-wide for consistency. Confirm.</li>
+  <li><strong>Q2:</strong> "employee" in report 1 — is it every <code>Task.owner</code> regardless of role (including managers who own tasks), or only hourly-tier staff? Spec assumes every task owner appears (a manager who misses their own tasks is also signal). Confirm — this interacts with whether managers see their own miss rate.</li>
+  <li><strong>Q3:</strong> does a GM see <em>their own</em> miss rate / response time in the reports, or are they excluded from the lists they can view? Spec assumes a GM sees everyone in their store including themselves (transparency), but flag in case Sam wants managers excluded from the reports they can read.</li>
+  <li><strong>Q4:</strong> response-time report — only count escalations that were eventually completed, or also surface still-open escalations as their own "stale" line? Spec assumes both: median/mean over completed ones + a separate still-open count. Confirm.</li>
+</ol>
+
+<h2>12. Distinct-commit boundary recap</h2>
+<p>
+  1G is one commit: <code>team_reports_bp</code> + the two permission tags +
+  the four reports + the sidebar gate + templates + tests. It does not ship
+  the 2H manager-tools reports (separate sub-block), any mutation, or any
+  data production. Hard dependency on 1A landed + PASSed. It is the
+  highest-stakes permission surface in Phase 2 — the §10 checklist is run
+  with that weight.
+</p>
+{% endraw %}
+
+</div>
+{% endblock %}

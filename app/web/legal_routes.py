@@ -42,6 +42,13 @@ from app.models import (
     LegalCompanyStructure, LegalInsurancePolicy,
     LegalAccessLog, User,
 )
+# Phase 0 Block 4 follow-up (ck 2026-05-13): migrate route gates from the
+# legacy partner-only require_level pattern onto samai's tag-based
+# decorator. _enforce_partner() stays as belt-and-suspenders during the
+# follow-up window — same shape as the developer_chat.py migration in
+# 44cc72b. Once the decorator + denial log show no false positives, the
+# in-handler partner check can come out in a Phase 2 cleanup pass.
+from app.services.permissions import requires_permission
 
 legal = Blueprint("legal", __name__)
 
@@ -196,6 +203,7 @@ def _format_key_dates(d: dict | None) -> str:
 # 1. Overview
 # -----------------------------------------------------------
 @legal.route("/partner/legal", methods=["GET"])
+@requires_permission("legal.view")
 def legal_overview():
     gate = _enforce_partner()
     if gate is not None:
@@ -252,6 +260,7 @@ def legal_overview():
 # 2. Matters list
 # -----------------------------------------------------------
 @legal.route("/partner/legal/matters", methods=["GET"])
+@requires_permission("legal.view")
 def legal_matters():
     gate = _enforce_partner()
     if gate is not None:
@@ -287,6 +296,7 @@ def legal_matters():
 # 3. New matter
 # -----------------------------------------------------------
 @legal.route("/partner/legal/matters/new", methods=["GET"])
+@requires_permission("legal.add_matter")
 def legal_matter_new():
     gate = _enforce_partner()
     if gate is not None:
@@ -312,6 +322,7 @@ def legal_matter_new():
 
 
 @legal.route("/partner/legal/matters", methods=["POST"])
+@requires_permission("legal.add_matter")
 def legal_matter_create():
     gate = _enforce_partner()
     if gate is not None:
@@ -370,6 +381,7 @@ def legal_matter_create():
 # 4. Single matter detail + edit
 # -----------------------------------------------------------
 @legal.route("/partner/legal/matters/<int:matter_id>", methods=["GET"])
+@requires_permission("legal.view")
 def legal_matter_detail(matter_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -416,6 +428,7 @@ def legal_matter_detail(matter_id: int):
 
 
 @legal.route("/partner/legal/matters/<int:matter_id>", methods=["POST"])
+@requires_permission("legal.edit")
 def legal_matter_update(matter_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -464,6 +477,7 @@ def legal_matter_update(matter_id: int):
 
 
 @legal.route("/partner/legal/matters/<int:matter_id>/status", methods=["POST"])
+@requires_permission("legal.edit")
 def legal_matter_status(matter_id: int):
     """Quick status change from the matter detail page or list. Single
     column rather than re-rendering the full form."""
@@ -501,6 +515,7 @@ def legal_matter_status(matter_id: int):
 # 5. Audit log
 # -----------------------------------------------------------
 @legal.route("/partner/legal/audit", methods=["GET"])
+@requires_permission("legal.view")
 def legal_audit():
     gate = _enforce_partner()
     if gate is not None:
@@ -532,6 +547,7 @@ def legal_audit():
 # Notes timeline (append-only, per-Matter)
 # ============================================================
 @legal.route("/partner/legal/matters/<int:matter_id>/notes", methods=["POST"])
+@requires_permission("legal.edit")
 def legal_matter_add_note(matter_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -567,6 +583,7 @@ def legal_matter_add_note(matter_id: int):
 # Matter-scoped document upload (file attached to a specific Matter)
 # ============================================================
 @legal.route("/partner/legal/matters/<int:matter_id>/upload", methods=["POST"])
+@requires_permission("legal.upload_document")
 def legal_matter_upload(matter_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -638,6 +655,7 @@ def _store_and_log_document(db, f, matter_id, redirect_target,
 # Documents library (matter_id IS NULL OR ALL)
 # ============================================================
 @legal.route("/partner/legal/documents", methods=["GET"])
+@requires_permission("legal.view")
 def legal_documents():
     gate = _enforce_partner()
     if gate is not None:
@@ -675,6 +693,7 @@ def legal_documents():
 
 
 @legal.route("/partner/legal/documents/upload", methods=["POST"])
+@requires_permission("legal.upload_document")
 def legal_documents_upload():
     gate = _enforce_partner()
     if gate is not None:
@@ -699,6 +718,7 @@ def legal_documents_upload():
 
 
 @legal.route("/partner/legal/documents/<int:doc_id>", methods=["GET"])
+@requires_permission("legal.view")
 def legal_document_download(doc_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -730,6 +750,7 @@ def legal_document_download(doc_id: int):
 # Company structure (single-row record)
 # ============================================================
 @legal.route("/partner/legal/structure", methods=["GET"])
+@requires_permission("legal.view")
 def legal_structure():
     gate = _enforce_partner()
     if gate is not None:
@@ -754,6 +775,7 @@ def legal_structure():
 
 
 @legal.route("/partner/legal/structure", methods=["POST"])
+@requires_permission("legal.edit")
 def legal_structure_save():
     gate = _enforce_partner()
     if gate is not None:
@@ -824,6 +846,7 @@ _INSURANCE_TYPE_KEYS = {k for k, _ in _INSURANCE_TYPES}
 
 
 @legal.route("/partner/legal/insurance", methods=["GET"])
+@requires_permission("legal.view_insurance")
 def legal_insurance():
     gate = _enforce_partner()
     if gate is not None:
@@ -852,6 +875,7 @@ def legal_insurance():
 
 
 @legal.route("/partner/legal/insurance/new", methods=["GET"])
+@requires_permission("legal.edit")
 def legal_insurance_new():
     gate = _enforce_partner()
     if gate is not None:
@@ -873,6 +897,7 @@ def legal_insurance_new():
 
 
 @legal.route("/partner/legal/insurance", methods=["POST"])
+@requires_permission("legal.edit")
 def legal_insurance_create():
     gate = _enforce_partner()
     if gate is not None:
@@ -913,6 +938,7 @@ def legal_insurance_create():
 
 
 @legal.route("/partner/legal/insurance/<int:policy_id>", methods=["GET"])
+@requires_permission("legal.view_insurance")
 def legal_insurance_edit(policy_id: int):
     gate = _enforce_partner()
     if gate is not None:
@@ -938,6 +964,7 @@ def legal_insurance_edit(policy_id: int):
 
 
 @legal.route("/partner/legal/insurance/<int:policy_id>", methods=["POST"])
+@requires_permission("legal.edit")
 def legal_insurance_update(policy_id: int):
     gate = _enforce_partner()
     if gate is not None:

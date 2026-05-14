@@ -66,7 +66,7 @@
         </td>
         <td>
           {% if r.mode == 'ENFORCING' %}
-            <span style="font-size:11px; padding:2px 8px; border-radius:4px; background: rgba(232,122,62,0.18); border: 1px solid rgba(232,122,62,0.5); color: #f4b48a;">ENFORCING</span>
+            <span style="font-size:11px; padding:2px 8px; border-radius:4px; background: color-mix(in srgb, var(--ck-status-warn) 18%, transparent); border: 1px solid var(--ck-status-warn); color: var(--ck-status-warn);">ENFORCING</span>
           {% else %}
             <span style="font-size:11px; padding:2px 8px; border-radius:4px; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); color: var(--text-3);">DARK-LAUNCH</span>
           {% endif %}

@@ -42,6 +42,12 @@ from sqlalchemy import desc, func
 
 from app.db import SessionLocal
 from app.models import Signal, SignalAck, RuleOverride, User
+# Phase 0 Block 4 follow-up (ck 2026-05-13): tag-based gates for the
+# anomaly admin pages + a coarse entry-tag for the ack endpoint. The
+# per-signal audience-eligibility check inside acknowledge_signal stays
+# — that's audience-correctness, distinct from the role-can-ack-at-all
+# entry gate the decorator provides.
+from app.services.permissions import requires_permission
 
 anomaly = Blueprint("anomaly", __name__)
 
@@ -123,6 +129,7 @@ def anomaly_signals_for(page_slug: str, limit: int = 5) -> list[Signal]:
 
 
 @anomaly.route("/partner/anomalies/<int:signal_id>/ack", methods=["POST"])
+@requires_permission("kds.view_alerts")
 def acknowledge_signal(signal_id: int):
     """Acknowledge a Signal. Writes one SignalAck row for audit, stamps
     Signal.acknowledged_by + Signal.acknowledged_at. Idempotent — if the
@@ -217,6 +224,7 @@ def _enforce_partner():
 
 
 @anomaly.route("/partner/anomalies/rules", methods=["GET"])
+@requires_permission("anomaly.admin")
 def rules_admin():
     """List every registered rule with stats + the active override.
 
@@ -287,6 +295,7 @@ def rules_admin():
 
 
 @anomaly.route("/partner/anomalies/rules/<rule_name>", methods=["POST"])
+@requires_permission("anomaly.admin")
 def rules_admin_save(rule_name: str):
     """Save a global override (store_id NULL) for one rule. Inserts a
     new RuleOverride row if none exists, otherwise updates. Engine

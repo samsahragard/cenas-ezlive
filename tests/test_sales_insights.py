@@ -102,21 +102,19 @@ def test_end_of_day_ct_is_naive_utc():
 
 def test_compute_valid_until_date_hint_is_end_of_that_day():
     now = datetime(2026, 5, 14, 10, 0, 0)
-    assert si._compute_valid_until("events", now, hint="2026-05-20") == \
+    assert si._compute_valid_until(now, hint="2026-05-20") == \
         datetime(2026, 5, 21, 4, 59, 59)
 
 
 def test_compute_valid_until_datetime_hint_used_directly():
     now = datetime(2026, 5, 14, 10, 0, 0)
-    assert si._compute_valid_until("traffic", now,
-                                   hint="2026-05-16T18:30:00") == \
+    assert si._compute_valid_until(now, hint="2026-05-16T18:30:00") == \
         datetime(2026, 5, 16, 18, 30, 0)
 
 
 def test_compute_valid_until_tzaware_hint_converted_to_naive_utc():
     now = datetime(2026, 5, 14, 10, 0, 0)
-    vu = si._compute_valid_until("weather", now,
-                                 hint="2026-05-16T18:30:00-05:00")
+    vu = si._compute_valid_until(now, hint="2026-05-16T18:30:00-05:00")
     assert vu == datetime(2026, 5, 16, 23, 30, 0)   # -05:00 -> UTC
     assert vu.tzinfo is None
 
@@ -124,7 +122,7 @@ def test_compute_valid_until_tzaware_hint_converted_to_naive_utc():
 @pytest.mark.parametrize("hint", [None, "", "garbage", "not-a-date", 12345])
 def test_compute_valid_until_no_usable_hint_falls_to_end_of_day(hint):
     now = datetime(2026, 5, 14, 10, 0, 0)
-    vu = si._compute_valid_until("ai_synthesized", now, hint=hint)
+    vu = si._compute_valid_until(now, hint=hint)
     assert vu == datetime(2026, 5, 15, 4, 59, 59)    # end of now's day
     assert vu is not None                            # never NULL
 

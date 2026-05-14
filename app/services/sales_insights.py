@@ -633,12 +633,15 @@ def _coerce_valid_until(hint, now: datetime) -> datetime | None:
     return dt
 
 
-def _compute_valid_until(category: str, now: datetime,
-                         hint=None) -> datetime:
-    """spec §6 — set valid_until_at. A usable hint wins (this is how a
-    multi-day event or road closure carries its real end). Absent a
-    hint, every current category defaults to the end-of-day CT floor.
-    Never returns None — valid_until_at is NOT NULL."""
+def _compute_valid_until(now: datetime, hint=None) -> datetime:
+    """spec §6 — set valid_until_at. The §6 per-category rules all
+    reduce to the same shape: a usable hint wins (the hint is HOW each
+    category carries its real end — a weather signal's hint is
+    end-of-forecast-day, an event's is the event date, a multi-day
+    closure's is its true end); absent a usable hint, the end-of-day CT
+    floor applies uniformly. So there is no per-category branching and
+    no `category` parameter (samai 1F review obs B). Never returns
+    None — valid_until_at is NOT NULL."""
     coerced = _coerce_valid_until(hint, now)
     if coerced is not None:
         return coerced
@@ -688,8 +691,7 @@ def _write_insights(db, insight_dicts: list[dict],
             continue
         row = SalesInsight(
             created_at=now,
-            valid_until_at=_compute_valid_until(
-                category, now, d.get("valid_until")),
+            valid_until_at=_compute_valid_until(now, d.get("valid_until")),
             category=category,
             store_scope=store_scope,
             severity=severity,

@@ -1,0 +1,28 @@
+{
+  "scenario": "quiet_overnight",
+  "description": "No signals, no wins. Brief should still ship with greeting+headline+closing and an empty sections list. Headline should call out the quiet state.",
+  "input": {
+    "audience": {
+      "role": "partner",
+      "user_id": 1,
+      "user_name": "Sam Sahragard",
+      "store_ids": ["store_1", "store_2"],
+      "store_labels": {"store_1": "Copperfield", "store_2": "Tomball"},
+      "permission_tags": ["*"],
+      "timezone": "America/Chicago",
+      "brief_date": "2026-05-13"
+    },
+    "signals": [],
+    "wins": []
+  },
+  "expected": {
+    "section_kinds": [],
+    "headline_contains_any_of": ["Quiet", "0"],
+    "greeting_prefix": "Good morning, Sam.",
+    "closing": "Have a strong day.",
+    "fallback_used": true,
+    "max_words_per_one_line": 35,
+    "min_total_words": 1,
+    "max_total_words": 10
+  }
+}

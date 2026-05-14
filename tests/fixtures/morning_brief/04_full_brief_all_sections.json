@@ -1,0 +1,60 @@
+{
+  "scenario": "full_brief_all_sections",
+  "description": "Mixed inputs producing alerts + warns + wins + info_aggregate sections all in the brief. Validates ordering across the full pipeline.",
+  "input": {
+    "audience": {
+      "role": "partner",
+      "user_id": 1,
+      "user_name": "Sam Sahragard",
+      "store_ids": ["store_1", "store_2", "store_3", "store_4"],
+      "store_labels": {"store_1": "Copperfield", "store_2": "Tomball",
+                        "store_3": "Westheimer", "store_4": "Spring Stuebner"},
+      "permission_tags": ["*"],
+      "timezone": "America/Chicago",
+      "brief_date": "2026-05-13"
+    },
+    "signals": [
+      {"rule_key": "orders.no_driver_30min_before", "severity": "alert",
+       "subject_label": "Order ORD-1", "store_id": "store_2", "store_label": "Tomball",
+       "trigger_at": "2026-05-12T18:00:00", "payload": {}, "action_text": "Assign driver for ORD-1.",
+       "status": "open", "acked_by": null, "age_hours": 12.5},
+      {"rule_key": "orders.late_delivery", "severity": "warn",
+       "subject_label": "Order ORD-2", "store_id": "store_1", "store_label": "Copperfield",
+       "trigger_at": "2026-05-12T19:00:00", "payload": {}, "action_text": "Confirm ORD-2 delivery.",
+       "status": "open", "acked_by": null, "age_hours": 11.5},
+      {"rule_key": "google.review.low", "severity": "info",
+       "subject_label": "Review #abc", "store_id": "store_3", "store_label": "Westheimer",
+       "trigger_at": "2026-05-12T10:00:00", "payload": {}, "action_text": "Read 3-star review.",
+       "status": "open", "acked_by": null, "age_hours": 20.0},
+      {"rule_key": "google.review.low", "severity": "info",
+       "subject_label": "Review #def", "store_id": "store_4", "store_label": "Spring Stuebner",
+       "trigger_at": "2026-05-12T11:00:00", "payload": {}, "action_text": "Read 2-star review.",
+       "status": "open", "acked_by": null, "age_hours": 19.0},
+      {"rule_key": "vendor.invoice_overdue", "severity": "info",
+       "subject_label": "Vendor: Maine Salt", "store_id": null, "store_label": null,
+       "trigger_at": "2026-05-12T08:00:00", "payload": {}, "action_text": "Pay Maine Salt invoice.",
+       "status": "open", "acked_by": null, "age_hours": 22.0}
+    ],
+    "wins": [
+      {"category": "driver", "win_key": "driver.day_perfect_ontime",
+       "subject_label": "Alejandro Martinez", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T20:00:00", "payload": {"deliveries": 4, "on_time_pct": 100},
+       "one_line_seed": "Alejandro Martinez hit 100% on-time across 4 stops."},
+      {"category": "driver", "win_key": "driver.first_paid_delivery",
+       "subject_label": "Sarah Chen", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T18:30:00", "payload": {"lifetime_count": 1},
+       "one_line_seed": "Sarah Chen completed their first paid delivery."}
+    ]
+  },
+  "expected": {
+    "section_kinds": ["alerts", "warns", "wins", "info_aggregate"],
+    "section_counts": {"alerts": 1, "warns": 1, "wins": 2, "info_aggregate": 1},
+    "headline_contains_any_of": ["alert", "warn"],
+    "greeting_prefix": "Good morning, Sam.",
+    "closing": "Have a strong day.",
+    "fallback_used": true,
+    "max_words_per_one_line": 35,
+    "min_total_words": 15,
+    "max_total_words": 380
+  }
+}

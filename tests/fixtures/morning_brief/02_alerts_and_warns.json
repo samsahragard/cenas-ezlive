@@ -1,0 +1,69 @@
+{
+  "scenario": "alerts_and_warns",
+  "description": "2 alerts + 1 warn → alerts section appears before warns section. Headline should call out both counts.",
+  "input": {
+    "audience": {
+      "role": "partner",
+      "user_id": 1,
+      "user_name": "Sam Sahragard",
+      "store_ids": ["store_1", "store_2"],
+      "store_labels": {"store_1": "Copperfield", "store_2": "Tomball"},
+      "permission_tags": ["*"],
+      "timezone": "America/Chicago",
+      "brief_date": "2026-05-13"
+    },
+    "signals": [
+      {
+        "rule_key": "orders.no_driver_30min_before",
+        "severity": "alert",
+        "subject_label": "Order ORD-1",
+        "store_id": "store_2",
+        "store_label": "Tomball",
+        "trigger_at": "2026-05-12T18:00:00",
+        "payload": {"minutes_until_pickup": 25},
+        "action_text": "Assign or call the driver for ORD-1.",
+        "status": "open",
+        "acked_by": null,
+        "age_hours": 12.5
+      },
+      {
+        "rule_key": "orders.late_delivery",
+        "severity": "alert",
+        "subject_label": "Order ORD-2",
+        "store_id": "store_1",
+        "store_label": "Copperfield",
+        "trigger_at": "2026-05-12T19:30:00",
+        "payload": {"minutes_late": 22},
+        "action_text": "Confirm ORD-2 was delivered and update status.",
+        "status": "open",
+        "acked_by": null,
+        "age_hours": 11.0
+      },
+      {
+        "rule_key": "vendor.invoice_overdue",
+        "severity": "warn",
+        "subject_label": "Vendor: Sysco",
+        "store_id": null,
+        "store_label": null,
+        "trigger_at": "2026-05-12T08:00:00",
+        "payload": {"days_overdue": 14},
+        "action_text": "Pay Sysco invoice or call rep.",
+        "status": "open",
+        "acked_by": null,
+        "age_hours": 22.0
+      }
+    ],
+    "wins": []
+  },
+  "expected": {
+    "section_kinds": ["alerts", "warns"],
+    "section_counts": {"alerts": 2, "warns": 1},
+    "headline_contains_any_of": ["alert", "warn"],
+    "greeting_prefix": "Good morning, Sam.",
+    "closing": "Have a strong day.",
+    "fallback_used": true,
+    "max_words_per_one_line": 35,
+    "min_total_words": 8,
+    "max_total_words": 250
+  }
+}

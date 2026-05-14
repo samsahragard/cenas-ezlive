@@ -1,0 +1,62 @@
+{
+  "scenario": "wins_capped_at_five",
+  "description": "8 wins → wins section caps at exactly 5 items. Spec §5.1 'Wins Rules': pick 3-5; do NOT exceed 5.",
+  "input": {
+    "audience": {
+      "role": "partner",
+      "user_id": 1,
+      "user_name": "Sam Sahragard",
+      "store_ids": ["store_1", "store_2"],
+      "store_labels": {"store_1": "Copperfield", "store_2": "Tomball"},
+      "permission_tags": ["*"],
+      "timezone": "America/Chicago",
+      "brief_date": "2026-05-13"
+    },
+    "signals": [],
+    "wins": [
+      {"category": "driver", "win_key": "driver.first_paid_delivery",
+       "subject_label": "Alejandro Martinez", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T19:00:00", "payload": {"lifetime_count": 1},
+       "one_line_seed": "Alejandro Martinez completed their first paid delivery."},
+      {"category": "driver", "win_key": "driver.day_perfect_ontime",
+       "subject_label": "Maria Lopez", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T20:00:00", "payload": {"deliveries": 4, "on_time_pct": 100},
+       "one_line_seed": "Maria Lopez hit 100% on-time across 4 stops."},
+      {"category": "driver", "win_key": "driver.day_perfect_ontime",
+       "subject_label": "James Wilson", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T20:00:00", "payload": {"deliveries": 3, "on_time_pct": 100},
+       "one_line_seed": "James Wilson hit 100% on-time across 3 stops."},
+      {"category": "driver", "win_key": "driver.first_paid_delivery",
+       "subject_label": "Sarah Chen", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T18:30:00", "payload": {"lifetime_count": 1},
+       "one_line_seed": "Sarah Chen completed their first paid delivery."},
+      {"category": "driver", "win_key": "driver.first_paid_delivery",
+       "subject_label": "Diego Ramirez", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T17:45:00", "payload": {"lifetime_count": 1},
+       "one_line_seed": "Diego Ramirez completed their first paid delivery."},
+      {"category": "driver", "win_key": "driver.day_perfect_ontime",
+       "subject_label": "Anna Kim", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T21:00:00", "payload": {"deliveries": 2, "on_time_pct": 100},
+       "one_line_seed": "Anna Kim hit 100% on-time across 2 stops."},
+      {"category": "driver", "win_key": "driver.first_paid_delivery",
+       "subject_label": "Marcus Davis", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T16:00:00", "payload": {"lifetime_count": 1},
+       "one_line_seed": "Marcus Davis completed their first paid delivery."},
+      {"category": "driver", "win_key": "driver.day_perfect_ontime",
+       "subject_label": "Priya Patel", "store_id": null, "store_label": null,
+       "occurred_at": "2026-05-12T22:00:00", "payload": {"deliveries": 5, "on_time_pct": 100},
+       "one_line_seed": "Priya Patel hit 100% on-time across 5 stops."}
+    ]
+  },
+  "expected": {
+    "section_kinds": ["wins"],
+    "section_counts": {"wins": 5},
+    "headline_contains_any_of": ["Quiet", "0"],
+    "greeting_prefix": "Good morning, Sam.",
+    "closing": "Have a strong day.",
+    "fallback_used": true,
+    "max_words_per_one_line": 35,
+    "min_total_words": 8,
+    "max_total_words": 250
+  }
+}

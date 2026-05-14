@@ -1,0 +1,44 @@
+{
+  "scenario": "gm_scoped_brief",
+  "description": "GM audience for a single store. Even though signals belong to that store, the brief content + structure is identical — fallback path treats audience.role as a label for greeting only, store filtering happens upstream in gather_signals.",
+  "input": {
+    "audience": {
+      "role": "gm",
+      "user_id": 14,
+      "user_name": "Sara Copperfield",
+      "store_ids": ["store_1"],
+      "store_labels": {"store_1": "Copperfield"},
+      "permission_tags": ["store.copperfield.gm"],
+      "timezone": "America/Chicago",
+      "brief_date": "2026-05-13"
+    },
+    "signals": [
+      {"rule_key": "orders.late_delivery", "severity": "warn",
+       "subject_label": "Order ORD-CF-1", "store_id": "store_1", "store_label": "Copperfield",
+       "trigger_at": "2026-05-12T19:30:00", "payload": {"minutes_late": 18},
+       "action_text": "Confirm ORD-CF-1 delivery and update status.",
+       "status": "open", "acked_by": null, "age_hours": 11.0},
+      {"rule_key": "labor.shift_unfilled", "severity": "warn",
+       "subject_label": "Lunch shift 11am-2pm", "store_id": "store_1", "store_label": "Copperfield",
+       "trigger_at": "2026-05-12T22:00:00", "payload": {}, "action_text": "Call standby pool for lunch.",
+       "status": "open", "acked_by": null, "age_hours": 9.0}
+    ],
+    "wins": [
+      {"category": "driver", "win_key": "driver.day_perfect_ontime",
+       "subject_label": "Maria Lopez", "store_id": "store_1", "store_label": "Copperfield",
+       "occurred_at": "2026-05-12T20:00:00", "payload": {"deliveries": 3, "on_time_pct": 100},
+       "one_line_seed": "Maria Lopez hit 100% on-time across 3 stops."}
+    ]
+  },
+  "expected": {
+    "section_kinds": ["warns", "wins"],
+    "section_counts": {"warns": 2, "wins": 1},
+    "headline_contains_any_of": ["warn"],
+    "greeting_prefix": "Good morning, Sara.",
+    "closing": "Have a strong day.",
+    "fallback_used": true,
+    "max_words_per_one_line": 35,
+    "min_total_words": 12,
+    "max_total_words": 380
+  }
+}

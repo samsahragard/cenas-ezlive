@@ -90,26 +90,42 @@ def _mk_task(db, *, owner_id, store_scope="tomball", category="vendor",
 @pytest.mark.parametrize(
     "role,expect_pass",
     [
+        # The FULL 17-role set (samai 1G review obs A fast-follow —
+        # the route-gating matrix is where audience-pinning for the
+        # two new tags lands; test_permission_matrix.py pins the
+        # _user_has LOGIC but is consistency-circular on AUDIENCE).
+        #
+        # PASS (4): hold team_reports.view —
+        #   partner   → "*" wildcard
+        #   corporate → explicit grant
+        #   gm        → explicit grant
+        #   manager   → _LEGACY_ALIASES entry, _canonical_role → "gm",
+        #               so a legacy `manager` row inherits gm's full
+        #               set INCLUDING team_reports.view. samai amended
+        #               spec §9 to reflect this (it had listed
+        #               "manager → 403" without accounting for the
+        #               alias).
         ("partner", True), ("corporate", True), ("gm", True),
-        # NOTE on "manager": it is a _LEGACY_ALIASES entry → resolves
-        # to "gm" in _canonical_role, so a legacy `manager` row gets
-        # gm's full permission set, INCLUDING team_reports.view → it
-        # PASSES. samai's 1G spec §9 lists "manager → 403" but didn't
-        # account for the alias; the denied set is really the
-        # *canonical* sub-gm roles (km / assistant_km / foh_manager /
-        # expo / driver), all five tested below. Flagged for samai —
-        # a 1-line §9 clarification, not a code change (the alias
-        # model is system-wide and correct).
         ("manager", True),
+        #
+        # DENIED (13): the canonical sub-gm roles + the hourly tier
+        # added in the role-taxonomy precondition + the
+        # corporate-driver legacy alias (→ driver, no grant). Each is
+        # redirected to /access-denied (302) by @requires_permission.
         ("km", False), ("assistant_km", False),
+        ("corporate_chef", False), ("prep_manager", False),
         ("foh_manager", False), ("expo", False), ("driver", False),
+        ("cook", False), ("server", False), ("busser", False),
+        ("host", False), ("bartender", False),
+        ("corporate-driver", False),
     ],
     ids=lambda v: str(v),
 )
 def test_route_gating_matrix(app, db_session, monkeypatch, role, expect_pass):
     """partner/corporate/gm (+ legacy 'manager'→gm) reach the view;
-    the five canonical sub-gm roles are redirected to /access-denied
-    by @requires_permission — the inner view never runs for them."""
+    the other 13 roles are redirected to /access-denied (302) by
+    @requires_permission — the inner view never runs for them. Full
+    17-role coverage per samai's 1G review obs A."""
     # _log_denial (on the deny path) does a delayed `from app.db import
     # SessionLocal`; the route's own SessionLocal is module-level in
     # team_reports. Patch both so neither path touches the real DB.

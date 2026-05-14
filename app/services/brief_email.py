@@ -69,6 +69,41 @@ def _dispatch_enabled() -> bool:
     return os.getenv("BRIEF_EMAIL_DISPATCH", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _calibration_enabled() -> bool:
+    """Phase 1 / Block 6 calibration C3 — when on, dispatch is restricted
+    to BRIEF_CALIBRATION_PANEL members, subject gets a [Calibration]
+    prefix, and the email body opens with a contract line + closes with
+    the 4 feedback questions + the form link. Per Sam 20:13 calibration
+    directive + samai 20:23 consolidated design (panel before broad flip).
+
+    Separate from BRIEF_EMAIL_DISPATCH so the panel can run live while
+    broad dispatch stays off (the whole point of panel-before-flip)."""
+    return os.getenv("BRIEF_CALIBRATION_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _calibration_panel() -> set[int]:
+    """Returns the set of User IDs eligible for calibration sends.
+    Env var BRIEF_CALIBRATION_PANEL is comma-separated user IDs;
+    empty / unparseable → empty set (everyone gets skipped, which is
+    the safe-fail). Lets Sam add/remove panel members in Render env
+    without redeploy."""
+    raw = os.getenv("BRIEF_CALIBRATION_PANEL", "").strip()
+    if not raw:
+        return set()
+    out: set[int] = set()
+    for chunk in raw.split(","):
+        c = chunk.strip()
+        if not c:
+            continue
+        try:
+            out.add(int(c))
+        except ValueError:
+            logger.warning(
+                "brief calibration panel: ignoring non-integer id %r in "
+                "BRIEF_CALIBRATION_PANEL", c)
+    return out
+
+
 # ---- counting + formatting ----
 
 @dataclass
@@ -98,12 +133,21 @@ def _count_severities(brief_body: dict) -> _SeverityCounts:
     return counts
 
 
-def format_subject(brief_date: date | str, counts: _SeverityCounts) -> str:
-    """Spec §11 subject line."""
+def format_subject(brief_date: date | str, counts: _SeverityCounts,
+                   calibration: bool = False) -> str:
+    """Spec §11 subject line, with the calibration variant per Sam 20:23.
+
+    Normal: "Cenas brief — {date} — N alerts / M warns"
+    Calibration: "[Calibration] Cenas brief — {date}" (no severity count;
+    samai 20:23 noted that the severity count would be noisy in the
+    [Calibration] subject — the counts live in the body, not the subject,
+    for the calibration variant)."""
     if isinstance(brief_date, date):
         date_str = brief_date.isoformat()
     else:
         date_str = str(brief_date)
+    if calibration:
+        return f"[Calibration] Cenas brief — {date_str}"
     return (
         f"Cenas brief — {date_str} — "
         f"{counts.alert} alerts / {counts.warn} warns"
@@ -118,7 +162,20 @@ def resolve_recipient(audience, db=None) -> tuple[str | None, str]:
 
     Partner role → PARTNER_EMAIL (sam@cenaskitchen.com).
     Other enrolled roles → User.email lookup via audience.user_id.
+
+    Calibration mode (Sam 20:13 + samai 20:23 design — panel before
+    broad flip): when BRIEF_CALIBRATION_MODE=1 AND audience.user_id is
+    not in BRIEF_CALIBRATION_PANEL → returns (None, "skipped_not_panel").
+    This is the dispatch-side enforcement; the cron compose still runs
+    for every enrolled user (composer cost is small, calibration data
+    benefits from having the would-be-sent briefs in the DB), but only
+    panel members actually receive mail.
     """
+    if _calibration_enabled():
+        panel = _calibration_panel()
+        if audience.user_id not in panel:
+            return None, "skipped_not_panel"
+
     role = (audience.role or "").lower()
     if role == "partner":
         return PARTNER_EMAIL, "ok"
@@ -146,6 +203,62 @@ def resolve_recipient(audience, db=None) -> tuple[str | None, str]:
 
 
 # ---- rendering ----
+
+# Calibration body wrap — samai 20:23 + Sam 20:13. Opens with the
+# expectation-setting contract line (so panel members know the brief
+# may read imperfectly, and that's the point); footer lists the 4
+# reply-with-answers questions inline AND links to the C2 form. Round 1
+# is email-reply-driven (samai parses replies + INSERTs); the link is
+# the Round 2 channel and the always-available alternative.
+_CALIBRATION_INTRO = (
+    "This is a calibration test — first real LLM-composed brief, "
+    "your feedback shapes tuning before broad dispatch."
+)
+
+_CALIBRATION_QUESTIONS = [
+    "On 1-5, how useful was this brief vs your current morning workflow?",
+    "Anything important from yesterday that the brief missed?",
+    "Anything in the brief that was noise — not worth your attention?",
+    "What single change would make this most useful?",
+]
+
+
+def _feedback_url(brief_body: dict) -> str:
+    """Absolute URL to the C2 feedback form. Built from brief_body['brief_id']
+    so the recipient lands on /partner/briefs/<brief_id>/feedback authenticated
+    via their existing session. Falls back to the briefs index if brief_id
+    is missing (shouldn't happen — composer always populates it)."""
+    base = os.getenv(
+        "BRIEF_FEEDBACK_BASE_URL", "https://app.cenaskitchen.com")
+    bid = brief_body.get("brief_id", "").strip()
+    if not bid:
+        return f"{base}/partner/briefs"
+    return f"{base}/partner/briefs/{bid}/feedback"
+
+
+def render_plain_calibration(brief_body: dict, audience) -> str:
+    """Plain-text rendering wrapped with the calibration intro + footer
+    per Sam 20:13 + samai 20:23 design. Round 1 panel sees this version
+    of the email; the body's normal content is bracketed by the test
+    notice + the reply-with-answers questions + the form link."""
+    body = render_plain(brief_body, audience)
+    parts: list[str] = []
+    parts.append(_CALIBRATION_INTRO)
+    parts.append("")
+    parts.append(body.rstrip())
+    parts.append("")
+    parts.append("─" * 56)
+    parts.append("")
+    parts.append("To submit feedback, just reply to this email with answers "
+                 "to these 4 questions:")
+    parts.append("")
+    for i, q in enumerate(_CALIBRATION_QUESTIONS, start=1):
+        parts.append(f"  {i}. {q}")
+    parts.append("")
+    parts.append("Or use the form: " + _feedback_url(brief_body))
+    parts.append("")
+    return "\n".join(parts) + "\n"
+
 
 def render_plain(brief_body: dict, audience) -> str:
     """Plain-text rendering — fallback for clients that don't render
@@ -268,17 +381,23 @@ def dispatch_brief(brief_row, audience, db=None) -> dict:
 
         body = dict(brief_row.body or {})
         counts = _count_severities(body)
-        subject = format_subject(audience.brief_date, counts)
-        plain = render_plain(body, audience)
+        is_calibration = _calibration_enabled()
+        subject = format_subject(
+            audience.brief_date, counts, calibration=is_calibration)
+        if is_calibration:
+            plain = render_plain_calibration(body, audience)
+        else:
+            plain = render_plain(body, audience)
 
         if not _dispatch_enabled():
             out["status"] = "dry_run"
             out["reason"] = "flag_off"
             logger.info(
                 "brief dispatch dry-run user_id=%s to=%s subject=%r "
-                "alerts=%d warns=%d (set BRIEF_EMAIL_DISPATCH=1 to send)",
+                "alerts=%d warns=%d calibration=%s "
+                "(set BRIEF_EMAIL_DISPATCH=1 to send)",
                 audience.user_id, to_addr, subject,
-                counts.alert, counts.warn,
+                counts.alert, counts.warn, is_calibration,
             )
             return out
 

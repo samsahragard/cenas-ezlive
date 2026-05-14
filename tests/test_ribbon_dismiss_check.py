@@ -4,7 +4,7 @@ Phase 2 / Block 1 / sub-block 1D (ck, 2026-05-14). Covers the
 dismiss + check handlers in app/web/ribbon_routes.py:
 
   DISMISS (the X — self-scoped, light eligibility):
-    - task / signal / scheduled_event dismiss writes a
+    - task / signal / scheduled_event / sales_insight dismiss writes a
       RibbonItemDismissal with the exact (user_id, item_type, item_id,
       dismiss_day=today) tuple 1C's _exclude_dismissed reads against
     - idempotent: a second dismiss the same day is a 200 no-op, no
@@ -21,7 +21,8 @@ dismiss + check handlers in app/web/ribbon_routes.py:
     - signal: in-audience → stamps acknowledged_by/at + writes
       SignalAck; out-of-audience → 403
     - scheduled_event → 403 (not checkable — can_check is always False)
-    - sales_insight → 503 (Block 1F not built — import-guarded)
+    - sales_insight → check appends user.id to SalesInsight.dismissed_by;
+      dismiss writes a RibbonItemDismissal; nonexistent id → 404
     - unknown item_type → 400; non-existent → 404; unauthenticated → 401
 
 Run cold — in-memory SQLite via the db_session fixture. g.current_user
@@ -40,7 +41,7 @@ from flask import g
 
 from app.models import (
     RibbonItemDismissal, Task, TaskAuditLog, Signal, SignalAck,
-    ScheduledEvent,
+    ScheduledEvent, SalesInsight,
 )
 from app.web.ribbon_routes import ribbon_dismiss, ribbon_check
 
@@ -133,6 +134,22 @@ def _mk_event(db, **over):
     return e
 
 
+def _mk_sales_insight(db, **over):
+    si = SalesInsight(
+        valid_until_at=over.get(
+            "valid_until_at", datetime.utcnow() + timedelta(hours=8)),
+        category=over.get("category", "weather"),
+        store_scope=over.get("store_scope", "tomball"),
+        severity=over.get("severity", "info"),
+        headline=over.get("headline", "95F and humid today"),
+        detail=over.get("detail"),
+        source_url=over.get("source_url"),
+        dismissed_by=over.get("dismissed_by"),
+    )
+    db.add(si); db.commit()
+    return si
+
+
 # ============================================================
 # DISMISS
 # ============================================================
@@ -170,6 +187,27 @@ def test_dismiss_signal_and_scheduled_event(app, db_session, monkeypatch):
     rows = db_session.query(RibbonItemDismissal).all()
     types = sorted(r.item_type for r in rows)
     assert types == ["scheduled_event", "signal"]
+
+
+def test_dismiss_sales_insight_writes_dismissal_row(app, db_session, monkeypatch):
+    """1D-1F integration: an X-dismiss of a real SalesInsight writes a
+    day-scoped RibbonItemDismissal, same mechanism as every other item
+    type. 1D's sales_insight branch was import-guarded through both 1D's
+    build and samai's behavior-depth pass (each pre-1F) -- this is its
+    first exercise against a live SalesInsight model."""
+    si = _mk_sales_insight(db_session)
+    si_id = si.id
+    user = _user(user_id=12)
+    resp, status = _call(app, db_session, monkeypatch,
+                         ribbon_dismiss, "sales_insight", si_id, user)
+    assert status == 200
+    data = resp.get_json()
+    assert data["ok"] is True and data["dismissed"] is True
+    rows = (db_session.query(RibbonItemDismissal)
+            .filter_by(item_type="sales_insight", item_id=si_id).all())
+    assert len(rows) == 1
+    assert rows[0].user_id == 12
+    assert rows[0].dismiss_day == date.today().isoformat()
 
 
 def test_dismiss_idempotent_same_day(app, db_session, monkeypatch):
@@ -346,17 +384,51 @@ def test_check_scheduled_event_403(app, db_session, monkeypatch):
     assert status == 403
 
 
-def test_check_sales_insight_503_until_1f(app, db_session, monkeypatch):
-    """SalesInsight is Block 1F — not built. The check endpoint
-    import-guards and returns 503 until 1F lands."""
+def test_check_sales_insight_nonexistent_404(app, db_session, monkeypatch):
+    """A check for a sales_insight id with no row is a clean non-500
+    refusal. 1F has shipped SalesInsight, so the import-guard passes,
+    _load_item_row returns None, and the endpoint returns 404. (Pre-1F
+    this returned 503 from the import-guard; that guard now stays as a
+    defensive fallback.)"""
     user = _user(user_id=8, role="gm")
     resp, status = _call(app, db_session, monkeypatch,
-                         ribbon_check, "sales_insight", 1, user)
-    # 503 if SalesInsight model doesn't import yet; if 1F has landed by
-    # the time this runs it'd be 404 (no such insight) — either is a
-    # clean non-500 refusal, which is the property under test.
-    assert status in (503, 404)
+                         ribbon_check, "sales_insight", 99999, user)
+    assert status == 404
     assert resp.get_json()["ok"] is False
+
+
+def test_check_sales_insight_appends_dismissed_by(app, db_session, monkeypatch):
+    """1D-1F integration: Check ('dismiss permanently') of a real
+    SalesInsight appends the user's id to SalesInsight.dismissed_by --
+    the write path 1F's spec section 2.1 left to 1D. First exercise of
+    this path against a live SalesInsight model (import-guarded through
+    both 1D's build and samai's behavior-depth pass, each pre-1F)."""
+    si = _mk_sales_insight(db_session, dismissed_by=None)
+    si_id = si.id
+    user = _user(user_id=12, role="gm")
+    resp, status = _call(app, db_session, monkeypatch,
+                         ribbon_check, "sales_insight", si_id, user)
+    assert status == 200
+    assert resp.get_json()["checked"] is True
+    fresh = db_session.get(SalesInsight, si_id)
+    assert fresh.dismissed_by == [12]
+
+
+def test_check_sales_insight_dismissed_by_idempotent(app, db_session, monkeypatch):
+    """The check handler guards 'if user.id not in dismissed_by': a user
+    already in the list is not duplicated, a distinct user appends.
+    Seed dismissed_by=[7]; user 7 re-checks -> still [7]; user 9 checks
+    -> [7, 9]."""
+    si = _mk_sales_insight(db_session, dismissed_by=[7])
+    si_id = si.id
+    r1, s1 = _call(app, db_session, monkeypatch, ribbon_check,
+                   "sales_insight", si_id, _user(user_id=7, role="gm"))
+    assert s1 == 200
+    assert db_session.get(SalesInsight, si_id).dismissed_by == [7]
+    r2, s2 = _call(app, db_session, monkeypatch, ribbon_check,
+                   "sales_insight", si_id, _user(user_id=9, role="gm"))
+    assert s2 == 200
+    assert db_session.get(SalesInsight, si_id).dismissed_by == [7, 9]
 
 
 def test_check_unknown_item_type_400(app, db_session, monkeypatch):

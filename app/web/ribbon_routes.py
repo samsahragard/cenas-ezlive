@@ -38,11 +38,12 @@ before-mutation — applied proportional to blast radius):
     escalated-to / partner only; signal: the anomaly-audience check
     (role ∈ audience_roles + store scope); scheduled_event: rejected
     (you don't "complete" a scheduled event — can_check is always
-    False for it); sales_insight: import-guarded, 1F not built yet.
+    False for it); sales_insight: import-guarded, now live (1F shipped).
 
 1D scope boundary — NOT here: the escalation cron (1E), sales-insight
-production (1F). The sales_insight branches in both handlers are
-import-guarded so they un-stub automatically when 1F lands.
+production (1F). 1F has since shipped SalesInsight, so the
+import-guarded sales_insight branches in both handlers are now live;
+the guards stay as a defensive fallback against an import failure.
 """
 from __future__ import annotations
 
@@ -136,10 +137,10 @@ def ribbon_collapse(category: str):
 # ============================================================
 def _load_item_row(db, item_type: str, item_id: int):
     """Load the underlying row for a ribbon item. Returns the row or
-    None if it doesn't exist. sales_insight is import-guarded — its
-    model (SalesInsight) is 1F, not built yet; until then no
-    sales_insight item can be on any ribbon, so a sales_insight id is
-    treated as a non-existent row."""
+    None if it doesn't exist. sales_insight stays import-guarded — 1F
+    has since shipped SalesInsight so this path is live; the guard
+    remains a defensive fallback (a failed import yields None, i.e. the
+    id is treated as a non-existent row)."""
     if item_type == "task":
         return db.get(Task, item_id)
     if item_type == "signal":
@@ -175,7 +176,7 @@ def _can_check_item(db, user, item_type: str, item_id: int, row) -> tuple[bool, 
         candidate.
       - scheduled_event: never checkable — you don't "complete" a
         scheduled event (1C sets can_check=False for it).
-      - sales_insight: 1F not built; caller import-guards before here.
+      - sales_insight: live (1F shipped); caller import-guards anyway.
     """
     role = (getattr(user, "permission_level", "") or "").strip()
 
@@ -208,7 +209,8 @@ def _can_check_item(db, user, item_type: str, item_id: int, row) -> tuple[bool, 
         # Reached only if SalesInsight exists (caller import-guards the
         # row load). Any keypad user who can see the sales category may
         # dismiss-permanently an insight — it's per-store info, not
-        # role-restricted. 1F finalizes this when it lands.
+        # role-restricted. 1F shipped without reaching into 1D, so this
+        # "any keypad user" rule stands as the final intent.
         return True, "sales insight"
 
     return False, "unknown item type"
@@ -298,7 +300,7 @@ def ribbon_check(item_type: str, item_id: int):
                         /partner/anomalies/<id>/ack.
       - sales_insight → "dismisses permanently" per the directive —
                         append the user to SalesInsight.dismissed_by.
-                        Import-guarded (1F not built); 503 until then.
+                        Import-guarded defensively (1F has shipped).
       - scheduled_event → rejected; you don't complete a scheduled
                         event (can_check is always False for it).
 
@@ -314,9 +316,9 @@ def ribbon_check(item_type: str, item_id: int):
 
     db = SessionLocal()
     try:
-        # sales_insight: import-guard before anything else — its model
-        # is 1F, not built. No sales_insight item can be on a ribbon
-        # yet, so a check POST for one is "not available" until 1F.
+        # sales_insight: import-guard before anything else — defensive
+        # fallback now that 1F has shipped SalesInsight. If the import
+        # ever fails, a check POST returns 503 rather than 500-ing.
         if item_type == "sales_insight":
             try:
                 from app.models import SalesInsight  # noqa: F401  (1F)
@@ -382,9 +384,9 @@ def ribbon_check(item_type: str, item_id: int):
             })
 
         if item_type == "sales_insight":
-            # 1F-guarded above; once SalesInsight lands this appends
-            # user.id to its dismissed_by JSON list (permanent dismiss
-            # per the directive's 1D Check semantics for insights).
+            # 1F-guarded above; appends user.id to SalesInsight's
+            # dismissed_by JSON list (permanent dismiss per the
+            # directive's 1D Check semantics for insights).
             dismissed_by = list(getattr(row, "dismissed_by", None) or [])
             if user.id not in dismissed_by:
                 dismissed_by.append(user.id)

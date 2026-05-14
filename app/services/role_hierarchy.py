@@ -204,3 +204,72 @@ def can_assign_to(actor, target) -> bool:
             return False
 
     return True
+
+
+# ---- immediate_manager — 1E's escalation lookup (Block 1 precond §1) ----
+# Deferred from the role-taxonomy precondition ("1E's escalation is its
+# first real consumer, it needs a db session") — 1E adds it here, the
+# shared home for the hierarchy concern. Unlike the rest of this module
+# it takes a db session; it stays import-safe (User is imported lazily,
+# inside the function, so module load never touches app.models).
+def immediate_manager(user, db):
+    """The lowest-tier active user STRICTLY ABOVE ``user``'s tier whose
+    authority covers ``user``'s store — i.e. who a missed task escalates
+    to. Returns a User row, or None if nobody qualifies (e.g. a partner
+    has no manager).
+
+    Per the precondition spec §2.3: "the lowest-tier user strictly above
+    user's tier in user's store scope." Concretely:
+      - candidate.tier must be strictly > user.tier
+      - candidate must be active
+      - candidate's authority must cover user's store: a store-unscoped
+        candidate (partner / corporate / corporate_chef / prep_manager)
+        covers everyone; a store-scoped candidate's store_scope must
+        intersect user's store_scope
+      - among the qualifying candidates, the LOWEST tier wins (closest
+        manager). Within that lowest tier, a same-domain candidate is
+        preferred (a kitchen cook escalates to a kitchen manager, not an
+        FOH manager) — a documented refinement on top of the spec's
+        bare "lowest-tier" wording, since cross-domain escalation reads
+        operationally wrong; flagged for samai's 1E review.
+      - final tie-break: lowest User.id, for determinism.
+
+    db is an active Session — caller owns its lifecycle.
+    """
+    from app.models import User  # lazy — keeps module load import-safe
+
+    user_role = getattr(user, "permission_level", None)
+    u_tier = role_tier(user_role)
+    if u_tier >= 5:
+        return None  # partner — nobody strictly above
+
+    u_store = getattr(user, "store_scope", None)
+    u_domain = role_domain(user_role)
+
+    candidates = []
+    for cand in db.query(User).filter(User.active.is_(True)).all():
+        if cand.id == getattr(user, "id", None):
+            continue
+        c_tier = role_tier(cand.permission_level)
+        if c_tier <= u_tier:
+            continue  # not strictly above
+        # store-coverage check
+        if _resolve(cand.permission_level) in _STORE_UNSCOPED_ROLES:
+            covers = True
+        else:
+            covers = _store_scopes_intersect(cand.store_scope, u_store)
+        if not covers:
+            continue
+        candidates.append(cand)
+
+    if not candidates:
+        return None
+
+    lowest_tier = min(role_tier(c.permission_level) for c in candidates)
+    closest = [c for c in candidates
+               if role_tier(c.permission_level) == lowest_tier]
+    # domain-preference refinement, then id tie-break
+    same_domain = [c for c in closest
+                   if role_domain(c.permission_level) == u_domain]
+    pool = same_domain or closest
+    return min(pool, key=lambda c: c.id)

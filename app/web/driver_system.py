@@ -783,3 +783,30 @@ def cron_anomaly_brief():
     from app.services.brief_composer import compose_all_briefs
     summary = compose_all_briefs(brief_date)
     return jsonify({"ok": True, "brief_date": brief_date.isoformat(), **summary})
+
+
+# ============================================================
+# Task escalation scan (Phase 2 / Block 1E)
+# The every_5m scheduler POSTs /cron/task-escalation. The handler
+# delegates to escalation.run_escalation_scan: escalate overdue tasks
+# (two tiers, capped) and expire stale sales insights.
+# ============================================================
+
+@driver_system_bp.route("/cron/task-escalation", methods=["POST"])
+def cron_task_escalation():
+    """Phase 2 / Block 1E: the every-5-minute escalation scan. Escalates
+    overdue tasks to the owner's manager (and, after 24h, one tier
+    further) and expires stale SalesInsight rows. Token-gated via
+    CRON_TOKEN like the other cron endpoints; returns an inspectable
+    JSON summary so a manual trigger / dry-run is legible."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    db = SessionLocal()
+    try:
+        from app.services.escalation import run_escalation_scan
+        summary = run_escalation_scan(db)
+        db.commit()
+        return jsonify({"ok": True, **summary})
+    finally:
+        db.close()

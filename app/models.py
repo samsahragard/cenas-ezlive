@@ -1660,3 +1660,138 @@ class SamChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False, index=True)
 
+
+# ---- Block 1J — AmbientSignal data plane (samai spec, 2026-05-14) ----
+# The in-app data-plane / control-plane separation: six per-source
+# /cron/refresh-* crons WRITE AmbientSignal rows; the 1C ribbon router
+# + the /cron/sales-insights pipeline READ them. One producer table,
+# many consumers. Valid-value sets are validated application-side (in
+# ambient_signal_upsert) — String columns, not native ENUM, same call
+# as Task / SalesInsight.
+_VALID_AMBIENT_SOURCES = {
+    "weather", "events", "outages",
+    "catering_pipeline", "vendor_status", "traffic",
+}
+# The ribbon category an ambient signal feeds (1J spec §2 / §7).
+_VALID_AMBIENT_CATEGORIES = {"caterings", "events", "maintenance"}
+_VALID_AMBIENT_STORE_SCOPES = {"tomball", "copperfield", "both"}
+_VALID_AMBIENT_SEVERITIES = {"info", "warn", "alert"}
+# AmbientSignalRun.status (1J spec §2.4 — Q3: no "skipped_unchanged").
+_VALID_AMBIENT_RUN_STATUSES = {"success", "error", "partial"}
+
+
+class AmbientSignal(Base):
+    """One logical piece of external intelligence with a STABLE
+    IDENTITY across refreshes — "Tomball weather today", "Astros home
+    game 5/16", "outage near Copperfield".
+
+    Phase 2 / Block 1J (samai spec, 2026-05-14). The data-plane row:
+    six per-source /cron/refresh-* crons upsert these via
+    ambient_signal_upsert(); the 1C ribbon router + the
+    /cron/sales-insights pipeline read them.
+
+    The id-stable contract (§2.2): when a cron re-pulls the same
+    logical signal — same (source, signal_key) — with a fresh payload,
+    the row is UPDATED IN PLACE and its id never changes. That is what
+    makes a user's RibbonItemDismissal survive a payload refresh (§6,
+    "the critical invariant"): the dismissal references (item_type,
+    item_id), so a stable id keeps the (updated) row dismissed.
+
+    NOT an audit log — like SalesInsight, an AmbientSignal is ephemeral
+    operational intelligence, not history. There is deliberately no
+    before_delete listener: expired rows (valid_until_at < now) are
+    DELETEd by each cron's own per-source expiry sweep (§2.3).
+
+    No dismissed_by column (contrast SalesInsight): ambient signals get
+    daily X-dismiss only (RibbonItemDismissal) and age out on their own
+    via valid_until_at — can_check is False for them (§7.2).
+    """
+    __tablename__ = "ambient_signals"
+    __table_args__ = (
+        # One row per logical signal. THIS is what makes "re-pull the
+        # same signal" deterministically find the existing row instead
+        # of inserting a duplicate — the id-stable upsert's lookup key.
+        UniqueConstraint("source", "signal_key",
+                         name="uq_ambient_signal_identity"),
+        # Hot reads: the 1C ribbon live-query (valid_until_at,
+        # store_scope) and each cron's own expiry sweep (source,
+        # valid_until_at). Mirrors SalesInsight's ix_sales_insights_live.
+        Index("ix_ambient_signals_live", "valid_until_at", "store_scope"),
+        Index("ix_ambient_signals_source_expiry",
+              "source", "valid_until_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # weather | events | outages | catering_pipeline | vendor_status |
+    # traffic — _VALID_AMBIENT_SOURCES.
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Source-scoped LOGICAL identity (§2.1) — derived from the signal's
+    # identity, never its content. Two pulls of the same logical signal
+    # produce the same signal_key even when the payload changed.
+    signal_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    # The structured signal content.
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # sha256 of the canonical payload serialization (§2.1) — the change
+    # detector. Set by _ambient_payload_hash() so all six crons hash
+    # identically.
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # tomball | copperfield | both — _VALID_AMBIENT_STORE_SCOPES.
+    store_scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    # caterings | events | maintenance — the ribbon category this
+    # signal feeds (§7). _VALID_AMBIENT_CATEGORIES.
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    # info | warn | alert — _VALID_AMBIENT_SEVERITIES.
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    # When the signal ages out (§2.3) — NOT NULL so nothing lingers on
+    # the ribbon forever. Each cron sweeps its own source's rows past
+    # this; DELETE, not flag-flip.
+    valid_until_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+    # The last cron run that re-confirmed this signal still exists —
+    # bumped on every upsert (created / updated / unchanged), so an
+    # unchanged-but-still-live signal isn't mistaken for stale (§2.2).
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AmbientSignalRun(Base):
+    """One row per per-source cron run — the operational record of
+    "did each refresh cron run, and what did it do."
+
+    Phase 2 / Block 1J (samai spec §2.4). The cron endpoint returns
+    this run summary as its JSON response so a manual trigger is
+    inspectable (same shape as the 1E / 1F cron summaries).
+    """
+    __tablename__ = "ambient_signal_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Which /cron/refresh-* produced this run.
+    source: Mapped[str] = mapped_column(
+        String(32), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True)
+    # success | error | partial — _VALID_AMBIENT_RUN_STATUSES. (§2.4
+    # Q3: no "skipped_unchanged" — an all-no-op cycle is still a
+    # successful run; signals_unchanged carries that detail per-run.)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    signals_created: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False)
+    signals_updated: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False)
+    signals_unchanged: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False)
+    # Rows swept by this run's per-source expiry sweep.
+    signals_expired: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False)
+    # Set when status != success.
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+

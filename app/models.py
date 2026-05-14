@@ -1486,6 +1486,80 @@ class RibbonItemDismissal(Base):
         DateTime, default=datetime.utcnow, nullable=False)
 
 
+# Phase 2 / Block 1F (samai spec, 2026-05-14). Valid-value constants for
+# SalesInsight — String columns (not native ENUM), same call as Task /
+# BriefFeedback: SQLite-compat + simpler migrations. The 1F synthesis
+# writer validates every produced row against these before insert.
+_VALID_INSIGHT_CATEGORIES = {
+    "weather", "events", "school_calendar", "traffic",
+    "outage", "yoy_comparison", "ai_synthesized",
+}
+# tomball | copperfield | both — note: no "none" (contrast Task's
+# _VALID_STORE_SCOPES). An insight always pertains to at least one store.
+_VALID_INSIGHT_STORE_SCOPES = {"tomball", "copperfield", "both"}
+_VALID_INSIGHT_SEVERITIES = {"info", "warn", "alert"}
+
+
+class SalesInsight(Base):
+    """A piece of time-bound external intelligence — weather, a local
+    event, a school-calendar day, traffic, an outage — synthesized
+    daily and rendered in the ribbon's Sales category.
+
+    Phase 2 / Block 1F (samai spec, 2026-05-14). 1F is the PRODUCER: a
+    5am-CT cron pulls external sources, a Haiku-normalize → Opus-
+    synthesize pipeline turns them into these rows. 1C's ribbon router
+    is the CONSUMER (reads live rows for the viewer's store). 1F ships
+    the model + the pipeline + the cron; it does NOT render the ribbon
+    (1C), write the X/Check dismissal paths (1D), or run the expiry
+    scan (1E).
+
+    NOT an audit log — SalesInsight rows are ephemeral operational
+    intelligence ("95F and humid today"), not history. They are
+    DELETEd once past valid_until_at by 1E's every-5m cron
+    (escalation.py leg 3). So there is deliberately no before_delete
+    listener / append-only constraint — contrast TaskAuditLog.
+
+    category / store_scope / severity are String, validated
+    application-side against the _VALID_INSIGHT_* constants above.
+    """
+    __tablename__ = "sales_insights"
+    __table_args__ = (
+        # Both the 1C ribbon query ("live insights for this store") and
+        # 1E's expiry scan ("rows past valid_until_at") hit these two
+        # columns — one composite covers both.
+        Index("ix_sales_insights_live", "valid_until_at", "store_scope"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    # When this insight stops being relevant — 1E's auto-expiry scans
+    # this. NOT NULL: every insight must expire so nothing lingers in
+    # the ribbon forever (1F spec §6 — end-of-day floor if none
+    # otherwise derivable).
+    valid_until_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True)
+    # weather | events | school_calendar | traffic | outage |
+    # yoy_comparison | ai_synthesized — _VALID_INSIGHT_CATEGORIES.
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    # tomball | copperfield | both — _VALID_INSIGHT_STORE_SCOPES.
+    store_scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    # info | warn | alert — _VALID_INSIGHT_SEVERITIES.
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Short, ribbon-renderable.
+    headline: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Longer, for click-through.
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional link to the source.
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # JSON list[int] of user_ids who PERMANENTLY dismissed this insight
+    # via the ribbon Check control. 1F ships the column; 1D wires the
+    # write path; 1C filters on it. NOT a User FK — it is a JSON list,
+    # not a relation (1F spec §2.1). The daily-reset X dismissal is a
+    # separate channel (RibbonItemDismissal).
+    dismissed_by: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+
 @_sa_event.listens_for(BriefFeedback, 'before_delete')
 def _no_delete_brief_feedback(mapper, connection, target):
     raise RuntimeError(

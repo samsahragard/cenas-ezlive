@@ -348,12 +348,48 @@ def test_leg2_no_manager_above_tier1(db_session):
 # ============================================================
 # run_escalation_scan — Leg 3: SalesInsight auto-expiry
 # ============================================================
+# 1F has now shipped the SalesInsight model, so leg 3's import guard no
+# longer trips — it runs for real. (Before 1F it was inert and reported
+# {"expired": 0, "available": False}; that assertion moved into 1F's
+# own test suite is unnecessary — the model existing is the contract.)
 
-def test_leg3_no_sales_insight_model(db_session):
-    # SalesInsight is Block 1F — not built. Leg 3 is import-guarded and
-    # reports itself unavailable rather than crashing.
+def _seed_insight(db, *, valid_until_at, headline="x", store="both"):
+    from app.models import SalesInsight
+    ins = SalesInsight(
+        created_at=datetime.utcnow(),
+        valid_until_at=valid_until_at,
+        category="weather", store_scope=store, severity="info",
+        headline=headline, dismissed_by=[],
+    )
+    db.add(ins)
+    return ins
+
+
+def test_leg3_expires_only_stale_insights(db_session):
+    from app.models import SalesInsight
+    _seed_insight(db_session, headline="expired",
+                  valid_until_at=datetime.utcnow() - timedelta(hours=1))
+    _seed_insight(db_session, headline="still live",
+                  valid_until_at=datetime.utcnow() + timedelta(hours=6))
+    db_session.commit()
+
     summary = run_escalation_scan(db_session)
-    assert summary["insight_expiry"] == {"expired": 0, "available": False}
+    db_session.flush()
+
+    assert summary["insight_expiry"] == {"expired": 1, "available": True}
+    remaining = db_session.query(SalesInsight).all()
+    assert len(remaining) == 1
+    assert remaining[0].headline == "still live"
+
+
+def test_leg3_available_now_that_1f_shipped(db_session):
+    # Nothing stale → nothing deleted, but leg 3 is live: 1F shipped the
+    # SalesInsight model so the import guard no longer trips.
+    _seed_insight(db_session,
+                  valid_until_at=datetime.utcnow() + timedelta(hours=6))
+    db_session.commit()
+    summary = run_escalation_scan(db_session)
+    assert summary["insight_expiry"] == {"expired": 0, "available": True}
 
 
 # ============================================================

@@ -810,3 +810,30 @@ def cron_task_escalation():
         return jsonify({"ok": True, **summary})
     finally:
         db.close()
+
+
+# ============================================================
+# Sales-insights synthesis (Phase 2 / Block 1F)
+# A daily 5am-CT scheduler POSTs /cron/sales-insights. The handler
+# delegates to sales_insights.run_sales_insights_synthesis: pull
+# external intelligence, Haiku-normalize -> Opus-synthesize, write
+# SalesInsight rows. The 5am-CT cron-job *resource* is created in the
+# Render dashboard (via API), same as the other /cron/ schedules.
+# ============================================================
+
+@driver_system_bp.route("/cron/sales-insights", methods=["POST"])
+def cron_sales_insights():
+    """Phase 2 / Block 1F: the daily sales-insights synthesis. Pulls
+    weather / events / traffic / outage intelligence, runs the
+    Haiku-normalize -> Opus-synthesize pipeline, writes SalesInsight
+    rows for the ribbon's Sales category. Token-gated via CRON_TOKEN
+    like the other cron endpoints; returns an inspectable JSON summary
+    (rows per category/store, raw-signal counts, fallback flag,
+    estimated cost). run_sales_insights_synthesis owns its own session
+    + commit (db=None path)."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from app.services.sales_insights import run_sales_insights_synthesis
+    summary = run_sales_insights_synthesis()
+    return jsonify({"ok": True, **summary})

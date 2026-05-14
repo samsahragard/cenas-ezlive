@@ -82,6 +82,22 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "kds.view_alerts", "kds.view_kitchen_display", "kds.edit_recipes",
         "developer.view_chat", "developer.view_app_docs",
         "access.approve_request", "access.deny_request",
+        # Phase 0 Block 4 follow-up (Sam 2026-05-13 20:01). The two
+        # ck-coined tags from cc7c41a (sidebar / route migration) gate
+        # global config surfaces: anomaly.admin = /partner/anomalies/rules
+        # (rule severity + threshold tuning) and access.team_admin =
+        # /partner/team (the Team UI for adding / editing users). Both
+        # sit at the partner + corporate tier — system tuning above
+        # store scope. gm and below operate within their store and
+        # shouldn't be tuning system-wide rules or managing all users.
+        # The parallel with developer.view_chat is exact: when future
+        # corporate hires come in (a controller, an ops director) they
+        # inherit these naturally via role membership rather than
+        # per-person grant — the role-based-not-per-person principle
+        # doing the work it's supposed to. Future new admin-surface
+        # tags should follow the same pattern (add to corporate's set
+        # in this block, not relitigate the audience question per tag).
+        "anomaly.admin", "access.team_admin",
     },
 
     "gm": {

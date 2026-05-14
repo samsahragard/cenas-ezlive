@@ -100,6 +100,30 @@ def _store_scope_refused(store: str | None, user) -> bool:
     return not _store_scopes_intersect(user_store, store)
 
 
+def _resolve_location_filter(store, user) -> str | None:
+    """Resolve `store` → labor_report's location_filter.
+
+    samai 1H review obs: render_labor_breakdown is THE canonical
+    adapter ("the one place"), so its inner belt shouldn't depend on
+    every caller passing a specific store. A store-scoped user (gm and
+    below) who passes store=None or "both" is narrowed to their OWN
+    store_scope — they see their store, not nothing (refusing would be
+    too harsh) and not everything (the over-exposure samai flagged).
+    A store-unscoped user, or a store-scoped user whose own scope is
+    "both", falls through to None = all stores.
+    """
+    if store in ("tomball", "copperfield"):
+        return store
+    # store is None / "both" / junk — narrow for a store-scoped user.
+    role = _canonical_role(getattr(user, "permission_level", None)) \
+        if user is not None else None
+    if role not in _STORE_UNSCOPED_ROLES:
+        user_store = getattr(user, "store_scope", None)
+        if user_store in ("tomball", "copperfield"):
+            return user_store
+    return None  # store-unscoped, or store-scoped-with-"both" → all stores
+
+
 def _refused_result(store: str | None) -> dict:
     """The shape returned when the store-scope guard refuses — mirrors
     labor_report's dict shape (empty) so callers can treat it
@@ -150,10 +174,11 @@ def render_labor_breakdown(store, user, start=None, end=None) -> dict:
     if start is None or end is None:
         start, end = _default_window()
 
-    # store → labor_report's location_filter. labor_report treats
-    # location_filter in ("tomball", "copperfield") as a single-store
-    # filter; anything else (None, "both") → all stores.
-    location_filter = store if store in ("tomball", "copperfield") else None
+    # store → labor_report's location_filter. A store-scoped user who
+    # passes None/"both" is narrowed to their own store (samai 1H
+    # review obs — the canonical adapter shouldn't over-expose just
+    # because a caller passed no store). See _resolve_location_filter.
+    location_filter = _resolve_location_filter(store, user)
 
     try:
         from app.services.toast_reports import labor_report

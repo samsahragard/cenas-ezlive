@@ -164,6 +164,45 @@ def test_render_labor_breakdown_passes_redact_flag(monkeypatch):
     assert captured["redact_management"] is False
 
 
+def test_store_scoped_user_with_no_store_narrows_to_own(monkeypatch):
+    """samai 1H review obs: a store-scoped GM passing store=None must
+    NOT see all stores — the canonical adapter narrows location_filter
+    to the GM's own store_scope rather than no-op-to-all."""
+    captured = {}
+
+    def _fake(start, end, location_filter=None, **kw):
+        captured["location_filter"] = location_filter
+        return _fake_labor_report_result()
+
+    import app.services.toast_reports as tr
+    monkeypatch.setattr(tr, "labor_report", _fake)
+
+    # GM scoped to tomball, asks for None → narrowed to "tomball"
+    render_labor_breakdown(None, _user("gm", store_scope="tomball"))
+    assert captured["location_filter"] == "tomball"
+    # GM scoped to tomball, asks for "both" → still narrowed to "tomball"
+    render_labor_breakdown("both", _user("gm", store_scope="tomball"))
+    assert captured["location_filter"] == "tomball"
+
+
+def test_store_unscoped_user_with_no_store_sees_all(monkeypatch):
+    """A store-unscoped user (partner / corporate) passing store=None
+    correctly gets location_filter=None — all stores."""
+    captured = {}
+
+    def _fake(start, end, location_filter="SENTINEL", **kw):
+        captured["location_filter"] = location_filter
+        return _fake_labor_report_result()
+
+    import app.services.toast_reports as tr
+    monkeypatch.setattr(tr, "labor_report", _fake)
+
+    render_labor_breakdown(None, _user("partner"))
+    assert captured["location_filter"] is None
+    render_labor_breakdown(None, _user("corporate"))
+    assert captured["location_filter"] is None
+
+
 def test_no_dollars_leak_invariant_carried_through(monkeypatch):
     """The core privacy invariant, re-asserted THROUGH 1H's wrapper:
     after render_labor_breakdown for a non-partner viewer, the

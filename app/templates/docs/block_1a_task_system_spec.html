@@ -1,0 +1,358 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 1A — Task Model + Task Assignment System</h1>
+<p class="doc-meta">
+  Phase 2 / Block 1 / sub-block 1A. samai spec, 2026-05-13.<br>
+  Implementation: aick. Review: ck (with samai) + samai checklist PASS per commit.<br>
+  Source: Phase 2 Directive §BLOCK 1 / 1A (see
+  <a href="{{ url_for('developer_chat.app_doc', page='phase-2-directive') }}">Phase 2 Directive</a>).
+</p>
+
+<h2>1. Scope — what 1A is, and what it is NOT</h2>
+<p>
+  1A is the <strong>data foundation</strong> of the Block 1 ribbon system: the
+  Task model, its append-only audit log, the ribbon-dismissal table, the
+  hierarchy-aware assignment helper, and the two routes that create and
+  reassign tasks. Nothing renders a ribbon in 1A — 1A makes tasks
+  <em>exist, be owned, be reassigned, and be audited</em>.
+</p>
+<p><strong>1A ships:</strong></p>
+<ul>
+  <li><code>Task</code>, <code>TaskAuditLog</code>, <code>RibbonItemDismissal</code> models + one alembic migration</li>
+  <li><code>TaskAuditLog</code> append-only <code>before_delete</code> listener</li>
+  <li>A shared <code>app/services/role_hierarchy.py</code> module (see §4 — 1A is first to need it; 1E and 2C consume it next)</li>
+  <li><code>can_assign_to(actor, target)</code> assignment helper in that module</li>
+  <li><code>POST /partner/tasks/create</code> and <code>POST /partner/tasks/&lt;id&gt;/reassign</code> routes with route-layer enforcement + audit emission</li>
+  <li>Tests: model behavior, the <code>can_assign_to</code> parameterized matrix, route enforcement, audit emission</li>
+</ul>
+<p><strong>1A does NOT ship</strong> (distinct-risk-surface boundary — each is its own sub-block / commit):</p>
+<ul>
+  <li>The ribbon Jinja partial or any rendering — that is 1B</li>
+  <li>The <code>ribbon_items_for</code> content router — that is 1C</li>
+  <li>The X / Check controls and the <code>POST /partner/ribbon/dismiss</code> + <code>/check</code> routes — that is 1D. 1A creates the <code>RibbonItemDismissal</code> <em>table</em>; 1D writes to it.</li>
+  <li>The escalation cron that sets <code>escalated_to_user_id</code> / <code>escalated_at</code> — that is 1E. 1A defines those columns; 1E populates them.</li>
+  <li>Any task-completion path — <code>completed_at</code> / <code>completed_by_user_id</code> are defined in 1A's schema but written by 1D's Check handler.</li>
+</ul>
+<p>
+  The audit-log <code>action</code> enum is fully defined in 1A (§7) so the
+  table is stable, but 1A's own routes only ever emit
+  <code>created</code> and <code>reassigned</code>. The other enum values
+  are emitted by the sub-blocks that own those write paths.
+</p>
+
+<h2>2. Schema</h2>
+
+<h3>2.1 Task</h3>
+<pre><code>class Task(Base):
+    __tablename__ = "tasks"
+
+    id                  Integer, primary key
+    title               String(200),  NOT NULL          # short: "SPECS liquor order"
+    description         Text,          nullable          # longer detail
+    owner_user_id       Integer, FK(users.id, ondelete="RESTRICT"), NOT NULL, indexed
+    assigned_by_user_id Integer, FK(users.id, ondelete="RESTRICT"), NOT NULL
+    store_scope         String(20),    NOT NULL          # tomball | copperfield | both | none
+    category            String(20),    NOT NULL          # vendor | catering | event | employee | maintenance | sales | general
+    deadline_at         DateTime,      NOT NULL, indexed
+    completed_at        DateTime,      nullable, indexed
+    completed_by_user_id Integer, FK(users.id, ondelete="SET NULL"), nullable
+    escalated_to_user_id Integer, FK(users.id, ondelete="SET NULL"), nullable, indexed
+    escalated_at        DateTime,      nullable
+    created_at          DateTime,      NOT NULL, default=utcnow
+    updated_at          DateTime,      NOT NULL, default=utcnow, onupdate=utcnow
+
+    __table_args__ = (
+        Index("ix_tasks_owner_open", "owner_user_id", "completed_at"),
+        Index("ix_tasks_escalation_scan", "completed_at", "escalated_at", "deadline_at"),
+    )</code></pre>
+<p><strong>Column rationale:</strong></p>
+<ul>
+  <li><code>store_scope</code> / <code>category</code> are <code>String(20)</code> not native ENUMs — same call ck made for <code>submitted_via</code> in BriefFeedback C1: SQLite-compat + simpler migrations. Values validated application-side (§6). Document the allowed values in a module-level constant (<code>_VALID_STORE_SCOPES</code>, <code>_VALID_CATEGORIES</code>) and reference it in both the route validator and the tests.</li>
+  <li><code>ix_tasks_owner_open (owner_user_id, completed_at)</code> — the hot ribbon query is "my open tasks" (<code>owner_user_id = me AND completed_at IS NULL</code>). Composite covers it.</li>
+  <li><code>ix_tasks_escalation_scan (completed_at, escalated_at, deadline_at)</code> — 1E's cron scans <code>WHERE deadline_at &lt; now AND completed_at IS NULL AND escalated_at IS NULL</code> every 5 minutes. 1A lays the index now so 1E doesn't have to add it later as a separate migration.</li>
+  <li><code>escalated_to_user_id</code> indexed — the ribbon also queries "tasks escalated to me."</li>
+</ul>
+<p><strong>FK ondelete:</strong></p>
+<ul>
+  <li><code>owner_user_id</code>, <code>assigned_by_user_id</code> → <code>RESTRICT</code>. These are NOT NULL. The codebase follows archive-not-delete (users get deactivated, never hard-deleted), so RESTRICT should never actually fire — it is a documented safety net. If a delete path is ever written, it must reassign the task first.</li>
+  <li><code>completed_by_user_id</code>, <code>escalated_to_user_id</code> → <code>SET NULL</code>. Nullable, historical; safe to null on the (non-expected) user delete.</li>
+</ul>
+<p>
+  <strong>No hard-delete path for Task in v1.</strong> Tasks are completed
+  (<code>completed_at</code> set), not deleted. There is no <code>DELETE</code>
+  route and no <code>before_delete</code> listener on <code>Task</code> itself
+  — but see §3: <code>TaskAuditLog</code>'s FK + listener make a Task with
+  audit history effectively undeletable, which is the intended property.
+</p>
+
+<h3>2.2 TaskAuditLog</h3>
+<pre><code>class TaskAuditLog(Base):
+    __tablename__ = "task_audit_log"
+
+    id            Integer, primary key
+    task_id       Integer, FK(tasks.id, ondelete="RESTRICT"), NOT NULL, indexed
+    actor_user_id Integer, FK(users.id, ondelete="RESTRICT"), NOT NULL
+    action        String(20), NOT NULL    # created | assigned | completed | dismissed | reassigned | escalated
+    details       JSON,       nullable
+    created_at    DateTime,   NOT NULL, default=utcnow, indexed
+
+# Append-only: before_delete listener raises RuntimeError (see §3).</code></pre>
+<ul>
+  <li><code>task_id</code> ondelete=<code>RESTRICT</code> (not CASCADE): a Task with audit rows cannot be DB-deleted. Combined with archive-not-delete this means Tasks are immutable-once-audited — the right property for an operational audit trail. RESTRICT also avoids the ORM-event-vs-DB-cascade ambiguity (DB-level CASCADE bypasses the SQLAlchemy <code>before_delete</code> event).</li>
+  <li><code>actor_user_id</code> ondelete=<code>RESTRICT</code> — same archive-not-delete reasoning; the actor on an audit row must remain resolvable.</li>
+  <li><code>details</code> JSON shape is per-action — see §7.</li>
+  <li><code>created_at</code> indexed — audit surfaces and the future agent-audit page query by time.</li>
+</ul>
+
+<h3>2.3 RibbonItemDismissal</h3>
+<pre><code>class RibbonItemDismissal(Base):
+    __tablename__ = "ribbon_item_dismissals"
+
+    id           Integer, primary key
+    user_id      Integer, FK(users.id, ondelete="CASCADE"), NOT NULL
+    item_type    String(20), NOT NULL    # task | signal | sales_insight
+    item_id      Integer,    NOT NULL    # polymorphic ref — NOT a DB FK (see below)
+    dismiss_day  String(10), NOT NULL    # "YYYY-MM-DD" — daily reset boundary
+    dismissed_at DateTime,   NOT NULL, default=utcnow
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "item_type", "item_id", "dismiss_day",
+                         name="uq_ribbon_dismissal_per_day"),
+        Index("ix_ribbon_dismissal_lookup", "user_id", "dismiss_day"),
+    )</code></pre>
+<ul>
+  <li><code>item_id</code> is a <strong>polymorphic reference</strong> — it points at <code>tasks.id</code>, <code>signals.id</code>, or <code>sales_insights.id</code> depending on <code>item_type</code>. It is deliberately <strong>not</strong> a DB-level FK (a single column can't FK three tables). Referential integrity is application-enforced in 1D's dismiss handler (validate the item exists + the user may dismiss it before INSERT).</li>
+  <li><code>user_id</code> ondelete=<code>CASCADE</code> — dismissals are ephemeral per-user UI state, meaningless once the user is gone. CASCADE is correct here (unlike Task ownership).</li>
+  <li><strong>Daily-reset decision (the directive flagged this as "samai's call"):</strong> use <code>dismiss_day</code> (a <code>"YYYY-MM-DD"</code> string), <strong>not</strong> a <code>session_id</code>. Rationale: (1) "session" is ambiguous in a web app — cookie session? browser tab? until logout? — whereas a day boundary is operationally meaningful: a manager X's a ribbon item, it's gone for today, it's back tomorrow morning so they re-triage it, matching the daily operational rhythm. (2) No session-tracking infrastructure needed — <code>dismiss_day = date.today().isoformat()</code> at write time. (3) The <code>UniqueConstraint(user_id, item_type, item_id, dismiss_day)</code> makes 1D's dismiss endpoint naturally idempotent (dismissing twice in one day is a harmless no-op). (4) Permanent dismissal of intrinsically time-bound items (sales insights) is handled by 1E's auto-expiry cron, not by this table — so this table only ever needs the "not now, today" semantics.</li>
+  <li><strong>1A ships the model + migration only.</strong> The <code>POST /partner/ribbon/dismiss</code> and <code>/check</code> write routes are 1D.</li>
+</ul>
+
+<h2>3. Append-only enforcement on TaskAuditLog</h2>
+<p>
+  Mirror the established pattern (<code>BriefFeedback</code> C1 / <code>LegalAccessLog</code>):
+  an ORM <code>before_delete</code> event listener on <code>TaskAuditLog</code>
+  that raises <code>RuntimeError</code> with an "append-only" message.
+</p>
+<pre><code>@_sa_event.listens_for(TaskAuditLog, "before_delete")
+def _no_delete_task_audit(mapper, connection, target):
+    raise RuntimeError(
+        "TaskAuditLog is append-only — task history cannot be deleted. "
+        "Corrections are made by appending a new audit row, not by "
+        "removing one."
+    )</code></pre>
+<p>
+  <code>UPDATE</code> is not blocked — but 1A's routes never UPDATE an audit
+  row (they only INSERT), and no other sub-block should either. A review
+  item (§10) checks that no write path mutates an existing
+  <code>TaskAuditLog</code> row.
+</p>
+
+<h2>4. The role-hierarchy foundation — a shared module</h2>
+<p>
+  <strong>Architectural call worth surfacing before implementation:</strong>
+  three Phase 2 sub-blocks need the same role-tier / hierarchy logic —
+  1A's <code>can_assign_to</code>, 1E's "find the owner's immediate manager"
+  escalation step, and 2C's <code>can_view_counseling</code> cascade. The
+  directive references "the existing role hierarchy" for 1E, but
+  <code>app/services/permissions.py</code> only has <code>ROLE_PERMISSIONS</code>
+  (tag grants) — there is <strong>no role-tier / hierarchy structure today</strong>.
+</p>
+<p>
+  1A is the first sub-block to need it, so 1A creates it:
+  <code>app/services/role_hierarchy.py</code>, consumed by 1E and 2C next.
+  It holds:
+</p>
+<ul>
+  <li><code>ROLE_TIER: dict[str, int]</code> — every canonical role mapped to an integer tier (higher = more authority). The tiers, from the directive's §2C hierarchy line:
+    <pre><code>partner            = 5
+corporate          = 4   # corporate, corporate_chef
+gm                 = 3   # gm, prep_manager        (see open question Q3)
+manager-tier       = 2   # km, assistant_km, foh_manager
+hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender — see Q1)</code></pre>
+  </li>
+  <li><code>role_tier(role) -&gt; int</code> — resolves a <code>User.permission_level</code> (including the <code>_LEGACY_ALIASES</code> from permissions.py — <code>"manager"</code>→gm, <code>"corporate-driver"</code>→driver) to its tier. Unknown roles resolve to tier <code>0</code> (no authority) rather than raising.</li>
+  <li><code>role_domain(role) -&gt; str</code> — <code>"kitchen"</code> | <code>"foh"</code> | <code>"both"</code>. <code>km</code>/<code>assistant_km</code>/<code>corporate_chef</code>/<code>prep_manager</code> = kitchen; <code>foh_manager</code> = foh; <code>gm</code>/<code>corporate</code>/<code>partner</code> = both. Needed because the assignment rules cross-cut tier with a kitchen/FOH domain (a KM can't assign to a server; an FOH manager can't assign to a cook).</li>
+  <li><code>immediate_manager(user, db) -&gt; User | None</code> — the lowest-tier user strictly above <code>user</code>'s tier in <code>user</code>'s store scope. 1E needs this; 1A defines it here so 1E imports rather than re-deriving.</li>
+</ul>
+<p>
+  Keeping this in its own module (not buried in <code>permissions.py</code>)
+  keeps the tag-grant concern and the org-hierarchy concern separate —
+  they answer different questions and will evolve independently.
+</p>
+
+<h2>5. can_assign_to — the assignment helper</h2>
+<h3>5.1 Signature</h3>
+<p>
+  The directive sketched <code>can_assign_to(actor_role, target_role, store_scope)</code>.
+  <strong>Spec proposes instead:</strong>
+</p>
+<pre><code>def can_assign_to(actor: User, target: User) -&gt; bool:
+    """True if `actor` may assign/reassign a task to `target`."""</code></pre>
+<p>
+  Reasons: the helper needs <code>actor.store_scope</code> <em>and</em>
+  <code>target.store_scope</code> (the rules say "in their store" / "in
+  their scope"), plus both roles — so passing full <code>User</code> objects
+  is cleaner than four loose primitives, and it matches the existing
+  <code>_user_has(user, ...)</code> convention in <code>permissions.py</code>.
+  The task's own <code>store_scope</code> is validated separately in the route
+  (§6) — it is a property of the task, not of the assignment relationship.
+</p>
+
+<h3>5.2 The assignment rules (from the directive, §1A)</h3>
+<table>
+  <tr><th>Actor</th><th>May assign to</th><th>Store constraint</th></tr>
+  <tr><td>partner</td><td>anyone</td><td>none</td></tr>
+  <tr><td>corporate</td><td>gm and every tier below</td><td>none (corporate is store-unscoped)</td></tr>
+  <tr><td>gm</td><td>manager-tier (km / assistant_km / foh_manager) + hourly-tier (expo, driver, …)</td><td>target must be in the GM's store</td></tr>
+  <tr><td>km / assistant_km</td><td>hourly-tier <em>kitchen</em> staff only</td><td>target must be in the KM's scope</td></tr>
+  <tr><td>foh_manager</td><td>hourly-tier <em>FOH</em> staff + expo</td><td>target must be in the manager's store</td></tr>
+  <tr><td>any role</td><td>themselves (<code>actor.id == target.id</code>)</td><td>always allowed</td></tr>
+</table>
+<p><strong>Derived rules the helper must encode:</strong></p>
+<ul>
+  <li>Self-assignment short-circuits to <code>True</code> first — every role, including hourly tier, may self-assign.</li>
+  <li>An actor may never assign to a peer at the same tier (gm→gm = False, corporate→corporate = False) — only strictly downward, except self.</li>
+  <li>Tier alone is not sufficient below GM: a KM (kitchen) and an FOH manager (FOH) are the same tier but assign to different <em>domains</em>. The helper checks <code>role_tier(actor) &gt; role_tier(target)</code> <strong>and</strong>, when the actor is manager-tier, <code>role_domain</code> compatibility.</li>
+  <li>Store constraint: when the actor is store-scoped (gm and below), <code>target.store_scope</code> must intersect <code>actor.store_scope</code>. Partner / corporate / corporate_chef / prep_manager are store-unscoped and skip the store check (corporate_chef + prep_manager pending Q3).</li>
+</ul>
+
+<h3>5.3 BLOCKING GAP — escalate to @sam before the km / manager-tier rules can be implemented</h3>
+<p>
+  <strong>@sam — the assignment hierarchy references roles that do not exist
+  in the current taxonomy.</strong> <code>ROLE_PERMISSIONS</code> has exactly
+  ten canonical roles: <code>partner, corporate, gm, km, assistant_km,
+  corporate_chef, prep_manager, foh_manager, expo, driver</code>. The
+  directive's rules ("KM can assign to <em>kitchen staff</em>",
+  "FOH manager can assign to <em>hourly staff</em>") reference
+  <code>cook</code>, <code>server</code>, <code>busser</code>, <code>host</code>,
+  <code>bartender</code> — none of which are roles in the system today. Only
+  <code>expo</code> and <code>driver</code> exist at the hourly tier.
+</p>
+<p>Three ways forward — recommend (A):</p>
+<ol>
+  <li><strong>(A, recommended) Extend the role taxonomy first, as a Block 1 precondition commit.</strong> Add the hourly roles (<code>cook, server, busser, host, bartender</code>) to <code>ROLE_PERMISSIONS</code> with appropriately minimal tag sets, and to <code>ROLE_TIER</code> / <code>role_domain</code>. This is needed anyway for Block 2 (the counseling cascade in 2C and attendance in 2B both reference the same hourly roles), so doing it once up front unblocks the most sub-blocks. samai will spec the taxonomy extension as a tiny standalone commit if Sam +1's this path.</li>
+  <li>(B) <code>can_assign_to</code> operates over a separate, broader role-tier table decoupled from <code>ROLE_PERMISSIONS</code> — but then two role lists drift apart, which is exactly the spec-drift the permission matrix tests were built to catch. Not recommended.</li>
+  <li>(C) Ship 1A's <code>can_assign_to</code> with only the partner / corporate / gm / self rules (all of which reference roles that <em>do</em> exist) and defer the km / assistant_km / foh_manager rules to a 1A-follow-up commit once the taxonomy lands. Viable as a stopgap if Sam wants 1A moving immediately, but it leaves the helper visibly incomplete.</li>
+</ol>
+<p>
+  <strong>Until Sam picks a path:</strong> aick can implement everything else
+  in 1A (all three tables, the migration, the append-only listener, the
+  role-hierarchy module skeleton, the partner/corporate/gm/self branches of
+  <code>can_assign_to</code>, both routes, and the tests for all of the
+  above). Only the km / assistant_km / foh_manager branches of
+  <code>can_assign_to</code> are blocked. This keeps 1A ~85% implementable
+  immediately.
+</p>
+<p>
+  <strong>Two smaller open questions, same area</strong> — see §11 Q2 / Q3.
+</p>
+
+<h2>6. Routes</h2>
+<p>1A ships exactly two write routes. Both follow samai methodology rule 1 (audience-eligibility-before-mutation): authorization is checked <em>before</em> any row is written.</p>
+
+<h3>6.1 POST /partner/tasks/create</h3>
+<ol>
+  <li>Resolve <code>owner_user_id</code> from the form. If absent, default to <code>current_user.id</code> (self-assignment).</li>
+  <li>Validate <code>store_scope</code> ∈ <code>_VALID_STORE_SCOPES</code>, <code>category</code> ∈ <code>_VALID_CATEGORIES</code>, <code>title</code> non-empty + ≤200 chars, <code>deadline_at</code> parses to a future-or-present datetime. Any failure → <code>400</code>.</li>
+  <li>Load the <code>owner</code> User. If not found / inactive → <code>400</code>.</li>
+  <li><strong>Enforce <code>can_assign_to(current_user, owner)</code></strong>. False → <code>403</code> (do not write the Task row).</li>
+  <li>INSERT the <code>Task</code> with <code>assigned_by_user_id = current_user.id</code>.</li>
+  <li>INSERT a <code>TaskAuditLog</code> row, <code>action="created"</code> (see §7 for the <code>details</code> shape).</li>
+  <li>Return the created task (redirect or JSON per the surface 1B/1C will consume — coordinate with aick; JSON is fine for v1).</li>
+</ol>
+
+<h3>6.2 POST /partner/tasks/&lt;id&gt;/reassign</h3>
+<ol>
+  <li>Load the <code>Task</code>. Not found → <code>404</code>.</li>
+  <li>Resolve the proposed <code>new_owner_user_id</code> from the form; load that User. Not found / inactive → <code>400</code>.</li>
+  <li><strong>Enforce <code>can_assign_to(current_user, new_owner)</code></strong>. False → <code>403</code> (do not mutate the Task).</li>
+  <li>Capture <code>from_owner_user_id</code> (the current value), then UPDATE <code>owner_user_id = new_owner.id</code>, <code>assigned_by_user_id = current_user.id</code>, <code>updated_at = utcnow</code>.</li>
+  <li>INSERT a <code>TaskAuditLog</code> row, <code>action="reassigned"</code>.</li>
+</ol>
+<p>
+  <strong>Permission-tag gating:</strong> 1A introduces <em>no</em> new
+  <code>requires_permission</code> tag. Task create/own/reassign is available
+  to every authenticated user — the directive's "anyone can assign to
+  themselves" means hourly-tier users (a driver self-assigning a task)
+  must reach these routes. <code>can_assign_to</code> <em>is</em> the
+  authorization gate for the assignment relationship; the route still runs
+  inside the normal authenticated-session guard. If Sam wants a coarse
+  <code>tasks.use</code> tag on top, that's a one-line follow-up — flagged
+  as Q4, not assumed.
+</p>
+<p>
+  <strong>Route file:</strong> new blueprint <code>app/web/tasks.py</code>
+  (<code>tasks_bp</code>), registered in <code>app/__init__.py</code>. Keeps
+  the 1A surface a clean, self-contained review target — same shape as
+  the briefs blueprint in calibration C2.
+</p>
+
+<h2>7. TaskAuditLog action emission map</h2>
+<table>
+  <tr><th>action</th><th>Emitted by</th><th>details JSON shape</th></tr>
+  <tr><td><code>created</code></td><td><strong>1A</strong> — create route</td><td><code>{owner_user_id, store_scope, category, deadline_at, title}</code></td></tr>
+  <tr><td><code>reassigned</code></td><td><strong>1A</strong> — reassign route</td><td><code>{from_owner_user_id, to_owner_user_id, reassigned_by_user_id}</code></td></tr>
+  <tr><td><code>completed</code></td><td>1D — Check handler</td><td><code>{completed_by_user_id}</code></td></tr>
+  <tr><td><code>dismissed</code></td><td>1D — task cancellation path (distinct from the ephemeral ribbon X — see note)</td><td><code>{dismissed_by_user_id, reason}</code></td></tr>
+  <tr><td><code>escalated</code></td><td>1E — escalation cron</td><td><code>{escalated_to_user_id, tier, deadline_at}</code></td></tr>
+  <tr><td><code>assigned</code></td><td>reserved — Block 3B delegation-approval execution path</td><td><code>{owner_user_id, via_delegation_request_id}</code></td></tr>
+</table>
+<p>
+  <strong>Note on <code>dismissed</code>:</strong> the audit-log
+  <code>dismissed</code> action means a <em>task was cancelled / killed</em>
+  — a permanent state change to the Task. It is <strong>not</strong> the
+  same as the ephemeral ribbon X (which writes a
+  <code>RibbonItemDismissal</code> row and resets daily). Two different
+  concepts that happen to share the word. 1A defines the enum value; the
+  task-cancellation route that emits it is 1D's (or a later sub-block's) —
+  flagged as Q5 since the directive doesn't fully specify a cancel path.
+</p>
+
+<h2>8. Test requirements</h2>
+<p>1A's test file: <code>tests/test_task_system.py</code>. Required coverage:</p>
+<ul>
+  <li><strong>Model:</strong> Task / TaskAuditLog / RibbonItemDismissal round-trip; <code>TaskAuditLog</code> <code>before_delete</code> raises <code>RuntimeError</code> matching <code>/append-only/</code>; FK ondelete declarations assert correctly (RESTRICT on owner/assigned_by/task_id/actor; SET NULL on completed_by/escalated_to; CASCADE on dismissal.user_id); the <code>uq_ribbon_dismissal_per_day</code> unique constraint rejects a duplicate.</li>
+  <li><strong>can_assign_to matrix:</strong> a parameterized test over <em>(actor_role × target_role × same-store / cross-store)</em>, asserting the gate decision against the §5.2 table — the same shape as the permission matrix in <code>test_permission_matrix.py</code> (2255c1d). Use a <code>_test_id()</code>-style self-describing id (<code>actor=gm__target=expo__store=same__expected=allow</code>) so a failure names the exact combo. Include the explicit self-assignment case for every role. <em>If Sam picks path (C) in §5.3, the km/foh_manager rows are marked xfail with a reason until the taxonomy lands.</em></li>
+  <li><strong>Routes:</strong> create with an allowed assignment → 200 + Task row + <code>created</code> audit row; create with a disallowed assignment → 403 + <em>no</em> Task row written (audience-eligibility-before-mutation); reassign allowed → 200 + owner changed + <code>reassigned</code> audit row with correct <code>from</code>/<code>to</code>; reassign disallowed → 403 + Task unchanged; invalid <code>store_scope</code>/<code>category</code>/<code>deadline_at</code> → 400.</li>
+  <li><strong>Audit emission:</strong> assert the <code>details</code> JSON shape per §7 for the two actions 1A emits.</li>
+</ul>
+
+<h2>9. Distinct-commit boundary recap</h2>
+<p>
+  1A is one commit (or, if Sam picks §5.3 path C, one commit + one small
+  follow-up once the taxonomy lands). It does not touch any ribbon
+  rendering, any cron, or any dismiss/check/complete write path. If the
+  role-taxonomy extension (§5.3 path A) is chosen, that is its
+  <em>own</em> precondition commit, samai-spec'd separately and reviewed
+  before 1A's <code>can_assign_to</code> depends on it.
+</p>
+
+<h2>10. samai review checklist (run per commit)</h2>
+<ol>
+  <li>Scope: only the 1A surfaces touched — no ribbon partial, no cron, no dismiss/check/complete route.</li>
+  <li>Three tables match §2 column-for-column: types, nullability, indexes, FK ondelete.</li>
+  <li><code>TaskAuditLog</code> <code>before_delete</code> listener present and raising; no write path UPDATEs an existing audit row.</li>
+  <li><code>RibbonItemDismissal</code> uses <code>dismiss_day</code> (not <code>session_id</code>) + the unique constraint + the lookup index.</li>
+  <li><code>app/services/role_hierarchy.py</code> exists with <code>ROLE_TIER</code>, <code>role_tier</code>, <code>role_domain</code>, <code>immediate_manager</code>; legacy aliases resolved; unknown role → tier 0, not a raise.</li>
+  <li><code>can_assign_to(actor, target)</code>: self-assignment short-circuits True; never assigns to a same-tier peer; store constraint enforced for store-scoped actors; the §5.2 table is encoded exactly (modulo the §5.3 gap, per Sam's chosen path).</li>
+  <li>Both routes enforce <code>can_assign_to</code> <em>before</em> any write (rule 1); 403 leaves no row written.</li>
+  <li>Route validation: <code>store_scope</code> / <code>category</code> / <code>title</code> / <code>deadline_at</code> validated, 400 on bad input.</li>
+  <li>Audit rows emitted with the §7 <code>details</code> shape for <code>created</code> and <code>reassigned</code>.</li>
+  <li><code>tasks_bp</code> registered in <code>app/__init__.py</code>; migration present and reversible.</li>
+  <li>Tests per §8 all green; full suite no regression.</li>
+  <li>Deploy-verify (rule 3) after aick's push: app boots, a representative authenticated route still 200s.</li>
+</ol>
+
+<h2>11. Open questions for Sam</h2>
+<ol>
+  <li><strong>Q1 (blocking — see §5.3):</strong> the hourly-tier role taxonomy gap. Recommend path (A): extend <code>ROLE_PERMISSIONS</code> with <code>cook / server / busser / host / bartender</code> as a Block 1 precondition commit.</li>
+  <li><strong>Q2:</strong> <code>assistant_km</code> assignment scope — the directive says "KM can assign to kitchen staff" but doesn't mention assistant_km. Spec assumes assistant_km = same as km (kitchen hourly, in scope). Confirm.</li>
+  <li><strong>Q3:</strong> <code>corporate_chef</code> and <code>prep_manager</code> placement. Both are multi-store. The directive's hierarchy line omits them. Spec provisionally puts <code>corporate_chef</code> at corporate tier (matches Javier's "walk into either kitchen" authority from the voice guide) and <code>prep_manager</code> at gm tier, both store-unscoped. Confirm or correct.</li>
+  <li><strong>Q4:</strong> coarse <code>tasks.use</code> permission tag — spec assumes <em>no</em> new tag (task CRUD is universal to authenticated users; <code>can_assign_to</code> is the real gate). Confirm, or say if you want a tag.</li>
+  <li><strong>Q5:</strong> task-cancellation path — the <code>dismissed</code> audit action implies a cancel route exists. The directive doesn't specify one. Spec leaves it for 1D or a later sub-block. Confirm where the cancel path should live, or whether v1 has no cancel (tasks are only completed, never cancelled).</li>
+</ol>
+
+</div>
+{% endblock %}

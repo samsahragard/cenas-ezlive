@@ -337,6 +337,7 @@ DOC_PAGES = [
     ("morning-brief-composer-spec", "Morning Brief Composer Spec", "doc_morning_brief_composer_spec"),
     ("brief-calibration-runbook", "Brief Calibration Runbook", "doc_brief_calibration_runbook"),
     ("phase-2-directive",        "Phase 2 Directive", "doc_phase_2_directive"),
+    ("block-1a-task-system-spec", "Block 1A - Task System Spec", "doc_block_1a_task_system_spec"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

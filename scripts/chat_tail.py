@@ -146,6 +146,12 @@ def main() -> int:
     NO_CHUNK = os.getenv("CHAT_TAIL_NO_CHUNK") == "1"
 
     def _emit(t: str, a: str, body: str, suffix: str) -> None:
+        # Collapse embedded newlines/CRs to spaces: a multi-line body
+        # splits into multiple terminal lines, and a line-anchored
+        # Monitor filter (^[|ERROR) then keeps only the first line of
+        # each chunk — silently dropping the rest. Keep every emitted
+        # event single-line. (ck, 2026-05-14)
+        body = body.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
         if not body:
             # Attachment-only message — one short line.
             print(f"[{t}] {a}:{suffix.lstrip()}", flush=True)

@@ -327,6 +327,27 @@ hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender �
   task-cancellation route that emits it is 1D's (or a later sub-block's) —
   flagged as Q5 since the directive doesn't fully specify a cancel path.
 </p>
+<p>
+  <strong>Note on system-initiated rows (<code>escalated</code>):</strong> the
+  <code>escalated</code> action is emitted by 1E's 5-minute cron — a system
+  actor, no human. <code>actor_user_id</code> is NOT NULL, so the row must
+  carry a resolvable <code>User</code> id; the convention is
+  <strong><code>actor_user_id</code> = the task's <code>owner_user_id</code></strong>
+  — guaranteed-resolvable (a NOT NULL RESTRICT FK, and the codebase archives
+  rather than hard-deletes users), it keys the row onto the owner's
+  task-history thread (the natural subject of an escalation), and it puts both
+  ids on one row (the owner as actor, the manager in
+  <code>details.escalated_to_user_id</code>). A system-initiated row is
+  identified as such by its <code>action</code> + <code>details</code>, never
+  by inferring intent from <code>actor_user_id</code>. <strong>Any
+  audit-display surface (e.g. Block 3D) MUST render <code>escalated</code> rows
+  by <code>action</code> + <code>details</code></strong> ("task escalated to
+  &lt;manager&gt;, tier N"), never naively as "&lt;actor&gt; did
+  &lt;action&gt;" — the actor field on a system row is a resolvable
+  placeholder, not a claim that the owner performed the escalation.
+  Established by 1E (commit <strong>8f69373</strong>); samai 1E review
+  2026-05-14.
+</p>
 
 <h2>8. Test requirements</h2>
 <p>1A's test file: <code>tests/test_task_system.py</code>. Required coverage:</p>

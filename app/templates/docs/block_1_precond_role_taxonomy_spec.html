@@ -125,6 +125,26 @@ def role_domain(role: str | None) -&gt; str:
   <li><strong>Unknown role:</strong> <code>role_tier</code> → <code>0</code> (an unknown role has no authority — it can never out-rank anyone, so <code>can_assign_to</code> and <code>can_view_counseling</code> both fail safe-closed for it). <code>role_domain</code> → <code>"foh"</code> (the role_classifier-consistent safe default). <strong>Neither function raises</strong> — a stray <code>permission_level</code> value degrades, never 500s.</li>
 </ul>
 
+<h3>2.4 immediate_manager — added by 1E, documented here for module coherence</h3>
+<p>
+  <strong>Not shipped by this precondition</strong> — deferred per §1. Added to
+  <code>role_hierarchy.py</code> by <strong>Block 1E</strong> (commit
+  <strong>8f69373</strong>, samai 1E review code-review PASS 2026-05-14), its
+  first real consumer (the escalation cron). Documented here because this spec
+  is the home for the <code>role_hierarchy.py</code> module; the contract as 1E
+  defines it:
+</p>
+<pre><code>def immediate_manager(user, db) -&gt; User | None:
+    """The lowest-tier ACTIVE user STRICTLY ABOVE user's tier whose
+    authority covers user's store — who a missed task escalates to.
+    Returns a User row, or None if nobody qualifies (a partner has no
+    manager). Takes a db Session — the caller owns its lifecycle."""</code></pre>
+<ul>
+  <li><strong>Candidate rule:</strong> active; <code>role_tier(candidate) &gt; role_tier(user)</code> (strictly above); authority covers the user's store — a store-unscoped candidate (partner / corporate / corporate_chef / prep_manager) covers everyone, a store-scoped candidate's <code>store_scope</code> must intersect the user's.</li>
+  <li><strong>Selection:</strong> among qualifying candidates the LOWEST tier wins (closest manager). <strong>Tie-break within that tier — domain preference:</strong> a same-<code>role_domain</code> candidate is preferred (a kitchen cook escalates to a kitchen manager, not the FOH manager), falling back to the whole lowest tier if none match; the final tie-break is the lowest <code>User.id</code> for determinism. The domain-preference tie-break is a 1E refinement on top of the bare "lowest-tier" wording — cross-domain escalation reads operationally wrong; samai's 1E review blessed it.</li>
+  <li><strong>Import-safe:</strong> <code>User</code> is imported lazily inside the function, so <code>role_hierarchy.py</code> stays import-safe-from-anywhere (§2's module contract) even though this helper takes a db session.</li>
+</ul>
+
 <h2>3. Minimal ROLE_PERMISSIONS entries for the five hourly roles</h2>
 <p>
   Add five entries to <code>ROLE_PERMISSIONS</code> in

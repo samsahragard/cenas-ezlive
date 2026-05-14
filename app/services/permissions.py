@@ -108,6 +108,21 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         # the gm set in this module — same role-based-not-per-person
         # inheritance pattern.
         "briefs.view_own",
+        # Phase 2 / Block 1G (ck 2026-05-14). The team-reports tab at
+        # /partner/team-reports/ — task-based personnel reports.
+        #   team_reports.view            → the tab + reports 1–3.
+        #     Held by corporate + gm (and partner via wildcard). GM
+        #     access is store-scoped at the QUERY layer (1G §4): the
+        #     tag grants the tab, the server-derived scope confines a
+        #     GM to their own store — defense-in-depth, the same shape
+        #     as the 251621f unassign-courier cross-check.
+        #   team_reports.view_all_stores → report #4 (per-store
+        #     comparison) + the unfiltered cross-store view. corporate
+        #     only (partner via wildcard) — NOT in the gm set; that
+        #     omission is the line that keeps cross-store reporting
+        #     partner/corporate-tier. Mirrors the existing
+        #     labor.view_store_summary vs labor.view_all_stores split.
+        "team_reports.view", "team_reports.view_all_stores",
     },
 
     "gm": {
@@ -130,6 +145,17 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
         "transcripts.search", "transcripts.read",
         "kds.view_alerts", "kds.view_kitchen_display",
+        # Phase 2 / Block 1G (ck 2026-05-14). A GM holds
+        # team_reports.view — they reach the team-reports tab + reports
+        # 1–3 — but their access is store-scoped at the QUERY layer
+        # (1G §4): _derive_store_scope confines a GM to their own store
+        # with no request-param override. A GM does NOT hold
+        # team_reports.view_all_stores (corporate + partner only), so
+        # report #4 + the cross-store view stay above their tier — the
+        # query for it never even runs for a GM. This is the
+        # labor.view_store_summary / labor.view_all_stores split
+        # applied to team reports.
+        "team_reports.view",
     },
 
     "km": {

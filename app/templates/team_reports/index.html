@@ -1,0 +1,198 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'team_reports' %}
+{% block title %}Team Reports — Cenas Kitchen{% endblock %}
+{% block page_title %}Partner · Team Reports{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    Task-based personnel reports — miss rates, escalation response time,
+    most-missed task types.
+    {% if scope_mode == 'store' %}
+      Showing <strong>{{ scope_store or 'your store' }}</strong> only.
+    {% else %}
+      Showing <strong>all stores</strong>.
+    {% endif %}
+    These reports drive personnel decisions — read them with that weight.
+  </p>
+{% endblock %}
+
+{% block content %}
+
+{# Window toggle — the only request param this tab honors. Store scope
+   is server-derived (a GM can't widen it by any param); 1G spec §4. #}
+<div class="tr-window" style="display:flex; gap:6px; margin-bottom:18px;">
+  {% for w in window_options %}
+    <a href="?window={{ w }}"
+       class="subnav-pill{% if w == window %} is-active{% endif %}"
+       style="border-radius:8px;">
+      Last {{ w }} days
+    </a>
+  {% endfor %}
+</div>
+
+{% macro who(uid) -%}
+  {{ labels.get(uid, 'User #' ~ uid) }}
+{%- endmacro %}
+
+{# ---- Report 1: per-employee miss rate ---- #}
+<section style="margin-bottom:24px;">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase;
+              letter-spacing:0.12em; color:var(--ck-gold, #d9a436);
+              margin-bottom:8px;">
+    1 · Per-employee task miss rate
+  </div>
+  {% if report1 %}
+  <div class="table-scroll">
+    <table class="log-table log-table-view">
+      <thead><tr class="group-header">
+        <th>Employee</th><th>Tasks resolved</th><th>Missed</th><th>Miss rate</th>
+      </tr></thead>
+      <tbody>
+        {% for r in report1 %}
+        <tr>
+          <td style="font-weight:600;">{{ who(r.owner_user_id) }}</td>
+          <td>{{ r.total }}</td>
+          <td>{{ r.missed }}</td>
+          <td>
+            <span style="font-weight:600;
+              {% if r.miss_rate >= 0.34 %}color:var(--ck-status-warn, #E2645C);
+              {% elif r.miss_rate >= 0.17 %}color:var(--ck-status-active, #FFD970);
+              {% else %}color:var(--ck-status-open, #9CCB76);{% endif %}">
+              {{ (r.miss_rate * 100) | round(1) }}%
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:12px; color:var(--text-3); font-style:italic;">
+    No resolved tasks in this window.
+  </p>
+  {% endif %}
+  <p style="margin-top:6px; font-size:11px; color:var(--text-3);">
+    "Missed" = escalated, completed late, or past deadline + still open.
+    A reassigned task's miss is attributed to whoever owned it when the
+    deadline passed.
+  </p>
+</section>
+
+{# ---- Report 2: per-manager escalation response time ---- #}
+<section style="margin-bottom:24px;">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase;
+              letter-spacing:0.12em; color:var(--ck-gold, #d9a436);
+              margin-bottom:8px;">
+    2 · Per-manager escalation response time
+  </div>
+  {% if report2 %}
+  <div class="table-scroll">
+    <table class="log-table log-table-view">
+      <thead><tr class="group-header">
+        <th>Manager</th><th>Escalations resolved</th>
+        <th>Median</th><th>Mean</th><th>Still open</th>
+      </tr></thead>
+      <tbody>
+        {% for r in report2 %}
+        <tr>
+          <td style="font-weight:600;">{{ who(r.manager_user_id) }}</td>
+          <td>{{ r.resolved_count }}</td>
+          <td>{% if r.median_hours is not none %}{{ r.median_hours }}h{% else %}—{% endif %}</td>
+          <td style="opacity:0.7;">{% if r.mean_hours is not none %}{{ r.mean_hours }}h{% else %}—{% endif %}</td>
+          <td>
+            {% if r.still_open %}
+              <span style="color:var(--ck-status-warn, #E2645C); font-weight:600;">{{ r.still_open }}</span>
+            {% else %}0{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:12px; color:var(--text-3); font-style:italic;">
+    No escalations in this window.
+  </p>
+  {% endif %}
+  <p style="margin-top:6px; font-size:11px; color:var(--text-3);">
+    Median is the headline — mean is skewed by a single stale task.
+  </p>
+</section>
+
+{# ---- Report 3: most-frequently-missed task types ---- #}
+<section style="margin-bottom:24px;">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase;
+              letter-spacing:0.12em; color:var(--ck-gold, #d9a436);
+              margin-bottom:8px;">
+    3 · Most-frequently-missed task types
+  </div>
+  {% if report3 %}
+  <div class="table-scroll">
+    <table class="log-table log-table-view">
+      <thead><tr class="group-header">
+        <th>Category</th><th>Missed tasks</th>
+      </tr></thead>
+      <tbody>
+        {% for r in report3 %}
+        <tr>
+          <td style="font-weight:600;">{{ r.category }}</td>
+          <td>{{ r.missed }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:12px; color:var(--text-3); font-style:italic;">
+    No missed tasks in this window.
+  </p>
+  {% endif %}
+</section>
+
+{# ---- Report 4: per-store comparison — view_all_stores only ----
+   The route only populates report4 when the viewer holds
+   team_reports.view_all_stores; for a GM it is None and this whole
+   block does not render. Layer 4 of the 1G gating model. #}
+{% if can_compare and report4 %}
+<section style="margin-bottom:24px;">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase;
+              letter-spacing:0.12em; color:var(--ck-gold, #d9a436);
+              margin-bottom:8px;">
+    4 · Per-store comparison
+  </div>
+  <div class="table-scroll">
+    <table class="log-table log-table-view">
+      <thead><tr class="group-header">
+        <th>Metric</th>
+        {% for store in report4.keys() %}<th style="text-transform:capitalize;">{{ store }}</th>{% endfor %}
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;">Tasks resolved</td>
+          {% for store, d in report4.items() %}<td>{{ d.total_tasks }}</td>{% endfor %}
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Missed tasks</td>
+          {% for store, d in report4.items() %}<td>{{ d.missed_tasks }}</td>{% endfor %}
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Miss rate</td>
+          {% for store, d in report4.items() %}
+            <td style="font-weight:600;
+              {% if d.miss_rate >= 0.34 %}color:var(--ck-status-warn, #E2645C);
+              {% elif d.miss_rate >= 0.17 %}color:var(--ck-status-active, #FFD970);
+              {% else %}color:var(--ck-status-open, #9CCB76);{% endif %}">
+              {{ (d.miss_rate * 100) | round(1) }}%
+            </td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Open escalations</td>
+          {% for store, d in report4.items() %}<td>{{ d.open_escalations }}</td>{% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

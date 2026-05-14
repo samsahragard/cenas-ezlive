@@ -304,6 +304,30 @@
     </div>
     {% endif %}{# end has_permission('access.team_admin') #}
 
+    {# Phase 2 / Block 1G (ck 2026-05-14): the team-reports tab. Its
+       own section gated by has_permission('team_reports.view') —
+       partner + corporate + gm. NOT folded into the Admin section
+       above: Admin is access.team_admin-gated (partner + corporate
+       only), but team-reports is also GM-visible, so it needs its
+       own gate. A GM seeing this link is correct + intended; the
+       store-scoping that confines a GM to their own store is enforced
+       server-side at the query layer (1G spec §4), not by hiding the
+       link. #}
+    {% if has_permission('team_reports.view') %}
+    <div class="ck-sb-section" data-id="team-reports">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Team Reports</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        <a href="/partner/team-reports/" class="ck-sb-item{% if active == 'team_reports' %} active{% endif %}">
+          <i class="ti ti-chart-bar ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Task Reports</span>
+        </a>
+      </div></div>
+    </div>
+    {% endif %}{# end has_permission('team_reports.view') #}
+
     {% if has_permission('legal.view') %}
     <div class="ck-sb-section" data-id="legal">
       <button class="ck-sb-section-head" aria-expanded="true">

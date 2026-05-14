@@ -24,6 +24,7 @@ from app.web.access_request_routes import access_req as access_req_bp
 from app.web.driver_system import driver_system_bp
 from app.web.briefs import briefs_bp
 from app.web.tasks import tasks_bp
+from app.web.team_reports import team_reports_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
@@ -124,6 +125,13 @@ def create_app():
     # not auto-partner-gated; the routes require g.current_user and use
     # can_assign_to as the authorization gate. See app/web/tasks.py.
     app.register_blueprint(tasks_bp)
+    # Team-reports tab (Phase 2 / Block 1G, ck 2026-05-14). The
+    # task-based team-reports tab at /partner/team-reports/. Every
+    # route carries @requires_permission("team_reports.view"); store
+    # scope is server-derived from current_user (a GM is confined to
+    # their own store, no request-param override). See
+    # app/web/team_reports.py.
+    app.register_blueprint(team_reports_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")

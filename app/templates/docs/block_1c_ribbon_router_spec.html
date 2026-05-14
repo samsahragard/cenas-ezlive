@@ -149,6 +149,30 @@
   <code>item_type</code> first, then <code>relation</code>.
 </p>
 
+<h3>5.1 Task severity derivation (addendum — 1C impl 71d81a3)</h3>
+<p>
+  <strong>Added 2026-05-14 after the 1C build.</strong> The original spec
+  defined <code>severity</code> as a <code>RibbonItem</code> contract field
+  but did not say how a <code>Task</code> gets one — and unlike
+  <code>Signal</code> (which carries a <code>severity</code> column) and
+  <code>SalesInsight</code>, the 1A <code>Task</code> model has no severity
+  field. 1C must derive it. aick's <code>_task_severity(task, now)</code>
+  derivation, reviewed and <strong>blessed</strong>:
+</p>
+<ul>
+  <li><code>escalated_to_user_id</code> is set, OR <code>deadline_at &lt; now</code> (past deadline) → <strong>alert</strong></li>
+  <li><code>deadline_at</code> within the next 24h → <strong>warn</strong></li>
+  <li>otherwise → <strong>info</strong></li>
+</ul>
+<p>
+  This is sound and — importantly — <em>consistent with the 1G spec's "miss"
+  definition</em>: a past-deadline-incomplete task counts as missed even
+  before 1E's escalation cron catches it, so surfacing it at <code>alert</code>
+  severity the moment its deadline passes is the right behavior, not a
+  premature flag. Severity feeds both the sort (§8) and the
+  <code>styling_class</code>.
+</p>
+
 <h2>6. Source adapters</h2>
 <table>
   <tr><th>Source</th><th>→ which ribbon category</th><th>relation logic</th><th>can_dismiss / can_check</th></tr>
@@ -277,7 +301,50 @@
 <ol>
   <li><strong>Q1 (BLOCKING — escalate to @sam):</strong> the <code>ScheduledEvent</code> model. The directive names <code>ScheduledEvent</code> as a ribbon source (Caterings + Events categories pull from it) but <strong>no Block 1 or Block 2 sub-block defines a <code>ScheduledEvent</code> model</strong>. Either it exists already in the codebase (aick: confirm), or it's an undefined dependency. If it doesn't exist, 1C's <code>ScheduledEvent</code> adapter is blocked and either (a) a <code>ScheduledEvent</code> model needs its own small precondition sub-block, or (b) the Caterings/Events categories ship empty in v1 and the adapter is a follow-up. samai recommends (a) if Sam wants Caterings/Events populated at Block 1 close; (b) is acceptable if those two categories can be empty until a later block. Sam's call.</li>
   <li><strong>Q2:</strong> the <code>page_slug → relevant_categories</code> map needs the actual set of page slugs. Spec default: 1C owns the map, unknown slugs fall back to main-dashboard behaviour (alert + todo only — the safe default). aick + ck enumerate the real slugs as the ribbon goes live page-by-page; the map grows. Confirm this incremental approach is acceptable vs. wanting the full slug set defined up front.</li>
-  <li><strong>Q3:</strong> Signal → ribbon category mapping. The anomaly engine's <code>Signal</code> rows have a rule category; 1C needs a map from anomaly-rule-category to ribbon-category. samai can spec that map as a small addendum once aick confirms the current anomaly rule-category taxonomy — flag if you want it in this spec or as a follow-up.</li>
+  <li><strong>Q3 — RESOLVED (addendum below).</strong> Signal → ribbon category mapping. samai confirmed the anomaly rule taxonomy from <code>app/services/anomaly_rules.py</code>: rule_names follow a <code>domain.specific</code> format across ten domains (<code>vendor / produce / orders / sales / labor / attendance / server / kitchen / customer / system</code>). The real map is §13.1 below — it replaces aick's best-effort <code>_SIGNAL_PREFIX_TO_RIBBON</code> placeholder.</li>
+</ol>
+
+<h3>13.1 Signal → ribbon-category map (addendum — resolves Q3)</h3>
+<p>
+  Signals are always <code>observer</code> (no owner) so they never land in
+  <code>todo</code>; and <code>caterings</code>/<code>events</code> are
+  populated only by <code>ScheduledEvent</code>... <strong>except</strong> the
+  <code>orders.*</code> anomaly domain, which <em>is</em> catering-order
+  fulfillment (driver no-show, ezCater rejection rate, pickup lag — all about
+  ezCater catering deliveries). So Signals map into <strong>caterings,
+  employee, vendors, maintenance, sales</strong> (five of the seven). Keyed on
+  the <code>rule_name</code> domain prefix, with full-rule_name overrides where
+  a prefix splits:
+</p>
+<table>
+  <tr><th>rule_name prefix</th><th>→ ribbon category</th><th>why</th></tr>
+  <tr><td><code>vendor.</code></td><td><code>vendors</code></td><td>invoice / delivery / price anomalies</td></tr>
+  <tr><td><code>produce.</code></td><td><code>vendors</code></td><td>produce ordering = supply/vendor domain</td></tr>
+  <tr><td><code>orders.</code></td><td><code>caterings</code></td><td>ezCater catering-order fulfillment — <strong>refines aick's placeholder (was <code>vendors</code>)</strong></td></tr>
+  <tr><td><code>sales.</code></td><td><code>sales</code></td><td>direct</td></tr>
+  <tr><td><code>labor.</code></td><td><code>employee</code></td><td>labor % / overtime / clock-in / manager-absent</td></tr>
+  <tr><td><code>attendance.</code></td><td><code>employee</code></td><td>attendance patterns / callout spikes</td></tr>
+  <tr><td><code>server.</code></td><td><code>employee</code></td><td>server performance (tip-rate)</td></tr>
+  <tr><td><code>customer.</code></td><td><code>employee</code></td><td>reviews / complaints reflect service+staff — imperfect fit, see Q4 below</td></tr>
+  <tr><td><code>kitchen.</code></td><td><code>employee</code></td><td>prep / yield / OOS = kitchen-staff ops — <em>except the override:</em></td></tr>
+  <tr><td><code>kitchen.equipment_down</code> (full-rule_name override)</td><td><code>maintenance</code></td><td>equipment failure is a maintenance issue, not staffing</td></tr>
+  <tr><td><code>system.</code></td><td><code>maintenance</code></td><td>deploy-failed / backup-missing / api-key-expiring — "something's broken, fix it" — <strong>refines aick's placeholder (was <code>employee</code>)</strong>; see Q5 below</td></tr>
+  <tr><td><em>unknown / default</em></td><td><code>employee</code></td><td>a mis-binned signal still surfaces, under the generic operational section — low-risk fallback</td></tr>
+</table>
+<p>
+  <strong>Implementation note for the wire-up:</strong> the map is keyed by
+  <code>rule_name</code> prefix, but supports full-<code>rule_name</code>
+  overrides (the <code>kitchen.equipment_down</code> row) — check the full
+  rule_name for an override first, then fall back to the prefix. This
+  replaces <code>_SIGNAL_PREFIX_TO_RIBBON</code> + <code>_SIGNAL_DEFAULT_RIBBON</code>
+  in <code>app/services/ribbon.py</code>; it's a small follow-up edit, not a
+  re-architecture — aick's structure was right, the values just needed the
+  real taxonomy.
+</p>
+<p><strong>Two genuinely-imperfect-fit cases flagged for Sam:</strong></p>
+<ol>
+  <li><strong>Q4 — <code>customer.*</code> (reviews / complaints).</strong> None of the seven ribbon categories is a clean home for customer-review anomalies. Spec routes them to <code>employee</code> (service quality reflects on staff) as the least-bad fit. If Sam wants a different home — or if the directive's category set should grow a "guest/reviews" category later — flag it. Non-blocking; <code>employee</code> is a defensible v1.</li>
+  <li><strong>Q5 — <code>system.*</code> (deploy-failed / backup-missing).</strong> These are dev/infra signals, not store-floor operations — a "deploy failed" arguably doesn't belong on a GM's operational ribbon at all. Spec routes them to <code>maintenance</code> as the closest fit, but the cleaner answer may be to <em>exclude</em> the <code>system.*</code> domain from the operational ribbon entirely (they already surface in the developer chat). That would be a 1C router filter, not a mapping — flagged for Sam's call; <code>maintenance</code> is the safe v1 default until then.</li>
 </ol>
 
 <h2>14. Distinct-commit boundary recap</h2>

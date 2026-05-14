@@ -340,6 +340,7 @@ DOC_PAGES = [
     ("block-1a-task-system-spec", "Block 1A - Task System Spec", "doc_block_1a_task_system_spec"),
     ("block-1b-ribbon-component-spec", "Block 1B - Ribbon Component Spec", "doc_block_1b_ribbon_component_spec"),
     ("block-1c-ribbon-router-spec", "Block 1C - Ribbon Content Router Spec", "doc_block_1c_ribbon_router_spec"),
+    ("block-1f-sales-insights-spec", "Block 1F - Sales Insights Spec", "doc_block_1f_sales_insights_spec"),
     ("block-1g-team-tab-spec",    "Block 1G - Team Tab Spec", "doc_block_1g_team_tab_spec"),
     ("block-1h-pay-masking-spec", "Block 1H - Pay Masking Spec", "doc_block_1h_pay_masking_spec"),
     ("denials",                  "Permission Denials", "doc_denials"),

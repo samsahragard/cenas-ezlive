@@ -1,0 +1,238 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 1B — Universal Ribbon Component</h1>
+<p class="doc-meta">
+  Phase 2 / Block 1 / sub-block 1B. samai spec, 2026-05-13.<br>
+  Implementation: ck. Review: samai checklist PASS per commit.<br>
+  Source: Phase 2 Directive §BLOCK 1 / 1B (see
+  <a href="{{ url_for('developer_chat.app_doc', page='phase-2-directive') }}">Phase 2 Directive</a>).
+</p>
+
+{# Body wrapped in raw — 1B documents the ribbon Jinja partial, so the
+   spec's code blocks contain literal {% if %} / {{ }} that must render
+   as text, not execute. verify-render-on-first-commit (samai rule 5)
+   caught this; the 4ace793 permission_system lesson applies. #}
+{% raw %}
+<h2>1. Scope — what 1B is, and what it is NOT</h2>
+<p>
+  1B is the <strong>rendering shell</strong> of the universal ribbon: the
+  Jinja partial, its placement in <code>base.html</code>, the seven-category
+  fixed layout, the per-user per-category collapse preference, and the
+  X / Check control <em>markup</em>. 1B renders whatever the content router
+  hands it — it does not decide <em>which</em> items appear.
+</p>
+<p><strong>1B ships:</strong></p>
+<ul>
+  <li><code>app/templates/partials/_ribbon.html</code> — the partial</li>
+  <li>The <code>base.html</code> include (after the topbar, before page content)</li>
+  <li><code>RibbonCategoryPreference</code> model + one alembic migration</li>
+  <li><code>POST /partner/ribbon/collapse/&lt;category&gt;</code> — the collapse-toggle endpoint</li>
+  <li>The X / Check control <em>markup</em> on each item (data-attributes + button structure) — <strong>inert in 1B</strong></li>
+  <li>Tests: partial renders against a stubbed router, collapse toggle round-trips, base.html include is defensive</li>
+</ul>
+<p><strong>1B does NOT ship</strong> (distinct-risk-surface boundary):</p>
+<ul>
+  <li><code>ribbon_items_for()</code> — the content router is 1C (aick). 1B builds against a stub that returns <code>[]</code>.</li>
+  <li><code>RibbonItem</code> the class + <code>render_for(user)</code> — 1C defines and implements them. 1B depends only on the <strong>render contract</strong> in §2.</li>
+  <li>The X / Check <em>behavior</em> — the <code>ribbon.js</code> fetch handler and the <code>POST /partner/ribbon/dismiss</code> + <code>/check</code> endpoints are 1D (ck's next sub-block). 1B renders the buttons; 1D makes them live.</li>
+  <li>The escalation cron, sales-insight synthesis, any data production — those are 1E / 1F.</li>
+</ul>
+<p>
+  <strong>Parallelization (ck's 23:52 question):</strong> 1B is safe to build
+  in parallel with aick's 1A. 1B renders <code>RibbonItem</code> render-contract
+  objects (§2), not <code>Task</code> rows directly — so a <code>Task</code>
+  schema change during 1A review does not ripple into the 1B partial. The
+  only hard pre-req for 1B is <em>this spec</em> + the render contract being
+  agreed. Build the partial against a stub <code>ribbon_items_for</code> that
+  returns <code>[]</code>; wire the real call when 1C lands.
+</p>
+
+<h2>2. The RibbonItem render contract — the shared interface</h2>
+<p>
+  This is the contract between 1B (renderer) and 1C (producer). Both
+  sub-blocks build against it; 1C implements the class, 1B's partial only
+  ever touches these attributes / methods. <strong>Any change to this
+  contract is a coordinated change across 1B + 1C and gets re-specced.</strong>
+</p>
+<pre><code># Produced by 1C's ribbon_items_for(); consumed by 1B's _ribbon.html.
+class RibbonItem:
+    category:    str    # one of RIBBON_CATEGORIES (§3) — which section it renders in
+    severity:    str    # "info" | "warn" | "alert" — drives styling + (in 1C) sort
+    item_type:   str    # "task" | "signal" | "sales_insight" — drives X/Check targets
+    item_id:     int    # the underlying row id in the table named by item_type
+    deadline_at: datetime | None   # nullable; used by 1C for sort, shown by 1B if present
+    can_dismiss: bool   # whether the X control renders for this item
+    can_check:   bool   # whether the Check control renders for this item
+
+    def render_for(self, user) -&gt; dict:
+        """Role-aware framing (1C's cross-cutting rule). Returns:
+           { "text": str,            # the primary line
+             "sub_text": str | None, # optional secondary line (owner/status framing)
+             "styling_class": str }  # CSS class hook, e.g. "ribbon-item--alert"
+        """
+</code></pre>
+<p>
+  1B's partial: for each item, call <code>item.render_for(current_user)</code>,
+  render <code>text</code> + optional <code>sub_text</code> with
+  <code>styling_class</code>, and emit the X / Check markup keyed by
+  <code>item_type</code> + <code>item_id</code> (§6), gated by
+  <code>can_dismiss</code> / <code>can_check</code>. 1B does <strong>not</strong>
+  sort — 1C returns the list already sorted (severity DESC, deadline ASC per
+  the directive). 1B renders in received order.
+</p>
+
+<h2>3. The seven categories — fixed vertical order</h2>
+<p>Module-level constant (define in <code>app/services/ribbon.py</code> so 1B + 1C share it; 1C owns that module, but the constant is needed by 1B's partial first — coordinate, or 1B defines it and 1C imports):</p>
+<pre><code>RIBBON_CATEGORIES = [
+    ("todo",        "To-do"),
+    ("caterings",   "Caterings"),
+    ("events",      "Events"),
+    ("employee",    "Employee"),
+    ("vendors",     "Vendors"),
+    ("maintenance", "Maintenance"),
+    ("sales",       "Sales"),
+]</code></pre>
+<ul>
+  <li><strong>Fixed order, always all seven.</strong> The partial renders all seven category headers every time, even when a category is empty — predictable structure + stable collapse toggles. An empty category renders a muted empty-state line ("Nothing here right now"), not a hidden section.</li>
+  <li><strong>Note the slug vs. Task.category mismatch:</strong> ribbon slugs are mostly plural (<code>caterings</code>, <code>events</code>, <code>vendors</code>) while <code>Task.category</code> is singular (<code>catering</code>, <code>event</code>, <code>vendor</code>) and includes <code>general</code>. The mapping from a Task/Signal/Insight to its ribbon category is <strong>1C's content-router concern</strong> — 1B only needs the seven ribbon slugs above. <code>general</code>-category tasks surface under <code>todo</code>, never their own section (1C handles that).</li>
+  <li>Each category section: a header (label + item count badge + collapse chevron) and a body (the items, or the empty-state).</li>
+</ul>
+
+<h2>4. The partial — app/templates/partials/_ribbon.html</h2>
+<ul>
+  <li>Iterates <code>RIBBON_CATEGORIES</code> in order. For each: render the header, then if not collapsed-for-this-user render the body.</li>
+  <li>Calls the router once: <code>{{ ribbon_items_for(page_slug, current_user, store_scope) }}</code> — registered as a Jinja global by 1C. <strong>During the stub period</strong>, 1B registers a stub global that returns <code>[]</code> so the partial renders an all-empty ribbon without erroring. 1C replaces the stub with the real implementation.</li>
+  <li>Groups the returned flat list by <code>item.category</code> into the seven buckets. (Or: call the router per-category with the <code>category=</code> kwarg — 1C's signature supports both. 1B's call: <strong>one call, group client-side in the template</strong> — fewer round-trips. Confirm with 1C which it prefers; spec default = one call + group.)</li>
+  <li>Per-category collapse state read from <code>RibbonCategoryPreference</code> (§5). Default (no row) = expanded.</li>
+  <li><strong>Defensive:</strong> the entire partial body is wrapped so that any failure inside it (router raises, item missing an attribute) renders an empty ribbon and logs at WARN — it must <em>never</em> 500 a page. The ribbon is on every authenticated page; a ribbon bug cannot take down the app.</li>
+</ul>
+
+<h3>4.1 base.html include</h3>
+<ul>
+  <li>Include <code>_ribbon.html</code> in <code>base.html</code> immediately after the topbar partial and before the <code>{% block content %}</code> wrapper.</li>
+  <li>The include is itself guarded: <code>{% if current_user %}</code> (authenticated pages only — the ribbon never renders on the login / passcode pages).</li>
+  <li>This is a shared-surface touch — every authenticated page now renders the ribbon. The 1B review (samai rule 3, deploy-verify) explicitly checks a representative sample of existing pages (dashboard, an orders page, a developer-docs page) still 200 after the include lands.</li>
+</ul>
+
+<h2>5. RibbonCategoryPreference — per-user collapse state</h2>
+<pre><code>class RibbonCategoryPreference(Base):
+    __tablename__ = "ribbon_category_preferences"
+
+    id           Integer, primary key
+    user_id      Integer, FK(users.id, ondelete="CASCADE"), NOT NULL
+    category     String(20), NOT NULL    # one of the seven RIBBON_CATEGORIES slugs
+    is_collapsed Boolean,    NOT NULL, default=False
+    updated_at   DateTime,   NOT NULL, default=utcnow, onupdate=utcnow
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", name="uq_ribbon_pref_user_category"),
+    )</code></pre>
+<ul>
+  <li><strong>Absence of a row = expanded</strong> (the default state). A row with <code>is_collapsed=True</code> = collapsed. This means a fresh user has zero preference rows and sees everything expanded — no backfill needed.</li>
+  <li><code>user_id</code> ondelete=<code>CASCADE</code> — pure per-user UI state, meaningless once the user is gone (same reasoning as <code>RibbonItemDismissal</code> in 1A).</li>
+  <li><code>UniqueConstraint(user_id, category)</code> — one preference row per user per category; the toggle endpoint upserts against it.</li>
+  <li><code>category</code> is validated against the seven <code>RIBBON_CATEGORIES</code> slugs in the toggle endpoint — reject anything else with 400.</li>
+</ul>
+
+<h2>6. The collapse-toggle endpoint + the X/Check markup contract</h2>
+
+<h3>6.1 POST /partner/ribbon/collapse/&lt;category&gt;</h3>
+<ol>
+  <li>Validate <code>&lt;category&gt;</code> ∈ the seven slugs → 400 otherwise.</li>
+  <li>Upsert <code>RibbonCategoryPreference</code> for <code>(current_user.id, category)</code>: if no row, INSERT with <code>is_collapsed=True</code>; if a row exists, flip <code>is_collapsed</code>.</li>
+  <li>Return the new state (JSON <code>{category, is_collapsed}</code>) so the JS can update the chevron without a reload.</li>
+  <li>Authenticated-session guard only — <strong>no new permission tag</strong> (any user may collapse their own ribbon). See §8.</li>
+</ol>
+
+<h3>6.2 X / Check markup contract — what 1B renders, what 1D wires</h3>
+<p>
+  1B renders the controls; 1D (ck's next sub-block) ships <code>ribbon.js</code>
+  + the <code>dismiss</code> / <code>check</code> endpoints that make them live.
+  For the wiring to "just work" when 1D lands, 1B must emit exactly this
+  markup contract per item:
+</p>
+<pre><code>&lt;div class="ribbon-item {{ payload.styling_class }}"
+     data-item-type="{{ item.item_type }}"
+     data-item-id="{{ item.item_id }}"&gt;
+  &lt;span class="ribbon-item__text"&gt;{{ payload.text }}&lt;/span&gt;
+  {% if payload.sub_text %}&lt;span class="ribbon-item__sub"&gt;{{ payload.sub_text }}&lt;/span&gt;{% endif %}
+  {% if item.can_dismiss %}
+    &lt;button class="ribbon-item__x" data-action="dismiss" aria-label="Dismiss"&gt;&times;&lt;/button&gt;
+  {% endif %}
+  {% if item.can_check %}
+    &lt;button class="ribbon-item__check" data-action="check" aria-label="Mark complete"&gt;&checkmark;&lt;/button&gt;
+  {% endif %}
+&lt;/div&gt;</code></pre>
+<ul>
+  <li>1D's <code>ribbon.js</code> delegates clicks on <code>[data-action]</code>, reads <code>data-item-type</code> + <code>data-item-id</code> off the closest <code>.ribbon-item</code>, and POSTs to <code>/partner/ribbon/dismiss/&lt;item_type&gt;/&lt;item_id&gt;</code> or <code>/check/&lt;item_type&gt;/&lt;item_id&gt;</code>.</li>
+  <li>In 1B the buttons are <strong>inert</strong> — no JS yet. They render, they're styled, they do nothing on click until 1D ships. That's the intended shell state.</li>
+  <li>1B owns the CSS for <code>.ribbon-item</code>, <code>.ribbon-item__x</code>, <code>.ribbon-item__check</code>, the category headers, collapse chevrons, and the severity styling classes (<code>ribbon-item--info / --warn / --alert</code>). Put it in the existing stylesheet or a dedicated <code>ribbon.css</code> — ck's call, note it in the commit.</li>
+</ul>
+
+<h2>7. Mobile / graceful degradation</h2>
+<ul>
+  <li>The ribbon is on every authenticated page, so it must degrade on narrow viewports. Spec minimum: on mobile widths the ribbon is <strong>collapsed by default</strong> (all seven categories collapsed) with the count badges still visible, so it's a compact triage summary that expands on tap rather than a wall of items pushing page content down.</li>
+  <li>Exact mobile treatment (drawer? accordion? sticky?) is ck's implementation call within the partial — the spec requires only that it not dominate the viewport and not error. Flag the chosen treatment in the commit message.</li>
+</ul>
+
+<h2>8. No new permission tag — rationale</h2>
+<p>
+  The directive: the ribbon is "role-aware but not role-restricted — all
+  management tier sees the same operational signals." The ribbon
+  <em>renders</em> for every authenticated user; <em>what it contains</em> is
+  filtered by 1C's router (role + store scope). So 1B introduces no
+  <code>requires_permission</code> tag — the partial renders inside the normal
+  authenticated-session guard, and the collapse endpoint likewise. The
+  role-filtering of <em>content</em> is 1C's concern, not 1B's.
+</p>
+
+<h2>9. Test requirements</h2>
+<p>1B's test file: <code>tests/test_ribbon_component.py</code>. Required coverage:</p>
+<ul>
+  <li><strong>Partial renders against a stub:</strong> with <code>ribbon_items_for</code> stubbed to return <code>[]</code>, the partial renders all seven category headers + seven empty-states, no error.</li>
+  <li><strong>Partial renders items:</strong> with the stub returning a few fake render-contract objects across categories, each lands in the correct category section, X/Check markup present iff <code>can_dismiss</code>/<code>can_check</code>, <code>styling_class</code> applied.</li>
+  <li><strong>Collapse preference:</strong> no row → category renders expanded; <code>is_collapsed=True</code> row → body not rendered, chevron in collapsed state. Toggle endpoint: first POST creates a row <code>is_collapsed=True</code>; second POST flips to <code>False</code>; invalid category → 400; unauthenticated → redirect to login.</li>
+  <li><strong>base.html include is defensive:</strong> a router stub that <em>raises</em> still renders the page (empty ribbon + WARN log), does not 500. This is the most important 1B test — it proves a ribbon bug can't take down every page.</li>
+  <li><strong>Deploy-verify surface (samai rule 3):</strong> after ck's push, a representative sample of existing authenticated pages (dashboard, an orders page, a developer-docs page) still return 200 with the ribbon include live.</li>
+</ul>
+
+<h2>10. samai review checklist (run per commit)</h2>
+<ol>
+  <li>Scope: only the 1B surfaces — no router logic, no X/Check endpoints, no <code>ribbon.js</code>, no data production.</li>
+  <li><code>_ribbon.html</code> renders all seven categories in fixed order, always (empty categories show the muted empty-state, not hidden).</li>
+  <li>The partial consumes only the §2 render contract — no direct <code>Task</code> / <code>Signal</code> / <code>SalesInsight</code> attribute access.</li>
+  <li>Stub <code>ribbon_items_for</code> registered as a Jinja global returning <code>[]</code>; partial renders clean against it.</li>
+  <li><code>RibbonCategoryPreference</code> matches §5: types, <code>CASCADE</code> on user_id, unique constraint; absence-of-row = expanded.</li>
+  <li>Collapse endpoint upserts correctly, validates category, returns JSON, no new permission tag, authenticated-guard only.</li>
+  <li>X/Check markup matches the §6.2 contract exactly (data-attributes, button classes, <code>can_dismiss</code>/<code>can_check</code> gating) so 1D's <code>ribbon.js</code> wires with zero markup changes.</li>
+  <li>base.html include placed after topbar, before content, guarded by <code>{% if current_user %}</code>.</li>
+  <li><strong>Defensive rendering verified:</strong> a raising router does not 500 the page (the §9 test).</li>
+  <li>Mobile: ribbon collapsed-by-default on narrow viewports, count badges visible, doesn't dominate the viewport.</li>
+  <li>Migration present + reversible; tests per §9 green; full suite no regression.</li>
+  <li>Deploy-verify (rule 3): representative existing pages still 200 with the include live.</li>
+</ol>
+
+<h2>11. Open questions for Sam / coordination notes</h2>
+<ol>
+  <li><strong>Q1 (coordination, not blocking):</strong> the <code>RIBBON_CATEGORIES</code> constant + the stub <code>ribbon_items_for</code> Jinja global — these straddle 1B and 1C. Spec default: 1B defines both (the constant in <code>app/services/ribbon.py</code>, the stub global in app init); 1C replaces the stub with the real router and imports the constant. ck + aick confirm this split when 1C starts so neither double-defines.</li>
+  <li><strong>Q2:</strong> one router call + group-in-template vs. seven per-category calls. Spec default = one call + group (fewer round-trips). 1C's signature supports both; confirm with aick.</li>
+  <li><strong>Q3:</strong> <code>page_slug</code> + <code>store_scope</code> — the partial passes these to the router. <code>page_slug</code> needs to be available in every template's context. Is there an existing context processor that exposes the current page slug + the user's store scope, or does 1B need to add one? If 1B adds a context processor, that's a small additional 1B surface — flag it in the commit. (samai's read: check for an existing one first; the developer-docs pages already track an <code>active</code> slug, there may be a pattern to reuse.)</li>
+  <li><strong>Q4:</strong> CSS location — dedicated <code>ribbon.css</code> vs. appending to the existing stylesheet. ck's call; spec just requires the severity + collapse + item styling exist and are scoped so they don't bleed into other components.</li>
+</ol>
+
+<h2>12. Distinct-commit boundary recap</h2>
+<p>
+  1B is one commit: the partial + base.html include + <code>RibbonCategoryPreference</code>
+  model + migration + collapse endpoint + X/Check markup (inert) + CSS + tests.
+  It does not ship the content router (1C), the X/Check behavior or
+  <code>ribbon.js</code> or the dismiss/check endpoints (1D), or any data
+  production (1E/1F). 1B is fully implementable <em>now</em>, in parallel with
+  aick's 1A — its only dependency is this spec and the §2 render contract
+  being agreed.
+</p>
+{% endraw %}
+
+</div>
+{% endblock %}

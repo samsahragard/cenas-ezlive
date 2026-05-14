@@ -338,6 +338,7 @@ DOC_PAGES = [
     ("brief-calibration-runbook", "Brief Calibration Runbook", "doc_brief_calibration_runbook"),
     ("phase-2-directive",        "Phase 2 Directive", "doc_phase_2_directive"),
     ("block-1a-task-system-spec", "Block 1A - Task System Spec", "doc_block_1a_task_system_spec"),
+    ("block-1b-ribbon-component-spec", "Block 1B - Ribbon Component Spec", "doc_block_1b_ribbon_component_spec"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

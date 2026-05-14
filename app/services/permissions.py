@@ -243,6 +243,30 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "ai.ask_claude_personal", "ai.view_transcripts",
         "transcripts.search", "transcripts.read",
     },
+
+    # Phase 2 / Block 1 precondition (samai spec, Sam §5.3 Path A
+    # 2026-05-14). The five hourly roles the task-assignment hierarchy
+    # (1A can_assign_to) + the counseling cascade (2C) reference. The
+    # point of these entries is taxonomy completeness — "everyone in the
+    # system is in the role taxonomy" (Sam) — so _user_has resolves them
+    # to a real set, not None, and the permission matrix test covers
+    # them. The tag sets are MINIMAL BY DESIGN: the personal-AI +
+    # transcripts baseline that expo + driver already share. Operational
+    # tag refinement per hourly role (does a cook need
+    # kds.view_kitchen_display like expo, does a server need orders.view,
+    # etc.) is a deliberate follow-up once these roles have actual app
+    # surfaces — see the precondition spec §6 Q1. Do NOT mistake the thin
+    # set for an oversight.
+    "cook":      {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
+    "server":    {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
+    "busser":    {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
+    "host":      {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
+    "bartender": {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
 }
 
 

@@ -1137,6 +1137,59 @@ class MorningBrief(Base):
         Boolean, default=False, nullable=False)
 
 
+class BriefFeedback(Base):
+    """One row per (morning_brief × recipient × submission). Captures
+    the calibration-panel reply for a single brief, per spec at
+    /partner/developer/app/morning-brief-composer-spec §13 + Sam 20:13
+    calibration directive.
+
+    Two submission channels — Round 1 (email_reply) is the active path,
+    Round 2 (form) is the upgrade once we have a baseline:
+      - submitted_via='email_reply': samai/aick reads the panel
+        member's email reply and creates this row. submitted_at is set
+        on INSERT.
+      - submitted_via='form': link clicked → row INSERTed with
+        submitted_at=NULL (created_at marks the click). Form POST then
+        UPDATEs submitted_at to the actual submission time.
+        NULL submitted_at = link clicked but form not yet posted;
+        non-NULL = submission completed.
+
+    Response latency is a real signal per Sam 20:47 — the join
+    submitted_at − morning_briefs.composed_at tells us about utility
+    independent of what the recipient wrote. Indexes on FK +
+    timestamps below support that join query cheaply.
+
+    Append-only: an event listener at the bottom of this module rejects
+    UPDATE/DELETE on this table outside of the explicit form-submit
+    flow (which writes submitted_at exactly once). Keeps the audit
+    trail clean for the Round 1 → Round 2 aggregation doc.
+    """
+    __tablename__ = "brief_feedback"
+    __table_args__ = (
+        Index("ix_brief_feedback_brief", "morning_brief_id"),
+        Index("ix_brief_feedback_user", "user_id"),
+        Index("ix_brief_feedback_submitted_at", "submitted_at"),
+        Index("ix_brief_feedback_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    morning_brief_id: Mapped[int] = mapped_column(
+        ForeignKey("morning_briefs.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # 1 = "not useful", 5 = "extremely useful vs current morning workflow"
+    useful_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    missed_something: Mapped[str | None] = mapped_column(Text, nullable=True)
+    was_noise: Mapped[str | None] = mapped_column(Text, nullable=True)
+    single_change: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "email_reply" | "form" — see docstring for the dual-channel split.
+    submitted_via: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Round 1: set on INSERT. Round 2: NULL until form POST.
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+
+
 class RuleOverride(Base):
     """Per-rule threshold + severity edits applied by a partner via
     /partner/anomalies/rules. Engine consults overrides at run start;
@@ -1159,4 +1212,15 @@ class RuleOverride(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
         nullable=False)
+
+
+@_sa_event.listens_for(BriefFeedback, 'before_delete')
+def _no_delete_brief_feedback(mapper, connection, target):
+    raise RuntimeError(
+        "BriefFeedback is append-only — rows cannot be deleted. "
+        "Each row is panel-member input on a specific brief; the "
+        "Round 1 → Round 2 aggregation doc derives from these rows. "
+        "Mistakes are corrected by appending a follow-up row "
+        "(submitted_via still indicates source), not by deleting."
+    )
 

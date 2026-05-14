@@ -1250,6 +1250,69 @@ class RibbonCategoryPreference(Base):
         nullable=False)
 
 
+# Phase 2 / Block 1 precondition (samai spec, Sam 1C §13 Path A
+# 2026-05-14). Valid-value constants for ScheduledEvent — String columns
+# (not native ENUM, same call as Task / SalesInsight / BriefFeedback:
+# SQLite-compat + simpler migrations). The Block 2 admin form, the 1C
+# ribbon adapter, and the model tests all validate against these single
+# sources.
+_VALID_EVENT_STORES = {"tomball", "copperfield", "both"}
+_VALID_EVENT_CATEGORIES = {"catering", "event"}
+_VALID_EVENT_STATUSES = {"scheduled", "confirmed", "completed", "cancelled"}
+
+
+class ScheduledEvent(Base):
+    """A catering or event on a store's calendar — the ribbon source for
+    the Caterings (ribbon category 2) and Events (category 3) sections.
+
+    Phase 2 / Block 1 precondition (samai spec, Sam 1C §13 Path A
+    2026-05-14). Ships the model + migration only, so 1C's adapter has a
+    real model to read instead of an undefined dependency, and Block 1
+    doesn't launch with 2 of 7 ribbon categories permanently empty.
+
+    Empty-but-populatable from day one: the table ships empty; Block 2's
+    admin form fills it; the 1C adapter renders whatever is in it.
+    Explicitly NOT in this precondition: the Block 2 admin form, the 1C
+    adapter, ezCater-webhook auto-population, and created_by_user_id
+    (a Block 2 admin-form concern, not a ribbon-rendering minimum field).
+
+    NOT an audit log — ScheduledEvent rows are mutable operational
+    records (an event gets confirmed, rescheduled, cancelled), so there
+    is deliberately no before_delete listener / append-only constraint.
+
+    store / category / status are String, validated application-side
+    against the _VALID_EVENT_* constants above.
+    """
+    __tablename__ = "scheduled_events"
+    __table_args__ = (
+        # The 1C ribbon query is "upcoming scheduled/confirmed events for
+        # this viewer's store" — hits exactly these three columns.
+        Index("ix_scheduled_events_ribbon",
+              "store", "status", "scheduled_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    store: Mapped[str] = mapped_column(String(20), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # When the event starts.
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True)
+    # When it ends; NULL = point-in-time (a catering delivery vs a
+    # spirit night that spans hours). 1C uses it for the ribbon
+    # relevance window.
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="scheduled")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
 @_sa_event.listens_for(BriefFeedback, 'before_delete')
 def _no_delete_brief_feedback(mapper, connection, target):
     raise RuntimeError(

@@ -336,6 +336,7 @@ DOC_PAGES = [
     ("anomaly-service-spec",     "Anomaly Service Spec", "doc_anomaly_service_spec"),
     ("morning-brief-composer-spec", "Morning Brief Composer Spec", "doc_morning_brief_composer_spec"),
     ("brief-calibration-runbook", "Brief Calibration Runbook", "doc_brief_calibration_runbook"),
+    ("phase-2-directive",        "Phase 2 Directive", "doc_phase_2_directive"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

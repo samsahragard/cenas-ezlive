@@ -1,51 +1,53 @@
-"""Phase 2 / Block 1F — sales-insights synthesis pipeline.
+"""Phase 2 / Block 1F — sales-insights synthesis pipeline
+(post-Block-1J: a CONSUMER of the AmbientSignal data plane).
 
-samai authored the spec at
-/partner/developer/app/block-1f-sales-insights-spec; this implements
-against that doc.
+samai authored the 1F spec at
+/partner/developer/app/block-1f-sales-insights-spec and the 1J spec at
+/partner/developer/app/block-1j-ambient-signal-spec; this implements
+against both.
 
 1F is the PRODUCER of the ribbon's Sales category: a daily 5am-CT cron
-that pulls external intelligence (weather, events, school calendars,
-traffic, outages, local news) and synthesizes it — via a Haiku-
-normalize → Opus-synthesize pipeline — into structured SalesInsight
+that synthesizes external intelligence into structured SalesInsight
 rows. The ribbon's 1C router reads those rows; 1E's every-5m cron
-expires them. 1F only writes them.
+expires them.
 
-Pipeline (spec §4), all in this module:
+Block 1J Day 3 refactored the SOURCE-FETCH stage (1J §5): this module
+no longer pulls external sources directly. The six 1J per-source crons
+(/cron/refresh-*) write AmbientSignal rows; this pipeline now READS
+them. The synthesis + write half is unchanged from 1F.
 
-  Stage 1 — gather_raw_signals(): seven source adapters run in
-    parallel, each returning list[RawSignal]. One dead adapter (API
-    down, no credential yet, raises) returns [] + logs WARN — it never
-    breaks the run. Three adapters wire-complete now (NOAA, CenterPoint,
-    Claude-search); four are credential-pending stubs (OpenWeatherMap,
-    Ticketmaster, Google Calendar, Google Maps) — each paid adapter
-    gets wired in its own later commit as Sam provides credentials.
+Pipeline:
+
+  Stage 1 — gather_raw_signals(db): reads the data plane — live
+    AmbientSignal rows (valid_until_at >= now), each converted to a
+    RawSignal — PLUS the Claude-search adapter, which stays HERE as a
+    synthesis INPUT: it produces an interpretive prose digest, not a
+    structured data-plane "source signal", so it is not promoted to a
+    1J per-source cron (1J §4 / §5 / §12 Q5).
 
   Stage 2 — _opus_synthesize(): Opus reads the full RawSignal bundle +
     the two store contexts and returns structured insight objects.
     _fallback_insights() is the deterministic degrade path: if Opus is
-    unavailable, the fallback-safe structured signals (a NOAA severe-
-    weather alert, a confirmed outage) still become insight rows —
-    fewer and blunter, not zero. Mirrors brief_composer's _fallback_brief.
+    unavailable, the fallback-safe structured signals still become
+    insight rows — fewer and blunter, not zero. UNCHANGED from 1F (1J
+    §5 moves only the source-fetch stage).
 
   Write — _write_insights(): validate each object against the model's
-    allowed values, set valid_until_at per spec §6, INSERT. Idempotent:
-    a same-day re-run first deletes the same-day batch, then re-inserts
-    (spec §3 — replace, not duplicate).
+    allowed values, set valid_until_at per 1F §6, INSERT. Idempotent:
+    a same-day re-run replaces, not duplicates. UNCHANGED from 1F.
 
 run_sales_insights_synthesis(db=None) is the entrypoint; the token-
 gated POST /cron/sales-insights endpoint (driver_system.py) calls it.
 
 Cost: every Anthropic call's token usage is cost-estimated and summed;
 the run summary carries total_cost_usd and flags if it crossed
-SALES_INSIGHTS_COST_CEILING_USD (spec §8).
+SALES_INSIGHTS_COST_CEILING_USD (1F §8).
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -216,182 +218,66 @@ def _parse_json_list(text: str) -> list:
     return []
 
 
-def _haiku_normalize(raw_text: str, source: str,
-                     store_hint: str = "both") -> tuple[dict, float]:
-    """Normalize one unstructured source's messy output into a compact
-    structured dict via Haiku. Returns (structured_dict, cost). On any
-    failure returns ({}, 0.0) — the caller keeps raw_text and lets the
-    Opus synthesis stage cope.
+# ---- AmbientSignal -> RawSignal conversion (Block 1J Day 3) ----
+# After 1J, the source-fetch stage is gone — the six 1J per-source
+# crons write AmbientSignal rows and this pipeline reads them.
+# _ambient_to_raw_signal converts one AmbientSignal into the RawSignal
+# shape the Opus synthesis stage already consumes.
 
-    This is the spec §4 "Haiku pulls raw data" interpretation: Haiku
-    normalizes UNSTRUCTURED sources (the CenterPoint scrape, etc.);
-    structured APIs (NOAA, the paid geo APIs) are plain parses with no
-    model in the loop. [Flagged in spec §12 Q2 for Sam.]
-    """
-    client = _anthropic_client()
-    if client is None or not raw_text.strip():
-        return {}, 0.0
-    system = (
-        "You normalize messy operational-intelligence source text into "
-        "one compact JSON object. Output ONLY the JSON object, no prose, "
-        "no markdown fences. Schema: "
-        '{"store_scope": "tomball"|"copperfield"|"both", '
-        '"category": one of '
-        '["weather","events","school_calendar","traffic","outage",'
-        '"yoy_comparison","ai_synthesized"], '
-        '"severity": "info"|"warn"|"alert", '
-        '"headline": short ribbon-renderable string, '
-        '"detail": one or two sentences, '
-        '"valid_until": ISO date or datetime if the text implies an end, '
-        'else null, '
-        '"fallback_safe": true if this is a concrete confirmed fact '
-        '(an outage, a closure) that needs no further synthesis, else false}'
-    )
-    user = (f"SOURCE: {source}\nSTORE HINT: {store_hint}\n\n"
-            f"RAW TEXT:\n{raw_text[:6000]}")
-    resp, cost = _call_model(client, _MODEL_HAIKU, system, user,
-                             max_tokens=600)
-    text = _extract_text(resp)
-    if not text:
-        return {}, cost
-    parsed = _parse_json_list("[" + text + "]") if text.strip().startswith("{") else []
-    if parsed and isinstance(parsed[0], dict):
-        return parsed[0], cost
-    # last resort: direct json.loads of a bare object
-    try:
-        obj = json.loads(text.strip())
-        return (obj if isinstance(obj, dict) else {}), cost
-    except Exception:  # noqa: BLE001
-        return {}, cost
+# AmbientSignal.category is the 1J ribbon vocabulary
+# (caterings|events|maintenance); SalesInsight.category is 1F's
+# (weather|events|school_calendar|traffic|outage|yoy_comparison|
+# ai_synthesized). The conversion maps by the ambient SOURCE — more
+# precise than the ambient category — to a valid 1F category, so the
+# _fallback_insights path (which copies structured["category"] straight
+# onto the SalesInsight) never produces an invalid row. The
+# Opus-synthesis path re-derives the category from content regardless;
+# this mapping is the fallback-path safety net. [Flagged for samai —
+# the spec leaves the ambient->insight category mapping implicit.]
+_AMBIENT_SOURCE_TO_INSIGHT_CATEGORY = {
+    "weather": "weather",
+    "outages": "outage",
+    "traffic": "traffic",
+    "events": "events",
+    "catering_pipeline": "events",
+    "vendor_status": "ai_synthesized",
+}
 
 
-# ---- the seven source adapters (spec §5) ----
-# Uniform signature: fetch(store_locations) -> list[RawSignal]
-#   or (list[RawSignal], cost_usd) when the adapter spends model tokens.
-# Every adapter guards itself: a failure returns [] (or ([], 0.0)) and
-# logs WARN. _run_adapter normalizes the two return shapes.
-
-_NOAA_URL = "https://api.weather.gov/alerts/active"
-_NOAA_HEADERS = {"User-Agent": "CenasKitchen/1.0 (ops@cenaskitchen.com)"}
-
-
-def _noaa_store_scope(area_desc: str) -> str:
-    """Map a NOAA areaDesc to a store_scope. Both stores sit in the
-    Houston / Harris-County area; Tomball also borders Montgomery
-    County. Anything else TX-wide → both."""
-    a = (area_desc or "").lower()
-    if "montgomery" in a and "harris" not in a:
-        return "tomball"
-    return "both"
-
-
-def _noaa_severity(noaa_sev: str) -> str:
-    s = (noaa_sev or "").lower()
-    if s in ("extreme", "severe"):
-        return "alert"
-    if s == "moderate":
-        return "warn"
-    return "info"
-
-
-def _fetch_noaa(store_locations) -> list[RawSignal]:
-    """Adapter 5 — NOAA active severe-weather alerts for Texas. Free,
-    public JSON feed, wire-complete. A NOAA alert is a concrete fact,
-    so its RawSignal is marked fallback_safe — it becomes an insight
-    row even when Opus synthesis is unavailable."""
-    try:
-        import requests
-        resp = requests.get(
-            _NOAA_URL, params={"area": "TX"},
-            headers=_NOAA_HEADERS, timeout=15,
-        )
-        resp.raise_for_status()
-        features = (resp.json() or {}).get("features", []) or []
-    except Exception:  # noqa: BLE001
-        logger.warning("sales_insights: NOAA adapter failed", exc_info=True)
-        return []
-
-    out: list[RawSignal] = []
-    for feat in features:
-        props = (feat or {}).get("properties", {}) or {}
-        event = props.get("event") or "Weather alert"
-        area_desc = props.get("areaDesc") or ""
-        # Only surface alerts that plausibly touch the Houston metro.
-        if not any(k in area_desc.lower()
-                   for k in ("harris", "montgomery", "houston", "texas")):
-            continue
-        headline = props.get("headline") or event
-        detail = props.get("description") or headline
-        severity = _noaa_severity(props.get("severity"))
-        scope = _noaa_store_scope(area_desc)
-        out.append(RawSignal(
-            source="noaa",
-            store_scope=scope,
-            raw_text=f"{event}: {headline}",
-            structured={
-                "fallback_safe": True,
-                "category": "weather",
-                "severity": severity,
-                "headline": event if len(event) <= 200 else event[:200],
-                "detail": detail,
-                "valid_until": props.get("expires") or props.get("ends"),
-            },
-            source_url=(feat or {}).get("id"),
-        ))
-    return out
-
-
-def _fetch_centerpoint(store_locations) -> tuple[list[RawSignal], float]:
-    """Adapter 6 — CenterPoint Energy outage tracker. The public outage
-    map has no documented data API; this adapter fetches a configurable
-    URL (CENTERPOINT_OUTAGE_URL) and runs the response through Haiku to
-    normalize it. Wire-complete in structure; the exact endpoint is a
-    known soft spot — set CENTERPOINT_OUTAGE_URL to the live data
-    endpoint once confirmed. Until then it best-efforts the public
-    tracker page and degrades to [] cleanly. [Flagged for samai's 1F
-    review — endpoint needs live verification.]"""
-    url = os.getenv(
-        "CENTERPOINT_OUTAGE_URL",
-        "https://www.centerpointenergy.com/en-us/residential/"
-        "outages-and-emergencies/outage-tracker",
-    )
-    try:
-        import requests
-        resp = requests.get(url, timeout=15, headers={
-            "User-Agent": "CenasKitchen/1.0 (ops@cenaskitchen.com)"})
-        resp.raise_for_status()
-        body = resp.text or ""
-    except Exception:  # noqa: BLE001
-        logger.warning("sales_insights: CenterPoint adapter fetch failed",
-                       exc_info=True)
-        return [], 0.0
-    if not body.strip():
-        return [], 0.0
-    structured, cost = _haiku_normalize(
-        body, source="centerpoint", store_hint="both")
-    if not structured or not structured.get("headline"):
-        # Nothing actionable found in the page — common when the page
-        # is JS-rendered. Degraded, not broken.
-        return [], cost
-    scope = structured.get("store_scope")
-    if scope not in _VALID_INSIGHT_STORE_SCOPES:
-        scope = "both"
-    sig = RawSignal(
-        source="centerpoint",
-        store_scope=scope,
-        raw_text=structured.get("detail") or structured.get("headline"),
+def _ambient_to_raw_signal(signal) -> RawSignal:
+    """Convert one AmbientSignal row (written by a 1J /cron/refresh-*
+    cron) into the RawSignal shape the synthesis stage consumes. The
+    ambient payload's headline/detail become raw_text + structured; an
+    AmbientSignal is a concrete structured fact, so the RawSignal is
+    marked fallback_safe — it becomes a SalesInsight row even when Opus
+    synthesis is unavailable."""
+    payload = signal.payload or {}
+    headline = (payload.get("headline") or "")
+    detail = payload.get("detail") or headline
+    insight_category = _AMBIENT_SOURCE_TO_INSIGHT_CATEGORY.get(
+        signal.source, "ai_synthesized")
+    return RawSignal(
+        source=f"ambient:{signal.source}",
+        store_scope=signal.store_scope,
+        raw_text=(f"{headline}: {detail}" if headline else detail),
         structured={
-            "fallback_safe": bool(structured.get("fallback_safe")),
-            "category": "outage",
-            "severity": structured.get("severity", "info"),
-            "headline": structured.get("headline"),
-            "detail": structured.get("detail"),
-            "valid_until": structured.get("valid_until"),
+            "fallback_safe": True,
+            "category": insight_category,
+            "severity": signal.severity,
+            "headline": headline[:200],
+            "detail": detail,
+            "valid_until": (signal.valid_until_at.isoformat()
+                            if signal.valid_until_at else None),
         },
-        source_url=url,
+        source_url=payload.get("source_url"),
     )
-    return [sig], cost
 
+
+# ---- Claude-search adapter — STAYS in this pipeline (1J §4/§5/Q5) ----
+# Claude-search produces an interpretive prose digest — a synthesis
+# INPUT, not a structured data-plane "source signal" like weather or an
+# outage — so 1J keeps it here rather than promoting it to a per-source
+# /cron/refresh-* cron. It is the only source-fetch left in this module.
 
 def _fetch_claude_search(store_locations) -> tuple[list[RawSignal], float]:
     """Adapter 7 — Claude with the web_search tool. Opus searches for
@@ -433,70 +319,50 @@ def _fetch_claude_search(store_locations) -> tuple[list[RawSignal], float]:
     )], cost
 
 
-def _stub_adapter(name: str):
-    """Build a credential-pending stub adapter — returns [] cleanly
-    until its paid-API credential lands and it is wired in a later
-    distinct-risk commit (spec §5 / §13)."""
-    def _fetch(store_locations) -> list[RawSignal]:
-        logger.info("sales_insights: %s adapter is a credential-pending "
-                    "stub — contributing nothing", name)
-        return []
-    _fetch.__name__ = f"_fetch_{name}"
-    return _fetch
+def gather_raw_signals(db) -> tuple[list[RawSignal], dict, float]:
+    """Stage 1 — read the data plane. After Block 1J Day 3 (1J §5),
+    sales_insights.py no longer pulls external sources directly: the
+    six 1J per-source crons write AmbientSignal rows, and this reads
+    the live ones (valid_until_at >= now), each converted to a
+    RawSignal via _ambient_to_raw_signal. Claude-search is the one
+    source that stays here — a synthesis input, not a data-plane
+    source (1J §4 / §5 / §12 Q5).
 
-
-_fetch_openweathermap = _stub_adapter("openweathermap")
-_fetch_ticketmaster = _stub_adapter("ticketmaster")
-_fetch_google_calendar = _stub_adapter("google_calendar")
-_fetch_google_maps = _stub_adapter("google_maps")
-
-
-# (adapter_name, fetch_fn) — the registry the parallel gather iterates.
-_ADAPTERS: list[tuple[str, object]] = [
-    ("noaa", _fetch_noaa),
-    ("centerpoint", _fetch_centerpoint),
-    ("claude_search", _fetch_claude_search),
-    ("openweathermap", _fetch_openweathermap),
-    ("ticketmaster", _fetch_ticketmaster),
-    ("google_calendar", _fetch_google_calendar),
-    ("google_maps", _fetch_google_maps),
-]
-
-
-def _run_adapter(name, fn, store_locations) -> tuple[list[RawSignal], float]:
-    """Invoke one adapter, normalizing its return to (list, cost). An
-    adapter may return list[RawSignal] or (list, cost). Self-guarding:
-    any exception → ([], 0.0) + WARN."""
-    try:
-        result = fn(store_locations)
-    except Exception:  # noqa: BLE001
-        logger.warning("sales_insights: adapter %s raised", name,
-                       exc_info=True)
-        return [], 0.0
-    if isinstance(result, tuple):
-        sigs, cost = result
-        return list(sigs or []), float(cost or 0.0)
-    return list(result or []), 0.0
-
-
-def gather_raw_signals(store_locations) -> tuple[list[RawSignal], dict, float]:
-    """Stage 1 — run all seven adapters in parallel (they are I/O-bound
-    HTTP / model calls). One dead adapter never breaks the run. Returns
-    (signals, per_adapter_counts, total_cost_usd)."""
+    Returns (signals, per_source_counts, total_cost_usd). `db` is the
+    caller's Session — run_sales_insights_synthesis owns its lifecycle.
+    Defensive: an AmbientSignal read failure degrades the run to
+    Claude-search only rather than breaking it.
+    """
     signals: list[RawSignal] = []
     counts: dict[str, int] = {}
     cost = 0.0
-    with ThreadPoolExecutor(max_workers=len(_ADAPTERS)) as ex:
-        futures = {
-            ex.submit(_run_adapter, name, fn, store_locations): name
-            for name, fn in _ADAPTERS
-        }
-        for fut in as_completed(futures):
-            name = futures[fut]
-            sigs, c = fut.result()   # _run_adapter never raises
-            counts[name] = len(sigs)
-            cost += c
-            signals.extend(sigs)
+    now = datetime.utcnow()
+
+    # --- the data plane: live AmbientSignal rows the 1J crons wrote ---
+    try:
+        from app.models import AmbientSignal
+        rows = (db.query(AmbientSignal)
+                .filter(AmbientSignal.valid_until_at >= now)
+                .all())
+        for r in rows:
+            signals.append(_ambient_to_raw_signal(r))
+        counts["ambient_signal"] = len(rows)
+    except Exception:  # noqa: BLE001
+        logger.warning("sales_insights: AmbientSignal read failed — the "
+                       "run degrades to Claude-search only", exc_info=True)
+        counts["ambient_signal"] = 0
+
+    # --- Claude-search: a synthesis INPUT, stays in this pipeline ---
+    try:
+        cs_signals, cs_cost = _fetch_claude_search(_STORE_LOCATIONS)
+    except Exception:  # noqa: BLE001
+        logger.warning("sales_insights: claude_search adapter raised",
+                       exc_info=True)
+        cs_signals, cs_cost = [], 0.0
+    signals.extend(cs_signals)
+    counts["claude_search"] = len(cs_signals)
+    cost += cs_cost
+
     return signals, counts, round(cost, 6)
 
 
@@ -725,8 +591,10 @@ def run_sales_insights_synthesis(db=None) -> dict:
 
     now = datetime.utcnow()
     try:
-        raw_signals, adapter_counts, gather_cost = gather_raw_signals(
-            _STORE_LOCATIONS)
+        # Stage 1 — read the AmbientSignal data plane (1J §5) + the
+        # Claude-search synthesis input. The caller's db is passed
+        # through so the gather reads live ambient rows.
+        raw_signals, adapter_counts, gather_cost = gather_raw_signals(db)
 
         insight_dicts, synth_cost = _opus_synthesize(raw_signals)
         fallback_used = False

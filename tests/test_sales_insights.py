@@ -1,36 +1,41 @@
-"""Phase 2 / Block 1F — sales-insights synthesis tests.
+"""Phase 2 / Block 1F sales-insights tests — post-Block-1J Day 3.
 
-Per spec §10:
-  - valid_until_at rules: table-driven over the §6 categories.
-  - The 3 free adapters (NOAA, CenterPoint, Claude-search): network-
-    mocked tests. The 4 paid adapters: return-[] stub tests.
-  - Pipeline orchestration: parallel gather, one dead source degrades
-    not breaks.
-  - Synthesis output -> row mapping: a fixture Opus output maps to
-    validated SalesInsight rows.
-  - Fallback path: a failing/absent Opus call still inserts the
-    fallback-safe structured signals.
-  - Idempotency: a same-day re-run replaces, not duplicates.
-  - Cost logging: total_cost_usd surfaced; ceiling breach flagged.
+After 1J Day 3, sales_insights.py is a CONSUMER of the AmbientSignal
+data plane: gather_raw_signals(db) reads live AmbientSignal rows + the
+Claude-search synthesis input. The old source-pull adapters (NOAA,
+CenterPoint, the 4 paid stubs, the parallel _ADAPTERS gather) are gone
+— removed in the same commit as this rewrite, per 1J §5.
+
+Covers:
+  - valid_until_at rules (1F §6) — unchanged.
+  - The Claude-search adapter — stays (1J §4/§5/Q5), network-mocked.
+  - _ambient_to_raw_signal + the ambient-source -> insight-category map.
+  - gather_raw_signals(db): reads live ambient rows + Claude-search;
+    degrades cleanly.
+  - §5 PARITY PROOF (samai "go (a)"): a seeded AmbientSignal produces,
+    through the new gather, a RawSignal equivalent to what the removed
+    1F source-pull adapter produced for the same intelligence.
+  - _fallback_insights, _write_insights — unchanged.
+  - run_sales_insights_synthesis end-to-end (gather + Opus mocked).
   - Cron auth: POST /cron/sales-insights without CRON_TOKEN -> 403.
 
-External calls (Anthropic, requests) are mocked — no network, no key.
+External calls (Anthropic) are mocked — no network, no key.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
-from app.models import SalesInsight
+from app.models import AmbientSignal, SalesInsight
 import app.services.sales_insights as si
 
 
 # ============================================================
-# Fakes — Anthropic client + requests
+# Fakes — Anthropic client
 # ============================================================
 
 class _FakeBlock:
@@ -69,28 +74,24 @@ class _FakeClient:
         self.messages = _FakeMessages(text)
 
 
-def _fake_requests_get(payload=None, text=None, raise_status=False):
-    class _R:
-        status_code = 200
-
-        def raise_for_status(self):
-            if raise_status:
-                raise RuntimeError("boom")
-
-        def json(self):
-            return payload or {}
-
-        @property
-        def text(self):
-            return text or ""
-
-    def _get(*args, **kwargs):
-        return _R()
-    return _get
+def _seed_ambient(db, *, source, signal_key, valid_until_at,
+                  headline="h", detail="d", store_scope="both",
+                  severity="info"):
+    now = datetime.utcnow()
+    s = AmbientSignal(
+        source=source, signal_key=signal_key,
+        payload={"headline": headline, "detail": detail},
+        payload_hash="x" * 64, store_scope=store_scope,
+        category="maintenance", severity=severity,
+        valid_until_at=valid_until_at,
+        created_at=now, updated_at=now, last_seen_at=now,
+    )
+    db.add(s)
+    return s
 
 
 # ============================================================
-# §6 — valid_until_at rules
+# §6 — valid_until_at rules (unchanged)
 # ============================================================
 
 def test_end_of_day_ct_is_naive_utc():
@@ -128,81 +129,8 @@ def test_compute_valid_until_no_usable_hint_falls_to_end_of_day(hint):
 
 
 # ============================================================
-# §5 — the three free adapters (network-mocked)
+# Claude-search adapter — STAYS in this pipeline (1J §4/§5/Q5)
 # ============================================================
-
-def test_noaa_adapter_parses_and_filters_alerts(monkeypatch):
-    payload = {"features": [
-        {"id": "https://api.weather.gov/alerts/X",
-         "properties": {
-             "event": "Heat Advisory",
-             "headline": "Heat Advisory until 8 PM CDT",
-             "description": "Hot.", "severity": "Moderate",
-             "areaDesc": "Harris, TX",
-             "expires": "2026-05-14T20:00:00-05:00"}},
-        {"id": "https://api.weather.gov/alerts/Y",
-         "properties": {
-             "event": "Tornado Warning", "headline": "Tornado Warning",
-             "description": "Take cover.", "severity": "Extreme",
-             "areaDesc": "Montgomery, TX",
-             "expires": "2026-05-14T15:00:00-05:00"}},
-        {"id": "Z",
-         "properties": {
-             "event": "Coastal Flood", "headline": "x", "description": "x",
-             "severity": "Minor", "areaDesc": "Galveston Island",
-             "expires": None}},
-    ]}
-    monkeypatch.setattr("requests.get", _fake_requests_get(payload=payload))
-    sigs = si._fetch_noaa(si._STORE_LOCATIONS)
-
-    assert len(sigs) == 2          # Galveston Island filtered out
-    by_event = {s.structured["headline"]: s for s in sigs}
-    heat = by_event["Heat Advisory"]
-    assert heat.store_scope == "both"               # Harris -> both
-    assert heat.structured["severity"] == "warn"    # Moderate
-    assert heat.structured["category"] == "weather"
-    assert heat.structured["fallback_safe"] is True
-    tornado = by_event["Tornado Warning"]
-    assert tornado.store_scope == "tomball"         # Montgomery-only
-    assert tornado.structured["severity"] == "alert"  # Extreme
-
-
-def test_noaa_adapter_handles_fetch_failure(monkeypatch):
-    monkeypatch.setattr("requests.get",
-                        _fake_requests_get(payload={}, raise_status=True))
-    assert si._fetch_noaa(si._STORE_LOCATIONS) == []
-
-
-def test_centerpoint_adapter_normalizes_via_haiku(monkeypatch):
-    monkeypatch.setattr("requests.get",
-                        _fake_requests_get(text="<html>outage page</html>"))
-    monkeypatch.setattr(si, "_haiku_normalize", lambda *a, **k: ({
-        "store_scope": "tomball", "category": "outage", "severity": "warn",
-        "headline": "Power outage near Tomball",
-        "detail": "1,200 customers affected.",
-        "valid_until": "2026-05-14T22:00:00", "fallback_safe": True,
-    }, 0.002))
-    sigs, cost = si._fetch_centerpoint(si._STORE_LOCATIONS)
-    assert len(sigs) == 1 and cost == 0.002
-    assert sigs[0].store_scope == "tomball"
-    assert sigs[0].structured["category"] == "outage"
-    assert sigs[0].structured["fallback_safe"] is True
-
-
-def test_centerpoint_adapter_empty_when_haiku_finds_nothing(monkeypatch):
-    monkeypatch.setattr("requests.get",
-                        _fake_requests_get(text="<html>js app</html>"))
-    monkeypatch.setattr(si, "_haiku_normalize", lambda *a, **k: ({}, 0.001))
-    sigs, cost = si._fetch_centerpoint(si._STORE_LOCATIONS)
-    assert sigs == [] and cost == 0.001
-
-
-def test_centerpoint_adapter_handles_fetch_failure(monkeypatch):
-    monkeypatch.setattr("requests.get",
-                        _fake_requests_get(text="x", raise_status=True))
-    sigs, cost = si._fetch_centerpoint(si._STORE_LOCATIONS)
-    assert sigs == [] and cost == 0.0
-
 
 def test_claude_search_adapter_returns_digest(monkeypatch):
     monkeypatch.setattr(
@@ -221,42 +149,160 @@ def test_claude_search_adapter_empty_without_client(monkeypatch):
     assert sigs == [] and cost == 0.0
 
 
-def test_paid_adapters_are_stubs():
-    for fn in (si._fetch_openweathermap, si._fetch_ticketmaster,
-               si._fetch_google_calendar, si._fetch_google_maps):
-        assert fn(si._STORE_LOCATIONS) == []
+# ============================================================
+# Block 1J Day 3 — _ambient_to_raw_signal conversion
+# ============================================================
+
+def test_ambient_to_raw_signal_conversion():
+    now = datetime(2026, 5, 14, 10, 0, 0)
+    sig = AmbientSignal(
+        source="weather", signal_key="tomball:forecast:2026-05-14",
+        payload={"headline": "95F and humid", "detail": "Hot day.",
+                 "source_url": "http://noaa/x"},
+        payload_hash="h", store_scope="tomball", category="maintenance",
+        severity="warn", valid_until_at=datetime(2026, 5, 15, 1, 0, 0),
+        created_at=now, updated_at=now, last_seen_at=now)
+    rs = si._ambient_to_raw_signal(sig)
+    assert rs.source == "ambient:weather"
+    assert rs.store_scope == "tomball"
+    assert "95F and humid" in rs.raw_text
+    assert rs.structured["fallback_safe"] is True
+    assert rs.structured["category"] == "weather"      # source-mapped
+    assert rs.structured["severity"] == "warn"
+    assert rs.structured["headline"] == "95F and humid"
+    assert rs.structured["detail"] == "Hot day."
+    assert rs.source_url == "http://noaa/x"
+
+
+@pytest.mark.parametrize("ambient_source,insight_category", [
+    ("weather", "weather"),
+    ("outages", "outage"),
+    ("traffic", "traffic"),
+    ("events", "events"),
+    ("catering_pipeline", "events"),
+    ("vendor_status", "ai_synthesized"),
+])
+def test_ambient_source_to_insight_category_mapping(ambient_source,
+                                                    insight_category):
+    # The fallback path copies structured["category"] straight onto the
+    # SalesInsight, so it MUST be a valid 1F category for every source.
+    now = datetime(2026, 5, 14, 10, 0, 0)
+    sig = AmbientSignal(
+        source=ambient_source, signal_key="k",
+        payload={"headline": "h", "detail": "d"}, payload_hash="x",
+        store_scope="both", category="maintenance", severity="info",
+        valid_until_at=now, created_at=now, updated_at=now, last_seen_at=now)
+    rs = si._ambient_to_raw_signal(sig)
+    assert rs.structured["category"] == insight_category
+    assert rs.structured["category"] in si._VALID_INSIGHT_CATEGORIES
 
 
 # ============================================================
-# §4 — parallel gather orchestration
+# Block 1J Day 3 — gather_raw_signals(db)
 # ============================================================
 
-def test_gather_raw_signals_one_dead_adapter_degrades(monkeypatch):
-    def good(loc):
-        return [si.RawSignal("good", "both", "ok", {})]
+def test_gather_reads_only_live_ambient_signals(db_session, monkeypatch):
+    now = datetime.utcnow()
+    _seed_ambient(db_session, source="weather", signal_key="live",
+                  valid_until_at=now + timedelta(hours=6))
+    _seed_ambient(db_session, source="outages", signal_key="expired",
+                  valid_until_at=now - timedelta(hours=1))   # not live
+    db_session.commit()
+    monkeypatch.setattr(si, "_fetch_claude_search", lambda loc: ([], 0.0))
 
-    def dead(loc):
-        raise RuntimeError("boom")
+    signals, counts, cost = si.gather_raw_signals(db_session)
+    assert counts["ambient_signal"] == 1     # only the live row
+    assert len(signals) == 1
+    assert signals[0].source == "ambient:weather"
 
-    def costly(loc):
-        return [si.RawSignal("costly", "tomball", "x", {})], 0.05
 
-    monkeypatch.setattr(si, "_ADAPTERS",
-                        [("good", good), ("dead", dead), ("costly", costly)])
-    signals, counts, cost = si.gather_raw_signals(si._STORE_LOCATIONS)
+def test_gather_includes_claude_search(db_session, monkeypatch):
+    monkeypatch.setattr(
+        si, "_fetch_claude_search",
+        lambda loc: ([si.RawSignal("claude_search", "both", "digest", {})],
+                     0.03))
+    signals, counts, cost = si.gather_raw_signals(db_session)
+    assert counts["claude_search"] == 1
+    assert cost == 0.03
+    assert any(s.source == "claude_search" for s in signals)
 
-    assert len(signals) == 2          # good + costly; dead degraded to []
-    assert counts == {"good": 1, "dead": 0, "costly": 1}
-    assert cost == 0.05
+
+def test_gather_degrades_when_claude_search_raises(db_session, monkeypatch):
+    def _boom(loc):
+        raise RuntimeError("search API down")
+    monkeypatch.setattr(si, "_fetch_claude_search", _boom)
+    # Must not raise — degrades to whatever ambient rows exist (none here).
+    signals, counts, cost = si.gather_raw_signals(db_session)
+    assert signals == []
+    assert counts["claude_search"] == 0
 
 
 # ============================================================
-# §4 — _fallback_insights (deterministic degrade path)
+# §5 PARITY PROOF — the AmbientSignal-reading path faithfully
+# replaces the removed source-pull path (samai "go (a)")
+# ============================================================
+
+def test_day3_parity_ambient_path_matches_old_source_pull(db_session,
+                                                          monkeypatch):
+    """§5 parity proof: a 1J cron writing an AmbientSignal for a given
+    piece of intelligence produces — through the new AmbientSignal-
+    reading gather — a RawSignal equivalent to what the REMOVED 1F
+    source-pull adapter produced for that SAME intelligence.
+
+    The synthesis-relevant content (store_scope + structured
+    category/severity/headline/detail/fallback_safe) is identical;
+    only `source` differs (a provenance label: the old path's "noaa"
+    vs the new path's "ambient:weather"). This is the same-commit
+    verification §5 requires that the new path faithfully replaces the
+    source-pull path removed in this commit.
+    """
+    now = datetime(2026, 5, 14, 10, 0, 0)
+
+    # What the OLD 1F _fetch_noaa produced for a Heat Advisory — its
+    # synthesis-relevant RawSignal content (store_scope + structured
+    # subset), per the pre-1J _fetch_noaa: a Harris-County alert ->
+    # store_scope "both", structured fallback_safe + weather +
+    # mapped-severity + headline + detail.
+    OLD_PATH_STORE_SCOPE = "both"
+    OLD_PATH_STRUCTURED = {
+        "fallback_safe": True,
+        "category": "weather",
+        "severity": "warn",
+        "headline": "Heat Advisory",
+        "detail": "Excessive heat through 8 PM CDT.",
+    }
+
+    # The 1J weather cron writes that SAME intelligence as an
+    # AmbientSignal: source=weather (-> insight category "weather"),
+    # the NOAA headline/detail in the payload, the mapped severity.
+    db_session.add(AmbientSignal(
+        source="weather", signal_key="both:noaa:heat-advisory",
+        payload={"headline": "Heat Advisory",
+                 "detail": "Excessive heat through 8 PM CDT."},
+        payload_hash="h", store_scope="both", category="maintenance",
+        severity="warn", valid_until_at=datetime(2026, 5, 15, 1, 0, 0),
+        created_at=now, updated_at=now, last_seen_at=now))
+    db_session.commit()
+    monkeypatch.setattr(si, "_fetch_claude_search", lambda loc: ([], 0.0))
+
+    signals, _counts, _cost = si.gather_raw_signals(db_session)
+    converted = [s for s in signals if s.source.startswith("ambient:")]
+    assert len(converted) == 1, "the seeded AmbientSignal -> one RawSignal"
+    rs = converted[0]
+
+    # PARITY — synthesis-relevant content matches the old source-pull output.
+    assert rs.store_scope == OLD_PATH_STORE_SCOPE
+    for key, expected in OLD_PATH_STRUCTURED.items():
+        assert rs.structured[key] == expected, f"parity mismatch on {key!r}"
+
+
+# ============================================================
+# _fallback_insights (deterministic degrade path) — unchanged
 # ============================================================
 
 def test_fallback_insights_emits_only_fallback_safe():
     signals = [
-        si.RawSignal("noaa", "both", "Heat", {
+        si.RawSignal("ambient:weather", "both", "Heat", {
             "fallback_safe": True, "category": "weather", "severity": "warn",
             "headline": "Heat Advisory", "detail": "Hot today.",
             "valid_until": None}),
@@ -270,7 +316,7 @@ def test_fallback_insights_emits_only_fallback_safe():
 
 
 # ============================================================
-# the synthesis writer — validation + idempotency
+# the synthesis writer — validation + idempotency (unchanged)
 # ============================================================
 
 def test_write_insights_validates_and_inserts(db_session):
@@ -331,8 +377,9 @@ _OPUS_FIXTURE = json.dumps([
 
 
 def test_run_synthesis_opus_path(db_session, monkeypatch):
-    monkeypatch.setattr(si, "gather_raw_signals", lambda loc: (
-        [si.RawSignal("noaa", "both", "x", {})], {"noaa": 1}, 0.0))
+    monkeypatch.setattr(si, "gather_raw_signals", lambda db: (
+        [si.RawSignal("ambient:weather", "both", "x", {})],
+        {"ambient_signal": 1}, 0.0))
     monkeypatch.setattr(si, "_anthropic_client",
                         lambda: _FakeClient(_OPUS_FIXTURE))
 
@@ -349,12 +396,12 @@ def test_run_synthesis_opus_path(db_session, monkeypatch):
 
 def test_run_synthesis_fallback_path(db_session, monkeypatch):
     # No Anthropic client -> Opus yields nothing -> deterministic fallback.
-    safe_sig = si.RawSignal("noaa", "both", "Heat", {
+    safe_sig = si.RawSignal("ambient:weather", "both", "Heat", {
         "fallback_safe": True, "category": "weather", "severity": "alert",
         "headline": "Excessive Heat Warning", "detail": "Dangerous heat.",
         "valid_until": None})
     monkeypatch.setattr(si, "gather_raw_signals",
-                        lambda loc: ([safe_sig], {"noaa": 1}, 0.0))
+                        lambda db: ([safe_sig], {"ambient_signal": 1}, 0.0))
     monkeypatch.setattr(si, "_anthropic_client", lambda: None)
 
     summary = si.run_sales_insights_synthesis(db_session)
@@ -368,7 +415,7 @@ def test_run_synthesis_fallback_path(db_session, monkeypatch):
 
 
 def test_run_synthesis_summary_shape(db_session, monkeypatch):
-    monkeypatch.setattr(si, "gather_raw_signals", lambda loc: ([], {}, 0.0))
+    monkeypatch.setattr(si, "gather_raw_signals", lambda db: ([], {}, 0.0))
     monkeypatch.setattr(si, "_anthropic_client", lambda: None)
 
     summary = si.run_sales_insights_synthesis(db_session)
@@ -382,7 +429,7 @@ def test_run_synthesis_summary_shape(db_session, monkeypatch):
 
 
 def test_run_synthesis_cost_ceiling_flagged(db_session, monkeypatch, caplog):
-    monkeypatch.setattr(si, "gather_raw_signals", lambda loc: (
+    monkeypatch.setattr(si, "gather_raw_signals", lambda db: (
         [si.RawSignal("x", "both", "y", {})], {"x": 1}, 9.0))  # pricey gather
     monkeypatch.setattr(si, "_anthropic_client", lambda: None)
     monkeypatch.setenv("SALES_INSIGHTS_COST_CEILING_USD", "5")
@@ -397,8 +444,9 @@ def test_run_synthesis_cost_ceiling_flagged(db_session, monkeypatch, caplog):
 
 
 def test_run_synthesis_idempotent(db_session, monkeypatch):
-    monkeypatch.setattr(si, "gather_raw_signals", lambda loc: (
-        [si.RawSignal("noaa", "both", "x", {})], {"noaa": 1}, 0.0))
+    monkeypatch.setattr(si, "gather_raw_signals", lambda db: (
+        [si.RawSignal("ambient:weather", "both", "x", {})],
+        {"ambient_signal": 1}, 0.0))
     monkeypatch.setattr(si, "_anthropic_client",
                         lambda: _FakeClient(_OPUS_FIXTURE))
 

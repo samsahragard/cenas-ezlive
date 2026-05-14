@@ -218,8 +218,13 @@ def immediate_manager(user, db):
     to. Returns a User row, or None if nobody qualifies (e.g. a partner
     has no manager).
 
-    Per the precondition spec §2.3: "the lowest-tier user strictly above
-    user's tier in user's store scope." Concretely:
+    Contract DEFINED HERE, not inherited: the Block 1 precondition spec
+    deferred immediate_manager with no contract ("1E's escalation will
+    need an immediate_manager(user, db) helper ... whichever sub-block
+    first needs it adds it"). 1E is that first consumer, so 1E defines
+    the contract. samai's 1E review blessed this definition and owns a
+    precondition-spec §2.4 amendment documenting it, so spec and code
+    stay coherent. Concretely:
       - candidate.tier must be strictly > user.tier
       - candidate must be active
       - candidate's authority must cover user's store: a store-unscoped
@@ -229,9 +234,10 @@ def immediate_manager(user, db):
       - among the qualifying candidates, the LOWEST tier wins (closest
         manager). Within that lowest tier, a same-domain candidate is
         preferred (a kitchen cook escalates to a kitchen manager, not an
-        FOH manager) — a documented refinement on top of the spec's
-        bare "lowest-tier" wording, since cross-domain escalation reads
-        operationally wrong; flagged for samai's 1E review.
+        FOH manager). This domain preference is a tie-break WITHIN the
+        lowest tier — it never promotes a higher tier — and exists
+        because cross-domain escalation reads operationally wrong;
+        samai's 1E review explicitly blessed it.
       - final tie-break: lowest User.id, for determinism.
 
     db is an active Session — caller owns its lifecycle.

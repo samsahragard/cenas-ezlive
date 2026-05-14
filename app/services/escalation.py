@@ -91,13 +91,19 @@ def _escalate_one(db, task: Task, escalate_to: User, tier: int,
         task_id=task.id,
         # System-initiated write: the 5-minute cron has no human actor,
         # but actor_user_id is NOT NULL. We use the task OWNER as the
-        # actor — guaranteed-resolvable (owner_user_id is a NOT NULL
-        # RESTRICT FK; owners are archived, never hard-deleted), and it
-        # keys the 'escalated' row onto the owner's audit history,
-        # which is exactly what 1G's per-employee miss-rate report
-        # groups by. action="escalated" + details.tier mark the row as
-        # system-driven. [FLAGGED for samai's 1E review — judgment call
-        # on a NOT-NULL column with no natural human actor.]
+        # actor, on three grounds (samai's 1E review — confirmed KEEP):
+        #   - guaranteed-resolvable: owner_user_id is a NOT NULL RESTRICT
+        #     FK and owners are archived, never hard-deleted;
+        #   - it carries BOTH ids on one row (owner=actor, manager in
+        #     details) — manager-as-actor would only duplicate details;
+        #   - it keys the row onto the owner's task-history thread, the
+        #     natural subject of the event.
+        # 1A §7 is silent on the actor for system-initiated rows — this
+        # is a spec-gap fill, not a violation (samai owns the §7
+        # amendment). action="escalated" + details.tier identify the row
+        # as system-driven; display surfaces (e.g. 3D's audit view) MUST
+        # render 'escalated' rows by action+details, never naively as
+        # "actor did X".
         actor_user_id=task.owner_user_id,
         action="escalated",
         details={

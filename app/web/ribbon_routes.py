@@ -1,46 +1,66 @@
-"""Ribbon routes — Phase 2 / Block 1 / sub-block 1B (ck, 2026-05-14).
+"""Ribbon routes — Phase 2 / Block 1, sub-blocks 1B + 1D (ck).
 
-Ships:
-  - POST /partner/ribbon/collapse/<category> — the collapse-toggle
-    endpoint for the per-user per-category collapse preference.
-  - ribbon_render_context() — the DEFENSIVE presentation-layer
-    wrapper the _ribbon.html partial calls (see the note below).
-  - install() — registers the blueprint + two Jinja globals.
+1B (2026-05-14) shipped:
+  - POST /partner/ribbon/collapse/<category> — collapse-toggle endpoint
+  - ribbon_render_context() — the defensive presentation-layer wrapper
+    the _ribbon.html partial calls (see the note below)
+  - install() — registers the blueprint + Jinja globals
+
+1D (2026-05-14) adds:
+  - POST /partner/ribbon/dismiss/<item_type>/<item_id> — the X handler
+  - POST /partner/ribbon/check/<item_type>/<item_id>   — the Check handler
+  These make the inert X/Check markup 1B rendered actually live; the
+  client side is app/static/js/ribbon.js.
 
 Why ribbon_render_context() exists (deviation-with-rationale from
-1B spec §4, flagged for samai review):
-  The 1B spec §4 says the partial "Calls the router once:
-  {{ ribbon_items_for(...) }}" AND that "the entire partial body is
-  wrapped so that any failure ... renders an empty ribbon and logs at
-  WARN ... it must never 500 a page." Those two can't both be done in
-  pure Jinja — Jinja has no try/except, so a router that raises (or an
-  item missing an attribute) inside a {% for %} WOULD 500 the page.
-  So the defensive wrapper has to be Python. ribbon_render_context()
-  is that wrapper: it calls 1C's ribbon_items_for(), groups by
-  category, pre-renders every item's render_for() payload, folds in
-  the per-user collapse prefs, and try/excepts the whole thing —
-  returning a fully-safe, fully-pre-computed structure so the partial
-  is pure dumb iteration with zero failure points. ribbon_items_for
-  is still registered as the stub Jinja global per spec §11 Q1 and
-  stays 1C's contract surface; the partial just doesn't call it raw.
+1B spec §4, samai-reviewed + spec-amended):
+  The 1B spec §4 wanted the partial to both "call the router once" AND
+  be "wrapped so any failure renders empty + never 500s." Impossible in
+  pure Jinja (no try/except). So the defensive wrapper is Python:
+  ribbon_render_context() calls 1C's ribbon_items_for(), groups by
+  category, pre-renders every render_for() payload, folds in collapse
+  prefs, and try/excepts the whole path — the partial is pure dumb
+  iteration. samai reviewed this as "strictly better" and amended
+  spec §4 (31a297b).
 
-1B scope boundary:
-  - HERE: collapse endpoint + ribbon_render_context + Jinja wiring.
-  - 1C (aick): the real ribbon_items_for content-router body in
-    app/services/ribbon.py. ribbon_render_context does a fresh module
-    attribute lookup at call time, so when 1C replaces the stub the
-    wrapper picks it up with no change here.
-  - 1D (ck, next): the X/Check dismiss/check endpoints + ribbon.js
-    that make the inert markup live.
+1D audience-eligibility design (samai rule 1 — audience-eligibility-
+before-mutation — applied proportional to blast radius):
+  - DISMISS is self-scoped: it writes RibbonItemDismissal(user_id=ME),
+    which only hides the item from the dismisser's OWN ribbon for the
+    rest of today. A "wrong" dismiss has zero blast radius beyond the
+    dismisser's own day-view. So dismiss eligibility is a light check:
+    valid item_type + the referenced row actually exists (don't
+    accrue dismissal rows for garbage ids).
+  - CHECK is the real mutation surface: a task check stamps
+    completed_at globally (feeds the escalation cron + the team-tab
+    miss-rate reports); a signal check acks it for everyone. So check
+    gets the full per-item-type audience check — task: owner /
+    escalated-to / partner only; signal: the anomaly-audience check
+    (role ∈ audience_roles + store scope); scheduled_event: rejected
+    (you don't "complete" a scheduled event — can_check is always
+    False for it); sales_insight: import-guarded, 1F not built yet.
+
+1D scope boundary — NOT here: the escalation cron (1E), sales-insight
+production (1F). The sales_insight branches in both handlers are
+import-guarded so they un-stub automatically when 1F lands.
 """
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
 
 from flask import Blueprint, g, jsonify, redirect, request, url_for
 
 from app.db import SessionLocal
-from app.models import RibbonCategoryPreference
+from app.models import (
+    RibbonCategoryPreference,
+    RibbonItemDismissal,
+    Task,
+    TaskAuditLog,
+    Signal,
+    SignalAck,
+    ScheduledEvent,
+)
 from app.services.ribbon import (
     RIBBON_CATEGORIES,
     RIBBON_CATEGORY_SLUGS,
@@ -51,9 +71,17 @@ log = logging.getLogger(__name__)
 
 ribbon_bp = Blueprint("ribbon", __name__)
 
+# The four item_types the ribbon renders (1C contract — task / signal /
+# sales_insight were the original three; scheduled_event was added by
+# 1C's §13 contract change). The dismiss/check <item_type> URL param is
+# validated against this set.
+_VALID_RIBBON_ITEM_TYPES = frozenset(
+    {"task", "signal", "sales_insight", "scheduled_event"}
+)
+
 
 # ============================================================
-# Collapse-toggle endpoint
+# Collapse-toggle endpoint (1B)
 # ============================================================
 @ribbon_bp.route("/partner/ribbon/collapse/<category>", methods=["POST"])
 def ribbon_collapse(category: str):
@@ -104,7 +132,278 @@ def ribbon_collapse(category: str):
 
 
 # ============================================================
-# Defensive presentation-layer wrapper (see module docstring)
+# X / Check handlers (1D)
+# ============================================================
+def _load_item_row(db, item_type: str, item_id: int):
+    """Load the underlying row for a ribbon item. Returns the row or
+    None if it doesn't exist. sales_insight is import-guarded — its
+    model (SalesInsight) is 1F, not built yet; until then no
+    sales_insight item can be on any ribbon, so a sales_insight id is
+    treated as a non-existent row."""
+    if item_type == "task":
+        return db.get(Task, item_id)
+    if item_type == "signal":
+        return db.get(Signal, item_id)
+    if item_type == "scheduled_event":
+        return db.get(ScheduledEvent, item_id)
+    if item_type == "sales_insight":
+        try:
+            from app.models import SalesInsight  # 1F — may not exist yet
+        except ImportError:
+            return None
+        return db.get(SalesInsight, item_id)
+    return None
+
+
+def _can_check_item(db, user, item_type: str, item_id: int, row) -> tuple[bool, str]:
+    """Audience-eligibility for the CHECK action (the high-blast-radius
+    mutation). Returns (eligible, reason). `row` is the already-loaded
+    underlying row (guaranteed non-None by the caller).
+
+    Per item type:
+      - task: only the owner, the escalated-to manager, or a partner
+        may mark a task complete. A manager who merely *sees* a
+        subordinate's task as observer-framing cannot complete it —
+        that matches 1C's RibbonItem.can_check, which is True only for
+        the owner_todo / escalated_to relations.
+      - signal: the anomaly-audience check — the user's role must be in
+        the signal's audience_roles (empty audience = visible to all),
+        and the signal's store must match the user's scope (NULL
+        store_id = global). Mirrors (does not import — the helpers are
+        anomaly_routes-private) the /partner/anomalies/<id>/ack check;
+        flagged for samai as a shared-helper-extraction follow-up
+        candidate.
+      - scheduled_event: never checkable — you don't "complete" a
+        scheduled event (1C sets can_check=False for it).
+      - sales_insight: 1F not built; caller import-guards before here.
+    """
+    role = (getattr(user, "permission_level", "") or "").strip()
+
+    if item_type == "task":
+        if role == "partner":
+            return True, "partner"
+        if user.id == row.owner_user_id:
+            return True, "owner"
+        if row.escalated_to_user_id is not None and user.id == row.escalated_to_user_id:
+            return True, "escalated_to"
+        return False, "not the task owner / escalation target"
+
+    if item_type == "signal":
+        aud = row.audience_roles or []
+        if aud and role not in aud and role != "partner":
+            return False, "not in this signal's audience"
+        # Store scope: NULL store_id = global signal. Otherwise the
+        # signal's store must be covered by the user's store_scope.
+        # partner / store-unscoped roles have cross-store visibility.
+        if row.store_id:
+            user_store = (getattr(user, "store_scope", "") or "")
+            if role != "partner" and row.store_id not in user_store:
+                return False, "signal is scoped to a different store"
+        return True, "in audience"
+
+    if item_type == "scheduled_event":
+        return False, "scheduled events cannot be marked complete"
+
+    if item_type == "sales_insight":
+        # Reached only if SalesInsight exists (caller import-guards the
+        # row load). Any keypad user who can see the sales category may
+        # dismiss-permanently an insight — it's per-store info, not
+        # role-restricted. 1F finalizes this when it lands.
+        return True, "sales insight"
+
+    return False, "unknown item type"
+
+
+@ribbon_bp.route(
+    "/partner/ribbon/dismiss/<item_type>/<int:item_id>", methods=["POST"])
+def ribbon_dismiss(item_type: str, item_id: int):
+    """X handler — dismiss a ribbon item for the rest of today.
+
+    Writes a RibbonItemDismissal(user_id, item_type, item_id,
+    dismiss_day=date.today().isoformat()). 1C's _exclude_dismissed
+    reads against exactly that (item_type, item_id, today) tuple, so
+    the item drops from the user's ribbon on the next render and comes
+    back tomorrow for re-triage.
+
+    Idempotent: the uq(user_id, item_type, item_id, dismiss_day)
+    constraint means a double-dismiss in one day is a harmless no-op —
+    we check-then-insert and return 200 either way.
+
+    Eligibility (proportional — see module docstring): dismiss is
+    self-scoped, so the check is light — valid item_type + the
+    referenced row exists. A dismiss can only ever affect the
+    dismisser's own day-view.
+
+    One-source-two-items note (aick's 1C contract): a task can render
+    as two RibbonItems (owner_todo in `todo` + observer in its domain
+    category). Both carry the same (item_type, item_id), so one dismiss
+    POST + 1C's (item_type, item_id)-keyed exclusion drops both copies.
+    """
+    user = getattr(g, "current_user", None)
+    if user is None:
+        return jsonify({"ok": False, "error": "not signed in"}), 401
+    if item_type not in _VALID_RIBBON_ITEM_TYPES:
+        return jsonify({"ok": False, "error": "unknown item type"}), 400
+
+    db = SessionLocal()
+    try:
+        row = _load_item_row(db, item_type, item_id)
+        if row is None:
+            # No such item — don't accrue dismissal rows for garbage ids.
+            return jsonify({"ok": False, "error": "item not found"}), 404
+
+        today = date.today().isoformat()
+        existing = (
+            db.query(RibbonItemDismissal)
+            .filter(
+                RibbonItemDismissal.user_id == user.id,
+                RibbonItemDismissal.item_type == item_type,
+                RibbonItemDismissal.item_id == item_id,
+                RibbonItemDismissal.dismiss_day == today,
+            )
+            .first()
+        )
+        if existing is not None:
+            # Already dismissed today — idempotent no-op.
+            return jsonify({
+                "ok": True, "item_type": item_type, "item_id": item_id,
+                "dismissed": True, "already": True,
+            })
+
+        db.add(RibbonItemDismissal(
+            user_id=user.id,
+            item_type=item_type,
+            item_id=item_id,
+            dismiss_day=today,
+            dismissed_at=datetime.utcnow(),
+        ))
+        db.commit()
+        return jsonify({
+            "ok": True, "item_type": item_type, "item_id": item_id,
+            "dismissed": True, "already": False,
+        })
+    finally:
+        db.close()
+
+
+@ribbon_bp.route(
+    "/partner/ribbon/check/<item_type>/<int:item_id>", methods=["POST"])
+def ribbon_check(item_type: str, item_id: int):
+    """Check handler — mark a ribbon item complete / acknowledged.
+
+      - task          → set completed_at + completed_by_user_id, write
+                        a TaskAuditLog(action="completed") row.
+      - signal        → stamp Signal.acknowledged_by/at (first ack
+                        only) + write a SignalAck row. Mirrors
+                        /partner/anomalies/<id>/ack.
+      - sales_insight → "dismisses permanently" per the directive —
+                        append the user to SalesInsight.dismissed_by.
+                        Import-guarded (1F not built); 503 until then.
+      - scheduled_event → rejected; you don't complete a scheduled
+                        event (can_check is always False for it).
+
+    Eligibility: the full per-item-type audience check (see
+    _can_check_item) — check is the high-blast-radius mutation, so
+    unlike dismiss it gets the real gate.
+    """
+    user = getattr(g, "current_user", None)
+    if user is None:
+        return jsonify({"ok": False, "error": "not signed in"}), 401
+    if item_type not in _VALID_RIBBON_ITEM_TYPES:
+        return jsonify({"ok": False, "error": "unknown item type"}), 400
+
+    db = SessionLocal()
+    try:
+        # sales_insight: import-guard before anything else — its model
+        # is 1F, not built. No sales_insight item can be on a ribbon
+        # yet, so a check POST for one is "not available" until 1F.
+        if item_type == "sales_insight":
+            try:
+                from app.models import SalesInsight  # noqa: F401  (1F)
+            except ImportError:
+                return jsonify({
+                    "ok": False,
+                    "error": "sales insights not available yet (Block 1F)",
+                }), 503
+
+        row = _load_item_row(db, item_type, item_id)
+        if row is None:
+            return jsonify({"ok": False, "error": "item not found"}), 404
+
+        eligible, reason = _can_check_item(db, user, item_type, item_id, row)
+        if not eligible:
+            return jsonify({"ok": False, "error": reason}), 403
+
+        now = datetime.utcnow()
+
+        if item_type == "task":
+            if row.completed_at is not None:
+                # Already complete — idempotent no-op, don't double-audit.
+                return jsonify({
+                    "ok": True, "item_type": item_type, "item_id": item_id,
+                    "checked": True, "already": True,
+                })
+            row.completed_at = now
+            row.completed_by_user_id = user.id
+            # TaskAuditLog "completed" — 1A reserved this enum value for
+            # the sub-block that owns the complete path (1D). details
+            # shape per 1A spec §7.
+            db.add(TaskAuditLog(
+                task_id=row.id,
+                actor_user_id=user.id,
+                action="completed",
+                details={"completed_by_user_id": user.id},
+            ))
+            db.commit()
+            return jsonify({
+                "ok": True, "item_type": item_type, "item_id": item_id,
+                "checked": True, "already": False,
+            })
+
+        if item_type == "signal":
+            # Stamp the first ack only — later checks still log a
+            # SignalAck row (captures the second interaction) but the
+            # signal's acknowledged_at sticks at the first. Mirrors the
+            # /partner/anomalies/<id>/ack endpoint.
+            already = row.acknowledged_at is not None
+            if not already:
+                row.acknowledged_by = user.id
+                row.acknowledged_at = now
+            db.add(SignalAck(
+                signal_id=row.id,
+                user_id=user.id,
+                acked_at=now,
+                note="ribbon check",
+            ))
+            db.commit()
+            return jsonify({
+                "ok": True, "item_type": item_type, "item_id": item_id,
+                "checked": True, "already": already,
+            })
+
+        if item_type == "sales_insight":
+            # 1F-guarded above; once SalesInsight lands this appends
+            # user.id to its dismissed_by JSON list (permanent dismiss
+            # per the directive's 1D Check semantics for insights).
+            dismissed_by = list(getattr(row, "dismissed_by", None) or [])
+            if user.id not in dismissed_by:
+                dismissed_by.append(user.id)
+                row.dismissed_by = dismissed_by
+            db.commit()
+            return jsonify({
+                "ok": True, "item_type": item_type, "item_id": item_id,
+                "checked": True, "already": False,
+            })
+
+        # scheduled_event reaches here only if _can_check_item somehow
+        # passed it — it doesn't, but belt-and-suspenders.
+        return jsonify({"ok": False, "error": "item type not checkable"}), 400
+    finally:
+        db.close()
+
+
+# ============================================================
+# Defensive presentation-layer wrapper (1B — see module docstring)
 # ============================================================
 def _empty_categories():
     """The all-empty, all-expanded fallback structure — what the
@@ -241,12 +540,14 @@ def install(app):
     from app.create_app() after the blueprint imports settle (mirrors
     ezanomaly.install / ezperms.install).
 
-      - ribbon_items_for : the stub content router from
-        app.services.ribbon (spec §11 Q1). Returns [] during the
-        1B/1C parallel window; 1C replaces the body. Registered so
-        templates / tooling can call the router directly if needed.
+      - ribbon_items_for : the content router from app.services.ribbon
+        (1C's real implementation; was a stub during the 1B/1C parallel
+        window). Registered so templates / tooling can call it directly.
       - ribbon_render_context : 1B's defensive wrapper — what
         _ribbon.html actually calls. See the module docstring.
+
+    The dismiss/check endpoints (1D) ride the same ribbon_bp blueprint,
+    so registering it here wires them too.
     """
     app.register_blueprint(ribbon_bp)
     app.jinja_env.globals["ribbon_items_for"] = ribbon_items_for

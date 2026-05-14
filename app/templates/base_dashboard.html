@@ -141,6 +141,12 @@
     }
   </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
+  {# Phase 2 / Block 1D — universal ribbon X/Check behavior. Wires the
+     inert dismiss/check buttons 1B rendered. No-ops on pages without a
+     .ck-ribbon (same defensive shape as sidebar.js). The ribbon's
+     collapse-toggle JS is separate — it's the inline script in
+     _ribbon.html (1B owns it). #}
+  <script src="{{ url_for('static', filename='js/ribbon.js') }}" defer></script>
   {% block head_extra %}{% endblock %}
 </head>
 {# Store context (set by /<store>/... routes via store_routes.py). Falls back in this order:

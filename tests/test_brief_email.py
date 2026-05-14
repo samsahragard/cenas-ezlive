@@ -213,7 +213,6 @@ def test_dispatch_dry_run_by_default(monkeypatch, audience, brief_row, db_sessio
     monkeypatch.delenv("BRIEF_EMAIL_DISPATCH", raising=False)
     sent: list = []
     monkeypatch.setattr(be, "_smtp_send", lambda *a, **k: sent.append(a))
-    monkeypatch.setattr(be, "render_html", lambda body, aud: "<html/>")
     out = be.dispatch_brief(brief_row, audience, db_session)
     assert out["status"] == "dry_run"
     assert out["reason"] == "flag_off"
@@ -225,17 +224,18 @@ def test_dispatch_sends_when_flag_on(monkeypatch, audience, brief_row, db_sessio
     monkeypatch.setenv("BRIEF_EMAIL_DISPATCH", "1")
     sent: list = []
     monkeypatch.setattr(be, "_smtp_send", lambda *a, **k: sent.append(a))
-    monkeypatch.setattr(be, "render_html", lambda body, aud: "<html/>")
     out = be.dispatch_brief(brief_row, audience, db_session)
     assert out["status"] == "sent"
     assert out["reason"] == "ok"
     assert len(sent) == 1
-    # _smtp_send(to_addr, subject, plain, html)
-    to_addr, subject, plain, html = sent[0]
+    # _smtp_send(to_addr, subject, plain) — plain-only since 128d8a5 +
+    # html-branch cleanup; render_html stays in the module for the
+    # Phase 1.5 /partner/briefs UI but is no longer called from the
+    # email dispatch path.
+    to_addr, subject, plain = sent[0]
     assert to_addr == be.PARTNER_EMAIL
     assert subject == "Cenas brief — 2026-05-13 — 1 alerts / 2 warns"
     assert "Good morning, Sam." in plain
-    assert html == "<html/>"
 
 
 def test_dispatch_skips_when_no_recipient(monkeypatch, audience, brief_row, db_session):
@@ -257,7 +257,6 @@ def test_dispatch_swallows_smtp_error(monkeypatch, audience, brief_row, db_sessi
         raise RuntimeError("smtp down")
 
     monkeypatch.setattr(be, "_smtp_send", boom)
-    monkeypatch.setattr(be, "render_html", lambda body, aud: "<html/>")
     out = be.dispatch_brief(brief_row, audience, db_session)
     assert out["status"] == "error"
     assert out["reason"] == "RuntimeError"

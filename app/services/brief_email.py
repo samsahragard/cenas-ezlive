@@ -33,7 +33,6 @@ import smtplib
 import ssl
 from dataclasses import dataclass
 from datetime import date
-from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -210,24 +209,22 @@ def render_html(brief_body: dict, audience) -> str:
 
 # ---- SMTP send ----
 
-def _smtp_send(to_addr: str, subject: str, plain: str, html: str) -> None:
+def _smtp_send(to_addr: str, subject: str, plain: str) -> None:
     """SMTP_SSL via the same SiteGround mailbox produce_order uses.
 
-    Plain-text only per Sam 2026-05-13 19:39 — phone notification preview
-    was using the plain part anyway; the html attach was over-implementation
-    relative to his 18:26 directive ("plain text with section headers,
-    easier to read on phone notification preview"). html arg retained for
-    caller compat + tests (it is composed by render_html and passed in)
-    but intentionally not attached to the outgoing message.
+    Plain-text only per Sam 2026-05-13 19:39 + 20:13 — phone notification
+    preview was using the plain part anyway; the multipart wrapper + html
+    branch was over-implementation relative to his 18:26 directive
+    ("plain text with section headers, easier to read on phone notification
+    preview"). render_html() is retained in this module — Phase 1.5 in-app
+    /partner/briefs UI uses the same Jinja partial per spec §11 — but no
+    longer fires from the email path.
     """
     pwd = _email_pwd()
-    msg = MIMEMultipart("alternative")
+    msg = MIMEText(plain, "plain")
     msg["Subject"] = subject
     msg["From"] = f"{FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_addr
-    msg.attach(MIMEText(plain, "plain"))
-    # html attach intentionally removed per Sam 2026-05-13 directive.
-    _ = html  # silence linters; arg retained for caller + test compat.
 
     ctx = ssl.create_default_context()
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx) as srv:
@@ -273,7 +270,6 @@ def dispatch_brief(brief_row, audience, db=None) -> dict:
         counts = _count_severities(body)
         subject = format_subject(audience.brief_date, counts)
         plain = render_plain(body, audience)
-        html = render_html(body, audience)
 
         if not _dispatch_enabled():
             out["status"] = "dry_run"
@@ -286,7 +282,7 @@ def dispatch_brief(brief_row, audience, db=None) -> dict:
             )
             return out
 
-        _smtp_send(to_addr, subject, plain, html)
+        _smtp_send(to_addr, subject, plain)
         out["status"] = "sent"
         out["reason"] = "ok"
         logger.info(

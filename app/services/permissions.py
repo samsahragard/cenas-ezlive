@@ -328,14 +328,39 @@ def _enforcing() -> bool:
 
 
 def _log_denial(user, tag: str, store_id: str | None, route: str) -> None:
+    mode = "ENFORCING" if _enforcing() else "DARK-LAUNCH"
     log.warning(
         "permission denial: route=%s tag=%s user_id=%s role=%s store_id=%s mode=%s",
         route, tag,
         (user.id if user else "(tier2-only)"),
         (getattr(user, "permission_level", "(none)") if user else "(none)"),
         store_id,
-        "ENFORCING" if _enforcing() else "DARK-LAUNCH",
+        mode,
     )
+    # Persist to PermissionDenial so /partner/developer/app/denials can
+    # render the trail (spec §5.3). Best-effort — a DB failure here must
+    # not block the routing path. Worst case we lose a row from the
+    # surface but the log line is still in Sentry/stdout.
+    try:
+        from app.db import SessionLocal
+        from app.models import PermissionDenial
+        from flask import request as _request
+        db = SessionLocal()
+        try:
+            db.add(PermissionDenial(
+                user_id=(user.id if user else None),
+                user_label=(getattr(user, "full_name", None) if user else None),
+                user_role=(getattr(user, "permission_level", None) if user else None),
+                tag=tag,
+                route=route,
+                ip=(_request.remote_addr if _request else None),
+                mode=mode,
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        log.exception("permission denial: failed to persist PermissionDenial row")
 
 
 # ============================================================

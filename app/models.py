@@ -500,6 +500,42 @@ class User(Base):
     session_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
 
+class PermissionDenial(Base):
+    """Append-only log of permission_denied events from the
+    @requires_permission decorator. Surfaces on
+    /partner/developer/app/denials so partners can see what's getting
+    blocked and decide if a role's tag set needs adjustment.
+
+    Phase 0 Block 4 follow-up — denials surface (Sam: 2026-05-13), per
+    samai's permission_system spec section 5.3. Not enforced-append-only
+    at the ORM layer — denials can be high-volume and a future
+    retention job may legitimately prune old rows. Audit trail integrity
+    is on UserAuditLog (which IS append-only-enforced), not here."""
+    __tablename__ = "permission_denial"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True,
+    )
+    # The denied user. SET NULL if the user row is later removed (we
+    # archive, never delete, but the FK is defensive). Tier-2-only
+    # sessions (site-password but no User) get NULL user_id.
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    user_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    user_role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Permission tag the user was missing (e.g. "orders.assign_driver").
+    tag: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    # Request path that triggered the denial.
+    route: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 'ENFORCING' (denial redirected to /access-denied) or 'DARK-LAUNCH'
+    # (denial logged but request passed through — only possible if
+    # PERMISSION_ENFORCE=0 in env).
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
 class UserAuditLog(Base):
     """Append-only audit trail for Team admin (User table) mutations.
     Every create / edit / role_change / activate / deactivate / passcode_reset

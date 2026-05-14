@@ -27,7 +27,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from werkzeug.utils import secure_filename
 
 from app.db import SessionLocal
-from app.models import DeveloperChatMessage, DeveloperChatAttachment
+from app.models import DeveloperChatMessage, DeveloperChatAttachment, PermissionDenial
 # Phase 0 Block 4: gate routes on the permission system. Decorator
 # runs first; the in-handler _enforce_partner() helper stays as
 # belt-and-suspenders during dark-launch.
@@ -335,6 +335,7 @@ DOC_PAGES = [
     ("anomaly-rules",            "Anomaly Rules",     "doc_anomaly_rules"),
     ("anomaly-service-spec",     "Anomaly Service Spec", "doc_anomaly_service_spec"),
     ("morning-brief-composer-spec", "Morning Brief Composer Spec", "doc_morning_brief_composer_spec"),
+    ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]
 
@@ -426,6 +427,42 @@ def app_doc_download():
         as_attachment=True,
         download_name=f"developer_docs_{stamp}.zip",
         max_age=0,
+    )
+
+
+# Permission denials surface (samai spec §5.3). Has its own route — not
+# a static doc template — so it can render live rows from the
+# PermissionDenial table populated by _log_denial(). Registered BEFORE the
+# `/<page>` catch-all so Flask routes the exact match first.
+@dev_chat.route("/partner/developer/app/denials")
+@requires_permission("developer.view_app_docs")
+def denials_page():
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    db = SessionLocal()
+    try:
+        # Latest 500 denials, newest first. Older rows still in the table
+        # but not surfaced — partners use the page for triage, not history.
+        rows = (db.query(PermissionDenial)
+                  .order_by(PermissionDenial.created_at.desc())
+                  .limit(500)
+                  .all())
+        total = db.query(PermissionDenial).count()
+    finally:
+        db.close()
+    return render_template(
+        "docs/denials.html",
+        active="doc_denials",
+        page_title="Permission Denials",
+        rows=rows,
+        total=total,
+        doc_pages=DOC_PAGES,
+        chat_pages=CHAT_PAGES,
+        current_doc_slug="denials",
     )
 
 

@@ -22,8 +22,7 @@
 <ul>
   <li><code>Task</code>, <code>TaskAuditLog</code>, <code>RibbonItemDismissal</code> models + one alembic migration</li>
   <li><code>TaskAuditLog</code> append-only <code>before_delete</code> listener</li>
-  <li>A shared <code>app/services/role_hierarchy.py</code> module (see §4 — 1A is first to need it; 1E and 2C consume it next)</li>
-  <li><code>can_assign_to(actor, target)</code> assignment helper in that module</li>
+  <li><code>can_assign_to(actor, target)</code> assignment helper, <strong>added to</strong> <code>app/services/role_hierarchy.py</code> — that module is <em>created</em> by the Block 1 role-taxonomy precondition commit (a9ae945, samai code-review PASS 2026-05-14; deploy-verify BLOCKED-PENDING-RENDER), not by 1A; see §4</li>
   <li><code>POST /partner/tasks/create</code> and <code>POST /partner/tasks/&lt;id&gt;/reassign</code> routes with route-layer enforcement + audit emission</li>
   <li>Tests: model behavior, the <code>can_assign_to</code> parameterized matrix, route enforcement, audit emission</li>
 </ul>
@@ -151,18 +150,29 @@ def _no_delete_task_audit(mapper, connection, target):
 
 <h2>4. The role-hierarchy foundation — a shared module</h2>
 <p>
-  <strong>Architectural call worth surfacing before implementation:</strong>
-  three Phase 2 sub-blocks need the same role-tier / hierarchy logic —
-  1A's <code>can_assign_to</code>, 1E's "find the owner's immediate manager"
-  escalation step, and 2C's <code>can_view_counseling</code> cascade. The
-  directive references "the existing role hierarchy" for 1E, but
-  <code>app/services/permissions.py</code> only has <code>ROLE_PERMISSIONS</code>
-  (tag grants) — there is <strong>no role-tier / hierarchy structure today</strong>.
+  <strong>Revised 2026-05-14 after the precondition landed.</strong> This
+  section originally flagged that three Phase 2 sub-blocks need the same
+  role-tier / hierarchy logic — 1A's <code>can_assign_to</code>, 1E's
+  escalation step, 2C's <code>can_view_counseling</code> cascade — and that
+  no role-tier structure existed. Sam's §5.3 Path A decision turned that flag
+  into a dedicated precondition commit. As of <strong>a9ae945</strong>
+  (Block 1 role-taxonomy precondition — samai code-review PASS 2026-05-14;
+  committed + pushed to origin/main; <em>deploy-verify BLOCKED-PENDING-RENDER</em>
+  — the Render account hit <code>pipeline_minutes_exhausted</code>, prod is
+  stuck on 31a297b, see the 02:34 chat thread),
+  <code>app/services/role_hierarchy.py</code> <strong>already exists in the
+  tree</strong> — created by the precondition, not by 1A.
 </p>
 <p>
-  1A is the first sub-block to need it, so 1A creates it:
-  <code>app/services/role_hierarchy.py</code>, consumed by 1E and 2C next.
-  It holds:
+  So 1A does <strong>not</strong> create <code>role_hierarchy.py</code> — 1A
+  <em>imports</em> it and <em>adds</em> <code>can_assign_to</code> to it. The
+  precondition shipped the module with <code>ROLE_TIER</code>,
+  <code>role_tier()</code>, and <code>role_domain()</code> for all 15 roles
+  (the 10 canonical + the 5 hourly added by §5.3 Path A). <code>can_assign_to</code>
+  (§5) is 1A's addition to that existing module. <code>immediate_manager()</code>
+  is still deferred — the precondition explicitly left it out (it needs a DB
+  session; 1E is its first real consumer). For reference, the precondition's
+  module holds:
 </p>
 <ul>
   <li><code>ROLE_TIER: dict[str, int]</code> — every canonical role mapped to an integer tier (higher = more authority). The tiers, from the directive's §2C hierarchy line:
@@ -174,8 +184,17 @@ hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender �
   </li>
   <li><code>role_tier(role) -&gt; int</code> — resolves a <code>User.permission_level</code> (including the <code>_LEGACY_ALIASES</code> from permissions.py — <code>"manager"</code>→gm, <code>"corporate-driver"</code>→driver) to its tier. Unknown roles resolve to tier <code>0</code> (no authority) rather than raising.</li>
   <li><code>role_domain(role) -&gt; str</code> — <code>"kitchen"</code> | <code>"foh"</code> | <code>"both"</code>. <code>km</code>/<code>assistant_km</code>/<code>corporate_chef</code>/<code>prep_manager</code> = kitchen; <code>foh_manager</code> = foh; <code>gm</code>/<code>corporate</code>/<code>partner</code> = both. Needed because the assignment rules cross-cut tier with a kitchen/FOH domain (a KM can't assign to a server; an FOH manager can't assign to a cook).</li>
-  <li><code>immediate_manager(user, db) -&gt; User | None</code> — the lowest-tier user strictly above <code>user</code>'s tier in <code>user</code>'s store scope. 1E needs this; 1A defines it here so 1E imports rather than re-deriving.</li>
 </ul>
+<p>
+  <strong>Not</strong> in the module: <code>immediate_manager(user, db) -&gt; User | None</code>
+  (the lowest-tier user strictly above <code>user</code> in <code>user</code>'s
+  store scope). The precondition deliberately deferred it — it needs a DB
+  session, the precondition module is pure, and no current consumer needs it.
+  1E's escalation is its first real consumer; whichever sub-block first needs
+  it adds it to <code>role_hierarchy.py</code> then. 1A's <code>can_assign_to</code>
+  (§5) uses only <code>role_tier</code> + <code>role_domain</code>, both of
+  which the precondition already shipped.
+</p>
 <p>
   Keeping this in its own module (not buried in <code>permissions.py</code>)
   keeps the tag-grant concern and the org-hierarchy concern separate —
@@ -218,32 +237,31 @@ hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender �
   <li>Store constraint: when the actor is store-scoped (gm and below), <code>target.store_scope</code> must intersect <code>actor.store_scope</code>. Partner / corporate / corporate_chef / prep_manager are store-unscoped and skip the store check (corporate_chef + prep_manager pending Q3).</li>
 </ul>
 
-<h3>5.3 BLOCKING GAP — escalate to @sam before the km / manager-tier rules can be implemented</h3>
+<h3>5.3 The hourly-role taxonomy gap — RESOLVED (precondition a9ae945)</h3>
 <p>
-  <strong>@sam — the assignment hierarchy references roles that do not exist
-  in the current taxonomy.</strong> <code>ROLE_PERMISSIONS</code> has exactly
-  ten canonical roles: <code>partner, corporate, gm, km, assistant_km,
-  corporate_chef, prep_manager, foh_manager, expo, driver</code>. The
-  directive's rules ("KM can assign to <em>kitchen staff</em>",
-  "FOH manager can assign to <em>hourly staff</em>") reference
-  <code>cook</code>, <code>server</code>, <code>busser</code>, <code>host</code>,
-  <code>bartender</code> — none of which are roles in the system today. Only
-  <code>expo</code> and <code>driver</code> exist at the hourly tier.
+  <strong>This was a blocking gap; it is now closed.</strong> The first draft
+  flagged that the assignment hierarchy references <code>cook</code>,
+  <code>server</code>, <code>busser</code>, <code>host</code>,
+  <code>bartender</code> — roles that did not exist in
+  <code>ROLE_PERMISSIONS</code> (only <code>expo</code> and <code>driver</code>
+  sat at the hourly tier). It was escalated to Sam; Sam chose <strong>Path A</strong>
+  (2026-05-14 01:05): round out the taxonomy as a dedicated precondition
+  commit.
 </p>
-<p>Three ways forward — recommend (A):</p>
-<ol>
-  <li><strong>(A, recommended) Extend the role taxonomy first, as a Block 1 precondition commit.</strong> Add the hourly roles (<code>cook, server, busser, host, bartender</code>) to <code>ROLE_PERMISSIONS</code> with appropriately minimal tag sets, and to <code>ROLE_TIER</code> / <code>role_domain</code>. This is needed anyway for Block 2 (the counseling cascade in 2C and attendance in 2B both reference the same hourly roles), so doing it once up front unblocks the most sub-blocks. samai will spec the taxonomy extension as a tiny standalone commit if Sam +1's this path.</li>
-  <li>(B) <code>can_assign_to</code> operates over a separate, broader role-tier table decoupled from <code>ROLE_PERMISSIONS</code> — but then two role lists drift apart, which is exactly the spec-drift the permission matrix tests were built to catch. Not recommended.</li>
-  <li>(C) Ship 1A's <code>can_assign_to</code> with only the partner / corporate / gm / self rules (all of which reference roles that <em>do</em> exist) and defer the km / assistant_km / foh_manager rules to a 1A-follow-up commit once the taxonomy lands. Viable as a stopgap if Sam wants 1A moving immediately, but it leaves the helper visibly incomplete.</li>
-</ol>
 <p>
-  <strong>Until Sam picks a path:</strong> aick can implement everything else
-  in 1A (all three tables, the migration, the append-only listener, the
-  role-hierarchy module skeleton, the partner/corporate/gm/self branches of
-  <code>can_assign_to</code>, both routes, and the tests for all of the
-  above). Only the km / assistant_km / foh_manager branches of
-  <code>can_assign_to</code> are blocked. This keeps 1A ~85% implementable
-  immediately.
+  The Block 1 role-taxonomy precondition (<strong>a9ae945</strong> — samai
+  code-review PASS 2026-05-14, on origin/main; deploy-verify
+  BLOCKED-PENDING-RENDER) shipped all five hourly roles into
+  <code>ROLE_TIER</code> + <code>role_domain</code> (all 15 roles, tier 1 /
+  kitchen-or-foh) <em>and</em> into <code>ROLE_PERMISSIONS</code> with a
+  minimal baseline tag set. So <strong>1A's <code>can_assign_to</code> ships
+  100% complete</strong> against the full 15-role taxonomy — every branch in
+  the §5.2 table (including the km / assistant_km / foh_manager rules) is
+  implementable now. No xfail'd branches, no half-implemented helper, no
+  1A-follow-up commit needed for the taxonomy. (The precondition's code is
+  reviewed + on the tree; it is not yet <em>live</em> — the Render account
+  hit <code>pipeline_minutes_exhausted</code>, a Sam-only fix; deploy-verify
+  of the whole c61afab..HEAD stack happens once builds resume.)
 </p>
 <p>
   <strong>Two smaller open questions, same area</strong> — see §11 Q2 / Q3.
@@ -314,19 +332,22 @@ hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender �
 <p>1A's test file: <code>tests/test_task_system.py</code>. Required coverage:</p>
 <ul>
   <li><strong>Model:</strong> Task / TaskAuditLog / RibbonItemDismissal round-trip; <code>TaskAuditLog</code> <code>before_delete</code> raises <code>RuntimeError</code> matching <code>/append-only/</code>; FK ondelete declarations assert correctly (RESTRICT on owner/assigned_by/task_id/actor; SET NULL on completed_by/escalated_to; CASCADE on dismissal.user_id); the <code>uq_ribbon_dismissal_per_day</code> unique constraint rejects a duplicate.</li>
-  <li><strong>can_assign_to matrix:</strong> a parameterized test over <em>(actor_role × target_role × same-store / cross-store)</em>, asserting the gate decision against the §5.2 table — the same shape as the permission matrix in <code>test_permission_matrix.py</code> (2255c1d). Use a <code>_test_id()</code>-style self-describing id (<code>actor=gm__target=expo__store=same__expected=allow</code>) so a failure names the exact combo. Include the explicit self-assignment case for every role. <em>If Sam picks path (C) in §5.3, the km/foh_manager rows are marked xfail with a reason until the taxonomy lands.</em></li>
+  <li><strong>can_assign_to matrix:</strong> a parameterized test over <em>(actor_role × target_role × same-store / cross-store)</em>, asserting the gate decision against the §5.2 table — the same shape as the permission matrix in <code>test_permission_matrix.py</code> (2255c1d). Use a <code>_test_id()</code>-style self-describing id (<code>actor=gm__target=expo__store=same__expected=allow</code>) so a failure names the exact combo. Include the explicit self-assignment case for every role. The matrix covers <strong>all 15 roles</strong> — the taxonomy is complete (§5.3 resolved, precondition a9ae945), so there are <strong>no xfail rows</strong>; every km / assistant_km / foh_manager combo is a real assertion.</li>
   <li><strong>Routes:</strong> create with an allowed assignment → 200 + Task row + <code>created</code> audit row; create with a disallowed assignment → 403 + <em>no</em> Task row written (audience-eligibility-before-mutation); reassign allowed → 200 + owner changed + <code>reassigned</code> audit row with correct <code>from</code>/<code>to</code>; reassign disallowed → 403 + Task unchanged; invalid <code>store_scope</code>/<code>category</code>/<code>deadline_at</code> → 400.</li>
   <li><strong>Audit emission:</strong> assert the <code>details</code> JSON shape per §7 for the two actions 1A emits.</li>
 </ul>
 
 <h2>9. Distinct-commit boundary recap</h2>
 <p>
-  1A is one commit (or, if Sam picks §5.3 path C, one commit + one small
-  follow-up once the taxonomy lands). It does not touch any ribbon
-  rendering, any cron, or any dismiss/check/complete write path. If the
-  role-taxonomy extension (§5.3 path A) is chosen, that is its
-  <em>own</em> precondition commit, samai-spec'd separately and reviewed
-  before 1A's <code>can_assign_to</code> depends on it.
+  1A is <strong>one commit</strong> — complete, no follow-up needed. The
+  role-taxonomy extension shipped as its own precondition commit (a9ae945 —
+  samai code-review PASS, on origin/main; deploy-verify BLOCKED-PENDING-RENDER)
+  <em>before</em> 1A in commit order, so 1A's
+  <code>can_assign_to</code> is 100% implementable in a single commit against
+  the full taxonomy. 1A does not touch any ribbon rendering, any cron, or any
+  dismiss/check/complete write path. It adds <code>can_assign_to</code> to the
+  precondition's <code>role_hierarchy.py</code> and ships the three Task-system
+  tables + routes + tests.
 </p>
 
 <h2>10. samai review checklist (run per commit)</h2>
@@ -335,8 +356,8 @@ hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender �
   <li>Three tables match §2 column-for-column: types, nullability, indexes, FK ondelete.</li>
   <li><code>TaskAuditLog</code> <code>before_delete</code> listener present and raising; no write path UPDATEs an existing audit row.</li>
   <li><code>RibbonItemDismissal</code> uses <code>dismiss_day</code> (not <code>session_id</code>) + the unique constraint + the lookup index.</li>
-  <li><code>app/services/role_hierarchy.py</code> exists with <code>ROLE_TIER</code>, <code>role_tier</code>, <code>role_domain</code>, <code>immediate_manager</code>; legacy aliases resolved; unknown role → tier 0, not a raise.</li>
-  <li><code>can_assign_to(actor, target)</code>: self-assignment short-circuits True; never assigns to a same-tier peer; store constraint enforced for store-scoped actors; the §5.2 table is encoded exactly (modulo the §5.3 gap, per Sam's chosen path).</li>
+  <li><code>app/services/role_hierarchy.py</code> already exists (precondition a9ae945) with <code>ROLE_TIER</code> + <code>role_tier</code> + <code>role_domain</code> for all 15 roles — 1A <em>imports</em> it, does not re-create it; 1A only <em>adds</em> <code>can_assign_to</code> to it. <code>immediate_manager</code> is deliberately not there yet (deferred — see §4). Verify 1A imports cleanly and does not redefine <code>ROLE_TIER</code> / <code>role_tier</code> / <code>role_domain</code>.</li>
+  <li><code>can_assign_to(actor, target)</code>: self-assignment short-circuits True; never assigns to a same-tier peer; store constraint enforced for store-scoped actors; the §5.2 table is encoded exactly and completely — all 15 roles, no gaps (§5.3 resolved by precondition a9ae945).</li>
   <li>Both routes enforce <code>can_assign_to</code> <em>before</em> any write (rule 1); 403 leaves no row written.</li>
   <li>Route validation: <code>store_scope</code> / <code>category</code> / <code>title</code> / <code>deadline_at</code> validated, 400 on bad input.</li>
   <li>Audit rows emitted with the §7 <code>details</code> shape for <code>created</code> and <code>reassigned</code>.</li>
@@ -347,7 +368,7 @@ hourly-tier        = 1   # expo, driver, + (cook/server/busser/host/bartender �
 
 <h2>11. Open questions for Sam</h2>
 <ol>
-  <li><strong>Q1 (blocking — see §5.3):</strong> the hourly-tier role taxonomy gap. Recommend path (A): extend <code>ROLE_PERMISSIONS</code> with <code>cook / server / busser / host / bartender</code> as a Block 1 precondition commit.</li>
+  <li><strong>Q1 — RESOLVED (code), deploy pending.</strong> The hourly-tier role taxonomy gap (was blocking, see §5.3): Sam chose Path A (2026-05-14 01:05); the role-taxonomy precondition a9ae945 shipped <code>cook / server / busser / host / bartender</code> into <code>ROLE_TIER</code> + <code>role_domain</code> + <code>ROLE_PERMISSIONS</code> — samai code-review PASS, on origin/main. The <em>code</em> question is closed; deploy-verify is BLOCKED-PENDING-RENDER (<code>pipeline_minutes_exhausted</code>, Sam-only fix) along with the rest of the c61afab..HEAD stack.</li>
   <li><strong>Q2:</strong> <code>assistant_km</code> assignment scope — the directive says "KM can assign to kitchen staff" but doesn't mention assistant_km. Spec assumes assistant_km = same as km (kitchen hourly, in scope). Confirm.</li>
   <li><strong>Q3:</strong> <code>corporate_chef</code> and <code>prep_manager</code> placement. Both are multi-store. The directive's hierarchy line omits them. Spec provisionally puts <code>corporate_chef</code> at corporate tier (matches Javier's "walk into either kitchen" authority from the voice guide) and <code>prep_manager</code> at gm tier, both store-unscoped. Confirm or correct.</li>
   <li><strong>Q4:</strong> coarse <code>tasks.use</code> permission tag — spec assumes <em>no</em> new tag (task CRUD is universal to authenticated users; <code>can_assign_to</code> is the real gate). Confirm, or say if you want a tag.</li>

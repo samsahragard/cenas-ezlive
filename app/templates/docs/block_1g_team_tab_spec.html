@@ -44,12 +44,12 @@
   <tr><th>Layer</th><th>Rule</th><th>Mechanism</th></tr>
   <tr>
     <td>1. Route access</td>
-    <td>Only partner / corporate / gm reach <code>/partner/team-reports/</code> at all. Everyone else → 403.</td>
+    <td>Only partner / corporate / gm reach <code>/partner/team-reports/</code> at all. Everyone else is redirected to <code>/access-denied</code> (a 302, the <code>requires_permission</code> mechanism — not a literal 403).</td>
     <td><code>@requires_permission("team_reports.view")</code> on every route in the blueprint.</td>
   </tr>
   <tr>
     <td>2. Sidebar link</td>
-    <td>The nav link renders only for roles that hold <code>team_reports.view</code>. manager / km / assistant_km / foh_manager / expo / driver see no link.</td>
+    <td>The nav link renders only for holders of <code>team_reports.view</code> — partner / corporate / gm. The twelve canonical non-holder roles see no link. (See §9 for the exact denied set + the <code>manager</code>-alias note.)</td>
     <td><code>{% if has_permission('team_reports.view') %}</code> wrapping the sidebar entry.</td>
   </tr>
   <tr>
@@ -135,8 +135,9 @@
 <h2>7. Sidebar gating</h2>
 <p>
   The nav link to <code>/partner/team-reports/</code> is wrapped in
-  <code>{% if has_permission('team_reports.view') %}</code> — so manager / km /
-  assistant_km / foh_manager / expo / driver never see it. Per samai rule 4
+  <code>{% if has_permission('team_reports.view') %}</code> — so only holders
+  of <code>team_reports.view</code> (partner / corporate / gm) see it; the
+  twelve canonical non-holder roles never do. Per samai rule 4
   (doc-registration-checks-both-route-and-sidebar) the review verifies
   <em>both</em> the route decorator <em>and</em> the sidebar gate are present
   — a route gated but a link still showing, or a link hidden but the route
@@ -162,10 +163,10 @@
 <h2>9. Test requirements</h2>
 <p>1G's test file: <code>tests/test_team_reports.py</code>. The gating matrix is THE test of this sub-block.</p>
 <ul>
-  <li><strong>Role-and-scope gating matrix:</strong> parameterized over <em>every role</em> × the team-tab route. Assert: partner/corporate/gm → 200; manager/km/assistant_km/foh_manager/expo/driver → 403. Self-describing ids.</li>
+  <li><strong>Role-and-scope gating matrix:</strong> parameterized over <em>every role</em> × the team-tab route. Assert: partner / corporate / gm reach the view; the twelve canonical non-holder roles — corporate_chef, prep_manager, km, assistant_km, foh_manager, expo, driver, cook, server, busser, host, bartender — are redirected to <code>/access-denied</code> (a 302, the <code>requires_permission</code> mechanism since the 2026-05-13 enforce flip — not a literal 403). <strong>Legacy aliases:</strong> <code>manager</code> resolves to <code>gm</code> via <code>_LEGACY_ALIASES</code> and therefore <em>passes</em> — it inherits gm's full set including <code>team_reports.view</code>; <code>corporate-driver</code> resolves to <code>driver</code> and is denied. The matrix must cover every canonical role <em>and</em> both aliases. Self-describing ids.</li>
   <li><strong>GM store-scoping:</strong> a Tomball GM's report data contains only Tomball employees; a Copperfield GM's only Copperfield. A Tomball GM passing <code>?store=copperfield</code> still gets <em>Tomball</em> data — the param is ignored, not honored, no 400.</li>
   <li><strong>Report #4 gating:</strong> partner/corporate see the per-store comparison section; a GM does not — and the GM's request never runs the cross-store query (assert via query observation or the section's absence, not just CSS hiding).</li>
-  <li><strong>Sidebar:</strong> the link renders for partner/corporate/gm, is absent for the other six roles.</li>
+  <li><strong>Sidebar:</strong> the link renders for partner / corporate / gm, is absent for the twelve canonical non-holder roles.</li>
   <li><strong>The "miss" definition (§6):</strong> a table-driven test over every §6 case — on-time completion = clean; late completion = missed; escalated = missed; open-future-deadline = not counted; open-deadline-passed-not-yet-escalated = missed.</li>
   <li><strong>Point-in-time ownership:</strong> a task created for A, reassigned to B before its deadline, then missed → the miss is attributed to <strong>B</strong> (owner when the deadline passed), not A; and vice-versa if reassigned after. This is the §6 subtle case — it gets its own explicit test.</li>
 </ul>
@@ -174,7 +175,7 @@
 <ol>
   <li>Scope: only the 1G surfaces — no 2H manager-tools reports, no data production, no mutations anywhere.</li>
   <li><strong>Layer 1:</strong> every route in <code>team_reports_bp</code> carries <code>@requires_permission("team_reports.view")</code> — no route is a gap.</li>
-  <li><strong>Layer 2:</strong> the sidebar link is wrapped in <code>has_permission('team_reports.view')</code>; absent for the six lower roles (rule 4 — both route and sidebar).</li>
+  <li><strong>Layer 2:</strong> the sidebar link is wrapped in <code>has_permission('team_reports.view')</code>; absent for the twelve canonical non-holder roles (rule 4 — both route and sidebar).</li>
   <li><strong>Layer 3:</strong> store scope is server-derived from <code>current_user</code>, never from a request parameter; a GM cannot widen scope by any param; a stray <code>store=</code> param from a GM is ignored, not honored, not 400'd.</li>
   <li><strong>Layer 4:</strong> report #4 + the unfiltered cross-store view are gated by <code>team_reports.view_all_stores</code>; a GM's request never even runs the cross-store query.</li>
   <li>Both tags added to <code>ROLE_PERMISSIONS</code> correctly: <code>team_reports.view</code> → corporate + gm; <code>team_reports.view_all_stores</code> → corporate only; both reach partner via wildcard; colocated comment present.</li>
@@ -182,7 +183,7 @@
   <li>Point-in-time ownership reconstructed from <code>TaskAuditLog</code> <code>reassigned</code> rows — a reassigned task's miss is attributed to the owner-at-deadline, not the current owner.</li>
   <li>Median (not just mean) reported for response time.</li>
   <li>The gating matrix test + the miss-definition test + the point-in-time-ownership test are all present and green.</li>
-  <li>Deploy-verify (rule 3): the tab 200s for partner against prod, 403s for a lower role; verified against prod, not local (rule 2).</li>
+  <li>Deploy-verify (rule 3): the tab 200s for partner against prod, redirects a non-holder role to <code>/access-denied</code>; verified against prod, not local (rule 2).</li>
   <li>Full suite no regression; the permission matrix picks up both new tags green.</li>
 </ol>
 

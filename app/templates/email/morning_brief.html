@@ -1,0 +1,83 @@
+{# Phase 1 / Block 6 — morning brief email template.
+
+   Rendered by app/services/brief_email.py:render_html().
+   Per spec §11 the in-app /partner/briefs surface (Phase 1.5) re-uses
+   this same partial so the brief reads the same in email and in-app.
+
+   Variables:
+     brief    — the MorningBrief.body dict (matches spec §3 schema)
+     audience — the AudienceContext used to compose
+
+   Styling: inline only. Email clients (Gmail, Apple Mail, Outlook)
+   strip <style> blocks aggressively and almost universally drop external
+   CSS. Inline keeps the brief readable everywhere. Mobile-first sizes
+   (16px base) since Sam reads on phone over coffee. #}
+<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1d2939;max-width:640px;margin:0 auto;padding:24px 20px;background:#ffffff">
+  <p style="font-size:18px;margin:0 0 16px 0;color:#1d2939">
+    {{ brief.greeting or ("Good morning, " ~ audience.user_name.split()[0] ~ ".") }}
+  </p>
+
+  {% if brief.headline %}
+    <p style="font-size:16px;margin:0 0 24px 0;color:#1d2939;line-height:1.5">
+      <strong>{{ brief.headline }}</strong>
+    </p>
+  {% endif %}
+
+  {% for section in (brief.sections or []) %}
+    {% set kind = section.section_kind %}
+    {% set bg = {
+      'alerts': '#fef3f2',
+      'warns':  '#fffaeb',
+      'wins':   '#ecfdf3',
+      'lookahead': '#eff8ff',
+      'info_aggregate': '#f9fafb',
+      'calibration':   '#f9fafb',
+    }[kind] | default('#f9fafb') %}
+    {% set bar = {
+      'alerts': '#d92d20',
+      'warns':  '#dc6803',
+      'wins':   '#039855',
+      'lookahead': '#175cd3',
+      'info_aggregate': '#667085',
+      'calibration':   '#667085',
+    }[kind] | default('#667085') %}
+
+    <div style="margin:0 0 18px 0;padding:14px 16px;background:{{ bg }};border-left:4px solid {{ bar }};border-radius:6px">
+      <h3 style="margin:0 0 8px 0;font-size:15px;color:{{ bar }};text-transform:uppercase;letter-spacing:0.04em">
+        {{ section.heading or kind }}
+      </h3>
+      {% if section.intro %}
+        <p style="margin:0 0 10px 0;font-size:14px;color:#475467">{{ section.intro }}</p>
+      {% endif %}
+      {% if kind != 'info_aggregate' %}
+        <ul style="margin:0;padding:0 0 0 18px;list-style:disc;color:#1d2939">
+          {% for item in (section['items'] or []) %}
+            <li style="margin:0 0 10px 0;font-size:14px;line-height:1.5">
+              <span>{{ item.one_line }}</span>
+              {% if item.action and item.action != 'FYI — no action required from you.' %}
+                <div style="margin-top:4px;font-size:13px;color:#475467">
+                  <em>Action:</em> {{ item.action }}
+                  {% if item.link_path %}
+                    &nbsp;·&nbsp;<a href="https://app.cenaskitchen.com{{ item.link_path }}" style="color:{{ bar }};text-decoration:none">open</a>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  {% if brief.closing %}
+    <p style="font-size:14px;color:#475467;margin:24px 0 0 0">{{ brief.closing }}</p>
+  {% endif %}
+
+  <p style="font-size:11px;color:#98a2b3;margin:32px 0 0 0;border-top:1px solid #eaecf0;padding-top:12px">
+    Cenas Kitchen morning brief · {{ brief.brief_date }}
+    {% if brief.fallback_used %} · <span style="color:#dc6803">composed via deterministic fallback</span>{% endif %}
+  </p>
+</body>
+</html>

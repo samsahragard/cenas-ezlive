@@ -710,7 +710,9 @@ _ENROLLED_ROLES = ("partner", "corporate", "gm", "km",
 
 def compose_all_briefs(brief_date: date | None = None) -> dict:
     """Cron entrypoint — compose one brief per enrolled audience for
-    brief_date (default: today). Returns summary counts."""
+    brief_date (default: today), then dispatch each via email
+    (dry-run by default; set BRIEF_EMAIL_DISPATCH=1 to actually send).
+    Returns summary counts including dispatch breakdown."""
     if brief_date is None:
         brief_date = date.today()
     db = SessionLocal()
@@ -718,7 +720,14 @@ def compose_all_briefs(brief_date: date | None = None) -> dict:
     skipped = 0
     fallbacks = 0
     errors = 0
+    dispatch_summary = {"sent": 0, "dry_run": 0, "skipped": 0, "error": 0}
+    dispatch_results: list[dict] = []
     try:
+        # Lazy import — brief_email pulls in smtplib + Flask render which
+        # we don't want at module-load time (some tests stub SessionLocal
+        # before the full app context exists).
+        from app.services.brief_email import dispatch_brief
+
         users = (
             db.query(User)
             .filter(User.active.is_(True))
@@ -742,6 +751,12 @@ def compose_all_briefs(brief_date: date | None = None) -> dict:
                 composed += 1
                 if row.fallback_used:
                     fallbacks += 1
+                # Dispatch after a successful compose. dispatch_brief
+                # never raises — it returns a status dict and logs.
+                d = dispatch_brief(row, audience, db)
+                key = d.get("status", "error")
+                dispatch_summary[key] = dispatch_summary.get(key, 0) + 1
+                dispatch_results.append(d)
             except Exception:
                 logger.exception(
                     "brief compose failed for user_id=%s", u.id)
@@ -754,4 +769,6 @@ def compose_all_briefs(brief_date: date | None = None) -> dict:
         "skipped": skipped,
         "fallbacks": fallbacks,
         "errors": errors,
+        "dispatch": dispatch_summary,
+        "dispatch_results": dispatch_results,
     }

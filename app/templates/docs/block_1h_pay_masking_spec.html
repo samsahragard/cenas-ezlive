@@ -1,0 +1,213 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 1H — Pay Masking Layer</h1>
+<p class="doc-meta">
+  Phase 2 / Block 1 / sub-block 1H. samai spec, 2026-05-14.<br>
+  Implementation: aick. Consumed in UI by ck. Review: samai checklist PASS — <strong>extra-careful, this is a pay-data-leakage surface.</strong><br>
+  Source: Phase 2 Directive §BLOCK 1 / 1H.
+</p>
+
+<h2>1. Scope — what 1H is, and what it is NOT</h2>
+<p>
+  1H is a single helper — <code>render_labor_breakdown(store, user)</code> — that
+  takes a store's labor breakdown and returns it <strong>masked to the
+  requesting user's role</strong>. It is the one place pay-aggregation policy
+  lives, so every surface that shows labor data (the ribbon's
+  <code>sales</code> category in 1C, the team tab in 1G, the Block 3 Q&amp;A
+  agent) calls this helper instead of rendering labor data directly.
+</p>
+<p><strong>1H ships:</strong></p>
+<ul>
+  <li><code>app/services/pay_masking.py</code> — the module</li>
+  <li><code>render_labor_breakdown(store, user) -&gt; LaborBreakdown</code> — the public helper</li>
+  <li>The masking transform (<code>_apply_masking</code>) — the security-critical part</li>
+  <li>The role → labor-tier mapping (reuses <code>role_hierarchy</code> from 1A)</li>
+  <li>A defense-in-depth store-scope guard (§6)</li>
+  <li>Tests: the masking matrix (every role × every line kind), the store-scope guard</li>
+</ul>
+<p><strong>1H does NOT ship:</strong> any UI (ck consumes the helper in 1G's team tab + elsewhere); the ribbon (1C calls the helper); the labor <em>data source</em> itself — see §7, this is a flagged gap.</p>
+<p>
+  <strong>1H's value is the masking transform.</strong> That part is fully
+  specifiable and fully testable against a documented raw-input shape,
+  independent of where the raw labor numbers come from. Spec + build + test
+  the transform now; wire the data source per §7.
+</p>
+
+<h2>2. The masking rule</h2>
+<p>Two things combine: <strong>who</strong> is asking, and <strong>which tier</strong> the labor line belongs to.</p>
+<h3>2.1 The viewer split is binary</h3>
+<ul>
+  <li><strong>partner</strong> → sees everything: every line individual, every dollar figure. No masking.</li>
+  <li><strong>everyone else</strong> (corporate included) → manager-tier pay is aggregated; see §2.2. The directive is explicit: "Partner sees all individual values. Everyone else sees aggregated manager-tier." Corporate does <em>not</em> get individual manager comp — comp detail is partner-only.</li>
+</ul>
+<h3>2.2 The three labor tiers</h3>
+<table>
+  <tr><th>Tier</th><th>Roles in it</th><th>How it renders for "everyone else"</th></tr>
+  <tr>
+    <td>Kitchen-manager</td>
+    <td><code>km</code>, <code>assistant_km</code> (directive's examples: Janet, Sebastian, Yasmine)</td>
+    <td>one rolled-up line "Kitchen manager labor", <strong>percentage of total labor only</strong> — no dollar figure, no individual breakdown</td>
+  </tr>
+  <tr>
+    <td>FOH-manager + GM</td>
+    <td><code>gm</code>, <code>foh_manager</code> (directive's examples: Anna, Brittany = GM; Adriana, Andres = FOH manager)</td>
+    <td>one rolled-up line "FOH manager labor", <strong>percentage of total labor only</strong></td>
+  </tr>
+  <tr>
+    <td>Hourly</td>
+    <td><code>cook</code>, <code>busser</code>, <code>server</code>, <code>host</code>, <code>bartender</code>, <code>expo</code>, <code>driver</code></td>
+    <td>shown normally — grouped by role, with dollars + headcount + percentage. Not aggregated away.</td>
+  </tr>
+</table>
+<p>
+  For <strong>partner</strong>, all three tiers render as full detail —
+  the two manager rollup lines instead break out into individual
+  manager labor lines with dollars.
+</p>
+<p>
+  <strong>Taxonomy dependency:</strong> the Hourly tier references
+  <code>cook / busser / server / host / bartender</code> — the same roles 1A
+  §5.3 flagged as missing from <code>ROLE_PERMISSIONS</code>. 1H is a second
+  surface that needs them. This <strong>reinforces 1A §5.3 path A</strong>
+  (extend the role taxonomy as a Block 1 precondition) — it unblocks 1A's
+  <code>can_assign_to</code>, 2B/2C, <em>and</em> 1H's tier mapping in one
+  commit. Until the taxonomy lands, 1H's <code>_labor_tier(role)</code> maps
+  the roles that <em>do</em> exist and treats unknown roles as Hourly
+  (the safe default — unknown role never lands in a manager rollup, so it
+  can't accidentally leak by being mis-tiered upward; worst case it shows
+  as its own hourly line).
+</p>
+
+<h2>3. render_labor_breakdown — the public helper</h2>
+<pre><code>def render_labor_breakdown(store: str, user: User) -&gt; LaborBreakdown:
+    """Return `store`'s labor breakdown, masked to `user`'s role.
+
+    partner            → full detail, all lines individual, all dollars.
+    everyone else      → kitchen-manager + FOH-manager tiers each collapse
+                         to a single percentage-of-total line; hourly tier
+                         shown normally.
+
+    Defense-in-depth: if `user` is store-scoped and `store` is not in
+    their scope, returns LaborBreakdown.refused() — see §6.
+    """</code></pre>
+
+<h2>4. The return structure</h2>
+<pre><code>@dataclass
+class LaborLine:
+    label:        str            # "Kitchen manager labor" | "Cooks" | ...
+    kind:         str            # "rollup_pct_only" | "detail"
+    pct_of_total: float          # always present — the % of total store labor
+    dollars:      Decimal | None # present only when kind == "detail"
+    headcount:    int | None     # present only when kind == "detail"
+
+@dataclass
+class LaborBreakdown:
+    store:        str
+    viewer_role:  str
+    lines:        list[LaborLine]
+    total_labor:  Decimal | None # present only for partner; None for everyone else
+    refused:      bool = False   # True when the store-scope guard (§6) refused
+
+    @classmethod
+    def refused(cls, store, user): ...   # lines=[], total_labor=None, refused=True
+</code></pre>
+<ul>
+  <li><strong><code>kind="rollup_pct_only"</code></strong> lines carry <em>only</em> <code>pct_of_total</code> — <code>dollars</code> and <code>headcount</code> are <code>None</code>. This is the security boundary: a rollup line can never carry a dollar figure. A review item (§10) checks this invariant holds in code, not just by convention.</li>
+  <li><strong><code>kind="detail"</code></strong> lines carry <code>dollars</code> + <code>headcount</code> + <code>pct_of_total</code>.</li>
+  <li><code>total_labor</code> is <code>None</code> for non-partner viewers — without it, the rollup percentages can't be back-solved into dollar figures. (If a non-partner had both the % and the total, they could compute the masked dollars. Withholding the total closes that inference channel.) Partner gets <code>total_labor</code>.</li>
+  <li>For non-partner viewers the <code>lines</code> list is: exactly one <code>"Kitchen manager labor"</code> rollup line, exactly one <code>"FOH manager labor"</code> rollup line, then N hourly <code>detail</code> lines. For partner: individual manager <code>detail</code> lines + hourly <code>detail</code> lines, no rollups.</li>
+</ul>
+
+<h2>5. Role → labor-tier mapping</h2>
+<p>
+  <code>_labor_tier(role) -&gt; "kitchen_manager" | "foh_manager_gm" | "hourly"</code>.
+  Built on <code>role_hierarchy</code> from 1A — reuse <code>role_tier</code> /
+  <code>role_domain</code> rather than re-deriving. Resolve
+  <code>_LEGACY_ALIASES</code> first (<code>"manager"</code> → gm →
+  <code>foh_manager_gm</code> tier). Unknown role → <code>"hourly"</code> (the
+  safe default per §2.2). <code>corporate_chef</code> and
+  <code>prep_manager</code> placement is an open question — §11 Q2.
+</p>
+
+<h2>6. Defense-in-depth store-scope guard</h2>
+<p>
+  1H's primary job is pay-tier masking, not store-scope authorization — but
+  because this is a leakage surface, 1H adds a second layer rather than
+  trusting every caller to gate correctly:
+</p>
+<ul>
+  <li>If <code>user</code> is store-scoped (gm and below) and <code>store</code> is not in <code>user.store_scope</code> → return <code>LaborBreakdown.refused(store, user)</code> (empty lines, <code>refused=True</code>). The caller renders a "not in your scope" state, not a data view.</li>
+  <li>partner / corporate / corporate_chef / prep_manager are store-unscoped — the guard is a no-op for them.</li>
+  <li><strong>This does not replace the caller's own gate.</strong> 1G's team tab must <em>still</em> gate store access before calling 1H — the §10 checklist verifies callers gate too. 1H's guard is the inner belt of a belt-and-suspenders pair, the same layered-auth shape Sam praised in the 251621f unassign-courier review.</li>
+</ul>
+
+<h2>7. The labor data source — flagged gap</h2>
+<p>
+  <strong>@sam / aick — <code>render_labor_breakdown</code> needs an underlying
+  labor data source, and the directive does not name one.</strong> The
+  helper's structure is <code>_raw_labor_breakdown(store) -&gt; raw rows</code>
+  → <code>_apply_masking(raw, user)</code> → <code>LaborBreakdown</code>. The
+  masking transform (<code>_apply_masking</code>) is the security-critical part
+  and is fully specified + testable here. <code>_raw_labor_breakdown</code> is
+  the open piece:
+</p>
+<ul>
+  <li><strong>aick — please confirm:</strong> does the app already have a labor data source — a <code>Labor</code> model, a Toast labor pull, a payroll import? The 100-questions doc says labor data lives in Masood's back-office; whether any of it is in the app today is the question.</li>
+  <li><strong>If a source exists:</strong> <code>_raw_labor_breakdown</code> wires to it; 1H ships complete.</li>
+  <li><strong>If no source exists:</strong> 1H ships with <code>_raw_labor_breakdown</code> as a clearly-marked stub returning a <em>documented fixed raw shape</em>, and the real data wiring is a follow-up (likely tied to the Toast labor integration or Phase 2.5). The masking transform + all its tests still land + are valuable — the stub just feeds them deterministic input. The surfaces that consume 1H (1C ribbon, 1G team tab) render the stubbed breakdown until the source is wired; that is acceptable for v1 because the <em>masking policy</em> is what's high-stakes, and that ships real.</li>
+</ul>
+<p>samai recommends: ship the masking transform real + tested now against the documented raw shape; wire <code>_raw_labor_breakdown</code> to a real source as soon as aick confirms one exists, else as a follow-up. Do not block 1H's masking logic on the data-source question.</p>
+
+<h2>8. Integration points</h2>
+<ul>
+  <li><strong>1C (ribbon sales category):</strong> 1C §7.2 — any <code>sales</code>-category ribbon item carrying labor data calls <code>render_labor_breakdown</code>. 1C must not re-implement masking. Sequence 1H before 1C's sales adapter, or 1C stubs the call and wires it when 1H lands.</li>
+  <li><strong>1G (team tab):</strong> the per-store labor reports in the team tab render through this helper. 1G also does its own store-scope gate (§6).</li>
+  <li><strong>Block 3 (Q&amp;A agent):</strong> any agent action that surfaces labor data routes through this helper — the directive's "no-pay-data-leakage" system principle. Out of 1H's scope to build, but 1H is the helper that principle points at.</li>
+</ul>
+
+<h2>9. Test requirements</h2>
+<p>1H's test file: <code>tests/test_pay_masking.py</code>. This is a leakage surface — the masking matrix is the highest-value test in the sub-block.</p>
+<ul>
+  <li><strong>The masking matrix:</strong> parameterized over <em>viewer role × labor tier</em>. For each cell, assert: partner sees the manager tiers as <code>detail</code> with dollars; every non-partner role sees them as <code>rollup_pct_only</code> with <code>dollars is None</code>. Self-describing test ids (<code>viewer=gm__tier=foh_manager_gm__expected=rollup_pct_only</code>).</li>
+  <li><strong>The dollar-leak invariant:</strong> assert directly that <em>no</em> <code>rollup_pct_only</code> line ever has a non-None <code>dollars</code> or <code>headcount</code>, for any non-partner viewer, across the whole fixture. This is the one-line regression net against the worst-case bug.</li>
+  <li><strong>total_labor withholding:</strong> non-partner viewers get <code>total_labor is None</code>; partner gets a value. (Closes the back-solve inference channel.)</li>
+  <li><strong>Store-scope guard:</strong> a Tomball GM asking for Copperfield → <code>refused=True</code>, empty lines; partner asking for any store → never refused.</li>
+  <li><strong>Unknown role → hourly:</strong> a role not in the tier map renders as an hourly detail line, never folded into a manager rollup.</li>
+  <li><strong>Legacy alias:</strong> a <code>"manager"</code>-role user is tiered as <code>foh_manager_gm</code> (via the gm alias), masked accordingly.</li>
+</ul>
+
+<h2>10. samai review checklist (run per commit — extra-careful, pay-leakage surface)</h2>
+<ol>
+  <li>Scope: only <code>app/services/pay_masking.py</code> + tests — no UI, no ribbon, no data-source wiring beyond <code>_raw_labor_breakdown</code> (stub or confirmed source).</li>
+  <li>The viewer split is binary and correct: partner = full detail; every other role including corporate = masked.</li>
+  <li><strong>Dollar-leak invariant holds in code:</strong> a <code>rollup_pct_only</code> line structurally cannot carry <code>dollars</code> / <code>headcount</code> — verify the construction path, not just the test.</li>
+  <li><code>total_labor</code> is <code>None</code> for every non-partner viewer.</li>
+  <li>The three-tier mapping matches §2.2; unknown role → hourly (never folded upward); legacy aliases resolved.</li>
+  <li>Store-scope guard returns <code>refused()</code> for an out-of-scope store-scoped viewer; no-op for store-unscoped roles.</li>
+  <li><code>_raw_labor_breakdown</code> is either wired to a confirmed source or a clearly-marked stub with a documented shape — and the masking transform is real + tested either way.</li>
+  <li>The masking matrix test + the dollar-leak invariant test are present and green.</li>
+  <li>Every caller of <code>render_labor_breakdown</code> (when they land — 1C, 1G) has its <em>own</em> store-scope gate too — 1H's guard is the inner belt, not the only one. (Carry this forward into the 1C / 1G reviews.)</li>
+  <li>Full suite no regression.</li>
+</ol>
+
+<h2>11. Open questions for Sam</h2>
+<ol>
+  <li><strong>Q1 (data source — escalate to @sam / aick):</strong> what is the labor data source for <code>_raw_labor_breakdown</code>? See §7. samai recommends shipping the masking transform real + tested now and wiring the source separately — do not block the masking policy on this.</li>
+  <li><strong>Q2:</strong> <code>corporate_chef</code> (Javier) and <code>prep_manager</code> (Gina) labor-tier placement. The directive's 1H names only KM/AKM-level people for the kitchen rollup and GM/FOH-manager people for the FOH rollup — it doesn't place the two multi-store roles. Options: their pay isn't part of any single store's rollup (they're corporate-tier multi-store cost, reported separately or partner-only), or they fold into the kitchen-manager rollup. samai's provisional read: <code>corporate_chef</code> + <code>prep_manager</code> are corporate-tier — their comp is partner-only and not part of a per-store rollup line at all. Confirm.</li>
+  <li><strong>Q3:</strong> for partner, do the manager lines break out fully individual (one line per named manager with their dollars) or stay grouped-but-with-dollars ("Kitchen manager labor: $X across 3")? Spec assumes fully individual for partner (partner "sees all individual values" per the directive). Confirm.</li>
+</ol>
+
+<h2>12. Distinct-commit boundary recap</h2>
+<p>
+  1H is one commit: <code>app/services/pay_masking.py</code> (the helper + the
+  masking transform + the tier map + the store-scope guard +
+  <code>_raw_labor_breakdown</code> stub-or-real) + tests. No UI, no ribbon,
+  no team tab. It depends on <code>role_hierarchy</code> from 1A and benefits
+  from the §5.3 role-taxonomy extension, but its masking logic can be built
+  + tested against the documented raw shape regardless of either landing.
+</p>
+
+</div>
+{% endblock %}

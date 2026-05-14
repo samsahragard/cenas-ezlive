@@ -1,0 +1,202 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 1 Precondition — Role Taxonomy Extension + role_hierarchy.py</h1>
+<p class="doc-meta">
+  Phase 2 / Block 1 / precondition commit (gates 1A). samai spec, 2026-05-14.<br>
+  Implementation: aick. Review: samai checklist PASS. Sam decision: §5.3 Path A (2026-05-14 01:05).<br>
+  Source: Block 1A spec §5.3 + Sam's 01:05 decision.
+</p>
+
+<h2>1. Scope — why this precondition exists</h2>
+<p>
+  The Phase 2 task-assignment hierarchy (1A's <code>can_assign_to</code>) and
+  the counseling-cascade (2C's <code>can_view_counseling</code>) both reference
+  hourly roles — <code>cook</code>, <code>server</code>, <code>busser</code>,
+  <code>host</code>, <code>bartender</code> — that do <strong>not</strong>
+  exist in the current taxonomy. <code>ROLE_PERMISSIONS</code> has ten
+  canonical roles; only <code>expo</code> and <code>driver</code> sit at the
+  hourly tier today. Sam's call (01:05): <strong>Path A</strong> — round out
+  the taxonomy as one small precondition commit so 1A starts with the full
+  taxonomy in place (no xfail'd <code>can_assign_to</code> branches).
+</p>
+<p><strong>This precondition ships, as one commit:</strong></p>
+<ul>
+  <li><code>app/services/role_hierarchy.py</code> — the <strong>new</strong> shared module: <code>ROLE_TIER</code>, <code>role_tier()</code>, <code>role_domain()</code>, for <em>all</em> roles including the five new hourly ones</li>
+  <li>Minimal <code>ROLE_PERMISSIONS</code> entries for <code>cook / server / busser / host / bartender</code> in <code>app/services/permissions.py</code></li>
+  <li>Tests: the tier + domain mapping for every role, legacy-alias resolution, the unknown-role safe default; the permission matrix from 2255c1d auto-extends to the five new roles</li>
+</ul>
+<p>
+  <strong>Sequencing note — this changes the 1A spec.</strong> The 1A spec §4
+  said "1A creates <code>app/services/role_hierarchy.py</code>." That
+  responsibility <strong>moves here</strong> — this precondition creates the
+  module complete; 1A <em>imports and consumes</em> it. The 1A spec §4 will be
+  amended (against <code>git show HEAD</code>, per rule 6) to reflect that
+  once this precondition is samai-PASSed.
+</p>
+<p>
+  <strong>This precondition does NOT ship:</strong> <code>can_assign_to</code>
+  (1A); <code>immediate_manager()</code> (deferred — 1E's escalation is its
+  first real consumer, it needs a db session, and it is not needed by this
+  precondition, by 1A's <code>can_assign_to</code>, or by 2C's cascade —
+  whichever sub-block first needs it adds it to <code>role_hierarchy.py</code>);
+  any per-hourly-role operational tag refinement (§6 — a follow-up).
+</p>
+
+<h2>2. app/services/role_hierarchy.py — the module</h2>
+<p>
+  A new, self-contained, pure module (no DB, no Flask). It holds the org-tier
+  / domain concern, kept deliberately separate from <code>permissions.py</code>'s
+  tag-grant concern — they answer different questions and evolve
+  independently. Three things:
+</p>
+
+<h3>2.1 ROLE_TIER — every role, every tier</h3>
+<pre><code>ROLE_TIER: dict[str, int] = {
+    # tier 5 — partner
+    "partner":        5,
+    # tier 4 — corporate (corporate + the multi-store corporate_chef)
+    "corporate":      4,
+    "corporate_chef": 4,
+    # tier 3 — gm + the multi-store prep_manager
+    "gm":             3,
+    "prep_manager":   3,
+    # tier 2 — manager tier
+    "km":             2,
+    "assistant_km":   2,
+    "foh_manager":    2,
+    # tier 1 — hourly tier
+    "expo":           1,
+    "driver":         1,
+    "cook":           1,   # NEW
+    "server":         1,   # NEW
+    "busser":         1,   # NEW
+    "host":           1,   # NEW
+    "bartender":      1,   # NEW
+}</code></pre>
+<p>
+  Fifteen roles. The five NEW ones are the only additions; the other ten are
+  the existing canonical <code>ROLE_PERMISSIONS</code> keys, placed at the
+  tiers derived from the directive's §2C hierarchy line
+  (<code>partner &gt; corporate &gt; gm &gt; km/asst_km/manager/foh_manager &gt; hourly</code>).
+  <code>corporate_chef</code> at tier 4 and <code>prep_manager</code> at tier 3
+  per the 1A spec §11 Q3 provisional placement — flagged again in §7 for Sam
+  to confirm or correct, but they need <em>a</em> tier and these are the
+  defensible defaults.
+</p>
+
+<h3>2.2 role_domain — kitchen / foh / both</h3>
+<pre><code>_ROLE_DOMAIN: dict[str, str] = {
+    "partner": "both", "corporate": "both", "gm": "both",
+    "corporate_chef": "kitchen", "prep_manager": "kitchen",
+    "km": "kitchen", "assistant_km": "kitchen",
+    "foh_manager": "foh",
+    "cook": "kitchen",                                  # NEW
+    "server": "foh", "busser": "foh",                   # NEW
+    "host": "foh", "bartender": "foh",                  # NEW
+    "expo": "foh", "driver": "foh",
+}</code></pre>
+<p>
+  The kitchen/foh split is the cross-cut <code>can_assign_to</code> needs below
+  the GM tier (a KM assigns to kitchen staff; an FOH manager assigns to FOH
+  staff). The hourly assignments align with the <em>existing</em>
+  <code>role_classifier.py</code> BOH/FOH rule (Sam's 2026-05-09 rule: cook =
+  BOH/kitchen; bussers, expo, servers, hosts = FOH) — so this module's
+  <code>role_domain</code> and <code>role_classifier.classify_role</code> agree
+  on the same staff, just keyed differently (app role vs Toast job title).
+  <code>partner / corporate / gm</code> = <code>both</code> (they cross
+  domains).
+</p>
+
+<h3>2.3 The two functions</h3>
+<pre><code>def role_tier(role: str | None) -&gt; int:
+    """Tier for a User.permission_level value. Resolves _LEGACY_ALIASES
+    first ('manager' -&gt; gm -&gt; 3, 'corporate-driver' -&gt; driver -&gt; 1).
+    Unknown / None -&gt; 0 (no authority) — never raises."""
+
+def role_domain(role: str | None) -&gt; str:
+    """'kitchen' | 'foh' | 'both' for a role. Resolves legacy aliases.
+    Unknown / None -&gt; 'foh' — the safe default (matches role_classifier's
+    'everything else is front' rule; an unknown role can never be
+    mis-assigned kitchen-only work it shouldn't see)."""</code></pre>
+<ul>
+  <li><strong>Legacy aliases:</strong> both functions resolve through <code>permissions._LEGACY_ALIASES</code> (<code>"manager"</code>→<code>gm</code>, <code>"corporate-driver"</code>→<code>driver</code>) before lookup — import that dict from <code>permissions.py</code>, do not re-declare it (single source of truth).</li>
+  <li><strong>Unknown role:</strong> <code>role_tier</code> → <code>0</code> (an unknown role has no authority — it can never out-rank anyone, so <code>can_assign_to</code> and <code>can_view_counseling</code> both fail safe-closed for it). <code>role_domain</code> → <code>"foh"</code> (the role_classifier-consistent safe default). <strong>Neither function raises</strong> — a stray <code>permission_level</code> value degrades, never 500s.</li>
+</ul>
+
+<h2>3. Minimal ROLE_PERMISSIONS entries for the five hourly roles</h2>
+<p>
+  Add five entries to <code>ROLE_PERMISSIONS</code> in
+  <code>app/services/permissions.py</code>. The point of these entries is
+  <strong>taxonomy completeness</strong> — "everyone in the system is in the
+  role taxonomy" (Sam's words) — so <code>_user_has</code> resolves these
+  roles to a real set instead of <code>None</code>, and the permission matrix
+  test covers them. <strong>The tag sets are deliberately minimal</strong>
+  — the baseline every existing staff role already holds:
+</p>
+<pre><code># Phase 2 / Block 1 precondition (samai spec, Sam §5.3 Path A 2026-05-14).
+# Minimal baseline — the personal-AI + transcripts set that expo + driver
+# already share. Operational tag refinement per hourly role (does a cook
+# need kds.view_kitchen_display, does a server need orders.view, etc.) is
+# a deliberate follow-up once these roles have actual app surfaces — see
+# the precondition spec §6.
+_HOURLY_BASELINE = {
+    "ai.ask_claude_personal", "ai.view_transcripts",
+    "transcripts.search", "transcripts.read",
+}
+"cook":      set(_HOURLY_BASELINE),
+"server":    set(_HOURLY_BASELINE),
+"busser":    set(_HOURLY_BASELINE),
+"host":      set(_HOURLY_BASELINE),
+"bartender": set(_HOURLY_BASELINE),</code></pre>
+<p>
+  Colocated comment makes the "minimal-by-design, refinement-is-a-follow-up"
+  intent explicit so a future reader doesn't mistake the thin set for an
+  oversight. <code>cook</code> is the one arguable case (kitchen staff
+  plausibly want <code>kds.view_kitchen_display</code> like <code>expo</code>
+  has) — flagged in §6 Q1, but the precondition ships the uniform baseline
+  and the refinement is separate.
+</p>
+
+<h2>4. Test requirements</h2>
+<p>Test file: <code>tests/test_role_hierarchy.py</code>.</p>
+<ul>
+  <li><strong>ROLE_TIER coverage:</strong> every one of the fifteen roles maps to its expected tier; the five new hourly roles are all tier 1; <code>role_tier</code> resolves legacy aliases (<code>"manager"</code>→3, <code>"corporate-driver"</code>→1); unknown / None → 0; never raises.</li>
+  <li><strong>role_domain coverage:</strong> every role maps to its expected domain; <code>cook</code>→kitchen, <code>server/busser/host/bartender</code>→foh; legacy aliases resolved; unknown / None → "foh"; never raises.</li>
+  <li><strong>Consistency with role_classifier:</strong> a small assertion that the hourly roles' <code>role_domain</code> agrees with <code>role_classifier.classify_role</code>'s BOH/FOH verdict on the same staff (cook = kitchen/BOH; server, busser, host = foh/FOH) — catches future drift between the two classifiers.</li>
+  <li><strong>ROLE_PERMISSIONS:</strong> the five new roles each resolve via <code>_user_has</code> to the baseline set (not <code>None</code>); the existing <code>test_permission_matrix.py</code> from 2255c1d auto-extends — its <code>_ALL_ROLES</code> picks up the five new keys, so the matrix grows by <code>5 × |_ALL_TAGS|</code> rows, all green, no drift on the existing ten roles.</li>
+  <li><strong>Spec-drift detector:</strong> the existing <code>test_surface_implicit_wildcard_only_tags</code> still passes — the five new roles add no tags, so they don't change the implicit-wildcard set.</li>
+</ul>
+
+<h2>5. samai review checklist</h2>
+<ol>
+  <li>Scope: only <code>role_hierarchy.py</code> (new) + the five <code>ROLE_PERMISSIONS</code> entries + the test file. No <code>can_assign_to</code>, no <code>immediate_manager</code>, no Task model, no 1A surfaces.</li>
+  <li><code>role_hierarchy.py</code> is pure (no DB, no Flask import) — the tier/domain concern cleanly separated from <code>permissions.py</code>'s tag concern.</li>
+  <li><code>ROLE_TIER</code> has all fifteen roles at the §2.1 tiers; <code>_ROLE_DOMAIN</code> all fifteen at the §2.2 domains.</li>
+  <li><code>role_tier</code> / <code>role_domain</code> resolve <code>_LEGACY_ALIASES</code> (imported from <code>permissions.py</code>, not re-declared); unknown → 0 / "foh"; neither raises.</li>
+  <li>Five <code>ROLE_PERMISSIONS</code> entries, the minimal baseline, with the colocated "refinement-is-a-follow-up" comment.</li>
+  <li>Tests per §4 green; the permission matrix auto-extends cleanly (no drift on the existing ten roles).</li>
+  <li>Deploy-verify (rule 3): app boots, a representative gated route still 200s; verified against prod (rule 2).</li>
+  <li>After PASS: the 1A spec §4 gets its one-line amendment (role_hierarchy.py created here, 1A consumes it) — authored against <code>git show HEAD</code> per rule 6.</li>
+</ol>
+
+<h2>6. Open questions for Sam</h2>
+<ol>
+  <li><strong>Q1 — cook's tag set.</strong> The precondition ships all five hourly roles with the uniform personal-AI + transcripts baseline. <code>cook</code> is the one role where a Phase-2-relevant tag (<code>kds.view_kitchen_display</code>, which <code>expo</code> already holds) is plausibly warranted now. Spec ships the uniform baseline; confirm whether <code>cook</code> should also get <code>kds.view_kitchen_display</code> in this commit or as part of the later per-role refinement.</li>
+  <li><strong>Q2 — corporate_chef / prep_manager tiers.</strong> Carried from 1A spec §11 Q3: <code>corporate_chef</code> = tier 4 (corporate-equivalent, matches Javier's "walk into either kitchen" authority), <code>prep_manager</code> = tier 3 (gm-equivalent, multi-store). They need <em>a</em> tier for <code>role_tier</code> to work; these are the defensible defaults. Confirm or correct — it affects <code>can_assign_to</code> (can a corporate_chef assign to a GM?) and the counseling cascade.</li>
+</ol>
+
+<h2>7. Distinct-commit boundary</h2>
+<p>
+  One commit: <code>role_hierarchy.py</code> (new, complete: <code>ROLE_TIER</code>
+  + <code>role_tier</code> + <code>role_domain</code>) + five
+  <code>ROLE_PERMISSIONS</code> entries + <code>tests/test_role_hierarchy.py</code>.
+  It is a pure-foundation commit — no behavior change to any existing surface,
+  it only <em>adds</em> a module and five role entries. It lands before 1A;
+  1A then imports <code>role_hierarchy</code> and ships <code>can_assign_to</code>
+  100% complete against the full taxonomy.
+</p>
+
+</div>
+{% endblock %}

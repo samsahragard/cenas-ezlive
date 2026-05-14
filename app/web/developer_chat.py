@@ -337,6 +337,8 @@ DOC_PAGES = [
     ("morning-brief-composer-spec", "Morning Brief Composer Spec", "doc_morning_brief_composer_spec"),
     ("brief-calibration-runbook", "Brief Calibration Runbook", "doc_brief_calibration_runbook"),
     ("phase-2-directive",        "Phase 2 Directive", "doc_phase_2_directive"),
+    ("block-1-precond-role-taxonomy-spec", "Block 1 Precond - Role Taxonomy", "doc_block_1_precond_role_taxonomy_spec"),
+    ("block-1-precond-scheduled-event-spec", "Block 1 Precond - ScheduledEvent Model", "doc_block_1_precond_scheduled_event_spec"),
     ("block-1a-task-system-spec", "Block 1A - Task System Spec", "doc_block_1a_task_system_spec"),
     ("block-1b-ribbon-component-spec", "Block 1B - Ribbon Component Spec", "doc_block_1b_ribbon_component_spec"),
     ("block-1c-ribbon-router-spec", "Block 1C - Ribbon Content Router Spec", "doc_block_1c_ribbon_router_spec"),

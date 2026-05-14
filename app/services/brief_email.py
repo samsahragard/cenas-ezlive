@@ -211,14 +211,23 @@ def render_html(brief_body: dict, audience) -> str:
 # ---- SMTP send ----
 
 def _smtp_send(to_addr: str, subject: str, plain: str, html: str) -> None:
-    """SMTP_SSL via the same SiteGround mailbox produce_order uses."""
+    """SMTP_SSL via the same SiteGround mailbox produce_order uses.
+
+    Plain-text only per Sam 2026-05-13 19:39 — phone notification preview
+    was using the plain part anyway; the html attach was over-implementation
+    relative to his 18:26 directive ("plain text with section headers,
+    easier to read on phone notification preview"). html arg retained for
+    caller compat + tests (it is composed by render_html and passed in)
+    but intentionally not attached to the outgoing message.
+    """
     pwd = _email_pwd()
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_addr
     msg.attach(MIMEText(plain, "plain"))
-    msg.attach(MIMEText(html, "html"))
+    # html attach intentionally removed per Sam 2026-05-13 directive.
+    _ = html  # silence linters; arg retained for caller + test compat.
 
     ctx = ssl.create_default_context()
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx) as srv:

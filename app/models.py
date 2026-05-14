@@ -1214,6 +1214,42 @@ class RuleOverride(Base):
         nullable=False)
 
 
+class RibbonCategoryPreference(Base):
+    """Per-user, per-category collapse state for the universal ribbon.
+
+    Phase 2 / Block 1 / sub-block 1B (ck, 2026-05-14). The ribbon
+    renders all seven categories on every authenticated page; this
+    table records which categories a given user has collapsed.
+
+    Absence of a row == expanded (the default). A row with
+    is_collapsed=True == collapsed. A fresh user has zero preference
+    rows and sees everything expanded — no backfill needed. The
+    collapse-toggle endpoint (POST /partner/ribbon/collapse/<category>)
+    upserts against the (user_id, category) unique constraint.
+
+    user_id ondelete=CASCADE — pure per-user UI state, meaningless
+    once the user is gone (same reasoning as RibbonItemDismissal in
+    Block 1A).
+    """
+    __tablename__ = "ribbon_category_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category",
+                         name="uq_ribbon_pref_user_category"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # One of the seven RIBBON_CATEGORIES slugs (app/services/ribbon.py).
+    # Validated against that set in the collapse-toggle endpoint.
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_collapsed: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
 @_sa_event.listens_for(BriefFeedback, 'before_delete')
 def _no_delete_brief_feedback(mapper, connection, target):
     raise RuntimeError(

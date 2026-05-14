@@ -26,6 +26,7 @@ from app.web.briefs import briefs_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
+from app.web import ribbon_routes as ezribbon
 from app.services import produce_ingest
 from app.services import permissions as ezperms
 
@@ -142,6 +143,14 @@ def create_app():
     # PERMISSION_ENFORCE=1 once denial logs show no legit flows
     # blocked.
     ezperms.install(app)
+    # Universal ribbon (Phase 2 / Block 1B, ck 2026-05-14). Registers
+    # the /partner/ribbon/collapse/<category> endpoint + two Jinja
+    # globals: ribbon_items_for (the stub content router from
+    # app/services/ribbon.py — 1C replaces the body) and
+    # ribbon_render_context (1B's defensive presentation-layer wrapper
+    # that _ribbon.html actually calls). The partial is mounted from
+    # base_dashboard.html above {% block content %}.
+    ezribbon.install(app)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop

@@ -15,6 +15,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
+  {# Phase 2 / Block 1B — universal ribbon styling. Scoped under
+     .ck-ribbon / .ribbon-* so it doesn't bleed into other components. #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ribbon.css') }}">
   <style>
     /* New sidebar (sidebar.css) replaces the inner content of the layout's
        .sidebar grid column. Neutralize the old .sidebar chrome here so the
@@ -188,6 +191,19 @@
       </div>
     </div>
     {% endblock %}
+
+    {# Universal ribbon (Phase 2 / Block 1B, ck 2026-05-14) — operational
+       signals on every authenticated page, mounted immediately after the
+       topbar and before the page content. Guarded by g.current_user so
+       it never renders on the login / passcode pages. `ignore missing`
+       keeps base_dashboard resilient if the partial file is absent; the
+       partial itself is internally defensive (ribbon_render_context
+       try/excepts the whole render path — a ribbon bug can't 500 a
+       page). The content router (1C) + the X/Check behavior (1D) land
+       in later sub-blocks; 1B ships the shell. #}
+    {% if g.current_user %}
+      {% include 'partials/_ribbon.html' ignore missing %}
+    {% endif %}
 
     {% set _subnav = subnav_for(active|default(none), g.current_store) %}
     {% if _subnav %}

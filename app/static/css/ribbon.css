@@ -1,0 +1,190 @@
+/* Universal ribbon — Phase 2 / Block 1 / sub-block 1B (ck, 2026-05-14).
+ *
+ * The ribbon sits at the top of every authenticated page (mounted from
+ * base_dashboard.html, above {% block content %}). Seven fixed-order
+ * categories, each independently collapsible. All selectors are scoped
+ * under .ck-ribbon / .ribbon-* so nothing bleeds into other components.
+ *
+ * Design tokens (sidebar.css :root):
+ *   --ck-status-open   #9CCB76  → severity=info
+ *   --ck-status-active #FFD970  → severity=warn
+ *   --ck-status-warn   #E2645C  → severity=alert
+ *   --ck-gold-soft / --ck-text / --ck-text-soft / --ck-text-muted /
+ *   --ck-text-faint / --ck-ease
+ * Glass-card recipe: rgba(40,22,14,0.55) bg, 0.5px gold border,
+ * 12px radius — mirrored from _anomaly_cards.html.
+ */
+
+.ck-ribbon {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+
+/* ---- category ---- */
+.ribbon-category {
+  background: rgba(40, 22, 14, 0.55);
+  border: 0.5px solid var(--ck-gold-soft, rgba(217, 164, 54, 0.25));
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ribbon-category__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ck-text-soft, rgba(236, 227, 208, 0.78));
+  text-align: left;
+  transition: background 160ms var(--ck-ease, ease);
+}
+.ribbon-category__head:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.ribbon-category__chevron {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ck-text-faint, rgba(236, 227, 208, 0.4));
+  transition: transform 180ms var(--ck-ease, ease);
+  /* Expanded state: chevron points down. */
+  transform: rotate(90deg);
+}
+.ribbon-category[data-collapsed="true"] .ribbon-category__chevron {
+  transform: rotate(0deg);
+}
+
+.ribbon-category__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.ribbon-category__count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ck-text-muted, rgba(236, 227, 208, 0.6));
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+/* Empty categories: badge fades back so a wall of zeros stays quiet. */
+.ribbon-category__count[data-empty="true"] {
+  background: transparent;
+  color: var(--ck-text-faint, rgba(236, 227, 208, 0.35));
+}
+
+/* ---- body ---- */
+.ribbon-category__body {
+  padding: 2px 10px 10px;
+  display: grid;
+  gap: 4px;
+}
+/* Desktop collapse: the per-user preference hides the body. */
+.ribbon-category[data-collapsed="true"] .ribbon-category__body {
+  display: none;
+}
+
+.ribbon-category__empty {
+  padding: 4px 4px 2px;
+  font-size: 12px;
+  color: var(--ck-text-faint, rgba(236, 227, 208, 0.4));
+  font-style: italic;
+}
+
+/* ---- item ---- */
+.ribbon-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border-left: 3px solid var(--ck-text-faint, rgba(236, 227, 208, 0.3));
+}
+.ribbon-item--info  { border-left-color: var(--ck-status-open, #9CCB76); }
+.ribbon-item--warn  { border-left-color: var(--ck-status-active, #FFD970); }
+.ribbon-item--alert {
+  border-left-color: var(--ck-status-warn, #E2645C);
+  background: rgba(64, 22, 18, 0.45);
+}
+
+.ribbon-item__text {
+  font-size: 13px;
+  color: var(--ck-text, #f4e7d0);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ribbon-item__sub {
+  font-size: 11.5px;
+  color: var(--ck-text-faint, rgba(236, 227, 208, 0.5));
+  white-space: nowrap;
+}
+
+/* X / Check controls — rendered by 1B, wired live by 1D's ribbon.js.
+ * Styled here so 1D ships behavior only, no markup or CSS change. */
+.ribbon-item__x,
+.ribbon-item__check {
+  margin-left: auto;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 0.5px solid var(--ck-gold-soft, rgba(217, 164, 54, 0.25));
+  background: rgba(40, 22, 14, 0.55);
+  color: var(--ck-text-soft, rgba(236, 227, 208, 0.78));
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 160ms var(--ck-ease, ease);
+}
+/* When two controls render, the second shouldn't also push off auto. */
+.ribbon-item__x + .ribbon-item__check {
+  margin-left: 4px;
+}
+.ribbon-item__x:hover {
+  border-color: var(--ck-status-warn, #E2645C);
+  color: var(--ck-status-warn, #E2645C);
+}
+.ribbon-item__check:hover {
+  border-color: var(--ck-status-open, #9CCB76);
+  color: var(--ck-status-open, #9CCB76);
+}
+
+/* ---- mobile: compact triage summary ---- *
+ * 1B spec §7: on narrow viewports the ribbon starts all-collapsed with
+ * count badges visible, expanding on tap. The desktop per-user
+ * collapse preference (data-collapsed) is ignored here — mobile is
+ * ephemeral triage. The partial's JS toggles .is-open instead of
+ * POSTing, so a tap on a phone never rewrites the user's saved
+ * desktop preference.
+ */
+@media (max-width: 768px) {
+  .ribbon-category__body {
+    display: none;
+  }
+  .ribbon-category.is-open .ribbon-category__body {
+    display: grid;
+  }
+  /* Chevron reflects the ephemeral mobile-open state, not data-collapsed. */
+  .ribbon-category__chevron {
+    transform: rotate(0deg);
+  }
+  .ribbon-category.is-open .ribbon-category__chevron {
+    transform: rotate(90deg);
+  }
+}

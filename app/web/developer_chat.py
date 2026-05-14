@@ -339,6 +339,7 @@ DOC_PAGES = [
     ("phase-2-directive",        "Phase 2 Directive", "doc_phase_2_directive"),
     ("block-1a-task-system-spec", "Block 1A - Task System Spec", "doc_block_1a_task_system_spec"),
     ("block-1b-ribbon-component-spec", "Block 1B - Ribbon Component Spec", "doc_block_1b_ribbon_component_spec"),
+    ("block-1c-ribbon-router-spec", "Block 1C - Ribbon Content Router Spec", "doc_block_1c_ribbon_router_spec"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

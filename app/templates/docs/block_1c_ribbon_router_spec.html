@@ -1,0 +1,295 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>Block 1C — Ribbon Content Router</h1>
+<p class="doc-meta">
+  Phase 2 / Block 1 / sub-block 1C. samai spec, 2026-05-14.<br>
+  Implementation: aick. Review: samai checklist PASS per commit.<br>
+  Source: Phase 2 Directive §BLOCK 1 / 1C (see
+  <a href="{{ url_for('developer_chat.app_doc', page='phase-2-directive') }}">Phase 2 Directive</a>).
+  Consumes the render contract from
+  <a href="{{ url_for('developer_chat.app_doc', page='block-1b-ribbon-component-spec') }}">Block 1B spec</a> §2.
+</p>
+
+<h2>1. Scope — what 1C is, and what it is NOT</h2>
+<p>
+  1C is the <strong>content brain</strong> of the ribbon: the module that
+  decides <em>which</em> items appear on <em>whose</em> ribbon on <em>which</em>
+  page, and <em>how each is framed</em>. 1B renders; 1C decides.
+</p>
+<p><strong>1C ships:</strong></p>
+<ul>
+  <li><code>app/services/ribbon.py</code> — the module (1B may have created a stub file + the <code>RIBBON_CATEGORIES</code> constant; 1C fills it in — confirm the split with ck per 1B spec Q1)</li>
+  <li>The <code>RibbonItem</code> class, implementing the 1B §2 render contract + the <code>relation</code> field (§3)</li>
+  <li><code>ribbon_items_for(page_slug, user, store_scope, category=None) -&gt; list[RibbonItem]</code> — the router (§4)</li>
+  <li><code>RibbonItem.render_for(user)</code> — the cross-cutting framing rule (§5)</li>
+  <li>Source adapters: <code>Task</code>, <code>Signal</code>, <code>SalesInsight</code>, <code>ScheduledEvent</code> → <code>RibbonItem</code> (§6)</li>
+  <li>Replacing 1B's stub Jinja global with the real <code>ribbon_items_for</code> (§9)</li>
+  <li>Tests: the framing matrix, the filtering rules, the sort, the dismissal exclusion</li>
+</ul>
+<p><strong>1C does NOT ship:</strong> the partial or any rendering (1B); the X/Check endpoints or <code>ribbon.js</code> (1D); the escalation cron (1E); <code>SalesInsight</code> production (1F — 1C <em>reads</em> the table, 1F <em>writes</em> it); the pay-masking helper (1H — 1C <em>calls</em> it).</p>
+<p>
+  <strong>Dependency:</strong> 1C has a HARD dependency on 1A — it reads
+  <code>Task</code> and <code>RibbonItemDismissal</code>. 1C can be
+  <em>specced</em> and its <code>Signal</code> branch <em>partially built</em>
+  now (the anomaly engine's <code>Signal</code> model already exists), but the
+  <code>Task</code> branch + the dismissal-exclusion join cannot be finished
+  until 1A lands and is samai-PASSed. Sequencing: 1C starts in earnest once
+  1A is PASSed.
+</p>
+
+<h2>2. The module — app/services/ribbon.py</h2>
+<p>
+  One module. Holds <code>RIBBON_CATEGORIES</code> (shared with 1B — see
+  coordination note §10), the <code>RibbonItem</code> class, the
+  <code>ribbon_items_for</code> router, the per-source adapter functions, and
+  the sort + filter helpers. No route handlers live here — 1C is pure
+  service-layer logic, called by 1B's partial via the Jinja global.
+</p>
+
+<h2>3. The RibbonItem class</h2>
+<p>
+  Implements the 1B §2 render contract exactly, plus one field 1C needs
+  internally for framing:
+</p>
+<pre><code>class RibbonItem:
+    # --- 1B render contract (§2 of the 1B spec) ---
+    category:    str       # one of RIBBON_CATEGORIES
+    severity:    str       # "info" | "warn" | "alert"
+    item_type:   str       # "task" | "signal" | "sales_insight" | "scheduled_event"
+    item_id:     int
+    deadline_at: datetime | None
+    can_dismiss: bool
+    can_check:   bool
+
+    # --- 1C-internal: drives render_for's framing (§5) ---
+    relation:    str       # "owner_todo" | "owner_category" | "observer" | "escalated_to"
+    _source:     object    # the underlying Task / Signal / SalesInsight / ScheduledEvent row
+                           #   (private — render_for reads it; the partial never does)
+
+    def render_for(self, user) -&gt; dict:
+        # returns { "text", "sub_text", "styling_class" } per §5
+</code></pre>
+<p>
+  <strong>One source row can yield more than one <code>RibbonItem</code>.</strong>
+  Andres's "SPECS liquor order" task, when Andres is on the Vendors page,
+  produces <em>two</em> items: one in the <code>todo</code> category
+  (<code>relation="owner_todo"</code>) and one in the <code>vendors</code>
+  category (<code>relation="owner_category"</code>) — same underlying Task,
+  two ribbon rows, two framings. This is intentional and is the mechanism
+  behind the cross-cutting rule. <code>item_type</code> + <code>item_id</code>
+  are identical on both; 1D's X/Check acts on the underlying row regardless
+  of which rendered copy was clicked.
+</p>
+<p>
+  <code>item_type</code> note: the 1B render contract listed
+  <code>task | signal | sales_insight</code>. 1C adds <code>scheduled_event</code>
+  as a fourth — it must be in the contract. <strong>This is a coordinated
+  contract change with 1B</strong> (§10); flag it so ck's 1B markup + 1D's
+  X/Check handler both account for the fourth type.
+</p>
+
+<h2>4. ribbon_items_for — the router</h2>
+<pre><code>def ribbon_items_for(page_slug, user, store_scope, category=None) -&gt; list[RibbonItem]:
+    """All ribbon items relevant to (page_slug, user, store_scope).
+       category=None → all seven categories; else → just that one.
+       Returns the list ALREADY SORTED (severity DESC, deadline ASC)."""</code></pre>
+<p>Algorithm, in order:</p>
+<ol>
+  <li><strong>Gather candidate source rows</strong> from the four sources, each filtered by the role + store-scope rules in §7. Tasks owned-by / escalated-to <code>user</code>; open Signals in scope; live SalesInsights in scope; upcoming ScheduledEvents in scope.</li>
+  <li><strong>Adapt</strong> each source row into one or two <code>RibbonItem</code>s with the right <code>category</code> + <code>relation</code> (§6).</li>
+  <li><strong>Apply the page-relevance filter</strong> (§7.3) — on the main dashboard, drop everything except <code>alert</code>-severity items and the user's <code>todo</code>; on a domain page, keep that domain's full detail.</li>
+  <li><strong>Exclude dismissed items</strong> — drop any item whose <code>(user.id, item_type, item_id, today)</code> has a <code>RibbonItemDismissal</code> row (§7.4).</li>
+  <li><strong>Filter to <code>category</code></strong> if the arg is set.</li>
+  <li><strong>Sort</strong> (§8) and return.</li>
+</ol>
+
+<h2>5. The cross-cutting framing rule — render_for(user)</h2>
+<p>
+  Sam's "SPECS by Andres" example, generalized. The same item is framed by
+  the viewer's <code>relation</code> to it. <code>relation</code> is set by the
+  router when it adapts the source row; <code>render_for</code> switches on it:
+</p>
+<table>
+  <tr><th>relation</th><th>When the router sets it</th><th>Framing</th><th>Example text</th></tr>
+  <tr>
+    <td><code>owner_todo</code></td>
+    <td>viewer owns the item, rendering in the <code>todo</code> category</td>
+    <td>action-required — imperative, what to do + when</td>
+    <td>"Place SPECS order by 5pm"</td>
+  </tr>
+  <tr>
+    <td><code>owner_category</code></td>
+    <td>viewer owns the item, rendering in its domain category (e.g. <code>vendors</code>)</td>
+    <td>informational — you already see it actionably in To-do, so here it's just context</td>
+    <td>"Owner: you, due 5pm"</td>
+  </tr>
+  <tr>
+    <td><code>observer</code></td>
+    <td>viewer does not own it, but it's in scope on a domain page</td>
+    <td>status — who owns it + what's pending</td>
+    <td>"SPECS order to be placed by Andres at 5pm"</td>
+  </tr>
+  <tr>
+    <td><code>escalated_to</code></td>
+    <td>the item escalated to the viewer (<code>Task.escalated_to_user_id == user.id</code>)</td>
+    <td>escalation — flags it's late + landed on them + who the original owner is</td>
+    <td>"ESCALATED: SPECS order, was due 5pm, owner Andres"</td>
+  </tr>
+</table>
+<p><strong>The "manager's to-do shows nothing" rule:</strong> a manager does <em>not</em> see a subordinate's task in their own <code>todo</code> category — only in the domain category as an <code>observer</code>, <em>unless</em> it escalated to them (then it's <code>escalated_to</code> and <em>does</em> appear in their <code>todo</code>). The router enforces this by only ever assigning <code>relation="owner_todo"</code> when <code>item._source.owner_user_id == user.id</code>, and <code>relation="escalated_to"</code> when <code>item._source.escalated_to_user_id == user.id</code>.</p>
+<p>
+  <code>render_for</code> returns <code>{ text, sub_text, styling_class }</code>.
+  <code>styling_class</code> is severity-driven (<code>ribbon-item--info / --warn / --alert</code>)
+  with an optional <code>relation</code> modifier (e.g. <code>ribbon-item--escalated</code>).
+  Signals and SalesInsights have simpler framing (they have no "owner" —
+  they're always <code>observer</code>-style status text); the four-way table
+  above is primarily for Tasks. <code>render_for</code> branches on
+  <code>item_type</code> first, then <code>relation</code>.
+</p>
+
+<h2>6. Source adapters</h2>
+<table>
+  <tr><th>Source</th><th>→ which ribbon category</th><th>relation logic</th><th>can_dismiss / can_check</th></tr>
+  <tr>
+    <td><code>Task</code></td>
+    <td><code>todo</code> if owned-by / escalated-to viewer; <em>and/or</em> its <code>category</code> mapped to a ribbon slug (<code>vendor→vendors</code>, <code>catering→caterings</code>, <code>event→events</code>, <code>employee→employee</code>, <code>maintenance→maintenance</code>, <code>sales→sales</code>; <code>general</code> → <code>todo</code> only)</td>
+    <td><code>owner_todo</code> / <code>owner_category</code> / <code>observer</code> / <code>escalated_to</code> per §5</td>
+    <td>dismiss: yes (X = "not now today"). check: yes (Check = complete the task) — but only for the owner or escalated-to viewer; an <code>observer</code> gets <code>can_check=False</code></td>
+  </tr>
+  <tr>
+    <td><code>Signal</code> (anomaly engine)</td>
+    <td>by the signal's domain — kitchen/labor/sales signals → <code>sales</code> or <code>employee</code>; map per the signal's rule category</td>
+    <td>always <code>observer</code> (signals have no owner)</td>
+    <td>dismiss: yes. check: yes → triggers <code>SignalAck</code> (1D wires it)</td>
+  </tr>
+  <tr>
+    <td><code>SalesInsight</code> (1F)</td>
+    <td><code>sales</code> always</td>
+    <td>always <code>observer</code></td>
+    <td>dismiss: yes. check: yes → permanent dismissal (insights are intrinsically time-bound; 1D handles)</td>
+  </tr>
+  <tr>
+    <td><code>ScheduledEvent</code></td>
+    <td><code>caterings</code> or <code>events</code> per the event type</td>
+    <td>always <code>observer</code></td>
+    <td>dismiss: yes. check: no (<code>can_check=False</code> — you don't "complete" a scheduled event)</td>
+  </tr>
+</table>
+<p>
+  Each adapter is its own function (<code>_task_to_items</code>,
+  <code>_signal_to_item</code>, <code>_sales_insight_to_item</code>,
+  <code>_scheduled_event_to_item</code>) so they're independently testable and
+  1C can ship the <code>Signal</code> adapter before 1A lands.
+</p>
+
+<h2>7. Filtering</h2>
+<h3>7.1 Role + store-scope</h3>
+<ul>
+  <li>Store-scoped users (gm and below) see only items whose store scope intersects their <code>store_scope</code>. A Tomball GM never sees Copperfield's vendor tasks or Copperfield-scoped signals.</li>
+  <li>Partner / corporate / corporate_chef / prep_manager are store-unscoped — they see both stores' items. (Same store-scope model as <code>can_assign_to</code> in 1A — reuse <code>role_hierarchy</code> helpers where they fit rather than re-deriving.)</li>
+  <li>Tasks: a user sees their own (<code>owner_user_id == user.id</code>), ones escalated to them, and — on domain pages — in-scope tasks as <code>observer</code>. They never see out-of-scope tasks.</li>
+</ul>
+<h3>7.2 Pay-data masking — coordination with 1H</h3>
+<p>
+  Any item in the <code>sales</code> category that surfaces labor-cost data
+  must run through 1H's <code>render_labor_breakdown(store, user)</code> so
+  manager-tier pay is aggregated for non-partner viewers. 1C does not
+  re-implement masking — it <em>calls</em> 1H's helper. This is a hard
+  coordination point: 1C's <code>sales</code> adapter cannot be considered
+  complete until 1H's helper exists. Sequence 1C's <code>sales</code> branch
+  after 1H, or stub the call and wire it when 1H lands.
+</p>
+<h3>7.3 page_slug relevance (the directive's "page-relevance principle")</h3>
+<ul>
+  <li><strong>Main dashboard</strong> (<code>page_slug</code> = the dashboard): return only <code>severity="alert"</code> items + the viewer's <code>todo</code> category. High-level only — no bulk operational detail.</li>
+  <li><strong>Domain page</strong> (orders, roster, maintenance, vendors, etc.): return that domain's <em>full</em> detail (all severities) plus the viewer's <code>todo</code> scoped to that domain's category.</li>
+  <li>1C needs a <code>page_slug → relevant_categories</code> map. Spec proposes 1C owns that map as a module constant; it will need a row per real page slug. The set of page slugs that exist is itself a small open question (§13 Q2) — the map can start with the known pages and default unknown slugs to "main-dashboard behaviour" (alert + todo only), which is the safe default.</li>
+</ul>
+<h3>7.4 Dismissal exclusion</h3>
+<p>
+  After adapting, drop any <code>RibbonItem</code> for which a
+  <code>RibbonItemDismissal</code> row exists with
+  <code>user_id == user.id AND item_type == item.item_type AND item_id == item.item_id AND dismiss_day == date.today().isoformat()</code>.
+  One query up front (load today's dismissals for the user into a set), then
+  filter in memory — don't N+1.
+</p>
+
+<h2>8. Sorting</h2>
+<p>
+  Within the returned list (and within each category when 1B groups):
+  <strong>severity DESC then deadline ASC</strong>. Severity rank
+  <code>alert=3, warn=2, info=1</code>. <code>deadline_at IS NULL</code> sorts
+  <em>last</em> within its severity band (no deadline = least time-urgent).
+  Spec the sort key as a module helper <code>_ribbon_sort_key(item)</code> so
+  the test asserts it directly.
+</p>
+
+<h2>9. Jinja global registration</h2>
+<p>
+  1C replaces 1B's stub global with the real <code>ribbon_items_for</code>.
+  Registration happens in <code>create_app()</code> — and per the bee8cdc
+  lesson (the import-shadow bug from Phase 0), do the import at module scope
+  with a clear alias, not inside <code>create_app</code> in a way that
+  rebinds <code>app</code>. Deploy-verify (rule 3) must confirm the app boots
+  and the ribbon renders real content after the swap, because this is the
+  commit where the stub becomes live on every authenticated page.
+</p>
+
+<h2>10. Coordination points</h2>
+<ul>
+  <li><strong>1B (render contract):</strong> 1C implements the §2 contract. 1C <em>adds</em> <code>scheduled_event</code> as a fourth <code>item_type</code> — a coordinated contract change; ck's 1B markup (the <code>data-item-type</code> values) and 1D's X/Check handler must both accept it. Flag to ck before 1C commits.</li>
+  <li><strong>1B (<code>RIBBON_CATEGORIES</code> + stub global):</strong> per 1B spec Q1, 1B defines the constant + the stub global; 1C imports the constant and replaces the stub. Confirm with ck that the constant lives where 1C can import it (1B spec says <code>app/services/ribbon.py</code> — so 1B creates the module file with just the constant + stub, 1C fills the rest).</li>
+  <li><strong>1H (pay masking):</strong> §7.2 — 1C's <code>sales</code> adapter calls <code>render_labor_breakdown</code>; sequence after 1H or stub-and-wire.</li>
+  <li><strong>1A (Task + RibbonItemDismissal):</strong> hard dependency; the Task adapter + dismissal exclusion need 1A landed + PASSed.</li>
+  <li><strong>1E (escalation):</strong> 1C reads <code>Task.escalated_to_user_id</code> to set <code>relation="escalated_to"</code>. The column exists from 1A; 1E populates it. 1C's escalation framing works the moment the column is non-null — no direct 1E dependency, just a shared column.</li>
+</ul>
+
+<h2>11. Test requirements</h2>
+<p>1C's test file: <code>tests/test_ribbon_router.py</code>. Required coverage:</p>
+<ul>
+  <li><strong>Framing matrix:</strong> the same Task, viewed by (owner on dashboard / owner on its domain page / observer-manager on the domain page / escalated-to manager) → asserts the four <code>relation</code> values and the four framings from §5. Self-describing test ids (<code>relation=owner_todo</code> etc.).</li>
+  <li><strong>One-source-two-items:</strong> owner on the matching domain page gets exactly two items (todo + category) for the one Task, both with the same <code>item_type</code>/<code>item_id</code>.</li>
+  <li><strong>Role + store-scope filter:</strong> a Tomball GM does not get Copperfield items; partner gets both stores'.</li>
+  <li><strong>page-relevance:</strong> dashboard returns only alerts + todo; a domain page returns full detail for that domain.</li>
+  <li><strong>Dismissal exclusion:</strong> an item with a today-dated <code>RibbonItemDismissal</code> row for the viewer is absent; a yesterday-dated one is present again (daily reset).</li>
+  <li><strong>Sort:</strong> <code>_ribbon_sort_key</code> orders alert-before-warn-before-info, soonest-deadline-first within band, null deadline last.</li>
+  <li><strong>Per-adapter:</strong> each of the four adapters tested in isolation; the <code>Signal</code> adapter test can run before 1A lands.</li>
+</ul>
+
+<h2>12. samai review checklist (run per commit)</h2>
+<ol>
+  <li>Scope: only <code>app/services/ribbon.py</code> + the Jinja-global registration + tests — no partial, no endpoints, no cron, no <code>SalesInsight</code> production.</li>
+  <li><code>RibbonItem</code> implements the 1B §2 contract exactly + the <code>relation</code> field; <code>scheduled_event</code> added to <code>item_type</code> and the change flagged to ck.</li>
+  <li><code>render_for</code> produces the four framings per §5; the "manager's to-do shows nothing unless escalated" rule holds.</li>
+  <li>One source row correctly yields one or two items per the §3 rule.</li>
+  <li>Role + store-scope filter: store-scoped users see only their store; partner/corporate see both.</li>
+  <li>Pay-data in the <code>sales</code> category routed through 1H's helper, not re-implemented.</li>
+  <li>page-relevance: dashboard = alerts + todo only; domain pages = full domain detail.</li>
+  <li>Dismissal exclusion uses today's <code>dismiss_day</code>, single up-front query, no N+1.</li>
+  <li>Sort: severity DESC, deadline ASC, null-deadline last.</li>
+  <li>Jinja global registered without the import-shadow pattern (bee8cdc lesson); deploy-verify confirms real content renders post-swap.</li>
+  <li>Tests per §11 green; full suite no regression.</li>
+</ol>
+
+<h2>13. Open questions for Sam / coordination notes</h2>
+<ol>
+  <li><strong>Q1 (BLOCKING — escalate to @sam):</strong> the <code>ScheduledEvent</code> model. The directive names <code>ScheduledEvent</code> as a ribbon source (Caterings + Events categories pull from it) but <strong>no Block 1 or Block 2 sub-block defines a <code>ScheduledEvent</code> model</strong>. Either it exists already in the codebase (aick: confirm), or it's an undefined dependency. If it doesn't exist, 1C's <code>ScheduledEvent</code> adapter is blocked and either (a) a <code>ScheduledEvent</code> model needs its own small precondition sub-block, or (b) the Caterings/Events categories ship empty in v1 and the adapter is a follow-up. samai recommends (a) if Sam wants Caterings/Events populated at Block 1 close; (b) is acceptable if those two categories can be empty until a later block. Sam's call.</li>
+  <li><strong>Q2:</strong> the <code>page_slug → relevant_categories</code> map needs the actual set of page slugs. Spec default: 1C owns the map, unknown slugs fall back to main-dashboard behaviour (alert + todo only — the safe default). aick + ck enumerate the real slugs as the ribbon goes live page-by-page; the map grows. Confirm this incremental approach is acceptable vs. wanting the full slug set defined up front.</li>
+  <li><strong>Q3:</strong> Signal → ribbon category mapping. The anomaly engine's <code>Signal</code> rows have a rule category; 1C needs a map from anomaly-rule-category to ribbon-category. samai can spec that map as a small addendum once aick confirms the current anomaly rule-category taxonomy — flag if you want it in this spec or as a follow-up.</li>
+</ol>
+
+<h2>14. Distinct-commit boundary recap</h2>
+<p>
+  1C is one commit: <code>app/services/ribbon.py</code> (the <code>RibbonItem</code>
+  class + <code>ribbon_items_for</code> + four adapters + filter/sort helpers) +
+  the real Jinja-global registration + tests. It touches no template, no
+  route, no model, no cron. Its hard dependency is 1A (Task +
+  RibbonItemDismissal) being landed + PASSed; its <code>Signal</code> adapter
+  can be built ahead of that. The <code>ScheduledEvent</code> adapter is
+  gated on Q1.
+</p>
+
+</div>
+{% endblock %}

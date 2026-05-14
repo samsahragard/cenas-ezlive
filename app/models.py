@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
+    Numeric,
     Date,
     Text,
     ForeignKey,
@@ -1578,4 +1579,84 @@ def _no_delete_task_audit(mapper, connection, target):
         "Corrections are made by appending a new audit row, not by "
         "removing one."
     )
+
+
+# ---- Sam Chat — standalone /sam/chat surface (Sam request 2026-05-14) ----
+# A dedicated chat page for Sam (partner) to converse with Claude
+# directly via the Anthropic API — no agentic context, no Cenas Kitchen
+# system prompt. Deliberately ISOLATED from the agentic pipeline: no FK
+# to User (the route is hard-gated to SAM_CHAT_USER_ID), and no
+# reads/writes to AgentChatMessage / AgentActionLog / any Phase 2 Block
+# 3 table. Distinct from the agent Developer Chat and from Block 3's
+# manager-facing in-app agent.
+_VALID_SAM_CHAT_ROLES = {"user", "assistant", "system"}
+
+
+class SamChatSession(Base):
+    """One Sam Chat conversation thread.
+
+    NOT an audit log — sessions are mutable operational records (title
+    editable, archivable), so there is deliberately no append-only
+    constraint. No per-row owner FK: the /sam/chat surface is
+    hard-gated to a single user (SAM_CHAT_USER_ID), so every row
+    belongs to Sam by construction.
+    """
+    __tablename__ = "sam_chat_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    # Bumped on every new message — the history sidebar orders by this.
+    last_message_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    # Auto-generated from the first user message (~60 chars), editable.
+    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
+class SamChatMessage(Base):
+    """One message in a SamChatSession — user, assistant, or system.
+    The app reconstructs Anthropic context from these rows on each turn
+    (the Anthropic API is stateless).
+
+    cost_* columns are populated on assistant messages from the
+    response usage block, feeding the live session-cost + 30-day-total
+    displays. Attachments are NOT persisted here (per the Sam Chat
+    model spec): images/PDFs go base64 into the send-time API payload,
+    text files are read into `content`. Consequence: a reloaded
+    session's history is text-only for past attachment turns —
+    flagged for samai's review; an `attachments` JSON column is the
+    fast-follow if persistence is wanted.
+
+    session_id ondelete=CASCADE — messages are meaningless without
+    their session; v1 has no delete-session route (sessions are
+    archived, not deleted) but the cascade is the correct safety
+    declaration.
+    """
+    __tablename__ = "sam_chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("sam_chat_sessions.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    # user | assistant | system — validated against _VALID_SAM_CHAT_ROLES.
+    role: Mapped[str] = mapped_column(String(12), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Which Claude model produced an assistant message; NULL on
+    # user/system rows.
+    model: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    cost_input_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True)
+    cost_output_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(
+        Numeric(10, 4), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
 

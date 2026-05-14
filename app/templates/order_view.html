@@ -59,6 +59,7 @@
          orders and any caterer that bypassed the webhook auto-assign). #}
       <button id="unassignBtn" type="button" class="btn-download" style="background:rgba(220,38,38,0.30); border-color:rgba(239,68,68,0.5); color:#fecaca;"
               data-order="{{ external_order_id }}"
+              data-store-scope="{{ unassign_store_scope }}"
               onclick="unassignCourier(this)">
         Free up ezCater driver field
       </button>
@@ -122,7 +123,13 @@
     const originalText = btn.textContent;
     btn.textContent = "Working…";
     try {
-      const r = await fetch(`/orders/view/${encodeURIComponent(btn.dataset.order)}/unassign-courier`, { method: "POST" });
+      // Phase 0 Block 4 follow-up 2026-05-13: URL gained a leading
+      // store-scope segment ("tomball" / "copperfield" / "unknown")
+      // so @requires_permission('orders.unassign_driver',
+      // store_arg='store_scope') in orders_browse.unassign_courier
+      // can validate against the user's User.store_scope assignment.
+      const scope = btn.dataset.storeScope || "unknown";
+      const r = await fetch(`/${scope}/orders/view/${encodeURIComponent(btn.dataset.order)}/unassign-courier`, { method: "POST" });
       const data = await r.json();
       if (r.ok && data.ok) {
         btn.textContent = "Unassigned ✓ — refresh ezCater";

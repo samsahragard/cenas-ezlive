@@ -21,6 +21,12 @@ from app.services.orders_query import (
     build_grids_for_orders,
 )
 from app.infra.export_xlsx import export_view_grids_to_xlsx
+# Phase 0 Block 4 follow-up (ck 2026-05-13): tag-based gate on the
+# unassign-courier action. URL gets a store_scope segment so the
+# decorator can resolve store-scope against the user's assignment set
+# via store_arg= — same shape as @requires_permission('drivers.admin',
+# store_arg='store_slug') in store_routes.py.
+from app.services.permissions import requires_permission
 
 logger = logging.getLogger(__name__)
 browse = Blueprint("orders_browse", __name__)
@@ -55,6 +61,11 @@ def view_order(external_order_id: str):
         if not result:
             abort(404, f"Order {external_order_id} not found")
         order = result["order"]
+        # Resolve the URL store_scope segment for the unassign-courier
+        # action button — "tomball" / "copperfield" / "unknown" (last
+        # for Cenas Fajitas etc. that aren't in _ORIGIN_STORE_ID_TO_SCOPE
+        # — only partner + corporate pass the decorator for those).
+        store_scope = _ORIGIN_STORE_ID_TO_SCOPE.get(order.origin_store_id) or "unknown"
         return render_template(
             "order_view.html",
             order=order,
@@ -63,6 +74,7 @@ def view_order(external_order_id: str):
             title=f"Order {order.external_order_id}",
             mode="single",
             external_order_id=external_order_id,
+            unassign_store_scope=store_scope,
         )
     finally:
         db.close()
@@ -186,6 +198,24 @@ _LEGACY_COURIER_ID_FOR_STORE = {
     "store_1": "sam-ck-1",     "store_3": "sam-ck-1",
     "store_2": "masood-ck-2",  "store_4": "masood-ck-2",
 }
+
+# Map Order.origin_store_id (internal store identifier from ezCater /
+# Toast) to the User.store_scope token used by the permission decorator.
+# store_1 + store_3 = Copperfield kitchen; store_2 + store_4 = Tomball.
+# Mirrors _COURIER_ID_FOR_STORE — extend both together if new origins
+# appear.
+_ORIGIN_STORE_ID_TO_SCOPE = {
+    "store_1": "copperfield", "store_3": "copperfield",
+    "store_2": "tomball",     "store_4": "tomball",
+}
+
+# Valid store_scope tokens accepted in the unassign-courier URL.
+# "unknown" is the sentinel used for orders whose origin_store_id isn't
+# in _ORIGIN_STORE_ID_TO_SCOPE (Cenas Fajitas etc.) — partner wildcard
+# + corporate (no own store_scope, store check bypassed) still pass the
+# decorator; everyone else is denied. Tagging it explicitly in the URL
+# (rather than allowing any string) keeps the surface predictable.
+_VALID_STORE_SCOPES = {"tomball", "copperfield", "unknown"}
 
 
 def _ezcater_gql(query: str, variables: dict | None = None) -> dict:
@@ -352,20 +382,47 @@ def _open_for_bidding(order: Order) -> bool:
     return changed
 
 
-@browse.route("/orders/view/<external_order_id>/unassign-courier", methods=["POST"])
-def unassign_courier(external_order_id: str):
+@browse.route("/<store_scope>/orders/view/<external_order_id>/unassign-courier",
+              methods=["POST"])
+@requires_permission("orders.unassign_driver", store_arg="store_scope")
+def unassign_courier(store_scope: str, external_order_id: str):
     """Free up the ezCater portal driver field so a manager can manually
     assign a real driver. Calls courierUnassign on the in-house courier
     auto-assigned by ezcater_webhook.py.
 
     Tries the new courier id (sam-ck-2 / masood-ck-1) first, then falls
     back to the legacy id (sam-ck-1 / masood-ck-2) if the order pre-dates
-    the 2026-05-08 swap."""
+    the 2026-05-08 swap.
+
+    URL shape (Phase 0 Block 4 follow-up 2026-05-13): the leading
+    <store_scope> segment ("tomball" / "copperfield") is the user's
+    assignment token, validated by @requires_permission(store_arg=...).
+    After the decorator passes, the handler also verifies that the
+    URL's store_scope MATCHES the order's actual origin_store_id-derived
+    scope — defense against a Tomball GM crafting a Copperfield order's
+    URL with their own store in the slug.
+    """
+    if store_scope not in _VALID_STORE_SCOPES:
+        return jsonify({"ok": False, "error": "invalid store_scope"}), 404
     db = next(get_db())
     try:
         order = db.query(Order).filter_by(external_order_id=external_order_id).first()
         if not order:
             return jsonify({"ok": False, "error": "order not found"}), 404
+        # Cross-check: the slug in the URL must match the order's own
+        # origin. Prevents URL tampering as a side-channel around the
+        # decorator's store-scope check — a user with assignment to
+        # tomball couldn't unassign a copperfield order by guessing the
+        # external_order_id and using their own slug; the decorator
+        # would let them in, but this assert turns it into a 403.
+        # Unknown-origin orders (no entry in the map) require the
+        # explicit "unknown" sentinel in the URL — same gate.
+        actual_scope = _ORIGIN_STORE_ID_TO_SCOPE.get(order.origin_store_id) or "unknown"
+        if actual_scope != store_scope:
+            return jsonify({
+                "ok": False,
+                "error": f"store_scope '{store_scope}' does not own this order",
+            }), 403
         # If delivery_id wasn't captured at ingest time (xlsx-import orders,
         # Cenas Fajitas orders that bypass the webhook, anything pre-dating
         # the webhook flow), look it up on the fly via the api.ezcater.com

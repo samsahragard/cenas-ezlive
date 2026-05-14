@@ -837,3 +837,76 @@ def cron_sales_insights():
     from app.services.sales_insights import run_sales_insights_synthesis
     summary = run_sales_insights_synthesis()
     return jsonify({"ok": True, **summary})
+
+
+# ============================================================
+# Block 1J — the six per-source ambient-signal refresh crons
+# Each /cron/refresh-<source> POSTs from its own Render cron resource
+# at its spec-§4 cadence; the handler delegates to
+# ambient_signals.run_refresh_cron (fetch -> id-stable upsert ->
+# per-source expiry sweep -> AmbientSignalRun). Cron-independent (§8):
+# one failing affects nothing else. Endpoint AND Render cron resource
+# are BOTH required — the 1E gap (endpoint shipped, resource never
+# created) is not allowed to recur, let alone six times.
+# ============================================================
+
+def _run_ambient_refresh(source: str):
+    """Shared body for the six /cron/refresh-* endpoints: CRON_TOKEN
+    gate, run_refresh_cron for `source`, commit, return the run
+    summary JSON. run_refresh_cron looks the adapter up by source."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    db = SessionLocal()
+    try:
+        from app.services.ambient_signals import run_refresh_cron
+        summary = run_refresh_cron(db, source)
+        db.commit()
+        return jsonify({"ok": True, **summary})
+    finally:
+        db.close()
+
+
+@driver_system_bp.route("/cron/refresh-weather", methods=["POST"])
+def cron_refresh_weather():
+    """Block 1J: refresh weather AmbientSignals (OpenWeatherMap + NOAA).
+    Render cron resource cadence: every 2h, 6am-8pm CT."""
+    return _run_ambient_refresh("weather")
+
+
+@driver_system_bp.route("/cron/refresh-events", methods=["POST"])
+def cron_refresh_events():
+    """Block 1J: refresh events AmbientSignals (Ticketmaster + Google
+    Calendar — credential-pending stub). Render cron resource cadence:
+    every 4h after noon (12:00 / 16:00 / 20:00 CT)."""
+    return _run_ambient_refresh("events")
+
+
+@driver_system_bp.route("/cron/refresh-outages", methods=["POST"])
+def cron_refresh_outages():
+    """Block 1J: refresh outage AmbientSignals (CenterPoint scrape +
+    Haiku-normalize). Render cron resource cadence: every 15 minutes."""
+    return _run_ambient_refresh("outages")
+
+
+@driver_system_bp.route("/cron/refresh-catering-pipeline", methods=["POST"])
+def cron_refresh_catering_pipeline():
+    """Block 1J: refresh catering-pipeline AmbientSignals (upcoming
+    ScheduledEvent rows). Render cron resource cadence: 8am + 2pm CT."""
+    return _run_ambient_refresh("catering_pipeline")
+
+
+@driver_system_bp.route("/cron/refresh-vendor-status", methods=["POST"])
+def cron_refresh_vendor_status():
+    """Block 1J: refresh vendor-status AmbientSignals (Phase-3 stub —
+    wiring proven, no source adapter yet). Render cron resource
+    cadence: twice daily."""
+    return _run_ambient_refresh("vendor_status")
+
+
+@driver_system_bp.route("/cron/refresh-traffic", methods=["POST"])
+def cron_refresh_traffic():
+    """Block 1J: refresh traffic AmbientSignals (Google Maps —
+    credential-pending stub). Render cron resource cadence: every 2h,
+    business hours (8am-6pm CT)."""
+    return _run_ambient_refresh("traffic")

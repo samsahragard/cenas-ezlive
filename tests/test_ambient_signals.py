@@ -15,7 +15,8 @@ Covers (spec §2 / §2.1 / §2.2 / §3):
 """
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +24,13 @@ from sqlalchemy.exc import IntegrityError
 from app.models import AmbientSignal, AmbientSignalRun
 from app.services.ambient_signals import (
     _ambient_payload_hash,
+    _coerce_dt,
+    _end_of_day_ct,
+    _fetch_events,
+    _fetch_traffic,
+    _fetch_vendor_status,
     ambient_signal_upsert,
+    run_refresh_cron,
 )
 
 _VU = datetime(2026, 5, 20, 23, 59, 0)   # a valid_until_at fixture
@@ -202,3 +209,199 @@ def test_uq_ambient_signal_identity_rejects_duplicate(db_session):
     db_session.add(AmbientSignal(source="events", signal_key="dup", **base))
     with pytest.raises(IntegrityError):
         db_session.flush()
+
+
+# ============================================================
+# Day 2 — _coerce_dt / _end_of_day_ct helpers
+# ============================================================
+
+def test_coerce_dt_naive_iso():
+    fb = datetime(2026, 1, 1)
+    assert _coerce_dt("2026-05-16T18:30:00", fb) == \
+        datetime(2026, 5, 16, 18, 30, 0)
+
+
+def test_coerce_dt_tzaware_iso_to_naive_utc():
+    fb = datetime(2026, 1, 1)
+    assert _coerce_dt("2026-05-16T18:30:00-05:00", fb) == \
+        datetime(2026, 5, 16, 23, 30, 0)   # -05:00 -> UTC
+
+
+def test_coerce_dt_epoch_seconds():
+    fb = datetime(2026, 1, 1)
+    assert _coerce_dt(0, fb) == datetime(1970, 1, 1, 0, 0, 0)
+
+
+@pytest.mark.parametrize("bad", ["not-a-date", "", None, "2026-13-99"])
+def test_coerce_dt_unparseable_falls_back(bad):
+    fb = datetime(2026, 1, 1, 12, 0, 0)
+    assert _coerce_dt(bad, fb) == fb
+
+
+def test_end_of_day_ct_is_naive_utc():
+    eod = _end_of_day_ct(datetime(2026, 5, 14, 10, 0, 0))
+    # 23:59:59 CT on 5/14 == 04:59:59 UTC on 5/15 (CDT, UTC-5).
+    assert eod == datetime(2026, 5, 15, 4, 59, 59)
+    assert eod.tzinfo is None
+
+
+# ============================================================
+# Day 2 — run_refresh_cron (spec §4 / §8)
+# ============================================================
+
+def _seed_signal(db, *, source, signal_key, valid_until_at,
+                 store_scope="both", category="maintenance",
+                 severity="info"):
+    now = datetime.utcnow()
+    s = AmbientSignal(
+        source=source, signal_key=signal_key,
+        payload={"k": signal_key}, payload_hash="x" * 64,
+        store_scope=store_scope, category=category, severity=severity,
+        valid_until_at=valid_until_at,
+        created_at=now, updated_at=now, last_seen_at=now,
+    )
+    db.add(s)
+    return s
+
+
+def _sig(signal_key, **over):
+    base = dict(signal_key=signal_key, payload={"k": signal_key},
+                store_scope="both", category="maintenance",
+                severity="info", valid_until_at=_VU)
+    base.update(over)
+    return base
+
+
+def test_run_refresh_cron_happy_path(db_session):
+    def fake(db):
+        return [_sig("k1", payload={"a": 1}),
+                _sig("k2", payload={"a": 2}, category="events",
+                     severity="warn")]
+    summary = run_refresh_cron(db_session, "weather", fake)
+    db_session.flush()
+
+    assert summary["status"] == "success"
+    assert summary["signals_created"] == 2
+    assert summary["signals_updated"] == 0
+    assert summary["signals_unchanged"] == 0
+    assert (db_session.query(AmbientSignal)
+            .filter_by(source="weather").count() == 2)
+    run = db_session.query(AmbientSignalRun).one()
+    assert run.source == "weather"
+    assert run.status == "success"
+    assert run.signals_created == 2
+    assert run.finished_at is not None
+
+
+def test_run_refresh_cron_idempotent(db_session):
+    run_refresh_cron(db_session, "weather", lambda db: [_sig("k1")])
+    db_session.flush()
+    summary2 = run_refresh_cron(db_session, "weather",
+                                lambda db: [_sig("k1")])
+    db_session.flush()
+    # Same payload -> unchanged; no duplicate row.
+    assert summary2["signals_created"] == 0
+    assert summary2["signals_unchanged"] == 1
+    assert (db_session.query(AmbientSignal)
+            .filter_by(source="weather").count() == 1)
+
+
+def test_run_refresh_cron_adapter_error_records_run(db_session):
+    def boom(db):
+        raise RuntimeError("source API down")
+    summary = run_refresh_cron(db_session, "weather", boom)
+    db_session.flush()
+
+    assert summary["status"] == "error"
+    assert "source API down" in summary["error_text"]
+    assert summary["signals_created"] == 0
+    # The errored run STILL writes an AmbientSignalRun (§2.4).
+    run = db_session.query(AmbientSignalRun).one()
+    assert run.status == "error"
+    assert run.error_text and "source API down" in run.error_text
+
+
+def test_run_refresh_cron_partial_on_one_bad_signal(db_session):
+    def fetch(db):
+        return [_sig("good"),
+                _sig("bad", category="BOGUS")]   # invalid category
+    summary = run_refresh_cron(db_session, "weather", fetch)
+    db_session.flush()
+
+    # One bad signal is skipped, never aborts the run (§8).
+    assert summary["status"] == "partial"
+    assert summary["signals_created"] == 1
+    keys = {r.signal_key for r in db_session.query(AmbientSignal).all()}
+    assert keys == {"good"}
+
+
+def test_run_refresh_cron_expiry_sweep_is_per_source(db_session):
+    now = datetime.utcnow()
+    _seed_signal(db_session, source="weather", signal_key="stale-w",
+                 valid_until_at=now - timedelta(hours=1))
+    _seed_signal(db_session, source="weather", signal_key="live-w",
+                 valid_until_at=now + timedelta(hours=6))
+    _seed_signal(db_session, source="outages", signal_key="stale-o",
+                 valid_until_at=now - timedelta(hours=1))
+    db_session.commit()
+
+    summary = run_refresh_cron(db_session, "weather", lambda db: [])
+    db_session.flush()
+
+    assert summary["signals_expired"] == 1     # only the stale WEATHER row
+    remaining = {(r.source, r.signal_key)
+                 for r in db_session.query(AmbientSignal).all()}
+    assert ("weather", "live-w") in remaining
+    assert ("weather", "stale-w") not in remaining
+    assert ("outages", "stale-o") in remaining  # other source untouched
+
+
+def test_run_refresh_cron_resolves_adapter_by_source(db_session):
+    # No fetch_fn -> run_refresh_cron resolves it from _ADAPTERS.
+    # vendor_status is a clean stub -> 0 signals, success.
+    summary = run_refresh_cron(db_session, "vendor_status")
+    db_session.flush()
+    assert summary["status"] == "success"
+    assert summary["signals_created"] == 0
+    assert (db_session.query(AmbientSignalRun)
+            .filter_by(source="vendor_status").count() == 1)
+
+
+def test_run_refresh_cron_unknown_source_raises(db_session):
+    with pytest.raises(ValueError, match="no ambient adapter"):
+        run_refresh_cron(db_session, "telepathy")
+
+
+# ============================================================
+# Day 2 — credential-pending / Phase-3 stub adapters
+# ============================================================
+
+def test_stub_adapters_return_empty():
+    assert _fetch_events(None) == []
+    assert _fetch_traffic(None) == []
+    assert _fetch_vendor_status(None) == []
+
+
+# ============================================================
+# Day 2 — the six /cron/refresh-* endpoints: the CRON_TOKEN gate
+# ============================================================
+
+_REFRESH_URLS = [
+    "/cron/refresh-weather", "/cron/refresh-events",
+    "/cron/refresh-outages", "/cron/refresh-catering-pipeline",
+    "/cron/refresh-vendor-status", "/cron/refresh-traffic",
+]
+
+
+def test_refresh_cron_endpoints_require_token(monkeypatch):
+    monkeypatch.setenv("CRON_TOKEN", "secret-test-token")
+    os.environ.setdefault("ALLOW_DEV_SECRET", "1")
+    os.environ.setdefault("SECRET_KEY", "devkey")
+    from app import create_app
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    for url in _REFRESH_URLS:
+        assert client.post(url).status_code == 403, f"{url} no-token"
+        bad = client.post(url, headers={"Authorization": "Bearer wrong"})
+        assert bad.status_code == 403, f"{url} wrong-token"

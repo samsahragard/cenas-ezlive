@@ -328,6 +328,45 @@
   meaningfully different things, split it; the spec is allowed to grow.
 </p>
 
+<h3>2.2 Tier rule for global-config tags (added 2026-05-13)</h3>
+<p>
+  <strong>Rule:</strong> any tag that gates a global-config surface
+  (system tuning, user management, developer / observability tools,
+  cross-store admin) belongs to <strong>partner + corporate only</strong>.
+  gm and below operate within store scope and never tune system-wide
+  rules or manage all users.
+</p>
+<p>
+  This generalizes the existing pattern in &sect;3 where
+  <code>developer.view_chat</code>, <code>developer.view_app_docs</code>,
+  <code>access.approve_request</code>, and <code>access.deny_request</code>
+  are partner+corporate only and absent from gm / km / asst_km /
+  corporate_chef / prep_manager / foh_manager / expo / driver. The
+  rule is now spelled out so future global-config tags inherit by
+  reference rather than relitigation.
+</p>
+<p>
+  <strong>Tags currently covered by the rule:</strong>
+  <code>developer.view_chat</code>, <code>developer.view_app_docs</code>,
+  <code>access.approve_request</code>, <code>access.deny_request</code>,
+  <code>anomaly.admin</code> (added 2026-05-13 by ck for the
+  <code>/partner/anomalies/rules</code> surface),
+  <code>access.team_admin</code> (added 2026-05-13 by ck for the
+  <code>/partner/team</code> Team UI).
+  <code>developer.view_render</code>,
+  <code>access.impersonate</code>, and <code>frostbank.view</code> stay
+  partner-only via wildcard &mdash; partner-only is the stricter case
+  of the same family (system internals + financial / impersonation
+  surfaces stay above the corporate tier).
+</p>
+<p>
+  <strong>Future tags fitting this pattern</strong> (any new admin
+  surface that crosses store boundaries or tunes the platform itself)
+  should land in corporate's set by default. Partner-only stays
+  reserved for system-internal surfaces (Render env, impersonation,
+  partner-personal financials).
+</p>
+
 <h2>3. Role &rarr; permission mapping</h2>
 <p>
   The table below is the authoritative source. ck lifts this into a Python

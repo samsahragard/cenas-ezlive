@@ -1,0 +1,103 @@
+{# Phase 1 / Block 6 calibration C2 — feedback form.
+
+   Round 2 surface. Round 1 (the active calibration channel) uses email
+   reply: panel members reply inline to the [Calibration] email; samai/
+   aick parses the reply + INSERTs a BriefFeedback row with
+   submitted_via='email_reply'. This form is the upgrade path once we
+   have a baseline.
+
+   Behavior:
+     - GET: a BriefFeedback row is INSERTed on first visit (
+       submitted_via='form', submitted_at=NULL). Tracks engagement
+       independent of completion. Refresh is idempotent.
+     - POST: UPDATEs the row, setting submitted_at=now() + answer fields.
+       One-time NULL → non-NULL transition; resubmits are rejected. #}
+{% extends "base_dashboard.html" %}
+
+{% block title %}Feedback — {{ brief.brief_date }} — Cenas Kitchen{% endblock %}
+
+{% block content %}
+<div style="max-width:680px;margin:0 auto;padding:24px 20px">
+  <div style="margin-bottom:24px">
+    <a href="{{ url_for('briefs.show_brief', brief_id=brief.brief_id) }}"
+       style="font-size:13px;color:#d9a436;text-decoration:none">← Back to brief</a>
+    <h1 style="margin:8px 0 4px 0;font-size:20px;color:#FAF6EC">
+      Calibration feedback — {{ brief.brief_date }}
+    </h1>
+    <p style="margin:0;color:rgba(236,227,208,0.7);font-size:13px;line-height:1.5">
+      First real LLM-composed brief — your feedback shapes tuning before
+      broad dispatch. Four questions, two structured + two free text.
+      Skip anything you don't have an answer for.
+    </p>
+  </div>
+
+  {% if already_submitted %}
+    <div style="background:rgba(3,152,85,0.12);border:1px solid #039855;border-radius:6px;padding:14px 16px;color:#FAF6EC;margin-bottom:18px;font-size:13px">
+      <strong>Feedback received.</strong> Thank you — submitted
+      {{ feedback.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}. Resubmits are
+      disabled to keep the audit trail clean. If you want to correct
+      something, reply to the email so samai can append a follow-up row.
+    </div>
+  {% else %}
+    <form method="POST"
+          action="{{ url_for('briefs.feedback_submit', brief_id=brief.brief_id) }}"
+          style="background:rgba(255,255,255,0.02);border:1px solid rgba(217,164,54,0.15);border-radius:8px;padding:24px;color:#FAF6EC">
+      <input type="hidden" name="submitted_via" value="form">
+
+      <div style="margin-bottom:24px">
+        <label style="display:block;font-weight:500;margin-bottom:8px">
+          1. On 1-5, how useful was this brief vs your current morning workflow?
+        </label>
+        <div style="display:flex;gap:8px">
+          {% for n in [1, 2, 3, 4, 5] %}
+            <label style="flex:1;text-align:center;border:1px solid rgba(217,164,54,0.3);border-radius:6px;padding:10px;cursor:pointer">
+              <input type="radio" name="useful_score" value="{{ n }}"
+                     style="margin-right:4px"
+                     {% if feedback.useful_score == n %}checked{% endif %}>
+              {{ n }}
+            </label>
+          {% endfor %}
+        </div>
+        <small style="display:block;color:rgba(236,227,208,0.5);margin-top:4px;font-size:11px">
+          1 = not useful · 5 = extremely useful
+        </small>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <label style="display:block;font-weight:500;margin-bottom:8px">
+          2. Anything important from yesterday that the brief missed?
+        </label>
+        <textarea name="missed_something" rows="3"
+                  style="width:100%;padding:10px;background:rgba(0,0,0,0.3);border:1px solid rgba(217,164,54,0.3);border-radius:6px;color:#FAF6EC;font-family:inherit;font-size:13px"
+                  placeholder="Free text — what wasn't covered?"
+        >{{ feedback.missed_something or '' }}</textarea>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <label style="display:block;font-weight:500;margin-bottom:8px">
+          3. Anything in the brief that was noise — not worth your attention?
+        </label>
+        <textarea name="was_noise" rows="3"
+                  style="width:100%;padding:10px;background:rgba(0,0,0,0.3);border:1px solid rgba(217,164,54,0.3);border-radius:6px;color:#FAF6EC;font-family:inherit;font-size:13px"
+                  placeholder="Free text — what shouldn't have been there?"
+        >{{ feedback.was_noise or '' }}</textarea>
+      </div>
+
+      <div style="margin-bottom:28px">
+        <label style="display:block;font-weight:500;margin-bottom:8px">
+          4. What single change would make this most useful?
+        </label>
+        <textarea name="single_change" rows="3"
+                  style="width:100%;padding:10px;background:rgba(0,0,0,0.3);border:1px solid rgba(217,164,54,0.3);border-radius:6px;color:#FAF6EC;font-family:inherit;font-size:13px"
+                  placeholder="One concrete change — what would move it from useful to essential?"
+        >{{ feedback.single_change or '' }}</textarea>
+      </div>
+
+      <button type="submit"
+              style="width:100%;padding:12px;background:#d9a436;color:#0a0604;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">
+        Submit feedback
+      </button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

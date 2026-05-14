@@ -1,0 +1,96 @@
+{# Phase 1 / Block 6 calibration C2 — in-app brief read surface.
+
+   Renders the MorningBrief.body dict in the in-app dashboard layout.
+   Mirrors the structure of templates/email/morning_brief.html (so the
+   brief reads the same in email + in-app per spec §11), but inlines the
+   markup rather than including the email partial — the partial's `brief`
+   variable name collides with the route-passed `brief` (the MorningBrief
+   row, used for metadata below) and Jinja {% set %}-based renaming
+   leaks across scope boundaries.
+
+   Used by /partner/briefs/<brief_id> (briefs.show_brief). #}
+{% extends "base_dashboard.html" %}
+
+{% block title %}Brief — {{ brief.brief_date }} — Cenas Kitchen{% endblock %}
+
+{% block content %}
+<div style="max-width:760px;margin:0 auto;padding:24px 20px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:24px">
+    <h1 style="margin:0;font-size:20px;color:#FAF6EC">
+      Morning brief — {{ brief.brief_date }}
+    </h1>
+    <a href="{{ url_for('briefs.feedback_form', brief_id=brief.brief_id) }}"
+       style="font-size:13px;color:#d9a436;text-decoration:none;border:1px solid rgba(217,164,54,0.4);padding:6px 12px;border-radius:6px">
+      Give feedback →
+    </a>
+  </div>
+
+  <div style="background:#ffffff;border:1px solid rgba(217,164,54,0.15);border-radius:8px;padding:24px;color:#1d2939;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+    <p style="font-size:18px;margin:0 0 16px 0;color:#1d2939">
+      {{ body.greeting or 'Good morning.' }}
+    </p>
+
+    {% if body.headline %}
+      <p style="font-size:16px;margin:0 0 24px 0;color:#1d2939;line-height:1.5">
+        <strong>{{ body.headline }}</strong>
+      </p>
+    {% endif %}
+
+    {% for section in (body.sections or []) %}
+      {% set kind = section.section_kind %}
+      {% set bg = {
+        'alerts': '#fef3f2',
+        'warns':  '#fffaeb',
+        'wins':   '#ecfdf3',
+        'lookahead': '#eff8ff',
+        'info_aggregate': '#f9fafb',
+        'calibration':   '#f9fafb',
+      }[kind] | default('#f9fafb') %}
+      {% set bar = {
+        'alerts': '#d92d20',
+        'warns':  '#dc6803',
+        'wins':   '#039855',
+        'lookahead': '#175cd3',
+        'info_aggregate': '#667085',
+        'calibration':   '#667085',
+      }[kind] | default('#667085') %}
+
+      <div style="margin:0 0 18px 0;padding:14px 16px;background:{{ bg }};border-left:4px solid {{ bar }};border-radius:6px">
+        <h3 style="margin:0 0 8px 0;font-size:15px;color:{{ bar }};text-transform:uppercase;letter-spacing:0.04em">
+          {{ section.heading or kind }}
+        </h3>
+        {% if section.intro %}
+          <p style="margin:0 0 10px 0;font-size:14px;color:#475467">{{ section.intro }}</p>
+        {% endif %}
+        {% if kind != 'info_aggregate' %}
+          <ul style="margin:0;padding:0 0 0 18px;list-style:disc;color:#1d2939">
+            {% for item in (section['items'] or []) %}
+              <li style="margin:0 0 10px 0;font-size:14px;line-height:1.5">
+                <span>{{ item.one_line }}</span>
+                {% if item.action and item.action != 'FYI — no action required from you.' %}
+                  <div style="margin-top:4px;font-size:13px;color:#475467">
+                    <em>Action:</em> {{ item.action }}
+                  </div>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    {% if body.closing %}
+      <p style="font-size:14px;color:#475467;margin:24px 0 0 0">{{ body.closing }}</p>
+    {% endif %}
+  </div>
+
+  <div style="margin-top:18px;font-size:11px;color:#98a2b3">
+    Brief ID: <code>{{ brief.brief_id }}</code>
+    · Composed by <code>{{ brief.composer_model }}</code>
+    {% if brief.fallback_used %}
+      · <span style="color:#dc6803">via deterministic fallback</span>
+    {% endif %}
+    · {{ brief.composed_at.strftime('%Y-%m-%d %H:%M UTC') }}
+  </div>
+</div>
+{% endblock %}

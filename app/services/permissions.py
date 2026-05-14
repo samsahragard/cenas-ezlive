@@ -98,6 +98,16 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         # tags should follow the same pattern (add to corporate's set
         # in this block, not relitigate the audience question per tag).
         "anomaly.admin", "access.team_admin",
+        # Phase 1 / Block 6 calibration C2 (aick 2026-05-13). Gates the
+        # /partner/briefs/<brief_id> read endpoint + /feedback form;
+        # the route handler additionally verifies brief.audience_user_id
+        # == current_user.id so a corporate user can only ever see
+        # their own brief. Partner wildcard reaches everyone's briefs
+        # (oversight + the calibration panel includes Sam). When Phase 2
+        # extends the panel to GM (Anna + Brittany), add this tag to
+        # the gm set in this module — same role-based-not-per-person
+        # inheritance pattern.
+        "briefs.view_own",
     },
 
     "gm": {

@@ -157,8 +157,6 @@ def _owner_at_deadline(task, audit_rows_for_task) -> int:
 
     # Walk reassignments up to (and including) the deadline.
     for r in reassigned_rows:
-        if r.created_at is None:
-            continue
         if r.created_at <= deadline:
             to_owner = (r.details or {}).get("to_owner_user_id")
             if to_owner is not None:
@@ -411,17 +409,3 @@ def team_reports_index():
         report4=report4,
         labels=labels,
     )
-
-
-def request_window():
-    """Pull ?window= off the request. Isolated so the route stays
-    readable + it's trivially mockable in tests."""
-    from flask import request
-    return request.args.get("window", _DEFAULT_WINDOW)
-
-
-def install(app):
-    """Register the team-reports blueprint. Called from
-    app.create_app() (mirrors the other ez*.install / register
-    patterns)."""
-    app.register_blueprint(team_reports_bp)

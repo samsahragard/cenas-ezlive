@@ -110,12 +110,14 @@ _TASK_CATEGORY_TO_RIBBON = {
 }
 
 # page_slug → the ribbon category that page's domain detail belongs to.
-# 1C spec §7.3 + Q2: this map grows incrementally as the ribbon goes
-# live page-by-page; an unknown slug (or the main dashboard) falls back
-# to main-dashboard behaviour (alert items + the viewer's todo only).
-# Starting set covers the pages that exist today; aick + ck extend it
-# as pages adopt the ribbon.
+# 1C spec §7.3 (amendment #1394, 2026-05-14): the map is explicit and
+# authoritative. A slug NOT in this map renders no ribbon at all (empty
+# list — a safe blank, not a guess). The "dashboard" slug maps to None,
+# the sentinel for "all categories, unfiltered" (the overview intent;
+# the 1B partial hides empty sections per §10). aick + ck extend the
+# map as new pages adopt the ribbon — there is no implicit fallback.
 _PAGE_TO_DOMAIN = {
+    "dashboard":    None,           # sentinel — all 7 categories, unfiltered
     "orders":       "vendors",      # placeholder — refine as pages adopt
     "vendors":      "vendors",
     "produce":      "vendors",
@@ -635,21 +637,23 @@ def ribbon_items_for(page_slug, user, store_scope, category=None):
 
 
 def _apply_page_relevance(items, page_slug):
-    """1C spec §7.3 — the page-relevance principle.
-      - main dashboard / unknown slug: only severity=alert items + the
-        viewer's todo category. High-level only.
-      - a domain page: that domain's full detail (all severities) +
-        the viewer's todo scoped to that domain.
-    The page_slug → domain map (_PAGE_TO_DOMAIN) grows incrementally
-    (1C spec Q2); an unknown slug safely defaults to dashboard rules.
+    """1C spec §7.3 (amendment #1394) — strict page-relevance.
+      - "dashboard" slug: all categories, unfiltered — the overview
+        intent (the 1B partial hides empty sections per §10).
+      - a mapped domain page: that domain's full detail (all
+        severities) + the viewer's todo category.
+      - an unmapped / unknown slug: empty list — no ribbon. A safe
+        blank, NOT a fallback to dashboard behaviour. If a new page
+        needs the ribbon, add it to _PAGE_TO_DOMAIN.
     """
-    domain = _PAGE_TO_DOMAIN.get(page_slug)
+    if page_slug not in _PAGE_TO_DOMAIN:
+        # unmapped slug → no ribbon (amendment #1394: explicit map
+        # only, no implicit fallback).
+        return []
+    domain = _PAGE_TO_DOMAIN[page_slug]
     if domain is None:
-        # main-dashboard behaviour: alerts + todo only.
-        return [
-            i for i in items
-            if i.severity == "alert" or i.category == "todo"
-        ]
+        # "dashboard" sentinel — all categories, unfiltered.
+        return items
     # domain page: that domain's full detail + the todo category.
     return [
         i for i in items

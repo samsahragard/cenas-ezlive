@@ -7,8 +7,8 @@ Per the 1C spec §11:
     items for one Task, same item_type/item_id
   - role + store-scope filter: a Tomball GM doesn't get Copperfield
     items; partner gets both stores'
-  - page-relevance: dashboard = alerts + todo only; domain page =
-    full domain detail
+  - page-relevance (amendment #1394): dashboard = all categories;
+    domain page = full domain detail + todo; unmapped slug = empty
   - dismissal exclusion: a today-dated RibbonItemDismissal hides the
     item; a yesterday-dated one doesn't (daily reset)
   - sort: _ribbon_sort_key — alert>warn>info, soonest-deadline-first,
@@ -428,19 +428,22 @@ def test_router_store_scope_filter_gm_scoped(router_db):
                for i in partner_items)
 
 
-def test_router_page_relevance_dashboard_alerts_and_todo_only(router_db):
-    """On the main dashboard (unknown slug → dashboard rules), only
-    alert-severity items + the viewer's todo show. A far-future info
-    task owned by someone else (observer, info) is filtered out."""
+def test_router_page_relevance_dashboard_returns_all_categories(router_db):
+    """1C spec §7.3 (amendment #1394): the "dashboard" slug returns
+    items from ALL categories, unfiltered — the overview intent (the
+    1B partial hides empty sections). A far-future info task owned by
+    someone else (observer, info severity) DOES surface on the
+    dashboard now; the old "alerts + todo only" dashboard filter is
+    gone."""
     db, users = router_db
     # info-severity vendor task owned by cook_cop — observer for gm_tom
     _add_task(db, owner_user_id=4, category="vendor",
               store_scope="both",  # in scope for everyone
               deadline_at=_NOW + timedelta(days=10))
     items = ribbon_items_for("dashboard", users["gm_tom"], "tomball")
-    # the observer info item is in 'vendors', severity info → filtered
-    assert not any(i.category == "vendors" and i.severity == "info"
-                   for i in items)
+    # the observer info vendors item now surfaces (was filtered pre-#1394)
+    assert any(i.category == "vendors" and i.severity == "info"
+               for i in items)
 
 
 def test_router_page_relevance_domain_page_full_detail(router_db):
@@ -451,6 +454,21 @@ def test_router_page_relevance_domain_page_full_detail(router_db):
               deadline_at=_NOW + timedelta(days=10))
     items = ribbon_items_for("vendors", users["gm_tom"], "tomball")
     assert any(i.category == "vendors" for i in items)
+
+
+def test_router_page_relevance_unmapped_slug_returns_empty(router_db):
+    """1C spec §7.3 (amendment #1394): a slug NOT in _PAGE_TO_DOMAIN
+    renders no ribbon at all — an empty list, a safe blank, NOT a
+    fallback to dashboard behaviour. Even with a live in-scope alert
+    item in the DB, an unknown page slug yields nothing."""
+    db, users = router_db
+    # a past-deadline alert task that WOULD surface on any mapped page
+    _add_task(db, owner_user_id=3, category="general",
+              store_scope="tomball",
+              deadline_at=_NOW - timedelta(hours=1))
+    items = ribbon_items_for("some-unmapped-page", users["cook_tom"],
+                             "tomball")
+    assert items == []
 
 
 def test_router_dismissal_exclusion_today_vs_yesterday(router_db):

@@ -534,9 +534,13 @@ def sam_chat_send():
         api_messages = [{"role": m.role, "content": m.content}
                         for m in prior if m.role in ("user", "assistant")]
 
-        # Persist the user message.
-        db.add(SamChatMessage(session_id=session_id, role="user",
-                              content=stored_content, created_at=now))
+        # Persist the user message and capture its id so the Cena audit
+        # log rows can link back to this exact chat turn.
+        user_row = SamChatMessage(session_id=session_id, role="user",
+                                  content=stored_content, created_at=now)
+        db.add(user_row)
+        db.flush()  # assigns user_row.id
+        user_message_id = user_row.id
         # Auto-title a fresh session from its first user message.
         if not session_row.title:
             session_row.title = (message or stored_content)[:60].strip() \
@@ -580,8 +584,12 @@ def sam_chat_send():
                 with httpx.Client(**_client_kwargs) as hx:
                     with hx.stream(
                         "POST", gateway_url + "/cena/stream",
+                        # session_id + message_id let the gateway link
+                        # each CenaActionLog row back to this chat turn.
                         json={"messages": api_messages, "model": model,
-                              "max_tokens": _MAX_OUTPUT_TOKENS},
+                              "max_tokens": _MAX_OUTPUT_TOKENS,
+                              "session_id": session_id,
+                              "message_id": user_message_id},
                         headers={"X-Cena-Token": cena_token,
                                  "Content-Type": "application/json"},
                     ) as r:

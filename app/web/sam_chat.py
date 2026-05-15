@@ -152,6 +152,14 @@ def _anthropic_client():
         return None
     return anthropic.Anthropic(api_key=key)
 
+def _cena_gateway_url() -> str | None:
+    """URL of Cena's gateway server on aick, e.g.
+    https://cena-api.cenaskitchen.com  (set via CENA_GATEWAY_URL env var).
+    When set, sam_chat routes to Cena instead of calling Anthropic directly.
+    Returns None when the env var is absent — falls back to Anthropic."""
+    url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
+    return url or None
+
 
 def _estimate_cost(model: str, in_tok: int, out_tok: int) -> Decimal:
     """Rough USD cost estimate from token usage. Quantized to 4 places
@@ -553,21 +561,53 @@ def sam_chat_send():
     def generate():
         full = ""
         in_tok = out_tok = 0
+        gateway_url = _cena_gateway_url()
         try:
-            with client.messages.stream(
-                model=model,
-                max_tokens=_MAX_OUTPUT_TOKENS,
-                messages=api_messages,
-            ) as stream:
-                for chunk in stream.text_stream:
-                    full += chunk
-                    yield _sse({"type": "delta", "text": chunk})
-                final = stream.get_final_message()
-            usage = getattr(final, "usage", None)
-            in_tok = getattr(usage, "input_tokens", 0) or 0
-            out_tok = getattr(usage, "output_tokens", 0) or 0
+            if gateway_url:
+                # ---- Cena gateway: route to aick ----
+                import httpx
+                cena_token = os.getenv("CENA_GATEWAY_TOKEN", "")
+                with httpx.Client(timeout=120.0) as hx:
+                    with hx.stream(
+                        "POST", gateway_url + "/cena/stream",
+                        json={"messages": api_messages, "model": model,
+                              "max_tokens": _MAX_OUTPUT_TOKENS},
+                        headers={"X-Cena-Token": cena_token,
+                                 "Content-Type": "application/json"},
+                    ) as r:
+                        for line in r.iter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            try:
+                                evt = json.loads(line[6:])
+                            except Exception:
+                                continue
+                            if evt.get("type") == "delta":
+                                chunk = evt.get("text", "")
+                                full += chunk
+                                yield _sse({"type": "delta", "text": chunk})
+                            elif evt.get("type") == "done":
+                                in_tok = evt.get("in_tokens", 0) or 0
+                                out_tok = evt.get("out_tokens", 0) or 0
+                            elif evt.get("type") == "error":
+                                raise RuntimeError(
+                                    evt.get("error", "Cena gateway error"))
+            else:
+                # ---- Direct Anthropic API (original path) ----
+                with client.messages.stream(
+                    model=model,
+                    max_tokens=_MAX_OUTPUT_TOKENS,
+                    messages=api_messages,
+                ) as stream:
+                    for chunk in stream.text_stream:
+                        full += chunk
+                        yield _sse({"type": "delta", "text": chunk})
+                    final = stream.get_final_message()
+                usage = getattr(final, "usage", None)
+                in_tok = getattr(usage, "input_tokens", 0) or 0
+                out_tok = getattr(usage, "output_tokens", 0) or 0
         except Exception as e:  # noqa: BLE001
-            logger.exception("sam_chat: Anthropic stream failed")
+            logger.exception("sam_chat: stream failed")
             # Persist whatever streamed before the failure so the turn
             # isn't silently lost; flag it.
             if full.strip():

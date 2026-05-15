@@ -83,7 +83,7 @@
 <hr>
 
 <h2>Status tags &mdash; what each one means</h2>
-<p>Every doc that opts into the status header partial (<code>{% include 'partials/_doc_status_header.html' %}</code>) shows a small box with one of these states:</p>
+<p>Every doc that opts into the status header partial (<code>&#123;% include 'partials/_doc_status_header.html' %&#125;</code>) shows a small box with one of these states:</p>
 
 <ul>
   <li><strong>ACTIVE</strong> &mdash; doc describes work currently in progress. Subject to change.</li>
@@ -100,10 +100,10 @@
 
 <h2>Update protocol &mdash; how to add or modify a doc</h2>
 <ol>
-  <li><strong>Write the doc</strong> at <code>app/templates/docs/&lt;slug_snake_case&gt;.html</code>, extending <code>docs/_doc_base.html</code>, with the body wrapped in <code>{% raw %}...{% endraw %}</code> if it contains literal Jinja-looking braces.</li>
+  <li><strong>Write the doc</strong> at <code>app/templates/docs/&lt;slug_snake_case&gt;.html</code>, extending <code>docs/_doc_base.html</code>, with the body wrapped in <code>&#123;% raw %&#125;...&#123;% endraw %&#125;</code> if it contains literal Jinja-looking braces.</li>
   <li><strong>Register the route</strong> by adding a tuple to <code>DOC_PAGES</code> in <code>app/web/developer_chat.py</code>: <code>(&quot;slug-kebab&quot;, &quot;Display Title&quot;, &quot;doc_slug_snake_case&quot;)</code>.</li>
   <li><strong>Register the nav</strong> by adding the link to the appropriate section in <code>app/templates/partials/sidebar.html</code>.</li>
-  <li><strong>Optionally include the status header</strong> via <code>{% include 'partials/_doc_status_header.html' with context %}</code> and the right block variables.</li>
+  <li><strong>Optionally include the status header</strong> via <code>&#123;% include 'partials/_doc_status_header.html' with context %&#125;</code> and the right block variables.</li>
   <li><strong>Three-gate verify</strong> per samai rules 2 + 3: local pytest, CI green, build-specific deploy probe (the URL renders 200 with the expected markers).</li>
 </ol>
 

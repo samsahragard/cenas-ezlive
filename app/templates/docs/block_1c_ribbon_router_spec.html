@@ -5,6 +5,7 @@
 <h1>Block 1C — Ribbon Content Router</h1>
 <p class="doc-meta">
   Phase 2 / Block 1 / sub-block 1C. samai spec, 2026-05-14.<br>
+  <strong>Amendment #1394</strong> (empty-category hiding + strict page-relevance), 2026-05-14.<br>
   Implementation: aick. Review: samai checklist PASS per commit.<br>
   Source: Phase 2 Directive §BLOCK 1 / 1C (see
   <a href="{{ url_for('developer_chat.app_doc', page='phase-2-directive') }}">Phase 2 Directive</a>).
@@ -24,7 +25,7 @@
   <li>The <code>RibbonItem</code> class, implementing the 1B §2 render contract + the <code>relation</code> field (§3)</li>
   <li><code>ribbon_items_for(page_slug, user, store_scope, category=None) -&gt; list[RibbonItem]</code> — the router (§4)</li>
   <li><code>RibbonItem.render_for(user)</code> — the cross-cutting framing rule (§5)</li>
-  <li>Source adapters: <code>Task</code>, <code>Signal</code>, <code>SalesInsight</code>, <code>ScheduledEvent</code> → <code>RibbonItem</code> (§6)</li>
+  <li>Source adapters: <code>Task</code>, <code>Signal</code>, <code>SalesInsight</code>, <code>ScheduledEvent</code>, <code>AmbientSignal</code> → <code>RibbonItem</code> (§6)</li>
   <li>Replacing 1B's stub Jinja global with the real <code>ribbon_items_for</code> (§9)</li>
   <li>Tests: the framing matrix, the filtering rules, the sort, the dismissal exclusion</li>
 </ul>
@@ -58,6 +59,9 @@
     category:    str       # one of RIBBON_CATEGORIES
     severity:    str       # "info" | "warn" | "alert"
     item_type:   str       # "task" | "signal" | "sales_insight" | "scheduled_event"
+                           #   | "ambient_signal"  (1J adds the 5th — deploy-live
+                           #     from 1J Day 4 / 7e7d4ea; 1B's item_type-agnostic
+                           #     partial passes any value straight through)
     item_id:     int
     deadline_at: datetime | None
     can_dismiss: bool
@@ -65,8 +69,9 @@
 
     # --- 1C-internal: drives render_for's framing (§5) ---
     relation:    str       # "owner_todo" | "owner_category" | "observer" | "escalated_to"
-    _source:     object    # the underlying Task / Signal / SalesInsight / ScheduledEvent row
-                           #   (private — render_for reads it; the partial never does)
+    _source:     object    # the underlying Task / Signal / SalesInsight / ScheduledEvent
+                           #   / AmbientSignal row (private — render_for reads it;
+                           #   the partial never does)
 
     def render_for(self, user) -&gt; dict:
         # returns { "text", "sub_text", "styling_class" } per §5
@@ -83,11 +88,12 @@
   of which rendered copy was clicked.
 </p>
 <p>
-  <code>item_type</code> note: the 1B render contract listed
-  <code>task | signal | sales_insight</code>. 1C adds <code>scheduled_event</code>
-  as a fourth — it must be in the contract. <strong>This is a coordinated
-  contract change with 1B</strong> (§10); flag it so ck's 1B markup + 1D's
-  X/Check handler both account for the fourth type.
+  <code>item_type</code> note: the 1B render contract originally listed
+  <code>task | signal | sales_insight</code>. 1C added <code>scheduled_event</code>
+  as a fourth (coordinated contract change, §10); 1J Day 4 (7e7d4ea) added
+  <code>ambient_signal</code> as a fifth — it is deploy-live. 1B's
+  item_type-agnostic partial passes any value straight through; 1D's
+  X/Check handler gained its <code>ambient_signal</code> branch in 1J Day 4.
 </p>
 
 <h2>4. ribbon_items_for — the router</h2>
@@ -97,9 +103,9 @@
        Returns the list ALREADY SORTED (severity DESC, deadline ASC)."""</code></pre>
 <p>Algorithm, in order:</p>
 <ol>
-  <li><strong>Gather candidate source rows</strong> from the four sources, each filtered by the role + store-scope rules in §7. Tasks owned-by / escalated-to <code>user</code>; open Signals in scope; live SalesInsights in scope; upcoming ScheduledEvents in scope.</li>
+  <li><strong>Gather candidate source rows</strong> from the five sources (§6), each filtered by the role + store-scope rules in §7. Tasks owned-by / escalated-to <code>user</code>; open Signals in scope; live SalesInsights in scope; upcoming ScheduledEvents in scope; live AmbientSignals (valid_until_at &ge; now) in scope.</li>
   <li><strong>Adapt</strong> each source row into one or two <code>RibbonItem</code>s with the right <code>category</code> + <code>relation</code> (§6).</li>
-  <li><strong>Apply the page-relevance filter</strong> (§7.3) — on the main dashboard, drop everything except <code>alert</code>-severity items and the user's <code>todo</code>; on a domain page, keep that domain's full detail.</li>
+  <li><strong>Apply the page-relevance filter</strong> (§7.3) — the explicit <code>_PAGE_TO_DOMAIN</code> map determines which categories are shown. Unmapped slugs return an empty list (no ribbon). Mapped domain pages return that domain's full detail (all severities) plus the viewer's <code>todo</code>. The <code>dashboard</code> slug returns all categories.</li>
   <li><strong>Exclude dismissed items</strong> — drop any item whose <code>(user.id, item_type, item_id, today)</code> has a <code>RibbonItemDismissal</code> row (§7.4).</li>
   <li><strong>Filter to <code>category</code></strong> if the arg is set.</li>
   <li><strong>Sort</strong> (§8) and return.</li>
@@ -143,9 +149,9 @@
   <code>render_for</code> returns <code>{ text, sub_text, styling_class }</code>.
   <code>styling_class</code> is severity-driven (<code>ribbon-item--info / --warn / --alert</code>)
   with an optional <code>relation</code> modifier (e.g. <code>ribbon-item--escalated</code>).
-  Signals and SalesInsights have simpler framing (they have no "owner" —
-  they're always <code>observer</code>-style status text); the four-way table
-  above is primarily for Tasks. <code>render_for</code> branches on
+  Signals, SalesInsights, ScheduledEvents, and AmbientSignals have simpler framing
+  (they have no "owner" — they're always <code>observer</code>-style status text);
+  the four-way table above is primarily for Tasks. <code>render_for</code> branches on
   <code>item_type</code> first, then <code>relation</code>.
 </p>
 
@@ -200,12 +206,19 @@
     <td>always <code>observer</code></td>
     <td>dismiss: yes. check: no (<code>can_check=False</code> — you don't "complete" a scheduled event)</td>
   </tr>
+  <tr>
+    <td><code>AmbientSignal</code> (1J)</td>
+    <td><code>caterings</code>, <code>events</code>, or <code>maintenance</code> — straight from <code>AmbientSignal.category</code>, which the model constrains to those three values. No adapter-level map needed.</td>
+    <td>always <code>observer</code> (ambient signals have no owner — they are external state written by the six 1J per-source crons)</td>
+    <td>dismiss: yes (X-dismiss writes a <code>RibbonItemDismissal</code>; survives payload refreshes because the id is id-stable per §2.2). check: no (<code>can_check=False</code> — not "completable"; ages out via <code>valid_until_at</code>)</td>
+  </tr>
 </table>
 <p>
   Each adapter is its own function (<code>_task_to_items</code>,
   <code>_signal_to_item</code>, <code>_sales_insight_to_item</code>,
-  <code>_scheduled_event_to_item</code>) so they're independently testable and
-  1C can ship the <code>Signal</code> adapter before 1A lands.
+  <code>_scheduled_event_to_item</code>, <code>_ambient_signal_to_item</code>)
+  so they're independently testable and 1C can ship the <code>Signal</code>
+  adapter before 1A lands.
 </p>
 
 <h2>7. Filtering</h2>
@@ -225,12 +238,56 @@
   complete until 1H's helper exists. Sequence 1C's <code>sales</code> branch
   after 1H, or stub the call and wire it when 1H lands.
 </p>
-<h3>7.3 page_slug relevance (the directive's "page-relevance principle")</h3>
+<h3>7.3 page_slug relevance — explicit mapping (amendment #1394, 2026-05-14)</h3>
+<p>
+  Two rules govern what appears on a given page:
+</p>
+<ol>
+  <li><strong>Mapped pages</strong> (in <code>_PAGE_TO_DOMAIN</code> below) show that domain's full detail (all severities) plus the viewer's <code>todo</code> category. The <code>dashboard</code> slug is a special entry — it shows all seven categories with items (the overview intent of the main page; empty categories are hidden by the 1B partial per §10).</li>
+  <li><strong>Unmapped / unknown slugs return an empty list.</strong> There is no fallback to dashboard behaviour — an unmapped page is a safe blank, not an alert-only summary. If a new page needs the ribbon, add it to the map.</li>
+</ol>
+<p><strong>The explicit <code>_PAGE_TO_DOMAIN</code> map</strong> (1C owns this as a module constant; extend it as pages adopt the ribbon):</p>
+<table>
+  <tr><th>page_slug</th><th>→ categories shown</th></tr>
+  <tr>
+    <td><code>dashboard</code></td>
+    <td>all 7 categories — <code>todo, vendors, caterings, events, sales, employee, maintenance</code> (full overview; the 1B partial hides empty sections — only categories with live items for the current user render)</td>
+  </tr>
+  <tr><td><code>vendors</code></td><td><code>vendors + todo</code></td></tr>
+  <tr><td><code>orders</code></td><td><code>vendors + todo</code> (order fulfilment = vendor domain)</td></tr>
+  <tr><td><code>produce</code></td><td><code>vendors + todo</code></td></tr>
+  <tr><td><code>roster</code></td><td><code>employee + todo</code></td></tr>
+  <tr><td><code>team</code></td><td><code>employee + todo</code></td></tr>
+  <tr><td><code>maintenance</code></td><td><code>maintenance + todo</code></td></tr>
+  <tr><td><code>caterings</code></td><td><code>caterings + todo</code></td></tr>
+  <tr><td><code>events</code></td><td><code>events + todo</code></td></tr>
+  <tr><td><code>reports</code></td><td><code>sales + todo</code></td></tr>
+  <tr><td><code>ezmarket</code></td><td><code>sales + todo</code></td></tr>
+  <tr><td><em>anything else</em></td><td><em>empty — no ribbon rendered</em></td></tr>
+</table>
+<p>
+  <strong>Empty-category hiding (1B coordination — 1B Refinement-1):</strong>
+  the 1B partial must skip the <code>&lt;section&gt;</code> element entirely
+  for categories with zero items — not a section heading with an empty body,
+  but zero DOM output for that category. This is the 1B side of the
+  dashboard's "all categories with items" behaviour: the router returns
+  items from all 7 categories on the dashboard slug, and the partial makes
+  only the non-empty ones visible. See §10.
+</p>
+<p>
+  <strong>Implementation note</strong> (ribbon.py follow-up — aick, small):<br>
+  The current <code>_apply_page_relevance</code> defaults unknown slugs to
+  "alerts + todo" (main-dashboard behaviour). This must change:
+</p>
 <ul>
-  <li><strong>Main dashboard</strong> (<code>page_slug</code> = the dashboard): return only <code>severity="alert"</code> items + the viewer's <code>todo</code> category. High-level only — no bulk operational detail.</li>
-  <li><strong>Domain page</strong> (orders, roster, maintenance, vendors, etc.): return that domain's <em>full</em> detail (all severities) plus the viewer's <code>todo</code> scoped to that domain's category.</li>
-  <li>1C needs a <code>page_slug → relevant_categories</code> map. Spec proposes 1C owns that map as a module constant; it will need a row per real page slug. The set of page slugs that exist is itself a small open question (§13 Q2) — the map can start with the known pages and default unknown slugs to "main-dashboard behaviour" (alert + todo only), which is the safe default.</li>
+  <li>Add <code>"dashboard": None</code> (or a sentinel) to <code>_PAGE_TO_DOMAIN</code> to handle the dashboard slug explicitly, returning all items unfiltered.</li>
+  <li>Change the <code>None</code> (unmapped) branch from "return alerts + todo" to <code>return []</code>.</li>
 </ul>
+<p>
+  This is a small two-line change to <code>_apply_page_relevance</code>;
+  all existing mapped-slug tests continue to pass. aick should apply this
+  before ck starts 1B Refinement-1.
+</p>
 <h3>7.4 Dismissal exclusion</h3>
 <p>
   After adapting, drop any <code>RibbonItem</code> for which a
@@ -263,7 +320,7 @@
 
 <h2>10. Coordination points</h2>
 <ul>
-  <li><strong>1B (render contract):</strong> 1C implements the §2 contract. 1C <em>adds</em> <code>scheduled_event</code> as a fourth <code>item_type</code> — a coordinated contract change; ck's 1B markup (the <code>data-item-type</code> values) and 1D's X/Check handler must both accept it. Flag to ck before 1C commits.</li>
+  <li><strong>1B (render contract + empty-category hiding):</strong> 1C implements the §2 contract. 1C added <code>scheduled_event</code> as a fourth <code>item_type</code>; 1J Day 4 added <code>ambient_signal</code> as a fifth — both deploy-live; 1B's item_type-agnostic partial passes any value through. <strong>Empty-category hiding (1B Refinement-1):</strong> the 1B partial must skip the <code>&lt;section&gt;</code> element entirely for zero-item categories — no section header, no empty list, zero DOM. This is the required change for ck's 1B Refinement-1 and must land before the dashboard page is considered complete (the router returns all-7-categories on the dashboard slug; the partial makes only the non-empty ones visible).</li>
   <li><strong>1B (<code>RIBBON_CATEGORIES</code> + stub global):</strong> per 1B spec Q1, 1B defines the constant + the stub global; 1C imports the constant and replaces the stub. Confirm with ck that the constant lives where 1C can import it (1B spec says <code>app/services/ribbon.py</code> — so 1B creates the module file with just the constant + stub, 1C fills the rest).</li>
   <li><strong>1H (pay masking):</strong> §7.2 — 1C's <code>sales</code> adapter calls <code>render_labor_breakdown</code>; sequence after 1H or stub-and-wire.</li>
   <li><strong>1A (Task + RibbonItemDismissal):</strong> hard dependency; the Task adapter + dismissal exclusion need 1A landed + PASSed.</li>
@@ -276,21 +333,21 @@
   <li><strong>Framing matrix:</strong> the same Task, viewed by (owner on dashboard / owner on its domain page / observer-manager on the domain page / escalated-to manager) → asserts the four <code>relation</code> values and the four framings from §5. Self-describing test ids (<code>relation=owner_todo</code> etc.).</li>
   <li><strong>One-source-two-items:</strong> owner on the matching domain page gets exactly two items (todo + category) for the one Task, both with the same <code>item_type</code>/<code>item_id</code>.</li>
   <li><strong>Role + store-scope filter:</strong> a Tomball GM does not get Copperfield items; partner gets both stores'.</li>
-  <li><strong>page-relevance:</strong> dashboard returns only alerts + todo; a domain page returns full detail for that domain.</li>
+  <li><strong>page-relevance:</strong> dashboard returns all-categories (the full set filtered by items present); a domain page returns full detail for that domain + todo; an unmapped slug returns empty (no items). Empty-category hiding is 1B's concern — tested in 1B Refinement-1's test suite.</li>
   <li><strong>Dismissal exclusion:</strong> an item with a today-dated <code>RibbonItemDismissal</code> row for the viewer is absent; a yesterday-dated one is present again (daily reset).</li>
   <li><strong>Sort:</strong> <code>_ribbon_sort_key</code> orders alert-before-warn-before-info, soonest-deadline-first within band, null deadline last.</li>
-  <li><strong>Per-adapter:</strong> each of the four adapters tested in isolation; the <code>Signal</code> adapter test can run before 1A lands.</li>
+  <li><strong>Per-adapter:</strong> each of the five adapters tested in isolation; the <code>Signal</code> adapter test can run before 1A lands.</li>
 </ul>
 
 <h2>12. samai review checklist (run per commit)</h2>
 <ol>
   <li>Scope: only <code>app/services/ribbon.py</code> + the Jinja-global registration + tests — no partial, no endpoints, no cron, no <code>SalesInsight</code> production.</li>
-  <li><code>RibbonItem</code> implements the 1B §2 contract exactly + the <code>relation</code> field; <code>scheduled_event</code> added to <code>item_type</code> and the change flagged to ck.</li>
+  <li><code>RibbonItem</code> implements the 1B §2 contract exactly + the <code>relation</code> field; all five <code>item_type</code> values present.</li>
   <li><code>render_for</code> produces the four framings per §5; the "manager's to-do shows nothing unless escalated" rule holds.</li>
   <li>One source row correctly yields one or two items per the §3 rule.</li>
   <li>Role + store-scope filter: store-scoped users see only their store; partner/corporate see both.</li>
   <li>Pay-data in the <code>sales</code> category routed through 1H's helper, not re-implemented.</li>
-  <li>page-relevance: dashboard = alerts + todo only; domain pages = full domain detail.</li>
+  <li>page-relevance: <code>dashboard</code> slug returns all categories; domain page slugs return that domain + todo; unmapped slugs return empty (not dashboard-default). <code>_PAGE_TO_DOMAIN</code> has the 10 live slugs + <code>dashboard</code> entry; unknown → <code>[]</code>.</li>
   <li>Dismissal exclusion uses today's <code>dismiss_day</code>, single up-front query, no N+1.</li>
   <li>Sort: severity DESC, deadline ASC, null-deadline last.</li>
   <li>Jinja global registered without the import-shadow pattern (bee8cdc lesson); deploy-verify confirms real content renders post-swap.</li>
@@ -300,7 +357,7 @@
 <h2>13. Open questions for Sam / coordination notes</h2>
 <ol>
   <li><strong>Q1 (BLOCKING — escalate to @sam):</strong> the <code>ScheduledEvent</code> model. The directive names <code>ScheduledEvent</code> as a ribbon source (Caterings + Events categories pull from it) but <strong>no Block 1 or Block 2 sub-block defines a <code>ScheduledEvent</code> model</strong>. Either it exists already in the codebase (aick: confirm), or it's an undefined dependency. If it doesn't exist, 1C's <code>ScheduledEvent</code> adapter is blocked and either (a) a <code>ScheduledEvent</code> model needs its own small precondition sub-block, or (b) the Caterings/Events categories ship empty in v1 and the adapter is a follow-up. samai recommends (a) if Sam wants Caterings/Events populated at Block 1 close; (b) is acceptable if those two categories can be empty until a later block. Sam's call.</li>
-  <li><strong>Q2:</strong> the <code>page_slug → relevant_categories</code> map needs the actual set of page slugs. Spec default: 1C owns the map, unknown slugs fall back to main-dashboard behaviour (alert + todo only — the safe default). aick + ck enumerate the real slugs as the ribbon goes live page-by-page; the map grows. Confirm this incremental approach is acceptable vs. wanting the full slug set defined up front.</li>
+  <li><strong>Q2 — RESOLVED (amendment #1394, 2026-05-14):</strong> the explicit <code>_PAGE_TO_DOMAIN</code> map is in §7.3. Unknown slugs return an empty list (not a dashboard-default). The 10 currently-live page slugs are mapped; extend the table as new pages adopt the ribbon. The incremental approach (aick + ck extend the map as pages adopt) is confirmed — no further open question.</li>
   <li><strong>Q3 — RESOLVED (addendum below).</strong> Signal → ribbon category mapping. samai confirmed the anomaly rule taxonomy from <code>app/services/anomaly_rules.py</code>: rule_names follow a <code>domain.specific</code> format across ten domains (<code>vendor / produce / orders / sales / labor / attendance / server / kitchen / customer / system</code>). The real map is §13.1 below — it replaces aick's best-effort <code>_SIGNAL_PREFIX_TO_RIBBON</code> placeholder.</li>
 </ol>
 
@@ -350,12 +407,20 @@
 <h2>14. Distinct-commit boundary recap</h2>
 <p>
   1C is one commit: <code>app/services/ribbon.py</code> (the <code>RibbonItem</code>
-  class + <code>ribbon_items_for</code> + four adapters + filter/sort helpers) +
+  class + <code>ribbon_items_for</code> + five adapters + filter/sort helpers) +
   the real Jinja-global registration + tests. It touches no template, no
   route, no model, no cron. Its hard dependency is 1A (Task +
   RibbonItemDismissal) being landed + PASSed; its <code>Signal</code> adapter
   can be built ahead of that. The <code>ScheduledEvent</code> adapter is
   gated on Q1.
+</p>
+<p>
+  <strong>Amendment #1394 follow-up (aick):</strong> a small ribbon.py change
+  is needed before ck starts 1B Refinement-1 — update
+  <code>_apply_page_relevance</code> to return <code>[]</code> for unmapped
+  slugs (not alerts+todo) and add a <code>dashboard</code> entry to
+  <code>_PAGE_TO_DOMAIN</code> that returns all items unfiltered. Two-line
+  change, no test-suite impact beyond the new unmapped-slug→empty assertion.
 </p>
 
 </div>

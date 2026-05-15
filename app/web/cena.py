@@ -33,6 +33,7 @@ from app.models import (
     SamChatMessage,
     SamChatSession,
     User,
+    UserAuditLog,
     _VALID_CENA_ACTION_TYPES,
 )
 
@@ -524,6 +525,135 @@ def cena_db_probe_access_requests():
                            if r.created_at else None),
         } for r in rows]
         return jsonify({"ok": True, "count": len(out), "rows": out})
+    finally:
+        db.close()
+
+
+# ============================================================
+# POST /sam/cena/db-probe/deactivate-users — Sam-only ops
+# ============================================================
+# Issue 4 cleanup tool (samai #1511, 2026-05-15). Deactivates users
+# with permission_level="driver" — the architectural leak. Always
+# scans for matching rows; deactivation only happens when dry_run
+# is false AND the id is in `ids` AND the row still qualifies.
+#
+# Body (JSON):
+#   {"ids": [<int>, ...], "dry_run": <bool>}
+#
+# Response (HTTP 200, JSON):
+#   {
+#     "ok": true,
+#     "scanned_matching": [<int>, ...],
+#     "requested_ids":    [<int>, ...],
+#     "deactivated_ids":  [<int>, ...],
+#     "skipped":          [{"id": <int>, "reason": "<enum>"}, ...],
+#     "dry_run":          <bool>,
+#     "actor":            "cena",
+#     "ts":               "<ISO-8601 UTC>"
+#   }
+#
+# skipped.reason is a closed enum: "not_found" | "already_inactive"
+#                                   | "not_a_driver_user"
+
+_SKIP_NOT_FOUND          = "not_found"
+_SKIP_ALREADY_INACTIVE   = "already_inactive"
+_SKIP_NOT_A_DRIVER_USER  = "not_a_driver_user"
+
+
+def _role_state(level, store_scope) -> str:
+    """Mirror team_routes._role_state for audit-log before/after parity."""
+    return f"{level or ''}|{store_scope or ''}"
+
+
+@cena_bp.route("/sam/cena/db-probe/deactivate-users", methods=["POST"])
+def cena_db_probe_deactivate_users():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    raw_ids = body.get("ids") or []
+    if not isinstance(raw_ids, list):
+        return jsonify({"ok": False, "error": "ids must be a list"}), 400
+    requested_ids: list[int] = []
+    for v in raw_ids:
+        try:
+            requested_ids.append(int(v))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False,
+                            "error": f"id {v!r} is not an int"}), 400
+    dry_run = bool(body.get("dry_run", False))
+
+    db = SessionLocal()
+    try:
+        # scanned_matching: all currently-active users with the driver leak.
+        # Independent of `ids`; pure audit signal so Sam knows the surface.
+        scanned_rows = (
+            db.query(User)
+              .filter(User.permission_level == "driver")
+              .filter(User.active.is_(True))
+              .all()
+        )
+        scanned_ids = sorted(u.id for u in scanned_rows)
+
+        deactivated_ids: list[int] = []
+        skipped: list[dict] = []
+
+        for uid in requested_ids:
+            u = db.get(User, uid)
+            if u is None:
+                skipped.append({"id": uid, "reason": _SKIP_NOT_FOUND})
+                continue
+            if u.permission_level != "driver":
+                skipped.append({"id": uid,
+                                "reason": _SKIP_NOT_A_DRIVER_USER})
+                continue
+            if not u.active:
+                skipped.append({"id": uid,
+                                "reason": _SKIP_ALREADY_INACTIVE})
+                continue
+            if dry_run:
+                # In dry-run we explicitly do NOT count it as deactivated.
+                continue
+            # Apply the deactivation + atomic audit row.
+            before = _role_state(u.permission_level, u.store_scope)
+            after = before + " [inactive]"
+            u.active = False
+            u.session_version = (u.session_version or 1) + 1
+            db.add(UserAuditLog(
+                target_user_id=u.id,
+                target_label=u.full_name,
+                actor_user_id=None,
+                actor_label="cena",
+                action="deactivate_driver_leak",
+                before_value=before,
+                after_value=after,
+                details="Issue 4 cleanup (samai #1511 spec); "
+                        "permission_level=driver on users table is a leak; "
+                        "drivers belong in the drivers table.",
+                ip=(request.remote_addr or None) if request else None,
+            ))
+            deactivated_ids.append(uid)
+
+        if dry_run:
+            db.rollback()
+        else:
+            db.commit()
+
+        return jsonify({
+            "ok": True,
+            "scanned_matching": scanned_ids,
+            "requested_ids": requested_ids,
+            "deactivated_ids": sorted(deactivated_ids),
+            "skipped": skipped,
+            "dry_run": dry_run,
+            "actor": "cena",
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: deactivate-users failed")
+        db.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()
 

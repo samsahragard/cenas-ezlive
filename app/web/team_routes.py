@@ -32,12 +32,15 @@ team_bp = Blueprint("team", __name__)
 
 PASSCODE_RE = re.compile(r"^[\d*#@+%\-$]{5}$")
 
-# Canonical 10 roles from samai's permission_system spec (dfde3de). Values
-# match ROLE_PERMISSIONS keys in app/services/permissions.py so the new
-# decorator-based gates resolve correctly. Display labels are human-friendly.
-# Legacy aliases ('manager' → gm, 'corporate-driver' → driver) are NOT in
-# the dropdown — Sam never wants to create new legacy rows. They survive in
-# LEVELS for require_level rank checks against any stale pre-spec rows.
+# 9 canonical user-creatable roles (driver excluded — drivers live in
+# the separate `drivers` table; see Issue 4 spec, samai #1511, 2026-05-15).
+# Values match ROLE_PERMISSIONS keys in app/services/permissions.py so the
+# new decorator-based gates resolve correctly. Display labels are human-
+# friendly. Legacy aliases ('manager' → gm, 'corporate-driver' → driver)
+# are NOT in the dropdown — Sam never wants to create new legacy rows.
+# They survive in role_hierarchy for require_level rank checks against
+# any stale pre-spec rows. To add a driver, use Drivers Admin at
+# /<store>/drivers — separate table, phone+PIN auth.
 LEVEL_OPTIONS = [
     ("partner",         "Partner"),
     ("corporate",       "Corporate"),
@@ -48,7 +51,6 @@ LEVEL_OPTIONS = [
     ("prep_manager",    "Prep Manager"),
     ("foh_manager",     "FOH Manager"),
     ("expo",            "Expo"),
-    ("driver",          "Driver"),
 ]
 # Stores the Team admin can assign for store-scoped levels. Multi-select
 # via the form's 'stores' checkbox list; CSV-stored in User.store_scope.

@@ -28,6 +28,7 @@ from flask import (
 from app.db import SessionLocal
 from app.models import (
     CenaActionLog,
+    Driver,
     SamChatMessage,
     SamChatSession,
     _VALID_CENA_ACTION_TYPES,
@@ -264,6 +265,92 @@ def cena_audit_view():
         )
     finally:
         db.close()
+
+
+# ============================================================
+# POST /sam/cena/db-probe/driver-row — Sam-only diagnostic
+# ============================================================
+# Lookup ONE Driver row by id / phone / name and return the diagnostic
+# fields aick needs to debug PIN-reset failures (samai #1503, 2026-05-15).
+# Read-only. Returns no plaintext credentials — passcode_hash is reported
+# as length + 8-char prefix only, enough to confirm "yes a fresh bcrypt
+# landed here" without leaking the hash itself.
+#
+# Body (JSON), exactly one of:
+#   {"id": <int>}
+#   {"phone": "<10-digit-or-raw>"}     (normalized via _norm before compare)
+#   {"name": "<substring>"}            (case-insensitive LIKE)
+#
+# Response (JSON):
+#   {"ok": true, "rows": [{...diagnostic fields...}, ...]}
+#
+# Auth: X-Cena-Token header. Same gate as /sam/cena/log.
+
+@cena_bp.route("/sam/cena/db-probe/driver-row", methods=["POST"])
+def cena_db_probe_driver():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        q = db.query(Driver)
+        if (did := body.get("id")) is not None:
+            try:
+                q = q.filter(Driver.id == int(did))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "id must be int"}), 400
+        elif (phone_raw := body.get("phone")):
+            # Match on normalized digits — re-uses the same normalize_phone
+            # logic the login flow uses, so the query mirrors what login sees.
+            from app.services.ezcater_known_drivers_seed import normalize_phone
+            target = normalize_phone(phone_raw)
+            # SQL can't easily do the normalization, so pull candidates by
+            # substring and filter in Python. Reasonable for diagnostic use.
+            rows = [d for d in q.all()
+                    if d.phone and normalize_phone(d.phone) == target]
+            return _driver_probe_response(rows)
+        elif (name := body.get("name")):
+            q = q.filter(Driver.name.ilike(f"%{name}%"))
+        else:
+            return jsonify({"ok": False,
+                            "error": "need id, phone, or name"}), 400
+
+        return _driver_probe_response(q.all())
+    finally:
+        db.close()
+
+
+def _driver_probe_response(rows):
+    """Serialize Driver rows to the diagnostic view aick needs. Never
+    returns the full passcode_hash — only its length + 8-char prefix
+    (enough to compare two hashes by eye, not enough to reverse)."""
+    out = []
+    for d in rows:
+        ph = d.passcode_hash or ""
+        out.append({
+            "id": d.id,
+            "name": d.name,
+            "email": d.email,
+            "phone": d.phone,
+            "active": bool(d.active),
+            "status": d.status,
+            "first_login_done": bool(d.first_login_done),
+            "failed_attempts": d.failed_attempts,
+            "lockout_until": (d.lockout_until.isoformat()
+                              if d.lockout_until else None),
+            "passcode_hash_length": len(ph),
+            "passcode_hash_prefix": ph[:8] if ph else "",
+            "password_hash_set": bool(d.password_hash),
+            "session_version": d.session_version,
+            "created_at": (d.created_at.isoformat()
+                           if d.created_at else None),
+            # Driver model doesn't have updated_at; the closest signal of
+            # "recently reset" is session_version increments + passcode_hash
+            # prefix change. Return what we have.
+        })
+    return jsonify({"ok": True, "count": len(out), "rows": out})
 
 
 def install(app):

@@ -353,6 +353,64 @@ def _driver_probe_response(rows):
     return jsonify({"ok": True, "count": len(out), "rows": out})
 
 
+# ============================================================
+# POST /sam/cena/db-probe/verify-pin — Sam-only diagnostic
+# ============================================================
+# Run werkzeug.security.check_password_hash() against ONE driver row's
+# stored passcode_hash. Returns boolean match + hash algorithm prefix
+# so aick can confirm scrypt/bcrypt/pbkdf2 round-trip works in the
+# same Python process the login route uses.
+#
+# Body (JSON):
+#   {"driver_id": <int>, "pin": "<plaintext>"}
+#
+# Response (JSON):
+#   {"ok": true, "match": true|false, "hash_prefix": "scrypt:3..." }
+#
+# The plaintext PIN is NEVER persisted or logged here — it lives only
+# in this request's body for the duration of the check, then is dropped.
+# Auth: X-Cena-Token, same as the other probe.
+
+@cena_bp.route("/sam/cena/db-probe/verify-pin", methods=["POST"])
+def cena_db_probe_verify_pin():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    try:
+        driver_id = int(body.get("driver_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "driver_id required"}), 400
+    pin = body.get("pin")
+    if not isinstance(pin, str) or not pin:
+        return jsonify({"ok": False, "error": "pin required"}), 400
+
+    from werkzeug.security import check_password_hash
+
+    db = SessionLocal()
+    try:
+        d = db.get(Driver, driver_id)
+        if d is None:
+            return jsonify({"ok": False, "error": "driver not found"}), 404
+        ph = d.passcode_hash or ""
+        if not ph:
+            return jsonify({"ok": True, "match": False,
+                            "hash_prefix": "",
+                            "reason": "passcode_hash empty"})
+        match = check_password_hash(ph, pin)
+        return jsonify({
+            "ok": True,
+            "match": bool(match),
+            "hash_prefix": ph[:32],  # enough to identify algorithm + params
+            "driver_id": d.id,
+            "driver_active": bool(d.active),
+            "first_login_done": bool(d.first_login_done),
+        })
+    finally:
+        db.close()
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

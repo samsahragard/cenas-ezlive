@@ -27,10 +27,12 @@ from flask import (
 
 from app.db import SessionLocal
 from app.models import (
+    AccessRequest,
     CenaActionLog,
     Driver,
     SamChatMessage,
     SamChatSession,
+    User,
     _VALID_CENA_ACTION_TYPES,
 )
 
@@ -407,6 +409,121 @@ def cena_db_probe_verify_pin():
             "driver_active": bool(d.active),
             "first_login_done": bool(d.first_login_done),
         })
+    finally:
+        db.close()
+
+
+# ============================================================
+# POST /sam/cena/db-probe/user-row — Sam-only diagnostic
+# ============================================================
+# Parallel to /sam/cena/db-probe/driver-row but for the users table.
+# Issue 4 architectural integrity check (2026-05-15).
+#
+# Body (JSON), one of: {"id": int} / {"email": str} / {"phone": str} /
+#                      {"name": str (substring)}
+# Returns the diagnostic fields for matching User rows. No plaintext
+# credentials — passcode_hash is reported as length + 8-char prefix.
+
+@cena_bp.route("/sam/cena/db-probe/user-row", methods=["POST"])
+def cena_db_probe_user():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        q = db.query(User)
+        if (uid := body.get("id")) is not None:
+            try:
+                q = q.filter(User.id == int(uid))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "id must be int"}), 400
+        elif (email := body.get("email")):
+            q = q.filter(User.email.ilike(email))
+        elif (phone := body.get("phone")):
+            from app.services.ezcater_known_drivers_seed import normalize_phone
+            target = normalize_phone(phone)
+            rows = [u for u in q.all()
+                    if u.phone and normalize_phone(u.phone) == target]
+            return _user_probe_response(rows)
+        elif (name := body.get("name")):
+            q = q.filter(User.full_name.ilike(f"%{name}%"))
+        else:
+            return jsonify({"ok": False,
+                            "error": "need id, email, phone, or name"}), 400
+        return _user_probe_response(q.all())
+    finally:
+        db.close()
+
+
+def _user_probe_response(rows):
+    out = []
+    for u in rows:
+        ph = u.passcode_hash or ""
+        out.append({
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "phone": u.phone,
+            "permission_level": u.permission_level,
+            "store_scope": u.store_scope,
+            "active": bool(u.active),
+            "first_login_done": bool(u.first_login_done),
+            "failed_attempts": u.failed_attempts,
+            "lockout_until": (u.lockout_until.isoformat()
+                              if u.lockout_until else None),
+            "passcode_hash_length": len(ph),
+            "passcode_hash_prefix": ph[:8] if ph else "",
+            "session_version": u.session_version,
+            "created_at": (u.created_at.isoformat()
+                           if u.created_at else None),
+            "updated_at": (u.updated_at.isoformat()
+                           if u.updated_at else None),
+            "last_login_at": (u.last_login_at.isoformat()
+                              if u.last_login_at else None),
+        })
+    return jsonify({"ok": True, "count": len(out), "rows": out})
+
+
+# ============================================================
+# POST /sam/cena/db-probe/access-requests — Sam-only diagnostic
+# ============================================================
+# Pull recent rows from the access_requests table (driver self-signup
+# overflow path). Issue 4 SYMPTOM A — Sam's self-signup attempt with
+# samsahragard@gmail.com may or may not have written a row.
+#
+# Body (JSON): {"email": str?, "since_minutes": int?, "limit": int?}
+
+@cena_bp.route("/sam/cena/db-probe/access-requests", methods=["POST"])
+def cena_db_probe_access_requests():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    limit = max(1, min(50, int(body.get("limit") or 20)))
+    db = SessionLocal()
+    try:
+        q = db.query(AccessRequest)
+        if (email := body.get("email")):
+            q = q.filter(AccessRequest.email.ilike(email))
+        if (since_min := body.get("since_minutes")):
+            cutoff = datetime.utcnow() - timedelta(minutes=int(since_min))
+            q = q.filter(AccessRequest.created_at >= cutoff)
+        rows = q.order_by(AccessRequest.created_at.desc()).limit(limit).all()
+        out = [{
+            "id": r.id,
+            "full_name": r.full_name,
+            "email": r.email,
+            "phone": r.phone,
+            "requested_role": r.requested_role,
+            "reason": r.reason,
+            "status": r.status,
+            "created_at": (r.created_at.isoformat()
+                           if r.created_at else None),
+        } for r in rows]
+        return jsonify({"ok": True, "count": len(out), "rows": out})
     finally:
         db.close()
 

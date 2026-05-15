@@ -77,11 +77,6 @@
   font-weight: 600;
   text-align: center;
 }
-/* Empty categories: badge fades back so a wall of zeros stays quiet. */
-.ribbon-category__count[data-empty="true"] {
-  background: transparent;
-  color: var(--ck-text-faint, rgba(236, 227, 208, 0.35));
-}
 
 /* ---- body ---- */
 .ribbon-category__body {
@@ -92,13 +87,6 @@
 /* Desktop collapse: the per-user preference hides the body. */
 .ribbon-category[data-collapsed="true"] .ribbon-category__body {
   display: none;
-}
-
-.ribbon-category__empty {
-  padding: 4px 4px 2px;
-  font-size: 12px;
-  color: var(--ck-text-faint, rgba(236, 227, 208, 0.4));
-  font-style: italic;
 }
 
 /* ---- item ---- */

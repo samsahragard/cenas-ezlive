@@ -193,19 +193,26 @@ def _ensure_miles_for_visible(db, orders: list[Order], cap: int = 8) -> None:
         o for o in orders
         if o.pickup_miles is None and o.pickup_kitchen and o.delivery_address
     ]
+    # Track ids the missing-miles loop fed to Routes this view so the legacy
+    # loop below doesn't re-call Routes for the same row in the same call
+    # (samai FLAG 3, 2026-05-15 — eliminates the legacy-NULL double-call).
+    just_computed_ids: set[int] = set()
     for o in needs_call[:cap]:
         miles = compute_one_way_miles(o.pickup_kitchen, o.delivery_address)
         if miles is not None:
             o.pickup_miles = miles
+        just_computed_ids.add(o.id)
     # Lazy legacy recompute (samai spec, 2026-05-15). Same Routes-API call,
     # different gate: orders created at-or-before the migration-11 cutoff
-    # with a kitchen + delivery address, not yet re-computed this process.
+    # with a kitchen + delivery address, not yet re-computed this process,
+    # AND not just freshly computed by the missing-miles loop above.
     legacy_needs_recompute = [
         o for o in orders
         if (o.created_at is not None
             and o.created_at <= _LEGACY_MILES_CUTOFF
             and o.pickup_kitchen
             and o.delivery_address
+            and o.id not in just_computed_ids
             and o.id not in _recomputed_legacy_ids)
     ]
     for o in legacy_needs_recompute[:cap]:

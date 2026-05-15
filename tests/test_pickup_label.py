@@ -259,3 +259,19 @@ def test_legacy_recompute_with_routes_failure_still_marks_cache():
     assert order.pickup_miles == 42.0  # unchanged on API failure
     assert m.call_count == 1  # second view skipped
     assert 4 in ds._recomputed_legacy_ids
+
+
+def test_legacy_null_miles_routes_called_only_once_per_view():
+    """samai FLAG 3 (2026-05-15): a legacy order with previously-NULL
+    pickup_miles must NOT trigger Routes twice in one
+    _ensure_miles_for_visible call (once for missing-miles + once for
+    legacy-recompute). The just_computed_ids dedup set guards this."""
+    from app.web import driver_system as ds
+    order = _legacy_order(5, miles=None)  # legacy + NULL miles
+    with patch("app.services.ezcater_miles.compute_one_way_miles",
+               return_value=12.3) as m:
+        ds._ensure_miles_for_visible(_NullDB(), [order])
+    assert order.pickup_miles == 12.3
+    # The missing-miles loop handles it; the legacy loop is skipped via
+    # just_computed_ids. Exactly one Routes call.
+    assert m.call_count == 1

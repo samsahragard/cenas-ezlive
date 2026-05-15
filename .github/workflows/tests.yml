@@ -27,4 +27,13 @@ jobs:
         env:
           SECRET_KEY: ci-secret-for-tests
           ALLOW_DEV_SECRET: "1"
+          # DATABASE_URL is deliberately absent.
+          # app/db.py builds SessionLocal at import time from DATABASE_URL;
+          # without it, SessionLocal=None. Any test that exercises a real-DB
+          # code path without properly patching SessionLocal will fail here
+          # even if it passes locally (where a .env sets DATABASE_URL).
+          # That is the correct, intended behaviour — it surfaces
+          # non-hermetic tests. The fix is always a fixture that patches
+          # SessionLocal in the consuming module (see ribbon_db in
+          # tests/test_ribbon_component.py), NOT adding DATABASE_URL here.
         run: pytest -q tests/

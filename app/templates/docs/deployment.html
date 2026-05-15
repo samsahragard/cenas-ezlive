@@ -198,6 +198,48 @@ curl -X POST -H "X-Cron-Token: $(cat ~/.openclaw/.secrets/cron_token.txt)" \
   "https://app.cenaskitchen.com/cron/anomaly-eval?bucket=every_5m"
 # {"bucket":"every_5m","fired":N,"saved":N,"updated":N,"resolved":N,"errors":0,"rules_run":2,"ok":true}</pre>
 
+<h2>Deploy verification rubric</h2>
+<p>
+  A commit does not count as fully verified until <strong>all three</strong>
+  of the following are green. Each carries equal weight — two out of three
+  is not enough.
+</p>
+<ol>
+  <li>
+    <strong>Local test suite</strong> — <code>pytest -q tests/</code> passes
+    with no failures on the developer's machine. Tests must be hermetic: they
+    may not rely on a local <code>.env</code> or a live database connection
+    (use in-memory SQLite fixtures; patch <code>SessionLocal</code> in every
+    consuming module via <code>monkeypatch.setattr</code>).
+  </li>
+  <li>
+    <strong>CI run</strong> — the GitHub Actions <code>tests</code> workflow
+    passes on the pushed commit. CI runs with a deliberately minimal env
+    (only <code>SECRET_KEY</code> and <code>ALLOW_DEV_SECRET</code> — no
+    <code>DATABASE_URL</code>). A commit that is green locally but red on CI
+    means a non-hermetic test slipped through; fix the test, never fix CI by
+    adding <code>DATABASE_URL</code>.
+  </li>
+  <li>
+    <strong>Build-specific deploy probe</strong> — a
+    <code>scripts/deploy_verify*.py</code> (or equivalent) run against
+    <code>app.cenaskitchen.com</code> after the Render deploy completes. The
+    probe must be build-specific: every HTTP check it makes must target a
+    route, asset, or content string that exists <em>only</em> after this
+    commit (pre-commit baseline returns 404 or string absent). Generic
+    health checks alone do not count. For changes that have no new
+    unauthenticated surface (e.g., a cron handler behind a token gate),
+    document why — the build-specific verification then lives entirely at the
+    test level and the deploy probe is a health check only (see
+    <code>deploy_verify_1j_day3.py</code> for the established precedent).
+  </li>
+</ol>
+<p>
+  These rules apply to every merged commit on <code>main</code>, including
+  spec amendments, doc additions, and refactors. The rubric is samai's
+  methodology; any proposed exception must be raised with Sam before merging.
+</p>
+
 <h2>Local development</h2>
 <ol>
   <li>Clone <code>github.com/leverr18/cenas-ezlive</code> to <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code></li>

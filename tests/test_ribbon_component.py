@@ -21,8 +21,13 @@ Phase 2 / Block 1 / sub-block 1B (ck, 2026-05-14). Coverage per the
      against the stub, and renders the §6.2 X/Check markup contract
      exactly when fed items.
 
-These run cold — in-memory SQLite via the db_session fixture, no real
-DB, no network.
+These run cold — in-memory SQLite via the db_session / ribbon_db
+fixtures, no real DB, no network. ribbon_db additionally binds the
+global SessionLocal (which ribbon_routes.py + ribbon.py capture via a
+module-level `from app.db import SessionLocal`) at the test session,
+so the suite is hermetic whether or not a local .env sets DATABASE_URL
+— the local-vs-CI discrepancy that made five of these tests pass
+locally but fail on a clean CI checkout.
 """
 from __future__ import annotations
 
@@ -51,6 +56,28 @@ def app():
     flask_app = create_app()
     flask_app.config["TESTING"] = True
     return flask_app
+
+
+@pytest.fixture
+def ribbon_db(db_session, monkeypatch):
+    """Bind the global SessionLocal at the in-memory test session.
+
+    app/db.py builds SessionLocal at import time from DATABASE_URL; on a
+    clean checkout with no .env (CI) DATABASE_URL is unset, so
+    app.db.SessionLocal is None. ribbon_routes.py AND ribbon.py each did
+    `from app.db import SessionLocal` at module load — capturing that
+    value into their own namespace — so ribbon_render_context's
+    collapse-pref query and the real ribbon_items_for's source queries
+    both hit a None and the ribbon silently degrades to empty. Patching
+    the name in both modules makes these tests hermetic: they pass
+    identically whether or not a local .env happens to set DATABASE_URL.
+    Returns the session so a test can seed rows into the same in-memory
+    DB the code under test reads."""
+    monkeypatch.setattr("app.web.ribbon_routes.SessionLocal",
+                        lambda: db_session)
+    monkeypatch.setattr("app.services.ribbon.SessionLocal",
+                        lambda: db_session)
+    return db_session
 
 
 def _make_user(user_id=1, role="gm", store_scope="tomball"):
@@ -96,7 +123,7 @@ class _FakeRibbonItem:
 # 1. ribbon_render_context — against the stub
 # ============================================================
 
-def test_render_context_stub_returns_seven_empty_categories(app):
+def test_render_context_stub_returns_seven_empty_categories(app, ribbon_db):
     """The stub ribbon_items_for returns [] — render context should be
     seven categories, fixed order, all empty, all expanded."""
     with app.test_request_context("/"):
@@ -111,7 +138,7 @@ def test_render_context_stub_returns_seven_empty_categories(app):
 # 2. ribbon_render_context — grouping + per-item resilience
 # ============================================================
 
-def test_render_context_groups_items_into_categories(app, monkeypatch):
+def test_render_context_groups_items_into_categories(app, ribbon_db, monkeypatch):
     items = [
         _FakeRibbonItem("todo", item_id=1, text="Place SPECS order"),
         _FakeRibbonItem("todo", item_id=2, text="Call vendor"),
@@ -141,7 +168,7 @@ def test_render_context_groups_items_into_categories(app, monkeypatch):
     assert by_slug["sales"]["entries"][0]["can_check"] is True
 
 
-def test_render_context_drops_item_with_unknown_category(app, monkeypatch):
+def test_render_context_drops_item_with_unknown_category(app, ribbon_db, monkeypatch):
     items = [
         _FakeRibbonItem("todo", item_id=1),
         _FakeRibbonItem("bogus_category", item_id=2),
@@ -158,7 +185,7 @@ def test_render_context_drops_item_with_unknown_category(app, monkeypatch):
     assert sum(c["count"] for c in cats) == 1
 
 
-def test_render_context_drops_item_whose_render_for_raises(app, monkeypatch):
+def test_render_context_drops_item_whose_render_for_raises(app, ribbon_db, monkeypatch):
     items = [
         _FakeRibbonItem("todo", item_id=1, text="good"),
         _FakeRibbonItem("todo", item_id=2, render_raises=True),
@@ -302,7 +329,7 @@ def test_collapse_unauthenticated_redirects(app, db_session, monkeypatch):
 # 5. The partial — seven categories + the §6.2 X/Check markup contract
 # ============================================================
 
-def test_partial_renders_seven_categories_against_stub(app):
+def test_partial_renders_seven_categories_against_stub(app, ribbon_db):
     """Against the real stub (returns []), the partial renders all
     seven category headers + seven empty-states, no error."""
     with app.test_request_context("/"):
@@ -315,7 +342,7 @@ def test_partial_renders_seven_categories_against_stub(app):
     assert html.count("Nothing here right now") == 7
 
 
-def test_partial_renders_xcheck_markup_contract(app, monkeypatch):
+def test_partial_renders_xcheck_markup_contract(app, ribbon_db, monkeypatch):
     """The §6.2 markup contract: data-item-type + data-item-id on the
     .ribbon-item wrapper, .ribbon-item__x present iff can_dismiss,
     .ribbon-item__check present iff can_check, styling_class applied.
@@ -356,19 +383,19 @@ def test_partial_renders_xcheck_markup_contract(app, monkeypatch):
     assert "valid until 6pm" in html
 
 
-def test_partial_collapse_state_reflected(app, db_session, monkeypatch):
+def test_partial_collapse_state_reflected(app, ribbon_db):
     """A RibbonCategoryPreference row with is_collapsed=True makes that
     category render with data-collapsed="true"; absent → "false".
 
-    Patches app.web.ribbon_routes.SessionLocal — that's where
-    ribbon_render_context resolves the name (module-level import),
-    so this redirects its collapse-pref query at the test session."""
-    monkeypatch.setattr(
-        "app.web.ribbon_routes.SessionLocal", lambda: db_session)
+    The ribbon_db fixture binds the global SessionLocal — which both
+    ribbon_routes.py and ribbon.py captured via a module-level
+    `from app.db import SessionLocal` — at the in-memory test session,
+    so ribbon_render_context's collapse-pref query AND the real
+    ribbon_items_for run hermetically."""
     user = _make_user(user_id=55)
-    db_session.add(RibbonCategoryPreference(
+    ribbon_db.add(RibbonCategoryPreference(
         user_id=55, category="employee", is_collapsed=True))
-    db_session.commit()
+    ribbon_db.commit()
     with app.test_request_context("/"):
         g.current_user = user
         html = render_template("partials/_ribbon.html",

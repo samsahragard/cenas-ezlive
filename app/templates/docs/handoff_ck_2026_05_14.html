@@ -1,0 +1,184 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+{% raw %}
+<div class="doc">
+
+<h1>CK Handoff &mdash; 2026-05-14</h1>
+<p class="doc-meta">
+  Author: ck (Claude Code on Mini_IT13). 2026-05-14 ~10pm CT.<br>
+  Purpose: restart continuity per Sam's evening shutdown handoff protocol (Sam #1452).<br>
+  Companion docs: <code>handoff_aick_2026-05-14.html</code>, <code>handoff_samai_2026-05-14.html</code>.
+</p>
+
+<hr>
+
+<h2>Original kickoff from Sam (verbatim)</h2>
+<p><em>Not retained in the current session post-compaction. Sources to pull from after restart:</em></p>
+<ul>
+  <li>Staged chat archive at <code>C:\Users\sam\handoff_2026-05-14_evening\full_dev_chat.txt</code> on aick
+    (3980 lines, May 9 04:50 PM through Sam #1452, prepared by aick during this same handoff)</li>
+  <li>Older CK session jsonls at <code>C:\Users\sam\.claude\projects\C--\</code> (earliest from 2026-04-22)</li>
+  <li>The canonical resume doc at <code>C:\Users\sam\Desktop\claude conversations\CLAUDE-RESUME.md</code> on aick</li>
+</ul>
+<p><em>On restart, first action is to recover the verbatim kickoff from one of those sources and
+amend this section in place (git commit, no rewrite of the rest of this doc).</em></p>
+
+<hr>
+
+<h2>Current state as of 2026-05-14 ~10pm CT</h2>
+<ul>
+  <li><strong>All Block 1 ck lanes complete + samai PASS:</strong>
+    <ul>
+      <li>1B (<code>c61afab</code>) + 1D (<code>7bdb79c</code>) + 1G (<code>7f7dfd5</code> + <code>e22ac9e</code> touch-up)</li>
+      <li>1J Day 4 (<code>7e7d4ea</code>) &mdash; adapter + 5th item_type + 3 &sect;10 integration contracts</li>
+      <li>1B Refinement-1 (<code>8bf2a64</code>) &mdash; empty-category hiding</li>
+    </ul>
+  </li>
+  <li><strong>All tracked follow-ups done + samai PASS:</strong>
+    <ul>
+      <li><code>26dde0d</code> chat_tail newline fix</li>
+      <li><code>78ca7b1</code> 1G obs B/C cleanup</li>
+      <li><code>5d56953</code> 1D-1F integration test</li>
+      <li><code>591ca45</code> dead-CSS cleanup (Flag 3 from 1B Refinement-1)</li>
+      <li><code>d82a963</code> httpx pin (was transitive via anthropic SDK)</li>
+      <li><code>a32b691</code> Cena gateway routing in sam_chat.py (dormant until <code>CENA_GATEWAY_URL</code> is set)</li>
+    </ul>
+  </li>
+  <li><strong>Live deploy:</strong> confirmed via independent Render API read
+    (<code>C:\Users\sam\AppData\Local\Temp\render_check.py</code>). Last observed live HEAD: <code>d82a963</code>
+    plus samai's two spec amendments (<code>02935ed</code>, <code>93fd9bb</code>) + dead-CSS cleanup (<code>591ca45</code>).</li>
+  <li><strong>Three-gate verification rubric</strong> (local suite + CI + build-specific probe) documented in
+    <code>app/templates/docs/deployment.html</code>.</li>
+  <li><strong>CI:</strong> green (first green run in project history, on <code>3259946</code>).</li>
+</ul>
+
+<hr>
+
+<h2>Active work + open items</h2>
+<ul>
+  <li><strong>1B Refinement-2 (strict page-relevance):</strong> partial-level change is already implicit in aick's
+    <code>_apply_page_relevance</code> update (<code>128a633</code>). Confirm with samai whether any further
+    partial-level work is needed before treating this as closed.</li>
+  <li><strong>Block 2 frontend lanes:</strong> opens when Sam opens Block 2 (currently waiting on 1I closure).</li>
+  <li><strong>Block 3A chat panel + 3D audit surface:</strong> Phase 2 Block 3 (later).</li>
+  <li><strong>One live click-test owed:</strong> ribbon.js dismiss-last-item path &mdash; confirm a category block
+    vanishes cleanly when its last item is dismissed (not an empty-state line). samai flagged this as the one
+    verification path not covered by the initial-render browser-verify or pytest.
+    <em>Not blocking &mdash; do on next live session, ideally on a category that has multiple items so the count-down
+    can be observed first.</em></li>
+</ul>
+
+<hr>
+
+<h2>Cena tunnel state (direct ck work)</h2>
+<ul>
+  <li><code>cena_gateway.py</code> running on AiCk localhost:8765 as a scheduled task
+    (<code>CenaGateway</code>, RunOnStart, restart-on-fail). Health endpoint verified.</li>
+  <li><code>cloudflared</code> Windows service Running, Automatic.</li>
+  <li>Tunnel ID: <code>259354d8-9383-4629-94c0-66100b8de216</code></li>
+  <li>4&times;QUIC HA connections up to Cloudflare edge.</li>
+  <li>DNS CNAME for <code>cena.cenaskitchen.com</code> added at SiteGround, resolving
+    (verified 2026-05-14 22:22 CT: returns the Cloudflare IPv6 <code>2600:1700:21f9:bab0::1</code>).
+    HTTP request returns 000 from CF because the tunnel's ingress has no Public Hostname route for
+    <code>cena.cenaskitchen.com</code> yet &mdash; that is Sam's tomorrow-morning task.</li>
+  <li><code>cena_token.txt</code> present at <code>C:\Users\sam\cena\cena_token.txt</code> on aick (44 chars).</li>
+  <li><strong>Ck pending work the moment Sam adds the Cloudflare dashboard route:</strong>
+    Set <code>CENA_GATEWAY_URL</code> + <code>CENA_GATEWAY_TOKEN</code> env vars on the cenas-ezlive Render
+    service via the Render API. Ck has the Render API key
+    (<code>C:\Users\sam\AppData\Local\Temp\ck-attachments-build\render_api_key.txt</code>) and the cena_token
+    value (the 44-char string from <code>cena_token.txt</code> on aick). After setting both, end-to-end test:
+    sam_chat &rarr; tunnel &rarr; gateway <code>/health</code>. Pre-built script (ready to run):
+    <code>C:\Users\sam\AppData\Local\Temp\set_cena_env.py</code>.</li>
+</ul>
+
+<hr>
+
+<h2>samai's standing 6 methodology rules</h2>
+<ol>
+  <li><strong>Audience-eligibility-before-mutation:</strong> the audience check (who can perform this action)
+    runs BEFORE any database mutation. A 403 leaves zero rows.</li>
+  <li><strong>Verify-against-prod-not-local:</strong> deploy-verify hits production state, not local state.
+    Must check something BUILD-SPECIFIC &mdash; a route or asset unique to the new commit. A build-agnostic
+    response (partner-gate 302) proves the service is up, NOT which commit it is serving.</li>
+  <li><strong>Deploy-success-verify:</strong> every commit gets a real deploy-verify pass after Render lands it.
+    BLOCKED-PENDING-RENDER is a valid state during build-pipeline outages; never claim "deploy-verified"
+    against a stale build.</li>
+  <li><strong>Doc-registration-checks-both-route-AND-sidebar:</strong> a new doc requires DOC_PAGES entry
+    AND sidebar nav config. Both surfaces.</li>
+  <li><strong>Hit-new-doc-URL-once-before-trusting-it:</strong> render-verify the URL returns 200 with
+    expected content before claiming the doc is live.</li>
+  <li><strong>Amendments-against-git-show-HEAD:</strong> spec doc amendments are authored against the committed
+    tree (<code>git show HEAD:&lt;path&gt;</code>), NEVER a local pre-commit copy. The tree is the source of truth.</li>
+</ol>
+
+<hr>
+
+<h2>Sam's expectations for what ck owns going forward</h2>
+<ul>
+  <li>Frontend / template / CSS / JS for Block 2 manager tools:
+    <ul>
+      <li>2A daily log forum</li>
+      <li>2C counseling cascade</li>
+      <li>2D interview</li>
+      <li>2E training</li>
+      <li>2F maintenance</li>
+      <li>2H reports</li>
+      <li>2I recipe page UI</li>
+      <li>2J portions page UI</li>
+    </ul>
+  </li>
+  <li>Block 3A in-app agent chat panel UI (Cenas Assistant for managers)</li>
+  <li>Block 3D agent audit surface UI</li>
+  <li>Cena tunnel Render-side wiring (when Sam adds the Cloudflare dashboard route)</li>
+</ul>
+
+<hr>
+
+<h2>Post-restart instructions (verbatim from Sam #1452)</h2>
+<ol>
+  <li>Open <code>/partner/developer/app/handoff-ck-2026-05-14</code> and read this doc.</li>
+  <li>Read aick's staged chat archive at
+    <code>C:\Users\sam\handoff_2026-05-14_evening\full_dev_chat.txt</code> (3980 lines, May 9 04:50 PM through
+    Sam's 10:20 handoff message inclusive).</li>
+  <li>Post a single confirmation to the Developer Chat:
+    <blockquote><em>&quot;ck &mdash; restarted. Handoff + archive read. Standing by. Cena tunnel wiring is
+    first priority when Sam adds the Cloudflare dashboard route.&quot;</em></blockquote>
+  </li>
+  <li>Reactive standby.</li>
+</ol>
+
+<hr>
+
+<h2>Key local artifacts ck built tonight (paths on CK Mini_IT13)</h2>
+<ul>
+  <li><code>C:\Users\sam\AppData\Local\Temp\cena_gateway.py</code> &mdash; the Cena Flask server (deployed to
+    aick at <code>C:\Users\sam\cena\cena_gateway.py</code>).</li>
+  <li><code>C:\Users\sam\AppData\Local\Temp\set_cena_env.py</code> &mdash; pre-built script to PUT
+    <code>CENA_GATEWAY_URL</code> and <code>CENA_GATEWAY_TOKEN</code> on the cenas-ezlive Render service
+    via the Render API. Single-env-var PUT (no bulk replace).</li>
+  <li><code>C:\Users\sam\AppData\Local\Temp\patch_sam_chat.py</code> &mdash; one-shot patch script that added
+    the gateway routing branch to sam_chat.py (already committed as <code>a32b691</code>; preserved as the
+    record of the precise edit).</li>
+  <li><code>C:\Users\sam\AppData\Local\Temp\day4_health_check.py</code> &mdash; no-redirect probe used for the
+    1J Day-4 deploy-health confirm. Reusable for future deploy-verifies of route-level changes.</li>
+  <li><code>C:\Users\sam\AppData\Local\Temp\check_msg.py</code>, <code>cookie_post.py</code> &mdash; cookie-based
+    Developer Chat fetch + post helpers. <code>cookie_post.py</code> supports <code>@file</code> for posting
+    pre-written messages (the <code>args.body</code> &rarr; <code>body</code> bug from earlier today is fixed).</li>
+  <li><code>C:\Users\sam\AppData\Local\Temp\render_check.py</code> &mdash; independent Render API read used
+    throughout for deploy-state verification.</li>
+</ul>
+
+<hr>
+
+<h2>Open questions ck would ask Sam first thing on restart</h2>
+<ol>
+  <li>Has the Cloudflare dashboard Public Hostname route been added? If yes, run
+    <code>set_cena_env.py</code> immediately.</li>
+  <li>Is 1B Refinement-2 (strict page-relevance) considered fully closed by aick's <code>_apply_page_relevance</code>
+    in <code>128a633</code>, or is there a partial-level follow-up ck owns?</li>
+  <li>Should ck pursue the optional ribbon.js dismiss-last-item click-test now or defer?</li>
+</ol>
+
+</div>
+{% endraw %}
+{% endblock %}

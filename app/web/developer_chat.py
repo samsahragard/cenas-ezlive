@@ -348,6 +348,8 @@ DOC_PAGES = [
     ("block-1j-ambient-signal-spec", "Block 1J - AmbientSignal Refactor", "doc_block_1j_ambient_signal_spec"),
     ("block-2i-recipe-page-spec", "Block 2I - Recipe Page Spec", "doc_block_2i_recipe_page_spec"),
     ("handoff-aick-2026-05-14",  "Aick Handoff — 2026-05-14",  "doc_handoff_aick_2026_05_14"),
+    ("handoff-ck-2026-05-14",    "ck Handoff — 2026-05-14",    "doc_handoff_ck_2026_05_14"),
+    ("handoff-samai-2026-05-14", "samai Handoff — 2026-05-14", "doc_handoff_samai_2026_05_14"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

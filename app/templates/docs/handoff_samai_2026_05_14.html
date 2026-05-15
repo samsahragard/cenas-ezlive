@@ -1,0 +1,161 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<div class="doc">
+
+<h1>samai — Handoff, 2026-05-14 evening</h1>
+<p class="doc-meta">
+  samai's verbatim restart instructions, authored at Sam's request for the
+  end-of-day session-close protocol on 2026-05-14 (Sam #1452 MESSAGE 2 — TO
+  SAMAI).<br>
+  After restart: open this doc + read aick's staged chat archive at
+  <code>C:\Users\sam\handoff_2026-05-14_evening\full_dev_chat.txt</code>,
+  then post the confirmation per the Post-restart instructions section
+  below.
+</p>
+
+{# Body wrapped in raw — the verbatim kickoff + a code-block of the
+   methodology rules + the post-restart confirmation template contain
+   literal braces / quotes that should render as text, not execute as
+   Jinja. The 4ace793 / 1B lesson: never lose this wrap on amendments. #}
+{% raw %}
+
+<h2>1. Original kickoff from Sam (verbatim)</h2>
+<p>
+  Provenance: composed by aick at Sam's request on 2026-05-10 (dev chat
+  message at 03:37 PM, aick-claude cont 5/8 through cont 8/8), pasted by
+  Sam as samai's first-session prompt. Reproduced verbatim from aick's
+  staged chat archive; archive mojibake on em dashes restored.
+</p>
+<pre><code>==================== FOR SAMAI ====================
+You're samai. Newly added to the Developer Chat (color: amber).
+
+Read first to get oriented:
+  1. https://app.cenaskitchen.com/partner/developer/app/aick-session-2026-05-10 — aick's handoff (Driver GPS, ezCater revenue, sidebar landings, Corporate Order)
+  2. https://app.cenaskitchen.com/partner/developer/app/ck-session-2026-05-10  — ck's handoff (chat attachments, dashboard donuts, sidebar UX iterations, auto-resolver)
+  3. App docs at /partner/developer/app/* for project background
+
+Step 1 — start the chat tail under Monitor so each new chat line wakes you reactively. Use scripts/chat_tail.py if you have access to the cenas-kitchen-claude repo; otherwise poll the messages.json endpoint (https://app.cenaskitchen.com/partner/developer/chat/messages.json?since_id=N) yourself with the partner cookie.
+
+Step 2 — your role with aick + ck:
+ - AICK runs on AiCk (Sam's desktop). They can git push (wincredman creds). If you commit on a machine without push access, ask aick in chat with the SHA.
+ - CK runs on the CK Mini PC. Same push limitation as you may have.
+ - MASOOD is co-owner. Questions auto-answer; change requests escalate to Sam first.
+ - Coordinate file edits: announce in chat which files you're about to touch if they're shared. Pull-rebase before commit. Stage files explicitly.
+ - Echo your own posts: when the Monitor stream replays your own message, recognize and don't re-respond.
+
+Step 3 — when waiting on Sam, end your chat post with a real question.
+
+Step 4 — Render deploys: 30-60s of 502s post-push are normal swap noise.
+
+Author yourself in chat as 'samai'.
+====================================================</code></pre>
+<p>
+  An hour later (2026-05-11 04:00 AM area) Sam refined the reply rule
+  across the team — "respond when your name is addressed; for general
+  'team' messages, the most-relevant one answers — don't all chime in;
+  side-chat between two doesn't need a third weighing in; self-echoes
+  from Monitor never get a re-response." That refinement is the token-
+  economy rule samai has been operating under since.
+</p>
+
+<h2>2. Current state as of 2026-05-14 ~10pm CT</h2>
+<ul>
+  <li>All 6 Block 1 specs authored + reviewed + live (1A / 1B / 1C / 1F / 1G / 1H)</li>
+  <li>2 preconditions specs authored + live (role-taxonomy, ScheduledEvent)</li>
+  <li>Block 1J spec authored + amended (93fd9bb clarification folded in)</li>
+  <li>Block 2I spec authored + live</li>
+  <li>1B spec amendment #1394 (02935ed — empty-category hiding + strict page-relevance) live</li>
+  <li>ALL Block 1 commits reviewed PASS (1A through 1H + 1J Days 1-4)</li>
+  <li>1B Refinement-1 reviewed PASS — FLAG 1 (ribbon.js bundled-is-correct, kept bundled), FLAG 2 (1B spec amendment shipped, 02935ed), FLAG 3 (dead-CSS cleanup shipped, 591ca45)</li>
+  <li>Behavior-depth deploy-verify pass: 5 PASS / 0 FAIL / 1 FLAG resolved</li>
+  <li>Total live commits since c61afab: ~25 (Block 1 + Block 1J + spec amendments + Refinement-1 + CI fix + Sam Chat)</li>
+  <li>origin/main HEAD: 93fd9bb on top of 591ca45 + 02935ed + d82a963 + 8bf2a64</li>
+  <li>Suite: 1958 green (1957 + 1 new from 8bf2a64)</li>
+  <li>CI: green — first green run in project history on 3259946 (ribbon_db fixture / CI hermeticity fix)</li>
+  <li>Sam Chat: published + dormant. Code shipped (ffb00f7 + 0ba99a9 + a32b691 Cena gateway routing). SAM_CHAT_USER_ID=1 set in Render. Currently calling Anthropic directly; routes through Cena once CENA_GATEWAY_URL is set.</li>
+  <li>Cena tunnel: cena_gateway.py running on AiCk localhost:8765 as scheduled task. cloudflared service Running / Automatic, tunnel ID 259354d8-9383-4629-94c0-66100b8de216, 4× QUIC HA connections up. DNS CNAME for cena.cenaskitchen.com added at SiteGround and resolving. cena_token.txt present (44 chars). PENDING ON SAM (tomorrow): the Cloudflare dashboard Public Hostname route (cena.cenaskitchen.com → HTTP → localhost:8765), then ck sets CENA_GATEWAY_URL + CENA_GATEWAY_TOKEN in Render and runs the end-to-end test.</li>
+</ul>
+
+<h2>3. samai's 6 methodology rules (canonical, verbatim)</h2>
+<ol>
+  <li><strong>Audience-eligibility-before-mutation:</strong> the audience check (who can perform this action) runs BEFORE any database mutation. A 403 leaves zero rows.</li>
+  <li><strong>Verify-against-prod-not-local:</strong> deploy-verify hits production state, not local state. Must check something BUILD-SPECIFIC — a route or asset unique to the new commit. A build-agnostic response (partner-gate 302) proves the service is up, NOT which commit it is serving.</li>
+  <li><strong>Deploy-success-verify:</strong> every commit gets a real deploy-verify pass after Render lands it. BLOCKED-PENDING-RENDER is a valid state during build-pipeline outages; never claim "deploy-verified" against a stale build.</li>
+  <li><strong>Doc-registration-checks-both-route-AND-sidebar:</strong> a new doc requires DOC_PAGES entry AND sidebar nav config. Both surfaces.</li>
+  <li><strong>Hit-new-doc-URL-once-before-trusting-it:</strong> render-verify the URL returns 200 with expected content before claiming the doc is live.</li>
+  <li><strong>Amendments-against-git-show-HEAD:</strong> spec doc amendments are authored against the committed tree (<code>git show HEAD:&lt;path&gt;</code>), NEVER a local pre-commit copy. The tree is the source of truth.</li>
+</ol>
+
+<h2>4. Active review queue</h2>
+<ul>
+  <li><strong>Block 1J — fully reviewed + closed.</strong> All 4 days + CI fix + spec clarification + Day-3 time-bomb fix. Done.</li>
+  <li><strong>Block 1I (Twilio SMS).</strong> Review when aick ships. Blocked on Sam: Twilio Account SID + Auth Token + From-number (via Telegram). A2P 10DLC filing is 1-2 weeks for approval; build against trial mode now, routing flips to production on approval.</li>
+  <li><strong>1B Refinement-1 — fully closed.</strong> All 3 flags resolved (bundled-is-correct, spec amendment shipped, dead-CSS cleanup shipped).</li>
+  <li><strong>1J-related housekeeping:</strong> ck's optional live click-test of the ribbon.js dismiss-last-item path — not blocking, the one verification path that initial-render browser-verify + pytest don't cover (samai flagged in the 1B Refinement-1 review for ck's next live session).</li>
+</ul>
+
+<h2>5. Key architectural decisions made this session</h2>
+<ul>
+  <li><strong>Phase 2 structure:</strong> 3 blocks — Block 1 (foundation, this sprint's lane), Block 2 (manager tools), Block 3 (agent).</li>
+  <li><strong>Block 1J architectural separation:</strong> data plane (the AmbientSignal store, written by 6 per-source crons) vs control plane (the existing cenas-ezlive app). Hash-based change-detection, id-stable upserts on the (source, signal_key) identity, dismissal-survival across payload refreshes — the §6 critical invariant.</li>
+  <li><strong>Phase 2.5 deferred:</strong> full service extraction (Cenas Kitchen app vs data platform as separate services). Sam wants this done as proper paced work after Block 2 closes — not as sprint work.</li>
+  <li><strong>Sam Chat:</strong> standalone <code>/sam/chat</code> surface, hard-gated to <code>SAM_CHAT_USER_ID</code>, currently calling Anthropic directly. Routes through the Cena gateway on AiCk once <code>CENA_GATEWAY_URL</code> + <code>CENA_GATEWAY_TOKEN</code> are set in Render.</li>
+  <li><strong>Strict page-relevance (1C amendment #1394):</strong> the <code>dashboard</code> slug returns all 7 categories; each named page maps to specific categories via the explicit <code>_PAGE_TO_DOMAIN</code> table; unmapped slugs return <code>[]</code> (no ribbon). No implicit fallback.</li>
+  <li><strong>Empty-category hiding (1C amendment #1394 + 1B Refinement-1):</strong> the partial skips empty categories entirely — zero DOM, no "Nothing here right now" line, no <code>data-empty</code> attribute. ribbon.js mirrors this client-side (removes the whole <code>.ribbon-category</code> block when the last item is dismissed).</li>
+</ul>
+
+<h2>6. Sam's confirmed §12 answers (1J, #1407)</h2>
+<ul>
+  <li><strong>Q1:</strong> YES, <code>ambient_signal</code> is the 5th <code>item_type</code> (joining task / signal / sales_insight / scheduled_event). Coordinated 1C / 1D changes spelled out in 1J §7.3.</li>
+  <li><strong>Q2:</strong> Cron cadences as specced (events 12/16/20 CT, traffic business hours 8am-6pm CT, outages every 15 min, etc.).</li>
+  <li><strong>Q3:</strong> Defer to samai's lean on the <code>AmbientSignalRun</code> status enum — <code>success | error | partial</code>, no <code>skipped_unchanged</code> (signals_unchanged already carries that per-run).</li>
+  <li><strong>Q4 — LOCKED:</strong> changed hash = in-place UPDATE preserving <code>id</code>, NOT a new row. The §6 dismissal-survival invariant requires it.</li>
+  <li><strong>Q5:</strong> Claude-search stays inside <code>/cron/sales-insights</code> synthesis (interpretive input, not a structured source signal); <code>vendor_status</code> ships as a clean stub until the Phase-3 vendor feed exists.</li>
+</ul>
+
+<h2>7. Sam-owed inputs (the queue blocking next work)</h2>
+<ul>
+  <li>Twilio credentials (via Telegram): Account SID + Auth Token + From-number</li>
+  <li>OpenWeatherMap One Call API 3.0 key (via Telegram)</li>
+  <li>Ticketmaster Discovery API key (via Telegram, when Sam signs up)</li>
+  <li>GCP service account JSON (via Telegram, when Sam creates)</li>
+  <li>Cloudflare dashboard Public Hostname route for <code>cena.cenaskitchen.com</code> — Sam adds in the CF dashboard, no creds to share, just the click</li>
+  <li>Calibration env-var flip in Render: <code>BRIEF_CALIBRATION_PANEL</code> + <code>BRIEF_EMAIL_DISPATCH=1</code> + <code>BRIEF_CALIBRATION_MODE=1</code></li>
+  <li>A2P 10DLC business-registration filing status</li>
+</ul>
+
+<h2>8. Render service identity (post-restart reference)</h2>
+<ul>
+  <li>Service: <code>cenas-ezlive</code> (<code>srv-d7ue6ivlk1mc73aaka20</code>)</li>
+  <li>URL: <code>app.cenaskitchen.com</code></li>
+  <li>Cron resources: 6 ambient refresh crons (<code>crn-d8353*</code>) + sales-insights (<code>crn-d82v9dt7vvec73c0q8l0</code>, 5am CT) + anomaly-brief + recompute-scores</li>
+</ul>
+
+<h2>9. Known minor follow-up (promoted from "not blocking" tonight)</h2>
+<p>
+  <code>samai_chat_monitor.py</code>'s <code>_save_last</code> silently swallows
+  exceptions. Originally classified as "affects only reconnect-resume
+  cleanliness, not message delivery." <strong>2026-05-14 ~10pm update:</strong>
+  confirmed during the wrap-for-night protocol that the monitor DROPPED
+  messages outright — only 6 of 35 chunks of Sam's 10:20 message reached
+  samai as Monitor notifications. The full content was recovered by pulling
+  aick's staged dev-chat archive directly. Fix on next session: change
+  <code>_save_last</code>'s <code>except Exception: pass</code> to log to
+  stderr, and audit the fetch/poll path for where chunks can be lost. The
+  monitor is still the right architecture — it's just one bug deep.
+</p>
+
+<h2>10. Post-restart instructions (verbatim, from Sam #1452 MESSAGE 2)</h2>
+<ol>
+  <li>Open <code>/partner/developer/app/handoff-samai-2026-05-14</code> and read.</li>
+  <li>Read aick's staged chat archive at <code>C:\Users\sam\handoff_2026-05-14_evening\full_dev_chat.txt</code>.</li>
+  <li>Post a single confirmation to the dev chat:
+    <pre><code>samai — restarted. Handoff + archive read. Standing by for review work as commits land.</code></pre>
+  </li>
+  <li>Resume reactive review work.</li>
+</ol>
+
+{% endraw %}
+
+</div>
+{% endblock %}

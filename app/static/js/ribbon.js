@@ -27,30 +27,27 @@
   var ribbon = document.querySelector('.ck-ribbon');
   if (!ribbon) return;  // ribbon not on this page — nothing to wire.
 
-  // Re-point the count badge + empty-state for a category after items
-  // are removed, so the UI stays consistent without a reload.
+  // Re-point the count badge after items are removed — or, if the
+  // category is now empty, remove the whole category block.
+  //
+  // 1B Refinement-1 (1C spec amendment #1394): a zero-item category is
+  // zero DOM. The server skips empty categories entirely on render, so
+  // when the last item in a category is removed client-side we remove
+  // the whole .ribbon-category block to match — no empty-state line,
+  // no orphaned header. This keeps the post-dismiss DOM identical to
+  // what a fresh server render would produce.
   function refreshCategory(categoryEl) {
     if (!categoryEl) return;
     var body = categoryEl.querySelector('.ribbon-category__body');
-    var countEl = categoryEl.querySelector('.ribbon-category__count');
     if (!body) return;
     var items = body.querySelectorAll('.ribbon-item');
+    if (items.length === 0) {
+      categoryEl.remove();
+      return;
+    }
+    var countEl = categoryEl.querySelector('.ribbon-category__count');
     if (countEl) {
       countEl.textContent = String(items.length);
-      if (items.length === 0) {
-        countEl.setAttribute('data-empty', 'true');
-      } else {
-        countEl.removeAttribute('data-empty');
-      }
-    }
-    // If the category is now empty and has no empty-state line, add one
-    // (the server renders one when count is 0; we match that on the
-    // client after the last item is removed).
-    if (items.length === 0 && !body.querySelector('.ribbon-category__empty')) {
-      var empty = document.createElement('div');
-      empty.className = 'ribbon-category__empty';
-      empty.textContent = 'Nothing here right now';
-      body.appendChild(empty);
     }
   }
 

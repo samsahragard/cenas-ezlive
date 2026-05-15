@@ -1,9 +1,11 @@
 {# Universal ribbon — Phase 2 / Block 1 / sub-block 1B (ck, 2026-05-14).
 
-   The rendering shell of the universal ribbon: seven fixed-order
-   categories, per-user per-category collapse state, and the X / Check
-   control MARKUP (inert in 1B — 1D ships ribbon.js + the dismiss/check
-   endpoints that make the buttons live).
+   The rendering shell of the universal ribbon: the non-empty subset of
+   the seven fixed-order categories (1B Refinement-1 / 1C amendment
+   #1394 — empty categories emit zero DOM), per-user per-category
+   collapse state, and the X / Check control MARKUP (inert in 1B — 1D
+   ships ribbon.js + the dismiss/check endpoints that make the buttons
+   live).
 
    Mounted from base_dashboard.html above {% block content %}, guarded
    by {% if g.current_user %} so it never renders on login / passcode
@@ -31,7 +33,16 @@
    ) if ribbon_render_context is defined else [] %}
 
 <section class="ck-ribbon" aria-label="Operational ribbon">
+  {# 1B Refinement-1 (1C spec amendment #1394): a zero-item category
+     emits ZERO DOM — no head, no empty body, nothing. The 1C router
+     returns all seven categories (notably on the `dashboard` slug);
+     this partial renders only the non-empty subset. cat.count equals
+     cat.entries|length by construction (ribbon_render_context builds
+     count as len(entries)), so the truthy-entries gate below IS the
+     empty-category test. ribbon.js applies the same rule client-side:
+     removing a category's last item removes the whole block. #}
   {% for cat in _ribbon_cats %}
+    {% if cat.entries %}
     <div class="ribbon-category"
          data-category="{{ cat.slug }}"
          data-collapsed="{{ 'true' if cat.is_collapsed else 'false' }}">
@@ -40,26 +51,22 @@
               aria-expanded="{{ 'false' if cat.is_collapsed else 'true' }}">
         <span class="ribbon-category__chevron" aria-hidden="true">&rsaquo;</span>
         <span class="ribbon-category__label">{{ cat.label }}</span>
-        <span class="ribbon-category__count"
-              {% if cat.count == 0 %}data-empty="true"{% endif %}>{{ cat.count }}</span>
+        <span class="ribbon-category__count">{{ cat.count }}</span>
       </button>
       <div class="ribbon-category__body">
-        {% if cat.entries %}
-          {% for it in cat.entries %}
-            <div class="ribbon-item {{ it.styling_class }}"
-                 data-item-type="{{ it.item_type }}"
-                 data-item-id="{{ it.item_id }}">
-              <span class="ribbon-item__text">{{ it.text }}</span>
-              {% if it.sub_text %}<span class="ribbon-item__sub">{{ it.sub_text }}</span>{% endif %}
-              {% if it.can_dismiss %}<button type="button" class="ribbon-item__x" data-action="dismiss" aria-label="Dismiss">&times;</button>{% endif %}
-              {% if it.can_check %}<button type="button" class="ribbon-item__check" data-action="check" aria-label="Mark complete">&checkmark;</button>{% endif %}
-            </div>
-          {% endfor %}
-        {% else %}
-          <div class="ribbon-category__empty">Nothing here right now</div>
-        {% endif %}
+        {% for it in cat.entries %}
+          <div class="ribbon-item {{ it.styling_class }}"
+               data-item-type="{{ it.item_type }}"
+               data-item-id="{{ it.item_id }}">
+            <span class="ribbon-item__text">{{ it.text }}</span>
+            {% if it.sub_text %}<span class="ribbon-item__sub">{{ it.sub_text }}</span>{% endif %}
+            {% if it.can_dismiss %}<button type="button" class="ribbon-item__x" data-action="dismiss" aria-label="Dismiss">&times;</button>{% endif %}
+            {% if it.can_check %}<button type="button" class="ribbon-item__check" data-action="check" aria-label="Mark complete">&checkmark;</button>{% endif %}
+          </div>
+        {% endfor %}
       </div>
     </div>
+    {% endif %}
   {% endfor %}
 </section>
 

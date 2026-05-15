@@ -17,9 +17,10 @@ Phase 2 / Block 1 / sub-block 1B (ck, 2026-05-14). Coverage per the
   4. The collapse-toggle endpoint: first POST creates a collapsed
      row, second POST flips it back, invalid category → 400,
      unauthenticated → redirect to keypad login.
-  5. The partial renders all seven category headers + empty-states
-     against the stub, and renders the §6.2 X/Check markup contract
-     exactly when fed items.
+  5. The partial renders the §6.2 X/Check markup contract exactly when
+     fed items, and — per 1B Refinement-1 (1C amendment #1394) — emits
+     ZERO DOM for empty categories: only non-empty categories produce a
+     section block, so an all-empty stub renders just the bare shell.
 
 These run cold — in-memory SQLite via the db_session / ribbon_db
 fixtures, no real DB, no network. ribbon_db additionally binds the
@@ -226,9 +227,16 @@ def test_render_context_raising_router_degrades_to_empty(app, monkeypatch):
 
 def test_partial_renders_when_router_raises(app, monkeypatch):
     """Same property, one layer up: rendering the actual _ribbon.html
-    partial with a raising router produces HTML (an empty ribbon), not
-    a TemplateError / 500. This is the proof the base_dashboard.html
-    include is safe on every authenticated page."""
+    partial with a raising router produces HTML (an empty ribbon shell),
+    not a TemplateError / 500. This is the proof the base_dashboard.html
+    include is safe on every authenticated page.
+
+    1B Refinement-1 (1C amendment #1394): a raising router degrades to
+    seven EMPTY categories, and empty categories now emit zero DOM — so
+    the shell renders with no category blocks at all. The safety
+    property (the include can't 500 the page) is unchanged; what flips
+    is that the now-correct absence of empty category headers is
+    asserted instead of their presence."""
     def _boom(page_slug, user, store_scope, category=None):
         raise RuntimeError("router exploded")
     monkeypatch.setattr("app.services.ribbon.ribbon_items_for", _boom)
@@ -236,10 +244,12 @@ def test_partial_renders_when_router_raises(app, monkeypatch):
         g.current_user = _make_user()
         html = render_template("partials/_ribbon.html",
                                active="dashboard", store_slug="tomball")
+    # The shell still renders — the include can't 500 the page.
     assert 'class="ck-ribbon"' in html
-    # All seven category labels still present even though the router blew up.
+    # Every category degraded to empty → zero category DOM, zero labels.
+    assert 'class="ribbon-category"' not in html
     for _slug, label in RIBBON_CATEGORIES:
-        assert label in html
+        assert label not in html
 
 
 # ============================================================
@@ -329,17 +339,26 @@ def test_collapse_unauthenticated_redirects(app, db_session, monkeypatch):
 # 5. The partial — seven categories + the §6.2 X/Check markup contract
 # ============================================================
 
-def test_partial_renders_seven_categories_against_stub(app, ribbon_db):
-    """Against the real stub (returns []), the partial renders all
-    seven category headers + seven empty-states, no error."""
+def test_partial_empty_categories_render_zero_dom(app, ribbon_db):
+    """1B Refinement-1 (1C amendment #1394): against the real stub
+    (returns []), every category is empty — so the partial renders the
+    .ck-ribbon shell with ZERO category blocks. No headers, no labels,
+    no 'Nothing here right now' line — zero DOM for empty categories.
+
+    (Was test_partial_renders_seven_categories_against_stub, which
+    asserted the inverse: seven headers + seven empty-state lines. The
+    amendment makes empty categories invisible, so that premise flips.)"""
     with app.test_request_context("/"):
         g.current_user = _make_user()
         html = render_template("partials/_ribbon.html",
                                active="dashboard", store_slug="tomball")
+    # The shell renders — but no category blocks, all seven are empty.
+    assert 'class="ck-ribbon"' in html
+    assert 'class="ribbon-category"' not in html
     for _slug, label in RIBBON_CATEGORIES:
-        assert label in html
-    # Seven empty-state lines (the stub returns no items).
-    assert html.count("Nothing here right now") == 7
+        assert label not in html
+    # The old empty-state line is gone entirely.
+    assert "Nothing here right now" not in html
 
 
 def test_partial_renders_xcheck_markup_contract(app, ribbon_db, monkeypatch):
@@ -383,16 +402,28 @@ def test_partial_renders_xcheck_markup_contract(app, ribbon_db, monkeypatch):
     assert "valid until 6pm" in html
 
 
-def test_partial_collapse_state_reflected(app, ribbon_db):
+def test_partial_collapse_state_reflected(app, ribbon_db, monkeypatch):
     """A RibbonCategoryPreference row with is_collapsed=True makes that
     category render with data-collapsed="true"; absent → "false".
+
+    1B Refinement-1 (1C amendment #1394): empty categories now emit zero
+    DOM, so this test seeds items into exactly the two categories under
+    test (employee, todo) — only those two render, and the
+    collapse-state assertions run against precisely that pair (was: all
+    seven rendered, 1 collapsed + 6 expanded).
 
     The ribbon_db fixture binds the global SessionLocal — which both
     ribbon_routes.py and ribbon.py captured via a module-level
     `from app.db import SessionLocal` — at the in-memory test session,
-    so ribbon_render_context's collapse-pref query AND the real
-    ribbon_items_for run hermetically."""
+    so ribbon_render_context's collapse-pref query runs hermetically."""
     user = _make_user(user_id=55)
+    monkeypatch.setattr(
+        "app.services.ribbon.ribbon_items_for",
+        lambda page_slug, user, store_scope, category=None: [
+            _FakeRibbonItem("employee", item_id=1, text="Shift swap"),
+            _FakeRibbonItem("todo", item_id=2, text="Place order"),
+        ],
+    )
     ribbon_db.add(RibbonCategoryPreference(
         user_id=55, category="employee", is_collapsed=True))
     ribbon_db.commit()
@@ -400,9 +431,42 @@ def test_partial_collapse_state_reflected(app, ribbon_db):
         g.current_user = user
         html = render_template("partials/_ribbon.html",
                                active="dashboard", store_slug="tomball")
-    # employee category collapsed, todo (no row) expanded.
+    # Both seeded categories render; employee collapsed, todo expanded.
     assert 'data-category="employee"' in html
-    assert 'data-collapsed="true"' in html
-    # exactly one category collapsed.
+    assert 'data-category="todo"' in html
+    # Exactly one collapsed (employee), one expanded (todo) — only the
+    # two non-empty categories are in the DOM at all.
     assert html.count('data-collapsed="true"') == 1
-    assert html.count('data-collapsed="false"') == 6
+    assert html.count('data-collapsed="false"') == 1
+
+
+def test_partial_skips_empty_categories_renders_nonempty(app, ribbon_db, monkeypatch):
+    """1B Refinement-1 (1C amendment #1394) — the core contract: given a
+    mix of populated and empty categories, the partial renders ONLY the
+    ones with items and emits zero DOM for the empty ones. This is the
+    dashboard behaviour — the 1C router returns all seven categories,
+    the partial surfaces only the non-empty subset."""
+    monkeypatch.setattr(
+        "app.services.ribbon.ribbon_items_for",
+        lambda page_slug, user, store_scope, category=None: [
+            _FakeRibbonItem("todo", item_id=1, text="Place SPECS order"),
+            _FakeRibbonItem("todo", item_id=2, text="Call vendor"),
+            _FakeRibbonItem("vendors", item_id=3, text="Invoice variance"),
+        ],
+    )
+    with app.test_request_context("/"):
+        g.current_user = _make_user()
+        html = render_template("partials/_ribbon.html",
+                               active="dashboard", store_slug="tomball")
+    # Exactly two category blocks render — todo and vendors.
+    assert html.count('class="ribbon-category"') == 2
+    assert 'data-category="todo"' in html
+    assert 'data-category="vendors"' in html
+    # The five empty categories emit zero DOM — no headers, no labels.
+    labels = {slug: label for slug, label in RIBBON_CATEGORIES}
+    assert 'data-category="employee"' not in html
+    assert labels["employee"] not in html
+    # No empty-state line anywhere — that markup is gone.
+    assert "Nothing here right now" not in html
+    # The non-empty categories carry all three items through.
+    assert html.count('data-item-id="') == 3

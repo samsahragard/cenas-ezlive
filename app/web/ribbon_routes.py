@@ -44,6 +44,12 @@ before-mutation — applied proportional to blast radius):
 production (1F). 1F has since shipped SalesInsight, so the
 import-guarded sales_insight branches in both handlers are now live;
 the guards stay as a defensive fallback against an import failure.
+
+1J (2026-05-14) wires ambient_signal in as the fifth item_type (1J
+spec §7.3): _VALID_RIBBON_ITEM_TYPES, _load_item_row, and
+_can_check_item each gain a branch. X-dismiss works like any other
+item; Check is rejected — ambient signals are observed external state,
+not completable (§7.2).
 """
 from __future__ import annotations
 
@@ -61,6 +67,7 @@ from app.models import (
     Signal,
     SignalAck,
     ScheduledEvent,
+    AmbientSignal,
 )
 from app.services.ribbon import (
     RIBBON_CATEGORIES,
@@ -72,12 +79,12 @@ log = logging.getLogger(__name__)
 
 ribbon_bp = Blueprint("ribbon", __name__)
 
-# The four item_types the ribbon renders (1C contract — task / signal /
+# The five item_types the ribbon renders (1C contract — task / signal /
 # sales_insight were the original three; scheduled_event was added by
-# 1C's §13 contract change). The dismiss/check <item_type> URL param is
-# validated against this set.
+# 1C's §13 contract change; ambient_signal added by 1J §7.3). The
+# dismiss/check <item_type> URL param is validated against this set.
 _VALID_RIBBON_ITEM_TYPES = frozenset(
-    {"task", "signal", "sales_insight", "scheduled_event"}
+    {"task", "signal", "sales_insight", "scheduled_event", "ambient_signal"}
 )
 
 
@@ -147,6 +154,11 @@ def _load_item_row(db, item_type: str, item_id: int):
         return db.get(Signal, item_id)
     if item_type == "scheduled_event":
         return db.get(ScheduledEvent, item_id)
+    if item_type == "ambient_signal":
+        # 1J data-plane row — AmbientSignal landed in 1J Day 1 and is
+        # deploy-live, so it imports at module top (no guard like
+        # sales_insight's, which predates 1F shipping).
+        return db.get(AmbientSignal, item_id)
     if item_type == "sales_insight":
         try:
             from app.models import SalesInsight  # 1F — may not exist yet
@@ -176,6 +188,8 @@ def _can_check_item(db, user, item_type: str, item_id: int, row) -> tuple[bool, 
         candidate.
       - scheduled_event: never checkable — you don't "complete" a
         scheduled event (1C sets can_check=False for it).
+      - ambient_signal: never checkable either (1J §7.2) — observed
+        external state that ages out via valid_until_at.
       - sales_insight: live (1F shipped); caller import-guards anyway.
     """
     role = (getattr(user, "permission_level", "") or "").strip()
@@ -204,6 +218,14 @@ def _can_check_item(db, user, item_type: str, item_id: int, row) -> tuple[bool, 
 
     if item_type == "scheduled_event":
         return False, "scheduled events cannot be marked complete"
+
+    if item_type == "ambient_signal":
+        # 1J spec §7.2: ambient signals are observed external state —
+        # not "completable". They have no dismissed_by column and age
+        # out via valid_until_at; can_check is always False (mirrors
+        # scheduled_event). X-dismiss still works — that path is the
+        # dismiss handler, not this check gate.
+        return False, "ambient signals cannot be marked complete"
 
     if item_type == "sales_insight":
         # Reached only if SalesInsight exists (caller import-guards the

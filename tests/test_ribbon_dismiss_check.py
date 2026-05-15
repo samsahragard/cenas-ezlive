@@ -41,7 +41,7 @@ from flask import g
 
 from app.models import (
     RibbonItemDismissal, Task, TaskAuditLog, Signal, SignalAck,
-    ScheduledEvent, SalesInsight,
+    ScheduledEvent, SalesInsight, AmbientSignal,
 )
 from app.web.ribbon_routes import ribbon_dismiss, ribbon_check
 
@@ -150,6 +150,24 @@ def _mk_sales_insight(db, **over):
     return si
 
 
+def _mk_ambient_signal(db, **over):
+    now = datetime.utcnow()
+    a = AmbientSignal(
+        source=over.get("source", "weather"),
+        signal_key=over.get("signal_key", "tomball:forecast:test"),
+        payload=over.get("payload", {"headline": "95F and humid",
+                                     "detail": "Delivery-heavy night."}),
+        payload_hash=over.get("payload_hash", "h" * 64),
+        store_scope=over.get("store_scope", "both"),
+        category=over.get("category", "maintenance"),
+        severity=over.get("severity", "info"),
+        valid_until_at=over.get("valid_until_at", now + timedelta(hours=8)),
+        created_at=now, updated_at=now, last_seen_at=now,
+    )
+    db.add(a); db.commit()
+    return a
+
+
 # ============================================================
 # DISMISS
 # ============================================================
@@ -207,6 +225,26 @@ def test_dismiss_sales_insight_writes_dismissal_row(app, db_session, monkeypatch
             .filter_by(item_type="sales_insight", item_id=si_id).all())
     assert len(rows) == 1
     assert rows[0].user_id == 12
+    assert rows[0].dismiss_day == date.today().isoformat()
+
+
+def test_dismiss_ambient_signal_writes_dismissal_row(app, db_session, monkeypatch):
+    """1J §7.3: an X-dismiss of an ambient_signal writes a day-scoped
+    RibbonItemDismissal — the new fifth item_type rides the same 1D
+    dismiss path as every other type (_VALID_RIBBON_ITEM_TYPES +
+    _load_item_row each gained an ambient_signal branch)."""
+    sig = _mk_ambient_signal(db_session)
+    sig_id = sig.id
+    user = _user(user_id=14)
+    resp, status = _call(app, db_session, monkeypatch,
+                         ribbon_dismiss, "ambient_signal", sig_id, user)
+    assert status == 200
+    data = resp.get_json()
+    assert data["ok"] is True and data["dismissed"] is True
+    rows = (db_session.query(RibbonItemDismissal)
+            .filter_by(item_type="ambient_signal", item_id=sig_id).all())
+    assert len(rows) == 1
+    assert rows[0].user_id == 14
     assert rows[0].dismiss_day == date.today().isoformat()
 
 
@@ -382,6 +420,19 @@ def test_check_scheduled_event_403(app, db_session, monkeypatch):
     resp, status = _call(app, db_session, monkeypatch,
                          ribbon_check, "scheduled_event", evt.id, user)
     assert status == 403
+
+
+def test_check_ambient_signal_403(app, db_session, monkeypatch):
+    """You don't 'complete' an ambient signal either — can_check is
+    always False for it (1J §7.2). _can_check_item's ambient_signal
+    branch returns (False, ...), so the check endpoint refuses with 403
+    even though the row exists and the item_type is valid."""
+    sig = _mk_ambient_signal(db_session)
+    user = _user(user_id=8, role="gm")
+    resp, status = _call(app, db_session, monkeypatch,
+                         ribbon_check, "ambient_signal", sig.id, user)
+    assert status == 403
+    assert resp.get_json()["ok"] is False
 
 
 def test_check_sales_insight_nonexistent_404(app, db_session, monkeypatch):

@@ -24,6 +24,7 @@ import pytest
 
 from app.models import (
     Task, TaskAuditLog, RibbonItemDismissal, Signal, User, ScheduledEvent,
+    AmbientSignal,
 )
 from app.services import ribbon as rb
 from app.services.ribbon import (
@@ -35,6 +36,7 @@ from app.services.ribbon import (
     _signal_to_item,
     _scheduled_event_to_item,
     _sales_insight_to_item,
+    _ambient_signal_to_item,
 )
 
 
@@ -259,6 +261,41 @@ def test_sales_insight_adapter_duck_typed():
     assert item.relation == "observer"
 
 
+def test_ambient_signal_adapter_basic():
+    """_ambient_signal_to_item (1J §7.1) — category straight from the
+    signal (no _*_TO_RIBBON map), always observer, can_check False
+    (mirrors scheduled_event), text/sub_text from the payload."""
+    sig = SimpleNamespace(
+        id=42, source="weather", category="maintenance", severity="warn",
+        payload={"headline": "Tomball: 99F, heat advisory",
+                 "detail": "High 99F — expect a delivery-heavy night."})
+    item = _ambient_signal_to_item(sig)
+    assert item.item_type == "ambient_signal"
+    assert item.item_id == 42
+    assert item.category == "maintenance"      # straight from signal.category
+    assert item.severity == "warn"
+    assert item.relation == "observer"
+    assert item.can_dismiss is True
+    assert item.can_check is False             # not "completable" (§7.2)
+    assert item.deadline_at is None
+
+
+def test_ambient_signal_adapter_category_passthrough_and_defaults():
+    """category passes straight through for all three ambient
+    categories; an out-of-range severity falls back to info; an empty
+    payload degrades to a safe placeholder headline."""
+    cat = _ambient_signal_to_item(SimpleNamespace(
+        id=1, source="catering_pipeline", category="caterings",
+        severity="info", payload={"headline": "Upcoming: Smith wedding"}))
+    assert cat.category == "caterings"
+    ev = _ambient_signal_to_item(SimpleNamespace(
+        id=2, source="events", category="events", severity="bogus",
+        payload={}))
+    assert ev.category == "events"
+    assert ev.severity == "info"               # bad severity → info
+    assert ev.render_for(SimpleNamespace(id=1))["text"] == "Ambient signal"
+
+
 # ============================================================
 # render_for — the framing matrix (1C spec §5)
 # ============================================================
@@ -295,6 +332,20 @@ def test_render_for_signal_is_observer_style():
     out = item.render_for(SimpleNamespace(id=1))
     assert out["text"] == "Tomball lunch"
     assert out["sub_text"] == "Call standby pool."
+
+
+def test_render_for_ambient_signal_is_observer_style():
+    """The ambient_signal render_for branch (1J §7.3) — observer-style,
+    the payload's headline/detail become text/sub_text, severity drives
+    the styling class."""
+    item = _ambient_signal_to_item(SimpleNamespace(
+        id=3, source="outages", category="maintenance", severity="alert",
+        payload={"headline": "Copperfield: power outage",
+                 "detail": "CenterPoint reports ~400 customers affected."}))
+    out = item.render_for(SimpleNamespace(id=1))
+    assert out["text"] == "Copperfield: power outage"
+    assert out["sub_text"] == "CenterPoint reports ~400 customers affected."
+    assert "ribbon-item--alert" in out["styling_class"]
 
 
 # ============================================================
@@ -450,3 +501,35 @@ def test_router_scheduled_event_source_wired(router_db):
     items = ribbon_items_for("caterings", users["gm_tom"], "tomball")
     assert any(i.item_type == "scheduled_event"
                and i.category == "caterings" for i in items)
+
+
+def test_router_ambient_signal_source_wired(router_db):
+    """The AmbientSignal adapter is live (1J §7) — a live in-scope
+    ambient signal surfaces in its category. The fifth gather source,
+    alongside Task / Signal / ScheduledEvent / SalesInsight. Also
+    proves the valid_until_at >= now read-filter: an expired ambient
+    signal does NOT surface."""
+    db, users = router_db
+    now = datetime.utcnow()
+    db.add(AmbientSignal(
+        source="weather", signal_key="tomball:forecast:wired-test",
+        payload={"headline": "Tomball: 95F and humid",
+                 "detail": "High 95F — expect a delivery-heavy dinner."},
+        payload_hash="h" * 64, store_scope="both", category="maintenance",
+        severity="warn", valid_until_at=now + timedelta(hours=6),
+        created_at=now, updated_at=now, last_seen_at=now))
+    db.commit()
+    items = ribbon_items_for("maintenance", users["gm_tom"], "tomball")
+    ambient = [i for i in items if i.item_type == "ambient_signal"]
+    assert len(ambient) == 1
+    assert ambient[0].category == "maintenance"
+    # an expired ambient signal does NOT surface (valid_until_at < now)
+    db.add(AmbientSignal(
+        source="weather", signal_key="tomball:forecast:expired",
+        payload={"headline": "stale"}, payload_hash="x" * 64,
+        store_scope="both", category="maintenance", severity="info",
+        valid_until_at=now - timedelta(hours=1),
+        created_at=now, updated_at=now, last_seen_at=now))
+    db.commit()
+    items2 = ribbon_items_for("maintenance", users["gm_tom"], "tomball")
+    assert len([i for i in items2 if i.item_type == "ambient_signal"]) == 1

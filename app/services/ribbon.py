@@ -14,10 +14,11 @@ _ribbon.html partial (consumer) and 1C's router (producer):
         category:    str    # one of the RIBBON_CATEGORIES slugs below
         severity:    str    # "info" | "warn" | "alert"
         item_type:   str    # "task" | "signal" | "sales_insight"
-                            #   | "scheduled_event"  (1C adds the 4th —
-                            #     coordinated contract change, flagged
-                            #     to ck per 1C spec §10; 1B's partial is
-                            #     item_type-agnostic so it passes any
+                            #   | "scheduled_event" | "ambient_signal"
+                            #   (1C added scheduled_event as the 4th, 1J
+                            #     adds ambient_signal as the 5th — each a
+                            #     coordinated contract change; 1B's partial
+                            #     is item_type-agnostic so it passes any
                             #     value straight through)
         item_id:     int    # the underlying row id in the item_type table
         deadline_at: datetime | None
@@ -58,7 +59,9 @@ import logging
 from datetime import date, datetime, timedelta
 
 from app.db import SessionLocal
-from app.models import Task, TaskAuditLog, RibbonItemDismissal, Signal, User
+from app.models import (
+    Task, TaskAuditLog, RibbonItemDismissal, Signal, User, AmbientSignal,
+)
 from app.services.role_hierarchy import (
     _STORE_UNSCOPED_ROLES,
     _store_scopes_intersect,
@@ -207,6 +210,13 @@ class RibbonItem:
                     "sub_text": self._ctx.get("sub_text"),
                     "styling_class": styling}
         if self.item_type == "scheduled_event":
+            return {"text": self._ctx.get("text", ""),
+                    "sub_text": self._ctx.get("sub_text"),
+                    "styling_class": styling}
+        if self.item_type == "ambient_signal":
+            # 1J data-plane signal — observer-style, like sales_insight /
+            # scheduled_event; the adapter pre-resolves text/sub_text from
+            # the AmbientSignal payload into _ctx.
             return {"text": self._ctx.get("text", ""),
                     "sub_text": self._ctx.get("sub_text"),
                     "styling_class": styling}
@@ -420,6 +430,34 @@ def _scheduled_event_to_item(event) -> RibbonItem:
     )
 
 
+def _ambient_signal_to_item(signal) -> RibbonItem:
+    """An AmbientSignal → one RibbonItem (1J spec §7.1). The six 1J
+    /cron/refresh-* crons write AmbientSignal rows; this adapts the
+    live ones onto the ribbon's Caterings / Events / Maintenance
+    categories — purely additive, alongside the existing adapters.
+
+    Pure — reads .id / .category / .severity / .payload. `category`
+    comes straight from AmbientSignal.category, which the model already
+    constrains to caterings|events|maintenance (§2/§7) — no _*_TO_RIBBON
+    map needed. Always observer (ambient signals have no owner);
+    can_check=False — they are observed external state that ages out via
+    valid_until_at, not something you "complete" (§7.2, mirrors
+    scheduled_event). The payload's headline/detail become the
+    render_for text/sub_text."""
+    severity = signal.severity if signal.severity in _SEVERITY_RANK else "info"
+    payload = signal.payload or {}
+    ctx = {
+        "text": payload.get("headline") or "Ambient signal",
+        "sub_text": payload.get("detail") or None,
+    }
+    return RibbonItem(
+        category=signal.category, severity=severity,
+        item_type="ambient_signal", item_id=signal.id, deadline_at=None,
+        can_dismiss=True, can_check=False, relation="observer",
+        source=signal, ctx=ctx,
+    )
+
+
 # ============================================================
 # Pay-masking hook (1H coordination — 1C spec §7.2)
 # ============================================================
@@ -557,6 +595,24 @@ def ribbon_items_for(page_slug, user, store_scope, category=None):
                 items.append(_sales_insight_to_item(ins))
         except ImportError:
             pass  # 1F not built yet — sales-insight source is empty.
+
+        # --- 1+2. AmbientSignals → items (1J data plane) ---
+        # The gather's fifth source (1J spec §7). The six 1J
+        # /cron/refresh-* crons write AmbientSignal rows; this reads the
+        # live ones (valid_until_at >= now) and adapts each onto its
+        # Caterings / Events / Maintenance category. AmbientSignal is a
+        # hard 1J-Day-1 dependency (landed + deploy-live) — unlike the
+        # historically import-guarded SalesInsight / ScheduledEvent
+        # above, so it imports at module top and needs no guard here.
+        ambient_rows = (
+            db.query(AmbientSignal)
+            .filter(AmbientSignal.valid_until_at >= now)
+            .all()
+        )
+        for sig in ambient_rows:
+            if not _in_scope(sig.store_scope):
+                continue
+            items.append(_ambient_signal_to_item(sig))
 
         # --- 3. page-relevance filter (1C spec §7.3) ---
         items = _apply_page_relevance(items, page_slug)

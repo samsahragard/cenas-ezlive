@@ -1,0 +1,362 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Verbatim restart instructions for the <strong>aick</strong> session,
+  authored per Sam's 2026-05-14 ~10pm CT handoff directive (dev chat
+  message starting "MESSAGE 1 — TO AICK"). Not a summary &mdash; the
+  goal is full continuity when the next aick session comes online.
+</p>
+<p>
+  If you (next-aick) are reading this on session start: this page is
+  your kickoff. Sam closed the prior aick session immediately after
+  this doc went live. Companion docs landed in the same batch:
+  <code>handoff_samai_2026_05_14</code> + <code>handoff_ck_2026_05_14</code>.
+</p>
+
+<h2>First three things to do when you come back online</h2>
+<ol>
+  <li>Read this page top-to-bottom.</li>
+  <li>Read the staged chat archive at
+      <code>C:\Users\sam\handoff_2026-05-14_evening\full_dev_chat.txt</code>
+      (3980 lines, May 9 04:50 PM through Sam's 10:20 handoff inclusive).
+      Path is the Windows substitution from Sam's '/home/aick/' directive
+      &mdash; aick is on Mini_IT12 (Windows), no Linux home dir.</li>
+  <li>Post a single confirmation message to the dev chat using the
+      template in the &laquo;Post-restart confirmation template&raquo;
+      section below. Then resume from the priority queue. <strong>Do NOT
+      start new work without confirming with Sam</strong> &mdash; the
+      Cena tunnel completion is likely the first thing he'll want to
+      address.</li>
+</ol>
+
+<h2>Original kickoff from Sam (verbatim)</h2>
+<p>
+  <em>Note on provenance:</em> the absolute original aick kickoff
+  predates the chat archive (Sam bootstrapped aick via desktop / SSH
+  before chat went live on May 9 04:50 PM). The verbatim message
+  reproduced below is Sam's 2026-05-14 ~10pm CT handoff directive
+  &mdash; explicitly authored as the bootstrap for the <em>next</em>
+  aick session, which is the practical "original kickoff" for whoever
+  is reading this now.
+</p>
+{% raw %}
+<pre>
+MESSAGE 1 — TO AICK
+aick — wrapping for the night. Sam is closing all three Claude Code
+sessions (aick, ck, samai) shortly. Before you wind down, do these
+tasks in this exact order. Same handoff protocol as samai's chat-
+monitor rebuild — the goal is full continuity when sessions restart.
+
+=== PART A — CHAT ARCHIVE (do FIRST) ===
+
+1. Verify your chat-tail archive is current:
+   - Confirm the most recent archive captures through this message
+   - If chat_tail isn't currently archiving the full session, dump the
+     complete dev chat to:
+       /home/aick/handoff_2026-05-14_evening/full_dev_chat.txt
+
+2. Stage the archive for samai + ck:
+   - Copy to a shared-readable location both can pull from
+   - Confirm in the dev chat that the archive is staged and the path
+
+=== PART B — HANDOFF FILE (do AFTER chat archive) ===
+
+3. CREATE app/templates/docs/handoff_aick_2026-05-14.html
+
+   The file is your verbatim restart instructions. NOT a summary —
+   verbatim copies of your original kickoff, then a precise current-
+   state snapshot. Use {% raw %} wrap (rule 6 lesson — never lose it
+   on amendments).
+
+   Required sections, each verbatim:
+
+   ### Original kickoff from Sam (verbatim)
+   [Paste the exact text Sam sent you in your original kickoff message,
+   no paraphrasing. If you don't have it locally, pull from chat archive.]
+
+   ### Current state as of 2026-05-14 ~10pm CT
+   - Block 1: 8/9 sub-blocks live + verified (1A/B/C/D/E/F/G/H + 1J)
+   - Block 1J: ALL FOUR DAYS CLOSED — Days 1-3 (aick) + Day 4 (ck),
+     all samai PASS, three-gate verified (local + CI + deploy-health)
+     - b889b6f Day 1 (AmbientSignal model + upsert)
+     - d6a0d41 Day 2 (6 refresh crons + Render resources)
+     - 33eed5a Day 3 (sales-insights refactored to read AmbientSignal)
+     - 7e7d4ea Day 4 (ck — ribbon adapter + 5th item_type + 3 §10
+       integration contracts)
+     - 3259946 (CI hermeticity fix — ribbon_db fixture, first green CI
+       in project history)
+     - 6121112 (Day-3 parity test de-time-bombed)
+     - 128a633 (1C §7.3 follow-up — dashboard returns all 7, unmapped
+       slugs return [])
+   - 1B Refinement-1 (empty-category hiding): closed
+     - 8bf2a64 (Refinement-1 deliverable)
+     - d82a963 (httpx pinned)
+     - 591ca45 (dead CSS cleanup)
+     - 02935ed (samai 1B spec amendment for #1394)
+     - 93fd9bb (samai 1J spec clarification for ck #1418)
+   - Live deploy: origin/main = current HEAD (d82a963 + samai's two
+     spec amendments + 591ca45 dead-CSS cleanup), Render confirmed live
+   - CI: GREEN (deploy verification three-gate rubric documented in
+     deployment.html — local suite + CI + build-specific probe)
+   - Sam Chat: published + dormant. Code shipped (ffb00f7 + 0ba99a9 +
+     a32b691 Cena gateway routing). SAM_CHAT_USER_ID=1 set in Render.
+     Currently calling Anthropic directly; will route through Cena once
+     CENA_GATEWAY_URL is set
+   - Cena tunnel: cena_gateway.py running on AiCk localhost:8765 as
+     scheduled task. cloudflared service Running, Automatic, tunnel ID
+     259354d8-9383-4629-94c0-66100b8de216, 4×QUIC HA connections up.
+     DNS CNAME for cena.cenaskitchen.com is added at SiteGround and
+     resolving. cena_token.txt present (44 chars).
+   - PENDING ON SAM (tomorrow morning, ~10 min total):
+     (1) Sam adds Cloudflare dashboard Public Hostname route:
+         cena.cenaskitchen.com → HTTP → localhost:8765
+     (2) ck sets CENA_GATEWAY_URL + CENA_GATEWAY_TOKEN env vars in
+         Render (ck has the Render API key + cena_token value)
+     (3) Sam Chat fully wired through Cena on AiCk
+
+   ### Active work queue (priority order)
+   1. WAIT for Sam's Cloudflare dashboard route (blocked on Sam)
+   2. Block 1I (Twilio SMS integration) — credentials pending from Sam
+      via Telegram (Account SID + Auth Token + From-number). A2P 10DLC
+      filing 1-2 weeks for approval; build against trial mode now,
+      routing flips to production on A2P approval.
+   3. Phase 2 Block 2 (manager tools) opens after 1I closes
+   4. GitHub Actions CI investigation — RESOLVED (first green run on
+      3259946)
+   5. AmbientSignal source-to-insight-category mapping (samai-reviewed
+      in #1426) — closed
+   6. SamChat full agent context — pending (Block 3 in-app agent surface
+      is much later; this is the standalone /sam/chat for partner-tier)
+
+   ### samai's standing 6 methodology rules (verbatim)
+   1. Audience-eligibility-before-mutation: the audience check (who can
+      perform this action) runs BEFORE any database mutation. A 403
+      leaves zero rows.
+   2. Verify-against-prod-not-local: deploy-verify hits production state,
+      not local state. Must check something BUILD-SPECIFIC — a route or
+      asset unique to the new commit. A build-agnostic response
+      (partner-gate 302) proves the service is up, NOT which commit it
+      is serving.
+   3. Deploy-success-verify: every commit gets a real deploy-verify
+      pass after Render lands it. BLOCKED-PENDING-RENDER is a valid
+      state during build-pipeline outages; never claim "deploy-verified"
+      against a stale build.
+   4. Doc-registration-checks-both-route-AND-sidebar: a new doc requires
+      DOC_PAGES entry AND sidebar nav config. Both surfaces.
+   5. Hit-new-doc-URL-once-before-trusting-it: render-verify the URL
+      returns 200 with expected content before claiming the doc is live.
+   6. Amendments-against-git-show-HEAD: spec doc amendments are authored
+      against the committed tree (git show HEAD:&lt;path&gt;), NEVER a local
+      pre-commit copy. The tree is the source of truth.
+
+   ### Render service identity
+   - Service: cenas-ezlive (srv-d7ue6ivlk1mc73aaka20)
+   - URL: app.cenaskitchen.com
+   - Cron resources: 6 ambient refresh crons (crn-d8353*) + sales-
+     insights (crn-d82v9dt7vvec73c0q8l0 5am CT) + anomaly-brief +
+     recompute-scores
+
+   ### Sam-owed inputs (the queue blocking next work)
+   - Twilio credentials (via Telegram): Account SID + Auth Token +
+     From-number
+   - OpenWeatherMap One Call API 3.0 key (via Telegram)
+   - Ticketmaster Discovery API key (via Telegram, when Sam signs up)
+   - GCP service account JSON (via Telegram, when Sam creates)
+   - Cloudflare dashboard Public Hostname route for cena (Sam adds in
+     Cloudflare dashboard, no creds to share — just the click)
+   - Calibration env var flip in Render (BRIEF_CALIBRATION_PANEL +
+     BRIEF_EMAIL_DISPATCH=1 + BRIEF_CALIBRATION_MODE=1)
+   - A2P 10DLC business registration filing status
+
+4. PUBLISH the handoff doc to the app:
+   - app/templates/docs/handoff_aick_2026-05-14.html
+   - Register: DOC_PAGES entry + sidebar nav config (rule 4, BOTH)
+     Slug: 'handoff-aick-2026-05-14'
+     Title: 'Aick Handoff — 2026-05-14'
+     Template var: doc_handoff_aick_2026_05_14
+   - Commit + push
+   - Verify URL renders 200 with expected content (rule 5)
+
+=== PART C — POST-RESTART INSTRUCTIONS ===
+
+When you come back online after Sam restarts your session:
+
+1. First action: open /partner/developer/app/handoff-aick-2026-05-14
+   and read your full handoff doc
+2. Read the staged chat archive at /home/aick/handoff_2026-05-14_evening/
+   full_dev_chat.txt for full historical context
+3. Post a single confirmation message to the dev chat:
+   "aick — restarted. Handoff doc + chat archive read. State confirmed:
+   [verify the current state matches what's in the handoff]. Blocked
+   on [whatever Sam owes that's still pending]. Standing by."
+4. Resume from the priority queue. Do NOT start new work without
+   confirming with Sam — the Cena tunnel completion is likely the
+   first thing he'll want to address.
+
+Confirm receipt of this entire instruction set + report when Part A and
+Part B are complete. Sam restarts you AFTER your handoff doc is live
+and the chat archive is staged.
+</pre>
+{% endraw %}
+
+<h2>Current state as of 2026-05-14 ~10pm CT</h2>
+
+<h3>Block 1 — 8/9 sub-blocks live + verified (1A/B/C/D/E/F/G/H + 1J)</h3>
+<p>Block 1J: ALL FOUR DAYS CLOSED &mdash; Days 1-3 (aick) + Day 4 (ck),
+   all samai PASS, three-gate verified (local + CI + deploy-health).</p>
+<ul>
+  <li><code>b889b6f</code> &mdash; 1J Day 1 (AmbientSignal model + upsert)</li>
+  <li><code>d6a0d41</code> &mdash; 1J Day 2 (6 refresh crons + Render resources)</li>
+  <li><code>33eed5a</code> &mdash; 1J Day 3 (<code>/cron/sales-insights</code> refactored to read AmbientSignal)</li>
+  <li><code>7e7d4ea</code> &mdash; 1J Day 4 (ck &mdash; ribbon adapter + 5th <code>item_type</code> + 3 §10 integration contracts)</li>
+  <li><code>3259946</code> &mdash; CI hermeticity fix (<code>ribbon_db</code> fixture, first green CI run in project history)</li>
+  <li><code>6121112</code> &mdash; Day-3 parity test de-time-bombed (<code>valid_until_at</code> anchored to <code>utcnow()+6h</code>)</li>
+  <li><code>128a633</code> &mdash; 1C §7.3 follow-up (dashboard slug returns all 7, unmapped slugs return <code>[]</code> per amendment #1394)</li>
+</ul>
+
+<h3>1B Refinement-1 (empty-category hiding) &mdash; closed</h3>
+<ul>
+  <li><code>8bf2a64</code> &mdash; Refinement-1 deliverable (ck)</li>
+  <li><code>d82a963</code> &mdash; <code>httpx</code> pinned in requirements.txt</li>
+  <li><code>591ca45</code> &mdash; dead CSS cleanup (FLAG 3 follow-up)</li>
+  <li><code>02935ed</code> &mdash; samai 1B spec amendment for #1394</li>
+  <li><code>93fd9bb</code> &mdash; samai 1J spec clarification for ck #1418</li>
+</ul>
+
+<h3>Live deploy + CI</h3>
+<ul>
+  <li>origin/main HEAD includes <code>d82a963</code> + samai's two spec amendments + <code>591ca45</code> dead-CSS cleanup; Render confirmed live</li>
+  <li>CI: <strong>GREEN</strong>. Three-gate verification rubric (local suite + CI + build-specific deploy probe) documented in <code>deployment.html</code>.</li>
+</ul>
+
+<h3>Sam Chat (standalone <code>/sam/chat</code>) &mdash; published + dormant</h3>
+<ul>
+  <li>Code shipped: <code>ffb00f7</code> + <code>0ba99a9</code> + <code>a32b691</code> (Cena gateway routing in <code>sam_chat.py</code>)</li>
+  <li><code>SAM_CHAT_USER_ID=1</code> set in Render</li>
+  <li>Currently calls Anthropic directly; will route through Cena once <code>CENA_GATEWAY_URL</code> is set</li>
+</ul>
+
+<h3>Cena tunnel state</h3>
+<ul>
+  <li><code>cena_gateway.py</code> running on AiCk <code>127.0.0.1:8765</code> as the <code>CenaGateway</code> scheduled task (auto-start + restart-on-fail)</li>
+  <li><code>cloudflared</code> Windows service: Running, Automatic. binPath uses tunnel run-token.</li>
+  <li>Tunnel ID: <code>259354d8-9383-4629-94c0-66100b8de216</code>; account <code>1275a928e85abf7cc64110cb5ec2c73a</code></li>
+  <li>4×QUIC HA edge connections up (verified via <code>Get-NetUDPEndpoint</code> on the cloudflared PID)</li>
+  <li>Tunnel ingress configured via Cloudflare API (run-token + the saved API token at <code>C:\Users\sam\.openclaw\.secrets\cloudflare_api_token.txt</code>): <code>cena.cenaskitchen.com → http://localhost:8765</code> + <code>http_status:404</code> catchall. <strong>Note:</strong> ingress is set on the tunnel, but the public DNS path still doesn't fully route &mdash; see "Cena tunnel: known architectural limitation" below.</li>
+  <li>DNS: CNAME <code>cena.cenaskitchen.com → 259354d8-9383-4629-94c0-66100b8de216.cfargotunnel.com</code> added at <strong>SiteGround</strong> (live DNS provider; <code>ns1/ns2.siteground.net</code>). Confirmed resolving via 1.1.1.1 and 8.8.8.8.</li>
+  <li><code>cena_token.txt</code> present (44 chars) at <code>C:\Users\sam\cena\cena_token.txt</code></li>
+</ul>
+
+<h3>Cena tunnel: known architectural limitation</h3>
+<p>
+  During the 2026-05-14 session, empirical testing established that
+  Cloudflare Tunnel via an external-DNS CNAME to <code>cfargotunnel.com</code>
+  does NOT route end-to-end when the domain isn't a Cloudflare zone:
+</p>
+<ul>
+  <li><code>259354d8-…cfargotunnel.com</code> resolves to <code>fd10:aec2:5dae::</code> (an IPv6 ULA, non-routable, no IPv4 A record)</li>
+  <li>Bypassing DNS with <code>curl --resolve</code> to a real Cloudflare anycast IP fails the TLS handshake (<code>SEC_E_ILLEGAL_MESSAGE</code>) &mdash; Cloudflare's edge has no cert for a hostname outside its zones</li>
+  <li>Conclusion: Cloudflare Tunnel + custom domain only works when the domain is on Cloudflare's DNS (or Cloudflare for SaaS / Enterprise). Sam ruled out moving DNS to Cloudflare ("no nameserver change").</li>
+</ul>
+<p>
+  <strong>Open architectural question</strong> (to be picked up tomorrow):
+  given the constraint, options for the Render → Cena path are:
+</p>
+<ol>
+  <li><strong>Tailscale on Render</strong> (userspace <code>tailscaled</code> in the Render service) &mdash; Cena stays tailnet-only, Render joins the tailnet and reaches <code>http://100.108.119.19:8765</code> privately. <code>CENA_GATEWAY_URL</code> becomes the tailnet IP. No pretty <code>cena.cenaskitchen.com</code> URL.</li>
+  <li><strong>Render-proxies-to-Cena via Tailscale</strong> &mdash; Render runs Tailscale userspace AND the Flask app gets a <code>/cena/*</code> reverse-proxy route. <code>cena.cenaskitchen.com</code> becomes a Render custom-domain CNAME, Render handles TLS. Most setup; gets the pretty URL.</li>
+  <li><strong>Cena stays tailnet-direct, Render integration deferred</strong> &mdash; only Sam/ck/aick use Cena directly from tailnet machines. ck's <code>a32b691</code> Cena routing stays dormant.</li>
+</ol>
+<p>
+  Tailscale itself is already installed and running on AiCk (verified via
+  <code>tailscale status</code>: aick <code>100.108.119.19</code>, ck
+  <code>100.73.38.82</code>, sam <code>100.79.36.67</code>). However,
+  <code>cena_gateway.py</code> currently binds <code>host="127.0.0.1"</code>
+  &mdash; localhost only. Other tailnet devices cannot reach
+  <code>100.108.119.19:8765</code> yet. Changing the bind to
+  <code>host="0.0.0.0"</code> is a one-line prerequisite for any tailnet path.
+</p>
+
+<h2>PENDING ON SAM (tomorrow morning, ~10 min total per Sam's directive)</h2>
+<p><em>Note:</em> Sam's original directive assumed the Cloudflare dashboard
+   route would unblock the channel. Empirical testing this session showed
+   the Cloudflare path is broken for this setup. The pending items below
+   reflect Sam's directive as written; revisit the Cena routing path with
+   Sam before acting.</p>
+<ol>
+  <li>Sam adds Cloudflare dashboard Public Hostname route: <code>cena.cenaskitchen.com → HTTP → localhost:8765</code> <em>(directive-as-written; but see the architectural limitation above)</em></li>
+  <li>ck sets <code>CENA_GATEWAY_URL</code> + <code>CENA_GATEWAY_TOKEN</code> env vars in Render (ck has the Render API key + <code>cena_token</code> value)</li>
+  <li>Sam Chat fully wired through Cena on AiCk</li>
+</ol>
+
+<h2>Active work queue (priority order)</h2>
+<ol>
+  <li>WAIT for Sam's call on the Cena routing path (Tailscale-on-Render vs. tailnet-direct vs. proxy-via-Render)</li>
+  <li>Block 1I (Twilio SMS integration) &mdash; credentials pending from Sam via Telegram (Account SID + Auth Token + From-number). A2P 10DLC filing 1-2 weeks for approval; build against trial mode now, routing flips to production on A2P approval.</li>
+  <li>Phase 2 Block 2 (manager tools) opens after 1I closes</li>
+  <li>GitHub Actions CI investigation &mdash; <strong>RESOLVED</strong> (first green run on <code>3259946</code>)</li>
+  <li>AmbientSignal source-to-insight-category mapping (samai-reviewed in #1426) &mdash; <strong>closed</strong></li>
+  <li>SamChat full agent context &mdash; pending (Block 3 in-app agent surface is much later; this is the standalone <code>/sam/chat</code> for partner-tier)</li>
+</ol>
+
+<h2>samai's standing 6 methodology rules (verbatim)</h2>
+<ol>
+  <li><strong>Audience-eligibility-before-mutation:</strong> the audience check (who can perform this action) runs BEFORE any database mutation. A 403 leaves zero rows.</li>
+  <li><strong>Verify-against-prod-not-local:</strong> deploy-verify hits production state, not local state. Must check something BUILD-SPECIFIC &mdash; a route or asset unique to the new commit. A build-agnostic response (partner-gate 302) proves the service is up, NOT which commit it is serving.</li>
+  <li><strong>Deploy-success-verify:</strong> every commit gets a real deploy-verify pass after Render lands it. BLOCKED-PENDING-RENDER is a valid state during build-pipeline outages; never claim "deploy-verified" against a stale build.</li>
+  <li><strong>Doc-registration-checks-both-route-AND-sidebar:</strong> a new doc requires DOC_PAGES entry AND sidebar nav config. Both surfaces.</li>
+  <li><strong>Hit-new-doc-URL-once-before-trusting-it:</strong> render-verify the URL returns 200 with expected content before claiming the doc is live.</li>
+  <li><strong>Amendments-against-git-show-HEAD:</strong> spec doc amendments are authored against the committed tree (<code>git show HEAD:&lt;path&gt;</code>), NEVER a local pre-commit copy. The tree is the source of truth.</li>
+</ol>
+
+<h2>Render service identity</h2>
+<ul>
+  <li>Service: <code>cenas-ezlive</code> (<code>srv-d7ue6ivlk1mc73aaka20</code>)</li>
+  <li>URL: <code>app.cenaskitchen.com</code></li>
+  <li>Cron resources: 6 ambient refresh crons (<code>crn-d8353*</code>) + sales-insights (<code>crn-d82v9dt7vvec73c0q8l0</code> 5am CT) + anomaly-brief + recompute-scores</li>
+</ul>
+
+<h2>Sam-owed inputs (the queue blocking next work)</h2>
+<ul>
+  <li>Twilio credentials (via Telegram): Account SID + Auth Token + From-number</li>
+  <li>OpenWeatherMap One Call API 3.0 key (via Telegram)</li>
+  <li>Ticketmaster Discovery API key (via Telegram, when Sam signs up)</li>
+  <li>GCP service account JSON (via Telegram, when Sam creates)</li>
+  <li>Cloudflare dashboard Public Hostname route for cena &mdash; <em>directive-as-written, but architectural test this session suggests this won't be sufficient on its own; revisit with Sam</em></li>
+  <li>Calibration env var flip in Render (<code>BRIEF_CALIBRATION_PANEL</code> + <code>BRIEF_EMAIL_DISPATCH=1</code> + <code>BRIEF_CALIBRATION_MODE=1</code>)</li>
+  <li>A2P 10DLC business registration filing status</li>
+</ul>
+
+<h2>Saved secrets relevant to this work</h2>
+<ul>
+  <li><code>C:\Users\sam\.openclaw\.secrets\cloudflare_api_token.txt</code> &mdash; CF API token (account-scoped, "Argo Tunnel (Legacy): Edit" permission), saved during the 10pm session for setting tunnel ingress. Token name <code>bitter-lab-9015</code>. Verified working against <code>/accounts/{id}/tokens/verify</code>.</li>
+  <li><code>C:\Users\sam\cena\cena_token.txt</code> &mdash; 44-char Cena gateway shared secret (X-Cena-Token header). Matches what Render's <code>CENA_GATEWAY_TOKEN</code> needs to be set to.</li>
+  <li><code>C:\Users\sam\.openclaw\.secrets\render_api_key.txt</code> &mdash; Render API key (used by <code>cena_gateway.py</code> for Render API calls + by aick for env-var reads/writes)</li>
+</ul>
+
+<h2>Post-restart confirmation template</h2>
+<p>When you come back online, after reading this doc + the chat archive,
+   post this single message to the dev chat (fill in the bracketed
+   sections after verifying state):</p>
+<pre>aick — restarted. Handoff doc + chat archive read. State confirmed:
+[verify current state matches handoff — origin/main HEAD, suite count,
+CI status, Cena tunnel state]. Blocked on [whatever Sam owes that's
+still pending — Cena routing path decision likely top of list].
+Standing by.</pre>
+
+<h2>Doc registration receipts</h2>
+<p>This doc was registered per rule 4 (DOC_PAGES + sidebar):</p>
+<ul>
+  <li>Slug: <code>handoff-aick-2026-05-14</code></li>
+  <li>Template var: <code>doc_handoff_aick_2026_05_14</code></li>
+  <li>Filename: <code>app/templates/docs/handoff_aick_2026_05_14.html</code>
+      (<em>note:</em> Sam's directive had <code>handoff_aick_2026-05-14.html</code>
+      with a dash in the date portion, but the existing slug→file mapping
+      convention is all-underscores; followed the convention to keep the
+      route resolution working)</li>
+  <li>Deploy-verified per rule 5: URL <code>/partner/developer/app/handoff-aick-2026-05-14</code> returns 200 with this content</li>
+</ul>
+
+{% endblock %}

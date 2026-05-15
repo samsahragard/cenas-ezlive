@@ -5,6 +5,7 @@
 <h1>Block 1B — Universal Ribbon Component</h1>
 <p class="doc-meta">
   Phase 2 / Block 1 / sub-block 1B. samai spec, 2026-05-13.<br>
+  <strong>Amendment #1394</strong> (empty-category hiding — aligns 1B with the 1C amendment), 2026-05-14.<br>
   Implementation: ck. Review: samai checklist PASS per commit.<br>
   Source: Phase 2 Directive §BLOCK 1 / 1B (see
   <a href="{{ url_for('developer_chat.app_doc', page='phase-2-directive') }}">Phase 2 Directive</a>).
@@ -96,9 +97,9 @@ class RibbonItem:
     ("sales",       "Sales"),
 ]</code></pre>
 <ul>
-  <li><strong>Fixed order, always all seven.</strong> The partial renders all seven category headers every time, even when a category is empty — predictable structure + stable collapse toggles. An empty category renders a muted empty-state line ("Nothing here right now"), not a hidden section.</li>
+  <li><strong>Fixed order; empty categories hidden (1C amendment #1394, 2026-05-14).</strong> The seven categories render in this fixed vertical order, but a category with zero items emits <strong>zero DOM</strong> — no header, no empty body, nothing. The 1C router returns all seven categories (notably on the <code>dashboard</code> slug); the partial renders only the non-empty subset. Collapse toggles stay stable — they key on the category slug, which is unchanged; a category simply isn't in the DOM when it has no items. <em>Superseded:</em> the original 1B contract rendered all seven headers every time with a muted "Nothing here right now" empty-state line. 1C amendment #1394 (empty-category hiding + strict page-relevance) changed that, and 1B Refinement-1 (commit 8bf2a64) implemented it — the empty-state line and the <code>data-empty</code> attribute are gone.</li>
   <li><strong>Note the slug vs. Task.category mismatch:</strong> ribbon slugs are mostly plural (<code>caterings</code>, <code>events</code>, <code>vendors</code>) while <code>Task.category</code> is singular (<code>catering</code>, <code>event</code>, <code>vendor</code>) and includes <code>general</code>. The mapping from a Task/Signal/Insight to its ribbon category is <strong>1C's content-router concern</strong> — 1B only needs the seven ribbon slugs above. <code>general</code>-category tasks surface under <code>todo</code>, never their own section (1C handles that).</li>
-  <li>Each category section: a header (label + item count badge + collapse chevron) and a body (the items, or the empty-state).</li>
+  <li>Each <em>rendered</em> category section: a header (label + item count badge + collapse chevron) and a body (the items). A category with no items renders nothing at all — see the empty-category-hiding bullet above.</li>
 </ul>
 
 <h2>4. The partial + the defensive wrapper — app/templates/partials/_ribbon.html + ribbon_render_context()</h2>
@@ -123,7 +124,7 @@ class RibbonItem:
 <h3>4.1 _ribbon.html — pure dumb iteration</h3>
 <ul>
   <li>Calls <code>ribbon_render_context(current_user, page_slug, store_scope)</code> once, with an <code>is defined</code> guard (if <code>install()</code> never ran, the partial still renders an empty shell rather than erroring).</li>
-  <li>Iterates the seven category dicts in received order. For each: render the header (label + count badge + collapse chevron), then the body — the pre-rendered <code>entries</code>, or the muted empty-state when <code>count == 0</code>.</li>
+  <li>Iterates the seven category dicts in received order, but renders a category <strong>only when it has items</strong> — <code>{% if cat.entries %}</code> gates the whole <code>.ribbon-category</code> block (1C amendment #1394). For each rendered category: the header (label + count badge + collapse chevron) and the body (the pre-rendered <code>entries</code>). <code>cat.count</code> equals <code>cat.entries|length</code> by construction, so the truthy-<code>entries</code> gate IS the exact empty-category test. There is no empty-state line — an empty category is zero DOM.</li>
   <li>Per-category collapse state comes pre-folded in the wrapper's output (<code>is_collapsed</code>); the partial just reads it.</li>
   <li>Emits the X / Check markup per §6.2, keyed by <code>item_type</code> + <code>item_id</code>, gated by <code>can_dismiss</code> / <code>can_check</code> — inert in 1B (1D wires it).</li>
   <li>The partial does <strong>no</strong> sorting (1C returns sorted), <strong>no</strong> router call (the wrapper does it), <strong>no</strong> risky attribute access (the wrapper pre-rendered everything). It is pure presentation.</li>
@@ -223,7 +224,7 @@ class RibbonItem:
 <h2>9. Test requirements</h2>
 <p>1B's test file: <code>tests/test_ribbon_component.py</code>. Required coverage:</p>
 <ul>
-  <li><strong>Partial renders against a stub:</strong> with <code>ribbon_items_for</code> stubbed to return <code>[]</code>, the partial renders all seven category headers + seven empty-states, no error.</li>
+  <li><strong>Partial renders against a stub:</strong> with <code>ribbon_items_for</code> stubbed to return <code>[]</code>, every category is empty — so the partial renders the bare <code>.ck-ribbon</code> shell with <strong>zero category blocks</strong> (1C amendment #1394 — empty categories emit zero DOM), no error. A mixed stub (some categories populated, some empty) renders only the populated ones.</li>
   <li><strong>Partial renders items:</strong> with the stub returning a few fake render-contract objects across categories, each lands in the correct category section, X/Check markup present iff <code>can_dismiss</code>/<code>can_check</code>, <code>styling_class</code> applied.</li>
   <li><strong>Collapse preference:</strong> no row → category renders expanded; <code>is_collapsed=True</code> row → body not rendered, chevron in collapsed state. Toggle endpoint: first POST creates a row <code>is_collapsed=True</code>; second POST flips to <code>False</code>; invalid category → 400; unauthenticated → redirect to login.</li>
   <li><strong>base.html include is defensive:</strong> a router stub that <em>raises</em> still renders the page (empty ribbon + WARN log), does not 500. This is the most important 1B test — it proves a ribbon bug can't take down every page.</li>
@@ -233,7 +234,7 @@ class RibbonItem:
 <h2>10. samai review checklist (run per commit)</h2>
 <ol>
   <li>Scope: only the 1B surfaces — no router logic, no X/Check endpoints, no <code>ribbon.js</code>, no data production.</li>
-  <li><code>_ribbon.html</code> renders all seven categories in fixed order, always (empty categories show the muted empty-state, not hidden).</li>
+  <li><code>_ribbon.html</code> renders categories in the fixed seven-category order, but emits <strong>zero DOM</strong> for empty categories (1C amendment #1394 — no header, no empty-state line); only non-empty categories produce a section block.</li>
   <li>The partial consumes only the §2 render contract — no direct <code>Task</code> / <code>Signal</code> / <code>SalesInsight</code> attribute access.</li>
   <li>Stub <code>ribbon_items_for</code> registered as a Jinja global returning <code>[]</code>; partial renders clean against it.</li>
   <li><code>RibbonCategoryPreference</code> matches §5: types, <code>CASCADE</code> on user_id, unique constraint; absence-of-row = expanded.</li>

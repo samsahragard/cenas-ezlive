@@ -1795,3 +1795,72 @@ class AmbientSignalRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False, index=True)
 
+
+# ============================================================
+# Phase 2 / Cena — Sam's personal operational AI surface
+# (PART 4 of Sam's 2026-05-15 directive)
+# ============================================================
+
+# Tool-name vocabulary. Mirrors the methods exposed in cena_gateway.py
+# on AiCk. Not enum-enforced at the column level so new tools can be
+# added without a migration; the gateway side validates before logging.
+_VALID_CENA_ACTION_TYPES = {
+    "shell_execute",
+    "git_commit", "git_push",
+    "render_deploy", "render_env_get", "render_env_set",
+    "file_read", "file_write", "file_delete",
+    "db_query", "db_execute",
+    "cf_api_call",
+    "telegram_send",
+    "read_agent_chat_history",
+    "anthropic_chat",
+}
+
+
+class CenaActionLog(Base):
+    """One row per tool invocation Cena makes through the gateway.
+
+    The gateway (cena_gateway.py on AiCk) POSTs to /sam/cena/log
+    after each tool call returns (success or failure). /sam/cena-audit/
+    renders this table in reverse-chronological order for review.
+
+    Fields follow Sam's PART 4 spec (id, action_type, parameters,
+    result, timestamp, cena_session_id), with operational additions:
+    started_at + finished_at (latency), success + error_text (failure
+    triage), message_id (which user turn drove the action).
+    """
+    __tablename__ = "cena_action_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # The tool that was invoked. See _VALID_CENA_ACTION_TYPES.
+    action_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True)
+
+    # Arguments passed in. JSON so any tool's shape can be persisted.
+    parameters: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    # Return value (success) or partial result (on error).
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    success: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, index=True)
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Bracketing timestamps. started_at indexed for the most common
+    # query (reverse-chronological feed at /sam/cena-audit/).
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True)
+
+    # Which Sam Chat session + turn triggered this action. Nullable
+    # because Cena could also run scheduled / ambient actions later
+    # that are not tied to a chat turn.
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sam_chat_sessions.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sam_chat_messages.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+

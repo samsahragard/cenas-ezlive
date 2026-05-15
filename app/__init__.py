@@ -30,6 +30,7 @@ from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import sam_chat as ezsamchat
+from app.web import cena as ezcena
 from app.services import produce_ingest
 from app.services import permissions as ezperms
 
@@ -171,6 +172,12 @@ def create_app():
     # Hard-gated to SAM_CHAT_USER_ID — dormant/safe-closed until that
     # env var is set. Deliberately isolated from the agentic pipeline.
     ezsamchat.install(app)
+
+    # Cena — Sam's personal operational AI surface. Two routes:
+    # POST /sam/cena/log (gateway ingress, X-Cena-Token auth) and
+    # GET /sam/cena-audit/ (Sam-only viewer). Shares the SAM_CHAT_USER_ID
+    # gate with sam_chat — also dormant when that env is unset.
+    ezcena.install(app)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop

@@ -20,6 +20,8 @@ WTForms==3.2.1
 requests==2.32.3
 # httpx: explicit (was transitive via anthropic). sam_chat.py's Cena
 # gateway path imports it directly to SSE-stream to the aick gateway.
-httpx>=0.28.1
+# [socks] extra pulls socksio for SOCKS5 proxy support — needed when
+# CENA_PROXY routes outbound through Render's userspace tailscaled.
+httpx[socks]>=0.28.1
 python-dotenv>=1.0.0
 sentry-sdk[flask]>=2.0

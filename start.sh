@@ -21,9 +21,13 @@ TS_SOCK="/tmp/tailscaled.sock"
 TS_STATE="/tmp/tailscaled.state"
 
 # 1) tailscaled in userspace networking mode. Render containers don't
-#    expose /dev/net/tun, so userspace stack is mandatory.
+#    expose /dev/net/tun, so userspace stack is mandatory. --socks5-server
+#    on localhost:1055 lets in-process clients (httpx, requests) reach
+#    tailnet IPs via the SOCKS5 proxy — required because userspace mode
+#    doesn't intercept OS syscalls.
 "$TS_BIN/tailscaled" \
     --tun=userspace-networking \
+    --socks5-server=localhost:1055 \
     --socket="$TS_SOCK" \
     --state="$TS_STATE" \
     >/tmp/tailscaled.log 2>&1 &

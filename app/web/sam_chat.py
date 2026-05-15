@@ -565,9 +565,19 @@ def sam_chat_send():
         try:
             if gateway_url:
                 # ---- Cena gateway: route to aick ----
+                # CENA_PROXY (e.g. socks5h://localhost:1055) routes the
+                # outbound call through Render's userspace tailscaled —
+                # required because userspace mode doesn't intercept OS
+                # syscalls, so a direct TCP connect to a 100.x tailnet IP
+                # would time out. Unset for local dev where the gateway
+                # is reachable directly.
                 import httpx
                 cena_token = os.getenv("CENA_GATEWAY_TOKEN", "")
-                with httpx.Client(timeout=120.0) as hx:
+                _proxy = os.getenv("CENA_PROXY") or None
+                _client_kwargs = {"timeout": 120.0}
+                if _proxy:
+                    _client_kwargs["proxy"] = _proxy
+                with httpx.Client(**_client_kwargs) as hx:
                     with hx.stream(
                         "POST", gateway_url + "/cena/stream",
                         json={"messages": api_messages, "model": model,

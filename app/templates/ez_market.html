@@ -162,7 +162,7 @@
             <div class="em-trip-leg">
               <span class="em-trip-icon"><i class="ti ti-building-store" aria-hidden="true"></i></span>
               <div class="em-trip-text">
-                <div class="em-trip-name">{{ o.reported_store or 'n/a' }}</div>
+                <div class="em-trip-name">{{ pickup_label(o) or 'n/a' }}</div>
               </div>
             </div>
             <div class="em-trip-leg">
@@ -226,7 +226,7 @@
         </div>
       </div>
       <div class="em-trip">
-        <div><strong>Pickup:</strong> {{ o.reported_store or '—' }}</div>
+        <div><strong>Pickup:</strong> {{ pickup_label(o) or '—' }}</div>
         <div><strong>Drop:</strong> {{ o.delivery_address or '—' }}</div>
       </div>
     </div>
@@ -242,7 +242,7 @@
       <div class="em-card-row">
         <div>
           <div class="em-time">{{ o.delivery_date or '' }}</div>
-          <div class="em-time-sub">{{ o.external_order_id }} · {{ o.reported_store or '—' }}</div>
+          <div class="em-time-sub">{{ o.external_order_id }} · {{ pickup_label(o) or '—' }}</div>
         </div>
         <div>
           <div class="em-payout">${{ "%.2f"|format(o.paid_payout or o.potential_payout or 0) }}</div>

@@ -35,6 +35,43 @@ def resolve_origin_store_id(store_id: str) -> str:
     return store_id
 
 
+# Physical-kitchen display labels for collapsed origin_store_id values.
+# Used by pickup_label() to render the kitchen-of-origin in driver-facing
+# views (the ezCater storefront-of-record on the raw payload is the GHOST
+# address for #3/#4 and would mislead drivers — see Sam #1486 / samai
+# #1488 for the bug + policy lock).
+#
+# Em dash is U+2014, NOT a hyphen-minus. The visual difference matters
+# and the tests byte-assert the exact glyph.
+_KITCHEN_DISPLAY = {"store_1": "Copperfield", "store_2": "Tomball"}
+_KITCHEN_ADDRESS = {
+    "store_1": "15650 FM 529, Houston, TX 77095",
+    "store_2": "27727 Tomball Pkwy, Tomball, TX 77375",
+}
+_LABEL_TEMPLATE = "{kitchen} Kitchen — {address}"
+
+
+def pickup_label(order) -> str:
+    """Display label for the pickup kitchen — "Copperfield Kitchen — <addr>"
+    or "Tomball Kitchen — <addr>" based on the collapsed origin_store_id.
+
+    Falls back to Order.reported_store for un-normalized legacy rows (e.g.
+    origin_store_id is None or doesn't match a known kitchen). Driver-
+    facing templates call this; the audit / review surfaces stay on the
+    raw reported_store so the original ezCater storefront-of-record is
+    preserved for forensic review.
+
+    Direction: domain -> templates. Deliberately NOT an Order @property,
+    to keep app.models free of presentation concerns.
+    """
+    osid = getattr(order, "origin_store_id", None)
+    kitchen = _KITCHEN_DISPLAY.get(osid)
+    address = _KITCHEN_ADDRESS.get(osid)
+    if kitchen and address:
+        return _LABEL_TEMPLATE.format(kitchen=kitchen, address=address)
+    return getattr(order, "reported_store", None) or ""
+
+
 def _parse_choices(raw_alias: str, line_items: List[str]) -> ItemChoices:
     text = " ".join([raw_alias, *line_items]).lower()
 

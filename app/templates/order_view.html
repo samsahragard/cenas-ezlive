@@ -31,6 +31,7 @@
     <div><span class="label">Deliver at</span>{{ order.deliver_at or '—' }}</div>
     <div><span class="label">Customer</span>{{ order.client or '—' }}</div>
     <div><span class="label">Headcount</span>{{ order.headcount or '—' }}</div>
+    {# audit surface — raw ezCater storefront, intentionally pre-collapse #}
     <div><span class="label">Store</span>{{ order.reported_store or '—' }}</div>
     <div><span class="label">Driver</span>{{ order.assigned_driver or '—' }}</div>
     <div><span class="label">Kitchen ready</span>{{ order.kitchen_ready_time or '—' }}</div>

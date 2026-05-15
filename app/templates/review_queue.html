@@ -41,6 +41,7 @@
           <td>{{ o.deliver_at or '—' }}</td>
           <td>{{ o.client or '—' }}</td>
           <td>{{ o.customer_phone or '—' }}</td>
+          {# audit surface — raw ezCater storefront, intentionally pre-collapse #}
           <td>{{ o.reported_store or '—' }}</td>
           <td>
             {% if o.needs_review %}

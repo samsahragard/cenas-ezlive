@@ -153,12 +153,36 @@ _ORIGIN_TO_KITCHEN = {
     "store_4": "tomball",
 }
 
+# Migration 11_payroll_backfill (commit fed513b, 2026-05-10 20:04:39 CDT =
+# 2026-05-11 01:04:39 UTC) backfilled pickup_miles from ezCater's XLSX
+# Delivery Performance Report. ezCater computes miles from the storefront-
+# of-record (ghost address for store_3/store_4), so those legacy values
+# are wrong under Sam's physical-kitchen routing model (policy locked in
+# services/ezcater_miles.py + samai #1488). Any Order with created_at
+# AT OR BEFORE this cutoff is a candidate for one-time lazy recompute on
+# next visible view. Buffer of ~1h past the commit accounts for deploy
+# swap + clock skew.
+_LEGACY_MILES_CUTOFF = datetime(2026, 5, 11, 2, 0, 0)
+
+# Per-process set of order ids already recomputed this run. Cache resets
+# on app restart; the first post-restart view of each legacy order pays
+# the Routes-API cost once, subsequent views skip. Idempotent — same
+# inputs return the same Routes result, so a re-recompute is correct just
+# wasteful.
+_recomputed_legacy_ids: set[int] = set()
+
 
 def _ensure_miles_for_visible(db, orders: list[Order], cap: int = 8) -> None:
     """Backfill pickup_kitchen + pickup_miles via Google Routes API for any
     orders that are missing the data (Sam 2026-05-12: 'correct location so
     we can properly pay the driver'). Capped per render to keep latency +
-    API cost predictable — subsequent refreshes catch up the rest."""
+    API cost predictable — subsequent refreshes catch up the rest.
+
+    Also lazily re-computes pickup_miles for pre-cutoff legacy orders whose
+    stored miles came from migration 11's ezCater XLSX backfill (untrusted
+    per Sam's 2026-05-15 policy). See _LEGACY_MILES_CUTOFF +
+    _recomputed_legacy_ids for the gating.
+    """
     from app.services.ezcater_miles import compute_one_way_miles
     # Fill in pickup_kitchen from origin_store_id where possible (cheap).
     for o in orders:
@@ -173,6 +197,24 @@ def _ensure_miles_for_visible(db, orders: list[Order], cap: int = 8) -> None:
         miles = compute_one_way_miles(o.pickup_kitchen, o.delivery_address)
         if miles is not None:
             o.pickup_miles = miles
+    # Lazy legacy recompute (samai spec, 2026-05-15). Same Routes-API call,
+    # different gate: orders created at-or-before the migration-11 cutoff
+    # with a kitchen + delivery address, not yet re-computed this process.
+    legacy_needs_recompute = [
+        o for o in orders
+        if (o.created_at is not None
+            and o.created_at <= _LEGACY_MILES_CUTOFF
+            and o.pickup_kitchen
+            and o.delivery_address
+            and o.id not in _recomputed_legacy_ids)
+    ]
+    for o in legacy_needs_recompute[:cap]:
+        miles = compute_one_way_miles(o.pickup_kitchen, o.delivery_address)
+        if miles is not None:
+            o.pickup_miles = miles
+        # Mark recomputed regardless of API success — a None means Routes
+        # was unreachable; retry on next process restart, not on every view.
+        _recomputed_legacy_ids.add(o.id)
     db.commit()
 
 

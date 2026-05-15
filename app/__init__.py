@@ -179,6 +179,14 @@ def create_app():
     # gate with sam_chat — also dormant when that env is unset.
     ezcena.install(app)
 
+    # Physical-kitchen pickup label for driver-facing templates. The raw
+    # Order.reported_store is the ezCater storefront-of-record (ghost for
+    # store_3/store_4); pickup_label collapses to the actual kitchen.
+    # See app/domain/normalize.py and samai #1488. Audit / review templates
+    # deliberately keep reading reported_store directly.
+    from app.domain.normalize import pickup_label as _pickup_label
+    app.jinja_env.globals["pickup_label"] = _pickup_label
+
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop
     # for environments where alembic Pre-Deploy isn't configured (Render's

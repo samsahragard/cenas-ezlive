@@ -49,6 +49,7 @@
             <td>{{ o.client or '—' }}</td>
             <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
             <td>{{ o.delivery_address or '—' }}</td>
+            {# audit surface — raw ezCater storefront, intentionally pre-collapse #}
             <td>{{ o.reported_store or '—' }}</td>
             <td>{{ o.assigned_driver or '—' }}</td>
             <td>

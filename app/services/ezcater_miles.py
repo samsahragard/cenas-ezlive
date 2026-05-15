@@ -41,6 +41,18 @@ def _get_api_key() -> str | None:
     return os.environ.get("GOOGLE_API_KEY", "").strip() or None
 
 
+# Sam's policy (permanent, 2026-05-15): we ALWAYS compute pickup_miles
+# ourselves via Google Routes against KITCHEN_ADDRESSES. NEVER trust the
+# miles field ezCater sends in webhooks or XLSX imports. ezCater computes
+# miles from the storefront-of-record (ghost address for store_3/store_4),
+# which is wrong for our physical-kitchen-collapsed routing model and
+# would mislead driver pay calculation.
+#
+# Future maintainers: do NOT add an ezCater-miles fallback here. If a new
+# ingest path ever passes a miles value, discard it. Only the call below
+# is the canonical source of pickup_miles. See samai #1488 for context.
+
+
 def compute_one_way_miles(pickup_kitchen: str, drop_off_address: str) -> float | None:
     """Return one-way driving miles from the pickup kitchen to the drop-off,
     or None if we can't resolve (missing API key / Google error / malformed

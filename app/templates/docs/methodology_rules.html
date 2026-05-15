@@ -1,0 +1,65 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+{% raw %}
+<div class="doc">
+
+<h1>Methodology Rules</h1>
+<p class="doc-meta">
+  Canonical engineering methodology for the Cenas Kitchen codebase.<br>
+  Authoritative source &mdash; cross-referenced from <a href="/partner/developer/app/deployment">deployment.html</a> (three-gate verify rubric), <a href="/partner/developer/app/system-inventory">system-inventory</a>, and every handoff doc.<br>
+  Lifted verbatim from <code>handoff_samai_2026_05_14.html</code> &sect;3 (samai authored these during Block 1). Author: ck (lift), samai (rules). Initial version 2026-05-15.
+</p>
+
+<hr>
+
+<h2>samai's 6 standing rules (canonical, verbatim)</h2>
+<p>Every commit that touches user-facing state, a database mutation, or a partner doc must pass each rule that applies. These are not guidelines &mdash; they are the gate before "samai PASS".</p>
+
+<ol>
+  <li><strong>Audience-eligibility-before-mutation:</strong> the audience check (who can perform this action) runs BEFORE any database mutation. A 403 leaves zero rows.</li>
+  <li><strong>Verify-against-prod-not-local:</strong> deploy-verify hits production state, not local state. Must check something BUILD-SPECIFIC &mdash; a route or asset unique to the new commit. A build-agnostic response (partner-gate 302) proves the service is up, NOT which commit it is serving.</li>
+  <li><strong>Deploy-success-verify:</strong> every commit gets a real deploy-verify pass after Render lands it. <code>BLOCKED-PENDING-RENDER</code> is a valid state during build-pipeline outages; never claim &quot;deploy-verified&quot; against a stale build.</li>
+  <li><strong>Doc-registration-checks-both-route-AND-sidebar:</strong> a new doc requires DOC_PAGES entry AND sidebar nav config. Both surfaces.</li>
+  <li><strong>Hit-new-doc-URL-once-before-trusting-it:</strong> render-verify the URL returns 200 with expected content before claiming the doc is live.</li>
+  <li><strong>Amendments-against-git-show-HEAD:</strong> spec doc amendments are authored against the committed tree (<code>git show HEAD:&lt;path&gt;</code>), NEVER a local pre-commit copy. The tree is the source of truth.</li>
+</ol>
+
+<hr>
+
+<h2>Three-gate deploy verification rubric</h2>
+<p>Rule 3 (deploy-success-verify) is operationalized as three independent gates. A commit is &quot;deploy-verified&quot; only when ALL THREE pass on the same SHA, and the verification is reported with the gate-by-gate breakdown.</p>
+
+<ol>
+  <li><strong>Gate 1 &mdash; Local pytest:</strong> the full suite passes on the working tree. Catches schema mismatches, fixture drift, and obvious regressions before the change ever leaves your machine. On AiCk run from the repo's <code>.venv</code>: <code>.\.venv\Scripts\python.exe -m pytest -q</code>. On CK, ssh aick and run from there (pytest is not installed locally on CK).</li>
+  <li><strong>Gate 2 &mdash; CI:</strong> the GitHub Actions <code>tests.yml</code> workflow lands <code>completed / success</code> for the SHA. CI's environment differs from local in subtle ways (no <code>.env</code>, hermetic fixtures); a green CI proves the change still passes in a clean room.</li>
+  <li><strong>Gate 3 &mdash; Build-specific deploy probe:</strong> a probe that confirms the COMMIT is live &mdash; not just &quot;the service is up&quot;. Per rule 2, the probe must check something BUILD-SPECIFIC: a new route, a new asset, a new string in a known route's body. A partner-gate 302 redirect proves the service is up, NOT which commit it is serving.</li>
+</ol>
+
+<p>Full rubric prose lives in <a href="/partner/developer/app/deployment">deployment.html</a> (the operational runbook). This page is the methodology reference; <code>deployment.html</code> is the day-to-day procedure.</p>
+
+<hr>
+
+<h2>Workflow norms (uncodified but observed)</h2>
+<p>Patterns that have emerged across the team. Not rules with the same weight as samai's 6, but the way work actually flows when it goes well.</p>
+
+<ul>
+  <li><strong>Push-on-behalf for ck and samai:</strong> only AiCk has wincredman <code>git push</code> credentials. ck / samai SSH to aick, commit on AiCk's working tree, then ask aick in dev chat: <code>aick &mdash; push &lt;SHA&gt;</code>. aick verifies diff + pushes.</li>
+  <li><strong>Pull-rebase before commit; stage by name:</strong> <code>git add file1 file2</code> with explicit filenames, never <code>-A</code> &mdash; the working tree on AiCk often has scratch files from prior debugging, and <code>-A</code> sweeps them in. Pull-rebase before staging so your commit lands on top of the latest origin/main, not on a stale local copy.</li>
+  <li><strong>Announce shared-file edits in dev chat first:</strong> for high-traffic files (<code>base_dashboard.html</code>, <code>store_routes.py</code>, <code>sidebar.html</code>, etc.), drop a one-line heads-up in chat before you start editing so other agents stay clear.</li>
+  <li><strong>Self-echo handling:</strong> the Monitor chat tail replays your own posts back. Recognize and don't re-respond &mdash; the agent layer should detect own-author and skip the wake-up cycle.</li>
+  <li><strong>Render-deploy swap noise:</strong> every push triggers ~30-60s of 502s + &quot;connection forcibly closed&quot; errors on the tail. Benign swap artifact. If 502s persist past ~2 minutes, check the Render API for the deploy status.</li>
+  <li><strong>Address-by-name protocol in dev chat:</strong> default to silent unless a message names you (<code>ck</code> / <code>aick</code> / <code>samai</code>) or operationally concerns you. Side-chat between two agents doesn't need a third weighing in. Saves Sam's attention budget for what actually matters.</li>
+</ul>
+
+<hr>
+
+<h2>Provenance + history</h2>
+<ul>
+  <li>samai's 6 rules: authored by samai during Block 1 (Phase 2). Verbatim source: <a href="/partner/developer/app/handoff-samai-2026-05-14">handoff_samai_2026-05-14</a> &sect;3.</li>
+  <li>Three-gate rubric: codified by aick during the 1J Day-4 deploy-verify split (commit <code>3259946</code> + the documentation amendment in <a href="/partner/developer/app/deployment">deployment.html</a>).</li>
+  <li>This doc: created during the 2026-05-15 dev-section reorganization to give the methodology a stable home outside the handoffs (which rotate per session).</li>
+</ul>
+
+</div>
+{% endraw %}
+{% endblock %}

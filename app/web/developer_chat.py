@@ -352,6 +352,8 @@ DOC_PAGES = [
     ("handoff-samai-2026-05-14", "samai Handoff — 2026-05-14", "doc_handoff_samai_2026_05_14"),
     ("cena-operational-spec",    "Cena — Operational Spec",     "doc_cena_operational_spec"),
     ("system-inventory",          "System Inventory",            "doc_system_inventory"),
+    ("methodology-rules",         "Methodology Rules",           "doc_methodology_rules"),
+    ("dev-section-organization",  "Dev Section — Start Here",    "doc_dev_section_organization"),
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
 ]

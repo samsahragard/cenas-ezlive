@@ -1,0 +1,42 @@
+{# Opt-in status header for partner docs.
+   Usage in a doc template:
+     {% include 'partials/_doc_status_header.html' with context %}
+   then set the block variables BEFORE the include via {% set %}, e.g.:
+     {% set doc_status = 'SHIPPED' %}
+     {% set doc_last_updated = '2026-05-15' %}
+     {% set doc_section = 'Block 1 — Foundation' %}
+     {% set doc_supersedes = 'block-1b-ribbon-component-spec-v1' %}  {# optional #}
+
+   Backwards-compatible: docs that don't include this render unchanged.
+   The valid statuses match dev_section_organization.html:
+     ACTIVE | SHIPPED | REFERENCE | DRAFT | SUPERSEDED | ARCHIVED
+#}
+{% raw %}
+<div class="doc-status-header" style="display:inline-block;border:1px solid #ccc;border-radius:4px;padding:8px 12px;margin:8px 0 16px;background:#f7f7f7;font-size:0.9em;line-height:1.5;">
+{% endraw %}
+  {% if doc_status %}
+    {% set _badge_color = {
+      'ACTIVE':     '#c08000',
+      'SHIPPED':    '#2a7a2a',
+      'REFERENCE':  '#2a5a8a',
+      'DRAFT':      '#888',
+      'SUPERSEDED': '#a04040',
+      'ARCHIVED':   '#666',
+    }.get(doc_status, '#666') %}
+    <strong style="color: {{ _badge_color }};">{{ doc_status }}</strong>
+  {% endif %}
+  {% if doc_section %}
+    &nbsp;&middot;&nbsp; {{ doc_section }}
+  {% endif %}
+  {% if doc_last_updated %}
+    &nbsp;&middot;&nbsp; Last updated {{ doc_last_updated }}
+  {% endif %}
+  {% if doc_supersedes %}
+    <br><span style="color:#a04040;">Superseded by: <a href="/partner/developer/app/{{ doc_supersedes }}">{{ doc_supersedes }}</a></span>
+  {% endif %}
+  {% if doc_supersedes_doc %}
+    <br><span style="color:#888;font-style:italic;">Replaces: <a href="/partner/developer/app/{{ doc_supersedes_doc }}">{{ doc_supersedes_doc }}</a></span>
+  {% endif %}
+{% raw %}
+</div>
+{% endraw %}

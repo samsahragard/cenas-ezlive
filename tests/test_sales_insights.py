@@ -275,12 +275,18 @@ def test_day3_parity_ambient_path_matches_old_source_pull(db_session,
     # The 1J weather cron writes that SAME intelligence as an
     # AmbientSignal: source=weather (-> insight category "weather"),
     # the NOAA headline/detail in the payload, the mapped severity.
+    # valid_until_at is anchored to the REAL clock (not the fixed `now`
+    # above, which only stamps audit columns) so the row clears
+    # gather_raw_signals' `valid_until_at >= utcnow()` live filter no
+    # matter the wall-clock time. A hardcoded absolute datetime here was
+    # a time-bomb — it silently expired once real UTC passed it.
     db_session.add(AmbientSignal(
         source="weather", signal_key="both:noaa:heat-advisory",
         payload={"headline": "Heat Advisory",
                  "detail": "Excessive heat through 8 PM CDT."},
         payload_hash="h", store_scope="both", category="maintenance",
-        severity="warn", valid_until_at=datetime(2026, 5, 15, 1, 0, 0),
+        severity="warn",
+        valid_until_at=datetime.utcnow() + timedelta(hours=6),
         created_at=now, updated_at=now, last_seen_at=now))
     db_session.commit()
     monkeypatch.setattr(si, "_fetch_claude_search", lambda loc: ([], 0.0))

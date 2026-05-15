@@ -558,6 +558,15 @@ class PlateComposition:
 <p><strong>Phase 2 ships the empty surface ready to receive data.</strong> Sam (or Javier) populates incrementally. Once populated, Block 3&#x27;s agent can answer &quot;what&#x27;s our food cost on the fajita plate at current vendor prices?&quot; with real math. This is the foundational data for the Phase 3 inventory depletion loop.</p>
 <p><strong>Export template:</strong> aick generates a CSV/Sheet template that matches the import format. Sam fills it in at his pace.</p>
 <hr style='border:none;border-top:1px solid var(--glass-border);margin:20px 0'>
+<h2>Out-of-band: Cena &mdash; Sam&#x27;s personal operational AI surface</h2>
+<p>Per Sam&#x27;s 2026-05-15 directive (PART 4): <strong>Cena now exists as a separate AI surface for Sam only</strong>. It is NOT Block 3 and does not replace any Block 3 work; Block 3 (below) remains the planned manager-facing agent. Cena and Block 3&#x27;s agent are two different things:</p>
+<ul>
+  <li><strong>Cena</strong> &mdash; lives at <code>/sam/chat</code>, hard-gated to <code>SAM_CHAT_USER_ID</code> (Sam&#x27;s User.id). Has full unrestricted access to the live infrastructure: shell on AiCk, codebase, Render API, Cloudflare API, Telegram (stub), git push. Eyes-open permission elevation. Every tool call audited at <code>/sam/cena-audit/</code>. Reference: <a href="/partner/developer/app/cena-operational-spec">cena-operational-spec</a>.</li>
+  <li><strong>Block 3&#x27;s &quot;Ask ck&quot;</strong> &mdash; lives in every authenticated page as a floating panel. Manager-facing, role-gated, action registry with the <code>tasks.delegate</code>/<code>maintenance.update_status</code> shape. Still future work.</li>
+</ul>
+<p>The audit pattern Cena uses (CenaActionLog table, ingest endpoint, audit feed) is intentionally similar in shape to what Block 3 will use (AgentActionLog, samai&#x27;s permission matrix). Block 3 will likely borrow the row shape but live in its own table because the access model is fundamentally different: Cena is one user with full power; Block 3 is many users with role-gated capabilities.</p>
+<p>The Cena tunnel topology (Tailscale-on-Render &harr; AiCk gateway) is the operational substrate. Block 3&#x27;s agent runs inside the Render app itself and doesn&#x27;t need a tunnel.</p>
+<hr style='border:none;border-top:1px solid var(--glass-border);margin:20px 0'>
 <h2>BLOCK 3: The Agent Surface</h2>
 <p>The big one. The conversational layer. Sam&#x27;s example: &quot;Sebastian is in Toast but not showing in our team page, can you sync him?&quot; → ck does it.</p>
 <h3>3A. In-app chat panel</h3>

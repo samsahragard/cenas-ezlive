@@ -41,6 +41,7 @@ EXEMPT_PREFIXES = (
     "/privacy",                  # public privacy policy (Play Store + general audit requirement)
     "/request-access",           # public access-request form (gated approval inside)
     "/cron/",                    # Render Cron Job endpoints — own CRON_TOKEN header check inside
+    "/sam/cena/log",             # Cena gateway audit ingest — own X-Cena-Token header check inside
 )
 
 

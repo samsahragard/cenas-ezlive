@@ -272,7 +272,7 @@ def _msg_to_dict(m: DeveloperChatMessage) -> dict:
             "url": url_for("developer_chat.download_attachment", att_id=a.id),
         })
     a_low = (m.author or "").lower()
-    is_ai = (a_low == "samai") or ("aick" in a_low) or (a_low == "ck") or (a_low == "ck-claude")
+    is_ai = (a_low == "samai") or ("aick" in a_low) or (a_low == "ck") or (a_low == "ck-claude") or (a_low == "cena")
     return {
         "id": m.id,
         "author": m.author,
@@ -294,6 +294,8 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
         d["css_class"] = "msg-masood"
     elif a == "samai":
         d["css_class"] = "msg-samai"
+    elif a == "cena":
+        d["css_class"] = "msg-cena"
     elif "aick" in a:
         d["css_class"] = "msg-aick"
     elif "ck" in a:

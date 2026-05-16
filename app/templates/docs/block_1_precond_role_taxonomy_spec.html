@@ -1,3 +1,6 @@
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
 {% extends "docs/_doc_base.html" %}
 {% block doc_body %}
 <div class="doc">
@@ -217,6 +220,105 @@ _HOURLY_BASELINE = {
   1A then imports <code>role_hierarchy</code> and ships <code>can_assign_to</code>
   100% complete against the full taxonomy.
 </p>
+
+<h2>8. Amendment 2026-05-15 — user-creatable roles vs role-hierarchy resolution</h2>
+<p>
+  <strong>Authored by samai against <code>git show HEAD</code> per rule 6.</strong>
+  Issue 4 (samai spec at dev-chat #1511; Sam intent (a) 2026-05-15) split the
+  role taxonomy across two surfaces with different cardinalities. Codifying
+  that here so the precondition spec reflects shipped state end-to-end.
+</p>
+
+<h3>8.1 Two surfaces, two cardinalities</h3>
+<ul>
+  <li><strong><code>LEVEL_OPTIONS</code> in <code>app/web/team_routes.py:41-50</code></strong>
+    — user-creatable roles surfaced in the <code>/partner/team</code> admin
+    form's role dropdown. <strong>9 entries</strong> after commit
+    <strong>095e97d</strong>: <code>partner, corporate, corporate_chef,
+    gm, km, assistant_km, prep_manager, foh_manager, expo</code>.
+    <strong><code>driver</code> is NOT user-creatable</strong> — drivers
+    live in the separate <code>drivers</code> table (phone+PIN auth,
+    store-scoped; <code>app/models.py:285</code> + Drivers Admin at
+    <code>/&lt;store&gt;/drivers</code>).</li>
+  <li><strong><code>ROLE_TIER</code> + <code>_ROLE_DOMAIN</code> in
+    <code>app/services/role_hierarchy.py</code></strong> — role-resolution
+    surface. <strong>15 entries</strong> (unchanged from §2.1 / §2.2).
+    <code>"driver"</code> retained at <code>tier=1 / domain="foh"</code>
+    for two reasons:
+    <ul>
+      <li>The <code>corporate-driver</code> legacy alias in
+        <code>permissions._LEGACY_ALIASES</code> resolves to
+        <code>"driver"</code>; <code>role_tier("driver")</code> must
+        answer correctly for any stale row carrying the alias.</li>
+      <li>Removing <code>"driver"</code> from the hierarchy would silently
+        degrade to the unknown-role default
+        (<code>0 / "foh"</code>) for any caller, hiding "this row has a
+        driver role" behind "unknown role." The explicit tier-1 entry
+        keeps correctly-resolved drivers distinguishable from
+        unknown-role degradation, which matters for diagnostic + audit
+        paths.</li>
+    </ul>
+  </li>
+</ul>
+<p>
+  <strong>Invariant:</strong> driver is NOT user-creatable, but IS
+  hierarchy-resolvable. Future <code>ROLE_TIER</code> additions must
+  decide which surface(s) they participate in.
+</p>
+
+<h3>8.2 Shipped commits</h3>
+<ul>
+  <li><strong>095e97d</strong> — <code>team_routes.py</code> drops the
+    <code>("driver", "Driver")</code> tuple from <code>LEVEL_OPTIONS</code>
+    (10 → 9 user-creatable roles) + adds
+    <code>/sam/cena/db-probe/deactivate-users</code> + two regression
+    tests (<code>test_level_options_excludes_driver</code> +
+    <code>test_team_add_rejects_driver_role_and_does_not_insert_user</code>).
+    samai PASS at dev-chat #1515.</li>
+  <li><strong>60bc1c7</strong> — <code>team.html</code> page_subtitle
+    updated (Ten → Nine roles, drop driver from listing, add "Adding a
+    driver? Drivers Admin" cross-link to <code>/&lt;store&gt;/drivers</code>)
+    + <code>driver_signup.html</code> Step-2-of-2 banner when prefilled
+    + <code>driver_routes.py</code> passes <code>prefilled</code> flag
+    from GET handler. samai PASS-with-FLAG at dev-chat #1531 (rule-2
+    build-specific verify on <code>/partner/team</code> is keypad-PIN-gated;
+    file-source + diff verified, rendered-against-prod leg unverified
+    due to auth-scope — not a deploy issue).</li>
+  <li><strong>Adjacent ops (no commit, audit only):</strong> johnny
+    (User.id=18, the one leaked <code>permission_level="driver"</code>
+    row in prod) deactivated via the new probe with a
+    <code>UserAuditLog</code> row
+    (<code>action="deactivate_driver_leak"</code>,
+    <code>before_value="driver|tomball"</code>,
+    <code>after_value="driver|tomball [inactive]"</code>,
+    <code>actor_label="cena"</code>). <code>permission_level</code> field
+    preserved on the row as audit artifact;
+    <code>session_version</code> bumped 1 → 2 to invalidate any
+    cached session cookie.</li>
+</ul>
+
+<h3>8.3 What this amendment does NOT change</h3>
+<ul>
+  <li><strong>§2.1 ROLE_TIER</strong> — 15 entries unchanged.
+    <code>"driver"</code> retained at tier 1.</li>
+  <li><strong>§2.2 _ROLE_DOMAIN</strong> — 15 entries unchanged.
+    <code>"driver"</code> retained at <code>"foh"</code>.</li>
+  <li><strong>Permission matrix tests</strong>
+    (<code>tests/test_permission_matrix.py</code>, commit 2255c1d) —
+    still parametrized over the full 12-key <code>_ALL_ROLES</code>
+    superset (10 canonical + 2 legacy aliases including
+    <code>corporate-driver</code>). The matrix's "driver" rows continue
+    to verify the role's tag set; no test changes needed for this
+    amendment.</li>
+  <li><strong>Drivers table schema</strong> (<code>app/models.py:285</code>)
+    — unchanged. The drivers-vs-users architectural split was always
+    intended; Issue 4 corrected a leak that violated it, did not
+    change the schema.</li>
+  <li><strong>This precondition's §1-§7 scope</strong> — original
+    precondition (role_hierarchy.py + 5 new hourly roles + tests)
+    landed as designed. §8 is post-hoc documentation of a downstream
+    refinement, not a re-scope.</li>
+</ul>
 
 </div>
 {% endblock %}

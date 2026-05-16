@@ -156,7 +156,16 @@
 
   <div class="auth-card">
     <h2>Create your driver account</h2>
-    <p class="sub">Pick your store, fill in the basics, choose a 5-digit PIN.</p>
+    {% if prefilled %}
+      <div style="margin:8px 0 14px; padding:10px 12px; background:rgba(101,168,255,0.08); border:1px solid rgba(101,168,255,0.35); border-radius:8px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.45;">
+        <strong>Step 2 of 2</strong> — pick your store and a 5-digit PIN.
+        We pre-filled your name, email, and phone from the request-access form.
+        Drivers live in a separate place from staff users, so this is where your
+        account gets created.
+      </div>
+    {% else %}
+      <p class="sub">Pick your store, fill in the basics, choose a 5-digit PIN.</p>
+    {% endif %}
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
     <form method="POST" action="{{ url_for('driver.driver_signup_submit') }}">
       <label for="location">Location</label>

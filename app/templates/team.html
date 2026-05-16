@@ -77,11 +77,17 @@
 {% block page_subtitle %}
   <p class="greeting-sub">
     Add, edit, deactivate, and reset passcodes for everyone with login access.
-    Ten roles from samai's permission_system spec —
+    Nine roles from samai's permission_system spec —
     <strong>partner</strong> &gt; corporate &gt; corporate chef &gt; gm &gt;
-    km &gt; assistant km &gt; prep manager &gt; foh manager &gt; expo &gt; driver.
+    km &gt; assistant km &gt; prep manager &gt; foh manager &gt; expo.
     Newly added or reset users get a 5-digit temp PIN (read aloud to them — won't
     be shown again) and are forced to change it on first login.
+    <br>
+    <em style="font-size:12px;color:rgba(255,255,255,0.65);">
+      Adding a driver? Drivers live in their own table — use
+      <a href="/copperfield/drivers" style="color:var(--accent-soft);">Drivers Admin</a>
+      (or <a href="/tomball/drivers" style="color:var(--accent-soft);">Tomball</a>).
+    </em>
   </p>
 {% endblock %}
 

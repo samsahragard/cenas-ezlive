@@ -182,7 +182,14 @@ def driver_signup():
         "email": _normalize_email(request.args.get("email")),
         "phone": (request.args.get("phone") or "").strip(),
     }
-    return render_template("driver_signup.html", error=None, form=form)
+    # `prefilled` is true when ANY of the three identity fields arrived via
+    # query string — i.e. the user landed here from /request-access (the
+    # only caller that passes those args). Template uses it to swap the
+    # generic sub-paragraph for a "Step 2 of 2" banner so the redirect feels
+    # intentional rather than a silent landing on a different form.
+    prefilled = bool(form["name"] or form["email"] or form["phone"])
+    return render_template("driver_signup.html", error=None, form=form,
+                           prefilled=prefilled)
 
 
 @driver.route("/driver/signup", methods=["POST"])

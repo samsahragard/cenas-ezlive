@@ -105,6 +105,21 @@
 {% endblock %}
 
 {% block content %}
+{# Issue B (samai #1599) — persisted driver notifications. Inline
+   dismissible cards at top of page; ck owns the polish in a follow-
+   up template lane. #}
+{% if unread_notifications %}
+<div class="em-notif-stack" style="margin-bottom:14px;">
+  {% for n in unread_notifications %}
+  <div class="em-notif" style="background: rgba(40,22,14,0.55); border:0.5px solid rgba(217,164,54,0.35); border-left:3px solid #E4B340; border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+    <span style="color:rgba(236,227,208,0.92); font-size:13px;">{{ n.message }}</span>
+    <form method="POST" action="{{ url_for('driver_system.ez_market_dismiss_notification', notif_id=n.id) }}" style="margin:0;">
+      <button type="submit" style="background:transparent; border:0.5px solid rgba(217,164,54,0.45); color:#E4B340; padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Dismiss</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 {# Stats + tabs shown to everyone (Sam 2026-05-12). For non-drivers,
    driver-only values render as 'n/a' but the category stays visible. #}
 <div class="em-stats">

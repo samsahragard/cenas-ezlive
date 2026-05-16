@@ -668,6 +668,40 @@ class DeliveryRequest(Base):
     )
 
 
+class DriverNotification(Base):
+    """One row per driver-facing notification (Issue B / Sam #1591 +
+    samai #1599 spec). Append-only: rows are written by the lifecycle
+    + request flow, and the only field a driver-side action mutates is
+    read_at (mark-as-read). kinds:
+      - order_taken_by_other: someone else got the order this driver
+        had requested (written when approve_request declines siblings).
+      - request_cancelled_admin: a manager declined this driver's
+        request explicitly (back_to_bidding / decline_all flows).
+    Surfaces inline at the top of /ez-market as a badge + dismissible
+    cards. created_at index supports the most-recent-N read on the
+    badge fetch.
+    """
+    __tablename__ = "driver_notification"
+    __table_args__ = (
+        Index("ix_driver_notification_driver_unread",
+              "driver_id", "read_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    related_delivery_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True,
+    )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class DriverScore(Base):
     """One snapshot per nightly recompute (4am cron). Latest row per driver
     is what My Profile reads. Each metric_pts column is the breakdown so

@@ -29,6 +29,7 @@ from app.models import (
     Cancellation,
     DeliveryRequest,
     Driver,
+    DriverNotification,
     DriverScore,
     Order,
     PayCheck,
@@ -353,6 +354,18 @@ def ez_market():
             if partner_user and partner_user.full_name:
                 viewer_name = partner_user.full_name.split()[0]
 
+        # Issue B / samai #1599: unread driver notifications (persisted
+        # so they survive logout). Most-recent-N pattern; template
+        # surfaces inline cards + a count badge.
+        unread_notifications = (
+            db.query(DriverNotification)
+            .filter(DriverNotification.driver_id == driver.id)
+            .filter(DriverNotification.read_at.is_(None))
+            .order_by(DriverNotification.created_at.desc())
+            .limit(20)
+            .all()
+        ) if driver else []
+
         ctx = {
             "active": "ez_market",
             "driver": driver,
@@ -365,6 +378,7 @@ def ez_market():
             "my_pending_reqs": my_pending_reqs,
             "my_active": my_active,
             "my_history": my_history,
+            "unread_notifications": unread_notifications,
             # None means "n/a" — template renders the category label but
             # substitutes 'n/a' for the value (Sam 2026-05-12).
             "stat_potential_today": _potential_today(db, driver.id, today) if driver else None,
@@ -401,6 +415,22 @@ def ez_market_request(delivery_id: int):
             flash(f"Max {cap} pending requests ({(driver.current_tier or 'new').replace('_', ' ').title()} tier).",
                   "error")
             return redirect(url_for("driver_system.ez_market"))
+        # Issue B (samai #1599): same-day time-window conflict against
+        # this driver's existing pending requests. First-of-day auto-
+        # allows (pending_count==0 is handled by the cap check above being
+        # a no-op for the first request). For 2nd+, refuse and surface
+        # which existing request conflicts so the driver can cancel it
+        # before re-requesting.
+        if pending_count > 0:
+            clash = lifecycle.find_conflicting_request(db, driver.id, order)
+            if clash is not None:
+                flash(
+                    f"This conflicts with your pending request for "
+                    f"order #{clash.delivery_id}. Cancel that request "
+                    f"first, then try this one again.",
+                    "error",
+                )
+                return redirect(url_for("driver_system.ez_market"))
         try:
             lifecycle.request_delivery(db, order, driver)
             db.commit()
@@ -447,6 +477,32 @@ def ez_market_cancel_request(request_id: int):
                     order.status = "available"
             db.commit()
             flash("Request cancelled.", "ok")
+        return redirect(url_for("driver_system.ez_market"))
+    finally:
+        db.close()
+
+
+# ============================================================
+# Issue B — driver notification mark-read
+# ============================================================
+
+@driver_system_bp.route("/ez-market/notifications/<int:notif_id>/dismiss",
+                        methods=["POST"])
+@require_driver
+def ez_market_dismiss_notification(notif_id: int):
+    """Mark one DriverNotification row as read. Idempotent: re-marking
+    a read row is a no-op. Driver can only mark their own."""
+    driver = _current_driver()
+    if not driver:
+        return redirect(url_for("driver.driver_login"))
+    db = SessionLocal()
+    try:
+        n = db.get(DriverNotification, notif_id)
+        if not n or n.driver_id != driver.id:
+            abort(404)
+        if n.read_at is None:
+            n.read_at = datetime.utcnow()
+            db.commit()
         return redirect(url_for("driver_system.ez_market"))
     finally:
         db.close()

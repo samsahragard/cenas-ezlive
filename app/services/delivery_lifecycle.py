@@ -34,6 +34,7 @@ from app.models import (
     Cancellation,
     DeliveryRequest,
     Driver,
+    DriverNotification,
     Order,
 )
 from app.services.ezcater_payroll import compute_one as compute_pay_one
@@ -116,6 +117,63 @@ def request_delivery(db: Session, order: Order, driver: Driver) -> DeliveryReque
     return req
 
 
+# ---- Issue B (Sam #1591 + samai #1599) — same-day conflict helpers ----
+#
+# Per samai #1599 spec:
+#   - time-only conflict (location dropped — drivers do back-to-back
+#     from same store all the time)
+#   - "different date → no conflict" gate handled upstream by checking
+#     order.delivery_window_start.date() vs the pending request's date
+#   - first-of-day auto-allows (caller skips conflict check on count=0)
+
+
+def _order_time_window(order: Order) -> tuple[datetime, datetime] | None:
+    """Best-effort (start, end) for an order's delivery window.
+    Returns None if the order has no usable time signal — caller treats
+    as 'no conflict possible' (degrades gracefully on legacy rows).
+    """
+    if order.delivery_window_start and order.delivery_window_end:
+        return order.delivery_window_start, order.delivery_window_end
+    if order.delivery_window_start:
+        # 15-min window centered on the start time (samai #1599 default
+        # when only the single time is present).
+        s = order.delivery_window_start
+        return s - timedelta(minutes=7, seconds=30), s + timedelta(minutes=7, seconds=30)
+    return None
+
+
+def find_conflicting_request(
+    db: Session, driver_id: int, new_order: Order
+) -> DeliveryRequest | None:
+    """If any of `driver_id`'s pending requests has a time window that
+    overlaps `new_order`'s window, return the first such DeliveryRequest.
+    Else None.
+    """
+    new_window = _order_time_window(new_order)
+    if new_window is None:
+        return None
+    new_start, new_end = new_window
+    pending = (
+        db.query(DeliveryRequest)
+        .filter(DeliveryRequest.driver_id == driver_id)
+        .filter(DeliveryRequest.status == "pending")
+        .all()
+    )
+    for r in pending:
+        if r.delivery_id == new_order.id:
+            continue
+        existing = db.get(Order, r.delivery_id)
+        if existing is None:
+            continue
+        existing_window = _order_time_window(existing)
+        if existing_window is None:
+            continue
+        es, ee = existing_window
+        if es < new_end and new_start < ee:
+            return r
+    return None
+
+
 def approve_request(
     db: Session, order: Order, driver: Driver, decided_by_user_id: int | None
 ) -> None:
@@ -142,6 +200,16 @@ def approve_request(
             r.status = "approved"
         else:
             r.status = "declined"
+            # Issue B / samai #1599: notify the losing driver inline at
+            # /ez-market. Persisted (not flash) so it survives logout.
+            db.add(DriverNotification(
+                driver_id=r.driver_id,
+                kind="order_taken_by_other",
+                message=(f"Another driver was given order "
+                         f"#{order.id} ({order.client or 'unnamed'}, "
+                         f"{order.delivery_date or 'no date'})."),
+                related_delivery_id=order.id,
+            ))
         r.decided_at = now
         r.decided_by_user_id = decided_by_user_id
 

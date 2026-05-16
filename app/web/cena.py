@@ -849,6 +849,8 @@ def cena_db_probe_list_orders():
         limit = 25
     limit = max(1, min(limit, 200))
 
+    delivery_date_gte = (body.get("delivery_date_gte") or "").strip() or None
+
     db = SessionLocal()
     try:
         q = db.query(Order)
@@ -858,13 +860,17 @@ def cena_db_probe_list_orders():
             q = q.filter(Order.client.ilike(f"%{client_substr}%"))
         if deliver_substr is not None:
             q = q.filter(Order.deliver_at.ilike(f"%{deliver_substr}%"))
-        rows = q.order_by(Order.deliver_at.asc(), Order.id.asc()).limit(limit).all()
+        if delivery_date_gte is not None:
+            q = q.filter(Order.delivery_date >= delivery_date_gte)
+        rows = q.order_by(Order.delivery_date.asc().nullslast(),
+                          Order.deliver_at.asc(), Order.id.asc()).limit(limit).all()
         return jsonify({
             "ok": True,
             "orders": [{
                 "id": o.id,
                 "status": o.status,
                 "client": o.client,
+                "delivery_date": o.delivery_date,
                 "deliver_at": o.deliver_at,
                 "reported_store": o.reported_store,
                 "total_amount": o.total_amount,
@@ -900,6 +906,10 @@ def cena_db_probe_list_orders():
 _VALID_ORDER_STATUSES = {
     "new", "available", "requested", "approved", "picked_up",
     "en_route", "delivered", "cancelled", "no_show",
+    # Undocumented ingest artifact — accepted so rollback after testing
+    # can restore the original state until T2 (ingest trace + samai
+    # spec) properly removes 'processed' from the data plane.
+    "processed",
 }
 
 

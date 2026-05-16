@@ -242,26 +242,59 @@ def login_submit():
                 return jsonify({"ok": True, "next": nxt})
 
         # ===== Path 2: User lookup by phone (managers/partners with phone set) =====
+        # If the phone matches an active User, that User is the SOLE
+        # candidate — wrong-passcode on the phone-matched user returns 401
+        # with failed_attempts bumped (mirrors Path 1's Driver lockout
+        # behavior). Locked-out match returns 429 with countdown. Does
+        # NOT cascade to Path 3 — cascading would be the passcode-
+        # collision-takeover surface samai flagged at FLAG-CRITICAL 1.
         user_match = None
         if digits:
+            phone_matched_user = None
             for cand in (db.query(User)
                            .filter(User.active.is_(True))
                            .filter(User.phone.isnot(None))
                            .all()):
-                if normalize_phone(cand.phone) != digits:
-                    continue
-                if cand.lockout_until and cand.lockout_until > now:
-                    continue
-                if cand.passcode_hash and _check(cand.passcode_hash, passcode):
-                    user_match = cand
+                if normalize_phone(cand.phone) == digits:
+                    phone_matched_user = cand
                     break
+            if phone_matched_user is not None:
+                # Locked? Return countdown immediately (FLAG-MEDIUM 2 fix —
+                # mirrors Path 1 driver lockout response).
+                if (phone_matched_user.lockout_until
+                        and phone_matched_user.lockout_until > now):
+                    mins = max(1, int((phone_matched_user.lockout_until - now)
+                                      .total_seconds() // 60) + 1)
+                    return jsonify({
+                        "ok": False,
+                        "error": f"Too many failed attempts. Try again in {mins} min.",
+                    }), 429
+                # Passcode check + failed-attempts bump (FLAG-MEDIUM 3 fix —
+                # mirrors Path 1 driver brute-force throttle).
+                if (phone_matched_user.passcode_hash
+                        and _check(phone_matched_user.passcode_hash, passcode)):
+                    user_match = phone_matched_user
+                else:
+                    phone_matched_user.failed_attempts = (
+                        phone_matched_user.failed_attempts or 0) + 1
+                    if phone_matched_user.failed_attempts >= MAX_FAILED_ATTEMPTS:
+                        phone_matched_user.lockout_until = (
+                            now + timedelta(minutes=LOCKOUT_MINUTES))
+                    db.commit()
+                    return jsonify({
+                        "ok": False,
+                        "error": "Phone or passcode doesn't match.",
+                    }), 401
 
         # ===== Path 3: Legacy fallback — User passcode-only scan =====
-        # For users who predate the Sam #1591 phone-required convention
-        # (User.phone may be NULL). Preserves backward compat — they can
-        # still sign in by typing any 10 digits as phone (ignored if no
-        # match) and their existing 5-char passcode.
-        if user_match is None:
+        # ONLY fires when no phone was typed at all (legacy passcode-only
+        # entry, for users who predate the Sam #1591 phone-required
+        # convention). FLAG-CRITICAL 1 fix: do NOT cascade here when
+        # digits was non-empty — that path was the account-takeover
+        # surface (typing phone-A, passcode-B matching user-B by collision,
+        # logged in as user-B). If digits was typed and Path 1+2 didn't
+        # match, return 401 instead.
+        if user_match is None and not digits:
             user_match = _find_user_by_passcode(db, passcode)
 
         if user_match is None:

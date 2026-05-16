@@ -30,6 +30,7 @@ from app.models import (
     AccessRequest,
     CenaActionLog,
     Driver,
+    Order,
     SamChatMessage,
     SamChatSession,
     User,
@@ -811,6 +812,107 @@ def cena_db_probe_deactivate_drivers():
         })
     except Exception as e:  # noqa: BLE001
         logger.exception("cena: deactivate-drivers failed")
+        db.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ============================================================
+# POST /sam/cena/db-probe/set-order-status — Sam-only write
+# ============================================================
+# Sets Order.status to a documented lifecycle value. Used to
+# unblock testing when ingest leaves orders in an undocumented
+# state (e.g. 'processed' from the ezCater pipeline, which isn't
+# in the {new, available, requested, approved, picked_up, en_route,
+# delivered, cancelled, no_show} taxonomy and so fails
+# lifecycle._check on every transition).
+#
+# Body (JSON):
+#   {id: int, status: str, audit_reason: str}
+#
+# Response (JSON):
+#   {ok, order_id, before_status, after_status, dry_run, actor, ts}
+
+_VALID_ORDER_STATUSES = {
+    "new", "available", "requested", "approved", "picked_up",
+    "en_route", "delivered", "cancelled", "no_show",
+}
+
+
+@cena_bp.route("/sam/cena/db-probe/set-order-status", methods=["POST"])
+def cena_db_probe_set_order_status():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    raw_id = body.get("id")
+    new_status = (body.get("status") or "").strip()
+    audit_reason = body.get("audit_reason") or ""
+    dry_run = bool(body.get("dry_run", False))
+
+    try:
+        order_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False,
+                        "error": f"id {raw_id!r} is not an int"}), 400
+
+    if new_status not in _VALID_ORDER_STATUSES:
+        return jsonify({"ok": False,
+                        "error": (f"status {new_status!r} not in "
+                                  f"{sorted(_VALID_ORDER_STATUSES)}")}), 400
+
+    db = SessionLocal()
+    try:
+        o = db.get(Order, order_id)
+        if o is None:
+            return jsonify({"ok": False,
+                            "error": f"order id={order_id} not found"}), 404
+
+        before_status = o.status
+        if before_status == new_status:
+            return jsonify({
+                "ok": True,
+                "order_id": order_id,
+                "before_status": before_status,
+                "after_status": new_status,
+                "noop": True,
+                "dry_run": dry_run,
+                "actor": "cena",
+                "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            })
+
+        if not dry_run:
+            o.status = new_status
+            db.add(UserAuditLog(
+                target_user_id=None,
+                target_label=f"order_id={order_id}",
+                actor_user_id=None,
+                actor_label="cena",
+                action="set_order_status",
+                before_value=f"status={before_status or ''}",
+                after_value=f"status={new_status}",
+                details=(f"order_id={order_id}; client={o.client}; "
+                         f"deliver_at={o.deliver_at}; reason={audit_reason}"),
+                ip=(request.remote_addr or None) if request else None,
+            ))
+            db.commit()
+        else:
+            db.rollback()
+
+        return jsonify({
+            "ok": True,
+            "order_id": order_id,
+            "before_status": before_status,
+            "after_status": new_status,
+            "noop": False,
+            "dry_run": dry_run,
+            "actor": "cena",
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: set-order-status failed")
         db.rollback()
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:

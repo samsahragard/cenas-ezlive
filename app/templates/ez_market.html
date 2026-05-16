@@ -105,6 +105,19 @@
 {% endblock %}
 
 {% block content %}
+{# Issue B follow-up (aick 2026-05-16 Chrome test): flash messages
+   were being silently swallowed because /ez-market never rendered
+   them. Causing "click did nothing" symptom on IllegalTransition +
+   conflict-check rejections. Same minimal pattern as ez_manage.html. #}
+{% with flashes = get_flashed_messages(with_categories=true) %}
+  {% if flashes %}
+  <div class="em-flash-stack" style="margin-bottom:14px;">
+    {% for cat, msg in flashes %}
+    <div class="em-flash em-flash-{{ cat }}" style="background: rgba(40,22,14,0.55); border:0.5px solid {% if cat == 'error' %}rgba(220,80,80,0.5){% else %}rgba(217,164,54,0.45){% endif %}; border-left:3px solid {% if cat == 'error' %}#dc5050{% else %}#E4B340{% endif %}; border-radius:8px; padding:10px 12px; margin-bottom:8px; color:rgba(236,227,208,0.92); font-size:13px;">{{ msg }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
 {# Issue B (samai #1599) — persisted driver notifications. Inline
    dismissible cards at top of page; ck owns the polish in a follow-
    up template lane. #}
@@ -201,9 +214,13 @@
               <span>0 drivers competing</span>
             {% endif %}
           </div>
+          {% if viewer_is_driver and o.status in ['available', 'requested'] %}
           <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
             <button type="submit" class="em-btn">Request delivery</button>
           </form>
+          {% elif viewer_is_driver %}
+          <div class="em-btn em-btn-disabled" style="opacity:0.55; text-align:center; cursor:not-allowed;">Not open for bidding (status: {{ o.status }})</div>
+          {% endif %}
         </div>
         {% endfor %}
       </div>

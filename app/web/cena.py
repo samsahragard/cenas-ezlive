@@ -819,6 +819,69 @@ def cena_db_probe_deactivate_drivers():
 
 
 # ============================================================
+# POST /sam/cena/db-probe/list-orders — Sam-only diagnostic
+# ============================================================
+# Lists Order rows for finding IDs by date/client/status. Read-
+# only, no audit row. Pre-flight survey for set-order-status.
+#
+# Body (JSON, all optional):
+#   {status: str | null, client_contains: str | null,
+#    deliver_at_contains: str | null, limit: int (default 25)}
+#
+# Response (JSON):
+#   {ok, orders: [{id, status, client, deliver_at,
+#                  reported_store, total_amount, potential_payout}],
+#    count, actor, ts}
+
+@cena_bp.route("/sam/cena/db-probe/list-orders", methods=["POST"])
+def cena_db_probe_list_orders():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    status_filter = (body.get("status") or "").strip() or None
+    client_substr = (body.get("client_contains") or "").strip() or None
+    deliver_substr = (body.get("deliver_at_contains") or "").strip() or None
+    try:
+        limit = int(body.get("limit", 25))
+    except (TypeError, ValueError):
+        limit = 25
+    limit = max(1, min(limit, 200))
+
+    db = SessionLocal()
+    try:
+        q = db.query(Order)
+        if status_filter is not None:
+            q = q.filter(Order.status == status_filter)
+        if client_substr is not None:
+            q = q.filter(Order.client.ilike(f"%{client_substr}%"))
+        if deliver_substr is not None:
+            q = q.filter(Order.deliver_at.ilike(f"%{deliver_substr}%"))
+        rows = q.order_by(Order.deliver_at.asc(), Order.id.asc()).limit(limit).all()
+        return jsonify({
+            "ok": True,
+            "orders": [{
+                "id": o.id,
+                "status": o.status,
+                "client": o.client,
+                "deliver_at": o.deliver_at,
+                "reported_store": o.reported_store,
+                "total_amount": o.total_amount,
+                "potential_payout": o.potential_payout,
+            } for o in rows],
+            "count": len(rows),
+            "actor": "cena",
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: list-orders failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ============================================================
 # POST /sam/cena/db-probe/set-order-status — Sam-only write
 # ============================================================
 # Sets Order.status to a documented lifecycle value. Used to

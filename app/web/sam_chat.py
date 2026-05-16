@@ -58,7 +58,7 @@ sam_chat_bp = Blueprint("sam_chat", __name__)
 # These are Sam's explicitly-chosen strings for this surface — NOT the
 # codebase's claude-opus-4-5 / claude-haiku-4-5 (those are the agentic
 # pipeline's; Sam Chat is Sam's personal surface, his model choice).
-_DEFAULT_MODEL = "claude-opus-4-7"
+_DEFAULT_MODEL = "claude-sonnet-4-6"
 _ALLOWED_MODELS = {"claude-opus-4-7", "claude-sonnet-4-6"}
 _MODEL_LABELS = {
     "claude-opus-4-7": "Opus 4.7",
@@ -72,6 +72,26 @@ _MODEL_RATES = {
     "claude-opus-4-7":   {"in": 5.0, "out": 25.0},
     "claude-sonnet-4-6": {"in": 3.0, "out": 15.0},
 }
+
+# ---- auto model selection ----
+_OPUS_KEYWORDS = frozenset({
+    "write", "build", "create", "debug", "refactor", "analyze", "review",
+    "explain", "implement", "optimize", "design", "architect", "code",
+    "function", "class", "error", "fix", "algorithm", "script", "module",
+    "compare", "summarize", "translate", "plan", "strategy",
+})
+_OPUS_CHAR_THRESHOLD = 300
+
+
+def _auto_select_model(text: str) -> str:
+    """Sonnet for short conversational queries, Opus for long/complex ones."""
+    if len(text) >= _OPUS_CHAR_THRESHOLD:
+        return "claude-opus-4-7"
+    words = set(text.lower().split())
+    if words & _OPUS_KEYWORDS:
+        return "claude-opus-4-7"
+    return "claude-sonnet-4-6"
+
 
 _MAX_OUTPUT_TOKENS = 8192
 # Attachment limits (Sam's spec): 5MB per file, 20MB total per message.
@@ -479,9 +499,7 @@ def sam_chat_send():
         return gate
 
     message = (request.form.get("message") or "").strip()
-    model = (request.form.get("model") or _DEFAULT_MODEL).strip()
-    if model not in _ALLOWED_MODELS:
-        return jsonify({"ok": False, "error": f"unknown model {model!r}"}), 400
+    model = _auto_select_model(message)
     raw_session_id = (request.form.get("session_id") or "").strip()
 
     # Attachments -> API content blocks + a text appendix.
@@ -632,6 +650,11 @@ def sam_chat_send():
                 _persist_assistant(session_id, full, model, in_tok, out_tok)
             yield _sse({"type": "error",
                         "error": f"stream failed: {e}"})
+            return
+
+        if not full.strip():
+            yield _sse({"type": "error",
+                        "error": "no text received — please try again"})
             return
 
         cost = _estimate_cost(model, in_tok, out_tok)

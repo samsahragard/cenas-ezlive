@@ -240,6 +240,21 @@
     background: rgba(220, 70, 60, 0.8);
     border-color: rgba(220, 70, 60, 0.8); color: #fff;
   }
+  /* ---- thinking animation ---- */
+  @keyframes sc-dot-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+  .sc-thinking-dots {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 2px;
+  }
+  .sc-thinking-dots span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: rgba(217, 164, 54, 0.65);
+    animation: sc-dot-bounce 1.2s ease-in-out infinite;
+  }
+  .sc-thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .sc-thinking-dots span:nth-child(3) { animation-delay: 0.30s; }
   .sc-foot {
     display: flex; align-items: center; gap: 14px;
     margin-top: 6px;
@@ -268,7 +283,8 @@
   <div class="sc-col">
     <div class="sc-colhead">
       <label style="font-size:11.5px;color:rgba(236,227,208,0.55);">Model</label>
-      <select id="sc-model"></select>
+      <span id="sc-model-label" style="font-size:11.5px;color:rgba(217,164,54,0.9);background:rgba(217,164,54,0.1);border:1px solid rgba(217,164,54,0.22);border-radius:7px;padding:4px 10px;">auto</span>
+      <select id="sc-model" style="display:none"></select>
       <span class="sc-cost30" id="sc-cost30">30d: $0.00</span>
     </div>
     <div class="sc-msgs" id="sc-msgs"></div>
@@ -321,7 +337,7 @@
   const D = window.SAM_CHAT_DATA;
   const $ = (id) => document.getElementById(id);
   const railEl = $("sc-sessions"), msgsEl = $("sc-msgs"),
-        inputEl = $("sc-input"), modelEl = $("sc-model"),
+        inputEl = $("sc-input"), modelLabelEl = $("sc-model-label"),
         chipsEl = $("sc-chips"), warnEl = $("sc-warn"),
         cost30El = $("sc-cost30"), sessionCostEl = $("sc-session-cost"),
         filesEl = $("sc-files"), sendBtn = $("sc-send"), micBtn = $("sc-mic");
@@ -330,13 +346,7 @@
   let attachments = [];
   let streaming = false;
 
-  // ---- model selector ----
-  D.models.forEach((m) => {
-    const o = document.createElement("option");
-    o.value = m.id; o.textContent = m.label;
-    if (m.id === D.defaultModel) o.selected = true;
-    modelEl.appendChild(o);
-  });
+  // model is auto-selected server-side; label updates after each response
 
   // ---- helpers ----
   function esc(s) {
@@ -566,11 +576,12 @@
 
     addMessage("user", text || "(attachments only)", {});
     const streamBubble = addMessage("assistant", "", { streaming: true });
+    streamBubble.innerHTML = '<span class="sc-thinking-dots"><span></span><span></span><span></span></span>';
     let acc = "";
+    let firstDelta = false;
 
     const fd = new FormData();
     fd.append("message", text);
-    fd.append("model", modelEl.value);
     if (currentSessionId) fd.append("session_id", String(currentSessionId));
     attachments.forEach((f) => fd.append("attachments", f));
 
@@ -587,6 +598,8 @@
         try { const j = await resp.json(); if (j.error) msg = j.error; }
         catch (e) {}
         streamBubble.textContent = "⚠ " + msg;
+        streamBubble.classList.remove("streaming");
+        firstDelta = true;
         setStreaming(false);
         return;
       }
@@ -606,6 +619,7 @@
           try { evt = JSON.parse(frame.slice(5).trim()); }
           catch (e) { continue; }
           if (evt.type === "delta") {
+            if (!firstDelta) { firstDelta = true; streamBubble.textContent = ""; }
             acc += evt.text;
             streamBubble.textContent = acc;
             streamBubble.dataset.raw = acc;
@@ -620,16 +634,25 @@
             fmtCost30(evt.cost_30d);
             updateWarn(evt.token_estimate);
             refreshSessions();
+            firstDelta = true;
+            const _mn = {"claude-opus-4-7": "Opus 4.7", "claude-sonnet-4-6": "Sonnet 4.6"};
+            if (modelLabelEl && evt.model) modelLabelEl.textContent = _mn[evt.model] || evt.model;
           } else if (evt.type === "error") {
-            streamBubble.textContent = acc + "\n\n⚠ " + evt.error;
+            streamBubble.textContent = (acc ? acc + "\n\n" : "") + "⚠ " + evt.error;
             streamBubble.classList.remove("streaming");
+            firstDelta = true;
           }
         }
       }
     } catch (e) {
-      streamBubble.textContent = acc + "\n\n⚠ connection error: " + e;
+      streamBubble.textContent = (acc ? acc + "\n\n" : "") + "⚠ connection error: " + e;
       streamBubble.classList.remove("streaming");
+      firstDelta = true;
     } finally {
+      if (!firstDelta) {
+        streamBubble.textContent = "⚠ no response received — please try again";
+        streamBubble.classList.remove("streaming");
+      }
       setStreaming(false);
       inputEl.focus();
     }

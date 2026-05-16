@@ -39,10 +39,18 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 # 3) Join the tailnet. Ephemeral node — auto-removed when the container exits.
-"$TS_BIN/tailscale" --socket="$TS_SOCK" up \
-    --authkey="${RENDER_TS_AUTHKEY:?RENDER_TS_AUTHKEY not set}" \
+#    NON-FATAL on failure (2026-05-16 prod incident): a stale/expired
+#    RENDER_TS_AUTHKEY took the entire app down because the original
+#    `tailscale up` was a hard gate under `set -e`. Cena tunnel breaks
+#    without tailnet, but the rest of the app (driver portal, ez-market,
+#    /partner/*) must keep serving. If you need tailnet again, rotate
+#    the key in Tailscale admin + restart.
+if ! "$TS_BIN/tailscale" --socket="$TS_SOCK" up \
+    --authkey="${RENDER_TS_AUTHKEY:-MISSING}" \
     --hostname="cenas-ezlive" \
-    --accept-routes
+    --accept-routes; then
+    echo "WARN: tailscale up failed (auth key invalid or expired?); continuing without tailnet — Cena gateway path will be degraded" >&2
+fi
 
 # Optional sanity log — visible in Render's deploy logs.
 "$TS_BIN/tailscale" --socket="$TS_SOCK" ip -4 || true

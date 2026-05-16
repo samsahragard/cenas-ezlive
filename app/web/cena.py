@@ -658,6 +658,165 @@ def cena_db_probe_deactivate_users():
         db.close()
 
 
+# ============================================================
+# POST /sam/cena/db-probe/list-drivers — Sam-only diagnostic
+# ============================================================
+# Returns a compact view of every row in the drivers table. Body
+# accepts an optional {active_only: bool} flag — when True, only
+# rows where Driver.active is True are returned. Used as the
+# pre-flight survey for the deactivate-drivers bulk pass per
+# samai #1562 spec.
+
+@cena_bp.route("/sam/cena/db-probe/list-drivers", methods=["POST"])
+def cena_db_probe_list_drivers():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    active_only = bool(body.get("active_only", False))
+
+    db = SessionLocal()
+    try:
+        q = db.query(Driver).order_by(Driver.id.asc())
+        if active_only:
+            q = q.filter(Driver.active.is_(True))
+        return _driver_probe_response(q.all())
+    finally:
+        db.close()
+
+
+# ============================================================
+# POST /sam/cena/db-probe/deactivate-drivers — Sam-only write
+# ============================================================
+# Bulk-deactivates rows in the drivers table per samai #1562 spec.
+# Counterpart to deactivate-users for the drivers table; same
+# safety pattern (dry-run-first → confirm → live).
+#
+# Body (JSON):
+#   {ids: [int] | null, all_active: bool, dry_run: bool,
+#    audit_reason: str}
+#
+# Scope resolution: if all_active is True, the target is every
+# row where Driver.active is True (ids is ignored). Otherwise
+# `ids` enumerates the targets. Exactly one of the two MUST be
+# supplied.
+#
+# Response (JSON):
+#   {ok, scanned_matching_active, requested_scope,
+#    deactivated_ids, skipped, dry_run, actor, ts}
+#
+# Each deactivation flips Driver.active = False, bumps
+# session_version (invalidates any live session), and writes a
+# UserAuditLog row (DriverAuditLog doesn't exist yet — pending
+# follow-up table; using UserAuditLog with action="deactivate
+# _driver_bulk" + driver_id stamped in details per samai spec).
+
+@cena_bp.route("/sam/cena/db-probe/deactivate-drivers", methods=["POST"])
+def cena_db_probe_deactivate_drivers():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    all_active = bool(body.get("all_active", False))
+    raw_ids = body.get("ids")
+    dry_run = bool(body.get("dry_run", False))
+    audit_reason = body.get("audit_reason") or ""
+
+    if all_active and raw_ids:
+        return jsonify({"ok": False,
+                        "error": "supply ids OR all_active, not both"}), 400
+    if not all_active and not raw_ids:
+        return jsonify({"ok": False,
+                        "error": "need ids or all_active=true"}), 400
+
+    requested_ids: list[int] = []
+    if raw_ids:
+        if not isinstance(raw_ids, list):
+            return jsonify({"ok": False,
+                            "error": "ids must be a list"}), 400
+        for v in raw_ids:
+            try:
+                requested_ids.append(int(v))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False,
+                                "error": f"id {v!r} is not an int"}), 400
+
+    db = SessionLocal()
+    try:
+        scanned_rows = (
+            db.query(Driver)
+              .filter(Driver.active.is_(True))
+              .order_by(Driver.id.asc())
+              .all()
+        )
+        scanned_ids = [d.id for d in scanned_rows]
+
+        if all_active:
+            requested_scope = "all_active"
+            target_ids = list(scanned_ids)
+        else:
+            requested_scope = "ids"
+            target_ids = requested_ids
+
+        deactivated_ids: list[int] = []
+        skipped: list[dict] = []
+
+        for did in target_ids:
+            d = db.get(Driver, did)
+            if d is None:
+                skipped.append({"id": did, "reason": _SKIP_NOT_FOUND})
+                continue
+            if not d.active:
+                skipped.append({"id": did,
+                                "reason": _SKIP_ALREADY_INACTIVE})
+                continue
+            if dry_run:
+                continue
+            before = f"active=true|status={d.status or ''}"
+            after = f"active=false|status={d.status or ''} [inactive]"
+            d.active = False
+            d.session_version = (d.session_version or 1) + 1
+            db.add(UserAuditLog(
+                target_user_id=None,
+                target_label=d.name,
+                actor_user_id=None,
+                actor_label="cena",
+                action="deactivate_driver_bulk",
+                before_value=before,
+                after_value=after,
+                details=(f"driver_id={d.id}; phone={d.phone}; "
+                         f"reason={audit_reason}"),
+                ip=(request.remote_addr or None) if request else None,
+            ))
+            deactivated_ids.append(did)
+
+        if dry_run:
+            db.rollback()
+        else:
+            db.commit()
+
+        return jsonify({
+            "ok": True,
+            "scanned_matching_active": scanned_ids,
+            "requested_scope": requested_scope,
+            "requested_ids": (requested_ids if requested_scope == "ids"
+                              else target_ids),
+            "deactivated_ids": sorted(deactivated_ids),
+            "skipped": skipped,
+            "dry_run": dry_run,
+            "actor": "cena",
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: deactivate-drivers failed")
+        db.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

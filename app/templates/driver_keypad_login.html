@@ -242,9 +242,15 @@
 <div class="wrap">
 
   {# ============== SCREEN 1 — Phone number ============== #}
+  {# Sam #1591 (2026-05-15): this template is now the unified login for
+     EVERYONE (drivers + managers + partners). Header label is neutral
+     "PHONE" instead of "DRIVER PHONE" so the form reads correctly for
+     non-driver roles too. The signup link still points to /driver/signup —
+     that's the only self-signup surface; managers/partners are added via
+     /partner/team admin, so the link is irrelevant-but-harmless for them. #}
   <div class="screen active" id="screen-phone">
     <div class="header-cap">
-      <div class="header-label">DRIVER PHONE</div>
+      <div class="header-label">PHONE</div>
       <div class="phone-strip" id="phone-strip" aria-live="polite"></div>
     </div>
 

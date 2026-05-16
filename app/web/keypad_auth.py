@@ -1,11 +1,27 @@
-"""5-digit passcode keypad auth (migration 13 + 2026-05-11 rewrite).
+"""Unified phone + 5-digit passcode keypad auth (Sam #1591 — 2026-05-15).
 
 Endpoints:
-  GET  /keypad-login          — renders the keypad
-  POST /keypad-login          — JSON: {"passcode": "12345"} → {"ok": true, "next": "/"} or {"ok": false, "error": "..."}
+  GET  /keypad-login          — renders the unified two-screen pad (phone → PIN)
+  POST /keypad-login          — JSON: {"phone": "...", "pin": "..."} → routes to right dashboard
+                                (Driver-table match first, User-table by phone second,
+                                 User-table by passcode-only as legacy fallback for users
+                                 without a phone set in the DB)
   GET  /change-passcode       — renders the change-passcode keypad (forced on first login)
   POST /change-passcode       — JSON: {"new": "12345"} → {"ok": true} or {"ok": false, "error": "..."}
-  GET  /logout                — clears session, redirects to /keypad-login
+  GET  /keypad-logout         — clears session, redirects to /keypad-login
+
+Pre-Sam-#1591 history: /keypad-login was passcode-only against User.passcode_hash;
+/driver/login was phone+pin against Driver.passcode_hash. Two forms, two
+post-logout destinations, and a confusing UX where a driver who logged out
+landed on the partner-keypad page (Sam, 2026-05-15: "it automatically goes
+to the password screen for the Partners, not the passcode").
+
+Now: ONE unified entry. Phone is the first factor (disambiguates which row
+to bcrypt against, makes login O(1) instead of O(N) for the common path).
+Driver-table lookup wins on phone collision (drivers are the higher-volume
+login source per samai #1601 default). User-by-phone is the next-tier match;
+user-by-passcode-only is the legacy fallback so partners/managers who
+predate the Sam #1591 phone-required convention can still sign in.
 
 The legacy /login + /partner-login routes (auth.py) stay live for backwards
 compat with the chat-tail/post tooling and the existing PARTNER_PASSWORD
@@ -102,20 +118,31 @@ def _bump_failed_attempts_for_passcode(db, passcode: str) -> None:
 
 @keypad_auth.route("/keypad-login", methods=["GET"])
 def login():
-    """Render the keypad. If already signed in, jump straight to their
-    role landing — Sam's 2026-05-11 spec: 'they stay logged in unless
-    logging out'. Back-button after login is solved client-side via
-    history.replaceState (see keypad_login.html JS)."""
+    """Render the unified phone+PIN keypad. If already signed in (either
+    role), jump straight to the dashboard.
+
+    Sam #1591 (2026-05-15): the partner-keypad and driver-keypad pages
+    are unified here — `driver_keypad_login.html` is the canonical login
+    template for EVERYONE (phone screen 1 → PIN screen 2). /driver/login
+    GET now redirects here too so there's a single entry point."""
     u = getattr(g, "current_user", None)
     if u is not None:
         nxt = request.args.get("next") or _landing_for_user(u)
         if not nxt.startswith("/"):
             nxt = "/"
         return redirect(nxt)
+    # Driver session takes a driver to their portal, NOT this login page.
+    # Prevents the post-driver-logout symptom where the partner-keypad
+    # rendered over an active driver session.
+    if session.get("driver_id"):
+        return redirect("/driver/logs")
     return _no_store(render_template(
-        "keypad_login.html",
+        "driver_keypad_login.html",
         next_url=request.args.get("next") or "/",
         passcode_len=PASSCODE_LEN,
+        submit_url=url_for("keypad_auth.login_submit"),
+        signup_url="/driver/signup",
+        prefill_phone="",
     ))
 
 
@@ -132,58 +159,147 @@ def _no_store(body):
 
 @keypad_auth.route("/keypad-login", methods=["POST"])
 def login_submit():
-    """Accept JSON {"passcode": "12345"}. On match: set session, return next URL."""
+    """Unified login (Sam #1591). Accept JSON {"phone": "...", "pin": "..."}.
+    Driver-table by phone -> User-table by phone -> User-table by passcode-only
+    (legacy fallback for users that predate the phone-required convention).
+
+    Backward-compat: the field name `passcode` is still accepted as an alias
+    for `pin` so old client code that POSTs {passcode: ...} doesn't break.
+    Sets the appropriate session keys for whichever role matched and routes
+    to that role's landing page.
+    """
+    from app.services.ezcater_known_drivers_seed import normalize_phone
+    from app.models import Driver
+    from werkzeug.security import check_password_hash as _check
+
     data = request.get_json(silent=True) or {}
-    passcode = (data.get("passcode") or "").strip()
+    phone_raw = (data.get("phone") or "").strip()
+    passcode = (data.get("pin") or data.get("passcode") or "").strip()
     if not _valid_passcode(passcode):
-        return jsonify({"ok": False, "error": "Passcode must be exactly 5 characters (digits or * # @ + % - $)."}), 400
+        return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
 
     nxt = (data.get("next") or "/").strip()
     if not nxt.startswith("/"):
         nxt = "/"
 
+    digits = normalize_phone(phone_raw) if phone_raw else ""
+    now = datetime.utcnow()
+
     db = SessionLocal()
     try:
-        u = _find_user_by_passcode(db, passcode)
-        if u is None:
-            return jsonify({"ok": False, "error": "Wrong passcode."}), 401
+        # ===== Path 1: Driver lookup by phone (highest-volume login source) =====
+        if digits:
+            driver_match = None
+            for d in (db.query(Driver)
+                        .filter(Driver.active.is_(True))
+                        .filter(Driver.phone.isnot(None))
+                        .all()):
+                if normalize_phone(d.phone) == digits:
+                    driver_match = d
+                    break
+            if driver_match is not None:
+                if driver_match.lockout_until and driver_match.lockout_until > now:
+                    mins = max(1, int((driver_match.lockout_until - now)
+                                      .total_seconds() // 60) + 1)
+                    return jsonify({
+                        "ok": False,
+                        "error": f"Too many failed attempts. Try again in {mins} min.",
+                    }), 429
+                if (not driver_match.passcode_hash
+                        or not _check(driver_match.passcode_hash, passcode)):
+                    driver_match.failed_attempts = (
+                        driver_match.failed_attempts or 0) + 1
+                    if driver_match.failed_attempts >= MAX_FAILED_ATTEMPTS:
+                        driver_match.lockout_until = (
+                            now + timedelta(minutes=LOCKOUT_MINUTES))
+                    db.commit()
+                    return jsonify({
+                        "ok": False,
+                        "error": "Phone or passcode doesn't match.",
+                    }), 401
+                # Driver login success — set driver session keys.
+                driver_match.failed_attempts = 0
+                driver_match.lockout_until = None
+                if hasattr(driver_match, "last_login_at"):
+                    driver_match.last_login_at = now
+                db.commit()
+                # Clear any leftover user-keypad keys.
+                for _k in ("user_id", "user_session_version",
+                           "partner_auth_ok"):
+                    session.pop(_k, None)
+                session.permanent = True
+                session["driver_id"] = driver_match.id
+                session["driver_name"] = driver_match.name
+                session["driver_location"] = driver_match.location
+                session["driver_session_version"] = driver_match.session_version
+                if not driver_match.first_login_done:
+                    return jsonify({
+                        "ok": True,
+                        "next": url_for("driver.driver_change_passcode"),
+                    })
+                if nxt == "/":
+                    nxt = "/driver/logs"
+                return jsonify({"ok": True, "next": nxt})
 
-        u.failed_attempts = 0
-        u.lockout_until = None
-        u.last_login_at = datetime.utcnow()
-        u.last_login_ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:64]
+        # ===== Path 2: User lookup by phone (managers/partners with phone set) =====
+        user_match = None
+        if digits:
+            for cand in (db.query(User)
+                           .filter(User.active.is_(True))
+                           .filter(User.phone.isnot(None))
+                           .all()):
+                if normalize_phone(cand.phone) != digits:
+                    continue
+                if cand.lockout_until and cand.lockout_until > now:
+                    continue
+                if cand.passcode_hash and _check(cand.passcode_hash, passcode):
+                    user_match = cand
+                    break
+
+        # ===== Path 3: Legacy fallback — User passcode-only scan =====
+        # For users who predate the Sam #1591 phone-required convention
+        # (User.phone may be NULL). Preserves backward compat — they can
+        # still sign in by typing any 10 digits as phone (ignored if no
+        # match) and their existing 5-char passcode.
+        if user_match is None:
+            user_match = _find_user_by_passcode(db, passcode)
+
+        if user_match is None:
+            return jsonify({
+                "ok": False,
+                "error": "Phone or passcode doesn't match.",
+            }), 401
+
+        # User login success.
+        user_match.failed_attempts = 0
+        user_match.lockout_until = None
+        user_match.last_login_at = now
+        user_match.last_login_ip = (
+            request.headers.get("X-Forwarded-For")
+            or request.remote_addr or "")[:64]
         db.commit()
 
         session.permanent = True
-        # Clear any leftover driver-portal session keys so the dashboard
-        # sidebar doesn't render the "MY WORK" driver menu over a partner
-        # session (Sam, 2026-05-13: hit this on the Capacitor mobile app
-        # after switching from a driver-login test back to his partner
-        # keypad — sidebar role-detection picks driver_id first).
+        # Clear any leftover driver-portal session keys (mirrors the
+        # pre-unification login_submit cleanup; same race fix applies).
         for _k in ("driver_id", "driver_name", "driver_location",
                    "driver_session_version"):
             session.pop(_k, None)
-        session["user_id"] = u.id
-        # Stamp the session with the user's current version. Any later
-        # passcode reset or deactivation bumps User.session_version, which
-        # makes load_current_user kick stale sessions on the next request.
-        session["user_session_version"] = u.session_version
-        # Legacy shims so partner-gated routes keep working under the new auth.
+        session["user_id"] = user_match.id
+        session["user_session_version"] = user_match.session_version
         session["auth_ok"] = True
-        # Sam (2026-05-11): only partner gets the partner_auth_ok flag — that
-        # unlocks /partner/team (Admin) and /partner/developer/* (Chat,
-        # Ezcater Review, App docs). Corporate sees the same operational
-        # dashboards as partner but NOT those owner-private sections.
-        if u.permission_level == "partner":
+        if user_match.permission_level == "partner":
             session["partner_auth_ok"] = True
         else:
             session.pop("partner_auth_ok", None)
 
-        if not u.first_login_done:
-            return jsonify({"ok": True, "next": url_for("keypad_auth.change_passcode")})
-        # Bare-login (no specific destination requested) routes by role.
+        if not user_match.first_login_done:
+            return jsonify({
+                "ok": True,
+                "next": url_for("keypad_auth.change_passcode"),
+            })
         if nxt == "/":
-            nxt = _landing_for_user(u)
+            nxt = _landing_for_user(user_match)
         return jsonify({"ok": True, "next": nxt})
     finally:
         db.close()

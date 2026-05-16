@@ -74,17 +74,30 @@ def driver_app_apk():
 
 @driver.route("/driver/login", methods=["GET"])
 def driver_login():
-    """Render the driver login pad. Two-step flow (Sam, 2026-05-13
-    post-Block-2 redesign): screen 1 is phone-number entry, screen 2
-    is the existing 5-char PIN pad. Phone is the first factor — gets
-    the search space down to one driver, so the PIN check is a single
-    bcrypt instead of a linear scan, and a random guess goes from
-    ~1-in-2,500 (PIN-only against ~40 drivers) to ~1-in-100,000
-    (phone + PIN).
+    """Sam #1591 (2026-05-15): the login form is now unified at
+    /keypad-login (phone + PIN for everyone). This URL stays as a
+    permanent redirect so old links, bookmarks, and the post-logout
+    ?_clear=1 path keep working.
 
-    UI state machine is fully client-side; this route just renders the
-    shell. Submit POSTs {phone, pin} as one JSON payload."""
-    # Already signed in? Jump to the driver portal.
+    Already-signed-in drivers still short-circuit to /driver/logs so the
+    redirect chain doesn't bounce them through the unified form. Query
+    string is preserved (esp. ?_clear=1 from /driver/logout, which the
+    driver_keypad_login.html JS reads to wipe the persisted phone)."""
+    if session.get("driver_id"):
+        return redirect(url_for("driver.driver_logs"))
+    qs = request.query_string.decode("ascii") if request.query_string else ""
+    target = url_for("keypad_auth.login")
+    if qs:
+        target = f"{target}?{qs}"
+    return redirect(target)
+
+
+@driver.route("/driver/login-legacy", methods=["GET"])
+def driver_login_legacy():
+    """Pre-unification driver login renderer. Kept callable in case a
+    future incident needs the old isolated path — the unified form at
+    /keypad-login is the canonical entry going forward. Not linked from
+    any nav surface."""
     if session.get("driver_id"):
         return redirect(url_for("driver.driver_logs"))
     return render_template(
@@ -392,8 +405,12 @@ def driver_logout():
     # Add ?_clear=1 so the driver_keypad_login JS wipes the persisted
     # phone in localStorage. Logout means "this person is done on this
     # device" — force re-entry on next login. Banking pattern (Sam
-    # 2026-05-13).
-    return redirect(url_for("driver.driver_login", _clear=1))
+    # 2026-05-13). Sam #1591 (2026-05-15): now lands on the unified
+    # /keypad-login (NOT the old /driver/login) — that was the symptom
+    # report ("when you log out and try to log back in, it automatically
+    # goes to the password screen for the Partners"). The ?_clear=1
+    # param survives the unified form's URL the same way.
+    return redirect(url_for("keypad_auth.login", _clear=1))
 
 
 @driver.route("/driver/shift/start", methods=["POST"])

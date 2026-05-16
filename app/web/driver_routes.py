@@ -177,16 +177,28 @@ def driver_login_submit():
 def driver_signup():
     # Pre-fill from query string so a user redirected from /request-access
     # (when they pick the "Driver" role) doesn't have to retype their info.
+    # `location` is also accepted so the "Add new driver" button on
+    # /<store>/drivers can route the admin into the form with their store
+    # pre-selected.
     form = {
         "name":  (request.args.get("name") or "").strip(),
         "email": _normalize_email(request.args.get("email")),
         "phone": (request.args.get("phone") or "").strip(),
+        "location": (request.args.get("location") or "").strip().lower(),
     }
+    # Defensive: only accept the two real store slugs in the location
+    # pre-fill. Anything else (typo, garbage, "both") falls back to the
+    # blank dropdown so the user picks deliberately.
+    if form["location"] not in {"copperfield", "tomball"}:
+        form["location"] = ""
     # `prefilled` is true when ANY of the three identity fields arrived via
     # query string — i.e. the user landed here from /request-access (the
     # only caller that passes those args). Template uses it to swap the
     # generic sub-paragraph for a "Step 2 of 2" banner so the redirect feels
     # intentional rather than a silent landing on a different form.
+    # Note: location-only pre-fill (admin "Add new driver" button) does NOT
+    # set prefilled — that path is admin-initiated, not the request-access
+    # Step-2-of-2 flow.
     prefilled = bool(form["name"] or form["email"] or form["phone"])
     return render_template("driver_signup.html", error=None, form=form,
                            prefilled=prefilled)

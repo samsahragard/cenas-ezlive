@@ -25,3 +25,5 @@ requests==2.32.3
 httpx[socks]>=0.28.1
 python-dotenv>=1.0.0
 sentry-sdk[flask]>=2.0
+# Google Gemini for sam_chat Gemini model option.
+google-genai>=1.0.0

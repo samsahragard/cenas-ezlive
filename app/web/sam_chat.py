@@ -54,23 +54,18 @@ sam_chat_bp = Blueprint("sam_chat", __name__)
 
 
 # ---- model routing ----
-# Sam's spec: Opus 4.7 default, Sonnet 4.6 as the faster/cheaper option.
-# These are Sam's explicitly-chosen strings for this surface — NOT the
-# codebase's claude-opus-4-5 / claude-haiku-4-5 (those are the agentic
-# pipeline's; Sam Chat is Sam's personal surface, his model choice).
 _DEFAULT_MODEL = "claude-sonnet-4-6"
-_ALLOWED_MODELS = {"claude-opus-4-7", "claude-sonnet-4-6"}
+_ALLOWED_MODELS = {"claude-opus-4-7", "claude-sonnet-4-6", "gemini-2.5-flash"}
 _MODEL_LABELS = {
-    "claude-opus-4-7": "Opus 4.7",
+    "claude-opus-4-7":  "Opus 4.7",
     "claude-sonnet-4-6": "Sonnet 4.6",
+    "gemini-2.5-flash":  "Gemini 2.5 Flash",
 }
-# Rough list-price estimates, USD per million tokens — for the cost
-# display. NOT billing-grade (exact pricing for these models may not be
-# public yet); update when known. cost_usd is stored per the spec so
-# Sam has a running tally; treat it as "approximately".
+# Rough list-price estimates, USD per million tokens.
 _MODEL_RATES = {
-    "claude-opus-4-7":   {"in": 5.0, "out": 25.0},
-    "claude-sonnet-4-6": {"in": 3.0, "out": 15.0},
+    "claude-opus-4-7":   {"in": 5.0,  "out": 25.0},
+    "claude-sonnet-4-6": {"in": 3.0,  "out": 15.0},
+    "gemini-2.5-flash":  {"in": 0.15, "out": 0.60},
 }
 
 # ---- auto model selection ----
@@ -91,6 +86,19 @@ def _auto_select_model(text: str) -> str:
     if words & _OPUS_KEYWORDS:
         return "claude-opus-4-7"
     return "claude-sonnet-4-6"
+
+
+def _gemini_client():
+    """Returns a google.genai Client or None if GEMINI_API_KEY is unset."""
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None
+    try:
+        from google import genai  # type: ignore[import]
+        return genai.Client(api_key=api_key)
+    except ImportError:
+        logger.warning("sam_chat: google-genai package not installed")
+        return None
 
 
 _MAX_OUTPUT_TOKENS = 8192
@@ -358,7 +366,8 @@ def sam_chat_page():
             current_session=(_session_json(current) if current else None),
             messages=[_message_json(m) for m in messages],
             models=[{"id": m, "label": _MODEL_LABELS[m]}
-                    for m in ("claude-opus-4-7", "claude-sonnet-4-6")],
+                    for m in ("claude-sonnet-4-6", "claude-opus-4-7",
+                               "gemini-2.5-flash")],
             default_model=_DEFAULT_MODEL,
             session_cost=session_cost,
             cost_30d=_cost_last_30d(db),
@@ -499,7 +508,9 @@ def sam_chat_send():
         return gate
 
     message = (request.form.get("message") or "").strip()
-    model = _auto_select_model(message)
+    model = (request.form.get("model") or _DEFAULT_MODEL).strip()
+    if model not in _ALLOWED_MODELS:
+        model = _auto_select_model(message)
     raw_session_id = (request.form.get("session_id") or "").strip()
 
     # Attachments -> API content blocks + a text appendix.
@@ -585,7 +596,44 @@ def sam_chat_send():
         in_tok = out_tok = 0
         gateway_url = _cena_gateway_url()
         try:
-            if gateway_url:
+            if model.startswith("gemini"):
+                # ---- Google Gemini: direct API call (no gateway) ----
+                gc = _gemini_client()
+                if gc is None:
+                    yield _sse({"type": "error",
+                                "error": "GEMINI_API_KEY not configured"})
+                    return
+                from google.genai import types as _gtypes  # type: ignore[import]
+                # Convert Anthropic role/content format → Gemini Contents.
+                gemini_contents = []
+                for _m in api_messages:
+                    _role = "model" if _m["role"] == "assistant" else "user"
+                    _raw = _m["content"]
+                    if isinstance(_raw, list):
+                        _text = " ".join(
+                            b.get("text", "") for b in _raw
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        )
+                    else:
+                        _text = str(_raw)
+                    gemini_contents.append(
+                        _gtypes.Content(role=_role,
+                                        parts=[_gtypes.Part(text=_text)]))
+                for _chunk in gc.models.generate_content_stream(
+                    model=model,
+                    contents=gemini_contents,
+                    config=_gtypes.GenerateContentConfig(
+                        max_output_tokens=_MAX_OUTPUT_TOKENS),
+                ):
+                    if _chunk.text:
+                        full += _chunk.text
+                        yield _sse({"type": "delta", "text": _chunk.text})
+                # Gemini streaming doesn't expose per-chunk usage;
+                # rough estimate from character counts (÷4 ≈ tokens).
+                in_tok = sum(len(str(_m.get("content", ""))) // 4
+                             for _m in api_messages)
+                out_tok = len(full) // 4
+            elif gateway_url:
                 # ---- Cena gateway: route to aick ----
                 # CENA_PROXY (e.g. socks5h://localhost:1055) routes the
                 # outbound call through Render's userspace tailscaled —

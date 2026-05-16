@@ -14,6 +14,29 @@
     height: calc(100vh - 200px);
     min-height: 460px;
     margin-top: 6px;
+    position: relative;
+    transition: outline 0.12s ease;
+  }
+  /* Drop-zone visual: applied to .sc-wrap when a file is dragged over the
+     page. A subtle accent outline + tint signals "drop anywhere here." */
+  .sc-wrap.sc-drag-active {
+    outline: 2px dashed rgba(232, 122, 62, 0.65);
+    outline-offset: -6px;
+  }
+  .sc-wrap.sc-drag-active::before {
+    content: "Drop to attach";
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 14px 22px;
+    background: rgba(15, 8, 5, 0.85);
+    border: 1px solid rgba(232, 122, 62, 0.65);
+    border-radius: 10px;
+    color: #FAF6EC;
+    font-size: 14px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 30;
   }
   /* ---- history rail ---- */
   .sc-rail {
@@ -478,6 +501,56 @@
     renderChips();
   });
   $("sc-attach").onclick = () => filesEl.click();
+
+  // ---- paste-from-clipboard: Ctrl/Cmd+V a screenshot or copied file
+  // anywhere in the chat surface adds it to the attachment chips. Mirrors
+  // the file-picker flow — pushes File objects onto `attachments`. Pasting
+  // plain text into the textarea is unaffected (we only pull `kind=file`).
+  document.addEventListener("paste", (e) => {
+    if (!e.clipboardData) return;
+    const files = [];
+    for (const item of e.clipboardData.items) {
+      if (item.kind === "file") {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length === 0) return;
+    e.preventDefault();
+    for (const f of files) attachments.push(f);
+    renderChips();
+  });
+
+  // ---- drag-and-drop: drop files anywhere on the chat surface to attach.
+  // Visual feedback via the .sc-drag-active class on .sc-wrap (the outer
+  // chat container). We listen on the document so a drop anywhere counts —
+  // landing the file precisely on the composer chip area is needlessly
+  // fiddly.
+  const dragTarget = document.querySelector(".sc-wrap") || document.body;
+  let dragDepth = 0;
+  document.addEventListener("dragenter", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth++;
+    dragTarget.classList.add("sc-drag-active");
+  });
+  document.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();  // required to allow drop
+  });
+  document.addEventListener("dragleave", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types.includes("Files")) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dragTarget.classList.remove("sc-drag-active");
+  });
+  document.addEventListener("drop", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    dragDepth = 0;
+    dragTarget.classList.remove("sc-drag-active");
+    for (const f of e.dataTransfer.files) attachments.push(f);
+    renderChips();
+  });
 
   // ---- send + SSE stream ----
   function setStreaming(on) {

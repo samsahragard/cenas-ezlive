@@ -1131,6 +1131,132 @@ def cena_db_probe_dev_chat_attribution_corrections():
 
 
 # ============================================================
+# GET /sam/cena/sam-chat — Sam Chat read access for dck (and team)
+# ============================================================
+# Returns recent /sam/chat (Sam<>Cena) messages in chronological
+# order. Built per cena #1907 + samai #1959 Track 8 spec: cursor-
+# tracked, X-Cena-Token gated, observer-only (no posting).
+#
+# DIVERGENCE FROM /sam/cena/dev-chat: read_dev_chat anchors its
+# "start_point" at cena's earliest post. dck (the primary reader
+# of /sam/chat) never posts to /sam/chat — observer-only by Sam's
+# Track 8 spec — so there's no equivalent anchor. Default window
+# = last SAM_CHAT_READ_DEFAULT_HOURS hours (env-configurable, 24
+# default). Callers can override with explicit `since=` or
+# include_all=true.
+#
+# Query params:
+#   limit: int, default 30, max 200
+#   since: ISO datetime string; default = now - default-window
+#   include_all: bool ("1"/"true"/"yes"); default false. If true,
+#     ignores the start-point filter and returns the most recent
+#     `limit` rows across the whole table.
+#   session_id: int, optional. If set, restricts to one session.
+#
+# Response:
+#   {"ok": true, "messages": [...], "count": n,
+#    "window_start": "<ISO>Z" | null,
+#    "default_window_hours": <int>}
+# Each message: {id, session_id, role, content (truncated 2000ch),
+#                model, created_at}
+#
+# Auth: X-Cena-Token header (same gate as /sam/cena/log + other
+# /sam/cena/* endpoints). Per-agent token (DCK_TOKEN) is samai-
+# spec future-lane.
+
+@cena_bp.route("/sam/cena/sam-chat", methods=["GET"])
+def cena_sam_chat_read():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    try:
+        limit = max(1, min(200, int(request.args.get("limit", 30))))
+    except (ValueError, TypeError):
+        limit = 30
+
+    try:
+        default_window_hours = int(
+            os.getenv("SAM_CHAT_READ_DEFAULT_HOURS", "24"))
+    except (ValueError, TypeError):
+        default_window_hours = 24
+
+    include_all = (request.args.get("include_all", "").lower()
+                   in ("1", "true", "yes"))
+
+    session_id_raw = request.args.get("session_id", "").strip()
+    session_id = None
+    if session_id_raw:
+        try:
+            session_id = int(session_id_raw)
+        except ValueError:
+            return jsonify({"ok": False,
+                            "error": "session_id must be int"}), 400
+
+    from app.models import SamChatMessage
+    db = SessionLocal()
+    try:
+        window_start = None
+        if include_all:
+            window_start = None
+        elif (raw_since := request.args.get("since", "")):
+            window_start = _parse_iso_utc(raw_since)
+            if window_start is None:
+                window_start = (datetime.utcnow()
+                                - timedelta(hours=default_window_hours))
+        else:
+            window_start = (datetime.utcnow()
+                            - timedelta(hours=default_window_hours))
+
+        q = db.query(SamChatMessage)
+        if window_start is not None:
+            q = q.filter(SamChatMessage.created_at >= window_start)
+        if session_id is not None:
+            q = q.filter(SamChatMessage.session_id == session_id)
+        # Newest N first, then reverse to chronological in the response.
+        rows = (q.order_by(SamChatMessage.created_at.desc(),
+                           SamChatMessage.id.desc())
+                .limit(limit).all())
+        rows.reverse()
+
+        messages = []
+        # 8000-char cap per samai #2199 spec input — covers ~95% of
+        # Cena's longer /sam/chat turns without truncation, and when
+        # truncation does happen the explicit marker keeps dck's
+        # reasoning from confabulating off incomplete context
+        # (confabulation-substrate failure mode per #1865/#2042/...).
+        _TRUNC_CAP = 8000
+        for m in rows:
+            body = m.content or ""
+            full_len = len(body)
+            truncated = full_len > _TRUNC_CAP
+            if truncated:
+                body = body[:_TRUNC_CAP]
+            messages.append({
+                "id": m.id,
+                "session_id": m.session_id,
+                "role": m.role,
+                "content": body + (
+                    f"\n…[truncated {_TRUNC_CAP}/{full_len} chars]"
+                    if truncated else ""),
+                "model": m.model,
+                "created_at": (m.created_at.isoformat() + "Z"
+                               if m.created_at else None),
+            })
+
+        return jsonify({
+            "ok": True,
+            "messages": messages,
+            "count": len(messages),
+            "window_start": (window_start.isoformat() + "Z"
+                             if window_start else None),
+            "default_window_hours": default_window_hours,
+        })
+    finally:
+        db.close()
+
+
+# ============================================================
 # GET /sam/cena/dev-chat — dev chat read access for the gateway
 # ============================================================
 # Returns dev chat messages in chronological order.

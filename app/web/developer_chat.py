@@ -116,7 +116,13 @@ def post_message():
     gate = _enforce_partner()
     if gate is not None:
         return gate
-    author = (request.form.get("author") or "sam").strip()[:60]
+    # Default missing/empty author to "unknown" rather than silently
+    # attributing to "sam". Per cena #2014 + aick #2013 diagnosis of the
+    # 2026-05-17 attribution incident: a client that forgot the form
+    # field landed its post under sam's name, muddying the audit trail.
+    # Real fix is per-agent identity (see samai-spec future); this is the
+    # smallest-blast-radius bleeding stop.
+    author = (request.form.get("author") or "unknown").strip()[:60]
     body = (request.form.get("body") or "").strip()
 
     # Parse uploaded files. Empty FileStorage entries (no filename) get skipped.

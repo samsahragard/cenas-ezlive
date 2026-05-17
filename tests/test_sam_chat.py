@@ -1,4 +1,4 @@
-"""Sam Chat — tests for the standalone /sam/chat surface.
+"""Sam Chat – tests for the standalone /sam/chat surface.
 
 Covers:
   - The access gate (the security boundary): is_sam_chat_user / the
@@ -12,7 +12,7 @@ Covers:
     /sam/chat/send happy-path (Anthropic client mocked) -> persists the
     user + assistant turns + SSE-streams the reply.
 
-External calls (Anthropic) are mocked — no network, no key.
+External calls (Anthropic) are mocked – no network, no key.
 """
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class _FakeClient:
 
 
 # ============================================================
-# _estimate_cost — pure
+# _estimate_cost – pure
 # ============================================================
 
 def test_estimate_cost_opus():
@@ -97,7 +97,7 @@ def test_estimate_cost_zero_and_unknown_model():
 
 
 # ============================================================
-# _process_attachments — types + limits
+# _process_attachments – types + limits
 # ============================================================
 
 def test_process_attachments_image_to_block():
@@ -175,7 +175,7 @@ def test_sam_chat_models_roundtrip(db_session):
 
 
 # ============================================================
-# Route fixture — mirrors test_briefs_routes.app_with_user
+# Route fixture – mirrors test_briefs_routes.app_with_user
 # ============================================================
 
 @pytest.fixture
@@ -218,7 +218,7 @@ def app_with_sam(db_session, monkeypatch):
 
 
 # ============================================================
-# The access gate — the security boundary
+# The access gate – the security boundary
 # ============================================================
 
 def test_gate_blocks_non_sam_from_page(app_with_sam):
@@ -297,7 +297,7 @@ def test_load_unknown_session_404(app_with_sam):
 
 
 # ============================================================
-# /sam/chat/send — happy path (Anthropic mocked)
+# /sam/chat/send – happy path (Anthropic mocked)
 # ============================================================
 
 def test_send_streams_and_persists(app_with_sam, monkeypatch):
@@ -338,11 +338,26 @@ def test_send_streams_and_persists(app_with_sam, monkeypatch):
     assert msgs[1].cost_usd is not None
 
 
-def test_send_rejects_bad_model(app_with_sam):
-    _app, client_for, _db = app_with_sam
+def test_send_coerces_unknown_model(app_with_sam, monkeypatch):
+    """Unknown/non-allowed models are auto-selected rather than rejected.
+    The request succeeds (200) and the persisted assistant message uses
+    a valid model."""
+    _app, client_for, db = app_with_sam
+    monkeypatch.setattr(sc, "_anthropic_client",
+                        lambda: _FakeClient("Auto-selected reply."))
     r = client_for(1).post("/sam/chat/send", data={
         "message": "hi", "model": "gpt-4"})
-    assert r.status_code == 400
+    assert r.status_code == 200
+    assert r.mimetype == "text/event-stream"
+    # Drain the SSE stream so the generator runs to completion and the
+    # assistant turn actually gets persisted (mirrors the pattern in
+    # test_send_streams_and_persists).
+    r.get_data(as_text=True)
+    msgs = (db.query(SamChatMessage)
+            .order_by(SamChatMessage.id).all())
+    # Last row is the assistant turn; user rows carry model=None.
+    assert msgs[-1].role == "assistant"
+    assert msgs[-1].model in sc._ALLOWED_MODELS
 
 
 def test_send_rejects_empty_message(app_with_sam):

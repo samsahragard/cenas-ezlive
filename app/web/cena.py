@@ -1284,6 +1284,53 @@ def cena_sam_chat_read():
 
 
 # ============================================================
+# POST /sam/cena/telegram-test-fire — Track 2 test-fire surface
+# ============================================================
+# Track 2 per cena #2245: "Move the Telegram sender into cenas-ezlive.
+# Send one test message to confirm." The app-hosted sender already
+# exists (app/web/produce_order.py:419 telegram_send) — this endpoint
+# is the gateway-callable trigger so samai's gate-3 can be "one test
+# alert lands on Sam's Telegram via the app-hosted path".
+#
+# Body (JSON):
+#   {"text": "<message body>"}            required, 1..1000 chars
+#
+# Response:
+#   {"ok": true|false, "telegram_response": <api dict-or-str>}
+#
+# Auth: X-Cena-Token (same gate as /sam/cena/log + other /sam/cena/*).
+# Not partner-session-eligible — sending Telegram to Sam is a higher-
+# privilege action than reading /sam/chat, and the gateway-token path
+# is the canonical caller for ops-style triggers.
+
+@cena_bp.route("/sam/cena/telegram-test-fire", methods=["POST"])
+def cena_telegram_test_fire():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    text = body.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({"ok": False,
+                        "error": "text required (non-empty str)"}), 400
+    if len(text) > 1000:
+        return jsonify({"ok": False,
+                        "error": "text too long (max 1000 chars)"}), 400
+
+    try:
+        from app.web.produce_order import telegram_send
+    except ImportError as e:
+        return jsonify({"ok": False,
+                        "error": f"telegram_send not importable: {e}"}), 500
+
+    ok, resp = telegram_send(text)
+    return jsonify({"ok": bool(ok),
+                    "telegram_response": resp if isinstance(resp, dict)
+                                         else str(resp)})
+
+
+# ============================================================
 # POST /sam/cena/sam-chat-post — dck (and team) writes to /sam/chat
 # ============================================================
 # Track 8b per Sam #2236: dck reads /sam/chat via the GET endpoint

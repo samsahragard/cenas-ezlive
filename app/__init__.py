@@ -435,6 +435,29 @@ def create_app():
         logging.getLogger(__name__).exception(
             "dev_chat_attribution_corrections backfill failed (non-fatal)")
 
+    # Idempotent destructive teardown — DROP TABLE whatsapp_messages
+    # (migration 27, Track 3 final teardown per cena #2257: Sam green-
+    # light on all 4 Track 3 items). The WhatsApp ingest route + model
+    # + ck-side runtime were already removed in 72c46a5 (samai PASS
+    # #2117); the WhatsAppMessage class is gone from models.py. This
+    # migration drops the legacy table itself so the schema matches
+    # the live code. No-op when the table is already absent.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_27, text as _sa_text_27
+        from app.db import engine as _eng_27
+        if _eng_27 is not None:
+            insp_27 = _sa_inspect_27(_eng_27)
+            if "whatsapp_messages" in insp_27.get_table_names():
+                with _eng_27.begin() as _conn_27:
+                    _conn_27.execute(_sa_text_27(
+                        "DROP TABLE IF EXISTS whatsapp_messages"))
+                logging.getLogger(__name__).info(
+                    "whatsapp_messages (migration 27): table dropped "
+                    "(Track 3 teardown)")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "whatsapp_messages drop failed (non-fatal)")
+
     # Idempotent data-backfill: rewrite legacy Order.status='processed'
     # rows to 'available' (migration 24, Sam #1646 + samai #1645). The
     # ingest pipeline historically wrote 'processed' (an ezCater-job-

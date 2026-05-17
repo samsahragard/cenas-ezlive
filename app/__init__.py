@@ -371,6 +371,70 @@ def create_app():
         logging.getLogger(__name__).exception(
             "sam_chat_messages cache-token backfill failed (non-fatal)")
 
+    # Idempotent table + data backfill for dev_chat_attribution_corrections
+    # (migration 26, Sam #2031 item 3 + samai #2024 sidecar plan). Created
+    # as a response to the 2026-05-17 attribution incident: 4 ck-authored
+    # work reports landed in developer_chat under author='sam' because the
+    # POST handler at developer_chat.py:119 defaulted a missing form field
+    # to "sam". 4c25f3b changed the default to "unknown" (bleeding stop);
+    # this sidecar audits the rows already in the DB by overlaying the
+    # corrected author without mutating the source row. Alembic isn't
+    # wired on Render so we create the table + seed the 4 known rows here.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_26
+        from app.db import engine as _eng_26, SessionLocal as _SL_26
+        from app.models import (Base as _Base_26,
+                                DevChatAttributionCorrection as _DCAC_26)
+        if _eng_26 is not None:
+            insp = _sa_inspect_26(_eng_26)
+            existing_tables = set(insp.get_table_names())
+            if "dev_chat_attribution_corrections" not in existing_tables:
+                # Create just this one table; metadata.create_all is a no-op
+                # for already-present tables but only operates on tables it
+                # knows about, so passing tables=[...] scopes it precisely.
+                _DCAC_26.__table__.create(_eng_26)
+                logging.getLogger(__name__).info(
+                    "dev_chat_attribution_corrections: table created")
+            # Seed the 4 known mislabels from the 2026-05-17 incident.
+            # message_id is UNIQUE so re-running is a no-op; only inserts
+            # for ids that don't already have a correction row.
+            _reason_26 = (
+                "2026-05-17 attribution incident: ck posted via "
+                "Chrome-MCP-fetch without the author form field; "
+                "developer_chat.py:119 default 'sam' applied. "
+                "Body sign-off '-- ck' confirms actual author. "
+                "aick #2013 diagnosis + samai #2016 sweep + Sam "
+                "#2031 cleanup directive.")
+            _2026_05_17_mislabels = [(2051, "sam", "ck"),
+                                     (2056, "sam", "ck"),
+                                     (2097, "sam", "ck"),
+                                     (2098, "sam", "ck")]
+            db_26 = _SL_26()
+            try:
+                existing_corr_msg_ids = {
+                    r[0] for r in db_26.query(_DCAC_26.message_id).all()
+                }
+                seeded_26: list[int] = []
+                for mid, orig, corr in _2026_05_17_mislabels:
+                    if mid in existing_corr_msg_ids:
+                        continue
+                    db_26.add(_DCAC_26(message_id=mid,
+                                       original_author=orig,
+                                       corrected_author=corr,
+                                       correction_reason=_reason_26,
+                                       corrected_by="samai"))
+                    seeded_26.append(mid)
+                if seeded_26:
+                    db_26.commit()
+                    logging.getLogger(__name__).info(
+                        "dev_chat_attribution_corrections: seeded %d rows %s",
+                        len(seeded_26), seeded_26)
+            finally:
+                db_26.close()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "dev_chat_attribution_corrections backfill failed (non-fatal)")
+
     # Idempotent data-backfill: rewrite legacy Order.status='processed'
     # rows to 'available' (migration 24, Sam #1646 + samai #1645). The
     # ingest pipeline historically wrote 'processed' (an ezCater-job-

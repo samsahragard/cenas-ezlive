@@ -437,6 +437,36 @@ class DeveloperChatMessage(Base):
     )
 
 
+class DevChatAttributionCorrection(Base):
+    """Sidecar table mapping a developer_chat row to its corrected author
+    when the original author column got misattributed (e.g. the
+    2026-05-17 attribution incident: ck-via-Chrome-MCP-fetch-without-
+    author-form-field landed 4 ck posts under author='sam' because the
+    server default at developer_chat.py:119 was 'sam'). Sidecar over
+    in-place UPDATE per samai #2024: mutating the source column is
+    irreversible if a correction is wrong; the sidecar preserves the
+    original row and overlays the correction, so the audit trail can
+    show 'displayed as X, actually authored by Y' transparently.
+
+    UI render: developer_chat.html joins on message_id; when a row
+    exists, shows corrected_author with the original as a strikethrough
+    or footnote. UI fold-in is a follow-up commit (ck/cena lane). This
+    table is the persistent audit-correction store.
+    """
+    __tablename__ = "dev_chat_attribution_corrections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("developer_chat.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True)
+    original_author: Mapped[str] = mapped_column(String(60), nullable=False)
+    corrected_author: Mapped[str] = mapped_column(String(60), nullable=False)
+    correction_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    corrected_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    corrected_by: Mapped[str] = mapped_column(String(60), nullable=False)
+
+
 class EzcaterKnownDriver(Base):
     """Manager-maintained roster of ezCater drivers we recognize, used to
     auto-verify Driver signups. When a Driver signs up with a phone that

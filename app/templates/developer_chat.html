@@ -1,4 +1,4 @@
-{% extends "base_dashboard.html" %}
+﻿{% extends "base_dashboard.html" %}
 {% set active = active|default('dev_chat') %}
 {% block title %}Developer Chat — Cenas Kitchen{% endblock %}
 
@@ -259,6 +259,38 @@
     text-align: left;
   }
   .msg-expand-btn:hover { text-decoration: underline; }
+
+  /* ===== Multi-select copy ===== */
+  .msg.is-selected {
+    outline: 2px solid rgba(232,122,62,0.75);
+    background: rgba(232,122,62,0.14) !important;
+  }
+  .in-selection-mode .msg { user-select: none; cursor: pointer; }
+  .in-selection-mode .msg:not(.is-selected):hover {
+    outline: 1px solid rgba(255,255,255,0.18);
+  }
+  .sel-bar {
+    display: none; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    background: rgba(15,8,4,0.96);
+    border-top: 1px solid rgba(232,122,62,0.35);
+  }
+  .sel-bar.visible { display: flex; }
+  .sel-count { flex: 1; font-size: 13px; color: rgba(236,227,208,0.85); }
+  .sel-copy-btn {
+    background: #E4B340; color: #140A06;
+    border: none; border-radius: 8px;
+    padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .sel-copy-btn:disabled { opacity: 0.45; cursor: default; }
+  .sel-copy-btn:not(:disabled):hover { filter: brightness(1.08); }
+  .sel-cancel-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(236,227,208,0.8);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+  }
+  .sel-cancel-btn:hover { background: rgba(255,255,255,0.05); }
 </style>
 {% endblock %}
 
@@ -317,6 +349,12 @@
     </div>
     {% endfor %}
     <div id="bottom"></div>
+  </div>
+
+  <div class="sel-bar" id="sel-bar">
+    <span class="sel-count" id="sel-count">0 selected</span>
+    <button type="button" class="sel-copy-btn" id="sel-copy-btn" disabled>Copy</button>
+    <button type="button" class="sel-cancel-btn" id="sel-cancel-btn">Cancel</button>
   </div>
 
   <form class="chat-input" method="POST" action="{{ url_for('developer_chat.post_message') }}" enctype="multipart/form-data" id="chat-form">
@@ -823,6 +861,113 @@
   // Stop any active TTS / transcription when the user submits or leaves
   form.addEventListener('submit', () => { stopTts(); stopTranscribing(); });
   window.addEventListener('beforeunload', () => { stopTts(); stopTranscribing(); });
+
+  // ===== Multi-select copy =====
+  const selBar = document.getElementById('sel-bar');
+  const selCountEl = document.getElementById('sel-count');
+  const selCopyBtn = document.getElementById('sel-copy-btn');
+  const selCancelBtn = document.getElementById('sel-cancel-btn');
+  let inSelectionMode = false;
+  const selectedMsgs = new Set();
+
+  function enterSelectionMode(firstMsg) {
+    inSelectionMode = true;
+    document.body.classList.add('in-selection-mode');
+    selBar.classList.add('visible');
+    selectedMsgs.clear();
+    toggleSelect(firstMsg);
+    if (navigator.vibrate) navigator.vibrate(40);
+  }
+
+  function exitSelectionMode() {
+    inSelectionMode = false;
+    document.body.classList.remove('in-selection-mode');
+    selBar.classList.remove('visible');
+    selectedMsgs.forEach(el => el.classList.remove('is-selected'));
+    selectedMsgs.clear();
+    updateSelBar();
+  }
+
+  function toggleSelect(msgEl) {
+    if (selectedMsgs.has(msgEl)) {
+      selectedMsgs.delete(msgEl);
+      msgEl.classList.remove('is-selected');
+    } else {
+      selectedMsgs.add(msgEl);
+      msgEl.classList.add('is-selected');
+    }
+    updateSelBar();
+  }
+
+  function updateSelBar() {
+    const n = selectedMsgs.size;
+    selCountEl.textContent = n + ' message' + (n === 1 ? '' : 's') + ' selected';
+    selCopyBtn.disabled = n === 0;
+  }
+
+  // Long-press detection (both touch and mouse)
+  let pressTimer = null;
+  function startPress(e) {
+    const msg = e.target.closest('.msg');
+    if (!msg || e.target.closest('button, a, audio')) return;
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      enterSelectionMode(msg);
+    }, 480);
+  }
+  function cancelPress() {
+    if (pressTimer !== null) { clearTimeout(pressTimer); pressTimer = null; }
+  }
+  list.addEventListener('mousedown', startPress);
+  list.addEventListener('mouseup', cancelPress);
+  list.addEventListener('mouseleave', cancelPress);
+  list.addEventListener('touchstart', startPress, { passive: true });
+  list.addEventListener('touchend', cancelPress, { passive: true });
+  list.addEventListener('touchcancel', cancelPress, { passive: true });
+
+  // In selection mode, message-background clicks toggle selection
+  list.addEventListener('click', (e) => {
+    if (!inSelectionMode) return;
+    if (e.target.closest('button, a, audio')) return;
+    const msg = e.target.closest('.msg');
+    if (msg) toggleSelect(msg);
+  });
+
+  // Copy selected messages
+  selCopyBtn.addEventListener('click', () => {
+    const msgs = Array.from(list.querySelectorAll('.msg.is-selected'));
+    const text = msgs.map(m => {
+      const author = m.querySelector('strong') ? m.querySelector('strong').textContent.trim() : '';
+      // Extract timestamp from text nodes in msg-meta (skip element children)
+      const metaEl = m.querySelector('.msg-meta');
+      let timeStr = '';
+      if (metaEl) {
+        metaEl.childNodes.forEach(n => { if (n.nodeType === 3) timeStr += n.textContent; });
+        timeStr = timeStr.trim();
+      }
+      const body = m.querySelector('.msg-body') ? m.querySelector('.msg-body').textContent.trim() : '';
+      const header = author + (timeStr ? ' · ' + timeStr : '');
+      return '[' + header + ']\n' + body;
+    }).join('\n\n');
+
+    const flash = (msg) => {
+      const orig = selCopyBtn.textContent;
+      selCopyBtn.textContent = msg;
+      setTimeout(() => { selCopyBtn.textContent = orig; exitSelectionMode(); }, 900);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => flash('✓ Copied!')).catch(() => flash('× Failed'));
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); flash('✓ Copied!'); }
+      catch (_) { flash('× Failed'); }
+      document.body.removeChild(ta);
+    }
+  });
+
+  selCancelBtn.addEventListener('click', exitSelectionMode);
 
   // Initial scroll-to-bottom
   setTimeout(() => bottom.scrollIntoView(), 100);

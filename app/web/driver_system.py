@@ -569,6 +569,37 @@ def ez_manage():
         db.close()
 
 
+# JSON poll endpoint for the live pending badge in the manager sidebar
+# (Cena #1758 req 4 + samai #1762 #1 / aick #1764 (4) — pending count
+# visible at all times to managers, not just on the /ez-manage page).
+# Front end polls every 30s and updates the badge. Returns 401 JSON on
+# unauth instead of the decorator's 302-to-login so XHR can render
+# 'auth lost' cleanly.
+@driver_system_bp.route("/ez-manage/pending-count.json", methods=["GET"])
+def ez_manage_pending_count():
+    user = getattr(g, "current_user", None)
+    if not user or user.permission_level not in MANAGER_ROLES:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    db = SessionLocal()
+    try:
+        # Same scoping as the page: ALL pending DeliveryRequests
+        # regardless of order location, cross-store. If per-location
+        # scoping becomes a product requirement later, filter by
+        # Order.reported_store_id against user.assigned_store_id.
+        n = (
+            db.query(DeliveryRequest)
+            .filter(DeliveryRequest.status == "pending")
+            .count()
+        )
+        return jsonify({
+            "ok": True,
+            "pending_count": n,
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        })
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/ez-manage/approve/<int:request_id>", methods=["POST"])
 @require_manager
 def ez_manage_approve(request_id: int):

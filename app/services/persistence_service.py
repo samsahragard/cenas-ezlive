@@ -96,7 +96,15 @@ def _persist_order(db, bundle: dict[str, Any]) -> int:
         flags=normalized.get("flags"),
         needs_review=bundle.get("needs_review", False),
         warning_count=len(warnings),
-        status="processed",
+        # Cenas's driver-bid operation is independent of ezCater's
+        # courier assignment (per Sam #1646): every order should enter
+        # the bid pool the moment ingest completes, since 'ingest done'
+        # is just a job-state on our side and has no bearing on whether
+        # a Cenas driver should be allowed to request it. Default to
+        # 'available' (the requestable lifecycle state); the prior
+        # 'processed' marker was a job-completion artifact predating
+        # the bid system and is decommissioned per samai #1645.
+        status="available",
         kitchen_ready_time=dispatch.get("kitchen_ready_time"),
         driver_departure_time=dispatch.get("driver_departure_time"),
         assigned_driver=dispatch.get("assigned_driver"),

@@ -341,6 +341,32 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("driver-system column backfill failed (non-fatal)")
 
+    # Idempotent data-backfill: rewrite legacy Order.status='processed'
+    # rows to 'available' (migration 24, Sam #1646 + samai #1645). The
+    # ingest pipeline historically wrote 'processed' (an ezCater-job-
+    # state marker predating the bid system). The new persist code
+    # writes 'available' directly, but any rows ingested before this
+    # boot still hold the legacy value and would be silently
+    # unrequestable in /ez-market. Runs every boot and is a no-op once
+    # the table is clean.
+    try:
+        from sqlalchemy import text as _sa_text_proc
+        from app.db import engine as _eng_proc
+        if _eng_proc is not None:
+            with _eng_proc.begin() as _conn:
+                result = _conn.execute(_sa_text_proc(
+                    "UPDATE orders SET status='available' "
+                    "WHERE status='processed'"
+                ))
+                if result.rowcount:
+                    logging.getLogger(__name__).info(
+                        "orders backfill (migration 24): %d processed -> available",
+                        result.rowcount,
+                    )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "orders 'processed'->'available' backfill failed (non-fatal)")
+
     # Seed ezcater_known_driver from the static roster Sam captured in his
     # 5/10 screenshots. Idempotent: only inserts rows for phones not already
     # present, so re-edits in the seed module on later boots add/update

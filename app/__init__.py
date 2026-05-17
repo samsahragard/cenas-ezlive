@@ -341,6 +341,38 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("driver-system column backfill failed (non-fatal)")
 
+    # Idempotent column backfill for sam_chat_messages cache-token columns
+    # (migration 25, Sam #1895 caching SECONDARY per samai #2058 amendment).
+    # Captures cache_creation_input_tokens + cache_read_input_tokens from
+    # the gateway SSE done event so prod surfaces the cache-savings
+    # accounting Sam's #1895 cost-impact projection promised.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_25, text as _sa_text_25
+        from app.db import engine as _eng_25
+        if _eng_25 is not None:
+            insp = _sa_inspect_25(_eng_25)
+            if "sam_chat_messages" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("sam_chat_messages")}
+                additions = [
+                    ("cost_cache_creation_tokens", "INTEGER"),
+                    ("cost_cache_read_tokens",     "INTEGER"),
+                ]
+                added = []
+                with _eng_25.begin() as conn:
+                    for col_name, col_def in additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_25(
+                                f"ALTER TABLE sam_chat_messages "
+                                f"ADD COLUMN {col_name} {col_def}"))
+                            added.append(col_name)
+                if added:
+                    logging.getLogger(__name__).info(
+                        "sam_chat_messages (migration 25): backfilled %s",
+                        added)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "sam_chat_messages cache-token backfill failed (non-fatal)")
+
     # Idempotent data-backfill: rewrite legacy Order.status='processed'
     # rows to 'available' (migration 24, Sam #1646 + samai #1645). The
     # ingest pipeline historically wrote 'processed' (an ezCater-job-

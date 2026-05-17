@@ -189,11 +189,22 @@ def _cena_gateway_url() -> str | None:
     return url or None
 
 
-def _estimate_cost(model: str, in_tok: int, out_tok: int) -> Decimal:
+def _estimate_cost(model: str, in_tok: int, out_tok: int,
+                   cache_create_tok: int = 0,
+                   cache_read_tok: int = 0) -> Decimal:
     """Rough USD cost estimate from token usage. Quantized to 4 places
-    for the Numeric(10,4) column. Best-effort — see _MODEL_RATES."""
+    for the Numeric(10,4) column. Best-effort — see _MODEL_RATES.
+
+    Cache pricing per Anthropic with the 1h ephemeral TTL set in
+    cena_gateway.py: cache_creation is paid at 2x the normal input
+    rate; cache_read is paid at 0.10x. in_tok covers only the
+    uncached portion (Anthropic returns input_tokens that way when
+    prompt caching is active)."""
     rates = _MODEL_RATES.get(model, {"in": 0.0, "out": 0.0})
-    usd = ((in_tok or 0) * rates["in"]
+    in_rate = rates["in"]
+    usd = ((in_tok or 0) * in_rate
+           + (cache_create_tok or 0) * in_rate * 2.0
+           + (cache_read_tok or 0) * in_rate * 0.10
            + (out_tok or 0) * rates["out"]) / 1_000_000
     return Decimal(str(usd)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
@@ -605,6 +616,7 @@ def sam_chat_send():
     def generate():
         full = ""
         in_tok = out_tok = 0
+        cache_create_tok = cache_read_tok = 0
         gateway_url = _cena_gateway_url()
         try:
             if model.startswith("gemini"):
@@ -684,6 +696,10 @@ def sam_chat_send():
                             elif evt.get("type") == "done":
                                 in_tok = evt.get("in_tokens", 0) or 0
                                 out_tok = evt.get("out_tokens", 0) or 0
+                                cache_create_tok = evt.get(
+                                    "cache_creation_input_tokens", 0) or 0
+                                cache_read_tok = evt.get(
+                                    "cache_read_input_tokens", 0) or 0
                             elif evt.get("type") == "error":
                                 raise RuntimeError(
                                     evt.get("error", "Cena gateway error"))
@@ -706,7 +722,9 @@ def sam_chat_send():
             # Persist whatever streamed before the failure so the turn
             # isn't silently lost; flag it.
             if full.strip():
-                _persist_assistant(session_id, full, model, in_tok, out_tok)
+                _persist_assistant(session_id, full, model, in_tok, out_tok,
+                                   cache_create_tok=cache_create_tok,
+                                   cache_read_tok=cache_read_tok)
             yield _sse({"type": "error",
                         "error": f"stream failed: {e}"})
             return
@@ -716,9 +734,13 @@ def sam_chat_send():
                         "error": "no text received — please try again"})
             return
 
-        cost = _estimate_cost(model, in_tok, out_tok)
+        cost = _estimate_cost(model, in_tok, out_tok,
+                              cache_create_tok=cache_create_tok,
+                              cache_read_tok=cache_read_tok)
         msg_id = _persist_assistant(session_id, full, model, in_tok,
-                                    out_tok, cost)
+                                    out_tok, cost,
+                                    cache_create_tok=cache_create_tok,
+                                    cache_read_tok=cache_read_tok)
         # Final event — metadata for the cost display + history refresh.
         d = SessionLocal()
         try:
@@ -742,7 +764,9 @@ def sam_chat_send():
 
 def _persist_assistant(session_id: int, content: str, model: str,
                        in_tok: int, out_tok: int,
-                       cost: Decimal | None = None) -> int | None:
+                       cost: Decimal | None = None,
+                       cache_create_tok: int = 0,
+                       cache_read_tok: int = 0) -> int | None:
     """Append the assistant SamChatMessage + bump the session. Its own
     session — the assistant turn is recorded independent of the request
     transaction. Returns the new message id (or None on failure)."""
@@ -754,6 +778,8 @@ def _persist_assistant(session_id: int, content: str, model: str,
             content=content or "(empty response)", model=model,
             cost_input_tokens=in_tok or None,
             cost_output_tokens=out_tok or None,
+            cost_cache_creation_tokens=cache_create_tok or None,
+            cost_cache_read_tokens=cache_read_tok or None,
             cost_usd=cost, created_at=now,
         )
         db.add(row)

@@ -1689,6 +1689,15 @@ class SamChatMessage(Base):
         Integer, nullable=True)
     cost_output_tokens: Mapped[int | None] = mapped_column(
         Integer, nullable=True)
+    # Anthropic prompt-cache token counters from the response usage block.
+    # cost_input_tokens covers only the UNCACHED portion; cache_creation
+    # is what was written to cache (paid at 2x normal input rate for the
+    # 1h ephemeral TTL set in cena_gateway.py), cache_read is what was
+    # served from cache (paid at 0.10x normal input rate).
+    cost_cache_creation_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True)
+    cost_cache_read_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(
         Numeric(10, 4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

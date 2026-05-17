@@ -96,6 +96,34 @@ def test_estimate_cost_zero_and_unknown_model():
     assert sc._estimate_cost("mystery-model", 5000, 5000) == Decimal("0.0000")
 
 
+def test_estimate_cost_with_cache_tokens_opus():
+    # opus rate: 5.0/M input. 1M uncached + 1M cache_creation @2x + 1M
+    # cache_read @0.10x + 0 output. 5 + 10 + 0.5 = 15.5
+    c = sc._estimate_cost("claude-opus-4-7", 1_000_000, 0,
+                          cache_create_tok=1_000_000,
+                          cache_read_tok=1_000_000)
+    assert c == Decimal("15.5000")
+
+
+def test_estimate_cost_cache_kwargs_default_zero_preserves_backcompat():
+    # Old callers that don't pass cache_create_tok / cache_read_tok must
+    # see exactly the pre-cache cost (regression guard for callers in
+    # sam_chat.py + chart/cron paths). Opus: 1M in @5 + 1M out @25 = 30.
+    c = sc._estimate_cost("claude-opus-4-7", 1_000_000, 1_000_000)
+    assert c == Decimal("30.0000")
+
+
+def test_estimate_cost_cache_read_is_cheaper_than_uncached():
+    # The cache_read pricing should make 1M cache-read tokens 10x cheaper
+    # than 1M uncached input tokens, all else equal.
+    uncached = sc._estimate_cost("claude-opus-4-7", 1_000_000, 0)
+    cached   = sc._estimate_cost("claude-opus-4-7", 0, 0,
+                                 cache_read_tok=1_000_000)
+    assert cached < uncached
+    assert cached == Decimal("0.5000")  # 5.0 * 0.10 = 0.50
+    assert uncached == Decimal("5.0000")
+
+
 # ============================================================
 # _process_attachments – types + limits
 # ============================================================

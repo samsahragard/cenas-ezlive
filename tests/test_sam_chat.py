@@ -125,6 +125,83 @@ def test_estimate_cost_cache_read_is_cheaper_than_uncached():
 
 
 # ============================================================
+# _strip_cena_tool_blocks — confabulation-substrate removal
+# (Sam #2148 + samai #2154 hybrid spec, closes lesson family
+# #1865/#2042/#2122/#2138)
+# ============================================================
+
+def test_strip_tool_announcements_from_prior_assistant():
+    """A real-shape assistant turn with one tool block + continuation
+    has the block stripped + the terminal marker appended."""
+    content = (
+        "Checking dev chat for replies first.\n\n"
+        "[read_dev_chat(limit=10)]\n"
+        "→ 10 messages | start_point=2026-05-16T22:04Z\n"
+        "[#2120 2026-05-17T20:00Z] aick: hi\n"
+        "[#2121 2026-05-17T20:01Z] cena: hello\n\n"
+        "Based on the chat, here's the summary..."
+    )
+    out = sc._strip_cena_tool_blocks(content)
+    assert "[read_dev_chat(limit=10)]" not in out
+    assert "→ 10 messages" not in out
+    assert "[#2120" not in out
+    assert "Checking dev chat for replies first." in out
+    assert "Based on the chat" in out
+    assert "stripped from context" in out
+
+
+def test_strip_preserves_natural_language():
+    """Assistant turn with no tool blocks is returned unchanged
+    (no terminal marker)."""
+    content = (
+        "Got it. The driver workflow looks healthy.\n\n"
+        "Three things to flag: (1) order 652 is approved, (2) "
+        "Cooper is on shift, (3) keypad timed out at 14:02."
+    )
+    out = sc._strip_cena_tool_blocks(content)
+    assert out == content  # exact identity, no edit
+    assert "stripped from context" not in out
+
+
+def test_strip_multi_tool_turn():
+    """A turn with TWO tool blocks gets both stripped and ONE terminal
+    marker appended (per samai #2154: 1-per-turn cap, not N-per-turn)."""
+    content = (
+        "First I'll check.\n\n"
+        "[read_dev_chat(limit=5)]\n"
+        "→ 5 messages\n[#1] author: body\n\n"
+        "Then I'll post.\n\n"
+        "[post_to_dev_chat(message='ok')]\n"
+        "→ Posted to dev chat.\n\n"
+        "Done."
+    )
+    out = sc._strip_cena_tool_blocks(content)
+    assert "[read_dev_chat" not in out
+    assert "[post_to_dev_chat" not in out
+    assert "First I'll check." in out
+    assert "Then I'll post." in out
+    assert "Done." in out
+    # Exactly one terminal marker even though two blocks stripped
+    assert out.count("stripped from context") == 1
+
+
+def test_terminal_marker_appended_when_strip_occurred():
+    """Terminal marker presence is the signal that strip happened."""
+    content = "Pre-text.\n\n[fetch_url(url='x')]\n→ response\n\nPost-text."
+    out = sc._strip_cena_tool_blocks(content)
+    assert out.endswith(sc._CENA_TOOL_STRIP_MARKER.rstrip()) or \
+           sc._CENA_TOOL_STRIP_MARKER.strip() in out
+
+
+def test_no_marker_when_no_strip():
+    """No terminal marker appended when no blocks matched."""
+    content = "Plain reasoning. Nothing tool-shaped here."
+    out = sc._strip_cena_tool_blocks(content)
+    assert "stripped from context" not in out
+    assert out == content
+
+
+# ============================================================
 # _process_attachments – types + limits
 # ============================================================
 

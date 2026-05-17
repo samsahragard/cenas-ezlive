@@ -37,6 +37,7 @@ import base64
 import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -207,6 +208,54 @@ def _estimate_cost(model: str, in_tok: int, out_tok: int,
            + (cache_read_tok or 0) * in_rate * 0.10
            + (out_tok or 0) * rates["out"]) / 1_000_000
     return Decimal(str(usd)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+
+# Tool-block strip for Anthropic context (Sam #2148 + samai #2154 hybrid
+# spec). Cena's gateway streams tool calls inline in the assistant turn
+# text using a fixed format:
+#   "\n\n[<tool_name>(<args>)]\n→ <preview up to 301 chars>\n"
+# (cena_gateway.py:857 announce, :884 result_notice). The full streamed
+# text is persisted into SamChatMessage.content. On the next turn,
+# rebuilding api_messages from those rows feeds prior tool blocks BACK
+# to Anthropic — and the model latches onto the in-context prior result
+# instead of re-firing the tool. That substrate is the confabulation
+# vector documented in lessons #1865/#2042/#2122/#2138. (B) system-
+# prompt nudge alone is insufficient to override the in-context pull.
+# This strip removes the substrate from the API-bound version while
+# leaving the UI/DB version intact.
+#
+# Boundary heuristic: a tool block runs from the announce-prefix until
+# the next double-newline (paragraph break) or end-of-string. Cena's
+# response style includes paragraph breaks after tool calls, so this
+# bounds cleanly in practice. Some natural continuation text may be
+# lost on the way; that's the conservative trade per samai #2154.
+#
+# Format coupling: the regex is in lockstep with cena_gateway.py:857 +
+# :884. If cena_gateway changes the announce/result format, the regex
+# stops matching and prior tool blocks pass through unstripped — tests
+# below catch a known-shape sample to detect drift.
+_CENA_TOOL_BLOCK_RE = re.compile(
+    r'\n\n\[[a-zA-Z_]\w*\([^\]]*\)\][\s\S]*?(?=\n\n|\Z)'
+)
+_CENA_TOOL_STRIP_MARKER = (
+    "\n\n[earlier tool calls this turn stripped from context — "
+    "re-fire any tool to get current data]"
+)
+
+
+def _strip_cena_tool_blocks(content: str) -> str:
+    """Remove cena-gateway tool announcements + result previews from a
+    prior assistant turn's content before it's passed back to Anthropic.
+    Appends ONE terminal marker if any block was stripped.
+
+    See _CENA_TOOL_BLOCK_RE comment block for design rationale (Sam
+    #2148 + samai #2154 cleanup of the #1865 lesson family)."""
+    if not content:
+        return content
+    stripped, n = _CENA_TOOL_BLOCK_RE.subn('', content)
+    if n == 0:
+        return content
+    return stripped.rstrip() + _CENA_TOOL_STRIP_MARKER
 
 
 def _estimate_tokens(text: str) -> int:
@@ -577,13 +626,20 @@ def sam_chat_send():
 
         # Prior turns -> Anthropic message list (user/assistant only;
         # the API takes 'system' separately and Sam Chat creates none).
+        # Assistant content has cena-gateway tool blocks stripped via
+        # _strip_cena_tool_blocks — see that function for the
+        # confabulation-substrate rationale (Sam #2148, samai #2154).
         prior = (db.query(SamChatMessage)
                  .filter(SamChatMessage.session_id == session_id)
                  .order_by(SamChatMessage.created_at.asc(),
                            SamChatMessage.id.asc())
                  .all())
-        api_messages = [{"role": m.role, "content": m.content}
-                        for m in prior if m.role in ("user", "assistant")]
+        api_messages = [
+            {"role": m.role,
+             "content": (_strip_cena_tool_blocks(m.content)
+                         if m.role == "assistant" else m.content)}
+            for m in prior if m.role in ("user", "assistant")
+        ]
 
         # Persist the user message and capture its id so the Cena audit
         # log rows can link back to this exact chat turn.

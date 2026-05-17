@@ -330,7 +330,7 @@
           <i class="ti ti-microphone"></i>
         </button>
         <textarea class="sc-input" id="sc-input" rows="1"
-                  placeholder="Message Claude…  (Cmd/Ctrl+Enter to send)"></textarea>
+                  placeholder="Message Claude…  (Shift+Enter for newline)"></textarea>
         <button class="sc-btn sc-send" id="sc-send" title="Send">
           <i class="ti ti-arrow-up"></i>
         </button>
@@ -707,7 +707,7 @@
     inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + "px";
   });
   inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }

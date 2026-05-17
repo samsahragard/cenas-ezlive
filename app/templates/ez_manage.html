@@ -56,6 +56,9 @@
   .ezm-btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.2);
                     color: rgba(236,227,208,0.85); }
   .ezm-btn-ghost:hover { background: rgba(255,255,255,0.05); }
+  .ezm-btn-decline { background: transparent; border: 1px solid rgba(226,100,92,0.45);
+                     color: rgba(226,100,92,0.9); }
+  .ezm-btn-decline:hover { background: rgba(226,100,92,0.08); }
 
   .ezm-footer { display: flex; gap: 8px; padding: 10px;
                 border-top: 0.5px solid rgba(255,255,255,0.06); }
@@ -229,7 +232,7 @@
           </button>
         </form>
         <form method="POST" action="{{ url_for('driver_system.ez_manage_decline', request_id=row.request.id) }}" style="display:inline;">
-          <button type="submit" class="ezm-btn ezm-btn-ghost">Decline</button>
+          <button type="submit" class="ezm-btn ezm-btn-decline">Decline</button>
         </form>
       </div>
       {% endfor %}

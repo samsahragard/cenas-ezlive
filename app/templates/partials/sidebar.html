@@ -150,8 +150,9 @@
             <a href="/ez-market" class="ck-sb-subitem{% if active == 'ez_market' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Ez Market</span>
             </a>
-            <a href="/ez-manage" class="ck-sb-subitem{% if active == 'ez_manage' %} active{% endif %}">
+            <a href="/ez-manage" class="ck-sb-subitem{% if active == 'ez_manage' %} active{% endif %}" style="display:flex;align-items:center;gap:6px;">
               <span class="ck-sb-subitem-label">Ez Manage</span>
+              <span id="ezm-sidebar-badge" style="display:none;background:rgba(228,179,64,0.22);color:#E4B340;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto;line-height:1.5;"></span>
             </a>
             <a href="/{{ store_slug }}/driver-tracking" class="ck-sb-subitem{% if active == 'driver_tracking' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Driver payroll</span>
@@ -712,5 +713,28 @@
     </a>
 
   </nav>
+
+  <script>
+  (function() {
+    var badge = document.getElementById('ezm-sidebar-badge');
+    if (!badge) return;
+    function poll() {
+      fetch('/ez-manage/pending-count.json')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) {
+          if (!d || !d.ok) return;
+          if (d.pending_count > 0) {
+            badge.textContent = d.pending_count;
+            badge.style.display = 'inline';
+          } else {
+            badge.style.display = 'none';
+          }
+        })
+        .catch(function() {});
+    }
+    poll();
+    setInterval(poll, 30000);
+  })();
+  </script>
 
 </div>

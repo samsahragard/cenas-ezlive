@@ -101,6 +101,13 @@
 <script>
   // 30s polling refresh (SPEC §4)
   setInterval(() => location.reload(), 30000);
+  // Scroll cap-limit flash into view in case browser preserved scroll position
+  document.addEventListener('DOMContentLoaded', function() {
+    var flash = document.querySelector('.em-flash-stack');
+    if (flash && flash.children.length > 0) {
+      flash.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
 </script>
 {% endblock %}
 

@@ -1072,6 +1072,65 @@ def cena_db_probe_sam_chat_cache_tokens():
 
 
 # ============================================================
+# POST /sam/cena/db-probe/dev-chat-attribution-corrections
+# ============================================================
+# Returns the most-recent N DevChatAttributionCorrection rows so
+# samai's gate-3 probe on the d693c7e sidecar commit can confirm:
+# (a) migration 26 table CREATE landed (endpoint returns 200, not 500),
+# (b) the seed for the 2026-05-17 incident rows landed (4 entries:
+#     message_id ∈ {2051, 2056, 2097, 2098} with original_author='sam',
+#     corrected_author='ck', corrected_by='samai').
+#
+# Body (JSON):
+#   {"limit": <int, default 10, max 100>}
+#
+# Response (JSON):
+#   {"ok": true, "rows": [{id, message_id, original_author,
+#                          corrected_author, correction_reason,
+#                          corrected_at, corrected_by}, ...]}
+#
+# Auth: X-Cena-Token header (same gate as the other db-probes).
+
+@cena_bp.route("/sam/cena/db-probe/dev-chat-attribution-corrections",
+               methods=["POST"])
+def cena_db_probe_dev_chat_attribution_corrections():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    try:
+        limit = int(body.get("limit", 10))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "limit must be int"}), 400
+    limit = max(1, min(limit, 100))
+
+    from app.models import DevChatAttributionCorrection
+    db = SessionLocal()
+    try:
+        rows = (db.query(DevChatAttributionCorrection)
+                  .order_by(DevChatAttributionCorrection.corrected_at.desc(),
+                            DevChatAttributionCorrection.id.desc())
+                  .limit(limit)
+                  .all())
+        out = []
+        for r in rows:
+            out.append({
+                "id": r.id,
+                "message_id": r.message_id,
+                "original_author": r.original_author,
+                "corrected_author": r.corrected_author,
+                "correction_reason": r.correction_reason,
+                "corrected_at": (r.corrected_at.isoformat()
+                                 if r.corrected_at else None),
+                "corrected_by": r.corrected_by,
+            })
+        return jsonify({"ok": True, "rows": out, "count": len(out)})
+    finally:
+        db.close()
+
+
+# ============================================================
 # GET /sam/cena/dev-chat — dev chat read access for the gateway
 # ============================================================
 # Returns dev chat messages in chronological order.

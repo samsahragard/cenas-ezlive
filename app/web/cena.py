@@ -1284,6 +1284,59 @@ def cena_sam_chat_read():
 
 
 # ============================================================
+# POST /sam/cena/db-probe/table-exists — generic schema check
+# ============================================================
+# Per samai #2272 + Track 3 migration 27 gate-3: confirm the
+# whatsapp_messages table was actually dropped on Render Postgres
+# (not just silently skipped via the boot-time IF EXISTS guard).
+# Generic so it can verify other schema migrations down the road.
+#
+# Body (JSON):
+#   {"table_name": "<str>"}        required, simple-identifier only
+#
+# Response (JSON):
+#   {"ok": true, "exists": true|false,
+#    "checked_table": "<str>"}
+#
+# Auth: X-Cena-Token (same gate as the other db-probes).
+
+import re as _re_table
+
+_VALID_TABLE_NAME_RE = _re_table.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
+
+
+@cena_bp.route("/sam/cena/db-probe/table-exists", methods=["POST"])
+def cena_db_probe_table_exists():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    table_name = (body.get("table_name") or "").strip()
+    if not _VALID_TABLE_NAME_RE.match(table_name):
+        # Strict identifier check so the value can't be a SQL injection
+        # vector when passed to to_regclass(). simple-identifier-only.
+        return jsonify({"ok": False,
+                        "error": "table_name required (simple identifier)"}), 400
+
+    from sqlalchemy import inspect as _sa_insp_te
+    db = SessionLocal()
+    try:
+        insp = _sa_insp_te(db.bind)
+        existing = set(insp.get_table_names())
+        return jsonify({
+            "ok": True,
+            "exists": table_name in existing,
+            "checked_table": table_name,
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: table-exists probe failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ============================================================
 # POST /sam/cena/telegram-test-fire — Track 2 test-fire surface
 # ============================================================
 # Track 2 per cena #2245: "Move the Telegram sender into cenas-ezlive.

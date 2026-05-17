@@ -56,8 +56,11 @@ AUDIO_EXTENSIONS = {".webm", ".ogg", ".mp3", ".wav", ".m4a"}
 # and the author dropdown in the UI. Add new agents here — nowhere else.
 AGENT_ROSTER = {
     "aick-claude": {"display": "aick",   "css_class": "msg-aick",  "is_ai": True},
+    "aick":        {"display": "aick",   "css_class": "msg-aick",  "is_ai": True},
     "ck-claude":   {"display": "ck",     "css_class": "msg-ck",    "is_ai": True},
+    "ck":          {"display": "ck",     "css_class": "msg-ck",    "is_ai": True},
     "dck-claude":  {"display": "dck",    "css_class": "msg-dck",   "is_ai": True},
+    "dck":         {"display": "dck",    "css_class": "msg-dck",   "is_ai": True},
     "samai":       {"display": "samai",  "css_class": "msg-samai", "is_ai": True},
     "cena":        {"display": "cena",   "css_class": "msg-cena",  "is_ai": True},
     "sam":         {"display": "sam",    "css_class": "msg-sam",   "is_ai": False},

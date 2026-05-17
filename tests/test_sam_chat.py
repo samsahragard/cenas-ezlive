@@ -202,6 +202,106 @@ def test_no_marker_when_no_strip():
 
 
 # ============================================================
+# _build_api_messages_from_rows — Track 8b dck mapping + merge
+# (Sam #2236)
+# ============================================================
+
+class _RowLike:
+    """Tiny stand-in for a SamChatMessage row in the mapper unit tests
+    so we don't need a DB fixture for pure-function behavior."""
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+
+def test_build_api_messages_user_assistant_passthrough():
+    rows = [
+        _RowLike("user", "hi"),
+        _RowLike("assistant", "hello back"),
+        _RowLike("user", "how are you?"),
+    ]
+    out = sc._build_api_messages_from_rows(rows)
+    assert out == [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello back"},
+        {"role": "user", "content": "how are you?"},
+    ]
+
+
+def test_build_api_messages_dck_maps_to_user_with_prefix():
+    """A dck row alone becomes a user-side turn with '[dck]: ' prefix
+    so Cena can see who spoke."""
+    rows = [_RowLike("dck", "summon me when you need a second opinion")]
+    out = sc._build_api_messages_from_rows(rows)
+    assert out == [{"role": "user",
+                    "content": "[dck]: summon me when you need a "
+                               "second opinion"}]
+
+
+def test_build_api_messages_merges_consecutive_user_after_dck():
+    """Sam → dck → Sam (after mapping) is three consecutive user
+    rows. The API requires alternation, so they merge into ONE user
+    turn joined by blank lines."""
+    rows = [
+        _RowLike("user", "Sam asks Cena something"),
+        _RowLike("dck", "dck chimes in unprompted"),
+        _RowLike("user", "Sam follows up"),
+    ]
+    out = sc._build_api_messages_from_rows(rows)
+    assert len(out) == 1
+    assert out[0]["role"] == "user"
+    assert "Sam asks Cena something" in out[0]["content"]
+    assert "[dck]: dck chimes in unprompted" in out[0]["content"]
+    assert "Sam follows up" in out[0]["content"]
+
+
+def test_build_api_messages_assistant_then_dck_then_user_alternates():
+    """assistant → dck → user becomes assistant → user(merged) — the
+    dck and Sam turns merge into one user turn after the assistant."""
+    rows = [
+        _RowLike("user", "first sam ask"),
+        _RowLike("assistant", "Cena replies"),
+        _RowLike("dck", "dck weighs in"),
+        _RowLike("user", "Sam's follow-up"),
+    ]
+    out = sc._build_api_messages_from_rows(rows)
+    assert [m["role"] for m in out] == ["user", "assistant", "user"]
+    assert out[2]["content"] == "[dck]: dck weighs in\n\nSam's follow-up"
+
+
+def test_build_api_messages_strips_tool_blocks_on_assistant():
+    """Mapper still applies _strip_cena_tool_blocks to assistant
+    content. Regression guard so the Track 8b refactor didn't lose
+    the strip path."""
+    rows = [
+        _RowLike("user", "hi"),
+        _RowLike("assistant",
+                 "thinking.\n\n[read_dev_chat(limit=5)]\n→ 5 msgs\n"
+                 "[#1] author: body\n\nDone."),
+    ]
+    out = sc._build_api_messages_from_rows(rows)
+    assert out[0] == {"role": "user", "content": "hi"}
+    # Assistant should have the tool block stripped + marker appended
+    assert "[read_dev_chat" not in out[1]["content"]
+    assert "stripped from context" in out[1]["content"]
+
+
+def test_build_api_messages_drops_system_rows():
+    """Non-user/assistant/dck rows are dropped from the API list."""
+    rows = [
+        _RowLike("user", "hi"),
+        _RowLike("system", "internal note"),
+        _RowLike("assistant", "ok"),
+    ]
+    out = sc._build_api_messages_from_rows(rows)
+    assert [m["role"] for m in out] == ["user", "assistant"]
+
+
+def test_build_api_messages_empty_returns_empty():
+    assert sc._build_api_messages_from_rows([]) == []
+
+
+# ============================================================
 # _process_attachments – types + limits
 # ============================================================
 

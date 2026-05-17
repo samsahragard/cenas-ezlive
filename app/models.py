@@ -1618,7 +1618,7 @@ def _no_delete_task_audit(mapper, connection, target):
 # reads/writes to AgentChatMessage / AgentActionLog / any Phase 2 Block
 # 3 table. Distinct from the agent Developer Chat and from Block 3's
 # manager-facing in-app agent.
-_VALID_SAM_CHAT_ROLES = {"user", "assistant", "system"}
+_VALID_SAM_CHAT_ROLES = {"user", "assistant", "system", "dck"}
 
 
 class SamChatSession(Base):

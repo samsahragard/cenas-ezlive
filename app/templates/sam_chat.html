@@ -124,6 +124,7 @@
   .sc-msg { margin-bottom: 16px; display: flex; flex-direction: column; }
   .sc-msg.role-user { align-items: flex-end; }
   .sc-msg.role-assistant { align-items: flex-start; }
+  .sc-msg.role-dck { align-items: flex-start; }
   .sc-bubble {
     max-width: 78%;
     padding: 10px 14px;
@@ -145,6 +146,12 @@
     white-space: normal;
   }
   .role-assistant .sc-bubble.streaming { white-space: pre-wrap; }
+  .role-dck .sc-bubble {
+    background: rgba(200, 130, 200, 0.10);
+    border: 1px solid rgba(200, 130, 200, 0.30);
+    color: #ECE3D0;
+    white-space: normal;
+  }
   .sc-bubble p:first-child { margin-top: 0; }
   .sc-bubble p:last-child { margin-bottom: 0; }
   .sc-bubble pre {
@@ -272,6 +279,7 @@
   }
   .role-user .sc-msg-author { text-align: right; color: rgba(232, 122, 62, 0.72); }
   .role-assistant .sc-msg-author { color: rgba(217, 164, 54, 0.70); }
+  .role-dck .sc-msg-author { color: rgba(200, 130, 200, 0.85); }
   /* ---- participant strip ---- */
   .sc-participants {
     display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
@@ -411,11 +419,12 @@
     wrap.className = "sc-msg role-" + role;
     const authorEl = document.createElement("div");
     authorEl.className = "sc-msg-author";
-    authorEl.textContent = role === "user" ? "Sam" : "Cena";
+    authorEl.textContent = role === "user" ? "Sam"
+      : role === "dck" ? "dck" : "Cena";
     wrap.appendChild(authorEl);
     const bubble = document.createElement("div");
     bubble.className = "sc-bubble";
-    if (role === "assistant" && !opts.streaming) {
+    if ((role === "assistant" || role === "dck") && !opts.streaming) {
       try { bubble.innerHTML = marked.parse(content || ""); }
       catch (e) { bubble.textContent = content || ""; }
     } else {

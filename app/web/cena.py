@@ -38,6 +38,7 @@ from app.models import (
     User,
     UserAuditLog,
     _VALID_CENA_ACTION_TYPES,
+    _VALID_SAM_CHAT_ROLES,
 )
 
 logger = logging.getLogger(__name__)
@@ -1278,6 +1279,111 @@ def cena_sam_chat_read():
                              if window_start else None),
             "default_window_hours": default_window_hours,
         })
+    finally:
+        db.close()
+
+
+# ============================================================
+# POST /sam/cena/sam-chat-post — dck (and team) writes to /sam/chat
+# ============================================================
+# Track 8b per Sam #2236: dck reads /sam/chat via the GET endpoint
+# above, and writes back here when summoned. Inserts ONE
+# SamChatMessage row with role="dck" (or other non-user/assistant
+# role explicitly permitted). Does NOT trigger any model turn — Cena's
+# next reply happens when Sam (or dck-on-summon-by-Cena) next POSTs to
+# /sam/chat via the normal user pathway.
+#
+# The "only respond when called" discipline is agent-side (each
+# agent's prompt), not server-side. This endpoint just enables the
+# write pathway. dck-side wrapper: scripts/post_sam_chat.py.
+#
+# Body (JSON):
+#   {
+#     "session_id": <int>,            required
+#     "content":    "<str>",          required, non-empty, max 30000ch
+#     "role":       "dck",            optional, default "dck"
+#   }
+#
+# Response:
+#   {"ok": true, "id": <row_id>, "session_id": <int>,
+#    "role": "dck", "created_at": "<ISO>Z"}
+#
+# Auth: dual-path (X-Cena-Token OR partner session), same gate as
+# the read endpoint. role MUST be "dck" — "user"/"assistant"/"system"
+# are reserved for the canonical Sam<>Cena flow (writing those via
+# this endpoint would bypass the cost+streaming pathway, which is
+# not what this endpoint is for).
+
+_VALID_POST_ROLES = {"dck"}
+
+
+@cena_bp.route("/sam/cena/sam-chat-post", methods=["POST"])
+def cena_sam_chat_post():
+    gate = _require_gateway_token_or_partner()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+
+    raw_sid = body.get("session_id")
+    try:
+        session_id = int(raw_sid)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False,
+                        "error": "session_id required (int)"}), 400
+
+    content = body.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return jsonify({"ok": False,
+                        "error": "content required (non-empty str)"}), 400
+    # Cap inbound dck posts at 30000 chars — generous, matches the
+    # ck/samai-style observation comment length, but bounded so a
+    # runaway agent can't flood the table.
+    if len(content) > 30000:
+        return jsonify({"ok": False,
+                        "error": "content too long (max 30000 chars)"}), 400
+
+    role = (body.get("role") or "dck").strip()
+    if role not in _VALID_POST_ROLES:
+        return jsonify({"ok": False,
+                        "error": (f"role {role!r} not allowed via this "
+                                  f"endpoint; allowed: "
+                                  f"{sorted(_VALID_POST_ROLES)}")}), 400
+    # Defense-in-depth: also reject if the model layer wouldn't accept it.
+    if role not in _VALID_SAM_CHAT_ROLES:
+        return jsonify({"ok": False,
+                        "error": f"role {role!r} not in model whitelist"}), 400
+
+    db = SessionLocal()
+    try:
+        sess = db.get(SamChatSession, session_id)
+        if sess is None:
+            return jsonify({"ok": False,
+                            "error": f"session_id={session_id} not found"}), 404
+
+        now = datetime.utcnow()
+        row = SamChatMessage(
+            session_id=session_id,
+            role=role,
+            content=content,
+            created_at=now,
+        )
+        db.add(row)
+        sess.last_message_at = now
+        sess.updated_at = now
+        db.commit()
+        db.refresh(row)
+        return jsonify({
+            "ok": True,
+            "id": row.id,
+            "session_id": session_id,
+            "role": row.role,
+            "created_at": row.created_at.isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: sam-chat-post failed")
+        db.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()
 

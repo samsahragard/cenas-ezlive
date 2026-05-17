@@ -258,6 +258,55 @@ def _strip_cena_tool_blocks(content: str) -> str:
     return stripped.rstrip() + _CENA_TOOL_STRIP_MARKER
 
 
+def _build_api_messages_from_rows(rows) -> list[dict]:
+    """Map persisted SamChatMessage rows to Anthropic's user/assistant
+    message list, applying the conversation-flow rules /sam/chat needs:
+
+    - 'user' rows pass through as user turns
+    - 'assistant' rows pass through as assistant turns (with cena tool
+      blocks stripped — see _strip_cena_tool_blocks)
+    - 'dck' rows (Track 8b per Sam #2236) map to USER turns with a
+      '[dck]: ' prefix. Treating dck as a user-side participant (rather
+      than another assistant) is closer to how multi-party chat works
+      in practice — Cena sees dck as a third voice in the room, not a
+      separate Cena saying contradictory things. The prefix marks the
+      speaker so Cena can address dck specifically when summoned.
+    - Other roles are dropped (defensive — model whitelist allows them
+      but the API layer ignores anything not user/assistant/system).
+
+    Anthropic requires strict role alternation. Consecutive same-role
+    turns are merged into one, joined by '\\n\\n'. Without merging, a
+    Sam→dck→Sam sequence becomes user→user→user and the API rejects."""
+    mapped: list[dict] = []
+    for m in rows:
+        if m.role == "user":
+            mapped.append({"role": "user", "content": m.content})
+        elif m.role == "assistant":
+            mapped.append({"role": "assistant",
+                           "content": _strip_cena_tool_blocks(m.content)})
+        elif m.role == "dck":
+            mapped.append({"role": "user",
+                           "content": f"[dck]: {m.content}"})
+        # else: skip (system rows etc. aren't sent in the conversation list)
+
+    merged: list[dict] = []
+    for msg in mapped:
+        if merged and merged[-1]["role"] == msg["role"]:
+            prev = merged[-1]["content"]
+            curr = msg["content"]
+            if isinstance(prev, str) and isinstance(curr, str):
+                merged[-1]["content"] = prev + "\n\n" + curr
+            else:
+                # Block-list content shouldn't appear in prior turns
+                # (only the new user turn has potential image blocks),
+                # but fall back to appending a fresh entry rather than
+                # losing data if it ever does.
+                merged.append(msg)
+        else:
+            merged.append(msg)
+    return merged
+
+
 def _estimate_tokens(text: str) -> int:
     """Very rough token estimate (~4 chars/token) for the soft
     context-window warning. Not precise — the SSE 'done' event carries
@@ -626,20 +675,19 @@ def sam_chat_send():
 
         # Prior turns -> Anthropic message list (user/assistant only;
         # the API takes 'system' separately and Sam Chat creates none).
-        # Assistant content has cena-gateway tool blocks stripped via
-        # _strip_cena_tool_blocks — see that function for the
-        # confabulation-substrate rationale (Sam #2148, samai #2154).
+        # dck rows map to user-side turns with '[dck]: ' prefix and
+        # consecutive same-role turns are merged for API alternation —
+        # see _build_api_messages_from_rows for the full mapping rules
+        # (Track 8b per Sam #2236). Assistant content has cena-gateway
+        # tool blocks stripped via _strip_cena_tool_blocks — see that
+        # function for the confabulation-substrate rationale (Sam #2148,
+        # samai #2154).
         prior = (db.query(SamChatMessage)
                  .filter(SamChatMessage.session_id == session_id)
                  .order_by(SamChatMessage.created_at.asc(),
                            SamChatMessage.id.asc())
                  .all())
-        api_messages = [
-            {"role": m.role,
-             "content": (_strip_cena_tool_blocks(m.content)
-                         if m.role == "assistant" else m.content)}
-            for m in prior if m.role in ("user", "assistant")
-        ]
+        api_messages = _build_api_messages_from_rows(prior)
 
         # Persist the user message and capture its id so the Cena audit
         # log rows can link back to this exact chat turn.
@@ -666,7 +714,19 @@ def sam_chat_send():
                        + api_blocks)
     else:
         new_content = stored_content
-    api_messages.append({"role": "user", "content": new_content})
+    # If the last prior turn was already user-role (e.g. a recent dck
+    # post mapped to user via _build_api_messages_from_rows), merge the
+    # new Sam turn into it to preserve API alternation. String concat
+    # for str+str; otherwise append as a separate entry and let Anthropic
+    # surface the alternation error (very unusual code path — only fires
+    # when Sam attaches an image immediately after a dck post).
+    if (api_messages and api_messages[-1]["role"] == "user"
+            and isinstance(api_messages[-1]["content"], str)
+            and isinstance(new_content, str)):
+        api_messages[-1]["content"] = (
+            api_messages[-1]["content"] + "\n\n" + new_content)
+    else:
+        api_messages.append({"role": "user", "content": new_content})
 
     # --- the SSE generator: stream, then persist the assistant turn ---
     def generate():

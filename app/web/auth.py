@@ -44,6 +44,7 @@ EXEMPT_PREFIXES = (
     "/sam/cena/log",             # Cena gateway audit ingest — own X-Cena-Token header check inside
     "/sam/cena/db-probe/",       # Cena gateway read-only DB probe — own X-Cena-Token header check inside
     "/sam/cena/dev-chat",        # Cena gateway dev-chat read — own X-Cena-Token header check inside
+    "/ez-manage/pending-count.json",  # XHR poll endpoint — own MANAGER_ROLES check inside, returns 401 JSON on unauth (not 302) so the sidebar badge fetcher renders cleanly + samai's stateless gate-3 probe sees the canonical 401 JSON signal (Cena #1820 + samai #1787)
 )
 
 

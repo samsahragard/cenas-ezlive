@@ -1,0 +1,828 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+<style>
+.or-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+.or-live    { background: #1a3a1a; color: #4caf50; border: 1px solid #2e5c2e; }
+.or-partial { background: #2a2a10; color: #d4a017; border: 1px solid #5a4a00; }
+.or-specced { background: #1a1a3a; color: #7a9cff; border: 1px solid #2e2e6a; }
+.or-retired { background: #2a1a1a; color: #888; border: 1px solid #4a2a2a; }
+.or-section-head {
+  background: var(--glass-bg, rgba(255,255,255,.04));
+  border: 1px solid var(--glass-border, rgba(255,255,255,.08));
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 28px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.or-section-head h2 { margin: 0; font-size: 15px; }
+.or-section-head .or-badge { margin-left: auto; font-size: 10px; }
+table td code { font-size: 12px; }
+table td, table th { vertical-align: top; }
+.or-url { font-family: monospace; font-size: 12px; color: var(--text-2, #aaa); }
+.or-gap { color: var(--text-3, #777); font-style: italic; font-size: 12px; }
+</style>
+
+<p class="doc-meta" style="color:var(--text-3,#8a8a8a);font-size:12px;margin-bottom:6px">
+  Cenas Kitchen — Operations Reference. Every tab, every page, every status.<br>
+  Generated 2026-05-16 from codebase + sidebar audit. Updated on significant changes only.
+</p>
+<p style="font-size:13px;margin-bottom:24px">
+  This document is the authoritative map of what the app can do, where to find it, what data it reads,
+  and what Phase 2 work fills the remaining gaps. Status key:
+  <span class="or-badge or-live">LIVE</span> fully operational ·
+  <span class="or-badge or-partial">PARTIAL</span> shipped but incomplete ·
+  <span class="or-badge or-specced">SPECCED</span> designed, not yet built ·
+  <span class="or-badge or-retired">RETIRED</span> stub/redirect only.
+</p>
+
+{# ═══════════════════════════════════════════════════════════════════════ TODAY #}
+<div class="or-section-head">
+  <h2>Today</h2>
+  <span class="or-badge or-live">LIVE</span>
+</div>
+
+<table>
+  <tr>
+    <th>Page</th><th>URL (canonical)</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Dashboard</strong></td>
+    <td class="or-url">/<em>store</em>/</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>orders table, ezcater_payroll, driver_logs</td>
+    <td>Today's delivery schedule; pending confirmations; courier-assigned orders; ribbon (Block 1B — shipped)</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ OPERATIONS #}
+<div class="or-section-head">
+  <h2>Operations</h2>
+</div>
+
+<p style="font-size:13px;font-weight:600;margin:12px 0 6px">Corporate Order</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Order</strong></td>
+    <td class="or-url">/<em>store</em>/corporate-order</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>CORPORATE_DB_URL (separate SQLite), local DB orders</td>
+    <td>Inter-store purchase order form; submit order to the other location</td>
+  </tr>
+  <tr>
+    <td><strong>Reports</strong></td>
+    <td class="or-url">/<em>store</em>/corporate-order/reports</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>CORPORATE_DB_URL</td>
+    <td>History of inter-store orders; totals by item</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Vendors — Produce</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Order Guide</strong></td>
+    <td class="or-url">/<em>store</em>/produce/</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>ProducePriceSnapshot, produce_price_history, IMAP-polled vendor emails</td>
+    <td>Scrollable produce catalog with current prices; add-to-cart; submit order (emails vendor, writes DB record); approval flow (Sam confirms/cancels)</td>
+  </tr>
+  <tr>
+    <td><strong>Price History</strong></td>
+    <td class="or-url">/<em>store</em>/produce/orders</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>produce_price_snapshots table</td>
+    <td>Weekly price snapshots per item per vendor; spot price trends</td>
+  </tr>
+  <tr>
+    <td><strong>Vendor confirm / cancel</strong></td>
+    <td class="or-url">/produce/confirm, /produce/cancel</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Token in email link</td>
+    <td>produce_orders table</td>
+    <td>One-click confirm / cancel from vendor reply email; updates order status</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Vendors — Upcoming (specced)</p>
+<table>
+  <tr><th>Page</th><th>Status</th><th>Notes</th></tr>
+  <tr>
+    <td><strong>Webstaurant</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td class="or-gap">Vendor ordering integration — no implementation yet; sidebar placeholder shows "soon"</td>
+  </tr>
+  <tr>
+    <td><strong>Performance</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td class="or-gap">Vendor performance tracking — no implementation; placeholder only</td>
+  </tr>
+  <tr>
+    <td><strong>Specs</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td class="or-gap">Product specification library — no implementation; placeholder only</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Ez Cater</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Orders</strong></td>
+    <td class="or-url">/<em>store</em>/orders</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>orders + order_items tables, ezcater Partner API</td>
+    <td>Paginated order list; filter by date; order detail view with items, driver info, revenue</td>
+  </tr>
+  <tr>
+    <td><strong>Order detail</strong></td>
+    <td class="or-url">/orders/view/&lt;id&gt;</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>orders, order_items, driver_logs</td>
+    <td>Full order detail: items, notes, driver assignment, status timeline</td>
+  </tr>
+  <tr>
+    <td><strong>Ez Market</strong> (bid pool)</td>
+    <td class="or-url">/ez-market</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad (drivers) / Site password (managers)</td>
+    <td>orders table (status=available), ezcater_payroll, routing_service</td>
+    <td>Open bids board; drivers request delivery; manager approves; courier-assign fires to ezcater Partner API</td>
+  </tr>
+  <tr>
+    <td><strong>Ez Manage</strong></td>
+    <td class="or-url">/ez-manage</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>orders table, ezcater Partner API</td>
+    <td>Manage open catering orders; confirm/reassign/cancel flows; unassign-courier; status overrides</td>
+  </tr>
+  <tr>
+    <td><strong>Driver Payroll</strong></td>
+    <td class="or-url">/<em>store</em>/driver-tracking</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>driver_logs, orders, ezcater_payroll service</td>
+    <td>Per-driver delivery count + payout for pay period; mileage calculations via Google Routes API</td>
+  </tr>
+  <tr>
+    <td><strong>Drivers (admin)</strong></td>
+    <td class="or-url">/<em>store</em>/drivers</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>drivers table</td>
+    <td>Driver directory; add/edit driver; active/inactive toggle; driver-location mapping</td>
+  </tr>
+  <tr>
+    <td><strong>Ezcater Ingest — Webhook</strong></td>
+    <td class="or-url">/ezcater/webhook</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>EZCATER_WEBHOOK_SECRET header</td>
+    <td>ezcater Partner API, Google Routes API</td>
+    <td>Auto-pipeline: receives order event → pulls full order → picks location → courier-assigns → writes DB → Telegram notify</td>
+  </tr>
+  <tr>
+    <td><strong>Ezcater Ingest — PDF</strong></td>
+    <td class="or-url">/orders/ingest (POST)</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Anthropic API (vision), PDF upload</td>
+    <td>Manual PDF upload → Claude extracts order fields → writes to DB; fallback when webhook fails</td>
+  </tr>
+  <tr>
+    <td><strong>Ezcater Import (XLSX)</strong></td>
+    <td class="or-url">/partner/developer/ezcater/import</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password</td>
+    <td>ezcater XLSX export, orders table</td>
+    <td>Bulk historical import; idempotent upsert by order reference; partner-only dev tool</td>
+  </tr>
+  <tr>
+    <td><strong>Ezcater Live GPS</strong></td>
+    <td class="or-url">/partner/developer/ezcater-live</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password</td>
+    <td>ezcater_live_tracker service, ezcater Partner API</td>
+    <td>Real-time GPS map of in-flight deliveries; tracking URLs from ezcater; partner-only visibility</td>
+  </tr>
+  <tr>
+    <td><strong>Ezcater Review Queue</strong></td>
+    <td class="or-url">/partner/developer/ezcater</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password</td>
+    <td>orders table (needs_review=True)</td>
+    <td>Orders flagged by auto-resolver (Claude found warnings); human review before confirming</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Schedule</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>All Roster</strong></td>
+    <td class="or-url">/<em>store</em>/roster/all</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Sling API (roster_report), role_classifier</td>
+    <td>Full staff roster across BOH + FOH; role classification; location scope from store slug</td>
+  </tr>
+  <tr>
+    <td><strong>BOH Roster</strong></td>
+    <td class="or-url">/<em>store</em>/roster/boh</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Sling API, role_classifier</td>
+    <td>Back-of-house staff only; classified via role_classifier BOH rules</td>
+  </tr>
+  <tr>
+    <td><strong>FOH Roster</strong></td>
+    <td class="or-url">/<em>store</em>/roster/foh</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Sling API, role_classifier</td>
+    <td>Front-of-house staff only; classified via role_classifier FOH rules</td>
+  </tr>
+  <tr>
+    <td><strong>Weekly Schedule</strong></td>
+    <td class="or-url">/<em>store</em>/schedule</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Sling API (schedule_report), Toast labor API</td>
+    <td>7-day shift grid; per-employee scheduled hours; both Tomball + Copperfield (Sling handles both, Toast only Tomball)</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ INSIGHTS #}
+<div class="or-section-head">
+  <h2>Insights</h2>
+  <span class="or-badge or-live">LIVE</span>
+</div>
+
+<p style="font-size:13px;font-weight:600;margin:12px 0 6px">Performance (Server)</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>All</strong></td>
+    <td class="or-url">/<em>store</em>/reports/server-performance/all</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast labor API (timeEntries, jobs), role_classifier</td>
+    <td>All-staff performance grid: hours, tips, tip-per-hour; filterable date range</td>
+  </tr>
+  <tr>
+    <td><strong>Server</strong></td>
+    <td class="or-url">/<em>store</em>/reports/server-performance/server</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast labor API</td>
+    <td>Server-only perf; tip rate, hours; ranked by performance</td>
+  </tr>
+  <tr>
+    <td><strong>Bartenders</strong></td>
+    <td class="or-url">/<em>store</em>/reports/server-performance/bartenders</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast labor API</td>
+    <td>Bartender-only perf; same metrics as Server view</td>
+  </tr>
+  <tr>
+    <td><strong>Prep</strong></td>
+    <td class="or-url">—</td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>—</td>
+    <td>—</td>
+    <td class="or-gap">Sidebar shows "soon" placeholder; no route or data model yet</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Sales</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>All (Total)</strong></td>
+    <td class="or-url">/<em>store</em>/reports/sales/total</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast orders API, orders table (ezCater), role_classifier</td>
+    <td>Combined sales from all channels; daily/weekly totals; channel breakdown</td>
+  </tr>
+  <tr>
+    <td><strong>Toast</strong></td>
+    <td class="or-url">/<em>store</em>/reports/sales/toast</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast orders API (ordersBulk)</td>
+    <td>In-store + online Toast POS sales by date; net/gross; category breakdown</td>
+  </tr>
+  <tr>
+    <td><strong>Online Toast</strong></td>
+    <td class="or-url">/<em>store</em>/reports/sales/online</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast orders API (source filter)</td>
+    <td>Online-ordering channel only; online revenue split from dine-in</td>
+  </tr>
+  <tr>
+    <td><strong>EzCater</strong></td>
+    <td class="or-url">/<em>store</em>/reports/sales/ezcater</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>orders + order_items tables, ezcater_revenue service</td>
+    <td>Catering revenue: gross, commission deducted, net; per-order breakdown</td>
+  </tr>
+  <tr>
+    <td><strong>DoorDash</strong></td>
+    <td class="or-url">/<em>store</em>/reports/sales/doordash</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast orders API (source=API, DoorDash channelGuid filter)</td>
+    <td>DoorDash orders routed through Toast; no direct DoorDash API</td>
+  </tr>
+  <tr>
+    <td><strong>Uber</strong></td>
+    <td class="or-url">/<em>store</em>/reports/sales/uber</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast orders API (source filter)</td>
+    <td>Uber Eats orders via Toast integration; net revenue</td>
+  </tr>
+  <tr>
+    <td><strong>Third-Party Sales</strong> (all online channels)</td>
+    <td class="or-url">/<em>store</em>/reports/sales (combined)</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast orders API</td>
+    <td>DoorDash + Uber + Online Toast combined report; toast_reports.third_party_sales_report</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Labor</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>BOH Labor</strong></td>
+    <td class="or-url">/<em>store</em>/reports/labor/boh</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast labor API (timeEntries, employees, jobs), role_classifier</td>
+    <td>BOH labor cost: hours by person by job; total wages; compare-to-prior-week if cached</td>
+  </tr>
+  <tr>
+    <td><strong>FOH Labor</strong></td>
+    <td class="or-url">/<em>store</em>/reports/labor/foh</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password</td>
+    <td>Toast labor API, role_classifier</td>
+    <td>FOH labor cost; same layout as BOH view</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Forecasts</p>
+<table>
+  <tr><th>Feature</th><th>Status</th><th>Notes</th></tr>
+  <tr>
+    <td><strong>Forecast view</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td class="or-gap">Sidebar placeholder. No route or model. Phase 2 Block 1F (Sales Insights) will feed this once the 5am synthesis cron is built.</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ ADMIN #}
+<div class="or-section-head">
+  <h2>Admin</h2>
+  <span class="or-badge or-live">LIVE</span>
+</div>
+
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Team</strong></td>
+    <td class="or-url">/partner/team</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password + <code>access.team_admin</code> permission</td>
+    <td>Users table, permission_grants table, role_classifier</td>
+    <td>User directory: add/edit users, set role + permissions per user; only Sam/Masood (partner) can access</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ TEAM REPORTS #}
+<div class="or-section-head">
+  <h2>Team Reports</h2>
+  <span class="or-badge or-live">LIVE</span>
+</div>
+
+<p style="font-size:13px;margin:8px 0 8px">
+  Phase 2 Block 1G. Gated by <code>team_reports.view</code> — partner + corporate + GM tier.
+  GMs see only their own store; scoping enforced server-side.
+</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Task Reports</strong></td>
+    <td class="or-url">/partner/team-reports/</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Site password + <code>team_reports.view</code></td>
+    <td>Tasks table (Phase 2 1A — Task model), TaskAuditLog</td>
+    <td>Task completion rates, overdue tasks, escalation history; store-scoped per role</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ LEGAL #}
+<div class="or-section-head">
+  <h2>Legal</h2>
+  <span class="or-badge or-live">LIVE</span>
+</div>
+
+<p style="font-size:13px;margin:8px 0 8px">
+  All pages gated by <code>legal.view</code> permission — partner tier only (Sam, Masood).
+</p>
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Overview</strong></td>
+    <td class="or-url">/partner/legal</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>LegalMatter, LegalDocument tables (counts)</td>
+    <td>Summary dashboard: open matters count, upcoming deadlines, insurance expiry alerts</td>
+  </tr>
+  <tr>
+    <td><strong>Matters</strong></td>
+    <td class="or-url">/partner/legal/matters</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>LegalMatter table</td>
+    <td>Active/archived matter list; create new matter; status tracking</td>
+  </tr>
+  <tr>
+    <td><strong>Matter detail</strong></td>
+    <td class="or-url">/partner/legal/matters/&lt;id&gt;</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>LegalMatter, LegalDocument tables</td>
+    <td>Full matter view: description, status, associated documents, timeline</td>
+  </tr>
+  <tr>
+    <td><strong>Structure</strong></td>
+    <td class="or-url">/partner/legal/structure</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>LegalStructure table (entity records)</td>
+    <td>Corporate entity map: LLC/Inc records, registered agents, EINs, ownership</td>
+  </tr>
+  <tr>
+    <td><strong>Insurance</strong></td>
+    <td class="or-url">/partner/legal/insurance</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>InsurancePolicy table</td>
+    <td>Policy list with carrier, coverage type, expiry dates; expiry-alert flags</td>
+  </tr>
+  <tr>
+    <td><strong>Insurance form</strong></td>
+    <td class="or-url">/partner/legal/insurance/add</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password</td>
+    <td>—</td>
+    <td>Add/edit insurance policy record</td>
+  </tr>
+  <tr>
+    <td><strong>Documents</strong></td>
+    <td class="or-url">/partner/legal/documents</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password</td>
+    <td>LegalDocument table</td>
+    <td>Document library: contracts, filings, permits; filter by matter or type</td>
+  </tr>
+  <tr>
+    <td><strong>Audit log</strong></td>
+    <td class="or-url">/partner/legal/audit</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Partner password</td>
+    <td>LegalAuditLog table</td>
+    <td>Immutable append-only log of all legal record changes; actor + timestamp + diff</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ DRIVER APP #}
+<div class="or-section-head">
+  <h2>Driver App</h2>
+  <em style="font-size:12px;color:var(--text-3,#777)">(not in partner sidebar — separate driver-facing surface)</em>
+</div>
+
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th><th>Auth gate</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Driver signup</strong></td>
+    <td class="or-url">/driver/signup</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>None (public sign-up)</td>
+    <td>—</td>
+    <td>New driver registration form; creates driver record + sets initial keypad PIN; sends to approval queue</td>
+  </tr>
+  <tr>
+    <td><strong>Driver login (keypad)</strong></td>
+    <td class="or-url">/driver/login</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad PIN</td>
+    <td>drivers table</td>
+    <td>4-digit PIN entry; session sets driver_id in session; redirects to driver view</td>
+  </tr>
+  <tr>
+    <td><strong>Change passcode</strong></td>
+    <td class="or-url">/driver/change-passcode</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad session</td>
+    <td>drivers table</td>
+    <td>First-login passcode change; forced on initial login if flag set</td>
+  </tr>
+  <tr>
+    <td><strong>Shifts</strong></td>
+    <td class="or-url">/driver/shifts</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad session</td>
+    <td>driver_logs, orders</td>
+    <td>Driver's own delivery history; per-shift summary; pay estimate</td>
+  </tr>
+  <tr>
+    <td><strong>Live Tracking</strong></td>
+    <td class="or-url">/driver/logs</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad session</td>
+    <td>driver_logs (GPS events)</td>
+    <td>Driver's live GPS breadcrumbs; active delivery tracker</td>
+  </tr>
+  <tr>
+    <td><strong>My Profile</strong></td>
+    <td class="or-url">/my-profile</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad session</td>
+    <td>drivers table</td>
+    <td>Driver's own profile; contact info; vehicle; payment details</td>
+  </tr>
+  <tr>
+    <td><strong>Pay History</strong></td>
+    <td class="or-url">/pay-history</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Driver keypad session</td>
+    <td>driver_logs, orders, ezcater_payroll</td>
+    <td>Historical pay statements; earnings by period; mileage totals</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ DEVELOPER #}
+<div class="or-section-head">
+  <h2>Developer / Partner Tools</h2>
+  <em style="font-size:12px;color:var(--text-3,#777)">(partner-gated — Sam + Masood only)</em>
+</div>
+
+<table>
+  <tr>
+    <th>Page</th><th>URL</th><th>Status</th>
+    <th>Data in</th><th>Key outputs</th>
+  </tr>
+  <tr>
+    <td><strong>Developer Chat</strong></td>
+    <td class="or-url">/partner/developer/chat</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>DeveloperChatMessage, DeveloperChatAttachment tables</td>
+    <td>Persistent multi-party coordination thread between Sam, aick, ck, samai; scriptable via chat_tail.py</td>
+  </tr>
+  <tr>
+    <td><strong>App Docs hub</strong></td>
+    <td class="or-url">/partner/developer/app/&lt;slug&gt;</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Static Jinja templates (DOC_PAGES registry)</td>
+    <td>All architecture + reference + session docs; this page lives here</td>
+  </tr>
+  <tr>
+    <td><strong>Sam Chat</strong></td>
+    <td class="or-url">/sam/chat</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Anthropic API (via Cena gateway or direct), Google Gemini API</td>
+    <td>Partner-only conversational AI; model selector (Sonnet 4.6, Opus 4.7, Gemini 2.5 Flash); auto-model selection for unspecified; streaming SSE; usage cost tracking</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ PHASE 2 PIPELINE #}
+<div class="or-section-head">
+  <h2>Phase 2 Pipeline — Specced, Not Yet Built</h2>
+</div>
+
+<p style="font-size:13px;margin:8px 0 12px">
+  From the Phase 2 directive (2026-05-13). Three blocks; each shippable as a unit.
+  samai reviews each sub-block independently. Items below are not yet in prod.
+</p>
+
+<p style="font-size:13px;font-weight:600;margin:12px 0 6px">Block 1 — Foundation</p>
+<table>
+  <tr><th>Item</th><th>Status</th><th>What it is</th><th>Key tables / env vars</th></tr>
+  <tr>
+    <td><strong>1A — Task model</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>Task + TaskAuditLog + RibbonItemDismissal tables; assignment UI; escalation records</td>
+    <td>Task, TaskAuditLog, RibbonItemDismissal (new tables)</td>
+  </tr>
+  <tr>
+    <td><strong>1B/1C — Universal Ribbon</strong></td>
+    <td><span class="or-badge or-partial">PARTIAL</span></td>
+    <td>Contextual ribbon at top of every authenticated page; role-aware signals (Tasks, alerts, sales insights). Ribbon route plumbing is shipped (ribbon_routes.py: collapse pref, dismiss, check handlers); full content router + task signals not yet wired.</td>
+    <td>ribbon_routes.py live; content router pending</td>
+  </tr>
+  <tr>
+    <td><strong>1D — X/Check controls</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>Inline pass/fail controls on order and task views; writes TaskAuditLog</td>
+    <td>Depends on 1A</td>
+  </tr>
+  <tr>
+    <td><strong>1E — Escalation engine</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>Cron-driven: when Task.deadline_at passes and task is incomplete, set escalated_to + fire SMS</td>
+    <td>Depends on 1A + 1I (SMS)</td>
+  </tr>
+  <tr>
+    <td><strong>1F — Sales Insights</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>5am daily cron: pulls Toast + ezcater sales, weather (OpenWeatherMap), events (Ticketmaster), sends to Claude for synthesis → SalesInsight table → feeds Ribbon</td>
+    <td>SalesInsight (new table), OPENWEATHERMAP_API_KEY, TICKETMASTER_API_KEY</td>
+  </tr>
+  <tr>
+    <td><strong>1G — Team Reports</strong></td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Task-completion reports at /partner/team-reports/ — shipped in Phase 2 Block 1G</td>
+    <td>team_routes.py, team.html</td>
+  </tr>
+  <tr>
+    <td><strong>1H — Pay masking</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>Hide individual manager pay from each other's view; each manager sees own pay, aggregate only for others</td>
+    <td>Permission layer on labor reports</td>
+  </tr>
+  <tr>
+    <td><strong>1I — SMS (Twilio)</strong></td>
+    <td><span class="or-badge or-partial">PARTIAL</span></td>
+    <td>Outbound SMS for escalation alerts + driver notifications. Env vars exist (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER); implementation status unclear — verify before marking LIVE.</td>
+    <td>TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Block 2 — Manager Tools</p>
+<table>
+  <tr><th>Item</th><th>Status</th><th>What it is</th></tr>
+  <tr>
+    <td><strong>2A — Daily Manager Log</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>Forum-style per-shift log; manager posts end-of-shift notes; searchable by Sam. Template shell (manager_logging.html) exists but route and DB model not wired.</td>
+  </tr>
+  <tr>
+    <td><strong>2B–2H — Other Manager Tools</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>Detailed specs in Phase 2 Directive. Includes: shift handoff notes, incident reports, supply requests, daily goals, staff feedback forms, pre-shift checklist, and close-of-day audit.</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;font-weight:600;margin:16px 0 6px">Block 3 — Agent Surface</p>
+<table>
+  <tr><th>Item</th><th>Status</th><th>What it is</th></tr>
+  <tr>
+    <td><strong>3A–3G — Conversational Agent</strong></td>
+    <td><span class="or-badge or-specced">SPECCED</span></td>
+    <td>In-app "ck" agent: any manager can ask ck a question and ck takes real, audited actions on their behalf. Depends on Block 1 (data surfaces) + Block 2 (operational surfaces). Sam Chat (/sam/chat) is the current partner-only prototype of this surface.</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ AUTH / SYSTEM #}
+<div class="or-section-head">
+  <h2>Auth &amp; System Endpoints</h2>
+  <em style="font-size:12px;color:var(--text-3,#777)">(not in sidebar — infrastructure layer)</em>
+</div>
+
+<table>
+  <tr>
+    <th>Endpoint</th><th>URL</th><th>Status</th><th>Notes</th>
+  </tr>
+  <tr>
+    <td><strong>Site password gate</strong></td>
+    <td class="or-url">/login</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>EZLIVE_PASSWORD env var; sets session[auth_ok]; before_request hook in auth.py gates all non-exempt routes</td>
+  </tr>
+  <tr>
+    <td><strong>Partner login</strong></td>
+    <td class="or-url">/partner-login</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>PARTNER_PASSWORD env var; sets session[partner_auth_ok]; gates all /partner/* routes</td>
+  </tr>
+  <tr>
+    <td><strong>Logout</strong></td>
+    <td class="or-url">/logout</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Clears both auth_ok + partner_auth_ok; redirects to /login</td>
+  </tr>
+  <tr>
+    <td><strong>Store picker</strong></td>
+    <td class="or-url">/</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Root redirect; renders store_picker.html (DOS / UNO / Corporate / Partner tiles)</td>
+  </tr>
+  <tr>
+    <td><strong>Keypad auth</strong></td>
+    <td class="or-url">/keypad/login</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>4-digit PIN for manager keypad access; separate session key from site-password</td>
+  </tr>
+  <tr>
+    <td><strong>Morning briefs</strong></td>
+    <td class="or-url">/partner/briefs</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Daily AI-synthesized morning brief; calibration feedback loop; partner-only</td>
+  </tr>
+  <tr>
+    <td><strong>Anomaly Rules</strong></td>
+    <td class="or-url">/partner/anomalies/rules</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Gated by anomaly.admin permission; configure alert thresholds; acknowledge active anomalies; tune detection sensitivity</td>
+  </tr>
+  <tr>
+    <td><strong>CenaActionLog ingest</strong></td>
+    <td class="or-url">/cena/action (POST)</td>
+    <td><span class="or-badge or-live">LIVE</span></td>
+    <td>Cena gateway posts action events here; Sam audit feed reads them back; CENA_GATEWAY_TOKEN required</td>
+  </tr>
+  <tr>
+    <td><strong>Review queue (legacy)</strong></td>
+    <td class="or-url">/review, /<em>store</em>/review</td>
+    <td><span class="or-badge or-retired">RETIRED</span></td>
+    <td>Old per-store review queue; replaced by /partner/developer/ezcater. Route still exists as stub redirect.</td>
+  </tr>
+</table>
+
+{# ═══════════════════════════════════════════════════════════════════════ QUICK GAPS #}
+<div class="or-section-head">
+  <h2>Gap Summary — What's Missing</h2>
+</div>
+
+<p style="font-size:13px;margin:8px 0 12px">
+  Top-level gaps to address in Phase 2, ordered by blocking depth:
+</p>
+<ol style="font-size:13px;line-height:1.8">
+  <li><strong>Task model (1A)</strong> — blocks Ribbon content router, X/Check controls, Team Reports data, and the escalation engine</li>
+  <li><strong>Ribbon content router (1B/1C)</strong> — plumbing shipped; signals not wired until Task table exists</li>
+  <li><strong>Sales Insights cron (1F)</strong> — 5am synthesis job; SalesInsight table; blocks Forecast view in Insights section</li>
+  <li><strong>SMS / Twilio (1I)</strong> — env vars present; implementation status unconfirmed; needed for escalation engine</li>
+  <li><strong>Pay masking (1H)</strong> — labor report permission layer; blocks manager self-service for pay review</li>
+  <li><strong>Daily Manager Log (2A)</strong> — template shell exists; route + model not wired</li>
+  <li><strong>Agent surface (Block 3)</strong> — depends on all of Block 1 and Block 2 being in place</li>
+  <li><strong>Webstaurant / Vendor Performance / Specs</strong> — sidebar placeholders; no spec yet</li>
+  <li><strong>Forecasts view</strong> — blocked on 1F Sales Insights</li>
+</ol>
+
+{% endblock %}

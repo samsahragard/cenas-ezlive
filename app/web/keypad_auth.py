@@ -232,6 +232,13 @@ def login_submit():
                 session["driver_name"] = driver_match.name
                 session["driver_location"] = driver_match.location
                 session["driver_session_version"] = driver_match.session_version
+                # Set Tier-1 auth_ok so the auth.py before_request gate
+                # (which checks 'session.user_id OR session.auth_ok')
+                # passes for driver-portal pages. Without this, /driver/*
+                # routes redirect back to /keypad-login = ERR_TOO_MANY_
+                # REDIRECTS loop. Mirrors the user-login path below which
+                # also sets auth_ok at line 323. Cena #2380 diagnosis.
+                session["auth_ok"] = True
                 if not driver_match.first_login_done:
                     return jsonify({
                         "ok": True,

@@ -73,15 +73,22 @@ Use this when assigning test tasks — aick can verify driver-facing flows, ck c
 | **`cena_reference/` doc set** | ⏳ Not built | Built as Sam feeds context |
 | **`cena_gateway.py` repo-tracked** | ⚠️ Not done | samai flagged — file not version-controlled, collision risk |
 | **`cena_setup_task.ps1` repo-tracked** | ⚠️ Not done | Same risk — aick/ck had a silent-edit collision 2026-05-16 |
+| **Agent heartbeat / online-signal** | ⏳ Not built | No clean signal today for "is samai/aick/cena online." samai flagged 2026-05-17 (#1931). Sam-surface as proposal post-Part-4. |
+| **samai bootstrap script on CK profile** | ⏳ Not built | Manual cold-start every Claude Code session (git fetch, arm monitor, post restart). Same friction class aick solved with scheduled tasks. samai-spec lane ticket when bandwidth allows. |
+| **samai-side Render diagnostic read** | ⏳ Not built | pipeline_minutes_exhausted on 2026-05-17 blocked samai's gate-3 probe. Second incident-time opacity hit. Pairs with gateway-in-repo close. |
 
 ---
 
 ## Open Threads
 
-- Track `cena_gateway.py` + `cena_setup_task.ps1` in the repo (samai flagged, collision risk).
+- Track `cena_gateway.py` + `cena_setup_task.ps1` in the repo (samai flagged, collision risk). Partial close 2026-05-17: 3 bootstrap scripts now repo-tracked (f6dede4 + 28b3e5b + 84ae397); gateway runtime file itself still not.
 - Verify Claude's May-12 sidebar redesign ship status — did `sidebar.css` / `sidebar.js` / `sidebar.html` partial land?
 - 24-hour rolling review routine — propose post-Part-4.
+- **Agent heartbeat mechanism** — surface to Sam post-Part-4 (samai #1931).
+- **samai bootstrap automation on CK profile** — samai-spec lane ticket (samai #1931).
+- **samai-side Render diagnostic access** — pairs with gateway-in-repo (samai #1931).
+- **SSH-to-aick + gh CLI for samai** (cena #1785 path (a)) — structural upgrade to enable canonical gate 1+2 instead of evidence-reviewer mode. Queued for Sam-surfacing.
 
 ---
 
-*Last updated: 2026-05-16*
+*Last updated: 2026-05-17*

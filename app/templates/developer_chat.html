@@ -291,6 +291,22 @@
     border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer;
   }
   .sel-cancel-btn:hover { background: rgba(255,255,255,0.05); }
+
+  /* ===== Cena cost display ===== */
+  .cena-cost {
+    font-size: 10px; color: rgba(72,200,200,0.75);
+    background: rgba(72,200,200,0.08);
+    border: 1px solid rgba(72,200,200,0.22);
+    border-radius: 8px; padding: 1px 6px;
+    margin-left: 6px; font-variant-numeric: tabular-nums;
+  }
+  .cena-cost-total {
+    font-size: 11px; color: rgba(72,200,200,0.80);
+    background: rgba(72,200,200,0.08);
+    border: 1px solid rgba(72,200,200,0.20);
+    border-radius: 8px; padding: 1px 8px;
+    margin-left: 8px; font-variant-numeric: tabular-nums;
+  }
 </style>
 {% endblock %}
 
@@ -300,6 +316,7 @@
     <span id="poll-status">Last sync: never</span>
     &nbsp;·&nbsp;
     <span id="msg-count">{{ messages | length }} message{{ 's' if (messages | length) != 1 else '' }}</span>
+    <span class="cena-cost-total" id="cena-cost-total" style="display:none;">Cena ~$0.0000</span>
   </div>
 
   {% if upload_error %}
@@ -391,6 +408,40 @@
   const attachPreview = document.getElementById('attach-preview');
   const form = document.getElementById('chat-form');
   const bodyTextarea = form.querySelector('textarea[name=body]');
+
+  // ---- Cena cost estimation (output-token estimate, Sonnet pricing $15/1M) ----
+  let cenaCostTotal = 0;
+  const costTotalEl = document.getElementById('cena-cost-total');
+
+  function estimateCenaCost(body) {
+    const tokens = Math.max(1, Math.round((body || '').length / 4));
+    return tokens * 15 / 1_000_000;
+  }
+
+  function addCenaCostBadge(msgEl, body) {
+    const cost = estimateCenaCost(body);
+    cenaCostTotal += cost;
+    const meta = msgEl.querySelector('.msg-meta');
+    if (!meta) return;
+    const badge = document.createElement('span');
+    badge.className = 'cena-cost';
+    badge.textContent = '~$' + cost.toFixed(4);
+    badge.title = 'Estimated output-token cost (Sonnet $15/1M)';
+    // Insert after the timestamp text node, before actions span
+    const actionsEl = meta.querySelector('.msg-meta-actions');
+    meta.insertBefore(badge, actionsEl || null);
+    if (costTotalEl) {
+      costTotalEl.textContent = 'Cena ~$' + cenaCostTotal.toFixed(4);
+      costTotalEl.style.display = '';
+    }
+  }
+
+  function initCenaCosts() {
+    document.querySelectorAll('.msg-cena').forEach(el => {
+      const body = el.querySelector('.msg-body');
+      if (body) addCenaCostBadge(el, body.textContent || '');
+    });
+  }
 
   function authorClass(author) {
     const a = (author || '').toLowerCase();
@@ -492,6 +543,7 @@
 
     list.insertBefore(div, bottom);
     maybeClip(div);
+    if ((m.author || '').toLowerCase() === 'cena' && m.body) addCenaCostBadge(div, m.body);
   }
 
   // Long-message collapse: clip msg-body past ~220px height with a "Show more" toggle
@@ -969,6 +1021,8 @@
 
   selCancelBtn.addEventListener('click', exitSelectionMode);
 
+  // Seed Cena cost totals from server-rendered messages
+  initCenaCosts();
   // Initial scroll-to-bottom
   setTimeout(() => bottom.scrollIntoView(), 100);
   // Poll every 4s

@@ -368,6 +368,7 @@ DOC_PAGES = [
     ("handoff-ck-2026-05-14",    "ck Handoff — 2026-05-14",    "doc_handoff_ck_2026_05_14"),
     ("handoff-samai-2026-05-14", "samai Handoff — 2026-05-14", "doc_handoff_samai_2026_05_14"),
     ("cena-operational-spec",    "Cena — Operational Spec",     "doc_cena_operational_spec"),
+    ("design-system-reference",   "Design System Reference",     "doc_design_system_reference"),
     ("system-inventory",          "System Inventory",            "doc_system_inventory"),
     ("methodology-rules",         "Methodology Rules",           "doc_methodology_rules"),
     ("dev-section-organization",  "Dev Section — Start Here",    "doc_dev_section_organization"),

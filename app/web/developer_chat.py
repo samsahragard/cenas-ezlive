@@ -194,9 +194,85 @@ def post_message():
             "dev-chat post: %s wrote %d chars + %d attachments",
             author, len(body), len(validated),
         )
+        # Capture id/author/body before db close — the thread reads
+        # primitives, never a SQLAlchemy row (avoids detached-instance
+        # errors when the session closes in finally).
+        wake_args = (m.id, author, body)
     finally:
         db.close()
+    # Sam #2342: wake cena on EVERY new dev-chat post (immediate, no
+    # 30s watcher poll wait). Cena decides whether to respond.
+    # Skip-author guard prevents cena ↔ cena infinite loop.
+    _wake_cena_on_post(*wake_args)
     return redirect(url_for("developer_chat.chat_page") + "#bottom")
+
+
+def _wake_cena_on_post(msg_id: int, author: str, body: str) -> None:
+    """Fire-and-forget POST to cena gateway on every dev-chat post.
+
+    Sam #2342 spec: "as soon as any text is written on this chat. it
+    pings cena, she reads it and decides to respond or not." Cuts the
+    30s cena_chat_watcher poll latency to ~immediate for every post.
+
+    Loop prevention: skip authors {cena, cena-watcher}. Otherwise
+    cena's own post_to_dev_chat would re-wake her ad infinitum.
+
+    Fire-and-forget: spawns a daemon thread so the HTTP-redirect
+    response to the user is not blocked by cena's tool turn (which
+    can take 10-30s). Failure to fire is logged but never raises.
+    Watcher (cena_chat_watcher.py) stays running as a 30s fallback
+    safety net in case the in-process fire fails."""
+    SKIP = {"cena", "cena-watcher"}
+    a = (author or "").strip().lower()
+    if a in SKIP:
+        return
+    gateway_url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
+    if not gateway_url:
+        return
+    token = (os.getenv("CENA_GATEWAY_TOKEN") or "").strip()
+    if not token:
+        return
+
+    import json as _json_wake
+    import threading as _threading_wake
+    import urllib.request as _urlreq_wake
+
+    prompt = (
+        f"NEW DEV CHAT MESSAGE\n"
+        f"author: {author}\n"
+        f"id: {msg_id}\n"
+        f"body:\n{body}\n\n"
+        f"If this message names you or asks for your action, respond "
+        f"now via post_to_dev_chat. If it's team cross-talk that "
+        f"doesn't need you, briefly acknowledge in your internal text "
+        f"reply but don't post — silence is fine."
+    )
+    payload = _json_wake.dumps({
+        "messages": [{"role": "user", "content": prompt}],
+        "model": "claude-opus-4-7",
+        "max_tokens": 3000,
+    }).encode()
+    req = _urlreq_wake.Request(
+        f"{gateway_url}/cena/stream",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Cena-Token": token,
+        },
+        method="POST",
+    )
+
+    def _fire():
+        try:
+            with _urlreq_wake.urlopen(req, timeout=180) as r:
+                r.read()  # drain SSE so cena's tool calls run
+        except Exception as e:  # noqa: BLE001
+            log.warning("cena wake fire failed for msg_id=%s: %s",
+                        msg_id, e)
+
+    t = _threading_wake.Thread(target=_fire, daemon=True,
+                               name=f"cena-wake-{msg_id}")
+    t.start()
 
 
 def _ensure_unique_in_msg(name: str, msg_id: int) -> str:

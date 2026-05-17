@@ -252,6 +252,37 @@ def test_gate_dormant_when_env_unset(app_with_sam, monkeypatch):
 
 
 # ============================================================
+# Model-picker enforcement: when Cena tools are wired (gateway
+# URL set), the picker must exclude non-Claude models. Non-Claude
+# models pattern-match bracketed tool-format text and emit a
+# fabricated tool-call trail without any real tool firing.
+# ============================================================
+
+def test_model_picker_excludes_non_claude_for_cena_tool_conversation(
+        app_with_sam, monkeypatch):
+    _app, client_for, _db = app_with_sam
+    monkeypatch.setenv("CENA_GATEWAY_URL", "https://cena.example.test")
+    r = client_for(1).get("/sam/chat")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8")
+    assert "claude-opus-4-7" in body
+    assert "claude-sonnet-4-6" in body
+    assert "gemini-2.5-flash" not in body
+
+
+def test_model_picker_includes_full_list_for_non_cena_conversation(
+        app_with_sam, monkeypatch):
+    _app, client_for, _db = app_with_sam
+    monkeypatch.delenv("CENA_GATEWAY_URL", raising=False)
+    r = client_for(1).get("/sam/chat")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8")
+    assert "claude-opus-4-7" in body
+    assert "claude-sonnet-4-6" in body
+    assert "gemini-2.5-flash" in body
+
+
+# ============================================================
 # Session CRUD routes
 # ============================================================
 

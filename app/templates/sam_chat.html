@@ -265,6 +265,31 @@
     color: rgba(236, 227, 208, 0.4);
     font-size: 13px; text-align: center; margin-top: 40px;
   }
+  /* ---- message author labels ---- */
+  .sc-msg-author {
+    font-size: 10.5px; font-weight: 600; margin-bottom: 3px;
+    letter-spacing: 0.03em;
+  }
+  .role-user .sc-msg-author { text-align: right; color: rgba(232, 122, 62, 0.72); }
+  .role-assistant .sc-msg-author { color: rgba(217, 164, 54, 0.70); }
+  /* ---- participant strip ---- */
+  .sc-participants {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+    padding: 5px 14px;
+    border-bottom: 0.5px solid rgba(217, 164, 54, 0.10);
+    font-size: 10.5px;
+  }
+  .sc-participants-label {
+    color: rgba(236, 227, 208, 0.35); text-transform: uppercase;
+    letter-spacing: 0.08em; font-size: 9.5px; margin-right: 2px;
+  }
+  .sc-part {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 9px;
+  }
+  .sc-part-sam  { background: rgba(232,122,62,0.12); border: 1px solid rgba(232,122,62,0.28); color: rgba(232,122,62,0.85); }
+  .sc-part-cena { background: rgba(217,164,54,0.10); border: 1px solid rgba(217,164,54,0.25); color: rgba(217,164,54,0.85); }
+  .sc-part-agent { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: rgba(236,227,208,0.50); }
 </style>
 {% endblock %}
 
@@ -285,6 +310,13 @@
       <label style="font-size:11.5px;color:rgba(236,227,208,0.55);">Model</label>
       <select id="sc-model"></select>
       <span class="sc-cost30" id="sc-cost30">30d: $0.00</span>
+    </div>
+    <div class="sc-participants">
+      <span class="sc-participants-label">In chat</span>
+      <span class="sc-part sc-part-sam">Sam</span>
+      <span class="sc-part sc-part-cena" id="sc-cena-chip">Cena</span>
+      <span class="sc-part sc-part-agent" title="Reading this conversation">👁 ck</span>
+      <span class="sc-part sc-part-agent" title="Reading this conversation">👁 dck</span>
     </div>
     <div class="sc-msgs" id="sc-msgs"></div>
     <div class="sc-warn" id="sc-warn"></div>
@@ -377,6 +409,10 @@
     opts = opts || {};
     const wrap = document.createElement("div");
     wrap.className = "sc-msg role-" + role;
+    const authorEl = document.createElement("div");
+    authorEl.className = "sc-msg-author";
+    authorEl.textContent = role === "user" ? "Sam" : "Cena";
+    wrap.appendChild(authorEl);
     const bubble = document.createElement("div");
     bubble.className = "sc-bubble";
     if (role === "assistant" && !opts.streaming) {

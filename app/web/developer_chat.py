@@ -52,6 +52,19 @@ ALLOWED_EXTENSIONS = {
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 AUDIO_EXTENSIONS = {".webm", ".ogg", ".mp3", ".wav", ".m4a"}
 
+# Canonical agent roster. Drives is_ai detection, CSS class lookup,
+# and the author dropdown in the UI. Add new agents here — nowhere else.
+AGENT_ROSTER = {
+    "aick-claude": {"display": "aick",   "css_class": "msg-aick",  "is_ai": True},
+    "ck-claude":   {"display": "ck",     "css_class": "msg-ck",    "is_ai": True},
+    "dck-claude":  {"display": "dck",    "css_class": "msg-dck",   "is_ai": True},
+    "samai":       {"display": "samai",  "css_class": "msg-samai", "is_ai": True},
+    "cena":        {"display": "cena",   "css_class": "msg-cena",  "is_ai": True},
+    "sam":         {"display": "sam",    "css_class": "msg-sam",   "is_ai": False},
+    "masood":      {"display": "masood", "css_class": "msg-masood","is_ai": False},
+    "system":      {"display": "system", "css_class": "msg-system","is_ai": False},
+}
+
 
 def _attachments_dir() -> Path:
     """Where attachment files live on disk. Defaults to /var/data/chat-attachments
@@ -278,7 +291,8 @@ def _msg_to_dict(m: DeveloperChatMessage) -> dict:
             "url": url_for("developer_chat.download_attachment", att_id=a.id),
         })
     a_low = (m.author or "").lower()
-    is_ai = (a_low == "samai") or ("aick" in a_low) or (a_low == "ck") or (a_low == "ck-claude") or (a_low == "cena")
+    roster_entry = AGENT_ROSTER.get(a_low)
+    is_ai = roster_entry["is_ai"] if roster_entry else False
     return {
         "id": m.id,
         "author": m.author,
@@ -291,23 +305,14 @@ def _msg_to_dict(m: DeveloperChatMessage) -> dict:
 
 
 def _render_msg(m: DeveloperChatMessage) -> dict:
-    """Adds CSS class hints based on author for color coding."""
+    """Adds CSS class hints based on author for color coding. Driven by AGENT_ROSTER."""
     d = _msg_to_dict(m)
     a = (m.author or "").lower()
-    if a == "sam":
-        d["css_class"] = "msg-sam"
-    elif a == "masood":
-        d["css_class"] = "msg-masood"
-    elif a == "samai":
-        d["css_class"] = "msg-samai"
-    elif a == "cena":
-        d["css_class"] = "msg-cena"
+    entry = AGENT_ROSTER.get(a)
+    if entry:
+        d["css_class"] = entry["css_class"]
     elif "aick" in a:
         d["css_class"] = "msg-aick"
-    elif "ck" in a:
-        d["css_class"] = "msg-ck"
-    elif a == "system":
-        d["css_class"] = "msg-system"
     elif "claude" in a:
         d["css_class"] = "msg-aick"
     else:

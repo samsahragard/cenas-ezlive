@@ -43,8 +43,32 @@
   .msg-ck      { border-color: rgba(122,210,122,0.45); align-self: flex-start; background: rgba(122,210,122,0.08); }
   .msg-samai   { border-color: rgba(240,192, 96,0.45); align-self: flex-start; background: rgba(240,192, 96,0.08); }
   .msg-cena    { border-color: rgba( 72,200,200,0.45); align-self: flex-start; background: rgba( 72,200,200,0.08); }
+  .msg-dck     { border-color: rgba(200,130,200,0.45); align-self: flex-start; background: rgba(200,130,200,0.08); }
   .msg-system  { border-color: rgba(255,255,255,0.16); align-self: center;   background: rgba(255,255,255,0.04); font-style: italic; }
   .msg-other   { align-self: flex-start; }
+
+  /* Participant strip */
+  .dc-participants {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+    padding: 6px 16px;
+    border-bottom: 0.5px solid rgba(255,255,255,0.08);
+    font-size: 10.5px;
+    background: rgba(0,0,0,0.15);
+  }
+  .dc-participants-label {
+    color: rgba(236,227,208,0.35); text-transform: uppercase;
+    letter-spacing: 0.08em; font-size: 9.5px; margin-right: 4px;
+  }
+  .dc-part {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px; border-radius: 9px;
+  }
+  .dc-part-sam   { background: rgba(64,128,232,0.10);  border: 1px solid rgba(64,128,232,0.25);  color: rgba(64,128,232,0.85); }
+  .dc-part-aick  { background: rgba(232,122,62,0.10);  border: 1px solid rgba(232,122,62,0.25);  color: rgba(232,122,62,0.85); }
+  .dc-part-ck    { background: rgba(122,210,122,0.10); border: 1px solid rgba(122,210,122,0.25); color: rgba(122,210,122,0.85); }
+  .dc-part-samai { background: rgba(240,192,96,0.10);  border: 1px solid rgba(240,192,96,0.25);  color: rgba(240,192,96,0.85); }
+  .dc-part-cena  { background: rgba(72,200,200,0.10);  border: 1px solid rgba(72,200,200,0.25);  color: rgba(72,200,200,0.85); }
+  .dc-part-dck   { background: rgba(200,130,200,0.10); border: 1px solid rgba(200,130,200,0.25); color: rgba(200,130,200,0.85); }
 
   .msg-meta {
     font-size: 10px;
@@ -312,6 +336,15 @@
 
 {% block content %}
 <div class="chat-wrap">
+  <div class="dc-participants">
+    <span class="dc-participants-label">Participants</span>
+    <span class="dc-part dc-part-sam">Sam</span>
+    <span class="dc-part dc-part-aick">aick</span>
+    <span class="dc-part dc-part-ck">ck</span>
+    <span class="dc-part dc-part-samai">samai</span>
+    <span class="dc-part dc-part-cena">Cena</span>
+    <span class="dc-part dc-part-dck">dck</span>
+  </div>
   <div class="chat-status">
     <span id="poll-status">Last sync: never</span>
     &nbsp;·&nbsp;
@@ -381,7 +414,9 @@
         <option value="masood">masood</option>
         <option value="aick-claude">aick-claude</option>
         <option value="ck-claude">ck-claude</option>
+        <option value="dck-claude">dck-claude</option>
         <option value="samai">samai</option>
+        <option value="cena">cena</option>
         <option value="system">system</option>
       </select>
       <textarea name="body" placeholder="Type a message…"></textarea>

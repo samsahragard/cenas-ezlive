@@ -1305,6 +1305,93 @@ import re as _re_table
 _VALID_TABLE_NAME_RE = _re_table.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
 
+# ============================================================
+# POST /sam/cena/db-probe/ezcater-webhook-recent — Track 5 verify
+# ============================================================
+# Per cena #2340 follow-up to Track 5 partial-kill: prove the
+# /ezcater/webhook endpoint on Render has been receiving real POSTs
+# (which closes the gap when ezcater_idle.py IMAP IDLE on AiCk gets
+# killed). Reads the tail of WEBHOOK_LOG (jsonl) and returns the
+# most-recent N entries with their server-side timestamps.
+#
+# Body (JSON):
+#   {"limit": <int 1..200, default 20>}
+#
+# Response (JSON):
+#   {"ok": true, "log_path": "<str>",
+#    "log_exists": true|false,
+#    "log_size_bytes": <int>,
+#    "entries": [{"ts": "<iso>", "key": "<str>",
+#                 "entity_type": "<str>", "entity_id": "<str>",
+#                 ...}, ...],
+#    "count": <int>}
+#
+# Auth: X-Cena-Token (same gate as other db-probes; covered by
+# /sam/cena/db-probe/ EXEMPT_PREFIXES entry).
+
+@cena_bp.route("/sam/cena/db-probe/ezcater-webhook-recent",
+               methods=["POST"])
+def cena_db_probe_ezcater_webhook_recent():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    try:
+        limit = int(body.get("limit", 20))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "limit must be int"}), 400
+    limit = max(1, min(limit, 200))
+
+    from app.web.ezcater_webhook import WEBHOOK_LOG
+    path_str = str(WEBHOOK_LOG)
+
+    if not WEBHOOK_LOG.exists():
+        return jsonify({
+            "ok": True,
+            "log_path": path_str,
+            "log_exists": False,
+            "log_size_bytes": 0,
+            "entries": [],
+            "count": 0,
+        })
+
+    import json as _json_eh
+    try:
+        size = WEBHOOK_LOG.stat().st_size
+        # Read full file then slice tail — log is jsonl and entries
+        # are small (~1KB each); full read is cheap for <50MB.
+        # For larger files this could be optimized to seek-from-end,
+        # but the webhook log historically stays well under 10MB.
+        lines = WEBHOOK_LOG.read_text(encoding="utf-8",
+                                      errors="replace").splitlines()
+        recent = lines[-limit:]
+        entries = []
+        for ln in recent:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                entries.append(_json_eh.loads(ln))
+            except Exception:
+                # Malformed line — surface a stub so the caller sees
+                # the line existed even if it can't be parsed.
+                entries.append({"_parse_error": True,
+                                "raw_head": ln[:200]})
+        return jsonify({
+            "ok": True,
+            "log_path": path_str,
+            "log_exists": True,
+            "log_size_bytes": size,
+            "entries": entries,
+            "count": len(entries),
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: ezcater-webhook-recent probe failed")
+        return jsonify({"ok": False, "error": str(e),
+                        "log_path": path_str}), 500
+
+
 @cena_bp.route("/sam/cena/db-probe/table-exists", methods=["POST"])
 def cena_db_probe_table_exists():
     gate = _require_gateway_token()

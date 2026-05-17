@@ -69,6 +69,7 @@ Use this when assigning test tasks — aick can verify driver-facing flows, ck c
 | `read_dev_chat` tool (start-point filter) | ✅ Live | Cena reads from session-start forward only |
 | Auto-load of CENA.md / CENA_CHARTER.md / APP_STATUS.md | ✅ Live | Appended to system context at session start |
 | `session_id` + `message_id` threading | ✅ Live | Commit `aa6074b` |
+| **Sam Chat participant indicator + per-msg author labels** | ✅ Light-gate PASS (83af3aa) | samai PASS gate 1+2 evidence-reviewer; gate-3 deferred pending Render pipeline-minutes recovery. Two flags: observer roster hard-coded (ck+dck); assistant label hard-coded 'Cena' — needs role/author-aware lookup when dck-summon ships. |
 | **`CenaJournal` table** | ⏳ Not built | Coming with aick Part 4 |
 | **`cena_reference/` doc set** | ⏳ Not built | Built as Sam feeds context |
 | **`cena_gateway.py` repo-tracked** | ⚠️ Not done | samai flagged — file not version-controlled, collision risk |
@@ -88,6 +89,8 @@ Use this when assigning test tasks — aick can verify driver-facing flows, ck c
 - **samai bootstrap automation on CK profile** — samai-spec lane ticket (samai #1931).
 - **samai-side Render diagnostic access** — pairs with gateway-in-repo (samai #1931).
 - **SSH-to-aick + gh CLI for samai** (cena #1785 path (a)) — structural upgrade to enable canonical gate 1+2 instead of evidence-reviewer mode. Queued for Sam-surfacing.
+- **Sam Chat participant indicator — dck-summon coupling** (samai #2003 flag 2). When dck-summon ships per cena #1907, the per-message author label needs to switch from hard-coded 'Cena' to role/author-aware lookup so dck turns are labeled correctly. Bundle into dck-summon spec rather than ship as a follow-up. Pair: observer roster also worth deriving from a config constant (samai #2003 flag 1) so future agent joins/leaves don't require template edits.
+- **Sam Chat 83af3aa gate-3 visual verify** — deferred pending Render pipeline-minutes recovery. When Render is back, samai picks up gate-3 and Cena verifies live.
 
 ---
 

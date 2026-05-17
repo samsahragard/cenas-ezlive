@@ -643,10 +643,23 @@ def ez_manage_decline(request_id: int):
             .filter(DeliveryRequest.id != req.id)
             .count()
         )
-        if other_pending == 0:
-            order = db.get(Order, req.delivery_id)
-            if order and order.status == "requested":
-                order.status = "available"
+        order = db.get(Order, req.delivery_id)
+        if other_pending == 0 and order and order.status == "requested":
+            order.status = "available"
+        # samai #1770: tell the declined driver. Without this they'd
+        # find out only by reloading /ez-market and noticing the
+        # request gone from their queue.
+        db.add(DriverNotification(
+            driver_id=req.driver_id,
+            kind="declined_by_manager",
+            message=(f"Manager declined your request for order "
+                     f"#{req.delivery_id}"
+                     + (f" ({order.client or 'unnamed'}, "
+                        f"{order.delivery_date or 'no date'})"
+                        if order else "")
+                     + "."),
+            related_delivery_id=req.delivery_id,
+        ))
         db.commit()
         flash("Request declined.", "ok")
         return redirect(url_for("driver_system.ez_manage"))

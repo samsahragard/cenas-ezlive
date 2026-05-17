@@ -234,6 +234,18 @@ def back_to_bidding(db: Session, order: Order, decided_by_user_id: int | None) -
         r.status = "declined"
         r.decided_at = now
         r.decided_by_user_id = decided_by_user_id
+        # samai #1770: drivers whose requests were active need to know
+        # the manager re-opened the slot; the order is back in the bid
+        # pool and they can re-request if interested.
+        db.add(DriverNotification(
+            driver_id=r.driver_id,
+            kind="manager_reopened",
+            message=(f"Manager re-opened order #{order.id} "
+                     f"({order.client or 'unnamed'}, "
+                     f"{order.delivery_date or 'no date'}) for bidding. "
+                     f"You can request it again if you still want it."),
+            related_delivery_id=order.id,
+        ))
     order.status = "available"
 
 
@@ -251,6 +263,17 @@ def decline_all(db: Session, order: Order, decided_by_user_id: int | None) -> No
         r.status = "declined"
         r.decided_at = now
         r.decided_by_user_id = decided_by_user_id
+        # samai #1770: order is dead, not re-opened. Tell drivers so
+        # they don't keep checking /ez-market expecting to see it.
+        db.add(DriverNotification(
+            driver_id=r.driver_id,
+            kind="order_cancelled",
+            message=(f"Order #{order.id} "
+                     f"({order.client or 'unnamed'}, "
+                     f"{order.delivery_date or 'no date'}) was cancelled "
+                     f"by the manager. No further action needed."),
+            related_delivery_id=order.id,
+        ))
     order.status = "cancelled"
 
 

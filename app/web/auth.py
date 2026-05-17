@@ -43,6 +43,7 @@ EXEMPT_PREFIXES = (
     "/cron/",                    # Render Cron Job endpoints — own CRON_TOKEN header check inside
     "/sam/cena/log",             # Cena gateway audit ingest — own X-Cena-Token header check inside
     "/sam/cena/db-probe/",       # Cena gateway read-only DB probe — own X-Cena-Token header check inside
+    "/sam/cena/dev-chat",        # Cena gateway dev-chat read — own X-Cena-Token header check inside
 )
 
 

@@ -18,17 +18,19 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import (
     Blueprint, g, jsonify, redirect, render_template, request, url_for,
 )
+from sqlalchemy import func
 
 from app.db import SessionLocal
 from app.models import (
     AccessRequest,
     CenaActionLog,
+    DeveloperChatMessage,
     Driver,
     Order,
     SamChatMessage,
@@ -129,8 +131,11 @@ def _parse_iso_utc(s: str | None) -> datetime | None:
             s = s[:-1] + "+00:00"
         dt = datetime.fromisoformat(s)
         # Persist as naive UTC (the rest of the schema is naive).
+        # astimezone() with no arg converts to local time; force UTC so
+        # the resulting naive datetime is comparable to the rest of the
+        # schema (which stores naive-UTC throughout).
         if dt.tzinfo is not None:
-            dt = dt.astimezone().replace(tzinfo=None)
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
         return dt
     except (ValueError, TypeError):
         return None
@@ -253,12 +258,23 @@ def cena_audit_view():
             summary["by_action"][r.action_type] = (
                 summary["by_action"].get(r.action_type, 0) + 1)
 
+        # Cena start point for the audit display.
+        cena_start_point = (
+            db.query(func.min(DeveloperChatMessage.created_at))
+              .filter(DeveloperChatMessage.author == "cena")
+              .scalar()
+        )
+
         return render_template(
             "cena_audit.html",
             rows=rows,
             summary=summary,
             limit=limit,
             valid_actions=sorted(_VALID_CENA_ACTION_TYPES),
+            cena_start_point=(
+                cena_start_point.isoformat() + "Z"
+                if cena_start_point else None
+            ),
             filters={
                 "action":  request.args.get("action", ""),
                 "success": request.args.get("success", ""),
@@ -988,6 +1004,108 @@ def cena_db_probe_set_order_status():
         logger.exception("cena: set-order-status failed")
         db.rollback()
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ============================================================
+# GET /sam/cena/dev-chat — dev chat read access for the gateway
+# ============================================================
+# Returns dev chat messages in chronological order.
+# Start-point filter: by default only messages from when Cena first
+# posted (earliest author='cena' row), so she doesn't re-read all
+# history on every call.
+#
+# Query params:
+#   limit: int, default 30, max 200
+#   since: ISO datetime string; default = cena start point
+#   include_pre_start: bool (0/1/true/false), default false —
+#     if true, ignores the start-point filter
+#   author: comma-separated author names to restrict results
+#
+# Response:
+#   {"ok": true, "messages": [...], "count": n,
+#    "cena_start_point": "<ISO>Z"}
+# Each message: {id, author, body (truncated at 2000 chars),
+#                created_at, attachment_count}
+#
+# Auth: X-Cena-Token header (same token as /sam/cena/log).
+
+@cena_bp.route("/sam/cena/dev-chat", methods=["GET"])
+def cena_dev_chat_read():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    try:
+        limit = max(1, min(200, int(request.args.get("limit", 30))))
+    except (ValueError, TypeError):
+        limit = 30
+
+    include_pre_start = (
+        request.args.get("include_pre_start", "").lower()
+        in ("1", "true", "yes")
+    )
+
+    author_raw = request.args.get("author", "").strip()
+    author_filter = (
+        [a.strip() for a in author_raw.split(",") if a.strip()]
+        if author_raw else []
+    )
+
+    db = SessionLocal()
+    try:
+        # Cena start point: earliest message authored by cena, or now.
+        cena_start = (
+            db.query(func.min(DeveloperChatMessage.created_at))
+              .filter(DeveloperChatMessage.author == "cena")
+              .scalar()
+        ) or datetime.utcnow()
+
+        # Resolve the effective since bound.
+        if include_pre_start:
+            since = None
+        elif (raw_since := request.args.get("since", "")):
+            since = _parse_iso_utc(raw_since) or cena_start
+        else:
+            since = cena_start
+
+        q = db.query(DeveloperChatMessage)
+        if since is not None:
+            q = q.filter(DeveloperChatMessage.created_at >= since)
+        if author_filter:
+            q = q.filter(DeveloperChatMessage.author.in_(author_filter))
+
+        # Most recent `limit` messages, returned in chronological order.
+        rows = (
+            q.order_by(DeveloperChatMessage.created_at.desc(),
+                       DeveloperChatMessage.id.desc())
+             .limit(limit)
+             .all()
+        )
+        rows.reverse()
+
+        messages = []
+        for m in rows:
+            body = m.body
+            truncated = len(body) > 2000
+            if truncated:
+                body = body[:2000]
+            messages.append({
+                "id": m.id,
+                "author": m.author,
+                "body": body + (" [truncated]" if truncated else ""),
+                "created_at": (m.created_at.isoformat() + "Z"
+                               if m.created_at else None),
+                "attachment_count": len(m.attachments),
+            })
+
+        return jsonify({
+            "ok": True,
+            "messages": messages,
+            "count": len(messages),
+            "cena_start_point": cena_start.isoformat() + "Z",
+        })
     finally:
         db.close()
 

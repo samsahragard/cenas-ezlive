@@ -1846,6 +1846,7 @@ _VALID_CENA_ACTION_TYPES = {
     "db_query", "db_execute",
     "cf_api_call",
     "telegram_send",
+    "post_to_dev_chat", "read_dev_chat",
     "read_agent_chat_history",
     "anthropic_chat",
 }

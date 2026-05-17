@@ -104,6 +104,28 @@ def _require_gateway_token():
     return None
 
 
+def _require_gateway_token_or_partner():
+    """Gate that accepts EITHER X-Cena-Token (cena gateway path) OR a
+    partner-authenticated Flask session (developer-tier observers like
+    dck who only have partner_password.txt + site cookie, not the
+    CENA_GATEWAY_TOKEN). Used by /sam/cena/sam-chat per Sam #2204 + Track 8
+    spec — dck can self-auth without a cross-user token copy.
+
+    Per-agent X-Author tokens are samai-spec future-lane; this dual-path
+    gate is the immediate unblock so dck observes /sam/chat with just
+    partner-tier credentials she already has."""
+    from flask import session as _flask_session
+    # Path 1: X-Cena-Token (cena gateway + scripts with the token)
+    want = _cena_gateway_token()
+    got = request.headers.get("X-Cena-Token", "")
+    if want and got == want:
+        return None
+    # Path 2: partner-authenticated session (chat_tail-style auth)
+    if _flask_session.get("partner_auth_ok"):
+        return None
+    return jsonify({"ok": False, "error": "unauthorized"}), 403
+
+
 # ============================================================
 # POST /sam/cena/log — the gateway calls this after each tool run
 # ============================================================
@@ -1166,7 +1188,11 @@ def cena_db_probe_dev_chat_attribution_corrections():
 
 @cena_bp.route("/sam/cena/sam-chat", methods=["GET"])
 def cena_sam_chat_read():
-    gate = _require_gateway_token()
+    # Dual-path auth (Sam #2204): X-Cena-Token OR partner session,
+    # so dck (partner-tier observer, no CENA_GATEWAY_TOKEN) can self-
+    # auth with the partner_password she already has. Per-agent token
+    # remains samai-spec future-lane.
+    gate = _require_gateway_token_or_partner()
     if gate is not None:
         return gate
 

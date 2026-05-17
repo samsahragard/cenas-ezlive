@@ -183,3 +183,28 @@ def test_session_id_invalid_returns_400(app_with_sam_chat_data):
     assert r.status_code == 400
     body = r.get_json()
     assert body["ok"] is False
+
+
+def test_partner_session_auth_alternative(app_with_sam_chat_data):
+    """Per Sam #2204 + Track 8 dck-self-auth: the endpoint accepts
+    EITHER X-Cena-Token OR a partner-authenticated session. dck (no
+    cena gateway token) self-auths via the partner_password she has.
+    Validates the dual-path gate works for the partner path."""
+    client, _s1, _s2 = app_with_sam_chat_data
+    # Establish a partner-auth session without sending X-Cena-Token
+    with client.session_transaction() as sess:
+        sess["auth_ok"] = True
+        sess["partner_auth_ok"] = True
+    r = client.get("/sam/cena/sam-chat?limit=3&include_all=true")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["count"] >= 1
+
+
+def test_no_token_and_no_partner_session_still_403(app_with_sam_chat_data):
+    """No X-Cena-Token AND no partner-auth -> 403. Closes the path
+    that the partner-auth fallback adds."""
+    client, _s1, _s2 = app_with_sam_chat_data
+    r = client.get("/sam/cena/sam-chat")
+    assert r.status_code == 403

@@ -601,41 +601,6 @@ class DeveloperChatAttachment(Base):
     message: Mapped["DeveloperChatMessage"] = relationship(back_populates="attachments")
 
 
-class WhatsAppMessage(Base):
-    """Partner-side mirror of ock's WhatsApp inbox. Populated by the
-    CK-Mini-PC daemon POSTing to /api/inbox/whatsapp; rendered by the
-    Partner-gated /partner/operations/whatsapp inbox so Sam + Masood can
-    read every thread on ock's number (+13464620746) without a phone in
-    hand. Phase 2 adds the outbound side via the same model + a
-    cloudflared tunnel on CK that hosts ock's send endpoint.
-    """
-    __tablename__ = "whatsapp_messages"
-    __table_args__ = (
-        UniqueConstraint("external_id", name="uq_whatsapp_external_id"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # ock's awareness.db message id (or whatsapp stanza id) — dedupe key.
-    external_id: Mapped[str | None] = mapped_column(String(120), index=True)
-    # ISO8601 timestamp from ock side (when the channel saw the message).
-    ts: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    # WhatsApp JID (group or DM).
-    chat_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    chat_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'group' | 'dm'
-    chat_name: Mapped[str | None] = mapped_column(String(200))
-    sender_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    sender_name: Mapped[str | None] = mapped_column(String(200))
-    body: Mapped[str | None] = mapped_column(Text)
-    media_kind: Mapped[str | None] = mapped_column(String(30))  # image|video|audio|document|sticker
-    # 'inbound' for messages ock received; 'outbound' once Phase 2 lets
-    # Sam/Masood reply through EZLive.
-    direction: Mapped[str] = mapped_column(String(10), nullable=False, default="inbound")
-    sent_by_user: Mapped[str | None] = mapped_column(String(80))  # 'sam' | 'masood' for outbound
-    reply_to_external_id: Mapped[str | None] = mapped_column(String(120))
-    raw_metadata: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
-    # When EZLive received the message (vs `ts` which is when ock saw it).
-    ingested_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
 
 # ============================================================
 # Driver system (migration 15) — see SPEC.md sections 15-16

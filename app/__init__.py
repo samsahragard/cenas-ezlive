@@ -17,7 +17,6 @@ from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web.corporate_order import corp_order as corp_order_bp
 from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
 from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
-from app.web.ck_whatsapp import ck_whatsapp_bp
 from app.web.team_routes import team_bp
 from app.web.legal_routes import legal as legal_bp
 from app.web.access_request_routes import access_req as access_req_bp
@@ -116,7 +115,6 @@ def create_app():
     app.register_blueprint(dev_chat_bp)
     app.register_blueprint(ezc_import_bp)
     app.register_blueprint(ezc_live_bp)
-    app.register_blueprint(ck_whatsapp_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(access_req_bp)

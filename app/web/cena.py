@@ -1009,6 +1009,69 @@ def cena_db_probe_set_order_status():
 
 
 # ============================================================
+# POST /sam/cena/db-probe/sam-chat-cache-tokens — gate-3 verify
+# ============================================================
+# Returns the most-recent N SamChatMessage assistant rows with their
+# cache-token columns so samai's gate-3 probe can confirm migration 25
+# is wired end-to-end (post Render deploy of 59f8022): cache_creation
+# > 0 on the cold-start turn, cache_read > 0 on subsequent warm turns.
+# Read-only. No content, no PII — just the cost-column counters + id +
+# created_at + model.
+#
+# Body (JSON):
+#   {"limit": <int, default 5, max 50>}
+#
+# Response (JSON):
+#   {"ok": true, "rows": [{id, created_at, model,
+#                          cost_input_tokens, cost_output_tokens,
+#                          cost_cache_creation_tokens,
+#                          cost_cache_read_tokens, cost_usd}, ...]}
+#
+# Auth: X-Cena-Token header (same gate as the other db-probes).
+
+@cena_bp.route("/sam/cena/db-probe/sam-chat-cache-tokens",
+               methods=["POST"])
+def cena_db_probe_sam_chat_cache_tokens():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    try:
+        limit = int(body.get("limit", 5))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "limit must be int"}), 400
+    limit = max(1, min(limit, 50))
+
+    from app.models import SamChatMessage
+    db = SessionLocal()
+    try:
+        rows = (db.query(SamChatMessage)
+                  .filter(SamChatMessage.role == "assistant")
+                  .order_by(SamChatMessage.created_at.desc(),
+                            SamChatMessage.id.desc())
+                  .limit(limit)
+                  .all())
+        out = []
+        for r in rows:
+            out.append({
+                "id": r.id,
+                "created_at": (r.created_at.isoformat()
+                               if r.created_at else None),
+                "model": r.model,
+                "cost_input_tokens": r.cost_input_tokens,
+                "cost_output_tokens": r.cost_output_tokens,
+                "cost_cache_creation_tokens": r.cost_cache_creation_tokens,
+                "cost_cache_read_tokens": r.cost_cache_read_tokens,
+                "cost_usd": (str(r.cost_usd) if r.cost_usd is not None
+                             else None),
+            })
+        return jsonify({"ok": True, "rows": out, "count": len(out)})
+    finally:
+        db.close()
+
+
+# ============================================================
 # GET /sam/cena/dev-chat — dev chat read access for the gateway
 # ============================================================
 # Returns dev chat messages in chronological order.

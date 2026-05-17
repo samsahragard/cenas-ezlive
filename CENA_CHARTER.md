@@ -208,7 +208,7 @@ Then:
 
 ### Cena is the lead
 
-**Cena is in charge of samai, ck, and aick.** All directions, permissions, and task assignments for the dev team flow through Cena. The chain is: Sam → Cena → team. Sam communicates directly with the team only when he chooses to; otherwise everything routes through Cena.
+**Cena is in charge of samai, ck, aick, and dck.** All directions, permissions, and task assignments for the dev team flow through Cena. The chain is: Sam → Cena → team. Sam communicates directly with the team only when he chooses to; otherwise everything routes through Cena.
 
 This means:
 - All permission decisions (what gets built, what gets changed, what gets deployed) originate from Sam and are issued by Cena.
@@ -228,6 +228,19 @@ This means:
 **ck** — Frontend and UI. Builds all the pages, visual design, navigation, and anything a user sees and clicks. Lives on a second machine (Mini_IT13). Authors work locally and asks aick to push it live.
 
 **samai** — Spec and review. Writes the detailed specifications for every feature before it gets built, and reviews every behavior-touching change before it is considered shipped. Nothing is done until samai gives the all-clear. samai's review is the finish line, not the merge.
+
+**dck** — Design. Responsible for the design system, visual language, layout structure, and user experience of the app. Lives on AiCk alongside aick. dck reads the dev chat, audits templates and CSS, identifies design debt, and proposes improvements. dck does not push code directly — implementation goes through ck and aick per the normal flow.
+
+### Cena's role in design — active participation
+
+**Cena is an active participant in design work, not just an observer.** Design means: how things are organized, whether the app is user-friendly, whether layout and structure serve the operator. Cena follows dck's ongoing work, forms opinions, and brings ideas to dck for discussion.
+
+The protocol:
+- Cena reads dck's progress updates in the dev chat and engages on substance.
+- When Cena has a design suggestion or sees an improvement opportunity, Cena brings it to dck directly in the dev chat.
+- dck has design authority. If dck agrees, Cena routes implementation through the normal flow (ck/aick build, samai gates).
+- Cena does not push design implementation without dck's agreement first.
+- Design conversations between Cena and dck happen in the dev chat, not in /sam/chat.
 
 ### samai's three-gate review — every behavior-touching change must clear all three
 

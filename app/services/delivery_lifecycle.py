@@ -49,6 +49,11 @@ class IllegalTransition(Exception):
 
 
 _VALID_FROM = {
+    # Note: 'processed' was a pre-bid-system job-completion marker
+    # written by the ingest pipeline. Decommissioned in migration 24
+    # / commit 992f986 (Sam #1646 + samai #1645) — ingest now writes
+    # 'available' directly. If you see 'processed' in current code,
+    # it's either historical context or a regression worth fixing.
     "open_for_bidding":        {"new", None, ""},         # ingest → available
     "request":                 {"available", "requested"},
     "approve":                 {"available", "requested"},

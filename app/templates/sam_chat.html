@@ -485,7 +485,8 @@
     msgsEl.scrollTop = msgsEl.scrollHeight;
     return bubble;
   }
-  function clearMessages() { msgsEl.innerHTML = ""; }
+  function clearMessages() { msgsEl.innerHTML = ""; lastSeenMsgId = 0; }
+  let lastSeenMsgId = 0;
   function renderMessages(list) {
     clearMessages();
     if (!list || !list.length) {
@@ -498,9 +499,35 @@
     }
     list.forEach((m) => {
       if (m.role === "system") return;
+      if (m.id && m.id > lastSeenMsgId) lastSeenMsgId = m.id;
       addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });
     });
   }
+
+  // Client-side poll for new cross-channel msgs (cena/aick/dck post via
+  // /sam/cena/sam-chat-post directly to the DB, bypassing the streaming
+  // flow that only fires on Sam's send). Without this, Sam only sees
+  // new aick/cena posts after a manual refresh. Per Sam #2821-ish
+  // observation 2026-05-18: "do it again" / "aick?" tests revealed
+  // server-side posts weren't appearing in Sam's view until refresh.
+  // 4s interval is interactive enough without thrashing the DB.
+  async function pollNewMessages() {
+    if (!currentSessionId) return;
+    if (streaming) return;  // don't fight the SSE bubble accumulation
+    try {
+      const r = await fetch("/sam/chat/sessions/" + currentSessionId);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j.ok || !j.messages) return;
+      j.messages.forEach((m) => {
+        if (m.role === "system") return;
+        if (!m.id || m.id <= lastSeenMsgId) return;
+        lastSeenMsgId = m.id;
+        addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });
+      });
+    } catch (e) { /* swallow — transient network */ }
+  }
+  setInterval(pollNewMessages, 4000);
 
   // ---- session rail ----
   function renderSessions(list) {

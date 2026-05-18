@@ -127,7 +127,7 @@ def drivers_admin():
     border-color: var(--ck-gold-soft, rgba(217, 164, 54, 0.14));
     background: rgba(228, 179, 64, 0.06);
   }
-  .da-tab.active {
+  .da-tab.is-active {
     color: #140A06;
     background: var(--ck-gold-bright, #FFD970);
     border-color: var(--ck-gold-bright, #FFD970);
@@ -138,11 +138,11 @@ def drivers_admin():
 
 &lt;div class="da-tabs"&gt;
   &lt;a href="?status=active"
-     class="da-tab{% if current_status == 'active' %} active{% endif %}"&gt;
+     class="da-tab{% if current_status == 'active' %} is-active{% endif %}"&gt;
     Active &lt;span class="count"&gt;({{ active_count }})&lt;/span&gt;
   &lt;/a&gt;
   &lt;a href="?status=inactive"
-     class="da-tab{% if current_status == 'inactive' %} active{% endif %}"&gt;
+     class="da-tab{% if current_status == 'inactive' %} is-active{% endif %}"&gt;
     Inactive &lt;span class="count"&gt;({{ inactive_count }})&lt;/span&gt;
   &lt;/a&gt;
 &lt;/div&gt;
@@ -220,7 +220,7 @@ def drivers_admin():
 <ul>
   <li><b>Gate 1 (local pytest):</b> existing tests pass + add 2 new behavior tests: <code>test_drivers_admin_active_filter</code> (default + explicit <code>?status=active</code> returns only active drivers) + <code>test_drivers_admin_inactive_filter</code> (<code>?status=inactive</code> returns only inactive drivers).</li>
   <li><b>Gate 2 (code-contract):</b> diff verifies route filter logic + template tab markup + dashboard.css hamburger sizing + base_dashboard.html hamburger relocation.</li>
-  <li><b>Gate 3 (prod probe):</b> three URL probes — <code>/dos/drivers</code> returns 200 with <code>da-tab</code> + <code>da-tab.active</code> markers + active drivers in list; <code>/dos/drivers?status=inactive</code> returns 200 with Inactive tab marked active; <code>/dos/drivers</code> mobile-viewport snapshot via Chrome MCP shows hamburger inside topbar with 48px-equivalent rendered size (per Sam #2470 charter amendment 7 Playwright requirement — see §8).</li>
+  <li><b>Gate 3 (prod probe):</b> three URL probes — <code>/dos/drivers</code> returns 200 with <code>da-tab</code> + <code>da-tab.is-active</code> markers + active drivers in list (note: BEM-style <code>is-active</code> modifier, not bare <code>active</code> — naming normalized per cena #2549 after impl); <code>/dos/drivers?status=inactive</code> returns 200 with Inactive tab marked <code>is-active</code>; <code>/dos/drivers</code> mobile-viewport snapshot via Chrome MCP shows hamburger inside topbar with 48px-equivalent rendered size (per Sam #2470 charter amendment 7 Playwright requirement — see §8).</li>
 </ul>
 
 <h2>8 · Playwright requirement (per Sam #2470 charter amendment 7)</h2>

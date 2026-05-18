@@ -123,6 +123,14 @@ SAMPLES = [
         url="/partner/legal/matters/1",
         type="reference",
     ),
+    dict(
+        title="Build Plan",
+        version=None,
+        date="2026-05-17",
+        description="plan.md — master build specification. Phases, surfaces, constraints, success criteria.",
+        url="/partner/developer/plan",
+        type="reference",
+    ),
 ]
 
 
@@ -508,6 +516,23 @@ CHAT_PAGES = [
     ("aick-session-2026-05-13",  "aick — 5/13",  "doc_aick_session_2026_05_13"),
     ("samai-session-2026-05-13", "samai — 5/13", "doc_samai_session_2026_05_13"),
 ]
+
+
+@dev_chat.route("/partner/developer/plan")
+@requires_permission("developer.view_chat")
+def developer_plan():
+    """Serve plan.md as a formatted readable view (Cena #2549 Item 3)."""
+    import pathlib as _pl
+    from flask import current_app
+    plan_path = _pl.Path(current_app.root_path).parent / "plan.md"
+    if plan_path.exists():
+        content = plan_path.read_text(encoding="utf-8")
+    else:
+        content = "plan.md not found in repo root."
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    return render_template("plan_viewer.html", plan_content=content, active="doc_plan")
 
 
 @dev_chat.route("/partner/developer/samples")

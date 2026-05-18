@@ -1,0 +1,50 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'doc_plan' %}
+{% block title %}Build Plan — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Build Plan{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    plan.md &mdash; master build specification &middot;
+    <a href="/partner/developer/samples" style="color:var(--ck-gold,#D9A436);text-decoration:none;">
+      &larr; Samples
+    </a>
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  .plan-wrapper { max-width: 860px; margin: 0 auto; padding: 0 0 60px; }
+  .plan-body { color: var(--ck-cream,#FAF6EC); font-size: 14.5px; line-height: 1.7; }
+  .plan-body h1 { font-size: 22px; font-weight: 700; color: #fff; margin: 32px 0 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(217,164,54,0.20); }
+  .plan-body h2 { font-size: 17px; font-weight: 700; color: var(--ck-gold,#D9A436); margin: 26px 0 6px; }
+  .plan-body h3 { font-size: 14px; font-weight: 700; color: rgba(236,227,208,0.90); margin: 18px 0 4px; letter-spacing: 0.02em; }
+  .plan-body p { margin: 0 0 12px; }
+  .plan-body ul, .plan-body ol { margin: 0 0 12px 18px; }
+  .plan-body li { margin-bottom: 4px; }
+  .plan-body code { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 12.5px; background: rgba(255,255,255,0.07); border: 0.5px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 5px; }
+  .plan-body pre { background: rgba(0,0,0,0.40); border: 0.5px solid rgba(217,164,54,0.15); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 0 0 16px; }
+  .plan-body pre code { background: none; border: none; padding: 0; font-size: 12.5px; }
+  .plan-body table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13px; }
+  .plan-body th { background: rgba(217,164,54,0.10); color: var(--ck-gold,#D9A436); font-weight: 600; text-align: left; padding: 8px 10px; border: 0.5px solid rgba(217,164,54,0.20); }
+  .plan-body td { padding: 7px 10px; border: 0.5px solid rgba(255,255,255,0.08); color: rgba(236,227,208,0.85); }
+  .plan-body blockquote { margin: 0 0 16px; padding: 8px 14px; border-left: 3px solid var(--ck-gold,#D9A436); background: rgba(217,164,54,0.05); border-radius: 0 6px 6px 0; color: rgba(236,227,208,0.80); }
+  .plan-body strong { color: #fff; font-weight: 700; }
+  .plan-body em { color: rgba(236,227,208,0.75); }
+  .plan-body a { color: var(--ck-gold,#D9A436); text-decoration: none; }
+  .plan-body a:hover { text-decoration: underline; }
+  .plan-body hr { border: none; border-top: 1px solid rgba(255,255,255,0.10); margin: 24px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="plan-wrapper">
+  <div class="plan-body" id="plan-body"></div>
+</div>
+<script>
+  const raw = {{ plan_content | tojson }};
+  marked.setOptions({ gfm: true, breaks: false });
+  document.getElementById("plan-body").innerHTML = marked.parse(raw);
+</script>
+{% endblock %}

@@ -222,8 +222,10 @@ Auth: Google Cloud service account. ALWAYS authoritative for mileage. Cache by (
 ### 4.5 OpenWeatherMap
 Auth: API key. Filter at producer level: only severe weather alerts surface to ribbon. Routine forecasts discarded.
 
-### 4.6 Twilio (SMS)
-Auth: Account SID + auth token + from-number. Escalation alerts, driver notifications. Requires A2P 10DLC registration.
+### 4.6 Twilio (SMS) — specced, not built; credentials on file
+Status: SPECCED, NOT BUILT. Credentials are on file in 1Password; the integration has not been wired into the app yet. Come back to it when we build. Do not remove from the plan.
+
+Auth (when built): Account SID + auth token + from-number. Escalation alerts, driver notifications. Requires A2P 10DLC registration.
 
 ### 4.7 Telegram
 Auth: bot token + chat IDs. Ops notifications (new catering orders, anomalies, system alerts). Runs inside cenas-ezlive on Render — not as a separate process on local machines. Async, non-blocking — failures must not crash the request.
@@ -334,12 +336,42 @@ Matters, documents, structure, insurance policies, append-only audit log. Partne
 
 ---
 
+## 7A. SAM-FACING AI PARTNER (CENA) — LIVE TODAY
+
+This is a separate platform from Block 3, predating it and serving a different audience. Documented here as a first-class section so the plan reflects the actual built system.
+
+### 7A.1 What Cena is
+Cena is Sam's AI partner — a partner-tier conversational agent gated to Sam and Masood. Lives at `/sam/chat` (see §5.8). Has broader system access than the Block 3 manager agent: she coordinates the engineering team (aick, ck, samai, dck) via dev chat, edits CENA_CHARTER.md / CENA.md / APP_STATUS.md (her lane), monitors infrastructure, and can call Render/Cloudflare/Toast tooling on Sam's behalf.
+
+### 7A.2 Surfaces
+- **Primary surface:** `/sam/chat` — Sam-initiated conversation thread, SamChatMessage history persisted per session.
+- **Coordination surface:** `/partner/developer/chat` — Cena posts and reads as a participant alongside the engineering AI team.
+- **Cross-channel injection:** Cena can use `post_to_sam_chat` (with role='cena') to inject a message into a `/sam/chat` session from a watcher-triggered turn — used when Sam asks her to respond in `/sam/chat` from outside that channel.
+
+### 7A.3 Runtime architecture
+- The Cena gateway runs on AiCk (a Windows mini PC in Sam's home office) on port 8765 — see §4.10.
+- Render bridges to AiCk via the gateway endpoint (CENA_GATEWAY_URL env var).
+- `cena_chat_watcher.py` (also on AiCk) polls dev chat every 2s, fires Cena via the gateway on every new dev-chat post (coalesced with recent history for context continuity). When the Render→AiCk wake-on-post hook (developer_chat.py POST handler) is healthy it fires immediately; the watcher is the always-on belt-and-suspenders backstop.
+- Session-start auto-load: CENA.md + CENA_CHARTER.md + APP_STATUS.md + plan.md are loaded into Cena's system prompt at every gateway start, cached via Anthropic prompt caching.
+
+### 7A.4 Distinction from Block 3
+- Cena is partner-tier with broader access. Block 3 manager-facing agent (§7) is store-scoped with narrower access.
+- Cena's tools include `render_*`, `git_*`, `post_to_dev_chat`, `read_dev_chat`, `post_to_sam_chat`, `telegram_send`, file ops. Block 3 manager agent's tool surface is narrower (approve/decline driver requests, create tasks, query store data).
+- Cena predates Block 3. Block 3 is the productized manager-facing AI surface; Cena is the founder-facing partner.
+
+### 7A.5 Discipline rules specific to Cena
+- Per cena #2470 charter amendment 7: Playwright interactive testing required for every milestone; only Sam can waive.
+- Per Sam #2310 standing rule: agents ping cena by name on task complete / question / result; aick checks Cena connection if she's silent past 20s.
+- Per Sam #2342 + #2554: every new dev-chat post wakes Cena (no @cena-mention filter); coalesced + history-aware via watcher v2.
+
+---
+
 ## 7. THE MANAGER-FACING AI AGENT SURFACE (Block 3)
 
 ### 7.1 Surface
 Chat interface at `/<store_slug>/assistant` (manager) and `/partner/assistant` (partner). Streaming responses via SSE. Conversation history persisted per user.
 
-Note: The Sam-facing Cena surface (`/sam/chat`) is architecturally related but separate — it predates Block 3, serves only Sam and Masood, and has broader system access. Block 3 is the manager-facing product layer.
+Note: The Sam-facing Cena surface (`/sam/chat`) is architecturally related but separate — see §7A for the full Cena platform. Block 3 is the manager-facing product layer.
 
 ### 7.2 Capabilities
 Answer questions about store data, take audited actions (approve driver requests, create tasks, post to manager log, log incidents, send Telegram notifications, pull from integrations), suggest actions without taking them, pull historical context.

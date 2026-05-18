@@ -26,6 +26,24 @@ Spec: /partner/developer/app/spec-drivers-redesign §8
 samai gate-3 was annotated "Playwright deferred to batch session
 per Sam direction" per cena #2548.
 
+### TBD — Samples approval workflow (2026-05-17)
+Spec: /partner/developer/app/spec-samples-approval-workflow §12
+File written: tests/test_sample_approval_playwright.py
+
+- **Test A — Approve persists**: Sam-session loads /partner/developer/samples,
+  clicks Approve on drivers-redesign-v2 card, types notes, clicks Save.
+  Status pill flips to APPROVED. Notes survive page reload.
+- **Test B — Attach chip**: Sam-session uploads a screenshot via the attach
+  zone (file input set_input_files), clicks Save. Chip with filename appears.
+  Persists after reload.
+- **Test C — Non-sam read-only**: gm-tier session loads page. approve/reject/
+  save buttons + notes textarea NOT in DOM. Read-only status pill + chips
+  remain visible.
+
+ck #2549 Item 3 lane. Tests written but deferred per Sam #2547 batch model.
+
+---
+
 ---
 
 ## How to append

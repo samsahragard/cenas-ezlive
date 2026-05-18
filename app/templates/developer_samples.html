@@ -61,12 +61,144 @@
   .sample-open:hover { background: #f0c84a; }
   .samples-empty { color: var(--text-3); font-size: 14px; padding: 32px 0; text-align: center; }
   @media (max-width: 600px) { .samples-grid { grid-template-columns: 1fr; } }
+
+  /* ==== Samples approval workflow (spec_samples_approval_workflow §5) ==== */
+  .dvs-approval {
+    border-top: 0.5px solid var(--ck-border, rgba(217,164,54,0.20));
+    margin-top: 14px; padding-top: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .dvs-approval-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .dvs-status-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 700;
+    padding: 3px 10px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .dvs-status-pending {
+    background: rgba(236,227,208,0.08);
+    color: var(--text-3, rgba(255,255,255,0.55));
+    border: 0.5px solid rgba(236,227,208,0.18);
+  }
+  .dvs-status-approved {
+    background: rgba(156,203,118,0.14);
+    color: var(--ck-status-open, #9CCB76);
+    border: 0.5px solid rgba(156,203,118,0.45);
+  }
+  .dvs-status-rejected {
+    background: rgba(226,100,92,0.18);
+    color: var(--ck-status-warn, #E2645C);
+    border: 0.5px solid rgba(226,100,92,0.45);
+  }
+  .dvs-approval-meta {
+    font-size: 11px; color: var(--text-3, rgba(255,255,255,0.55));
+  }
+  .dvs-approve-btn, .dvs-reject-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px solid; background: transparent;
+    transition: filter 150ms ease, background 150ms ease;
+    font-family: inherit;
+  }
+  .dvs-approve-btn {
+    background: rgba(156,203,118,0.14);
+    color: var(--ck-status-open, #9CCB76);
+    border-color: rgba(156,203,118,0.45);
+  }
+  .dvs-approve-btn:hover { background: rgba(156,203,118,0.22); }
+  .dvs-approve-btn.is-active {
+    background: var(--ck-status-open, #9CCB76);
+    color: #0a1f0a; border-color: var(--ck-status-open, #9CCB76);
+  }
+  .dvs-reject-btn {
+    background: rgba(226,100,92,0.18);
+    color: var(--ck-status-warn, #E2645C);
+    border-color: rgba(226,100,92,0.45);
+  }
+  .dvs-reject-btn:hover { background: rgba(226,100,92,0.28); }
+  .dvs-reject-btn.is-active {
+    background: var(--ck-status-warn, #E2645C);
+    color: #2a0a08; border-color: var(--ck-status-warn, #E2645C);
+  }
+  .dvs-notes {
+    width: 100%; min-height: 80px;
+    padding: 10px 12px;
+    background: rgba(10,6,4,0.9);
+    border: 1px solid var(--ck-border, rgba(217,164,54,0.20));
+    border-radius: 8px;
+    color: var(--text, #ffffff);
+    font-size: 13px; font-family: inherit;
+    resize: vertical;
+  }
+  .dvs-notes:focus { outline: none; border-color: var(--ck-gold-soft, rgba(217,164,54,0.45)); }
+  .dvs-notes-readonly {
+    padding: 8px 12px;
+    background: rgba(10,6,4,0.55);
+    border: 0.5px solid rgba(217,164,54,0.15);
+    border-radius: 6px;
+    color: var(--text-2, rgba(255,255,255,0.78));
+    font-size: 13px; line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  .dvs-attach-zone {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 14px;
+    border: 1px dashed var(--ck-gold-soft, rgba(217,164,54,0.45));
+    border-radius: 8px;
+    color: var(--text-3, rgba(255,255,255,0.55));
+    font-size: 12px; cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+  }
+  .dvs-attach-zone:hover, .dvs-attach-zone.is-drag-over {
+    border-color: var(--ck-gold, #D9A436);
+    background: rgba(228,179,64,0.06);
+  }
+  .dvs-attach-zone .icon { font-size: 20px; opacity: 0.6; margin-bottom: 4px; }
+  .dvs-attach-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dvs-attach-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background: rgba(228,179,64,0.10);
+    border: 0.5px solid var(--ck-gold-soft, rgba(217,164,54,0.40));
+    border-radius: 4px;
+    font-size: 11px; color: var(--text-2, rgba(255,255,255,0.78));
+    text-decoration: none;
+  }
+  .dvs-attach-chip .x {
+    background: transparent; border: none; color: inherit; cursor: pointer;
+    font-size: 13px; opacity: 0.7; padding: 0;
+  }
+  .dvs-attach-chip .x:hover { opacity: 1; color: var(--ck-status-warn, #E2645C); }
+  .dvs-save-btn {
+    background: var(--ck-gold, #D9A436);
+    color: #140A06;
+    padding: 8px 16px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    margin-left: auto;
+    font-family: inherit;
+  }
+  .dvs-save-btn:hover { filter: brightness(1.08); }
+  .dvs-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .dvs-save-confirm {
+    font-size: 12px; color: var(--ck-status-open, #9CCB76);
+    opacity: 0; transition: opacity 150ms ease;
+  }
+  .dvs-save-confirm.is-visible { opacity: 1; }
+  @media (max-width: 720px) {
+    .dvs-approval-row { gap: 8px; }
+    .dvs-save-btn { margin-left: 0; width: 100%; }
+    .dvs-attach-zone { padding: 10px; }
+  }
+
 </style>
 
 <div class="samples-grid">
 {% if samples %}
   {% for s in samples %}
-  <div class="sample-card">
+  <div class="sample-card" data-slug="{{ s.get('slug', '') }}">
     <div class="sample-card-head">
       <span class="sample-title">{{ s.title }}</span>
       {% if s.version %}<span class="sample-badge">{{ s.version }}</span>{% endif %}
@@ -78,10 +210,205 @@
       <i class="ti ti-external-link"></i>
       {% if s.get('type') == 'reference' %}Open page{% else %}Open mockup{% endif %}
     </a>
+    {% if s.get('slug') %}
+    <div class="dvs-approval">
+      <div class="dvs-approval-row">
+        <span class="dvs-status-pill dvs-status-{{ s.get('approval_status', 'pending') }}">
+          {% if s.get('approval_status') == 'approved' %}
+            <i class="ti ti-check"></i> APPROVED
+          {% elif s.get('approval_status') == 'rejected' %}
+            <i class="ti ti-x"></i> REJECTED
+          {% else %}
+            PENDING APPROVAL
+          {% endif %}
+        </span>
+        {% if s.get('approval_marked_at') %}
+          <span class="dvs-approval-meta">Marked {{ s.approval_marked_at.strftime('%b %d %H:%M') }}</span>
+        {% endif %}
+      </div>
+      {% if is_sam %}
+      <form class="dvs-approval-form" data-slug="{{ s.slug }}" enctype="multipart/form-data">
+        <div class="dvs-approval-row">
+          <button type="button" class="dvs-approve-btn{% if s.get('approval_status') == 'approved' %} is-active{% endif %}"
+                  data-action="approve" data-slug="{{ s.slug }}"
+                  aria-pressed="{{ 'true' if s.get('approval_status') == 'approved' else 'false' }}">
+            <i class="ti ti-check"></i> Approve to implement
+          </button>
+          <button type="button" class="dvs-reject-btn{% if s.get('approval_status') == 'rejected' %} is-active{% endif %}"
+                  data-action="reject" data-slug="{{ s.slug }}"
+                  aria-pressed="{{ 'true' if s.get('approval_status') == 'rejected' else 'false' }}">
+            <i class="ti ti-x"></i> Reject
+          </button>
+        </div>
+        <textarea class="dvs-notes" name="notes"
+                  aria-label="Correction notes for dck"
+                  placeholder="Correction notes for dck (optional)…">{{ s.get('approval_notes') or '' }}</textarea>
+        <div class="dvs-attach-zone" data-slug="{{ s.slug }}" tabindex="0">
+          <i class="ti ti-paperclip icon"></i>
+          Drop screenshots or click to attach (PNG/JPG/WebP, 5 MB / file)
+          <input type="file" name="files" multiple accept="image/png,image/jpeg,image/webp" style="display:none;">
+        </div>
+        {% if s.get('approval_attachments') %}
+        <div class="dvs-attach-chips">
+          {% for a in s.approval_attachments %}
+            <span class="dvs-attach-chip" data-attachment-id="{{ a.id }}">
+              <i class="ti ti-photo"></i> {{ a.filename }}
+              <button type="button" class="x" data-attachment-id="{{ a.id }}" data-slug="{{ s.slug }}"
+                      aria-label="Delete attachment">×</button>
+            </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="dvs-approval-row">
+          <span class="dvs-save-confirm">Saved</span>
+          <button type="button" class="dvs-save-btn" data-action="notes" data-slug="{{ s.slug }}">
+            Save notes / attachments
+          </button>
+        </div>
+      </form>
+      {% else %}
+        {% if s.get('approval_notes') %}
+          <div class="dvs-notes-readonly">{{ s.approval_notes }}</div>
+        {% endif %}
+        {% if s.get('approval_attachments') %}
+          <div class="dvs-attach-chips">
+            {% for a in s.approval_attachments %}
+              <a class="dvs-attach-chip" target="_blank" rel="noopener"
+                 href="/partner/developer/samples/attachments/{{ a.id }}">
+                <i class="ti ti-photo"></i> {{ a.filename }}
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
 {% else %}
   <div class="samples-empty">No design samples yet.</div>
 {% endif %}
 </div>
+
+<script>
+(function(){
+  // Samples approval workflow (spec §7)
+  if (!document.querySelector('.dvs-approval-form')) return;
+
+  function postForm(url, formEl, opts) {
+    opts = opts || {};
+    var fd = new FormData();
+    if (formEl) {
+      var notes = formEl.querySelector('textarea[name="notes"]');
+      if (notes) fd.append('notes', notes.value);
+      var fi = formEl.querySelector('input[type="file"]');
+      if (fi && fi.files) {
+        for (var i = 0; i < fi.files.length; i++) fd.append('files', fi.files[i]);
+      }
+    }
+    return fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, body: j}; }); });
+  }
+
+  function updateCardState(slug, status) {
+    var card = document.querySelector('.sample-card[data-slug="' + slug + '"]');
+    if (!card) return;
+    var pill = card.querySelector('.dvs-status-pill');
+    var approveBtn = card.querySelector('.dvs-approve-btn');
+    var rejectBtn = card.querySelector('.dvs-reject-btn');
+    if (pill) {
+      pill.className = 'dvs-status-pill dvs-status-' + status;
+      if (status === 'approved') pill.innerHTML = '<i class="ti ti-check"></i> APPROVED';
+      else if (status === 'rejected') pill.innerHTML = '<i class="ti ti-x"></i> REJECTED';
+      else pill.innerHTML = 'PENDING APPROVAL';
+    }
+    if (approveBtn) {
+      approveBtn.classList.toggle('is-active', status === 'approved');
+      approveBtn.setAttribute('aria-pressed', status === 'approved' ? 'true' : 'false');
+    }
+    if (rejectBtn) {
+      rejectBtn.classList.toggle('is-active', status === 'rejected');
+      rejectBtn.setAttribute('aria-pressed', status === 'rejected' ? 'true' : 'false');
+    }
+  }
+
+  function flashSaved(form) {
+    var c = form.querySelector('.dvs-save-confirm');
+    if (!c) return;
+    c.classList.add('is-visible');
+    setTimeout(function(){ c.classList.remove('is-visible'); }, 1500);
+  }
+
+  // Approve / Reject / Save buttons
+  document.addEventListener('click', function(ev){
+    var btn = ev.target.closest('[data-action]');
+    if (!btn) return;
+    var action = btn.getAttribute('data-action');
+    var slug = btn.getAttribute('data-slug');
+    if (!slug) return;
+    var form = btn.closest('.dvs-approval-form');
+    if (!form) return;
+    var url = '/partner/developer/samples/' + encodeURIComponent(slug) + '/' + action;
+    btn.disabled = true;
+    postForm(url, form).then(function(res){
+      btn.disabled = false;
+      if (!res.ok) {
+        alert((res.body && res.body.error) || 'Save failed.');
+        return;
+      }
+      var status = res.body.approval && res.body.approval.status;
+      if (status) updateCardState(slug, status);
+      flashSaved(form);
+      // Clear file input after successful upload so the same files aren't resent
+      var fi = form.querySelector('input[type="file"]');
+      if (fi) fi.value = '';
+    }).catch(function(){ btn.disabled = false; alert('Network error.'); });
+  });
+
+  // Attachment delete
+  document.addEventListener('click', function(ev){
+    var x = ev.target.closest('.dvs-attach-chip .x[data-attachment-id]');
+    if (!x) return;
+    var att = x.getAttribute('data-attachment-id');
+    var slug = x.getAttribute('data-slug');
+    if (!att || !slug) return;
+    if (!confirm('Delete this attachment?')) return;
+    var url = '/partner/developer/samples/' + encodeURIComponent(slug) +
+              '/attachments/' + encodeURIComponent(att) + '/delete';
+    fetch(url, { method: 'POST', credentials: 'same-origin' })
+      .then(function(r){ return r.json().then(function(j){ return {ok: r.ok, body: j}; }); })
+      .then(function(res){
+        if (!res.ok) { alert((res.body && res.body.error) || 'Delete failed.'); return; }
+        var chip = x.closest('.dvs-attach-chip');
+        if (chip) chip.remove();
+      })
+      .catch(function(){ alert('Network error.'); });
+  });
+
+  // Attach zone: click to open file input, drag-drop to receive files
+  document.querySelectorAll('.dvs-attach-zone').forEach(function(zone){
+    var fi = zone.querySelector('input[type="file"]');
+    zone.addEventListener('click', function(ev){
+      if (ev.target.tagName === 'INPUT') return;
+      if (fi) fi.click();
+    });
+    zone.addEventListener('keydown', function(ev){
+      if ((ev.key === 'Enter' || ev.key === ' ') && fi) { ev.preventDefault(); fi.click(); }
+    });
+    zone.addEventListener('dragover', function(ev){ ev.preventDefault(); zone.classList.add('is-drag-over'); });
+    zone.addEventListener('dragleave', function(){ zone.classList.remove('is-drag-over'); });
+    zone.addEventListener('drop', function(ev){
+      ev.preventDefault();
+      zone.classList.remove('is-drag-over');
+      if (!fi || !ev.dataTransfer || !ev.dataTransfer.files) return;
+      var dt = new DataTransfer();
+      // Append existing selection + new dropped files
+      if (fi.files) for (var i = 0; i < fi.files.length; i++) dt.items.add(fi.files[i]);
+      for (var j = 0; j < ev.dataTransfer.files.length; j++) dt.items.add(ev.dataTransfer.files[j]);
+      fi.files = dt.files;
+    });
+  });
+})();
+</script>
+
 {% endblock %}

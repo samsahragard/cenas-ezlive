@@ -27,7 +27,10 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from werkzeug.utils import secure_filename
 
 from app.db import SessionLocal
-from app.models import DeveloperChatMessage, DeveloperChatAttachment, PermissionDenial
+from app.models import (
+    DeveloperChatMessage, DeveloperChatAttachment, PermissionDenial,
+    SampleApproval, SampleApprovalAttachment,
+)
 # Phase 0 Block 4: gate routes on the permission system. Decorator
 # runs first; the in-handler _enforce_partner() helper stays as
 # belt-and-suspenders during dark-launch.
@@ -556,12 +559,327 @@ def developer_samples():
     gate = _enforce_partner()
     if gate is not None:
         return gate
+    from app.web.sam_chat import is_sam_chat_user
+    db = SessionLocal()
+    try:
+        approvals_by_slug = {
+            a.sample_slug: a for a in db.query(SampleApproval).all()
+        }
+        atts_by_approval_id: dict[int, list] = {}
+        for att in db.query(SampleApprovalAttachment).all():
+            atts_by_approval_id.setdefault(att.sample_approval_id, []).append(att)
+        enriched = []
+        for s in SAMPLES:
+            ap = approvals_by_slug.get(s.get("slug"))
+            enriched.append({
+                **s,
+                "approval_status": ap.status if ap else "pending",
+                "approval_notes": ap.notes if ap else None,
+                "approval_attachments": atts_by_approval_id.get(ap.id, []) if ap else [],
+                "approval_marked_at": ap.updated_at if ap else None,
+                "approval_marked_by": ap.marked_by_user_id if ap else None,
+            })
+    finally:
+        db.close()
     return render_template(
         "developer_samples.html",
         active="dev_samples",
-        samples=SAMPLES,
+        samples=enriched,
         doc_pages=DOC_PAGES,
+        is_sam=is_sam_chat_user(),
     )
+
+
+# ============================================================
+# Samples approval workflow (spec_samples_approval_workflow)
+# ============================================================
+
+SAMPLE_APPROVAL_MAX_BYTES = 5 * 1024 * 1024   # 5 MB per file (spec §2.2)
+SAMPLE_APPROVAL_MAX_TOTAL = 20 * 1024 * 1024  # 20 MB total per approval
+SAMPLE_APPROVAL_ALLOWED_MIMES = {"image/png", "image/jpeg", "image/webp"}
+SAMPLE_APPROVAL_ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _sample_approval_attachments_dir() -> Path:
+    """Where sample-approval attachments live on disk. Defaults to
+    /var/data/sample-approval-attachments (Render persistent disk).
+    Override with SAMPLE_APPROVAL_ATTACHMENTS_DIR for local dev."""
+    base = os.environ.get(
+        "SAMPLE_APPROVAL_ATTACHMENTS_DIR",
+        "/var/data/sample-approval-attachments",
+    )
+    p = Path(base)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _resolve_sample_slug(slug: str) -> dict | None:
+    """Return the SAMPLES dict matching <slug>, or None."""
+    for s in SAMPLES:
+        if s.get("slug") == slug:
+            return s
+    return None
+
+
+def _get_or_create_approval(db, slug: str, user_id: int | None) -> SampleApproval:
+    """Fetch the approval row for this slug, or create one with status='pending'."""
+    ap = db.query(SampleApproval).filter(SampleApproval.sample_slug == slug).one_or_none()
+    if ap is None:
+        ap = SampleApproval(sample_slug=slug, status="pending",
+                            marked_by_user_id=user_id)
+        db.add(ap)
+        db.flush()  # need ap.id for attachments
+    return ap
+
+
+def _require_sam_for_approval():
+    """Sam-only gate on POST routes per spec §3 auth. Returns a Response to
+    short-circuit (403), or None to proceed."""
+    from app.web.sam_chat import is_sam_chat_user
+    if not is_sam_chat_user():
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+    return None
+
+
+def _save_approval_attachments(db, ap: SampleApproval, files: list, user_id: int | None) -> tuple[list, str | None]:
+    """Validate + persist uploaded files. Returns (saved_attachments, error_msg)."""
+    if not files:
+        return [], None
+    total = 0
+    for f in files:
+        try:
+            f.stream.seek(0, os.SEEK_END)
+            size = f.stream.tell()
+            f.stream.seek(0)
+        except Exception:
+            size = 0
+        total += size
+        if size > SAMPLE_APPROVAL_MAX_BYTES:
+            return [], f"{f.filename} is {size/1024/1024:.1f} MB — per-file limit is 5 MB"
+    if total > SAMPLE_APPROVAL_MAX_TOTAL:
+        return [], f"total upload {total/1024/1024:.1f} MB exceeds 20 MB cap"
+    saved = []
+    base_dir = _sample_approval_attachments_dir() / str(ap.id)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    for f in files:
+        orig = f.filename or ""
+        ext = os.path.splitext(orig)[1].lower()
+        if ext not in SAMPLE_APPROVAL_ALLOWED_EXTS:
+            continue
+        data = f.read()
+        if not data:
+            continue
+        safe = secure_filename(orig) or f"upload{ext}"
+        # collision dodge
+        i = 2
+        cand = safe
+        while (base_dir / cand).exists():
+            stem, e = os.path.splitext(safe)
+            cand = f"{stem}-{i}{e}"
+            i += 1
+        (base_dir / cand).write_bytes(data)
+        mime = mimetypes.guess_type(cand)[0] or "application/octet-stream"
+        if mime not in SAMPLE_APPROVAL_ALLOWED_MIMES:
+            # unknown image subtype — keep the file but log
+            log.info("sample-approval attach: unusual mime %s for %s", mime, orig)
+        att = SampleApprovalAttachment(
+            sample_approval_id=ap.id,
+            filename=orig[:255],
+            mime_type=mime[:64],
+            byte_size=len(data),
+            storage_path=f"{ap.id}/{cand}",
+            created_by_user_id=user_id,
+        )
+        db.add(att)
+        saved.append(att)
+    return saved, None
+
+
+def _approval_payload(ap: SampleApproval, atts: list[SampleApprovalAttachment]) -> dict:
+    """Serialize an approval + its attachments for JSON responses."""
+    return {
+        "slug": ap.sample_slug,
+        "status": ap.status,
+        "notes": ap.notes,
+        "updated_at": ap.updated_at.isoformat() if ap.updated_at else None,
+        "attachments": [
+            {"id": a.id, "filename": a.filename, "mime_type": a.mime_type, "byte_size": a.byte_size}
+            for a in atts
+        ],
+    }
+
+
+@dev_chat.route("/partner/developer/samples/<slug>/approve", methods=["POST"])
+@requires_permission("developer.view_chat")
+def sample_approve(slug: str):
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    sam_gate = _require_sam_for_approval()
+    if sam_gate is not None:
+        return sam_gate
+    if _resolve_sample_slug(slug) is None:
+        return jsonify({"ok": False, "error": "unknown_slug"}), 404
+    user = getattr(g, "current_user", None)
+    uid = getattr(user, "id", None)
+    notes = (request.form.get("notes") or "").strip() or None
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    db = SessionLocal()
+    try:
+        ap = _get_or_create_approval(db, slug, uid)
+        ap.status = "approved"
+        if notes is not None:
+            ap.notes = notes
+        ap.marked_by_user_id = uid
+        ap.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        _, err = _save_approval_attachments(db, ap, files, uid)
+        if err:
+            db.rollback()
+            return jsonify({"ok": False, "error": err}), 400
+        db.commit()
+        atts = db.query(SampleApprovalAttachment).filter(
+            SampleApprovalAttachment.sample_approval_id == ap.id
+        ).all()
+        return jsonify({"ok": True, "approval": _approval_payload(ap, atts)})
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/samples/<slug>/reject", methods=["POST"])
+@requires_permission("developer.view_chat")
+def sample_reject(slug: str):
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    sam_gate = _require_sam_for_approval()
+    if sam_gate is not None:
+        return sam_gate
+    if _resolve_sample_slug(slug) is None:
+        return jsonify({"ok": False, "error": "unknown_slug"}), 404
+    user = getattr(g, "current_user", None)
+    uid = getattr(user, "id", None)
+    notes = (request.form.get("notes") or "").strip() or None
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    db = SessionLocal()
+    try:
+        ap = _get_or_create_approval(db, slug, uid)
+        ap.status = "rejected"
+        if notes is not None:
+            ap.notes = notes
+        ap.marked_by_user_id = uid
+        ap.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        _, err = _save_approval_attachments(db, ap, files, uid)
+        if err:
+            db.rollback()
+            return jsonify({"ok": False, "error": err}), 400
+        db.commit()
+        atts = db.query(SampleApprovalAttachment).filter(
+            SampleApprovalAttachment.sample_approval_id == ap.id
+        ).all()
+        return jsonify({"ok": True, "approval": _approval_payload(ap, atts)})
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/samples/<slug>/notes", methods=["POST"])
+@requires_permission("developer.view_chat")
+def sample_notes(slug: str):
+    """Save notes + attachments WITHOUT changing approval status."""
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    sam_gate = _require_sam_for_approval()
+    if sam_gate is not None:
+        return sam_gate
+    if _resolve_sample_slug(slug) is None:
+        return jsonify({"ok": False, "error": "unknown_slug"}), 404
+    user = getattr(g, "current_user", None)
+    uid = getattr(user, "id", None)
+    notes = (request.form.get("notes") or "").strip() or None
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    db = SessionLocal()
+    try:
+        ap = _get_or_create_approval(db, slug, uid)
+        if notes is not None:
+            ap.notes = notes
+            ap.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        _, err = _save_approval_attachments(db, ap, files, uid)
+        if err:
+            db.rollback()
+            return jsonify({"ok": False, "error": err}), 400
+        db.commit()
+        atts = db.query(SampleApprovalAttachment).filter(
+            SampleApprovalAttachment.sample_approval_id == ap.id
+        ).all()
+        return jsonify({"ok": True, "approval": _approval_payload(ap, atts)})
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/samples/<slug>/attachments/<int:att_id>/delete", methods=["POST"])
+@requires_permission("developer.view_chat")
+def sample_attachment_delete(slug: str, att_id: int):
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    sam_gate = _require_sam_for_approval()
+    if sam_gate is not None:
+        return sam_gate
+    db = SessionLocal()
+    try:
+        att = db.get(SampleApprovalAttachment, att_id)
+        if att is None:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        # Verify the attachment is on the requested slug
+        ap = db.get(SampleApproval, att.sample_approval_id)
+        if ap is None or ap.sample_slug != slug:
+            return jsonify({"ok": False, "error": "slug_mismatch"}), 404
+        # Remove file (best-effort)
+        try:
+            base = _sample_approval_attachments_dir().resolve()
+            full = (base / att.storage_path).resolve()
+            full.relative_to(base)
+            if full.is_file():
+                full.unlink()
+        except Exception as e:
+            log.warning("sample-approval attachment delete: file unlink failed: %s", e)
+        db.delete(att)
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/samples/attachments/<int:att_id>", methods=["GET"])
+@requires_permission("developer.view_chat")
+def sample_attachment_serve(att_id: int):
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    db = SessionLocal()
+    try:
+        att = db.get(SampleApprovalAttachment, att_id)
+        if att is None:
+            abort(404)
+        base = _sample_approval_attachments_dir().resolve()
+        full = (base / att.storage_path).resolve()
+        try:
+            full.relative_to(base)
+        except ValueError:
+            abort(404)
+        if not full.is_file():
+            abort(404)
+        return send_file(
+            str(full),
+            mimetype=att.mime_type or "application/octet-stream",
+            as_attachment=False,
+            download_name=att.filename,
+        )
+    finally:
+        db.close()
 
 
 @dev_chat.route("/partner/developer/ezcater")

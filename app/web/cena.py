@@ -1881,6 +1881,66 @@ def cena_wake_decision_log():
         db.close()
 
 
+# ============================================================
+# POST /sam/cena/db-probe/sam-chat-env — diagnose Sam's /sam/chat input lock
+# ============================================================
+# Per Sam #2690 2026-05-18: Sam reported he cannot text in /sam/chat from
+# phone after the Render outage cycle. Diagnostic surface to verify:
+#   - SAM_CHAT_USER_ID env var is set on Render
+#   - The Sam user row exists in the DB with that ID
+#   - Anthropic API key is present (sam_chat_send returns 503 if missing)
+# Returns sanitized state — never echo the API key or any PIN.
+#
+# Auth: X-Cena-Token (same gate as other db-probes).
+
+@cena_bp.route("/sam/cena/db-probe/sam-chat-env", methods=["POST"])
+def cena_db_probe_sam_chat_env():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    sam_id_raw = (os.getenv("SAM_CHAT_USER_ID") or "").strip()
+    anthropic_key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+
+    out = {
+        "ok": True,
+        "sam_chat_user_id_set": bool(sam_id_raw),
+        "sam_chat_user_id_value": sam_id_raw or None,
+        "sam_chat_user_id_is_int": False,
+        "anthropic_api_key_set": bool(anthropic_key),
+        "anthropic_api_key_len": len(anthropic_key),
+        "sam_user_row_exists": None,
+        "sam_user_full_name": None,
+        "sam_user_active": None,
+    }
+
+    sam_id_int = None
+    try:
+        sam_id_int = int(sam_id_raw) if sam_id_raw else None
+        out["sam_chat_user_id_is_int"] = sam_id_int is not None
+    except (TypeError, ValueError):
+        out["sam_chat_user_id_is_int"] = False
+
+    if sam_id_int is not None:
+        db = SessionLocal()
+        try:
+            from app.models import User
+            u = db.get(User, sam_id_int)
+            if u is None:
+                out["sam_user_row_exists"] = False
+            else:
+                out["sam_user_row_exists"] = True
+                out["sam_user_full_name"] = u.full_name
+                out["sam_user_active"] = bool(getattr(u, "is_active", True))
+        except Exception as e:  # noqa: BLE001
+            logger.exception("cena: sam-chat-env probe failed")
+            out["sam_user_row_exists"] = f"error: {type(e).__name__}: {e}"
+        finally:
+            db.close()
+
+    return jsonify(out)
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

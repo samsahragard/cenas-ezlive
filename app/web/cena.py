@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import (
-    Blueprint, current_app, g, jsonify, redirect, render_template, request, url_for,
+    Blueprint, abort, current_app, g, jsonify, redirect, render_template, request, url_for,
 )
 from sqlalchemy import func
 

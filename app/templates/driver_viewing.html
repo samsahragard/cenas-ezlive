@@ -114,6 +114,11 @@
   // browser instead of the Capacitor shell.
   const inCapacitor = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
   const BgGeo = inCapacitor && window.Capacitor.Plugins ? window.Capacitor.Plugins.BackgroundGeolocation : null;
+  // Per Sam #672: native HTTP delivery via the cenas-gps-native plugin —
+  // no JS callback in the data path, so GPS fixes keep streaming to
+  // /driver/track even while the WebView is suspended (screen lock,
+  // app-switch, deep doze). Preferred over BgGeo when present.
+  const CenasNative = inCapacitor && window.Capacitor.Plugins ? window.Capacitor.Plugins.CenasGpsNative : null;
 
   function setUI(state, msg) {
     if (state === 'on') {
@@ -278,21 +283,65 @@
     }
   }
 
+  async function startCenasNativeTracking() {
+    if (!CenasNative) return false;
+    try {
+      const perms = await CenasNative.requestPermissions();
+      if (perms && perms.location !== 'granted') {
+        permDenied = true;
+        statusEl.textContent = 'location permission denied — tap status for help';
+        return false;
+      }
+      const trackUrl = window.location.origin + '/driver/track';
+      const res = await CenasNative.start({
+        url: trackUrl,
+        interval_ms: 5000,
+        distance_m: 10,
+      });
+      if (!res || !res.started) return false;
+      if (perms && perms.backgroundLocation !== 'granted') {
+        statusEl.textContent = 'native GPS active — grant background for screen-off tracking';
+      } else {
+        statusEl.textContent = 'native GPS active (background-safe)';
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function stopCenasNativeTracking() {
+    if (!CenasNative) return;
+    try { await CenasNative.stop(); } catch (_) {}
+  }
+
   async function startStreaming() {
     if (!('geolocation' in navigator)) {
       statusEl.textContent = 'this device has no GPS';
       return;
     }
-    // Native path: foreground service keeps tracking alive while the WebView
-    // is suspended. Wake Lock isn't requested here — native owns the lifecycle.
+    // Preferred path: cenas-gps-native handles HTTP delivery entirely
+    // inside the foreground service, so GPS keeps streaming even when
+    // the WebView is suspended. JS does not see individual fixes; the
+    // server-side manager view is the source of truth for whether fixes
+    // are arriving.
+    if (inCapacitor && CenasNative) {
+      const ok = await startCenasNativeTracking();
+      if (ok) {
+        tickId = setInterval(tickStatus, 1000);
+        return;
+      }
+      // fall through if plugin refused to start (perms denied, etc.)
+    }
+    // Legacy native path (BgGeo with JS callback) — kept for older
+    // APK builds + as a fallback while cenas-gps-native bakes in.
     if (inCapacitor && BgGeo) {
       const ok = await startNativeTracking();
       if (ok) {
         tickId = setInterval(tickStatus, 1000);
-        statusEl.textContent = 'native GPS active (background-safe)';
+        statusEl.textContent = 'legacy GPS active (background-safe)';
         return;
       }
-      // fall through to web path if plugin refused to start (perms denied, etc.)
     }
     requestWakeLock();
     pollOnce();                          // immediate first fix
@@ -304,6 +353,7 @@
   function stopStreaming() {
     if (pollId !== null) { clearInterval(pollId); pollId = null; }
     if (tickId !== null) { clearInterval(tickId); tickId = null; }
+    stopCenasNativeTracking();
     stopNativeTracking();
     releaseWakeLock();
     statusEl.textContent = '';

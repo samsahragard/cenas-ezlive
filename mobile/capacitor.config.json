@@ -11,6 +11,7 @@
     "allowMixedContent": false
   },
   "plugins": {
-    "BackgroundGeolocation": {}
+    "BackgroundGeolocation": {},
+    "CenasGpsNative": {}
   }
 }

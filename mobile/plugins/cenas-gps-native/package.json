@@ -1,0 +1,19 @@
+{
+  "name": "cenas-gps-native",
+  "version": "0.1.0",
+  "description": "Native foreground GPS tracking for Cenas Kitchen driver shifts. POSTs fixes directly to /driver/track via OkHttp on a background thread — no JS involvement after start. Survives screen lock and app-switch.",
+  "main": "src/index.js",
+  "files": [
+    "android/",
+    "src/",
+    "CenasGpsNativePlugin.podspec"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0"
+  }
+}

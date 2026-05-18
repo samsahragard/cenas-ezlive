@@ -1,0 +1,41 @@
+// cenas-gps-native — Android build script for the local Capacitor plugin.
+// Mirrors the shape Capacitor expects for a community plugin's android/ project.
+ext {
+    capacitorAndroidVersion = project.hasProperty('capacitorAndroidVersion') ? rootProject.ext.capacitorAndroidVersion : '7.0.0'
+}
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.2'
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.cenaskitchen.gps'
+    compileSdkVersion 35
+    defaultConfig {
+        minSdkVersion 23
+        targetSdkVersion 35
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation 'androidx.core:core:1.13.1'
+}

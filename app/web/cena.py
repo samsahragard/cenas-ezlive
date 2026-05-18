@@ -1941,6 +1941,106 @@ def cena_db_probe_sam_chat_env():
     return jsonify(out)
 
 
+# ============================================================
+# POST /sam/cena/run-seed-test-drivers — one-shot seed trigger
+# ============================================================
+# Per Sam direct ask 2026-05-18: run scripts/seed_test_drivers.py in
+# the LIVE service container (which has prod Postgres DATABASE_URL).
+# Render Jobs API doesn't work — those run in ephemeral containers
+# without prod env vars (got "no such table: drivers" SQLite default).
+#
+# Auth: X-Cena-Token (same gate as the other db-probes).
+# Body: {} (no params).
+# Response: {"ok": true, "stdout": "<markdown table>", "summary": "..."}
+#
+# Scope: this is a deliberate one-shot trigger for the 10-Test-Driver
+# seed. Idempotent (rotates PIN on name+location collision). Soft-
+# delete cleanup (active=false) is a separate manual step per cena
+# #2685 step 8 — NOT in this trigger.
+
+@cena_bp.route("/sam/cena/run-seed-test-drivers", methods=["POST"])
+def cena_run_seed_test_drivers():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    import io
+    import contextlib
+    import sys as _sys
+    import pathlib as _pl
+
+    # Ensure repo root is on sys.path so the script can import app.*
+    repo_root = _pl.Path(current_app.root_path).parent
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+    try:
+        from scripts import seed_test_drivers as _seed
+    except ImportError as e:
+        return jsonify({"ok": False,
+                        "error": f"import failed: {e}"}), 500
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = _seed.main()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: seed_test_drivers crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "stdout": buf.getvalue()}), 500
+
+    return jsonify({
+        "ok": rc == 0,
+        "return_code": rc,
+        "stdout": buf.getvalue(),
+    })
+
+
+# ============================================================
+# POST /sam/cena/run-flip-buildplan-approval — one-shot flip trigger
+# ============================================================
+# Same pattern as run-seed-test-drivers. Flips the build-plan sample
+# approval row from REJECTED → PENDING per Sam #2687.
+
+@cena_bp.route("/sam/cena/run-flip-buildplan-approval", methods=["POST"])
+def cena_run_flip_buildplan_approval():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    import io
+    import contextlib
+    import sys as _sys
+    import pathlib as _pl
+
+    repo_root = _pl.Path(current_app.root_path).parent
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+    try:
+        from scripts import flip_buildplan_approval as _flip
+    except ImportError as e:
+        return jsonify({"ok": False,
+                        "error": f"import failed: {e}"}), 500
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = _flip.main()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: flip_buildplan_approval crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "stdout": buf.getvalue()}), 500
+
+    return jsonify({
+        "ok": rc == 0,
+        "return_code": rc,
+        "stdout": buf.getvalue(),
+    })
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

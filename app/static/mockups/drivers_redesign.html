@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Drivers Page — Design Mockup (dck) v2</title>
+<title>Drivers Page — Design Mockup (dck) v3</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
 <style>
   :root {
@@ -56,6 +56,18 @@
     font-weight: 700;
     margin-left: 8px;
     vertical-align: middle;
+  }
+  .v3-badge {
+    display: inline-block;
+    background: var(--ck-gold-bright);
+    color: #140A06;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+    vertical-align: middle;
+    box-shadow: 0 0 10px rgba(255, 200, 80, 0.32);
   }
   .section-label {
     font-size: 11px; color: var(--ck-gold);
@@ -160,34 +172,51 @@
   }
   .mock-phone .body { padding: 14px 14px; }
 
-  /* SHARED — tabs */
+  /* SHARED — tabs (v3 per Sam via cena #2485:
+     inactive = pure white text on transparent;
+     active = dark text on gold-bright pill bg.
+     Switches from V2 .ezm-tab underline pattern to V2 .lg-nav pill
+     pattern — same shape as the Legal subsystem nav.) */
   .tabs {
-    display: flex; gap: 4px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; gap: 6px;
     margin-bottom: 18px;
     overflow-x: auto;
+    padding-bottom: 14px;
+    border-bottom: 0.5px solid var(--ck-border);
   }
   .tab {
     background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 10px 16px;
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 13px; font-weight: 500;
+    border: 0.5px solid var(--ck-border);
+    border-radius: 14px;
+    padding: 8px 16px;
+    color: #FFFFFF;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
     font-family: inherit;
-    transition: color 150ms var(--ck-ease),
-                border-color 150ms var(--ck-ease);
+    transition: background 150ms var(--ck-ease),
+                border-color 150ms var(--ck-ease),
+                color 150ms var(--ck-ease);
   }
   .tab .count {
-    font-size: 11px; opacity: 0.65; margin-left: 4px;
+    font-size: 11px;
+    opacity: 0.7;
+    margin-left: 4px;
   }
-  .tab:hover { color: var(--ck-text); }
+  .tab:hover {
+    border-color: var(--ck-gold-soft);
+    background: rgba(228, 179, 64, 0.06);
+  }
   .tab.active {
-    color: var(--ck-text-hover);
-    border-bottom-color: var(--ck-gold-bright);
-    background: rgba(0, 0, 0, 0.55);
+    color: #140A06;
+    background: var(--ck-gold-bright);
+    border-color: var(--ck-gold-bright);
+    font-weight: 600;
+    box-shadow: 0 0 14px rgba(255, 200, 80, 0.32);
+  }
+  .tab.active .count {
+    opacity: 0.65;
   }
 
   /* SHARED — driver rows (v2: hover state + chevron tappability) */
@@ -362,7 +391,7 @@
       <ul>
         <li><b>No hamburger</b> at ≥1024px — sidebar is always-visible, hamburger redundant. Hidden via <code>@media (max-width: 1024px) { .menu-toggle { display: flex } }</code> in base_dashboard chrome.</li>
         <li><b>Topbar = title + location pill only</b> (v2 change). Tab counts carry the active/inactive magnitudes; no duplication.</li>
-        <li><b>Active / Inactive tabs</b> — V2 <code>.ezm-tab</code> pattern. Active = <code>2px var(--ck-gold-bright)</code> bottom border + <code>rgba(0,0,0,0.55)</code> recess bg + <code>var(--ck-text-hover)</code> text.</li>
+        <li><b>Active / Inactive tabs (v3)</b> — pill pattern matching V2 <code>.lg-nav</code> (Legal subsystem nav). Inactive = pure white text on transparent bg + gold-soft border. Active = dark text on <code>var(--ck-gold-bright)</code> pill bg with 14px glow. Per Sam #2485 via cena.</li>
         <li><b>Driver rows are tappable</b> (v2 change). First row shows the hover state — gold-soft bg + chevron-right nudged + colored gold. Real implementation: <code>:hover</code> drives this; row click → <code>/drivers/&lt;id&gt;</code>.</li>
         <li><b>Status-meta inline on desktop</b> (rating · deliveries · last-shift) — desktop has the horizontal room, so all three pieces stay on the row.</li>
       </ul>

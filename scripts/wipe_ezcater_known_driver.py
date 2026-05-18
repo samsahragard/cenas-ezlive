@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from sqlalchemy import text  # noqa: E402
+from sqlalchemy import inspect, text  # noqa: E402
 
 from app.db import SessionLocal  # noqa: E402
 
@@ -43,9 +43,7 @@ def main() -> int:
             print("source already empty - nothing to wipe")
             return 0
 
-        archive_exists = db.execute(text(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = :t"
-        ), {"t": ARCHIVE_TABLE}).first()
+        archive_exists = ARCHIVE_TABLE in inspect(db.bind).get_table_names()
         if archive_exists:
             print(f"FAIL: archive table {ARCHIVE_TABLE} already exists; "
                   f"manual DROP required to re-run")

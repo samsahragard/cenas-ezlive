@@ -676,6 +676,69 @@ class SampleApprovalAttachment(Base):
     )
 
 
+class CenaWakeDecision(Base):
+    """Telemetry row for the Haiku-classifier-gated cena wake pipeline.
+    One row per dev chat message the watcher considers, regardless of
+    whether cena actually fires. Captures both the classifier verdict
+    and the watcher's actual decision so the cena-stats dashboard can
+    compute the would-have-fired vs did-fire delta that drives the
+    cutover-from-shadow-to-enforcement call.
+
+    Spec: Sam #2576 6-piece proposal (greenlight 2026-05-17) + cena
+    #2572 refinements. Migration 29.
+    """
+    __tablename__ = "cena_wake_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dev_chat_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("developer_chat.id"), nullable=True, index=True
+    )
+    author: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    message_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    classifier_label: Mapped[str] = mapped_column(
+        String(32), nullable=False, index=True
+    )  # 'wake' | 'skip' | 'uncertain' | 'error'
+    classifier_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    classifier_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    classifier_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    classifier_input_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    classifier_output_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    classifier_cache_create_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    classifier_cache_read_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    classifier_latency_ms: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
+    would_fire: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    did_fire: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    actual_rule_trigger: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
+    shadow_mode: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+
+
 class DeveloperChatAttachment(Base):
     """Files attached to a Developer Chat message. Up to 5 per message,
     enforced at the route layer. Files live under CHAT_ATTACHMENTS_DIR

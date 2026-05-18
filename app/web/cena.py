@@ -1762,6 +1762,125 @@ def cena_dev_chat_read():
         db.close()
 
 
+# ============================================================
+# POST /sam/cena/cena-wake-decision-log — telemetry write endpoint
+# ============================================================
+# Per Sam #2576 6-piece proposal (greenlight 2026-05-17) + cena #2572
+# refinements: the AiCk-side watcher (cena_chat_watcher.py) calls
+# Haiku-4.5 to classify each dev chat msg as wake/skip/uncertain, then
+# POSTs the classifier's verdict + token counts + latency + the
+# watcher's own decision into the cena_wake_decisions table here.
+#
+# In Phase A (shadow mode) the watcher still fires under current rules
+# regardless of classifier label; the dashboard reads this table to
+# compute would-have-fired vs did-fire delta before we promote the
+# classifier to gate the wake.
+#
+# Body (JSON):
+#   {
+#     "dev_chat_message_id": <int|null>,    optional FK
+#     "author":              "<str|null>",  optional
+#     "message_snippet":     "<str|null>",  optional, first 200ch
+#
+#     "classifier_label":    "wake|skip|uncertain|error",   required
+#     "classifier_confidence":      <float|null>,
+#     "classifier_reason":          "<str|null>",
+#     "classifier_model":           "<str|null>",
+#     "classifier_input_tokens":    <int|null>,
+#     "classifier_output_tokens":   <int|null>,
+#     "classifier_cache_create_tokens": <int|null>,
+#     "classifier_cache_read_tokens":   <int|null>,
+#     "classifier_latency_ms":      <int|null>,
+#
+#     "would_fire":          <bool>,        default false
+#     "did_fire":             <bool>,        default false
+#     "actual_rule_trigger":  "<str|null>",  optional
+#     "shadow_mode":          <bool>,        default true
+#   }
+#
+# Response:
+#   {"ok": true, "id": <row_id>, "created_at": "<ISO>Z"}
+#
+# Auth: X-Cena-Token header (same gate as the db-probes).
+
+_VALID_CLASSIFIER_LABELS = {"wake", "skip", "uncertain", "error"}
+
+
+@cena_bp.route("/sam/cena/cena-wake-decision-log", methods=["POST"])
+def cena_wake_decision_log():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+
+    label = (body.get("classifier_label") or "").strip()
+    if label not in _VALID_CLASSIFIER_LABELS:
+        return jsonify({"ok": False,
+                        "error": (f"classifier_label required, one of "
+                                  f"{sorted(_VALID_CLASSIFIER_LABELS)}")}), 400
+
+    def _opt_int(v):
+        try:
+            return int(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _opt_float(v):
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _opt_str(v, cap=None):
+        if v is None:
+            return None
+        s = str(v)
+        if cap is not None and len(s) > cap:
+            s = s[:cap]
+        return s
+
+    from app.models import CenaWakeDecision
+    db = SessionLocal()
+    try:
+        row = CenaWakeDecision(
+            dev_chat_message_id=_opt_int(body.get("dev_chat_message_id")),
+            author=_opt_str(body.get("author"), cap=64),
+            message_snippet=_opt_str(body.get("message_snippet"), cap=2000),
+            classifier_label=label,
+            classifier_confidence=_opt_float(body.get("classifier_confidence")),
+            classifier_reason=_opt_str(body.get("classifier_reason"), cap=4000),
+            classifier_model=_opt_str(body.get("classifier_model"), cap=64),
+            classifier_input_tokens=_opt_int(body.get("classifier_input_tokens")),
+            classifier_output_tokens=_opt_int(body.get("classifier_output_tokens")),
+            classifier_cache_create_tokens=_opt_int(
+                body.get("classifier_cache_create_tokens")),
+            classifier_cache_read_tokens=_opt_int(
+                body.get("classifier_cache_read_tokens")),
+            classifier_latency_ms=_opt_int(body.get("classifier_latency_ms")),
+            would_fire=bool(body.get("would_fire", False)),
+            did_fire=bool(body.get("did_fire", False)),
+            actual_rule_trigger=_opt_str(
+                body.get("actual_rule_trigger"), cap=64),
+            shadow_mode=bool(body.get("shadow_mode", True)),
+            created_at=datetime.utcnow(),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return jsonify({
+            "ok": True,
+            "id": row.id,
+            "created_at": row.created_at.isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: wake-decision-log failed")
+        db.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

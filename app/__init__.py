@@ -466,6 +466,28 @@ def create_app():
         logging.getLogger(__name__).exception(
             "sample_approvals backfill failed (non-fatal)")
 
+    # Idempotent table create — cena_wake_decisions (migration 29,
+    # Sam #2576 6-piece proposal Phase A piece #3 — telemetry-first).
+    # One row per dev chat message considered by the watcher; captures
+    # classifier verdict + tokens + latency + watcher's actual decision
+    # so the cena-stats dashboard can compute would-have-fired vs
+    # did-fire delta during shadow-mode observation period.
+    try:
+        from sqlalchemy import inspect as _sa_insp_29
+        from app.db import engine as _eng_29
+        from app.models import (Base as _Base_29,
+                                CenaWakeDecision as _CWD_29)
+        if _eng_29 is not None:
+            insp_29 = _sa_insp_29(_eng_29)
+            if "cena_wake_decisions" not in set(insp_29.get_table_names()):
+                _Base_29.metadata.create_all(
+                    bind=_eng_29, tables=[_CWD_29.__table__])
+                logging.getLogger(__name__).info(
+                    "cena_wake_decisions (migration 29): table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "cena_wake_decisions backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

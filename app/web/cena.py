@@ -1392,6 +1392,91 @@ def cena_db_probe_ezcater_webhook_recent():
                         "log_path": path_str}), 500
 
 
+# ============================================================
+# POST /sam/cena/db-probe/cena-wake-env — diagnose the f8328b9 hook
+# ============================================================
+# Per samai #2369 + aick #2371 (C): the wake-on-post hook in
+# developer_chat.py reads CENA_GATEWAY_URL + CENA_GATEWAY_TOKEN env
+# vars and silently no-ops if either is empty. cena_gateway_err.log
+# on AiCk shows zero hits today (2026-05-17) despite many dev-chat
+# posts, suggesting one of the env vars is missing on Render or the
+# URL is unreachable.
+#
+# Returns presence flags + URL+token *shape* (length/prefix/suffix)
+# WITHOUT exposing the actual values. Also fires a synthetic POST to
+# the configured URL and reports the HTTP code so we know whether
+# the URL is reachable from inside Render.
+#
+# Body: {} (no input needed)
+# Response (JSON):
+#   {"ok": true,
+#    "gateway_url_set": true|false,
+#    "gateway_url_len": <int>,
+#    "gateway_url_prefix": "<first 30 chars>" | null,
+#    "gateway_token_set": true|false,
+#    "gateway_token_len": <int>,
+#    "probe_status": <int>  HTTP code from a HEAD/GET to gateway,
+#    "probe_error": "<str>" | null,
+#    "probe_ms": <int>}
+#
+# Auth: X-Cena-Token (same gate as other db-probes).
+
+@cena_bp.route("/sam/cena/db-probe/cena-wake-env",
+               methods=["POST"])
+def cena_db_probe_cena_wake_env():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    gw_url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
+    gw_tok = (os.getenv("CENA_GATEWAY_TOKEN") or "").strip()
+
+    out = {
+        "ok": True,
+        "gateway_url_set": bool(gw_url),
+        "gateway_url_len": len(gw_url),
+        "gateway_url_prefix": (gw_url[:30] if gw_url else None),
+        "gateway_token_set": bool(gw_tok),
+        "gateway_token_len": len(gw_tok),
+        "probe_status": None,
+        "probe_error": None,
+        "probe_ms": None,
+    }
+
+    if gw_url:
+        import time as _time_probe
+        import urllib.request as _urlreq_probe
+        import urllib.error as _urlerr_probe
+        # Hit the gateway's /health endpoint (or root if /health 404s)
+        # to see if it's reachable from Render. Use HEAD-ish via short
+        # GET timeout. /cena/stream itself is POST-only and would
+        # consume a Claude turn, which we don't want as a probe side
+        # effect.
+        for probe_path in ("/health", "/"):
+            req = _urlreq_probe.Request(f"{gw_url}{probe_path}",
+                                        method="GET")
+            t0 = _time_probe.time()
+            try:
+                with _urlreq_probe.urlopen(req, timeout=8) as r:
+                    out["probe_status"] = r.status
+                    out["probe_ms"] = int((_time_probe.time() - t0) * 1000)
+                    out["probe_path"] = probe_path
+                break
+            except _urlerr_probe.HTTPError as e:
+                out["probe_status"] = e.code
+                out["probe_ms"] = int((_time_probe.time() - t0) * 1000)
+                out["probe_path"] = probe_path
+                # 404 on /health is fine — try /
+                if e.code != 404:
+                    break
+            except Exception as e:  # noqa: BLE001
+                out["probe_error"] = f"{type(e).__name__}: {e}"
+                out["probe_ms"] = int((_time_probe.time() - t0) * 1000)
+                break
+
+    return jsonify(out)
+
+
 @cena_bp.route("/sam/cena/db-probe/table-exists", methods=["POST"])
 def cena_db_probe_table_exists():
     gate = _require_gateway_token()

@@ -2062,6 +2062,13 @@ def cena_run_list_upcoming_orders():
         return jsonify({"ok": False,
                         "error": f"import failed: {e}"}), 500
 
+    import os as _os
+    body = request.get_json(silent=True) or {}
+    if body.get("include_recent"):
+        _os.environ["CENA_INCLUDE_RECENT"] = "1"
+    else:
+        _os.environ.pop("CENA_INCLUDE_RECENT", None)
+
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):

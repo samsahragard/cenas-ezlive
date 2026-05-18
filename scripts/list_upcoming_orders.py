@@ -24,14 +24,23 @@ LOCATION_LABEL = {"store_1": "Copperfield", "store_2": "Tomball"}
 
 
 def main() -> int:
+    """When CENA_INCLUDE_RECENT=1 env var is set, also include the last 30
+    days of completed/delivered orders. Lets Sam check if ezcater_driver_name
+    is populated for past orders (webhook health) vs only missing for upcoming
+    ones (ezCater hasn't assigned yet)."""
+    import os
+    include_recent = os.getenv("CENA_INCLUDE_RECENT") == "1"
     today_iso = datetime.now().strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
-        orders = (db.query(Order)
-            .filter(Order.delivery_date >= today_iso)
-            .filter(Order.status != "cancelled")
-            .order_by(Order.delivery_date.asc(), Order.deliver_at.asc())
-            .all())
+        q = db.query(Order).filter(Order.status != "cancelled")
+        if include_recent:
+            from datetime import timedelta
+            since = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            q = q.filter(Order.delivery_date >= since)
+        else:
+            q = q.filter(Order.delivery_date >= today_iso)
+        orders = q.order_by(Order.delivery_date.asc(), Order.deliver_at.asc()).all()
 
         driver_by_id = {d.id: d.name for d in db.query(Driver).all()}
 

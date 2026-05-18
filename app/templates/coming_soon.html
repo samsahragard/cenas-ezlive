@@ -1,0 +1,28 @@
+{% extends "base_dashboard.html" %}
+{% block title %}{{ page_label }} — Cenas Kitchen{% endblock %}
+
+{% block page_title %}{{ page_label }}{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {{ section_label }} feature — placeholder while the implementation is in progress.
+  </p>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 720px; padding: 32px; margin: 20px 0;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 12px; text-align: center;">
+  <div style="font-size: 56px; line-height: 1; margin-bottom: 12px; opacity: 0.65;">⏳</div>
+  <h2 style="margin: 0 0 12px; font-size: 18px; font-weight: 600;">
+    {{ page_label }} — coming soon
+  </h2>
+  <p style="margin: 0 0 6px; color: var(--text-2); font-size: 14px;">
+    This is a placeholder for the <strong>{{ section_label }}</strong> &rarr; <strong>{{ page_label }}</strong> page.
+  </p>
+  <p style="margin: 12px 0 0; color: var(--text-3); font-size: 12.5px;">
+    The sidebar entry shipped with the May 18 restructure so the layout is locked.
+    The actual feature follows in its own wave. If you need it sooner, message aick.
+  </p>
+</div>
+{% endblock %}

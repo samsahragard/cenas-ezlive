@@ -77,8 +77,52 @@
           <i class="ti ti-bell ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Notifications</span>
         </a>
+        {# Cena — Sam's personal direct-to-Claude surface. Per Sam #837
+           item 8: moved into TODAY (was its own bottom section), renamed
+           from "Sam Chat → Claude" to just "Cena". Gated by
+           is_sam_chat_user() (SAM_CHAT_USER_ID match) so it only renders
+           for Sam + Masood, NOT inherited via partner role. #}
+        {% if is_sam_chat_user() %}
+        <a href="/sam/chat" class="ck-sb-item{% if active == 'sam_chat' %} active{% endif %}"
+           {% if active == 'sam_chat' %}aria-current="page"{% endif %}>
+          <i class="ti ti-sparkles ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Cena</span>
+        </a>
+        {% endif %}
       </div></div>
     </div>
+
+    {# ==== MANAGER ==== per Sam #837 item 8 — 7 placeholder entries
+       routing to a single Coming Soon page. Sam + Masood only (same
+       is_sam_chat_user() gate that scopes the Cena entry above). When
+       the underlying features ship, swap each placeholder href for the
+       real route + active key. #}
+    {% if is_sam_chat_user() %}
+    <div class="ck-sb-section" data-id="manager">
+      <button class="ck-sb-section-head" aria-expanded="true">
+        <span class="ck-sb-section-label">Manager</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        {% for slug, label, icon in [
+          ('daily-log', 'Daily manager log', 'ti-clipboard-text'),
+          ('incident-reports', 'Incident reports', 'ti-alert-triangle'),
+          ('attendance', 'Attendance tracking', 'ti-calendar-time'),
+          ('counseling', 'Employee counseling', 'ti-user-exclamation'),
+          ('interview', 'Interview surface', 'ti-user-plus'),
+          ('training', 'Training records', 'ti-school'),
+          ('maintenance', 'Maintenance requests', 'ti-tools'),
+        ] %}
+        <a href="/{{ store_slug }}/manager/{{ slug }}"
+           class="ck-sb-item{% if active == 'manager_' + slug.replace('-','_') %} active{% endif %}">
+          <i class="ti {{ icon }} ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">{{ label }}</span>
+          <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
+        </a>
+        {% endfor %}
+      </div></div>
+    </div>
+    {% endif %}
 
     {# ==== OPERATIONS ==== #}
     <div class="ck-sb-section" data-id="operations">
@@ -697,24 +741,40 @@
     </div>
     {% endif %}{# end has_permission('developer.view_chat') #}
 
-    {# Sam Chat — Sam's personal direct-to-Claude surface. Gated by
-       is_sam_chat_user() (the SAM_CHAT_USER_ID match), NOT by a
-       has_permission tag — so it can never be role-inherited. Renders
-       for nobody until SAM_CHAT_USER_ID is set in Render. #}
-    {% if is_sam_chat_user() %}
-    <div class="ck-sb-section" data-id="sam-chat">
+    {# Sam Chat section retired here per Sam #837 item 8 — entry moved
+       up into the TODAY section + renamed to "Cena" (see above). The
+       /sam/chat route + view remain unchanged; only the sidebar entry
+       moved. #}
+
+    {# ==== LEGAL ==== per Sam #837 item 8 — 6 placeholder entries to
+       the same Coming Soon page until the legal features ship.
+       Partner-only by default (matches the existing per-section gating
+       pattern Admin uses elsewhere). #}
+    {% if user_role == 'partner' %}
+    <div class="ck-sb-section" data-id="legal">
       <button class="ck-sb-section-head" aria-expanded="true">
-        <span class="ck-sb-section-label">Sam Chat</span>
+        <span class="ck-sb-section-label">Legal</span>
         <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
       </button>
       <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/sam/chat" class="ck-sb-item{% if active == 'sam_chat' %} active{% endif %}">
-          <i class="ti ti-sparkles ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Claude</span>
+        {% for slug, label, icon in [
+          ('overview', 'Overview', 'ti-scale'),
+          ('matters', 'Matters', 'ti-folder'),
+          ('structure', 'Structure', 'ti-building-bank'),
+          ('insurance', 'Insurance', 'ti-shield-check'),
+          ('documents', 'Documents', 'ti-file-text'),
+          ('audit-log', 'Audit log', 'ti-history'),
+        ] %}
+        <a href="/{{ store_slug }}/legal/{{ slug }}"
+           class="ck-sb-item{% if active == 'legal_' + slug.replace('-','_') %} active{% endif %}">
+          <i class="ti {{ icon }} ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">{{ label }}</span>
+          <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
         </a>
+        {% endfor %}
       </div></div>
     </div>
-    {% endif %}{# end is_sam_chat_user() #}
+    {% endif %}
     {% endif %}{# closes user_role == 'driver' / else #}
 
     <a href="{% if user_role == 'driver' %}/driver/logout{% else %}/keypad-logout{% endif %}" class="ck-sb-logout"

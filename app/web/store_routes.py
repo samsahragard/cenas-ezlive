@@ -978,6 +978,64 @@ def driver_shift_track(driver_id: int, shift_id: int):
         db.close()
 
 
+# ============================================================
+# MANAGER + LEGAL placeholder routes (Sam #837 item 8 — sidebar
+# restructure ships the entries before the features land).
+# ============================================================
+_MANAGER_PAGE_LABELS = {
+    "daily-log":         "Daily Manager Log",
+    "incident-reports":  "Incident Reports",
+    "attendance":        "Attendance Tracking",
+    "counseling":        "Employee Counseling",
+    "interview":         "Interview Surface",
+    "training":          "Training Records",
+    "maintenance":       "Maintenance Requests",
+}
+_LEGAL_PAGE_LABELS = {
+    "overview":   "Overview",
+    "matters":    "Matters",
+    "structure":  "Structure",
+    "insurance":  "Insurance",
+    "documents":  "Documents",
+    "audit-log":  "Audit Log",
+}
+
+
+@store_bp.route("/manager/<page>", methods=["GET"])
+def manager_placeholder(page: str):
+    """Placeholder for the new Manager section per Sam #837 item 8.
+    Sidebar entries are live; the underlying features land in
+    follow-up waves. Renders a Coming Soon card with the page label
+    so the navigation flow stays intact."""
+    label = _MANAGER_PAGE_LABELS.get(page)
+    if not label:
+        abort(404)
+    active_key = "manager_" + page.replace("-", "_")
+    return render_template(
+        "coming_soon.html",
+        section_label="Manager",
+        page_label=label,
+        active=active_key,
+    )
+
+
+@store_bp.route("/legal/<page>", methods=["GET"])
+def legal_placeholder(page: str):
+    """Placeholder for the new Legal section per Sam #837 item 8.
+    Same shape as manager_placeholder — sidebar entries shipped first,
+    real pages follow."""
+    label = _LEGAL_PAGE_LABELS.get(page)
+    if not label:
+        abort(404)
+    active_key = "legal_" + page.replace("-", "_")
+    return render_template(
+        "coming_soon.html",
+        section_label="Legal",
+        page_label=label,
+        active=active_key,
+    )
+
+
 @store_bp.route("/drivers/<int:driver_id>/toggle-active", methods=["POST"])
 def drivers_toggle_active(driver_id: int):
     db = next(get_db())

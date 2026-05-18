@@ -2034,6 +2034,33 @@ class CenaActionLog(Base):
         nullable=True, index=True)
 
 
+class SamChatAttachment(Base):
+    """One row per file Sam attached to a /sam/chat user turn — images
+    and PDFs base64-encoded for storage. Per Sam #837 item 5 (vision
+    parity for dev-team agents): cena saw images at the API layer but
+    they were thrown away after the turn, leaving aick/ck/samai blind
+    on the read side. Persisting them here lets the /sam/cena/sam-chat
+    read endpoint surface attachment IDs + a download URL so any agent
+    polling /sam/chat can fetch and process the same images.
+
+    Storage shape: inline base64 in `data_base64`. Capped at 5MB per
+    file in the POST handler (post-base64 inflation ~6.7MB DB cell).
+    Larger files would belong on disk / object storage; for the
+    screenshot + small-PDF workflow this is enough."""
+    __tablename__ = "sam_chat_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("sam_chat_messages.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    data_base64: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+
+
 class CenaUsageLog(Base):
     """Per-turn token + cost telemetry for the cena gateway.
 

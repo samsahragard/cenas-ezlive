@@ -473,6 +473,25 @@ def create_app():
         logging.getLogger(__name__).exception(
             "sample_approvals backfill failed (non-fatal)")
 
+    # Idempotent table create — sam_chat_attachments (Sam #837 item 5
+    # vision parity for dev-team agents). Persists image/PDF blocks so
+    # aick / ck / samai can fetch the same files cena saw at API time.
+    try:
+        from sqlalchemy import inspect as _sa_insp_31
+        from app.db import engine as _eng_31
+        from app.models import (Base as _Base_31,
+                                SamChatAttachment as _SCAT_31)
+        if _eng_31 is not None:
+            insp_31 = _sa_insp_31(_eng_31)
+            if "sam_chat_attachments" not in set(insp_31.get_table_names()):
+                _Base_31.metadata.create_all(
+                    bind=_eng_31, tables=[_SCAT_31.__table__])
+                logging.getLogger(__name__).info(
+                    "sam_chat_attachments: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "sam_chat_attachments backfill failed (non-fatal)")
+
     # Idempotent table create — cena_usage_logs (Sam /sam/chat session 13
     # #11 cost telemetry). One row per cena gateway streaming turn
     # capturing token counts so /partner/cena-usage can roll up dollars.

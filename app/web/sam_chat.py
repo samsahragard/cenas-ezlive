@@ -718,6 +718,32 @@ def sam_chat_send():
         db.add(user_row)
         db.flush()  # assigns user_row.id
         user_message_id = user_row.id
+
+        # Per Sam #837 item 5 — persist any image/PDF attachments so the
+        # dev-team agents (aick/ck/samai) can fetch them via the
+        # /sam/cena/sam-chat read endpoint. Cena saw them inline at the
+        # API layer (api_blocks above), but they were thrown away after
+        # the turn until this row landed. Cap at 5MB pre-base64.
+        try:
+            from app.models import SamChatAttachment as _SCA
+            for blk in (api_blocks or []):
+                src = blk.get("source") or {}
+                if src.get("type") != "base64":
+                    continue
+                data_b64 = src.get("data") or ""
+                if not data_b64:
+                    continue
+                if len(data_b64) > 7_500_000:  # ~5.5MB binary
+                    continue
+                media_type = src.get("media_type") or "application/octet-stream"
+                db.add(_SCA(
+                    message_id=user_message_id,
+                    filename=None,
+                    content_type=media_type,
+                    data_base64=data_b64,
+                ))
+        except Exception:  # noqa: BLE001
+            pass
         # Auto-title a fresh session from its first user message.
         if not session_row.title:
             session_row.title = (message or stored_content)[:60].strip() \

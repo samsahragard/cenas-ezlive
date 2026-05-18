@@ -1246,6 +1246,24 @@ def cena_sam_chat_read():
                 .limit(limit).all())
         rows.reverse()
 
+        # Per Sam #837 item 5 — surface attachment IDs alongside each
+        # message so aick/ck/samai polling tails can fetch the same
+        # image cena saw at API time. Eager-load attachments for the
+        # window we're returning in one query.
+        from app.models import SamChatAttachment as _SCA
+        attach_by_msg: dict[int, list[dict]] = {}
+        if rows:
+            msg_ids = [m.id for m in rows]
+            for a in (db.query(_SCA)
+                        .filter(_SCA.message_id.in_(msg_ids))
+                        .all()):
+                attach_by_msg.setdefault(a.message_id, []).append({
+                    "id": a.id,
+                    "content_type": a.content_type,
+                    "filename": a.filename,
+                    "url": f"/sam/cena/sam-chat-attachment/{a.id}",
+                })
+
         messages = []
         # 8000-char cap per samai #2199 spec input — covers ~95% of
         # Cena's longer /sam/chat turns without truncation, and when
@@ -1269,6 +1287,7 @@ def cena_sam_chat_read():
                 "model": m.model,
                 "created_at": (m.created_at.isoformat() + "Z"
                                if m.created_at else None),
+                "attachments": attach_by_msg.get(m.id, []),
             })
 
         return jsonify({
@@ -1587,6 +1606,35 @@ def cena_telegram_test_fire():
 # not what this endpoint is for).
 
 _VALID_POST_ROLES = {"dck", "cena", "aick"}
+
+
+@cena_bp.route("/sam/cena/sam-chat-attachment/<int:att_id>", methods=["GET"])
+def cena_sam_chat_attachment_get(att_id: int):
+    """Serve a persisted /sam/chat attachment as raw binary.
+
+    Per Sam #837 item 5 — the cena gateway / aick polling tail / ck /
+    samai can fetch any image Sam attached. Gateway-token gated like
+    the other /sam/cena/* endpoints (added to auth EXEMPT_PREFIXES via
+    /sam/cena/sam-chat-attachment/ in the next push).
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    import base64 as _b64
+    from app.models import SamChatAttachment as _SCA
+    db = next(get_db())
+    try:
+        att = db.get(_SCA, att_id)
+        if not att:
+            abort(404)
+        try:
+            data = _b64.b64decode(att.data_base64)
+        except Exception:
+            abort(500)
+        from flask import Response as _Resp
+        return _Resp(data, mimetype=att.content_type or "application/octet-stream")
+    finally:
+        db.close()
 
 
 @cena_bp.route("/sam/cena/sam-chat-post", methods=["POST"])

@@ -2041,6 +2041,51 @@ def cena_run_flip_buildplan_approval():
     })
 
 
+@cena_bp.route("/sam/cena/run-probe-ezcater-order", methods=["POST"])
+def cena_run_probe_ezcater_order():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    import io
+    import contextlib
+    import os as _os
+    import sys as _sys
+    import pathlib as _pl
+
+    repo_root = _pl.Path(current_app.root_path).parent
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+    body = request.get_json(silent=True) or {}
+    order_id = (body.get("order_id") or "").strip()
+    if not order_id:
+        return jsonify({"ok": False, "error": "order_id required in body"}), 400
+    _os.environ["CENA_PROBE_ORDER_ID"] = order_id
+
+    try:
+        from scripts import probe_ezcater_order as _probe
+    except ImportError as e:
+        return jsonify({"ok": False,
+                        "error": f"import failed: {e}"}), 500
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = _probe.main()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: probe_ezcater_order crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "stdout": buf.getvalue()}), 500
+
+    return jsonify({
+        "ok": rc == 0,
+        "return_code": rc,
+        "stdout": buf.getvalue(),
+    })
+
+
 @cena_bp.route("/sam/cena/run-list-upcoming-orders", methods=["POST"])
 def cena_run_list_upcoming_orders():
     gate = _require_gateway_token()

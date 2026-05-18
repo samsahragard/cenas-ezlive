@@ -370,12 +370,45 @@
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script>
   (function() {
+    // marked v12 calls renderer.link(token) with a single object {href,
+    // title, text, tokens}. The old override below tried to handle both
+    // v4 (3-arg) and v12 (1-arg) shapes by delegating to the original
+    // renderer.link, but the v12 base renderer behavior produced broken
+    // hrefs like "[object Object]" for autolinked URLs inside bold/etc
+    // (per Sam #791 2026-05-18 — github.com link rendered as
+    // /sam/[object Object] with text "undefined"). Self-contained
+    // rewrite below: build the <a> tag directly from the token fields.
     const renderer = new marked.Renderer();
-    const _link = renderer.link.bind(renderer);
-    renderer.link = function(href, title, text) {
-      const h = (typeof href === 'object') ? href : {href: href, title: title, text: text};
-      const out = _link.call(renderer, h);
-      return out.replace('<a ', '<a target="_blank" rel="noopener" ');
+    const _esc = function(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+    renderer.link = function(token) {
+      // Accept either v12-style {href, title, text, tokens} or legacy
+      // (href, title, text) positional args.
+      let href, title, text, tokens;
+      if (token && typeof token === 'object' && 'href' in token) {
+        href = token.href;
+        title = token.title;
+        text = token.text;
+        tokens = token.tokens;
+      } else {
+        href = arguments[0];
+        title = arguments[1];
+        text = arguments[2];
+      }
+      // text may be empty when the link is rendered through nested
+      // tokens (e.g. inside **bold**) — parse the child tokens back to
+      // string in that case so we don't show "undefined".
+      let display = text;
+      if ((!display || display === 'undefined') && tokens && tokens.length) {
+        display = tokens.map(t => t.raw || t.text || '').join('');
+      }
+      if (!display) display = href || '';
+      const titleAttr = title ? ' title="' + _esc(title) + '"' : '';
+      return '<a href="' + _esc(href || '#') + '"' + titleAttr
+           + ' target="_blank" rel="noopener">' + _esc(display) + '</a>';
     };
     marked.use({ renderer });
   })();

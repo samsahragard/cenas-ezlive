@@ -473,6 +473,25 @@ def create_app():
         logging.getLogger(__name__).exception(
             "sample_approvals backfill failed (non-fatal)")
 
+    # Idempotent table create — vendor_recent_orders (Sam #837 items
+    # 9-12 vendor email watchers framework). Each parsed vendor email
+    # lands as a row so /<store>/vendors/<vendor>/recent-orders renders.
+    try:
+        from sqlalchemy import inspect as _sa_insp_32
+        from app.db import engine as _eng_32
+        from app.models import (Base as _Base_32,
+                                VendorRecentOrder as _VRO_32)
+        if _eng_32 is not None:
+            insp_32 = _sa_insp_32(_eng_32)
+            if "vendor_recent_orders" not in set(insp_32.get_table_names()):
+                _Base_32.metadata.create_all(
+                    bind=_eng_32, tables=[_VRO_32.__table__])
+                logging.getLogger(__name__).info(
+                    "vendor_recent_orders: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "vendor_recent_orders backfill failed (non-fatal)")
+
     # Idempotent table create — sam_chat_attachments (Sam #837 item 5
     # vision parity for dev-team agents). Persists image/PDF blocks so
     # aick / ck / samai can fetch the same files cena saw at API time.

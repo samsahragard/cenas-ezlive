@@ -2034,6 +2034,52 @@ class CenaActionLog(Base):
         nullable=True, index=True)
 
 
+class VendorRecentOrder(Base):
+    """One row per email-parsed vendor order (Webstaurant, Performance
+    Food, Restaurant Depot, Specs — Sam #837 items 9-12).
+
+    The existing produce_ingest.py IMAP poller on orders@cenaskitchen.com
+    extends to handle these four senders. Each parsed email lands here
+    so the /<store>/vendors/<vendor>/recent-orders page can render the
+    rolling order list.
+
+    Parsing is per-vendor and shipped one vendor at a time as Sam
+    forwards sample emails. Until a parser exists, the email body is
+    saved verbatim in raw_body so we don't lose data.
+    """
+    __tablename__ = "vendor_recent_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # 'webstaurant' | 'performance-food' | 'restaurant-depot' | 'specs'
+    vendor: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    # Which store the order belongs to — derived from From/To/CC matching
+    # or the vendor account that received the email. 'tomball' / 'copperfield'.
+    store_scope: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+
+    order_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    customer_or_caterer: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    placed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    total_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # Structured order items + tracking links, JSON-encoded; shape varies
+    # per vendor parser.
+    items_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    tracking_links_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # Raw email fields preserved so a future parser update can re-parse.
+    source_email_mid: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    from_addr: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    raw_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parse_status: Mapped[str] = mapped_column(
+        String(20), default="unparsed", nullable=False, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class SamChatAttachment(Base):
     """One row per file Sam attached to a /sam/chat user turn — images
     and PDFs base64-encoded for storage. Per Sam #837 item 5 (vision

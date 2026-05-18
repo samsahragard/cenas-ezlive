@@ -1,0 +1,71 @@
+{% extends "base_dashboard.html" %}
+{% block title %}{{ vendor_label }} — Recent Orders — Cenas Kitchen{% endblock %}
+
+{% block page_title %}{{ vendor_label }} &mdash; Recent Orders{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    Orders parsed from {{ vendor_label }} emails received at
+    <code>orders@cenaskitchen.com</code>. Newest first, capped at 100.
+  </p>
+{% endblock %}
+
+{% block content %}
+{% if orders %}
+<div class="table-scroll">
+  <table class="log-table log-table-view">
+    <thead>
+      <tr class="group-header">
+        <th>Order #</th>
+        <th>Placed</th>
+        <th>Status</th>
+        <th>Total</th>
+        <th>Tracking</th>
+        <th>Subject</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+      <tr>
+        <td>{{ o.order_number or '—' }}</td>
+        <td>{{ o.placed_at.strftime('%b %d %H:%M') if o.placed_at else '—' }}</td>
+        <td>{{ o.status or '—' }}</td>
+        <td>{% if o.total_cents %}${{ '%.2f'|format(o.total_cents / 100.0) }}{% else %}—{% endif %}</td>
+        <td>
+          {% if o.tracking_links_json %}
+            {% for tl in o.tracking_links_json %}
+              <a href="{{ tl.url }}" target="_blank" rel="noopener" style="color:var(--accent-soft);">{{ tl.label or tl.carrier or 'Track' }}</a>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:12px;opacity:0.8;">{{ (o.subject or '')[:80] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div style="max-width: 720px; padding: 28px; margin: 20px 0;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 12px;">
+  <h2 style="margin: 0 0 10px; font-size: 16px;">No orders yet</h2>
+  <p style="margin: 0 0 10px; color: var(--text-2); font-size: 13.5px;">
+    No {{ vendor_label }} emails have been parsed and stored yet. The page is live and the
+    row template is ready &mdash; orders appear here automatically once two things land:
+  </p>
+  <ol style="margin: 4px 0 10px 18px; color: var(--text-2); font-size: 13px;">
+    <li>{{ vendor_label }}'s sender domain is added to
+        <code>app/services/produce_ingest_config/approved_senders.json</code>
+        with <code>expected_format: "order_body"</code>.</li>
+    <li>The vendor-specific email-body parser ships in
+        <code>app/services/vendor_order_parsers/{{ vendor_slug.replace('-', '_') }}.py</code>
+        &mdash; Sam forwards 3-5 sample emails first so the parser
+        matches the real shape.</li>
+  </ol>
+  <p style="margin: 8px 0 0; color: var(--text-3); font-size: 12px;">
+    Both above are tracked items in the Sam #837 spec. The framework
+    (table, route, sidebar entry, store-scope filtering) is shipped.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1032,6 +1032,51 @@ _LEGAL_PAGE_LABELS = {
 }
 
 
+# ============================================================
+# VENDORS — Recent Orders pages (Sam #837 items 9-12)
+# ============================================================
+_VENDOR_LABELS = {
+    "webstaurant":      "Webstaurant",
+    "performance-food": "Performance Food",
+    "restaurant-depot": "Restaurant Depot",
+    "specs":            "Specs",
+}
+
+
+@store_bp.route("/vendors/<vendor>/recent-orders", methods=["GET"])
+def vendor_recent_orders(vendor: str):
+    """Per-vendor Recent Orders list. Reads from VendorRecentOrder,
+    filtered to this vendor + store scope. Until the parser for this
+    vendor is fed sample emails by Sam, the table will render empty
+    with a 'no orders yet' message — but the page itself is live so
+    the navigation flow is intact.
+    """
+    label = _VENDOR_LABELS.get(vendor)
+    if not label:
+        abort(404)
+    from app.models import VendorRecentOrder
+    db = next(get_db())
+    try:
+        q = db.query(VendorRecentOrder).filter(VendorRecentOrder.vendor == vendor)
+        if g.current_location in ("tomball", "copperfield"):
+            q = q.filter(
+                (VendorRecentOrder.store_scope == g.current_location) |
+                (VendorRecentOrder.store_scope.is_(None))
+            )
+        rows = q.order_by(VendorRecentOrder.placed_at.desc().nullslast(),
+                          VendorRecentOrder.created_at.desc()).limit(100).all()
+        active_key = "vendor_recent_" + vendor.replace("-", "_")
+        return render_template(
+            "vendor_recent_orders.html",
+            vendor_slug=vendor,
+            vendor_label=label,
+            orders=rows,
+            active=active_key,
+        )
+    finally:
+        db.close()
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_placeholder(page: str):
     """Placeholder for the new Manager section per Sam #837 item 8.

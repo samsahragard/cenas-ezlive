@@ -171,18 +171,29 @@
               </div></div>
             </div>
 
-            <a href="#" class="ck-sb-subitem" aria-disabled="true">
-              <span class="ck-sb-subitem-label">Webstaurant</span>
-              <span class="ck-sb-soon">soon</span>
-            </a>
-            <a href="#" class="ck-sb-subitem" aria-disabled="true">
-              <span class="ck-sb-subitem-label">Performance</span>
-              <span class="ck-sb-soon">soon</span>
-            </a>
-            <a href="#" class="ck-sb-subitem" aria-disabled="true">
-              <span class="ck-sb-subitem-label">Specs</span>
-              <span class="ck-sb-soon">soon</span>
-            </a>
+            {# Vendor Recent Orders pages per Sam #837 items 9-12. Each
+               vendor has a stub page that lists rows once the email
+               parser starts filling them. Routes mounted at
+               /<store>/vendors/<vendor>/recent-orders. #}
+            {% for vendor_slug, vendor_label in [
+              ('webstaurant',      'Webstaurant'),
+              ('performance-food', 'Performance Food'),
+              ('restaurant-depot', 'Restaurant Depot'),
+              ('specs',            'Specs'),
+            ] %}
+            <div class="ck-sb-branch ck-sb-branch--nested" data-id="ops.vendors.{{ vendor_slug }}">
+              <button class="ck-sb-branch-head">
+                <span class="ck-sb-branch-label">{{ vendor_label }}</span>
+                <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+              </button>
+              <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+                <a href="/{{ store_slug }}/vendors/{{ vendor_slug }}/recent-orders"
+                   class="ck-sb-subitem ck-sb-subitem--deep{% if active == 'vendor_recent_' + vendor_slug.replace('-','_') %} active{% endif %}">
+                  <span class="ck-sb-subitem-label">Recent orders</span>
+                </a>
+              </div></div>
+            </div>
+            {% endfor %}
           </div></div>
         </div>
 

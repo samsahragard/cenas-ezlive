@@ -122,6 +122,15 @@ SAMPLES = [
         type="mockup",
     ),
     dict(
+        slug="produce-mobile-redesign-v1",
+        title="Produce Mobile Redesign",
+        version="v1",
+        date="2026-05-17",
+        description="Mobile-first Produce order-guide rework: card list <640px (qty stepper 44x44pt + live line subtotal), overflow-fixed table >=640px (sticky ITEM column + scroll-fade), sticky bottom bar collapses vendor trackers once any qty > 0. Per Sam #2607 spec — dck mockup awaiting Sam approval before ck implementation.",
+        url="/static/mockups/produce_mobile_redesign.html",
+        type="mockup",
+    ),
+    dict(
         slug="legal-overview",
         title="Legal — Overview",
         version=None,

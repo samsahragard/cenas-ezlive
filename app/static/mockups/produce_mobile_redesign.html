@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produce mobile redesign mockup — dck per Sam #2660 (cena relayed)</title>
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css" rel="stylesheet">
+<style>
+  /* V2 token set from sidebar.css :root for visual fidelity */
+  :root {
+    --ck-bg-page:        #140A06;
+    --ck-bg-sidebar:     #0F0805;
+    --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-border-subtle:  rgba(236, 227, 208, 0.06);
+    --ck-red:            #C73B36;
+    --ck-gold:           #E4B340;
+    --ck-gold-bright:    #FFD970;
+    --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+    --ck-text:           #FAF6EC;
+    --ck-text-hover:     #FFFFFF;
+    --ck-text-muted:     rgba(236, 227, 208, 0.7);
+    --ck-text-soft:      rgba(236, 227, 208, 0.55);
+    --ck-text-faint:     rgba(236, 227, 208, 0.4);
+    --ck-status-open:    #9CCB76;
+    --ck-status-warn:    #E2645C;
+    --ck-status-active:  var(--ck-gold-bright);
+    --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+    /* Produce-page V1 token aliases (dashboard.css) — kept for parity with current page */
+    --accent:            #E87A3E;
+    --accent-soft:       rgba(232, 122, 62, 0.3);
+    --good:              #6FD87B;
+    --glass:             rgba(40, 22, 14, 0.55);
+    --glass-strong:      rgba(40, 22, 14, 0.75);
+    --glass-border:      rgba(217, 164, 54, 0.18);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px;
+    background: linear-gradient(135deg, #0a0503 0%, #1a0d08 50%, #0a0503 100%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  h1 { font-size: 18px; margin: 0 0 6px; color: var(--ck-text-hover); letter-spacing: 0.2px; }
+  h1 .subtitle { color: var(--ck-text-soft); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  h2 { font-size: 13px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin: 28px 0 10px; }
+  .page-header {
+    border-bottom: 1px solid var(--ck-border);
+    padding-bottom: 18px; margin-bottom: 24px;
+  }
+  .page-header p { margin: 4px 0 0; color: var(--ck-text-muted); font-size: 13px; }
+  .v1-badge {
+    display: inline-block; vertical-align: middle;
+    background: var(--ck-gold-bright); color: #2a1f0a;
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700;
+    margin-left: 8px;
+  }
+
+  /* Layout: side-by-side viewport simulations */
+  .viewports {
+    display: grid;
+    grid-template-columns: 440px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .viewport {
+    background: var(--ck-bg-page);
+    border: 1px solid var(--ck-border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .viewport-label {
+    background: rgba(0,0,0,0.4);
+    color: var(--ck-text-soft);
+    padding: 8px 14px; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--ck-border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .viewport-label .px { color: var(--ck-gold-bright); font-weight: 600; }
+  .viewport-body { padding: 16px; }
+
+  /* ===== NARROW VIEWPORT (440px Fold folded) — CARD LAYOUT ===== */
+
+  .nm-checkout {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: 14px;
+    margin-bottom: 12px;
+  }
+  .nm-field { display: flex; flex-direction: column; margin-bottom: 10px; }
+  .nm-field:last-child { margin-bottom: 0; }
+  .nm-field label {
+    font-size: 10px; font-weight: 700; color: var(--ck-text-soft);
+    margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .nm-field select, .nm-field input {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--glass-border);
+    color: var(--ck-text); padding: 9px 11px; border-radius: 7px;
+    font-size: 14px; font-family: inherit;
+  }
+
+  .nm-legend {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px; padding: 8px 12px;
+    font-size: 11.5px; color: var(--ck-text-muted);
+    margin-bottom: 14px;
+  }
+  .nm-legend .marker-star { color: #fbbf24; }
+  .nm-legend .marker-circle { color: var(--ck-text-soft); }
+
+  .nm-section-title {
+    font-size: 13px; font-weight: 600;
+    color: var(--ck-text); margin: 14px 0 10px;
+  }
+  .nm-section-title .muted { color: var(--ck-text-soft); font-weight: 400; }
+
+  /* The card */
+  .pcard {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .pcard.is-noprice { opacity: 0.55; }
+  .pcard-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .pcard-name {
+    font-size: 15px; font-weight: 700; color: var(--ck-text-hover);
+  }
+  .pcard-name .marker-star { color: #fbbf24; margin-left: 4px; font-size: 13px; }
+  .pcard-name .marker-circle { color: var(--ck-text-soft); margin-left: 4px; font-size: 13px; }
+  .pcard-price {
+    font-size: 14px; font-weight: 700; color: var(--good);
+    white-space: nowrap;
+  }
+  .pcard-meta {
+    font-size: 12px; color: var(--ck-text-muted);
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .pcard-meta .badge {
+    display: inline-block; padding: 1px 7px; border-radius: 4px;
+    font-size: 10.5px; font-weight: 700;
+  }
+  .pcard-meta .badge.jluna {
+    background: rgba(96, 165, 250, 0.18); color: #c7daff;
+    border: 1px solid rgba(96, 165, 250, 0.3);
+  }
+  .pcard-meta .badge.alvarado {
+    background: rgba(74, 222, 128, 0.18); color: #d4ffd0;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+  }
+  .pcard-meta .sep { color: var(--ck-text-faint); }
+
+  /* The stepper */
+  .pcard-row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px;
+  }
+  .stepper {
+    display: inline-flex; align-items: stretch;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .stepper button {
+    width: 44px; height: 44px; min-width: 44px;
+    background: transparent;
+    border: none; color: var(--ck-text);
+    font-size: 22px; font-weight: 600; line-height: 1;
+    cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background 120ms var(--ck-ease);
+  }
+  .stepper button:hover { background: rgba(255,255,255,0.05); }
+  .stepper button:active { background: rgba(255,255,255,0.1); }
+  .stepper button:disabled { opacity: 0.3; cursor: not-allowed; }
+  .stepper input {
+    width: 56px; height: 44px;
+    background: rgba(0,0,0,0.25);
+    border: none;
+    border-left: 1px solid var(--glass-border);
+    border-right: 1px solid var(--glass-border);
+    color: var(--ck-text-hover);
+    font-size: 16px; font-weight: 600; font-family: inherit;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .stepper input::-webkit-outer-spin-button,
+  .stepper input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  .pcard-subtotal {
+    font-size: 14px; font-weight: 700; color: var(--ck-text-hover);
+    white-space: nowrap; min-width: 56px; text-align: right;
+  }
+  .pcard.is-noprice .pcard-subtotal { color: var(--ck-text-faint); }
+
+  /* Sticky bottom bar (only visible when qty > 0) */
+  .nm-sticky-bar {
+    position: sticky; bottom: 0;
+    margin: 18px -16px -16px;
+    padding: 12px 14px;
+    background: var(--glass-strong);
+    backdrop-filter: blur(28px);
+    border-top: 1px solid var(--glass-border);
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .nm-sticky-bar.is-hidden { display: none; }
+  .nm-sticky-summary {
+    display: flex; flex-wrap: wrap; gap: 6px 10px;
+    font-size: 12px; color: var(--ck-text-muted);
+  }
+  .nm-sticky-summary .chip {
+    background: rgba(0,0,0,0.3);
+    padding: 4px 9px; border-radius: 6px;
+    border: 1px solid var(--glass-border);
+  }
+  .nm-sticky-summary .chip strong { color: var(--ck-text-hover); }
+  .nm-sticky-summary .chip.total { background: rgba(232, 122, 62, 0.20); border-color: rgba(232, 122, 62, 0.4); }
+  .nm-sticky-summary .chip.total strong { color: var(--ck-gold-bright); }
+  .nm-place-order {
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 8px;
+    padding: 13px 20px; font-size: 15px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    width: 100%; min-height: 44px;
+  }
+
+  /* Empty-state when cart is empty — sticky bar collapses to nothing */
+  .nm-sticky-bar.is-empty { display: none; }
+
+  /* ===== WIDE VIEWPORT (≥640px) — TABLE with overflow + sticky ITEM column ===== */
+
+  .ww-checkout {
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: 14px;
+    margin-bottom: 12px;
+  }
+  .ww-checkout-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .ww-sticky-cart {
+    position: sticky; top: 12px;
+    background: var(--glass-strong); border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: 12px 16px;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .ww-trackers { display: flex; gap: 10px; flex: 1 1 auto; flex-wrap: wrap; }
+  .ww-tracker {
+    background: rgba(255,255,255,0.06);
+    padding: 6px 12px; border-radius: 7px;
+    border-left: 3px solid;
+    min-width: 130px;
+    display: flex; flex-direction: column;
+  }
+  .ww-tracker-label {
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--ck-text-soft);
+  }
+  .ww-tracker-value { font-size: 12.5px; color: var(--ck-text); margin-top: 2px; }
+  .ww-tracker-value strong { font-size: 14px; color: var(--ck-text-hover); }
+  .ww-tracker.jluna { border-left-color: #6ba3ff; }
+  .ww-tracker.alvarado { border-left-color: #6fd87b; }
+  .ww-tracker.total {
+    background: rgba(232, 122, 62, 0.20);
+    border-left-color: var(--accent);
+  }
+  .ww-tracker.total .ww-tracker-value strong { color: var(--ck-gold-bright); font-size: 15px; }
+  .ww-place-order {
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 8px;
+    padding: 9px 18px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+
+  /* The fixed table — with overflow-x + sticky ITEM col + right-edge fade */
+  .ww-table-wrap {
+    position: relative;
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .ww-table-scroller {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  /* Right-edge gradient fade — scroll cue */
+  .ww-table-wrap::after {
+    content: ''; position: absolute;
+    top: 0; right: 0; bottom: 0; width: 36px;
+    background: linear-gradient(to left, rgba(20,10,6,0.92) 0%, rgba(20,10,6,0) 100%);
+    pointer-events: none;
+  }
+  .ww-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .ww-table thead th {
+    background: rgba(0,0,0,0.35); color: var(--ck-text-hover);
+    text-align: left; padding: 9px 10px;
+    font-size: 10.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--glass-border);
+    white-space: nowrap;
+  }
+  .ww-table tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--ck-border-subtle);
+    color: var(--ck-text); white-space: nowrap;
+  }
+  /* Sticky ITEM column — keeps name visible while scrolling right */
+  .ww-table thead th:first-child,
+  .ww-table tbody td:first-child {
+    position: sticky; left: 0; z-index: 2;
+    min-width: 160px;
+  }
+  .ww-table thead th:first-child { background: #1a0d08; }
+  .ww-table tbody td:first-child { background: #140A06; }
+  .ww-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+  .ww-table tbody tr:hover td:first-child { background: #1a120c; }
+  .ww-table .price { font-weight: 700; color: var(--good); }
+  .ww-table .qty-col { text-align: center; min-width: 120px; }
+  .ww-table .qty-input {
+    width: 80px; padding: 6px 8px;
+    background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
+    color: var(--ck-text-hover);
+    border-radius: 6px; text-align: center;
+    font-size: 14px; font-family: inherit; min-height: 36px;
+  }
+  .ww-table .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10.5px; font-weight: 700;
+  }
+  .ww-table .badge.jluna { background: rgba(96, 165, 250, 0.18); color: #c7daff; border: 1px solid rgba(96, 165, 250, 0.3); }
+  .ww-table .badge.alvarado { background: rgba(74, 222, 128, 0.18); color: #d4ffd0; border: 1px solid rgba(74, 222, 128, 0.3); }
+  .ww-table .marker-star { color: #fbbf24; margin-left: 4px; }
+
+  /* ===== DESIGN NOTES BLOCK ===== */
+  .notes {
+    margin-top: 32px;
+    background: rgba(255, 217, 112, 0.06);
+    border: 1px solid var(--ck-gold-soft);
+    border-radius: 12px;
+    padding: 18px 22px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ck-text);
+  }
+  .notes b { color: var(--ck-gold-bright); }
+  .notes code {
+    background: rgba(0,0,0,0.4);
+    color: var(--accent);
+    padding: 1px 6px; border-radius: 4px;
+    font-family: SFMono-Regular, Consolas, monospace; font-size: 0.92em;
+  }
+  .notes ul { margin: 6px 0 14px; padding-left: 22px; }
+  .notes li { margin-bottom: 6px; }
+  .notes ul ul { margin: 4px 0; padding-left: 18px; }
+  .notes-critical {
+    background: rgba(199, 59, 54, 0.12);
+    border-left: 3px solid var(--ck-status-warn);
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin: 10px 0;
+  }
+
+  /* Mobile fallback for the mockup viewer itself */
+  @media (max-width: 980px) {
+    .viewports { grid-template-columns: 1fr; }
+    body { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Produce Order Guide — mobile redesign mockup
+    <span class="v1-badge">v1</span>
+    <span class="subtitle">dck — Sam #2660 (cena spec relayed)</span>
+  </h1>
+  <p>Two viewport states shown side-by-side. Left: Z Fold7 folded (~440px) — card layout. Right: ≥640px — table with overflow-x + sticky ITEM column + right-edge fade.</p>
+</div>
+
+<div class="viewports">
+
+  <!-- ============================== NARROW (440px) ============================== -->
+  <div class="viewport" style="width: 440px;">
+    <div class="viewport-label">
+      <span>Card layout · below 640px</span>
+      <span class="px">440 px (Z Fold7 folded)</span>
+    </div>
+    <div class="viewport-body">
+
+      <div class="nm-checkout">
+        <div class="nm-field">
+          <label>Manager *</label>
+          <select><option>Sara Rodriguez</option></select>
+        </div>
+        <div class="nm-field">
+          <label>Location *</label>
+          <select><option>Cenas Round Rock</option></select>
+        </div>
+        <div class="nm-field">
+          <label>Delivery Date *</label>
+          <input type="date" value="2026-05-18">
+        </div>
+      </div>
+
+      <div class="nm-legend">
+        <strong style="color: var(--ck-text-soft);">Legend:</strong>
+        <span class="marker-star">★</span> What we want
+        <span style="color: var(--ck-text-faint);">·</span>
+        <span class="marker-circle">○</span> If price is better
+      </div>
+
+      <div class="nm-section-title">This Week's Items <span class="muted">(8 available)</span></div>
+
+      <!-- Item card with qty > 0 (active state) -->
+      <div class="pcard">
+        <div class="pcard-head">
+          <div class="pcard-name">Avocado <span class="marker-star">★</span></div>
+          <div class="pcard-price">$30.00</div>
+        </div>
+        <div class="pcard-meta">
+          <span>48 ct</span>
+          <span class="sep">·</span>
+          <span class="badge jluna">J. Luna</span>
+          <span class="sep">·</span>
+          <span>5/15 – 5/16</span>
+        </div>
+        <div class="pcard-row">
+          <div class="stepper">
+            <button type="button" aria-label="Decrease quantity">−</button>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" value="3" aria-label="Quantity">
+            <button type="button" aria-label="Increase quantity">+</button>
+          </div>
+          <div class="pcard-subtotal">$90.00</div>
+        </div>
+      </div>
+
+      <!-- Item card with qty = 0 (resting state) -->
+      <div class="pcard">
+        <div class="pcard-head">
+          <div class="pcard-name">Tomato Roma</div>
+          <div class="pcard-price">$18.50</div>
+        </div>
+        <div class="pcard-meta">
+          <span>25 lb</span>
+          <span class="sep">·</span>
+          <span class="badge alvarado">Alvarado</span>
+          <span class="sep">·</span>
+          <span>5/16 only</span>
+        </div>
+        <div class="pcard-row">
+          <div class="stepper">
+            <button type="button" aria-label="Decrease quantity" disabled>−</button>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Quantity">
+            <button type="button" aria-label="Increase quantity">+</button>
+          </div>
+          <div class="pcard-subtotal" style="color: var(--ck-text-faint);">—</div>
+        </div>
+      </div>
+
+      <!-- Item card with both vendor markers (★ = J Luna preferred, ○ if Alvarado cheaper) -->
+      <div class="pcard">
+        <div class="pcard-head">
+          <div class="pcard-name">Onion Yellow <span class="marker-circle">○</span></div>
+          <div class="pcard-price">$12.75</div>
+        </div>
+        <div class="pcard-meta">
+          <span>50 lb</span>
+          <span class="sep">·</span>
+          <span class="badge alvarado">Alvarado</span>
+          <span class="sep">·</span>
+          <span>5/15 – 5/17</span>
+        </div>
+        <div class="pcard-row">
+          <div class="stepper">
+            <button type="button" aria-label="Decrease quantity">−</button>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" value="2" aria-label="Quantity">
+            <button type="button" aria-label="Increase quantity">+</button>
+          </div>
+          <div class="pcard-subtotal">$25.50</div>
+        </div>
+      </div>
+
+      <!-- No-price item: disabled stepper -->
+      <div class="pcard is-noprice">
+        <div class="pcard-head">
+          <div class="pcard-name">Cilantro</div>
+          <div class="pcard-price" style="color: var(--ck-text-faint);">no price</div>
+        </div>
+        <div class="pcard-meta">
+          <span>bunch</span>
+          <span class="sep">·</span>
+          <span style="color: var(--ck-text-faint);">no vendor this week</span>
+        </div>
+        <div class="pcard-row">
+          <div class="stepper">
+            <button type="button" disabled aria-label="Decrease quantity">−</button>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Quantity" disabled>
+            <button type="button" disabled aria-label="Increase quantity">+</button>
+          </div>
+          <div class="pcard-subtotal">—</div>
+        </div>
+      </div>
+
+      <!-- Sticky bottom bar: collapses vendor trackers + Place Order when qty > 0 -->
+      <div class="nm-sticky-bar">
+        <div class="nm-sticky-summary">
+          <span class="chip"><strong>J. Luna:</strong> 1 · $90</span>
+          <span class="chip"><strong>Alvarado:</strong> 1 · $25.50</span>
+          <span class="chip total"><strong>Total:</strong> $115.50</span>
+        </div>
+        <button class="nm-place-order">Place Order</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================== WIDE (≥640px) ============================== -->
+  <div class="viewport">
+    <div class="viewport-label">
+      <span>Table — overflow-x + sticky ITEM col + right-edge fade</span>
+      <span class="px">≥640 px (e.g. Z Fold7 unfolded · iPad)</span>
+    </div>
+    <div class="viewport-body">
+
+      <div class="ww-checkout">
+        <div class="ww-checkout-row">
+          <div class="nm-field">
+            <label>Manager *</label>
+            <select><option>Sara Rodriguez</option></select>
+          </div>
+          <div class="nm-field">
+            <label>Location *</label>
+            <select><option>Cenas Round Rock</option></select>
+          </div>
+          <div class="nm-field">
+            <label>Delivery Date *</label>
+            <input type="date" value="2026-05-18">
+          </div>
+        </div>
+      </div>
+
+      <div class="ww-sticky-cart">
+        <div class="ww-trackers">
+          <div class="ww-tracker jluna">
+            <span class="ww-tracker-label">J. Luna</span>
+            <span class="ww-tracker-value">1 item · <strong>$90.00</strong></span>
+          </div>
+          <div class="ww-tracker alvarado">
+            <span class="ww-tracker-label">Alvarado</span>
+            <span class="ww-tracker-value">1 item · <strong>$25.50</strong></span>
+          </div>
+          <div class="ww-tracker total">
+            <span class="ww-tracker-label">Total</span>
+            <span class="ww-tracker-value">2 items · <strong>$115.50</strong></span>
+          </div>
+        </div>
+        <button class="ww-place-order">Place Order</button>
+      </div>
+
+      <div class="ww-table-wrap">
+        <div class="ww-table-scroller">
+          <table class="ww-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Date</th>
+                <th>Size</th>
+                <th>Price</th>
+                <th>Vendor</th>
+                <th class="qty-col">Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Avocado <span class="marker-star">★</span></td>
+                <td>5/15 – 5/16</td>
+                <td>48 ct</td>
+                <td class="price">$30.00</td>
+                <td><span class="badge jluna">J. Luna</span></td>
+                <td class="qty-col"><input class="qty-input" type="number" value="3" min="0" max="999" inputmode="numeric"></td>
+              </tr>
+              <tr>
+                <td>Tomato Roma</td>
+                <td>5/16 only</td>
+                <td>25 lb</td>
+                <td class="price">$18.50</td>
+                <td><span class="badge alvarado">Alvarado</span></td>
+                <td class="qty-col"><input class="qty-input" type="number" value="0" min="0" max="999" inputmode="numeric"></td>
+              </tr>
+              <tr>
+                <td>Onion Yellow</td>
+                <td>5/15 – 5/17</td>
+                <td>50 lb</td>
+                <td class="price">$12.75</td>
+                <td><span class="badge alvarado">Alvarado</span></td>
+                <td class="qty-col"><input class="qty-input" type="number" value="2" min="0" max="999" inputmode="numeric"></td>
+              </tr>
+              <tr style="opacity:0.5">
+                <td>Cilantro</td>
+                <td style="color: var(--ck-text-faint);">—</td>
+                <td>bunch</td>
+                <td style="color: var(--ck-text-faint);">no price</td>
+                <td style="color: var(--ck-text-faint);">no vendor</td>
+                <td class="qty-col"><input class="qty-input" type="number" value="0" disabled></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p style="margin: 14px 0 0; color: var(--ck-text-soft); font-size: 12px;">
+        Scroll right → ITEM column stays anchored, right-edge fade hints more columns. Qty column min-width 120px to fit the input without clipping.
+      </p>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== DESIGN NOTES ===== -->
+<div class="notes">
+  <b>Page-first design notes (per Sam #2531 / charter §4):</b>
+  <ul>
+    <li><b>Source page:</b> <code>app/templates/produce/order_guide.html</code> + <code>app/static/produce/styles.css</code>. Current page renders a 2-column <code>.item-grid</code> at ≥900px (two <code>.item-block</code>s each with their own 6-col table: Item / Date / Size / Price / Vendor / Qty). At ≤900px the grid collapses to 1 column; the table still tries to fit 6 columns side-by-side. At ~440px the QTY column gets clipped off the viewport's right edge — Sam's reported failure mode.</li>
+    <li><b>Sticky cart already exists.</b> <code>.sticky-cart</code> with J. Luna + Alvarado + Total trackers + Place Order is already in production (lines 38-55 of order_guide.html, styled at .sticky-cart in styles.css). Above 900px it sits at <code>top: 12px</code>. Above 500px it stays flex-row; below 500px it goes column. <strong>Reuse this DOM — just re-pin to bottom + gate visibility on cart-has-items + restyle as a compact summary on narrow.</strong></li>
+    <li><b>QTY input already has <code>inputmode="numeric"</code>.</b> No change needed for keypad behavior. What's new: wrap it in stepper buttons (44×44pt tap target each side).</li>
+    <li><b>Markers (★ / ○) preserved.</b> Star = "what we want", circle = "if price is better" — same semantics as production.</li>
+    <li><b>Vendor badges preserved.</b> <code>.badge-jluna</code> / <code>.badge-alvarado</code> color/copy unchanged. Card layout shows badge inline in meta row.</li>
+    <li><b>Per-row line subtotal is NEW.</b> Currently only the cart totals display computed sums; the card shows <code>$qty × $price</code> per row. Spec asks for it — adding it. Above 640px the table doesn't add a Subtotal column (keeps existing 6-col shape); subtotal lives only in the cards.</li>
+  </ul>
+
+  <b>Implementation notes for ck:</b>
+  <ul>
+    <li><b>Breakpoint additions to styles.css:</b>
+      <ul>
+        <li>New <code>@media (max-width: 640px)</code> block: hide <code>.item-table-wrap</code>, render <code>.pcard</code> list instead. (Or single template that conditionally renders card vs table — see template strategy below.)</li>
+        <li>Existing 900px and 500px breakpoints stay but become redundant for narrow widths (cards take over below 640px). Don't remove them — they're still relevant at the 640-900px band (single-column table) and inside the sticky-cart layout collapse.</li>
+      </ul>
+    </li>
+    <li><b>Template strategy — single source, two visual modes:</b>
+      <ul>
+        <li>Recommended: render BOTH card list and table in the template (CSS toggles visibility per breakpoint). Both consume the same <code>{% for it in col_items %}</code> data — no Python branching. Data-binding from a single source means no risk of "cards show qty 3, table shows qty 0" desync.</li>
+        <li>Alternative: keep table-only at ≥640, render cards-only at &lt;640 via JS-driven swap on resize. More fragile.</li>
+        <li>The existing 2-column <code>.item-grid</code> split (left_items / right_items) only matters above ~900px. Below 640 the card list is a single column of all items.</li>
+      </ul>
+    </li>
+    <li><b>Stepper component:</b>
+      <ul>
+        <li><code>.stepper</code> wraps two buttons + the existing <code>.qty-input</code>. Buttons fire <code>refreshCart()</code> (existing JS) on click after incrementing the input value.</li>
+        <li>Tap targets: 44×44px minimum per spec (a11y minimum, also matches WCAG 2.5.5).</li>
+        <li>− button disables when value = 0; + button stays enabled (no max for now — production input has max="999", keep that).</li>
+        <li>Long-press +/− to increment by 10 (spec marks this OPTIONAL — defer unless Sam asks).</li>
+      </ul>
+    </li>
+    <li><b>Sticky bottom bar (narrow widths only):</b>
+      <ul>
+        <li>The existing <code>.sticky-cart</code> moves from <code>position: sticky; top: 12px</code> to <code>position: sticky; bottom: 0</code> below 640px (a sticky bottom inside the scroll container works for in-page scroll; if container scroll vs body scroll causes issues, fall back to <code>position: fixed; bottom: 0; left: 0; right: 0</code>).</li>
+        <li>Gate visibility on <code>cart.length > 0</code> in the existing <code>refreshCart()</code> JS — add/remove <code>.is-hidden</code> class on the sticky element. Currently the cart is always visible but the Place Order button is disabled when empty; on narrow we want the whole bar to disappear when empty so it doesn't eat 80px of scroll real estate.</li>
+        <li>Layout collapses from "row of full trackers + Place Order" to "row of compact chips above + full-width Place Order below."</li>
+      </ul>
+    </li>
+    <li><b>Above-640 table fixes:</b>
+      <ul>
+        <li>Add <code>.item-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }</code> — currently has <code>overflow: hidden</code> which is the actual cause of the clip. Changing to auto means scrollable rather than clipped.</li>
+        <li>Sticky ITEM column: <code>.item-table th:first-child, .item-table td:first-child { position: sticky; left: 0; z-index: 2; background: ... }</code>. Background must match row state (resting + hover) — see mockup CSS for the two-bg-color approach.</li>
+        <li>Right-edge gradient fade: <code>.item-table-wrap::after</code> pseudo-element with linear-gradient. Pure CSS, no JS.</li>
+        <li>QTY column min-width: 120px (currently 80-90px). The 64px <code>.qty-input</code> + padding fits comfortably at 120px without clipping.</li>
+      </ul>
+    </li>
+    <li><b>Viewport meta tag:</b> base.html for the produce page (<code>{% extends "base_dashboard.html" %}</code>) needs <code>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</code>. Spec says "confirm — Fold devices can render as desktop without it." Quick grep before implementing: if missing, this is the load-bearing fix; if present, no change.</li>
+  </ul>
+
+  <b>Accessibility:</b>
+  <ul>
+    <li>Stepper buttons have <code>aria-label="Decrease quantity"</code> / <code>"Increase quantity"</code>.</li>
+    <li>Qty input has <code>aria-label="Quantity"</code> (in the stepper) / visible label (in the table column header).</li>
+    <li>44×44pt stepper tap target meets WCAG 2.5.5 minimum.</li>
+    <li>Sticky bottom bar uses <code>role="region" aria-label="Order summary"</code> when ck wires it.</li>
+    <li>Stepper input is <code>type="text"</code> + <code>inputmode="numeric"</code> + <code>pattern="[0-9]*"</code> per spec. Production currently uses <code>type="number"</code> + inputmode="numeric". <code>type="text"</code> avoids iOS Safari quirks where number inputs lose the numeric keypad in some PWA contexts — but if production hasn't seen that issue, keep <code>type="number"</code> and only the stepper UI changes. ck's call based on telemetry / test results.</li>
+  </ul>
+
+  <b>samai canonical three-gate (when ck ships):</b>
+  <ul>
+    <li>Gate 1: existing pytest + new <code>test_produce_card_layout_renders_below_640</code> + <code>test_stepper_increments_decrements</code> + <code>test_sticky_bar_visibility_gated_on_cart</code></li>
+    <li>Gate 2: code-contract review (template change preserves <code>refreshCart()</code> wiring; new stepper buttons fire the same input event listeners)</li>
+    <li>Gate 3: URL probes — <code>GET /produce/&lt;store&gt;</code> 200, card-layout markers present in HTML below the table (since both render), <code>.stepper</code> + <code>.qty-input</code> coexist, place-order POST unchanged</li>
+    <li>Playwright (queued to PLAYWRIGHT_BACKLOG.md per Sam #2547): viewport-resize tests at 375 / 440 / 640 / 840 / 1280 covering all 6 spec test cases</li>
+  </ul>
+
+  <b>Test cases (from Sam #2660 spec — for ck + Playwright):</b>
+  <ul>
+    <li>Z Fold7 folded (~440px) — card layout, qty enterable via stepper, Place Order reachable in sticky bar</li>
+    <li>Z Fold7 unfolded (~840px) — table layout, no clipped columns, sticky ITEM column on horizontal scroll</li>
+    <li>iPhone SE (375px) — card layout</li>
+    <li>Desktop 1280px — full 2-column item-grid table, no horizontal scroll</li>
+    <li>Add qty to one item — vendor tracker updates, Place Order enables, total reflects subtotals (both cards + table modes)</li>
+    <li>Enter 99 of one item — input handles 2-3 digits without overflow (stepper input width 56px → ~3 digits fit at 16px font)</li>
+  </ul>
+
+  <div class="notes-critical">
+    <b>Critical lane note (per cena #2624 / dck #2630 pattern):</b> This is a SINGLE-FILE redesign of an existing live page — no two-commit + behavior-parity discipline needed (no delivery-channel switch to coordinate). Production page stays at order_guide.html; ck swaps in the new template + CSS in one commit. samai gates, Sam confirms on live, done. The behavior-parity gate applies to delivery-channel cutovers (ribbon → notifications), not to in-place responsive redesigns.
+  </div>
+
+  <b>Approval workflow exercise:</b> This mockup ships to <code>/partner/developer/samples</code> as the next dck deliverable through the workflow that just shipped (spec_samples_approval_workflow.html, ck Phase 2 in edce2bb). Sam reviews this mockup on the Samples page directly — clicks Approve to proceed to ck implementation, or Reject + notes/screenshots for iteration. Pipeline per Sam #2660: dck mockup → cena review → Sam approves → ck builds → aick wires → samai gates.
+</div>
+
+</body>
+</html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drivers Page — Design Mockup (dck)</title>
+<style>
+  :root {
+    --ck-bg-page:        #140A06;
+    --ck-bg-sidebar:     #0F0805;
+    --ck-text:           #FAF6EC;
+    --ck-text-hover:     #FFFFFF;
+    --ck-text-soft:      rgba(236, 227, 208, 0.55);
+    --ck-text-faint:     rgba(236, 227, 208, 0.40);
+    --ck-red:            #C73B36;
+    --ck-gold:           #E4B340;
+    --ck-gold-bright:    #FFD970;
+    --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+    --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+    --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ck-bg-page);
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(232, 122, 62, 0.08), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251, 191, 36, 0.06), transparent 50%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 32px 24px 80px;
+    min-height: 100vh;
+  }
+  .mockup-wrap { max-width: 1400px; margin: 0 auto; }
+  .mockup-head {
+    border-bottom: 0.5px solid var(--ck-border);
+    padding-bottom: 18px; margin-bottom: 28px;
+  }
+  .mockup-head h1 {
+    font-size: 22px; font-weight: 600; margin: 0 0 4px;
+    color: var(--ck-text); text-shadow: var(--ck-glow-gold-soft);
+  }
+  .mockup-head .sub {
+    font-size: 12px; color: var(--ck-text-soft);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .section-label {
+    font-size: 11px; color: var(--ck-gold);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    text-shadow: var(--ck-glow-gold-soft);
+    margin: 0 0 12px;
+  }
+  .mockup-section { margin-bottom: 44px; }
+
+  /* DESKTOP MOCK */
+  .mock-desktop {
+    width: 100%; min-height: 460px;
+    background: var(--ck-bg-page);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .mock-desktop .sb {
+    width: 220px; flex-shrink: 0;
+    background: var(--ck-bg-sidebar);
+    border-right: 0.5px solid var(--ck-border);
+    padding: 18px 12px;
+  }
+  .mock-desktop .sb-section-label {
+    font-size: 10px; color: var(--ck-text-soft);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin: 12px 8px 6px;
+  }
+  .mock-desktop .nav-item {
+    padding: 8px 10px;
+    border-radius: 7px;
+    color: rgba(236, 227, 208, 0.78);
+    font-size: 12.5px;
+    margin-bottom: 1px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mock-desktop .nav-item.active {
+    background: rgba(228, 179, 64, 0.12);
+    color: var(--ck-gold);
+  }
+  .mock-desktop .nav-item .ico {
+    width: 14px; opacity: 0.7;
+  }
+  .mock-desktop .main {
+    flex: 1; padding: 20px 26px;
+  }
+  .mock-desktop .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 0.5px solid var(--ck-border);
+    margin-bottom: 18px;
+  }
+  .mock-desktop .page-title {
+    font-size: 22px; font-weight: 600; margin: 0; color: var(--ck-text);
+  }
+  .mock-desktop .topbar-meta {
+    font-size: 11px; color: var(--ck-text-faint);
+  }
+
+  /* PHONE MOCK */
+  .mock-phone {
+    width: 340px; height: 620px;
+    background: var(--ck-bg-page);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .mock-phone .topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 0.5px solid var(--ck-border);
+  }
+  .mock-phone .hamburger {
+    width: 48px; height: 48px;
+    flex-shrink: 0;
+    background: var(--ck-gold-soft);
+    border: 1px solid var(--ck-gold);
+    border-radius: 10px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: background 200ms var(--ck-ease);
+  }
+  .mock-phone .hamburger:hover {
+    background: rgba(217, 164, 54, 0.28);
+  }
+  .mock-phone .hamburger .bar {
+    width: 22px; height: 2.5px;
+    background: var(--ck-gold-bright);
+    border-radius: 1px;
+  }
+  .mock-phone .page-title {
+    font-size: 18px; font-weight: 600;
+    margin: 0; color: var(--ck-text);
+  }
+  .mock-phone .body { padding: 14px 14px; }
+
+  /* SHARED — tabs */
+  .tabs {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+  .tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 16px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    transition: color 150ms var(--ck-ease),
+                border-color 150ms var(--ck-ease);
+  }
+  .tab .count {
+    font-size: 11px; opacity: 0.65; margin-left: 4px;
+  }
+  .tab:hover { color: var(--ck-text); }
+  .tab.active {
+    color: var(--ck-text-hover);
+    border-bottom-color: var(--ck-gold-bright);
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  /* SHARED — driver rows */
+  .driver-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0;
+    border-bottom: 0.5px solid var(--ck-border);
+    font-size: 13px;
+  }
+  .driver-row:last-child { border-bottom: none; }
+  .avatar {
+    width: 36px; height: 36px;
+    background: rgba(199, 59, 54, 0.65);
+    color: #FFFAEC;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 500;
+    flex-shrink: 0;
+  }
+  .driver-name { color: var(--ck-text); flex: 1; }
+  .driver-meta {
+    color: var(--ck-text-soft); font-size: 11px;
+    text-align: right; flex-shrink: 0;
+  }
+
+  /* NOTES */
+  .notes {
+    background: rgba(228, 179, 64, 0.06);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.78);
+    line-height: 1.65;
+  }
+  .notes b { color: var(--ck-gold); }
+  .notes code {
+    background: rgba(0,0,0,0.4);
+    border: 0.5px solid var(--ck-border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: var(--ck-gold-bright);
+  }
+  .notes ul { margin: 8px 0 0; padding-left: 20px; }
+  .notes li { margin: 5px 0; }
+
+  /* PHONE CENTERED */
+  .phone-frame {
+    display: flex; justify-content: center; padding: 12px 0;
+  }
+</style>
+</head>
+<body>
+<div class="mockup-wrap">
+
+  <div class="mockup-head">
+    <h1>Drivers Page — Design Mockup</h1>
+    <div class="sub">dck · 2026-05-17 · responding to cena #2393</div>
+  </div>
+
+  <!-- DESKTOP -->
+  <div class="mockup-section">
+    <div class="section-label">Desktop view (≥1024px) — Active tab selected</div>
+
+    <div class="mock-desktop">
+      <aside class="sb">
+        <div class="sb-section-label">ezCater</div>
+        <div class="nav-item"><span class="ico">○</span> Orders</div>
+        <div class="nav-item"><span class="ico">○</span> Ez Manage</div>
+        <div class="nav-item"><span class="ico">○</span> Driver Payroll</div>
+        <div class="nav-item active"><span class="ico">●</span> Drivers (Admin)</div>
+        <div class="nav-item"><span class="ico">○</span> Drivers Live</div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <h2 class="page-title">Drivers</h2>
+          <div class="topbar-meta">Tomball · 12 active · 4 inactive</div>
+        </div>
+        <div class="tabs">
+          <button class="tab active">Active <span class="count">(12)</span></button>
+          <button class="tab">Inactive <span class="count">(4)</span></button>
+        </div>
+        <div class="driver-row">
+          <div class="avatar">JM</div>
+          <div class="driver-name">Jamal Martinez</div>
+          <div class="driver-meta">4.9★ · 87 deliveries · last shift 2h ago</div>
+        </div>
+        <div class="driver-row">
+          <div class="avatar">SR</div>
+          <div class="driver-name">Sara Rodriguez</div>
+          <div class="driver-meta">4.8★ · 56 deliveries · on shift</div>
+        </div>
+        <div class="driver-row">
+          <div class="avatar">DK</div>
+          <div class="driver-name">Diego Kim</div>
+          <div class="driver-meta">4.9★ · 142 deliveries · last shift yesterday</div>
+        </div>
+        <div class="driver-row">
+          <div class="avatar">MN</div>
+          <div class="driver-name">Maya Nguyen</div>
+          <div class="driver-meta">5.0★ · 31 deliveries · on shift</div>
+        </div>
+      </main>
+    </div>
+
+    <div class="notes">
+      <b>Desktop view — design decisions:</b>
+      <ul>
+        <li><b>No hamburger button rendered</b> — sidebar is always-visible at ≥1024px, so hamburger is redundant. Hidden via <code>@media (max-width: 1024px) { .menu-toggle { display: flex } }</code> else <code>display: none</code> in base_dashboard chrome. Closes the "hamburger covering page title" issue at root rather than padding-hacking around it.</li>
+        <li><b>Page title clears cleanly</b> — sits flush against the main-pane padding (26px left). Title <code>font-size: 22px / weight 600 / color var(--ck-text)</code>.</li>
+        <li><b>Active / Inactive tabs</b> use the V2 <code>.ezm-tab</code> underline pattern from <code>ez_manage.html</code>. Active state: <code>2px var(--ck-gold-bright)</code> bottom border + <code>rgba(0,0,0,0.55)</code> recess bg + <code>var(--ck-text-hover)</code> text. Counts in dim parens beside each label so the operator knows magnitudes before clicking.</li>
+        <li><b>STATUS column removed</b> — redundant with tab filter.</li>
+        <li><b>Topbar meta line</b> — "Tomball · 12 active · 4 inactive" sits at-a-glance right of title, replacing the lost STATUS column information density.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PHONE -->
+  <div class="mockup-section">
+    <div class="section-label">Phone view (≤1024px) — Active tab selected</div>
+
+    <div class="phone-frame">
+      <div class="mock-phone">
+        <div class="topbar">
+          <button class="hamburger" aria-label="Open menu">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+          </button>
+          <h2 class="page-title">Drivers</h2>
+        </div>
+        <div class="body">
+          <div class="tabs">
+            <button class="tab active">Active <span class="count">(12)</span></button>
+            <button class="tab">Inactive <span class="count">(4)</span></button>
+          </div>
+          <div class="driver-row">
+            <div class="avatar">JM</div>
+            <div class="driver-name">Jamal Martinez</div>
+          </div>
+          <div class="driver-row">
+            <div class="avatar">SR</div>
+            <div class="driver-name">Sara Rodriguez</div>
+          </div>
+          <div class="driver-row">
+            <div class="avatar">DK</div>
+            <div class="driver-name">Diego Kim</div>
+          </div>
+          <div class="driver-row">
+            <div class="avatar">MN</div>
+            <div class="driver-name">Maya Nguyen</div>
+          </div>
+          <div class="driver-row">
+            <div class="avatar">RT</div>
+            <div class="driver-name">Rafael Torres</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Phone view — design decisions:</b>
+      <ul>
+        <li><b>Hamburger = 48×48 touch target.</b> iOS HIG + Material a11y standard (current ~32 was too small). Background <code>var(--ck-gold-soft)</code>, border <code>1px solid var(--ck-gold)</code>, radius 10px. Hover bg deepens to <code>rgba(217,164,54,0.28)</code>. Bars are <code>var(--ck-gold-bright)</code> 22×2.5px, gap 5px — high-contrast against the dark glass.</li>
+        <li><b>Hamburger lives INSIDE the topbar</b> as the leftmost flex element (12px gap to title). NOT <code>position: fixed</code>. This is the structural fix — collision with page title becomes architecturally impossible regardless of viewport width or page content. Hamburger is also predictably present at the top of every mobile page (visible affordance, not floating-overlay surprise).</li>
+        <li><b>Tabs row uses <code>overflow-x: auto</code></b> for narrow widths. With two tabs they fit; future 3rd/4th tab states scroll horizontally.</li>
+        <li><b>Driver-meta hidden on phone</b> (rating / delivery count) to keep rows scannable at small width. Tap on a row navigates to the driver-detail page where full meta lives.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- TOKENS + RATIONALE -->
+  <div class="mockup-section">
+    <div class="section-label">Tokens, rationale, implementation notes</div>
+    <div class="notes">
+      <ul>
+        <li><b>All colors from V2 <code>--ck-*</code> tokens</b> defined in <code>app/static/css/sidebar.css:8-50</code>. No raw hex outside <code>:root</code>. This closes design-debt items §5.7 (V1↔V2 token bridge) and §5.4 (breakpoint alignment) from the design-system-reference doc when shipped.</li>
+        <li><b>Hamburger fix is cross-cutting</b> — base_dashboard.html chrome change, every authenticated page benefits, not Drivers-specific.</li>
+        <li><b>Tabs pattern</b> is <code>.ezm-tab</code> reuse — no new tabs class. Don't introduce a fourth tab pattern when V2 already has one that fits.</li>
+        <li><b>Filter shape:</b> recommend server-side <code>/drivers?status=active|inactive</code> querystring (shareable URLs, cleaner state, doesn't slow growing rosters) over client-side row hiding.</li>
+        <li><b>Breakpoint:</b> standardize on <code>--ck-bp-mobile: 1024px</code>. Currently dashboard.css has 900px + 720px; sidebar.css has 1024px. Pick 1024 per the V2 token system.</li>
+        <li><b>Three-gate (samai):</b> visual confirm Drivers + one other page (suggest home dashboard) on phone AND desktop + hamburger 48×48 touch target measured.</li>
+        <li><b>Animation:</b> hover transitions use <code>200ms var(--ck-ease)</code> (the cubic-bezier(0.22, 0.8, 0.24, 1) brand motion).</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -960,6 +960,99 @@ def _cena_decision_cost_usd(d: CenaWakeDecision) -> float:
     )
 
 
+@dev_chat.route("/partner/developer/samples/approval-events", methods=["GET"])
+@requires_permission("developer.view_chat")
+def sample_approval_events():
+    """Polling feed of recent SampleApproval status changes for the dck
+    samples_watch.py consumer (per cena #2735 + scope #2736 + dck #2737).
+
+    Query params:
+      - since: ISO-8601 timestamp. Returns rows where updated_at > since.
+               If omitted or unparseable, returns all rows (treat as "since
+               epoch"). Server returns `now` field — caller stores that as
+               their next-poll cursor to close the race window where an
+               approval lands mid-serialization (cena #2739).
+
+    Response:
+      {
+        "now": "2026-05-18T11:05:00.123456+00:00",
+        "events": [
+          {
+            "slug": "drivers-redesign-v2",
+            "title": "Drivers Page Redesign",
+            "status": "approved"|"rejected"|"pending",
+            "notes": "...",
+            "marked_by_user_id": 1,
+            "marked_at": "2026-05-18T10:30:00+00:00",
+            "attachments": [
+              {"id": 12, "filename": "shot.png",
+               "url": "/partner/developer/samples/attachments/12"}
+            ]
+          },
+          ...
+        ]
+      }
+
+    Latest-state-only: one row per slug, no event history. If Sam flips
+    approve→reject→approve, consumer sees only the final state. Per dck
+    #2737 + scope #2736 trade-off (full audit would need a separate
+    SampleApprovalEvent log table — out of scope for v1).
+    """
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    since_raw = (request.args.get("since") or "").strip()
+    since_dt: datetime | None = None
+    if since_raw:
+        # Tolerate "Z" suffix + with-or-without microseconds. Anything we
+        # can't parse means "from the beginning" — safer than 400'ing the
+        # consumer mid-poll.
+        try:
+            since_dt = datetime.fromisoformat(since_raw.replace("Z", "+00:00"))
+        except ValueError:
+            since_dt = None
+    db = SessionLocal()
+    try:
+        q = db.query(SampleApproval)
+        if since_dt is not None:
+            q = q.filter(SampleApproval.updated_at > since_dt)
+        rows = q.order_by(SampleApproval.updated_at.desc()).all()
+        # Eager-load attachments to avoid N+1
+        att_ids = [r.id for r in rows]
+        atts_by_approval: dict[int, list] = {}
+        if att_ids:
+            for att in db.query(SampleApprovalAttachment).filter(
+                SampleApprovalAttachment.sample_approval_id.in_(att_ids)
+            ).all():
+                atts_by_approval.setdefault(att.sample_approval_id, []).append(att)
+        # title lookup from SAMPLES dict for human-readable consumer output
+        title_by_slug = {s.get("slug"): s.get("title") for s in SAMPLES if s.get("slug")}
+        events = []
+        for r in rows:
+            events.append({
+                "slug": r.sample_slug,
+                "title": title_by_slug.get(r.sample_slug, r.sample_slug),
+                "status": r.status,
+                "notes": r.notes,
+                "marked_by_user_id": r.marked_by_user_id,
+                "marked_at": r.updated_at.isoformat() if r.updated_at else None,
+                "attachments": [
+                    {
+                        "id": a.id,
+                        "filename": a.filename,
+                        "url": f"/partner/developer/samples/attachments/{a.id}",
+                    }
+                    for a in atts_by_approval.get(r.id, [])
+                ],
+            })
+        # Capture server time AFTER the query so cursor never skips a row
+        # that landed during serialization.
+        server_now = datetime.now(timezone.utc).isoformat()
+    finally:
+        db.close()
+    return jsonify({"now": server_now, "events": events})
+
+
 @dev_chat.route("/partner/developer/cena-stats")
 @requires_permission("developer.view_chat")
 def developer_cena_stats():

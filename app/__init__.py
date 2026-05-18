@@ -473,6 +473,25 @@ def create_app():
         logging.getLogger(__name__).exception(
             "sample_approvals backfill failed (non-fatal)")
 
+    # Idempotent table create — cena_usage_logs (Sam /sam/chat session 13
+    # #11 cost telemetry). One row per cena gateway streaming turn
+    # capturing token counts so /partner/cena-usage can roll up dollars.
+    try:
+        from sqlalchemy import inspect as _sa_insp_30
+        from app.db import engine as _eng_30
+        from app.models import (Base as _Base_30,
+                                CenaUsageLog as _CUL_30)
+        if _eng_30 is not None:
+            insp_30 = _sa_insp_30(_eng_30)
+            if "cena_usage_logs" not in set(insp_30.get_table_names()):
+                _Base_30.metadata.create_all(
+                    bind=_eng_30, tables=[_CUL_30.__table__])
+                logging.getLogger(__name__).info(
+                    "cena_usage_logs: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "cena_usage_logs backfill failed (non-fatal)")
+
     # Idempotent table create — cena_wake_decisions (migration 29,
     # Sam #2576 6-piece proposal Phase A piece #3 — telemetry-first).
     # One row per dev chat message considered by the watcher; captures

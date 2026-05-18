@@ -609,6 +609,73 @@ class UserAuditLog(Base):
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
+class SampleApproval(Base):
+    """Approval state for a sample on the /partner/developer/samples
+    page. One row per sample_slug (latest state only — no history
+    table in v1; if audit becomes needed, add sample_approval_history
+    later). Sam toggles status via the per-card approval UI; aick/ck
+    track via reads.
+
+    Spec: app/templates/docs/spec_samples_approval_workflow.html §2.1
+    (dck 68c5248 + Cena #2549 item 2 + ck #2548 ship-pending-models).
+    """
+    __tablename__ = "sample_approvals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sample_slug: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending"
+    )  # 'pending' | 'approved' | 'rejected'
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marked_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow,
+        onupdate=datetime.utcnow, nullable=False
+    )
+
+    attachments: Mapped[list["SampleApprovalAttachment"]] = relationship(
+        back_populates="approval", cascade="all, delete-orphan"
+    )
+
+
+class SampleApprovalAttachment(Base):
+    """Image attachments to a SampleApproval correction note. v1 caps
+    at image/png + image/jpeg + image/webp, 5 MB per file. Files
+    live under SAMPLE_APPROVAL_ATTACHMENTS_DIR (env-overridable, ck
+    #2548 per spec §2.2 storage backend note).
+
+    Spec: spec_samples_approval_workflow.html §2.2.
+    """
+    __tablename__ = "sample_approval_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sample_approval_id: Mapped[int] = mapped_column(
+        ForeignKey("sample_approvals.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    approval: Mapped["SampleApproval"] = relationship(
+        back_populates="attachments"
+    )
+
+
 class DeveloperChatAttachment(Base):
     """Files attached to a Developer Chat message. Up to 5 per message,
     enforced at the route layer. Files live under CHAT_ATTACHMENTS_DIR

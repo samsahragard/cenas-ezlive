@@ -435,6 +435,37 @@ def create_app():
         logging.getLogger(__name__).exception(
             "dev_chat_attribution_corrections backfill failed (non-fatal)")
 
+    # Idempotent table create — sample_approvals + sample_approval_attachments
+    # (migration 28, cena #2549 item 2 + dck 68c5248 spec + ck #2548 dep-chain).
+    # Sam approval workflow for the /partner/developer/samples page:
+    # one row per sample_slug (latest state only, no history table in v1),
+    # cascading attachments. Boot-time create via metadata.create_all
+    # scoped to just these two tables — no-op once present.
+    try:
+        from sqlalchemy import inspect as _sa_insp_28
+        from app.db import engine as _eng_28
+        from app.models import (Base as _Base_28,
+                                SampleApproval as _SA_28,
+                                SampleApprovalAttachment as _SAA_28)
+        if _eng_28 is not None:
+            insp_28 = _sa_insp_28(_eng_28)
+            existing_28 = set(insp_28.get_table_names())
+            tables_to_create = []
+            if "sample_approvals" not in existing_28:
+                tables_to_create.append(_SA_28.__table__)
+            if "sample_approval_attachments" not in existing_28:
+                tables_to_create.append(_SAA_28.__table__)
+            if tables_to_create:
+                _Base_28.metadata.create_all(
+                    bind=_eng_28, tables=tables_to_create)
+                logging.getLogger(__name__).info(
+                    "sample_approvals (migration 28): created %d table(s) %s",
+                    len(tables_to_create),
+                    [t.name for t in tables_to_create])
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "sample_approvals backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

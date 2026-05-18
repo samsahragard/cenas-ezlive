@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Right-side menu bar — plan.md status mockup (dck)</title>
+<title>Right-side build roadmap — plan.md visualization (dck)</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
 <style>
   :root {
@@ -23,6 +23,7 @@
     --ck-status-warn:    #E2645C;
     --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
     --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+    --ck-glow-cream:     0 1px 1px rgba(0,0,0,0.55), 0 0 12px rgba(255,240,215,0.18);
   }
   * { box-sizing: border-box; }
   body {
@@ -44,7 +45,7 @@
     font-size: 22px; font-weight: 600; margin: 0 0 4px;
     color: var(--ck-text); text-shadow: var(--ck-glow-gold-soft);
   }
-  .mockup-head .v1-badge {
+  .mockup-head .v2-badge {
     display: inline-block;
     background: var(--ck-gold-bright);
     color: #140A06;
@@ -54,18 +55,19 @@
     font-weight: 700;
     margin-left: 8px;
     vertical-align: middle;
+    box-shadow: 0 0 10px rgba(255, 200, 80, 0.32);
   }
   .mockup-head .sub {
     font-size: 12px; color: var(--ck-text-soft);
     text-transform: uppercase; letter-spacing: 0.12em;
   }
 
-  /* Mock-app layout: left sidebar (existing chrome) + main content placeholder + RIGHT sidebar (new) */
+  /* Mock-app layout: left sidebar + main content + RIGHT roadmap */
   .mock-app {
     display: grid;
-    grid-template-columns: 220px 1fr 260px;
+    grid-template-columns: 220px 1fr 280px;
     gap: 14px;
-    min-height: 620px;
+    min-height: 700px;
     border: 0.5px solid var(--ck-border);
     border-radius: 12px;
     overflow: hidden;
@@ -100,7 +102,6 @@
     padding: 24px 28px;
     color: var(--ck-text-soft);
     font-size: 13px;
-    background: transparent;
   }
   .mock-main h2 {
     margin: 0 0 8px;
@@ -117,123 +118,229 @@
     font-style: italic;
   }
 
-  /* === RIGHT SIDEBAR (the new thing) === */
-  .ck-right-sb {
+  /* === RIGHT ROADMAP SIDEBAR === */
+  .ck-roadmap {
     background: var(--ck-bg-sidebar);
     border-left: 0.5px solid var(--ck-border);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
   }
-  .ck-right-sb-head {
+  .ck-roadmap-head {
     padding: 14px 16px;
     border-bottom: 0.5px solid var(--ck-border);
     background: rgba(20, 12, 8, 0.6);
   }
-  .ck-right-sb-head-title {
+  .ck-roadmap-head-title {
     font-size: 13px;
     font-weight: 600;
     color: var(--ck-text);
-    margin: 0 0 4px;
+    margin: 0 0 2px;
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  .ck-right-sb-head-sub {
+  .ck-roadmap-head-sub {
     font-size: 10.5px;
     color: var(--ck-text-soft);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
-
-  /* Legend row */
-  .ck-right-sb-legend {
-    display: flex;
-    gap: 12px;
+  .ck-roadmap-overall {
     padding: 10px 16px;
     border-bottom: 0.5px solid var(--ck-border);
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--ck-text-soft);
-    flex-wrap: wrap;
-  }
-  .ck-right-sb-legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .status-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .status-dot.live    { background: var(--ck-status-open); box-shadow: 0 0 6px rgba(156,203,118,0.5); }
-  .status-dot.soon    { background: var(--ck-gold);        box-shadow: 0 0 6px rgba(228,179,64,0.5); }
-  .status-dot.planned { background: rgba(236, 227, 208, 0.25); }
-
-  /* Section blocks */
-  .ck-right-sb-section {
-    border-bottom: 0.5px solid var(--ck-border);
-  }
-  .ck-right-sb-section-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px 8px;
-    cursor: default;
+    gap: 10px;
   }
-  .ck-right-sb-section-label {
-    font-size: 10.5px;
+  .ck-roadmap-overall-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(236, 227, 208, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .ck-roadmap-overall-bar-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    background: linear-gradient(90deg, var(--ck-status-open), var(--ck-gold));
+    border-radius: 3px;
+  }
+  .ck-roadmap-overall-pct {
     color: var(--ck-gold);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  /* Phase block */
+  .ck-roadmap-phase {
+    border-bottom: 0.5px solid var(--ck-border);
+    padding: 14px 16px;
+  }
+  .ck-roadmap-phase.is-current { background: rgba(228, 179, 64, 0.04); }
+  .ck-roadmap-phase-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .ck-roadmap-phase-num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--ck-gold-soft);
+    color: var(--ck-gold);
+    border: 1px solid var(--ck-gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
     font-weight: 700;
-    text-shadow: var(--ck-glow-gold-soft);
+    flex-shrink: 0;
   }
-  .ck-right-sb-section-count {
-    font-size: 10px;
-    color: var(--ck-text-soft);
+  .ck-roadmap-phase.is-done .ck-roadmap-phase-num {
+    background: var(--ck-status-open);
+    color: #0a1f0a;
+    border-color: var(--ck-status-open);
   }
-  .ck-right-sb-section-count strong {
-    color: var(--ck-status-open);
+  .ck-roadmap-phase.is-current .ck-roadmap-phase-num {
+    background: var(--ck-gold-bright);
+    color: #140A06;
+    border-color: var(--ck-gold-bright);
+    box-shadow: 0 0 8px rgba(255, 200, 80, 0.45);
+  }
+  .ck-roadmap-phase.is-planned .ck-roadmap-phase-num {
+    background: transparent;
+    color: var(--ck-text-faint);
+    border-color: var(--ck-border);
+  }
+  .ck-roadmap-phase-title {
+    flex: 1;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ck-text);
+  }
+  .ck-roadmap-phase.is-planned .ck-roadmap-phase-title { color: var(--ck-text-soft); }
+  .ck-roadmap-phase-pct {
+    font-size: 11px;
+    color: var(--ck-gold);
     font-weight: 600;
   }
-  .ck-right-sb-section-body {
-    padding: 0 6px 10px;
+  .ck-roadmap-phase.is-done .ck-roadmap-phase-pct { color: var(--ck-status-open); }
+  .ck-roadmap-phase.is-planned .ck-roadmap-phase-pct { color: var(--ck-text-faint); }
+
+  .ck-roadmap-bar {
+    height: 4px;
+    background: rgba(236, 227, 208, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    position: relative;
   }
-  .ck-right-sb-item {
+  .ck-roadmap-bar-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    border-radius: 2px;
+    transition: width 200ms var(--ck-ease);
+  }
+  .ck-roadmap-phase.is-done .ck-roadmap-bar-fill { background: var(--ck-status-open); }
+  .ck-roadmap-phase.is-current .ck-roadmap-bar-fill {
+    background: linear-gradient(90deg, var(--ck-status-open), var(--ck-gold-bright));
+  }
+  .ck-roadmap-phase.is-planned .ck-roadmap-bar-fill {
+    background: var(--ck-border);
+  }
+
+  .ck-roadmap-items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-left: 32px;
+  }
+  .ck-roadmap-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: 6px;
+    gap: 6px;
+    font-size: 11.5px;
+    padding: 2px 0;
+  }
+  .ck-roadmap-item .status-icon {
+    width: 12px;
+    text-align: center;
+    flex-shrink: 0;
+    font-size: 10px;
+  }
+  .ck-roadmap-item.is-built {
+    color: var(--ck-text);
+  }
+  .ck-roadmap-item.is-built .status-icon {
+    color: var(--ck-status-open);
+  }
+  .ck-roadmap-item.is-progress {
     color: var(--ck-text-muted);
-    font-size: 12px;
-    margin-bottom: 1px;
   }
-  .ck-right-sb-item.is-live    { color: var(--ck-text); }
-  .ck-right-sb-item.is-soon    { color: var(--ck-text-soft); }
-  .ck-right-sb-item.is-planned { color: var(--ck-text-faint); }
-  .ck-right-sb-item:hover {
-    background: rgba(228, 179, 64, 0.06);
+  .ck-roadmap-item.is-progress .status-icon {
+    color: var(--ck-gold);
   }
-  .ck-right-sb-item .ck-right-sb-label {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .ck-roadmap-item.is-coming {
+    color: var(--ck-text-faint);
   }
-  .ck-right-sb-item .ck-right-sb-soon {
-    font-size: 9px;
+  .ck-roadmap-item.is-coming .status-icon {
+    color: rgba(236, 227, 208, 0.25);
+  }
+  .ck-roadmap-item .new-tag {
+    margin-left: auto;
+    font-size: 8.5px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 1px 5px;
-    border-radius: 4px;
+    border-radius: 3px;
     background: var(--ck-gold-soft);
     color: var(--ck-gold);
   }
 
-  /* Notes block (below the mock-app) */
+  /* Standing track (Design system) — distinct style */
+  .ck-roadmap-standing {
+    border-bottom: 0.5px solid var(--ck-border);
+    padding: 14px 16px;
+    background: linear-gradient(90deg, rgba(228,179,64,0.05), transparent 70%);
+    border-left: 2px solid var(--ck-gold);
+  }
+  .ck-roadmap-standing-label {
+    font-size: 9.5px;
+    color: var(--ck-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-bottom: 4px;
+    text-shadow: var(--ck-glow-gold-soft);
+  }
+  .ck-roadmap-standing-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ck-text);
+    margin-bottom: 8px;
+  }
+
+  /* Legend */
+  .ck-roadmap-legend {
+    display: flex;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 0.5px solid var(--ck-border);
+    font-size: 10px;
+    color: var(--ck-text-soft);
+    flex-wrap: wrap;
+  }
+  .ck-roadmap-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Notes block */
   .notes {
     background: rgba(228, 179, 64, 0.06);
     border: 0.5px solid var(--ck-gold-soft);
@@ -255,27 +362,51 @@
   }
   .notes ul { margin: 8px 0 0; padding-left: 20px; }
   .notes li { margin: 5px 0; }
+  .changelog {
+    background: rgba(156, 203, 118, 0.06);
+    border: 0.5px solid rgba(156, 203, 118, 0.25);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.85);
+    line-height: 1.65;
+  }
+  .changelog b { color: var(--ck-status-open); }
 </style>
 </head>
 <body>
 <div class="mockup-wrap">
 
   <div class="mockup-head">
-    <h1>Right-side menu bar — plan.md status <span class="v1-badge">v1</span></h1>
-    <div class="sub">dck · 2026-05-17 · per Sam #2531 · sourced from plan.md §5 (9e34176)</div>
+    <h1>Right-side build roadmap — plan.md visualization <span class="v2-badge">v2</span></h1>
+    <div class="sub">dck · 2026-05-17 · v2 reshape per cena #2557 (roadmap not nav-menu)</div>
+  </div>
+
+  <div class="changelog">
+    <b>v2 reshape (per cena #2557):</b>
+    <ul>
+      <li><b>Structural pivot: §5-audience nav-menu → §9-phase roadmap visualization.</b> v1 grouped surfaces by audience (Operations / Insights / Admin / Developer); v2 groups by build phase (Phase 1-7 + standing Design System track) with per-phase progress bars. Reads as "where the product stands" first, "what's where" second.</li>
+      <li><b>Phase progress bars</b> — visual fill % per phase, color-keyed (built=green, in-progress=gold gradient, planned=faint). At-a-glance scan of the whole build state.</li>
+      <li><b>Phase number markers</b> — circular badges with phase number, color-keyed by state. Current phase has gold glow.</li>
+      <li><b>Standing Design System track</b> rendered distinct (left-border accent + warm bg) since it runs parallel to all phases per plan.md §9 framing.</li>
+      <li><b>Overall progress bar</b> in the header — single % across all phases. Quick "where are we" summary.</li>
+      <li><b>Per-item granularity preserved</b> — under each phase, the actual surfaces (Drivers admin, Ez Manage, Block 2 items, etc.) with built/in-progress/coming markers. Still navigable; just structured by build sequence.</li>
+    </ul>
   </div>
 
   <div class="mock-app">
 
-    <!-- LEFT: existing sidebar (collapsed reference for context, real chrome on a real page) -->
+    <!-- LEFT: existing sidebar -->
     <aside class="mock-left">
       <div style="font-size:11px;color:var(--ck-gold);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px;">[Existing sidebar]</div>
       <div class="mock-left-label">Today</div>
       <div class="mock-left-item">Dashboard</div>
       <div class="mock-left-label">Operations</div>
       <div class="mock-left-item">Corporate Order</div>
+      <div class="mock-left-item active">Drivers (admin)</div>
       <div class="mock-left-item">Vendors</div>
-      <div class="mock-left-item active">Ez Cater</div>
+      <div class="mock-left-item">Ez Cater</div>
       <div class="mock-left-item">Schedule</div>
       <div class="mock-left-label">Insights</div>
       <div class="mock-left-item">Performance</div>
@@ -288,196 +419,185 @@
       <div class="mock-left-item">Samples</div>
     </aside>
 
-    <!-- MAIN: placeholder for any page content -->
+    <!-- MAIN -->
     <main class="mock-main">
       <h2>Drivers (Admin)</h2>
       <div style="font-size:11px;color:var(--ck-text-faint);text-transform:uppercase;letter-spacing:0.1em;">Page content area</div>
       <div class="mock-main-placeholder">
         Real page content lives here.<br>
-        The right-side bar is independent — same height as the left sidebar, sticky on scroll.
+        The right roadmap is a glance surface — operators look without leaving the current page.
       </div>
     </main>
 
-    <!-- RIGHT: NEW plan.md status nav -->
-    <aside class="ck-right-sb">
+    <!-- RIGHT: BUILD ROADMAP -->
+    <aside class="ck-roadmap">
 
-      <div class="ck-right-sb-head">
-        <div class="ck-right-sb-head-title">
-          <i class="ti ti-map-2"></i> Build progress
+      <div class="ck-roadmap-head">
+        <div class="ck-roadmap-head-title">
+          <i class="ti ti-route"></i> Build roadmap
         </div>
-        <div class="ck-right-sb-head-sub">plan.md surfaces · 2026-05-17</div>
+        <div class="ck-roadmap-head-sub">plan.md · live</div>
       </div>
 
-      <div class="ck-right-sb-legend">
-        <span class="ck-right-sb-legend-item"><span class="status-dot live"></span> live</span>
-        <span class="ck-right-sb-legend-item"><span class="status-dot soon"></span> partial/soon</span>
-        <span class="ck-right-sb-legend-item"><span class="status-dot planned"></span> planned</span>
+      <div class="ck-roadmap-overall">
+        <span>Overall</span>
+        <div class="ck-roadmap-overall-bar">
+          <div class="ck-roadmap-overall-bar-fill" style="width: 64%;"></div>
+        </div>
+        <span class="ck-roadmap-overall-pct">64%</span>
       </div>
 
-      <!-- §5.1 Root + auth -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Root + auth · §5.1</span>
-          <span class="ck-right-sb-section-count"><strong>8</strong>/8</span>
-        </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Store picker /</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Site login</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Partner login</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Keypad login</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Driver login</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Driver signup</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Request access</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Logout</span></div>
-        </div>
+      <div class="ck-roadmap-legend">
+        <span class="ck-roadmap-legend-item"><span style="color:var(--ck-status-open);">●</span> built</span>
+        <span class="ck-roadmap-legend-item"><span style="color:var(--ck-gold);">●</span> in progress</span>
+        <span class="ck-roadmap-legend-item"><span style="color:rgba(236,227,208,0.25);">●</span> coming</span>
       </div>
 
-      <!-- §5.2 + §5.3 Operations -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Operations · §5.2-§5.3</span>
-          <span class="ck-right-sb-section-count"><strong>13</strong>/16</span>
+      <!-- Standing track: Design system -->
+      <div class="ck-roadmap-standing">
+        <div class="ck-roadmap-standing-label">Standing · parallel to all phases</div>
+        <div class="ck-roadmap-standing-title">Design system</div>
+        <div class="ck-roadmap-bar">
+          <div class="ck-roadmap-bar-fill" style="width: 70%; background: linear-gradient(90deg, var(--ck-status-open), var(--ck-gold-bright));"></div>
         </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Store dashboard</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">EzCater orders</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Order view</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Ez Market (bid)</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Ez Manage (approve)</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Driver payroll</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Drivers (admin)</span><span class="ck-right-sb-soon">new</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">EzCater webhook</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">PDF ingest</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Corporate order</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Produce ordering</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Schedule + roster</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Drivers Live (GPS)</span></div>
-          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Webstaurant</span><span class="ck-right-sb-soon">soon</span></div>
-          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Vendor performance</span><span class="ck-right-sb-soon">soon</span></div>
-          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Vendor specs</span><span class="ck-right-sb-soon">soon</span></div>
+        <div class="ck-roadmap-items" style="margin-left: 0;">
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> V2 --ck-* token system</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> design-system-reference doc</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Samples page</div>
+          <div class="ck-roadmap-item is-progress"><span class="status-icon">●</span> approval workflow</div>
+          <div class="ck-roadmap-item is-progress"><span class="status-icon">●</span> V1→V2 token migration</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> chart palette tokenization</div>
         </div>
       </div>
 
-      <!-- §5.4 Block 2 Manager Tools -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Manager Tools · §5.4 · Block 2</span>
-          <span class="ck-right-sb-section-count"><strong>0</strong>/9</span>
+      <!-- Phase 1 -->
+      <div class="ck-roadmap-phase is-done">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">1</span>
+          <span class="ck-roadmap-phase-title">Foundation</span>
+          <span class="ck-roadmap-phase-pct">100%</span>
         </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Daily Manager Log</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Shift Handoff</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Incident Reports</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Supply Requests</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Daily Goals</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Staff Feedback</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Pre-shift Checklist</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Close-of-day Audit</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Recipe Page</span><span class="ck-right-sb-soon">spec</span></div>
-        </div>
-      </div>
-
-      <!-- §5.5 Insights -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Insights · §5.5</span>
-          <span class="ck-right-sb-section-count"><strong>3</strong>/4</span>
-        </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Performance</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Sales (all channels)</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Labor (BOH/FOH)</span></div>
-          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Forecasts</span><span class="ck-right-sb-soon">soon</span></div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 100%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> DB schema (users, drivers, orders)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Auth (4 surfaces)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Permission system (9 roles)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Store picker + routing</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Basic admin / Team page</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Site navigation skeleton</div>
         </div>
       </div>
 
-      <!-- §5.6 Admin -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Admin · §5.6</span>
-          <span class="ck-right-sb-section-count"><strong>1</strong>/1</span>
+      <!-- Phase 2 -->
+      <div class="ck-roadmap-phase is-current">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">2</span>
+          <span class="ck-roadmap-phase-title">Core operations</span>
+          <span class="ck-roadmap-phase-pct">95%</span>
         </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Team</span></div>
-        </div>
-      </div>
-
-      <!-- §5.7 Developer -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Developer · §5.7</span>
-          <span class="ck-right-sb-section-count"><strong>3</strong>/3</span>
-        </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Dev Chat</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Samples</span><span class="ck-right-sb-soon">new</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Build Plan viewer</span><span class="ck-right-sb-soon">new</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">App docs</span></div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 95%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> ezCater webhook + PDF fallback</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Ez Market bid pool</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Ez Manage approval queue</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Driver app (signup/login/shifts/pay)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Drivers admin (Active/Inactive)<span class="new-tag">new</span></div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Toast integration + sales reports</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Sling roster + schedule</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Labor reports</div>
+          <div class="ck-roadmap-item is-progress"><span class="status-icon">●</span> Google Routes mileage + payroll</div>
         </div>
       </div>
 
-      <!-- §5.8 Sam Chat -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Sam Chat · §5.8</span>
-          <span class="ck-right-sb-section-count"><strong>1</strong>/1</span>
+      <!-- Phase 3 -->
+      <div class="ck-roadmap-phase is-current">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">3</span>
+          <span class="ck-roadmap-phase-title">Block 1 — task / ribbon / insights</span>
+          <span class="ck-roadmap-phase-pct">70%</span>
         </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Cena (/sam/chat)</span></div>
-        </div>
-      </div>
-
-      <!-- §5.9 Legal -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Legal · §5.9</span>
-          <span class="ck-right-sb-section-count"><strong>5</strong>/5</span>
-        </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Overview</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Matters</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Documents</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Insurance</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Structure + Audit</span></div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 70%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Task system (1A)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Ribbon component (1B/1C)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> X/Check controls (1D)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Sales insights cron (1F)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Team reports (1G)</div>
+          <div class="ck-roadmap-item is-progress"><span class="status-icon">●</span> Pay masking (1H)</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> SMS via Twilio + escalation</div>
         </div>
       </div>
 
-      <!-- §5.10 Driver app -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Driver app · §5.10</span>
-          <span class="ck-right-sb-section-count"><strong>5</strong>/5</span>
+      <!-- Phase 4 -->
+      <div class="ck-roadmap-phase is-planned">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">4</span>
+          <span class="ck-roadmap-phase-title">Block 2 — manager tools</span>
+          <span class="ck-roadmap-phase-pct">0%</span>
         </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Shifts</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Live logs (GPS)</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">My profile</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Pay history</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Change passcode</span></div>
-        </div>
-      </div>
-
-      <!-- §5.11 Briefs + anomalies -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Briefs + anomalies · §5.11</span>
-          <span class="ck-right-sb-section-count"><strong>2</strong>/2</span>
-        </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Briefs</span></div>
-          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Anomaly rules</span></div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 0%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Daily Manager Log</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Shift Handoff</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Incident Reports</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Supply Requests</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Daily Goals</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Staff Feedback</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Pre-shift Checklist</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Close-of-day Audit</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Recipe Page <span class="new-tag" style="background:rgba(228,179,64,0.10);color:var(--ck-text-soft);">spec'd</span></div>
         </div>
       </div>
 
-      <!-- §5.12 Block 3 Manager AI agent -->
-      <div class="ck-right-sb-section">
-        <div class="ck-right-sb-section-head">
-          <span class="ck-right-sb-section-label">Manager AI · §5.12 · Block 3</span>
-          <span class="ck-right-sb-section-count"><strong>0</strong>/2</span>
+      <!-- Phase 5 -->
+      <div class="ck-roadmap-phase is-planned">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">5</span>
+          <span class="ck-roadmap-phase-title">Block 3 — manager AI agent</span>
+          <span class="ck-roadmap-phase-pct">0%</span>
         </div>
-        <div class="ck-right-sb-section-body">
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Per-store assistant</span></div>
-          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Partner assistant</span></div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 0%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Per-store assistant surface</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Partner assistant surface</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Agent action log</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Tool definitions + audit</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Agent journal (per-store)</div>
+        </div>
+      </div>
+
+      <!-- Phase 6 -->
+      <div class="ck-roadmap-phase is-current">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">6</span>
+          <span class="ck-roadmap-phase-title">Auxiliary subsystems</span>
+          <span class="ck-roadmap-phase-pct">75%</span>
+        </div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 75%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Legal subsystem (8 pages)</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Anomaly detection engine</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Morning brief composer</div>
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Produce ordering pipeline</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Webstaurant integration</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Vendor performance / specs</div>
+        </div>
+      </div>
+
+      <!-- Phase 7 -->
+      <div class="ck-roadmap-phase is-current">
+        <div class="ck-roadmap-phase-head">
+          <span class="ck-roadmap-phase-num">7</span>
+          <span class="ck-roadmap-phase-title">Polish + integrations</span>
+          <span class="ck-roadmap-phase-pct">15%</span>
+        </div>
+        <div class="ck-roadmap-bar"><div class="ck-roadmap-bar-fill" style="width: 15%;"></div></div>
+        <div class="ck-roadmap-items">
+          <div class="ck-roadmap-item is-built"><span class="status-icon">✓</span> Live GPS tracking surface</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Forecasts</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Customer-facing surfaces</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> KDS (Kitchen Display)</div>
+          <div class="ck-roadmap-item is-coming"><span class="status-icon">○</span> Recipes ↔ inventory loop</div>
         </div>
       </div>
 
@@ -485,32 +605,35 @@
 
   </div>
 
-  <!-- NOTES -->
+  <!-- DESIGN NOTES -->
   <div class="notes">
-    <b>Page-first build per Sam #2531:</b>
+    <b>v2 design decisions (page-first per Sam #2531 + cena #2557 reshape):</b>
     <ul>
-      <li><b>Visual vocabulary copied from existing sidebar.html partial</b> (the V2 <code>.ck-sb-*</code> family). Right-side bar uses the same V2 <code>--ck-*</code> tokens, the same Tabler icon vocabulary, the same gold uppercase section labels with cream-glow text-shadow, the same hover-row treatment. No new design language invented — the right bar reads as a sibling of the left bar, not a foreign element.</li>
-      <li><b>Sourced from plan.md §5</b> (origin/main 9e34176). Each section header references its §5 subsection so a reader can trace any item back to the plan.</li>
-      <li><b>Per-section completion counts</b> in the header (<code><strong>X</strong>/Y</code>). At-a-glance scan: where the gold-green numbers diverge from total, that's the work remaining. Block 2 (0/9) + Block 3 (0/2) + the "soon" line items in Operations (13/16) + Forecasts (3/4) are the live "still need to do" list.</li>
-      <li><b>Status legend at top.</b> Live (gold-green dot), partial/soon (gold dot), planned (faint cream dot). Item text dims for soon/planned states so the eye lands first on what's live.</li>
-      <li><b>"new" pills</b> on items shipped in the last ~24h (Drivers admin Phase A, Samples page, Build Plan viewer). Drops to nothing after a few sessions.</li>
+      <li><b>Source of truth:</b> plan.md §9 phases drive the structure. Per-phase items pulled from §5 surface inventory + §6 features + §7 Block 3. Standing "Design system" track separated per §9 framing.</li>
+      <li><b>Visual vocabulary copied from existing sidebar.html partial</b> (V2 .ck-sb-* family + --ck-* tokens). New <code>.ck-roadmap-*</code> classes mirror the same idioms — gold accent on current state, status-open green for done, cream-glow on headers, Tabler icons.</li>
+      <li><b>Phase number badges</b> work as visual anchors — at-a-glance you see how many phases exist + which are done (green) vs current (gold-glow) vs planned (faint).</li>
+      <li><b>Progress bars per phase</b> at 4px height. Subtle, but reads instantly. Gradient on current-phase bar (green→gold-bright) signals "actively in progress."</li>
+      <li><b>Overall progress in header</b> = single % across all phases. v1 had per-section counts; v2 surfaces a roll-up so operators know the global state without scanning.</li>
+      <li><b>Standing design system track</b> rendered distinct (left gold accent border + warm gradient bg) since it doesn't slot into a single phase per plan.md §9 ("parallel to all phases").</li>
     </ul>
 
-    <b>Structural decisions worth flagging:</b>
+    <b>v1 vs v2 — what changed and why:</b>
     <ul>
-      <li><b>Width 260px</b> — slightly wider than the left sidebar's 220px because the per-item status dot + soon-pill add horizontal weight. Could squeeze to 240px if main content needs the room.</li>
-      <li><b>Sticky scroll independent of main content</b> — vertical position scrolls within the right bar itself, not the page. Otherwise the bar disappears when the user scrolls deep on a long page.</li>
-      <li><b>This is the FULL page list</b>, not role-gated. A real implementation should role-gate (drivers don't need to see "Manager Tools" todo) — but for a build-status mockup, showing everything to everyone is the right call.</li>
-      <li><b>Right bar lives at desktop only.</b> On mobile (≤1024px per <code>--ck-bp-mobile</code>) it collapses to a "Build progress" entry in the existing hamburger menu — adding a second sidebar on phone would crowd the surface. Defer the mobile pattern to a Phase B mockup if Sam wants it.</li>
-      <li><b>Two-sidebar layout has a tradeoff.</b> The main content column shrinks. On 1440px desktop you get ~920px main column — fine for most surfaces but tight for wide tables (orders list, sales reports). Could be a toggle ("show build progress") rather than always-on, if main-column real estate matters more than always-visible status.</li>
+      <li><b>v1 was a navigation menu with status icons</b> (grouped by §5 audience tier). Read as "where can I go" first, "what's done" second.</li>
+      <li><b>v2 is a roadmap visualization</b> (grouped by §9 build phase with progress bars). Reads as "where the product stands" first, "what's where" second.</li>
+      <li>Cena #2557 directed this reshape. Sam wants an at-a-glance build state, not a second nav menu.</li>
     </ul>
 
-    <b>Status data freshness:</b>
+    <b>Implementation notes for ck when Sam approves direction:</b>
     <ul>
-      <li><b>v1 is hand-coded</b> from my knowledge of what's live as of 2026-05-17. For a production implementation, the status per route should be derived from a registry — e.g., scan DOC_PAGES + the route registrations + a small <code>FEATURE_STATUS</code> map per route — so the right bar updates automatically as new pages ship.</li>
-      <li><b>"new" pill</b> would come from a per-route <code>shipped_at</code> field, with a 7-day window.</li>
-      <li><b>Counts in section headers</b> would compute server-side from the same status registry.</li>
+      <li><b>Phase + per-item status data:</b> currently hand-coded. Production should derive from a registry — e.g., one entry per plan.md surface mapping to <code>{phase, status, route, shipped_at}</code>. The Build Plan viewer (/partner/developer/plan) could double as the source-of-truth surface if it parses plan.md headings into a structured map.</li>
+      <li><b>Overall % computation:</b> simple — count items built across all phases, divide by total. Weighted-by-phase is possible but adds complexity for marginal benefit.</li>
+      <li><b>Auto-update on ship:</b> when a route registers in DOC_PAGES or SAMPLES, the registry entry flips to built. "new" pill via 7-day window on shipped_at.</li>
+      <li><b>Mobile:</b> top-right small icon (40×40) with completion badge ("36%") opens roadmap as right-slide drawer. Same pattern I proposed for v1 — applies cleanly here.</li>
+      <li><b>Wide-table routes:</b> right-bar collapses to icon-rail showing only phase number badges + their bars (a vertical mini-timeline). One click expands a phase inline. Same toggle as the left bar's collapsed state.</li>
     </ul>
+
+    <b>Accuracy caveat:</b> per-item built/in-progress/coming markers and the % numbers in v1 are best-effort estimates from what I've seen tonight. Production registry-derived numbers will differ; the mockup demonstrates the SHAPE, not the exact state. Verify-before-promote when ck wires it.
   </div>
 
 </div>

@@ -92,6 +92,7 @@ def _enforce_partner():
 
 SAMPLES = [
     dict(
+        slug="drivers-redesign-v2",
         title="Drivers Page Redesign",
         version="v2",
         date="2026-05-17",
@@ -100,6 +101,16 @@ SAMPLES = [
         type="mockup",
     ),
     dict(
+        slug="right-sidebar-plan-v1",
+        title="Right-Side Menu Bar — Plan Status",
+        version="v1",
+        date="2026-05-17",
+        description="Right-side navigation panel sourced from plan.md §5 surfaces. Per-section completion counts, status legend (live/soon/planned), 'new' pills on last-24h ships. V2 .ck-sb-* token reuse — sibling-not-foreign to the existing left sidebar.",
+        url="/static/mockups/right_sidebar_plan_status.html",
+        type="mockup",
+    ),
+    dict(
+        slug="legal-overview",
         title="Legal — Overview",
         version=None,
         date="2026-05-16",
@@ -108,6 +119,7 @@ SAMPLES = [
         type="reference",
     ),
     dict(
+        slug="legal-matters-list",
         title="Legal — Matters List",
         version=None,
         date="2026-05-16",
@@ -116,6 +128,7 @@ SAMPLES = [
         type="reference",
     ),
     dict(
+        slug="legal-matter-detail",
         title="Legal — Matter Detail",
         version=None,
         date="2026-05-16",
@@ -124,6 +137,7 @@ SAMPLES = [
         type="reference",
     ),
     dict(
+        slug="build-plan",
         title="Build Plan",
         version=None,
         date="2026-05-17",

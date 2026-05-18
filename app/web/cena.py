@@ -2041,6 +2041,82 @@ def cena_run_flip_buildplan_approval():
     })
 
 
+@cena_bp.route("/sam/cena/db-probe/query", methods=["POST"])
+def cena_db_probe_query():
+    """Read-only SQL surface for the cena gateway's sql_query tool.
+
+    Body: {"sql": "SELECT ...", "limit": 200}
+    Refuses anything that isn't a bare SELECT (no semicolons, no
+    INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/PRAGMA/ATTACH/etc.). Caps
+    result row count to `limit` (max 1000). Returns {ok, rows, columns,
+    row_count}. Per Sam /sam/chat session 13 — cena wants a clean SQL
+    surface against the live DB instead of needing a per-question
+    Python script."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    sql = (body.get("sql") or "").strip()
+    if not sql:
+        return jsonify({"ok": False, "error": "sql required"}), 400
+
+    upper = sql.upper()
+    if not upper.startswith("SELECT") and not upper.startswith("WITH"):
+        return jsonify({"ok": False,
+                        "error": "only SELECT/WITH queries are allowed"}), 400
+    if ";" in sql.rstrip(";"):
+        return jsonify({"ok": False,
+                        "error": "multi-statement queries not allowed"}), 400
+    banned = ("INSERT ", "UPDATE ", "DELETE ", "CREATE ", "ALTER ",
+              "DROP ", "TRUNCATE ", "PRAGMA ", "ATTACH ", "DETACH ",
+              "REPLACE ", "VACUUM ", "REINDEX ")
+    if any(b in upper for b in banned):
+        return jsonify({"ok": False,
+                        "error": "DDL/DML keywords not allowed"}), 400
+
+    limit = int(body.get("limit") or 200)
+    if limit < 1 or limit > 1000:
+        limit = 200
+
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    db = _SL()
+    try:
+        try:
+            result = db.execute(_sa_text(sql))
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False,
+                            "error": f"sql error: {type(e).__name__}: {e}"}), 400
+        cols = list(result.keys())
+        rows = []
+        for i, row in enumerate(result):
+            if i >= limit:
+                break
+            rows.append([_jsonable(v) for v in row])
+        return jsonify({
+            "ok": True,
+            "columns": cols,
+            "rows": rows,
+            "row_count": len(rows),
+            "truncated": (i + 1 > limit) if rows else False,
+        })
+    finally:
+        db.close()
+
+
+def _jsonable(v):
+    from datetime import date, datetime
+    from decimal import Decimal
+    if isinstance(v, (date, datetime)):
+        return v.isoformat()
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, (bytes, bytearray)):
+        return f"<{len(v)} bytes>"
+    return v
+
+
 @cena_bp.route("/sam/cena/run-probe-ezcater-order", methods=["POST"])
 def cena_run_probe_ezcater_order():
     gate = _require_gateway_token()

@@ -75,10 +75,46 @@ def main() -> int:
             print(f"FAIL: source still has {post_count} rows after DELETE")
             return 1
 
+        ck1_post = db.execute(text(
+            f"SELECT COUNT(*) FROM {SOURCE_TABLE} WHERE ck_prefix = 1"
+        )).scalar()
+        ck2_post = db.execute(text(
+            f"SELECT COUNT(*) FROM {SOURCE_TABLE} WHERE ck_prefix = 2"
+        )).scalar()
+        ck_null_post = db.execute(text(
+            f"SELECT COUNT(*) FROM {SOURCE_TABLE} WHERE ck_prefix IS NULL"
+        )).scalar()
+        print(f"per-prefix post-delete: ck1(Copperfield)={ck1_post} "
+              f"ck2(Tomball)={ck2_post} null(ambiguous)={ck_null_post}")
+
+        try:
+            from flask import current_app as _ca, render_template_string
+            from datetime import date as _d, timedelta as _td
+            tpl = (_ca.jinja_env.loader.get_source(_ca.jinja_env, "driver_payroll_list.html")[0])
+            content_start = tpl.find("{% block content %}")
+            content_end = tpl.find("{% endblock %}", content_start)
+            content_block = tpl[content_start + len("{% block content %}"):content_end] if content_start >= 0 else tpl
+            today = _d.today()
+            rendered = render_template_string(
+                content_block,
+                rows=[],
+                current_period_start=today,
+                current_period_end=today + _td(days=14),
+                current_check_date=today + _td(days=21),
+                g=type("G", (), {"store_label": "verify"})(),
+            )
+            empty_marker = "No ezCater drivers in this store" in rendered
+            no_name_link = 'class="driver-link"' not in rendered and "driver_paycheck" not in rendered
+            print(f"jinja-render verify (rows=[]): empty_marker={empty_marker} "
+                  f"no_name_links={no_name_link} body_len={len(rendered)}")
+        except Exception as e:  # noqa: BLE001
+            print(f"jinja-render verify skipped: {type(e).__name__}: {e}")
+
         print(f"\nSUMMARY:")
         print(f"  archived: {archive_count} rows -> {ARCHIVE_TABLE}")
         print(f"  deleted:  {deleted} rows from {SOURCE_TABLE}")
-        print(f"  source now: {post_count} rows")
+        print(f"  source now: {post_count} rows "
+              f"(ck1={ck1_post}, ck2={ck2_post}, null={ck_null_post})")
         return 0
     finally:
         db.close()

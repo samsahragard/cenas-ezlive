@@ -250,3 +250,19 @@ def group_orders_by_date(orders: list[Order]) -> list[dict[str, Any]]:
             display = date_str
         out.append({"date": date_str, "display": display, "orders": rows})
     return out
+
+
+def rotated_dispatch_letters(groups: list[dict[str, Any]]) -> dict[int, str]:
+    """Per Sam #2870 follow-up: per-location dashboard was showing 'DRIVER A'
+    for every row because each order's assigned_driver was set at ingest time
+    in isolation (planner index always 0). Recompute a per-date rotation by
+    deliver_at sort order so A/B/C/D/E cycle. Lightweight (no Maps API) —
+    pairings shown on the per-location list are positional, not route-grouped.
+    The combined-view route uses the full dispatch planner with route pairing.
+    """
+    from app.domain.delivery_timing import next_driver_name
+    letters: dict[int, str] = {}
+    for grp in groups:
+        for idx, o in enumerate(grp.get("orders") or []):
+            letters[o.id] = next_driver_name(idx)
+    return letters

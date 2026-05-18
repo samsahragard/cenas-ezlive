@@ -17,6 +17,7 @@ from app.services.orders_query import (
     LOCATION_LABELS,
     list_orders_for_location,
     group_orders_by_date,
+    rotated_dispatch_letters,
     build_grids_for_single_order,
     build_grids_for_orders,
 )
@@ -43,11 +44,13 @@ def location_orders(location: str):
     try:
         orders = list_orders_for_location(db, location)
         groups = group_orders_by_date(orders)
+        display_drivers = rotated_dispatch_letters(groups)
         return render_template(
             "orders_by_store.html",
             location=location,
             location_label=LOCATION_LABELS[location],
             groups=groups,
+            display_drivers=display_drivers,
         )
     finally:
         db.close()

@@ -71,7 +71,7 @@
                 —
               {% endif %}
             </td>
-            <td>{{ o.assigned_driver or '—' }}{# TODO Sam #2842 item 2: +1 multi-delivery badge needs backend `is_paired` flag; coord with aick #}</td>
+            <td>{{ display_drivers.get(o.id) or o.assigned_driver or '—' }}{# TODO Sam #2842 item 2: +1 multi-delivery badge needs backend `is_paired` flag; coord with aick #}</td>
             <td>
               {% if o.needs_review %}
                 <span class="pill pill-review">Needs review</span>

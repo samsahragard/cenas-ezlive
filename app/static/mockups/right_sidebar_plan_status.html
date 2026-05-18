@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Right-side menu bar — plan.md status mockup (dck)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root {
+    --ck-bg-page:        #140A06;
+    --ck-bg-sidebar:     #0F0805;
+    --ck-text:           #FAF6EC;
+    --ck-text-hover:     #FFFFFF;
+    --ck-text-muted:     rgba(236, 227, 208, 0.7);
+    --ck-text-soft:      rgba(236, 227, 208, 0.55);
+    --ck-text-faint:     rgba(236, 227, 208, 0.4);
+    --ck-red:            #C73B36;
+    --ck-gold:           #E4B340;
+    --ck-gold-bright:    #FFD970;
+    --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+    --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-status-open:    #9CCB76;
+    --ck-status-warn:    #E2645C;
+    --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+    --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ck-bg-page);
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(232, 122, 62, 0.08), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251, 191, 36, 0.06), transparent 50%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 32px 24px 80px;
+    min-height: 100vh;
+  }
+  .mockup-wrap { max-width: 1400px; margin: 0 auto; }
+  .mockup-head {
+    border-bottom: 0.5px solid var(--ck-border);
+    padding-bottom: 18px; margin-bottom: 28px;
+  }
+  .mockup-head h1 {
+    font-size: 22px; font-weight: 600; margin: 0 0 4px;
+    color: var(--ck-text); text-shadow: var(--ck-glow-gold-soft);
+  }
+  .mockup-head .v1-badge {
+    display: inline-block;
+    background: var(--ck-gold-bright);
+    color: #140A06;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .mockup-head .sub {
+    font-size: 12px; color: var(--ck-text-soft);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+
+  /* Mock-app layout: left sidebar (existing chrome) + main content placeholder + RIGHT sidebar (new) */
+  .mock-app {
+    display: grid;
+    grid-template-columns: 220px 1fr 260px;
+    gap: 14px;
+    min-height: 620px;
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--ck-bg-page);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    margin-bottom: 22px;
+  }
+  .mock-left {
+    background: var(--ck-bg-sidebar);
+    border-right: 0.5px solid var(--ck-border);
+    padding: 16px 12px;
+  }
+  .mock-left-label {
+    font-size: 10px;
+    color: var(--ck-text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 12px 8px 6px;
+  }
+  .mock-left-item {
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: var(--ck-text-soft);
+    font-size: 12px;
+    margin-bottom: 1px;
+  }
+  .mock-left-item.active {
+    background: rgba(228, 179, 64, 0.12);
+    color: var(--ck-gold);
+  }
+  .mock-main {
+    padding: 24px 28px;
+    color: var(--ck-text-soft);
+    font-size: 13px;
+    background: transparent;
+  }
+  .mock-main h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    color: var(--ck-text);
+  }
+  .mock-main-placeholder {
+    margin-top: 18px;
+    padding: 60px 24px;
+    border: 1px dashed var(--ck-border);
+    border-radius: 8px;
+    text-align: center;
+    color: var(--ck-text-faint);
+    font-style: italic;
+  }
+
+  /* === RIGHT SIDEBAR (the new thing) === */
+  .ck-right-sb {
+    background: var(--ck-bg-sidebar);
+    border-left: 0.5px solid var(--ck-border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .ck-right-sb-head {
+    padding: 14px 16px;
+    border-bottom: 0.5px solid var(--ck-border);
+    background: rgba(20, 12, 8, 0.6);
+  }
+  .ck-right-sb-head-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ck-text);
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ck-right-sb-head-sub {
+    font-size: 10.5px;
+    color: var(--ck-text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* Legend row */
+  .ck-right-sb-legend {
+    display: flex;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 0.5px solid var(--ck-border);
+    font-size: 10.5px;
+    color: var(--ck-text-soft);
+    flex-wrap: wrap;
+  }
+  .ck-right-sb-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .status-dot.live    { background: var(--ck-status-open); box-shadow: 0 0 6px rgba(156,203,118,0.5); }
+  .status-dot.soon    { background: var(--ck-gold);        box-shadow: 0 0 6px rgba(228,179,64,0.5); }
+  .status-dot.planned { background: rgba(236, 227, 208, 0.25); }
+
+  /* Section blocks */
+  .ck-right-sb-section {
+    border-bottom: 0.5px solid var(--ck-border);
+  }
+  .ck-right-sb-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 8px;
+    cursor: default;
+  }
+  .ck-right-sb-section-label {
+    font-size: 10.5px;
+    color: var(--ck-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+    text-shadow: var(--ck-glow-gold-soft);
+  }
+  .ck-right-sb-section-count {
+    font-size: 10px;
+    color: var(--ck-text-soft);
+  }
+  .ck-right-sb-section-count strong {
+    color: var(--ck-status-open);
+    font-weight: 600;
+  }
+  .ck-right-sb-section-body {
+    padding: 0 6px 10px;
+  }
+  .ck-right-sb-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--ck-text-muted);
+    font-size: 12px;
+    margin-bottom: 1px;
+  }
+  .ck-right-sb-item.is-live    { color: var(--ck-text); }
+  .ck-right-sb-item.is-soon    { color: var(--ck-text-soft); }
+  .ck-right-sb-item.is-planned { color: var(--ck-text-faint); }
+  .ck-right-sb-item:hover {
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .ck-right-sb-item .ck-right-sb-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ck-right-sb-item .ck-right-sb-soon {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--ck-gold-soft);
+    color: var(--ck-gold);
+  }
+
+  /* Notes block (below the mock-app) */
+  .notes {
+    background: rgba(228, 179, 64, 0.06);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.78);
+    line-height: 1.65;
+  }
+  .notes b { color: var(--ck-gold); }
+  .notes code {
+    background: rgba(0,0,0,0.4);
+    border: 0.5px solid var(--ck-border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: var(--ck-gold-bright);
+  }
+  .notes ul { margin: 8px 0 0; padding-left: 20px; }
+  .notes li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<div class="mockup-wrap">
+
+  <div class="mockup-head">
+    <h1>Right-side menu bar — plan.md status <span class="v1-badge">v1</span></h1>
+    <div class="sub">dck · 2026-05-17 · per Sam #2531 · sourced from plan.md §5 (9e34176)</div>
+  </div>
+
+  <div class="mock-app">
+
+    <!-- LEFT: existing sidebar (collapsed reference for context, real chrome on a real page) -->
+    <aside class="mock-left">
+      <div style="font-size:11px;color:var(--ck-gold);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px;">[Existing sidebar]</div>
+      <div class="mock-left-label">Today</div>
+      <div class="mock-left-item">Dashboard</div>
+      <div class="mock-left-label">Operations</div>
+      <div class="mock-left-item">Corporate Order</div>
+      <div class="mock-left-item">Vendors</div>
+      <div class="mock-left-item active">Ez Cater</div>
+      <div class="mock-left-item">Schedule</div>
+      <div class="mock-left-label">Insights</div>
+      <div class="mock-left-item">Performance</div>
+      <div class="mock-left-item">Sales</div>
+      <div class="mock-left-item">Labor</div>
+      <div class="mock-left-label">Admin</div>
+      <div class="mock-left-item">Team</div>
+      <div class="mock-left-label">Developer</div>
+      <div class="mock-left-item">Chat</div>
+      <div class="mock-left-item">Samples</div>
+    </aside>
+
+    <!-- MAIN: placeholder for any page content -->
+    <main class="mock-main">
+      <h2>Drivers (Admin)</h2>
+      <div style="font-size:11px;color:var(--ck-text-faint);text-transform:uppercase;letter-spacing:0.1em;">Page content area</div>
+      <div class="mock-main-placeholder">
+        Real page content lives here.<br>
+        The right-side bar is independent — same height as the left sidebar, sticky on scroll.
+      </div>
+    </main>
+
+    <!-- RIGHT: NEW plan.md status nav -->
+    <aside class="ck-right-sb">
+
+      <div class="ck-right-sb-head">
+        <div class="ck-right-sb-head-title">
+          <i class="ti ti-map-2"></i> Build progress
+        </div>
+        <div class="ck-right-sb-head-sub">plan.md surfaces · 2026-05-17</div>
+      </div>
+
+      <div class="ck-right-sb-legend">
+        <span class="ck-right-sb-legend-item"><span class="status-dot live"></span> live</span>
+        <span class="ck-right-sb-legend-item"><span class="status-dot soon"></span> partial/soon</span>
+        <span class="ck-right-sb-legend-item"><span class="status-dot planned"></span> planned</span>
+      </div>
+
+      <!-- §5.1 Root + auth -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Root + auth · §5.1</span>
+          <span class="ck-right-sb-section-count"><strong>8</strong>/8</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Store picker /</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Site login</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Partner login</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Keypad login</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Driver login</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Driver signup</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Request access</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Logout</span></div>
+        </div>
+      </div>
+
+      <!-- §5.2 + §5.3 Operations -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Operations · §5.2-§5.3</span>
+          <span class="ck-right-sb-section-count"><strong>13</strong>/16</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Store dashboard</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">EzCater orders</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Order view</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Ez Market (bid)</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Ez Manage (approve)</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Driver payroll</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Drivers (admin)</span><span class="ck-right-sb-soon">new</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">EzCater webhook</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">PDF ingest</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Corporate order</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Produce ordering</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Schedule + roster</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Drivers Live (GPS)</span></div>
+          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Webstaurant</span><span class="ck-right-sb-soon">soon</span></div>
+          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Vendor performance</span><span class="ck-right-sb-soon">soon</span></div>
+          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Vendor specs</span><span class="ck-right-sb-soon">soon</span></div>
+        </div>
+      </div>
+
+      <!-- §5.4 Block 2 Manager Tools -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Manager Tools · §5.4 · Block 2</span>
+          <span class="ck-right-sb-section-count"><strong>0</strong>/9</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Daily Manager Log</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Shift Handoff</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Incident Reports</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Supply Requests</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Daily Goals</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Staff Feedback</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Pre-shift Checklist</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Close-of-day Audit</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Recipe Page</span><span class="ck-right-sb-soon">spec</span></div>
+        </div>
+      </div>
+
+      <!-- §5.5 Insights -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Insights · §5.5</span>
+          <span class="ck-right-sb-section-count"><strong>3</strong>/4</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Performance</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Sales (all channels)</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Labor (BOH/FOH)</span></div>
+          <div class="ck-right-sb-item is-soon"><span class="status-dot soon"></span><span class="ck-right-sb-label">Forecasts</span><span class="ck-right-sb-soon">soon</span></div>
+        </div>
+      </div>
+
+      <!-- §5.6 Admin -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Admin · §5.6</span>
+          <span class="ck-right-sb-section-count"><strong>1</strong>/1</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Team</span></div>
+        </div>
+      </div>
+
+      <!-- §5.7 Developer -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Developer · §5.7</span>
+          <span class="ck-right-sb-section-count"><strong>3</strong>/3</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Dev Chat</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Samples</span><span class="ck-right-sb-soon">new</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Build Plan viewer</span><span class="ck-right-sb-soon">new</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">App docs</span></div>
+        </div>
+      </div>
+
+      <!-- §5.8 Sam Chat -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Sam Chat · §5.8</span>
+          <span class="ck-right-sb-section-count"><strong>1</strong>/1</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Cena (/sam/chat)</span></div>
+        </div>
+      </div>
+
+      <!-- §5.9 Legal -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Legal · §5.9</span>
+          <span class="ck-right-sb-section-count"><strong>5</strong>/5</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Overview</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Matters</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Documents</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Insurance</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Structure + Audit</span></div>
+        </div>
+      </div>
+
+      <!-- §5.10 Driver app -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Driver app · §5.10</span>
+          <span class="ck-right-sb-section-count"><strong>5</strong>/5</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Shifts</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Live logs (GPS)</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">My profile</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Pay history</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Change passcode</span></div>
+        </div>
+      </div>
+
+      <!-- §5.11 Briefs + anomalies -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Briefs + anomalies · §5.11</span>
+          <span class="ck-right-sb-section-count"><strong>2</strong>/2</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Briefs</span></div>
+          <div class="ck-right-sb-item is-live"><span class="status-dot live"></span><span class="ck-right-sb-label">Anomaly rules</span></div>
+        </div>
+      </div>
+
+      <!-- §5.12 Block 3 Manager AI agent -->
+      <div class="ck-right-sb-section">
+        <div class="ck-right-sb-section-head">
+          <span class="ck-right-sb-section-label">Manager AI · §5.12 · Block 3</span>
+          <span class="ck-right-sb-section-count"><strong>0</strong>/2</span>
+        </div>
+        <div class="ck-right-sb-section-body">
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Per-store assistant</span></div>
+          <div class="ck-right-sb-item is-planned"><span class="status-dot planned"></span><span class="ck-right-sb-label">Partner assistant</span></div>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- NOTES -->
+  <div class="notes">
+    <b>Page-first build per Sam #2531:</b>
+    <ul>
+      <li><b>Visual vocabulary copied from existing sidebar.html partial</b> (the V2 <code>.ck-sb-*</code> family). Right-side bar uses the same V2 <code>--ck-*</code> tokens, the same Tabler icon vocabulary, the same gold uppercase section labels with cream-glow text-shadow, the same hover-row treatment. No new design language invented — the right bar reads as a sibling of the left bar, not a foreign element.</li>
+      <li><b>Sourced from plan.md §5</b> (origin/main 9e34176). Each section header references its §5 subsection so a reader can trace any item back to the plan.</li>
+      <li><b>Per-section completion counts</b> in the header (<code><strong>X</strong>/Y</code>). At-a-glance scan: where the gold-green numbers diverge from total, that's the work remaining. Block 2 (0/9) + Block 3 (0/2) + the "soon" line items in Operations (13/16) + Forecasts (3/4) are the live "still need to do" list.</li>
+      <li><b>Status legend at top.</b> Live (gold-green dot), partial/soon (gold dot), planned (faint cream dot). Item text dims for soon/planned states so the eye lands first on what's live.</li>
+      <li><b>"new" pills</b> on items shipped in the last ~24h (Drivers admin Phase A, Samples page, Build Plan viewer). Drops to nothing after a few sessions.</li>
+    </ul>
+
+    <b>Structural decisions worth flagging:</b>
+    <ul>
+      <li><b>Width 260px</b> — slightly wider than the left sidebar's 220px because the per-item status dot + soon-pill add horizontal weight. Could squeeze to 240px if main content needs the room.</li>
+      <li><b>Sticky scroll independent of main content</b> — vertical position scrolls within the right bar itself, not the page. Otherwise the bar disappears when the user scrolls deep on a long page.</li>
+      <li><b>This is the FULL page list</b>, not role-gated. A real implementation should role-gate (drivers don't need to see "Manager Tools" todo) — but for a build-status mockup, showing everything to everyone is the right call.</li>
+      <li><b>Right bar lives at desktop only.</b> On mobile (≤1024px per <code>--ck-bp-mobile</code>) it collapses to a "Build progress" entry in the existing hamburger menu — adding a second sidebar on phone would crowd the surface. Defer the mobile pattern to a Phase B mockup if Sam wants it.</li>
+      <li><b>Two-sidebar layout has a tradeoff.</b> The main content column shrinks. On 1440px desktop you get ~920px main column — fine for most surfaces but tight for wide tables (orders list, sales reports). Could be a toggle ("show build progress") rather than always-on, if main-column real estate matters more than always-visible status.</li>
+    </ul>
+
+    <b>Status data freshness:</b>
+    <ul>
+      <li><b>v1 is hand-coded</b> from my knowledge of what's live as of 2026-05-17. For a production implementation, the status per route should be derived from a registry — e.g., scan DOC_PAGES + the route registrations + a small <code>FEATURE_STATUS</code> map per route — so the right bar updates automatically as new pages ship.</li>
+      <li><b>"new" pill</b> would come from a per-route <code>shipped_at</code> field, with a 7-day window.</li>
+      <li><b>Counts in section headers</b> would compute server-side from the same status registry.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

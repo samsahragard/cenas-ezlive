@@ -118,6 +118,11 @@ _TASK_CATEGORY_TO_RIBBON = {
 # map as new pages adopt the ribbon — there is no implicit fallback.
 _PAGE_TO_DOMAIN = {
     "dashboard":    None,           # sentinel — all 7 categories, unfiltered
+    "notifications": None,          # sentinel — same shape as dashboard
+                                    # (cena #2767 + aick #2768: /partner/notifications
+                                    # page IS the all-categories overview after
+                                    # ribbon retire at da61280; missing this mapping
+                                    # was the root cause of empty notifications page)
     "orders":       "vendors",      # placeholder — refine as pages adopt
     "vendors":      "vendors",
     "produce":      "vendors",

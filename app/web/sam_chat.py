@@ -287,6 +287,18 @@ def _build_api_messages_from_rows(rows) -> list[dict]:
         elif m.role == "dck":
             mapped.append({"role": "user",
                            "content": f"[dck]: {m.content}"})
+        elif m.role == "aick":
+            # Per Sam direct ask 2026-05-18: aick joins /sam/chat as a
+            # third participant. Render as a user-tagged turn (parallel
+            # to dck pattern) so Cena reads aick's posts as team-member
+            # contributions to react to, not as her own prior assistant
+            # turns. Behavior is summon-only by default (no auto-watcher
+            # on aick side at commit time); follow-up could add a
+            # /sam/chat poller on the aick side mirroring dck's
+            # samples_watch.py pattern if Sam wants full-participant
+            # auto-wake semantics (cena #2775 (a) + (b) still open).
+            mapped.append({"role": "user",
+                           "content": f"[aick]: {m.content}"})
         elif m.role == "cena":
             # Cena-injected posts from dev-chat-watcher-triggered turns
             # (per Sam #2533: cena uses post_to_sam_chat to surface

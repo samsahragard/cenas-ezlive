@@ -42,6 +42,7 @@ EXEMPT_PREFIXES = (
     "/request-access",           # public access-request form (gated approval inside)
     "/cron/",                    # Render Cron Job endpoints — own CRON_TOKEN header check inside
     "/sam/cena/log",             # Cena gateway audit ingest — own X-Cena-Token header check inside
+    "/sam/cena/usage-log",       # Cena gateway per-turn usage ingest — own X-Cena-Token header check inside
     "/sam/cena/db-probe/",       # Cena gateway read-only DB probe — own X-Cena-Token header check inside
     "/sam/cena/dev-chat",        # Cena gateway dev-chat read — own X-Cena-Token header check inside
     "/sam/cena/sam-chat",        # dck observer read of /sam/chat — own X-Cena-Token header check inside (Track 8 per cena #1907)

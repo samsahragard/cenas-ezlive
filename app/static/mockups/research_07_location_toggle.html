@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #7 — Persistent multi-location toggle (Uber Eats Manager pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35); }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* Top app bar with location toggle pinned in */
+  .topbar {
+    background: var(--ck-bg-sidebar);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 10px 10px 0 0;
+    padding: 12px 18px;
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 0.5px solid var(--ck-border);
+  }
+  .topbar-page { font-size: 15px; font-weight: 600; color: var(--ck-text-hover); }
+  .topbar-spacer { flex: 1; }
+
+  .loc-toggle {
+    display: inline-flex; background: rgba(0,0,0,0.3); padding: 3px;
+    border-radius: 8px; border: 0.5px solid var(--ck-border);
+  }
+  .loc-toggle button {
+    padding: 6px 14px; border-radius: 6px;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--ck-text-soft); font-size: 12px; font-family: inherit;
+    transition: background 160ms var(--ck-ease), color 160ms var(--ck-ease);
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .loc-toggle button:hover { color: var(--ck-text); }
+  .loc-toggle button.is-active {
+    background: var(--ck-gold-bright); color: #140A06; font-weight: 600;
+  }
+  .loc-toggle .loc-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .loc-toggle .loc-dot.tomball     { background: #6BA3FF; }
+  .loc-toggle .loc-dot.copperfield { background: #6FD87B; }
+  .loc-toggle .loc-dot.both        { background: linear-gradient(90deg, #6BA3FF 0%, #6FD87B 100%); }
+
+  /* "page body" placeholder showing filtered content */
+  .body-mock {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-top: none;
+    border-radius: 0 0 10px 10px; padding: 18px 22px;
+  }
+  .scope-label { font-size: 11px; color: var(--ck-text-soft); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+  .scope-label b { color: var(--ck-gold); }
+  .body-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .body-kpi { background: rgba(20,12,8,0.4); border: 0.5px solid var(--ck-border); border-radius: 8px; padding: 12px 14px; }
+  .body-kpi-label { font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+  .body-kpi-val { font-size: 20px; font-weight: 600; color: var(--ck-text-hover); }
+  .body-kpi-val .tomball { color: #6BA3FF; font-size: 13px; font-weight: 600; }
+  .body-kpi-val .copperfield { color: #6FD87B; font-size: 13px; font-weight: 600; }
+  .body-kpi-split { font-size: 10.5px; color: var(--ck-text-faint); margin-top: 6px; }
+
+  .ph { border: 1px dashed var(--ck-border); border-radius: 8px; padding: 36px; text-align: center; color: var(--ck-text-faint); font-style: italic; font-size: 12px; }
+
+  .three-up { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+
+  .pages-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .pages-row button { background: rgba(0,0,0,0.3); border: 0.5px solid var(--ck-border); color: var(--ck-text-soft); font-size: 11.5px; padding: 5px 12px; border-radius: 5px; cursor: pointer; font-family: inherit; }
+  .pages-row button.is-current { background: var(--ck-gold-soft); border-color: var(--ck-gold); color: var(--ck-gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Persistent multi-location toggle in the top bar
+      <span class="badge">RESEARCH 7/10</span>
+    </h1>
+    <div class="sub">Source pattern: Uber Eats Manager · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — "Both" scope active, dashboard aggregates both stores</div>
+
+  <div class="topbar">
+    <i class="ti ti-menu-2" style="color: var(--ck-gold); font-size: 18px;"></i>
+    <span class="topbar-page">Dashboard</span>
+    <span class="topbar-spacer"></span>
+    <div class="loc-toggle">
+      <button><span class="loc-dot tomball"></span>Tomball</button>
+      <button><span class="loc-dot copperfield"></span>Copperfield</button>
+      <button class="is-active"><span class="loc-dot both"></span>Both</button>
+    </div>
+  </div>
+
+  <div class="body-mock">
+    <div class="scope-label"><i class="ti ti-buildings" style="color: var(--ck-gold);"></i> Showing <b>Both stores</b> · aggregate · Tue May 18</div>
+
+    <div class="body-kpis">
+      <div class="body-kpi">
+        <div class="body-kpi-label">Covers</div>
+        <div class="body-kpi-val">596</div>
+        <div class="body-kpi-split"><span class="tomball">312</span> · <span class="copperfield">284</span></div>
+      </div>
+      <div class="body-kpi">
+        <div class="body-kpi-label">Ticket Avg</div>
+        <div class="body-kpi-val">$18.10</div>
+        <div class="body-kpi-split"><span class="tomball">$18.40</span> · <span class="copperfield">$17.80</span></div>
+      </div>
+      <div class="body-kpi">
+        <div class="body-kpi-label">EzCater</div>
+        <div class="body-kpi-val">14</div>
+        <div class="body-kpi-split"><span class="tomball">8</span> · <span class="copperfield">6</span></div>
+      </div>
+      <div class="body-kpi">
+        <div class="body-kpi-label">Driver Runs</div>
+        <div class="body-kpi-val">81</div>
+        <div class="body-kpi-split"><span class="tomball">47</span> · <span class="copperfield">34</span></div>
+      </div>
+    </div>
+
+    <div class="ph">Order list / driver dispatch / etc. rendered below, all scoped to BOTH stores by default. Switching the toggle re-filters everything.</div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">Toggle persists across pages — selection carries to /drivers, /orders, /produce</div>
+
+  <div class="pages-row">
+    <button class="is-current">/dashboard (scope: Both)</button>
+    <button>/drivers (scope: Both)</button>
+    <button>/orders (scope: Both)</button>
+    <button>/produce (scope: Both)</button>
+  </div>
+  <div style="font-size: 11.5px; color: var(--ck-text-faint); margin-top: 8px; font-style: italic;">Manager picks scope once → carries to every page until they change it. URL: <code style="font-size:11px;color:var(--ck-gold-bright);background:rgba(0,0,0,0.4);padding:1px 5px;border-radius:3px;">?scope=both</code> on each page; localStorage default sticks across browser sessions.</div>
+
+  <div class="section-label" style="margin-top: 32px;">Single-store scope active — only that store's data shown</div>
+
+  <div class="topbar">
+    <i class="ti ti-menu-2" style="color: var(--ck-gold); font-size: 18px;"></i>
+    <span class="topbar-page">Dashboard</span>
+    <span class="topbar-spacer"></span>
+    <div class="loc-toggle">
+      <button class="is-active"><span class="loc-dot tomball"></span>Tomball</button>
+      <button><span class="loc-dot copperfield"></span>Copperfield</button>
+      <button><span class="loc-dot both"></span>Both</button>
+    </div>
+  </div>
+
+  <div class="body-mock" style="margin-bottom: 0;">
+    <div class="scope-label"><i class="ti ti-building" style="color: #6BA3FF;"></i> Showing <b style="color:#6BA3FF;">Tomball only</b> · Tue May 18</div>
+
+    <div class="body-kpis">
+      <div class="body-kpi">
+        <div class="body-kpi-label">Covers</div>
+        <div class="body-kpi-val" style="color: #6BA3FF;">312</div>
+        <div class="body-kpi-split">vs. last Tue: +14%</div>
+      </div>
+      <div class="body-kpi">
+        <div class="body-kpi-label">Ticket Avg</div>
+        <div class="body-kpi-val" style="color: #6BA3FF;">$18.40</div>
+        <div class="body-kpi-split">vs. last Tue: −$0.85</div>
+      </div>
+      <div class="body-kpi">
+        <div class="body-kpi-label">EzCater</div>
+        <div class="body-kpi-val" style="color: #6BA3FF;">8</div>
+        <div class="body-kpi-split">vs. last Tue: +3</div>
+      </div>
+      <div class="body-kpi">
+        <div class="body-kpi-label">Driver Runs</div>
+        <div class="body-kpi-val" style="color: #6BA3FF;">47</div>
+        <div class="body-kpi-split">vs. last Tue: 0%</div>
+      </div>
+    </div>
+
+    <div class="ph">Tomball-scoped order/driver/produce data renders below. Copperfield data hidden until toggle flipped.</div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>Uber Eats Manager.</b> A persistent location chooser at the top filters all metrics, with "All locations" as an aggregate option. The toggle lives in the app chrome (top bar), not inside any one page — so it survives navigation. Operators with 2+ locations spend a meaningful fraction of their time switching scope; making the switch one tap from anywhere is the whole game.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Toggle in chrome > toggle in page.</b> If the toggle is inside the dashboard page, the operator has to navigate back to switch scope. In the top bar, scope-switching is global and constant.</li>
+      <li><b>Default "Both" view = aggregate as first impression.</b> Most operators want the big picture first ("how's the business today") then drill into a single store. Default scope = aggregate respects that pattern.</li>
+      <li><b>Per-store color identity.</b> Tomball=blue, Copperfield=green — operators recognize scope at a glance from anywhere on the page (sub-numbers tinted, page accents shift).</li>
+      <li><b>Persists across navigation.</b> Scope from /dashboard carries to /drivers carries to /orders. Operator picks scope once for a session, not once per page.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surface: base_dashboard.html topbar.</b> 3-segment toggle: Tomball / Copperfield / Both. Lives globally — every partner-tier page that has store-scoped data inherits.</li>
+      <li><b>Routing model:</b> today routes are <code>/dos/...</code> and <code>/uno/...</code> per-store. New unified routes <code>/store/{scope}/...</code> OR keep per-store URLs and add a global <code>?scope=</code> override on those that support aggregate. Either works; aggregate-overlay is the cheaper path.</li>
+      <li><b>"Both" aggregate semantics:</b> KPIs sum across stores. Order list interleaves with a per-row scope-dot indicator. Driver dispatch shows both stores' drivers on one map. Some pages (like a single store's pre-shift checklist) can hide the "Both" option since it doesn't make sense for that surface.</li>
+      <li><b>Per-store color tokens:</b> add <code>--ck-store-tomball: #6BA3FF</code> + <code>--ck-store-copperfield: #6FD87B</code>. Used in toggle dots + page accent tint + sub-split numbers.</li>
+      <li><b>Persistence:</b> URL query string for shareability + localStorage for default sticky-across-sessions. Combo: URL wins if present, otherwise fall back to localStorage, otherwise default "Both."</li>
+      <li><b>Sub-split numbers in aggregate view.</b> When in Both scope, each KPI shows the aggregate big number + the per-store split underneath (small, tinted). Operator gets aggregate + composition in one card.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Toggle component: ~30 lines (CSS+JS) wired into base_dashboard.html. Routing: depends on how store-scoped queries are structured today — if you have a clean <code>get_orders_for_store(store_slug)</code> helper, add <code>store_slug == 'both'</code> handling = trivial. If queries are baked into route handlers, this is more work (~2-3 days). Per-page sub-split display: ~per-page small touch (~half day per major page). Total: ~1-2 days for the chrome + ~1 day per major page that gains aggregate scope.</p>
+
+    <h3>Citation</h3>
+    <p>Uber Eats Manager — see <code>uber.com/us/en/blog/restaurant-manager/</code> + <code>help.uber.com/merchants-and-restaurants/article/how-can-i-view-my-performance-data-in-uber-eats-manager</code>. Similar pattern in Toast Manager (multi-store accounts), 7shifts (multi-location), Olo, Square Dashboard.</p>
+  </div>
+</div>
+</body>
+</html>

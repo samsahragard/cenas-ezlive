@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #5 — "Who's Working" right-now status blocks (7shifts pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35); }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* The status blocks row */
+  .rn-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px; }
+  .rn-block {
+    background: var(--ck-glass);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 160ms var(--ck-ease), transform 100ms var(--ck-ease);
+  }
+  .rn-block:hover { border-color: var(--ck-gold-soft); transform: translateY(-1px); }
+  .rn-block-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .rn-block-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .rn-block.on .rn-block-dot       { background: var(--ck-status-open); box-shadow: 0 0 8px var(--ck-status-open); }
+  .rn-block.on .rn-block-count     { color: var(--ck-status-open); }
+  .rn-block.idle .rn-block-dot     { background: var(--ck-gold); }
+  .rn-block.idle .rn-block-count   { color: var(--ck-gold); }
+  .rn-block.break .rn-block-dot    { background: var(--ck-gold-bright); }
+  .rn-block.break .rn-block-count  { color: var(--ck-gold-bright); }
+  .rn-block.late .rn-block-dot     { background: var(--ck-status-warn); animation: pulse 2.4s ease-in-out infinite; }
+  .rn-block.late .rn-block-count   { color: var(--ck-status-warn); }
+  .rn-block.off .rn-block-dot      { background: var(--ck-text-faint); }
+  .rn-block.off .rn-block-count    { color: var(--ck-text-soft); }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 6px rgba(226,100,92,0.4); } 50% { box-shadow: 0 0 12px rgba(226,100,92,0.9); } }
+  .rn-block-label { font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; }
+  .rn-block-count { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .rn-block-meta { font-size: 11px; color: var(--ck-text-soft); margin-top: 6px; }
+
+  /* Drill-down panel (mock state when one block is "selected") */
+  .drill {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px; padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+  .drill-head { font-size: 12px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .drill-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 0.5px solid var(--ck-border); }
+  .drill-row:last-child { border-bottom: none; }
+  .drill-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--ck-gold-soft); border: 1px solid var(--ck-gold); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--ck-gold); flex-shrink: 0; }
+  .drill-name { flex: 1; font-size: 13px; color: var(--ck-text); }
+  .drill-status { font-size: 11px; color: var(--ck-text-soft); }
+  .drill-elapsed { font-size: 11px; color: var(--ck-text-soft); font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 720px) {
+    .rn-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>"Right Now" — who's working live status blocks
+      <span class="badge">RESEARCH 5/10</span>
+    </h1>
+    <div class="sub">Source pattern: 7shifts mobile home · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — 5-bucket status strip for Tomball drivers (10:42 AM, live)</div>
+
+  <div class="rn-row">
+    <div class="rn-block on">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">On Run</span></div>
+      <div class="rn-block-count">4</div>
+      <div class="rn-block-meta">avg 12 min remaining</div>
+    </div>
+    <div class="rn-block idle">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">Idle</span></div>
+      <div class="rn-block-count">2</div>
+      <div class="rn-block-meta">avg waiting 18 min</div>
+    </div>
+    <div class="rn-block break">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">On Break</span></div>
+      <div class="rn-block-count">1</div>
+      <div class="rn-block-meta">due back 11:00</div>
+    </div>
+    <div class="rn-block late">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">Late / Overdue</span></div>
+      <div class="rn-block-count">1</div>
+      <div class="rn-block-meta">9 min past ETA</div>
+    </div>
+    <div class="rn-block off">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">Off Today</span></div>
+      <div class="rn-block-count">3</div>
+      <div class="rn-block-meta">scheduled tomorrow</div>
+    </div>
+  </div>
+
+  <div class="section-label">Drill-down — clicking "Late / Overdue" expands to action list</div>
+
+  <div class="drill">
+    <div class="drill-head"><i class="ti ti-clock-exclamation"></i> Late · 1 driver</div>
+    <div class="drill-row">
+      <div class="drill-avatar">RH</div>
+      <div class="drill-name">R. Hernandez · order EZ-44204</div>
+      <div class="drill-status">Phoenix Law · should have arrived 11:24</div>
+      <div class="drill-elapsed" style="color: var(--ck-status-warn);">+9 min</div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">Same component, FOH staffing variant (future)</div>
+
+  <div class="rn-row">
+    <div class="rn-block on">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">On the Floor</span></div>
+      <div class="rn-block-count">7</div>
+      <div class="rn-block-meta">4 FOH + 3 BOH</div>
+    </div>
+    <div class="rn-block idle">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">Upcoming</span></div>
+      <div class="rn-block-count">2</div>
+      <div class="rn-block-meta">starting in 45 min</div>
+    </div>
+    <div class="rn-block break">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">On Break</span></div>
+      <div class="rn-block-count">1</div>
+      <div class="rn-block-meta">due back 11:15</div>
+    </div>
+    <div class="rn-block late">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">No-Show</span></div>
+      <div class="rn-block-count">0</div>
+      <div class="rn-block-meta">all in</div>
+    </div>
+    <div class="rn-block off">
+      <div class="rn-block-head"><span class="rn-block-dot"></span><span class="rn-block-label">Off Today</span></div>
+      <div class="rn-block-count">8</div>
+      <div class="rn-block-meta">8 of 16 staff</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>7shifts mobile home.</b> The manager home shows a row of blocks summarizing staff state right now: On / On Break / Overdue / Upcoming / Out, each tappable to drill in. It answers "who do I have on the floor this minute" in one glance without opening the schedule. The five-bucket abstraction is the heart of the pattern — fewer buckets and you lose triage clarity; more and you lose at-a-glance scannability.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Real-time, not "today's schedule".</b> Schedules are abstract; "4 drivers are on a run RIGHT NOW" is concrete. Operators care about current state, not planned state.</li>
+      <li><b>Color-bound to action.</b> Green = good (people working). Gold = warm (people idle or on break — opportunity to redirect). Red pulse = urgent (someone late). Gray = neutral (off-shift, no action needed).</li>
+      <li><b>Drill-down = same component, deeper.</b> Clicking a bucket expands into the list of named individuals + their context. No screen change — overlay or expand inline.</li>
+      <li><b>Reusable abstraction.</b> Same 5-bucket pattern works for drivers (On Run / Idle / Break / Late / Off), FOH staff (On Floor / Upcoming / Break / No-Show / Off), kitchen staff, vendors, etc. One CSS component, many surfaces.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary v1 surface: per-store dashboard, drivers bucket.</b> 5 blocks tied to driver_runs + driver_shifts tables. Late-detection: any run with arrived_at IS NULL AND expected_arrival_at < now() - 5min.</li>
+      <li><b>v2 surface: FOH/BOH staffing</b> once you have a real schedule system. Same 5 bucket pattern, different data source.</li>
+      <li><b>Drill behavior:</b> click a bucket → expand inline (don't navigate). For the Late bucket, the drill row should include 1-tap actions: "Ping driver" / "Reassign" / "Mark contacted." Otherwise it's just inspection, not workflow.</li>
+      <li><b>Don't double up with the needs-you strip (research #4).</b> Strip says "X needs your action"; Right Now says "here's the team state." Complementary — Strip = TO-DO, Right Now = STATUS.</li>
+      <li><b>Late-block pulse only when count > 0.</b> Pulse is annoying when always-on; valuable when it appears to draw attention.</li>
+      <li><b>Mobile responsive:</b> 5-up grid collapses to 2-up on &lt;720px (mockup demonstrates). Late + On stay first since they're the actionable buckets.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Backend: aggregator query joining driver + driver_runs + driver_shifts (or current proxy tables). Returns {on, idle, break, late, off} counts + a few summary stats per bucket. ~half day. Frontend: ~half day for the 5-block grid component + drill-expand interaction. Late-detection threshold tuning: ongoing per Sam's input on what feels right. Total: ~1 day for v1 driver bucket; FOH adds when staffing data exists.</p>
+
+    <h3>Citation</h3>
+    <p>7shifts — see <code>kb.7shifts.com/hc/en-us/articles/4417513719699</code> ("Who's Working Dashboard Overview"). Similar pattern in Toast Manager ("staffing at a glance") + Homebase mobile home. The 5-bucket count is consistent across all three implementations — strong convergent design.</p>
+  </div>
+</div>
+</body>
+</html>

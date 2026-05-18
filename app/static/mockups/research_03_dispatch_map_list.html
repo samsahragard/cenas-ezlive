@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #3 — Dispatch map + per-driver status tiles (DoorDash Drive pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root {
+    --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805;
+    --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4);
+    --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14);
+    --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C;
+    --ck-glass:rgba(40,22,14,0.55);
+    --ck-ease:cubic-bezier(0.22,0.8,0.24,1);
+    --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* === DUAL-PANE: map + list === */
+  .dispatch { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 12px; padding: 14px; }
+  .map-pane {
+    background: linear-gradient(135deg, #1a0e08 0%, #251610 50%, #1a0e08 100%);
+    border-radius: 10px;
+    height: 420px;
+    position: relative;
+    overflow: hidden;
+    border: 0.5px solid var(--ck-border);
+  }
+  .map-grid {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(228,179,64,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(228,179,64,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .map-roads {
+    position: absolute; inset: 0;
+    pointer-events: none;
+  }
+  .map-roads svg { width: 100%; height: 100%; }
+  .map-pin {
+    position: absolute;
+    width: 30px; height: 30px;
+    background: var(--ck-gold-bright);
+    border: 2px solid #140A06;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  }
+  .map-pin span { transform: rotate(45deg); font-size: 11px; font-weight: 700; color: #140A06; }
+  .map-pin.driver { background: var(--ck-status-open); border-radius: 50%; transform: none; box-shadow: 0 0 0 3px rgba(156,203,118,0.25), 0 4px 8px rgba(0,0,0,0.4); }
+  .map-pin.driver span { transform: none; color: #0a1f0a; font-size: 9px; }
+  .map-pin.driver.late { background: var(--ck-status-warn); box-shadow: 0 0 0 3px rgba(226,100,92,0.25), 0 4px 8px rgba(0,0,0,0.4); }
+  .map-store { position: absolute; width: 14px; height: 14px; background: var(--ck-red); border: 2px solid #FFFAEC; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.4); }
+  .map-legend { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 6px; font-size: 10.5px; color: var(--ck-text-soft); display: flex; gap: 12px; flex-wrap: wrap; }
+  .map-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+  .map-legend .swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  .list-pane { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+  .list-head { font-size: 10.5px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em; padding: 4px 6px; display: flex; justify-content: space-between; }
+  .driver-tile { background: rgba(20,12,8,0.55); border: 0.5px solid var(--ck-border); border-left-width: 3px; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color 160ms var(--ck-ease); }
+  .driver-tile:hover { border-color: var(--ck-gold-soft); }
+  .driver-tile.s-pickup     { border-left-color: var(--ck-gold); }
+  .driver-tile.s-enroute    { border-left-color: var(--ck-gold-bright); }
+  .driver-tile.s-arrived    { border-left-color: var(--ck-status-open); }
+  .driver-tile.s-late       { border-left-color: var(--ck-status-warn); background: rgba(226,100,92,0.07); }
+  .driver-tile.s-idle       { border-left-color: var(--ck-text-faint); opacity: 0.7; }
+  .dt-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .dt-name { font-size: 13px; font-weight: 600; color: var(--ck-text-hover); }
+  .dt-eta { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dt-tile.s-late .dt-eta { color: var(--ck-status-warn); }
+  .dt-status-pill { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border-radius: 3px; display: inline-block; margin-right: 4px; }
+  .driver-tile.s-pickup .dt-status-pill   { background: rgba(228,179,64,0.18); color: var(--ck-gold); }
+  .driver-tile.s-enroute .dt-status-pill  { background: rgba(255,217,112,0.18); color: var(--ck-gold-bright); }
+  .driver-tile.s-arrived .dt-status-pill  { background: rgba(156,203,118,0.18); color: var(--ck-status-open); }
+  .driver-tile.s-late .dt-status-pill     { background: rgba(226,100,92,0.18); color: var(--ck-status-warn); }
+  .driver-tile.s-idle .dt-status-pill     { background: rgba(236,227,208,0.08); color: var(--ck-text-faint); }
+  .dt-meta { font-size: 11px; color: var(--ck-text-muted); }
+
+  .mobile-toggle { display: none; }
+  @media (max-width: 768px) {
+    .dispatch { grid-template-columns: 1fr; }
+    .map-pane { display: none; height: 280px; }
+    .map-pane.is-active { display: block; }
+    .list-pane.is-hidden { display: none; }
+    .mobile-toggle { display: flex; gap: 4px; margin-bottom: 12px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 8px; }
+    .mobile-toggle button { flex: 1; padding: 7px 12px; background: transparent; border: none; color: var(--ck-text-soft); border-radius: 6px; font-size: 12px; font-family: inherit; cursor: pointer; }
+    .mobile-toggle button.is-active { background: var(--ck-gold-bright); color: #140A06; font-weight: 600; }
+  }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Dispatch map + per-driver status tiles
+      <span class="badge">RESEARCH 3/10</span>
+    </h1>
+    <div class="sub">Source pattern: DoorDash Drive Portal · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — driver dispatch with dual map+list (desktop)</div>
+
+  <div class="mobile-toggle">
+    <button>List</button>
+    <button class="is-active">Map</button>
+  </div>
+
+  <div class="dispatch">
+    <div class="map-pane">
+      <div class="map-grid"></div>
+      <div class="map-roads"><svg viewBox="0 0 600 420" preserveAspectRatio="none">
+        <path d="M 0 200 L 600 220" stroke="rgba(236,227,208,0.15)" stroke-width="3" fill="none"/>
+        <path d="M 200 0 L 220 420" stroke="rgba(236,227,208,0.15)" stroke-width="3" fill="none"/>
+        <path d="M 0 100 L 600 90" stroke="rgba(236,227,208,0.08)" stroke-width="2" fill="none"/>
+        <path d="M 0 340 L 600 320" stroke="rgba(236,227,208,0.08)" stroke-width="2" fill="none"/>
+        <path d="M 400 0 L 420 420" stroke="rgba(236,227,208,0.08)" stroke-width="2" fill="none"/>
+      </svg></div>
+
+      <!-- Store -->
+      <div class="map-store" style="top: 200px; left: 210px;" title="Tomball (origin)"></div>
+
+      <!-- Active driver pins -->
+      <div class="map-pin driver" style="top: 80px; left: 120px;"><span>SA</span></div>
+      <div class="map-pin driver" style="top: 150px; left: 380px;"><span>JL</span></div>
+      <div class="map-pin driver" style="top: 290px; left: 90px;"><span>MK</span></div>
+      <div class="map-pin driver late" style="top: 340px; left: 470px;"><span>RH</span></div>
+
+      <!-- Destinations -->
+      <div class="map-pin" style="top: 60px; left: 140px;"><span>1</span></div>
+      <div class="map-pin" style="top: 130px; left: 410px;"><span>2</span></div>
+      <div class="map-pin" style="top: 280px; left: 110px;"><span>3</span></div>
+      <div class="map-pin" style="top: 320px; left: 490px;"><span>4</span></div>
+
+      <div class="map-legend">
+        <span class="map-legend-item"><span class="swatch" style="background: var(--ck-red);"></span>Store</span>
+        <span class="map-legend-item"><span class="swatch" style="background: var(--ck-status-open); border-radius: 50%;"></span>Driver (on-time)</span>
+        <span class="map-legend-item"><span class="swatch" style="background: var(--ck-status-warn); border-radius: 50%;"></span>Driver (late)</span>
+        <span class="map-legend-item"><span class="swatch" style="background: var(--ck-gold-bright);"></span>Destination</span>
+      </div>
+    </div>
+
+    <div class="list-pane">
+      <div class="list-head">
+        <span>Active runs · 4</span>
+        <span>sort: ETA</span>
+      </div>
+
+      <div class="driver-tile s-pickup">
+        <div class="dt-head"><span class="dt-name">Sara A · order #1</span><span class="dt-eta">12 min</span></div>
+        <span class="dt-status-pill">en route to pickup</span>
+        <span class="dt-meta">Acme Corp · $384 · 24 ppl</span>
+      </div>
+
+      <div class="driver-tile s-enroute">
+        <div class="dt-head"><span class="dt-name">J Luna · order #2</span><span class="dt-eta">8 min</span></div>
+        <span class="dt-status-pill">en route to drop</span>
+        <span class="dt-meta">ConfTech · $192 · 12 ppl</span>
+      </div>
+
+      <div class="driver-tile s-arrived">
+        <div class="dt-head"><span class="dt-name">M Kim · order #3</span><span class="dt-eta">arrived</span></div>
+        <span class="dt-status-pill">at customer</span>
+        <span class="dt-meta">Briarwood Elem · $288 · 18 ppl</span>
+      </div>
+
+      <div class="driver-tile s-late">
+        <div class="dt-head"><span class="dt-name">R Hernandez · order #4</span><span class="dt-eta">+9 min late</span></div>
+        <span class="dt-status-pill">delayed in traffic</span>
+        <span class="dt-meta">Phoenix Law · $560 · 35 ppl</span>
+      </div>
+
+      <div class="driver-tile s-idle">
+        <div class="dt-head"><span class="dt-name">D Patel · idle</span><span class="dt-eta">—</span></div>
+        <span class="dt-status-pill">available</span>
+        <span class="dt-meta">last run finished 14 min ago</span>
+      </div>
+
+      <div class="driver-tile s-idle">
+        <div class="dt-head"><span class="dt-name">T Wu · idle</span><span class="dt-eta">—</span></div>
+        <span class="dt-status-pill">available</span>
+        <span class="dt-meta">last run finished 28 min ago</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>DoorDash Drive Portal.</b> The portal pairs a live map of active deliveries with a sortable list of order tiles, each tile showing Dasher name, ETA, and current state (assigned / en route to pickup / picked up / en route to drop / arrived). The dual map+list layout means dispatch can scan visually or scan textually depending on need.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Two scanning modalities, one source of truth.</b> Some operators are visual ("where are my drivers right now") and some are list-oriented ("who's late, in order"). Same data, two surfaces — no mode switching cognitive cost.</li>
+      <li><b>Map = situational awareness; list = action queue.</b> Map shows clustering, route overlap, dead zones. List shows priorities, urgency, what-to-do-next. Operators flip between them constantly.</li>
+      <li><b>Single status pill vocabulary.</b> Pickup / enroute / arrived / late / idle — same labels on the tile AND the map pin color. Reduces "wait, what does yellow mean again" friction.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surface: <code>/dos/drivers</code> + <code>/uno/drivers</code> admin pages.</b> Today these are list-only. Add a map pane on the left (desktop ≥768px) showing active drivers + their destinations relative to the store.</li>
+      <li><b>Map data source:</b> driver GPS pings (if you have them) OR last-known-from-route-API geocode. For v1, even a static map with pins placed by destination address would beat no map at all.</li>
+      <li><b>Status vocabulary.</b> Five states match our driver workflow: pickup-en-route / drop-en-route / arrived / late / idle. Token bindings: <code>--ck-gold</code> (pickup) / <code>--ck-gold-bright</code> (drop) / <code>--ck-status-open</code> (arrived) / <code>--ck-status-warn</code> (late) / <code>--ck-text-faint</code> (idle).</li>
+      <li><b>Mobile collapse: default to LIST, "Map" toggle in header.</b> 440px phone can't show both meaningfully; managers can opt-in to map mode for triage. Don't waste vertical real estate by default.</li>
+      <li><b>Single-driver multi-order:</b> if a driver has multiple deliveries pinned to same route, stack the tiles + show a single pin on the map with the order count badge.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>The map is the load-bearing piece — pick a library (Leaflet + OSM tiles is the cheap path; Mapbox GL JS is the rich path) and budget a real chunk of time for it. The list view + status pill vocabulary is the easy half (~1 day). Map integration: ~3-5 days depending on whether you have driver GPS or have to geocode destinations. Mobile drawer/toggle UX: ~1 day.</p>
+
+    <h3>Citation</h3>
+    <p>DoorDash Drive Portal — see <code>help.doordash.com/dashers/s/article/DoorDash-Drive-Portal</code> + <code>developer.doordash.com/en-US/docs/drive/how_to/build_for_restaurants/</code>. Same dual map+list pattern appears in Uber Eats Dispatcher (for fleet operations) and the Olo Dispatch product.</p>
+  </div>
+</div>
+</body>
+</html>

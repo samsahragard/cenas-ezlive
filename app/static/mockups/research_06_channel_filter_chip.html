@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #6 — Channel-filter chip row (Olo Dashboard pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35); }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* Channel filter row */
+  .filter-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 14px;
+    overflow-x: auto;
+  }
+  .filter-label { font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-right: 4px; flex-shrink: 0; }
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 16px;
+    background: rgba(0,0,0,0.3); border: 0.5px solid var(--ck-border);
+    color: var(--ck-text-soft); font-size: 12px; cursor: pointer;
+    font-family: inherit; white-space: nowrap;
+    transition: border-color 160ms var(--ck-ease), background 160ms var(--ck-ease);
+  }
+  .filter-chip:hover { border-color: var(--ck-gold-soft); }
+  .filter-chip.is-active {
+    background: var(--ck-gold-bright); color: #140A06;
+    border-color: var(--ck-gold-bright); font-weight: 600;
+  }
+  .filter-chip .count {
+    background: rgba(0,0,0,0.18); color: inherit;
+    font-size: 10.5px; font-weight: 600;
+    padding: 1px 6px; border-radius: 8px;
+  }
+  .filter-chip.is-active .count { background: rgba(20,10,6,0.25); }
+  .filter-chip .channel-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .filter-chip .channel-dot.ezcater { background: #FFAA33; }
+  .filter-chip .channel-dot.direct  { background: var(--ck-status-open); }
+  .filter-chip .channel-dot.phone   { background: var(--ck-gold); }
+  .filter-chip .channel-dot.doordash { background: #FF3B3B; }
+  .filter-chip .channel-dot.ubereats { background: #00C868; }
+
+  .filter-meta { margin-left: auto; font-size: 11px; color: var(--ck-text-faint); }
+
+  /* Order list (filtered view) */
+  .orders { display: flex; flex-direction: column; gap: 6px; background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px; overflow: hidden; }
+  .order-row {
+    display: grid; grid-template-columns: 16px 80px 1.4fr 1fr 100px 70px;
+    gap: 12px; padding: 10px 14px; align-items: center;
+    border-bottom: 0.5px solid var(--ck-border);
+    font-size: 12.5px; cursor: pointer;
+    transition: background 120ms var(--ck-ease);
+  }
+  .order-row:hover { background: rgba(228,179,64,0.04); }
+  .order-row:last-child { border-bottom: none; }
+  .order-row .channel-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .order-row .channel-dot.ezcater { background: #FFAA33; }
+  .order-row .channel-dot.direct  { background: var(--ck-status-open); }
+  .order-row .channel-dot.phone   { background: var(--ck-gold); }
+  .order-row .channel-dot.doordash { background: #FF3B3B; }
+  .order-row .channel-dot.ubereats { background: #00C868; }
+  .o-id { font-family: SFMono-Regular, Consolas, monospace; color: var(--ck-text-soft); font-size: 11.5px; }
+  .o-customer { color: var(--ck-text-hover); font-weight: 600; }
+  .o-meta { color: var(--ck-text-muted); font-size: 11.5px; }
+  .o-total { font-weight: 700; color: var(--ck-status-open); text-align: right; }
+  .o-status { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 3px; text-align: center; }
+  .o-status.pending  { background: rgba(228,179,64,0.18); color: var(--ck-gold); }
+  .o-status.confirmed { background: rgba(156,203,118,0.18); color: var(--ck-status-open); }
+  .o-status.out     { background: rgba(255,217,112,0.18); color: var(--ck-gold-bright); }
+
+  .filter-state { margin-bottom: 10px; font-size: 11.5px; color: var(--ck-text-soft); font-style: italic; }
+  .filter-state b { color: var(--ck-gold); font-style: normal; }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Channel-filter chip row — single-pane order view
+      <span class="badge">RESEARCH 6/10</span>
+    </h1>
+    <div class="sub">Source pattern: Olo Dashboard · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — catering pipeline with channel chips</div>
+
+  <div class="filter-row">
+    <span class="filter-label">Source</span>
+    <button class="filter-chip is-active">All <span class="count">14</span></button>
+    <button class="filter-chip"><span class="channel-dot ezcater"></span>EzCater <span class="count">8</span></button>
+    <button class="filter-chip"><span class="channel-dot direct"></span>Direct <span class="count">3</span></button>
+    <button class="filter-chip"><span class="channel-dot phone"></span>Phone <span class="count">3</span></button>
+    <button class="filter-chip"><span class="channel-dot doordash"></span>DoorDash <span class="count">0</span></button>
+    <button class="filter-chip"><span class="channel-dot ubereats"></span>UberEats <span class="count">0</span></button>
+    <div class="filter-meta">14 today · Tomball</div>
+  </div>
+
+  <div class="filter-state">Showing <b>All sources</b> · filter persists per session · click chip to narrow</div>
+
+  <div class="orders">
+    <div class="order-row">
+      <span class="channel-dot ezcater"></span>
+      <span class="o-id">EZ-44218</span>
+      <div><div class="o-customer">Sara R · Acme Corp</div><div class="o-meta">24 ppl · Pickup 12:30</div></div>
+      <span class="o-meta">EzCater fee 12%</span>
+      <span class="o-total">$384</span>
+      <span class="o-status pending">pending</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot direct"></span>
+      <span class="o-id">D-1842</span>
+      <div><div class="o-customer">Briarwood Office Mgmt</div><div class="o-meta">35 ppl · Pickup 11:45</div></div>
+      <span class="o-meta">repeat client (4th order)</span>
+      <span class="o-total">$525</span>
+      <span class="o-status confirmed">confirmed</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot ezcater"></span>
+      <span class="o-id">EZ-44219</span>
+      <div><div class="o-customer">Marcus T · ConfTech</div><div class="o-meta">12 ppl · Pickup 1:00</div></div>
+      <span class="o-meta">EzCater fee 12%</span>
+      <span class="o-total">$192</span>
+      <span class="o-status pending">pending</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot phone"></span>
+      <span class="o-id">P-2104</span>
+      <div><div class="o-customer">Robert K · Westside HOA</div><div class="o-meta">8 ppl · Pickup 12:15</div></div>
+      <span class="o-meta">phoned in 10:18 by Sara</span>
+      <span class="o-total">$128</span>
+      <span class="o-status confirmed">confirmed</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot direct"></span>
+      <span class="o-id">D-1843</span>
+      <div><div class="o-customer">Tomball ISD</div><div class="o-meta">60 ppl · Pickup 11:30</div></div>
+      <span class="o-meta">school account · NET-30</span>
+      <span class="o-total">$960</span>
+      <span class="o-status out">out for delivery</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot ezcater"></span>
+      <span class="o-id">EZ-44215</span>
+      <div><div class="o-customer">Anna L · Briarwood Elem</div><div class="o-meta">18 ppl · Pickup 11:45</div></div>
+      <span class="o-meta">EzCater fee 12%</span>
+      <span class="o-total">$288</span>
+      <span class="o-status confirmed">confirmed</span>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">Filtered state — EzCater chip active, others dim</div>
+
+  <div class="filter-row">
+    <span class="filter-label">Source</span>
+    <button class="filter-chip">All <span class="count">14</span></button>
+    <button class="filter-chip is-active"><span class="channel-dot ezcater"></span>EzCater <span class="count">8</span></button>
+    <button class="filter-chip"><span class="channel-dot direct"></span>Direct <span class="count">3</span></button>
+    <button class="filter-chip"><span class="channel-dot phone"></span>Phone <span class="count">3</span></button>
+    <button class="filter-chip" style="opacity:0.4;"><span class="channel-dot doordash"></span>DoorDash <span class="count">0</span></button>
+    <button class="filter-chip" style="opacity:0.4;"><span class="channel-dot ubereats"></span>UberEats <span class="count">0</span></button>
+    <div class="filter-meta">8 EzCater · Tomball</div>
+  </div>
+
+  <div class="filter-state">Showing <b>EzCater only</b> · 8 of 14 orders match · clear filter to show all</div>
+
+  <div class="orders" style="margin-bottom: 0;">
+    <div class="order-row">
+      <span class="channel-dot ezcater"></span>
+      <span class="o-id">EZ-44218</span>
+      <div><div class="o-customer">Sara R · Acme Corp</div><div class="o-meta">24 ppl · Pickup 12:30</div></div>
+      <span class="o-meta">EzCater fee 12%</span>
+      <span class="o-total">$384</span>
+      <span class="o-status pending">pending</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot ezcater"></span>
+      <span class="o-id">EZ-44219</span>
+      <div><div class="o-customer">Marcus T · ConfTech</div><div class="o-meta">12 ppl · Pickup 1:00</div></div>
+      <span class="o-meta">EzCater fee 12%</span>
+      <span class="o-total">$192</span>
+      <span class="o-status pending">pending</span>
+    </div>
+    <div class="order-row">
+      <span class="channel-dot ezcater"></span>
+      <span class="o-id">EZ-44215</span>
+      <div><div class="o-customer">Anna L · Briarwood Elem</div><div class="o-meta">18 ppl · Pickup 11:45</div></div>
+      <span class="o-meta">EzCater fee 12%</span>
+      <span class="o-total">$288</span>
+      <span class="o-status confirmed">confirmed</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>Olo Dashboard.</b> Olo's value proposition is "stop juggling tablets" — they aggregate every digital order channel into one list with a filter chip row at the top to narrow by source. Filter state persists per session so operators don't re-pick on every page load.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>One pane > many panes.</b> Operators stop context-switching between EzCater portal / DoorDash portal / phone-notepad / Direct-CRM. Everything lives in one list.</li>
+      <li><b>Per-channel color identity.</b> EzCater orange / Direct green / Phone gold / DoorDash red / UberEats green — operators recognize source at a glance without reading the channel name.</li>
+      <li><b>Forward-compatible by construction.</b> Adding a new channel (e.g. a future Cenas direct-catering web form) is one row in a channel-config table + a new chip. No restructuring of the order pipeline.</li>
+      <li><b>Filter persists per session.</b> Operator who lives in EzCater filter all morning doesn't get reset on page reload. localStorage or query-string persist.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surface: <code>/dos/orders</code> + <code>/uno/orders</code></b> catering pipeline pages. Today these are probably EzCater-only. Build the page as if multiple channels exist even if only EzCater is active right now — one channel works fine + you avoid a rewrite when direct/phone channels are added.</li>
+      <li><b>Channel taxonomy for Cenas v1:</b> EzCater (live) / Direct (web form, future) / Phone (manager-entered, today probably an off-system notepad — formalize) / DoorDash (if you add) / UberEats (if you add).</li>
+      <li><b>Color palette per channel:</b> use the actual brand colors of the source service (#FFAA33 EzCater, #FF3B3B DoorDash, #00C868 UberEats). For internal-source channels (Direct, Phone) use semantic tokens — green for direct (no platform fee), gold for phone (warmth).</li>
+      <li><b>Filter state persistence:</b> URL query string (<code>?source=ezcater</code>) is preferred over localStorage — shareable, bookmarkable, survives device switches.</li>
+      <li><b>"All" chip is the default + carries the total.</b> Don't make operators click a chip to see anything; show everything by default.</li>
+      <li><b>Zero-count chips dim, don't hide.</b> Empty DoorDash chip stays visible at 40% opacity so operator knows the channel exists + sees if it activates. Hiding zero-counts breaks discoverability.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Backend: add a <code>channel</code> column to the orders table (default 'ezcater' for existing rows). ~10 min migration. Frontend: chip row component (~30 lines), URL query param wiring (~10 lines), per-channel color dot (~5 lines CSS). Total: ~2-4 hours. Trivial cost, large future-proofing value.</p>
+
+    <h3>Citation</h3>
+    <p>Olo Dashboard — see <code>olo.com/dispatch</code> + <code>olosupport.zendesk.com/hc/en-us/articles/115000076446-Dashboard-Overview</code>. Similar pattern in ChowNow + Square Dashboard + Toast Order Aggregator.</p>
+  </div>
+</div>
+</body>
+</html>

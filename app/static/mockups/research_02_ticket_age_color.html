@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #2 — Ticket-age color escalation (Toast KDS pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root {
+    --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805;
+    --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4);
+    --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14);
+    --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C;
+    --ck-glass:rgba(40,22,14,0.55);
+    --ck-ease:cubic-bezier(0.22,0.8,0.24,1);
+    --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+    /* Age tiers — the heart of this pattern */
+    --age-fresh:  var(--ck-text-soft);          /* < 5 min: nothing special */
+    --age-aware:  var(--ck-gold);               /* 5-10 min: attention */
+    --age-warn:   var(--ck-gold-bright);        /* 10-15 min: warm warning */
+    --age-late:   var(--ck-status-warn);        /* > 15 min: late, red */
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* === ORDER TILES (EzCater pipeline mockup) === */
+  .legend { display: flex; gap: 18px; padding: 10px 14px; background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 8px; margin-bottom: 18px; font-size: 11px; color: var(--ck-text-soft); flex-wrap: wrap; }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .tile {
+    background: var(--ck-glass);
+    border: 0.5px solid var(--ck-border);
+    border-left-width: 3px;
+    border-radius: 8px;
+    padding: 12px 14px;
+    transition: border-color 200ms var(--ck-ease), background 200ms var(--ck-ease);
+  }
+  .tile.age-fresh  { border-left-color: var(--age-fresh);  }
+  .tile.age-aware  { border-left-color: var(--age-aware);  }
+  .tile.age-warn   { border-left-color: var(--age-warn); background: rgba(255,217,112,0.05);   }
+  .tile.age-late   { border-left-color: var(--age-late); background: rgba(226,100,92,0.07); animation: pulse-late 2.4s ease-in-out infinite; }
+  @keyframes pulse-late {
+    0%,100% { box-shadow: inset 4px 0 0 var(--age-late), 0 0 0 rgba(226,100,92,0); }
+    50%     { box-shadow: inset 4px 0 0 var(--age-late), 0 0 12px rgba(226,100,92,0.3); }
+  }
+  .tile-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .tile-id { font-size: 11.5px; color: var(--ck-text-soft); font-family: SFMono-Regular, Consolas, monospace; }
+  .tile-age { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile.age-fresh .tile-age { color: var(--age-fresh); }
+  .tile.age-aware .tile-age { color: var(--age-aware); }
+  .tile.age-warn  .tile-age { color: var(--age-warn); }
+  .tile.age-late  .tile-age { color: var(--age-late); }
+  .tile-customer { font-size: 14px; font-weight: 600; color: var(--ck-text-hover); margin-bottom: 4px; }
+  .tile-meta { font-size: 11.5px; color: var(--ck-text-muted); }
+  .tile-meta .sep { color: var(--ck-text-faint); margin: 0 4px; }
+  .tile-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .tile-btn { flex: 1; padding: 6px 10px; border-radius: 5px; font-size: 11.5px; font-weight: 600; background: transparent; border: 0.5px solid var(--ck-border); color: var(--ck-text-soft); cursor: pointer; font-family: inherit; }
+  .tile-btn.primary { background: var(--ck-gold-bright); color: #140A06; border-color: var(--ck-gold-bright); }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Ticket-age color escalation
+      <span class="badge">RESEARCH 2/10</span>
+    </h1>
+    <div class="sub">Source pattern: Toast KDS · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — EzCater pipeline tiles with age-driven color</div>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--age-fresh);"></span> fresh · &lt; 5 min</span>
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--age-aware);"></span> aware · 5–10 min</span>
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--age-warn);"></span> warn · 10–15 min</span>
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--age-late);"></span> late · &gt; 15 min (pulse)</span>
+  </div>
+
+  <div class="tiles">
+    <div class="tile age-fresh">
+      <div class="tile-head"><span class="tile-id">EZ-44218</span><span class="tile-age">2:14</span></div>
+      <div class="tile-customer">Sara R · Acme Corp · 24 ppl</div>
+      <div class="tile-meta">Tomball <span class="sep">·</span> Pickup 12:30 <span class="sep">·</span> $384</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-fresh">
+      <div class="tile-head"><span class="tile-id">EZ-44219</span><span class="tile-age">3:48</span></div>
+      <div class="tile-customer">Marcus T · ConfTech · 12 ppl</div>
+      <div class="tile-meta">Copperfield <span class="sep">·</span> Pickup 1:00 <span class="sep">·</span> $192</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-aware">
+      <div class="tile-head"><span class="tile-id">EZ-44215</span><span class="tile-age">6:22</span></div>
+      <div class="tile-customer">Anna L · Briarwood Elem · 18 ppl</div>
+      <div class="tile-meta">Tomball <span class="sep">·</span> Pickup 11:45 <span class="sep">·</span> $288</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-aware">
+      <div class="tile-head"><span class="tile-id">EZ-44214</span><span class="tile-age">8:51</span></div>
+      <div class="tile-customer">DeShawn K · Phoenix Law · 35 ppl</div>
+      <div class="tile-meta">Tomball <span class="sep">·</span> Pickup 12:00 <span class="sep">·</span> $560</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-warn">
+      <div class="tile-head"><span class="tile-id">EZ-44210</span><span class="tile-age">12:07</span></div>
+      <div class="tile-customer">Brittany M · Cedar Pediatrics · 8 ppl</div>
+      <div class="tile-meta">Copperfield <span class="sep">·</span> Pickup 11:15 <span class="sep">·</span> $128</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-warn">
+      <div class="tile-head"><span class="tile-id">EZ-44208</span><span class="tile-age">13:42</span></div>
+      <div class="tile-customer">Roger N · Tomball ISD · 60 ppl</div>
+      <div class="tile-meta">Tomball <span class="sep">·</span> Pickup 11:30 <span class="sep">·</span> $960</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-late">
+      <div class="tile-head"><span class="tile-id">EZ-44204</span><span class="tile-age">17:33</span></div>
+      <div class="tile-customer">Kim J · Westside Realty · 14 ppl</div>
+      <div class="tile-meta">Tomball <span class="sep">·</span> Pickup 11:00 <span class="sep">·</span> $224</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+
+    <div class="tile age-late">
+      <div class="tile-head"><span class="tile-id">EZ-44201</span><span class="tile-age">22:18</span></div>
+      <div class="tile-customer">Marcus B · Northpark Office · 6 ppl</div>
+      <div class="tile-meta">Copperfield <span class="sep">·</span> Pickup 10:45 <span class="sep">·</span> $96</div>
+      <div class="tile-actions">
+        <button class="tile-btn">Reassign</button>
+        <button class="tile-btn primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>Toast KDS.</b> Kitchen Display ticket headers shift color as the ticket ages, and new/changed tickets briefly flash. Kitchen reads urgency peripherally — no time math, no reading timestamps. This is the single most universally-praised pattern in restaurant ops UX. Toast lets operators customize the thresholds per their service standards, but the color escalation itself is non-negotiable in the product.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Pre-attentive color processing.</b> Humans see "that one's red" before they finish reading any other tile. Kitchen on the line glances at the screen with eyes already moving toward the next task — color does the triage work for them.</li>
+      <li><b>Thresholds, not gradients.</b> Discrete tiers (fresh / aware / warn / late) beat continuous gradients because the human brain bins them — you don't need to read "11 vs 12 min", just "warn vs warn".</li>
+      <li><b>Pulse on late.</b> Late tier adds a slow pulse so it draws the eye even on a glance. Aware/warn don't pulse — preserves attention for the actually-late tickets.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surface: EzCater pipeline.</b> Today the cards probably show a created-at timestamp. Add an age field + a tier-classifier + the color treatment. Thresholds: 5/10/15 min make sense for catering confirm-back (Sam to validate against actual operations).</li>
+      <li><b>Secondary surface: Driver dispatch tiles.</b> Same pattern, different thresholds — driver-not-acknowledged-yet age. Tile turns red if a driver hasn't accepted/started the run within X min of dispatch.</li>
+      <li><b>Tertiary: Produce-order-not-sent.</b> If a manager opens an order and walks away, the cart sits. Age the cart so they see "12 minutes ago" in red when they come back.</li>
+      <li><b>Token additions:</b> <code>--age-fresh</code> / <code>--age-aware</code> / <code>--age-warn</code> / <code>--age-late</code> map to existing semantic tokens (text-soft / gold / gold-bright / status-warn). No new colors needed — just the binding.</li>
+      <li><b>Animation discipline.</b> Pulse on LATE only, 2.4s ease-in-out infinite — same cadence as the right-sidebar current-phase pulse (v3 mockup 298eeb8). Consistency across the app's animation vocabulary.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Backend: trivial — compute age client-side from created_at. Frontend: ~20 lines CSS (tier classes + keyframes), ~5 lines JS to compute tier from age. Apply to existing tile templates. Total: ~half day for all three surfaces.</p>
+
+    <h3>Citation</h3>
+    <p>Toast KDS — see <code>doc.toasttab.com/doc/platformguide/platformKDSOverview.html</code> + Toast support docs on "Customize the Appearance of KDS Tickets". Pattern also in Square KDS, Lavu KDS, Olo Expo. Universal in restaurant ops; Cenas adopting it is table stakes, not differentiation.</p>
+  </div>
+</div>
+</body>
+</html>

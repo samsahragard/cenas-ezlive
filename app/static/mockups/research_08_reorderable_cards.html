@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #8 — Per-manager reorderable dashboard cards (Square pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35); }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .tb-btn { background: rgba(0,0,0,0.3); border: 0.5px solid var(--ck-border); color: var(--ck-text-soft); font-size: 11.5px; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
+  .tb-btn:hover { border-color: var(--ck-gold-soft); color: var(--ck-text); }
+  .tb-btn.is-active { background: var(--ck-gold-bright); color: #140A06; border-color: var(--ck-gold-bright); font-weight: 600; }
+
+  /* Dashboard cards (the reorderable list) */
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+  .card {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    transition: border-color 160ms var(--ck-ease);
+  }
+  .card.is-edit-mode {
+    border-left: 3px solid var(--ck-gold);
+    background: rgba(228,179,64,0.04);
+  }
+  .card:hover { border-color: var(--ck-gold-soft); }
+  .card-handle {
+    cursor: grab; color: var(--ck-text-faint);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 160ms var(--ck-ease);
+  }
+  .card.is-edit-mode .card-handle { opacity: 1; color: var(--ck-gold); }
+  .card-body { display: flex; flex-direction: column; gap: 4px; }
+  .card-name { font-size: 13px; font-weight: 600; color: var(--ck-text-hover); }
+  .card-preview { font-size: 11.5px; color: var(--ck-text-soft); }
+  .card-controls { display: flex; gap: 4px; opacity: 0; transition: opacity 160ms var(--ck-ease); }
+  .card.is-edit-mode .card-controls { opacity: 1; }
+  .icon-btn {
+    width: 28px; height: 28px;
+    background: transparent;
+    border: 0.5px solid var(--ck-border);
+    border-radius: 5px;
+    color: var(--ck-gold);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: inherit;
+  }
+  .icon-btn:hover { background: var(--ck-gold-soft); }
+  .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .icon-btn.hide { color: var(--ck-text-faint); }
+
+  /* Hidden cards section */
+  .hidden-cards { margin-top: 18px; padding: 12px 16px; background: rgba(15,8,5,0.4); border: 0.5px dashed var(--ck-border); border-radius: 10px; }
+  .hidden-cards-label { font-size: 10px; color: var(--ck-text-faint); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+  .hidden-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 5px;
+    background: rgba(20,12,8,0.5); border: 0.5px solid var(--ck-border);
+    color: var(--ck-text-faint); font-size: 11.5px; margin-right: 6px; margin-bottom: 4px;
+    cursor: pointer; font-family: inherit;
+  }
+  .hidden-chip:hover { color: var(--ck-text); border-color: var(--ck-gold-soft); }
+
+  .config-note { font-size: 11px; color: var(--ck-text-soft); margin-top: 10px; font-style: italic; }
+  .config-note b { color: var(--ck-gold); font-style: normal; }
+
+  /* Per-manager preview */
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .preview-col {
+    background: rgba(15,8,5,0.4); border: 0.5px solid var(--ck-border); border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .preview-col-name { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+  .preview-mini { font-size: 11.5px; color: var(--ck-text-soft); padding: 4px 0; border-bottom: 0.5px solid var(--ck-border); }
+  .preview-mini:last-child { border: none; }
+  .preview-mini b { color: var(--ck-text); font-weight: 600; }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Per-manager reorderable dashboard cards
+      <span class="badge">RESEARCH 8/10</span>
+    </h1>
+    <div class="sub">Source pattern: Square for Restaurants · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — edit-mode toggled, up/down arrows visible</div>
+
+  <div class="toolbar">
+    <button class="tb-btn is-active"><i class="ti ti-settings"></i> Editing order</button>
+    <button class="tb-btn"><i class="ti ti-circle-check"></i> Done</button>
+    <div style="margin-left:auto; font-size: 11.5px; color: var(--ck-text-soft);">Layout saves automatically per user</div>
+  </div>
+
+  <div class="cards">
+    <div class="card is-edit-mode">
+      <span class="card-handle"><i class="ti ti-grip-vertical"></i></span>
+      <div class="card-body">
+        <div class="card-name">Needs You — typed pending actions</div>
+        <div class="card-preview">2 chips: 1 driver no-show, 3 EzCater unconfirmed</div>
+      </div>
+      <div class="card-controls">
+        <button class="icon-btn" disabled title="Already at top"><i class="ti ti-chevron-up"></i></button>
+        <button class="icon-btn"><i class="ti ti-chevron-down"></i></button>
+        <button class="icon-btn hide" title="Hide"><i class="ti ti-eye-off"></i></button>
+      </div>
+    </div>
+
+    <div class="card is-edit-mode">
+      <span class="card-handle"><i class="ti ti-grip-vertical"></i></span>
+      <div class="card-body">
+        <div class="card-name">KPI strip — covers/ticket/EzCater/runs</div>
+        <div class="card-preview">6 metrics with compare-to-last-Tue deltas</div>
+      </div>
+      <div class="card-controls">
+        <button class="icon-btn"><i class="ti ti-chevron-up"></i></button>
+        <button class="icon-btn"><i class="ti ti-chevron-down"></i></button>
+        <button class="icon-btn hide" title="Hide"><i class="ti ti-eye-off"></i></button>
+      </div>
+    </div>
+
+    <div class="card is-edit-mode">
+      <span class="card-handle"><i class="ti ti-grip-vertical"></i></span>
+      <div class="card-body">
+        <div class="card-name">Right Now — staff/driver status blocks</div>
+        <div class="card-preview">5 buckets: on / idle / break / late / off</div>
+      </div>
+      <div class="card-controls">
+        <button class="icon-btn"><i class="ti ti-chevron-up"></i></button>
+        <button class="icon-btn"><i class="ti ti-chevron-down"></i></button>
+        <button class="icon-btn hide" title="Hide"><i class="ti ti-eye-off"></i></button>
+      </div>
+    </div>
+
+    <div class="card is-edit-mode">
+      <span class="card-handle"><i class="ti ti-grip-vertical"></i></span>
+      <div class="card-body">
+        <div class="card-name">Today's catering pipeline (preview)</div>
+        <div class="card-preview">Top 5 EzCater orders by pickup time</div>
+      </div>
+      <div class="card-controls">
+        <button class="icon-btn"><i class="ti ti-chevron-up"></i></button>
+        <button class="icon-btn"><i class="ti ti-chevron-down"></i></button>
+        <button class="icon-btn hide" title="Hide"><i class="ti ti-eye-off"></i></button>
+      </div>
+    </div>
+
+    <div class="card is-edit-mode">
+      <span class="card-handle"><i class="ti ti-grip-vertical"></i></span>
+      <div class="card-body">
+        <div class="card-name">Driver runs in flight</div>
+        <div class="card-preview">Compact map + 4 active runs with ETAs</div>
+      </div>
+      <div class="card-controls">
+        <button class="icon-btn"><i class="ti ti-chevron-up"></i></button>
+        <button class="icon-btn"><i class="ti ti-chevron-down"></i></button>
+        <button class="icon-btn hide" title="Hide"><i class="ti ti-eye-off"></i></button>
+      </div>
+    </div>
+
+    <div class="card is-edit-mode">
+      <span class="card-handle"><i class="ti ti-grip-vertical"></i></span>
+      <div class="card-body">
+        <div class="card-name">Produce — this week's orders status</div>
+        <div class="card-preview">2 vendors, 1 cart awaiting send</div>
+      </div>
+      <div class="card-controls">
+        <button class="icon-btn"><i class="ti ti-chevron-up"></i></button>
+        <button class="icon-btn" disabled title="Already at bottom"><i class="ti ti-chevron-down"></i></button>
+        <button class="icon-btn hide" title="Hide"><i class="ti ti-eye-off"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hidden-cards">
+    <div class="hidden-cards-label">Hidden — tap to re-add</div>
+    <button class="hidden-chip"><i class="ti ti-plus"></i> Briefing of the day</button>
+    <button class="hidden-chip"><i class="ti ti-plus"></i> Vendor invoices flagged</button>
+    <button class="hidden-chip"><i class="ti ti-plus"></i> Yesterday's recap</button>
+  </div>
+
+  <div class="config-note"><b>Default order ships sensibly</b> — managers only need to reorder if they want to optimize. Most won't touch it; those who do, get a 30-second customization.</div>
+
+  <div class="section-label" style="margin-top: 32px;">Why each manager's dashboard looks different (real-life)</div>
+
+  <div class="three-col">
+    <div class="preview-col">
+      <div class="preview-col-name">Sara · GM Tomball</div>
+      <div class="preview-mini"><b>1.</b> Needs You</div>
+      <div class="preview-mini"><b>2.</b> KPI strip</div>
+      <div class="preview-mini"><b>3.</b> Right Now (driver focus)</div>
+      <div class="preview-mini"><b>4.</b> Today's catering</div>
+      <div class="preview-mini" style="color: var(--ck-text-faint);">Hidden: Briefing, Produce</div>
+    </div>
+    <div class="preview-col">
+      <div class="preview-col-name">Marcus · BOH Lead Copperfield</div>
+      <div class="preview-mini"><b>1.</b> Produce — awaiting send</div>
+      <div class="preview-mini"><b>2.</b> Today's catering</div>
+      <div class="preview-mini"><b>3.</b> Needs You</div>
+      <div class="preview-mini"><b>4.</b> Right Now (kitchen)</div>
+      <div class="preview-mini" style="color: var(--ck-text-faint);">Hidden: KPI strip, Driver runs</div>
+    </div>
+    <div class="preview-col">
+      <div class="preview-col-name">Sam · Partner</div>
+      <div class="preview-mini"><b>1.</b> KPI strip (both stores)</div>
+      <div class="preview-mini"><b>2.</b> Yesterday's recap</div>
+      <div class="preview-mini"><b>3.</b> Needs You</div>
+      <div class="preview-mini"><b>4.</b> Right Now (both)</div>
+      <div class="preview-mini" style="color: var(--ck-text-faint);">Hidden: none (sees all)</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>Square for Restaurants.</b> Square's POS layout editor lets staff drag tiles to reorder and the grid auto-sizes to fit. Principle: <b>layout is owned by the person using it, not the person who built it.</b> Tomball's GM ranks "driver runs" first because that's where their attention goes; Copperfield's BOH lead ranks "produce" first for the same reason. Same app, different default views per role.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Roles imply different priorities.</b> A GM cares about covers + tickets + drivers. A BOH lead cares about produce + inventory + tomorrow's prep. A partner cares about both-stores aggregate + week-over-week trends. One default ordering can't serve all three well.</li>
+      <li><b>Edit-mode toggle keeps the regular dashboard clean.</b> Reorder controls only appear when the user is actively editing. Otherwise the cards just render — no grip handles, no arrows, no chrome noise.</li>
+      <li><b>Up/down arrows beat drag-drop on cost.</b> Real drag-drop has touch-event quirks, accessibility implications, edge cases (dragging past viewport, etc.). Up/down arrows are 5 lines of JS, work on every device, accessible by keyboard. 80% of the value at 10% of the cost.</li>
+      <li><b>Hide ≠ delete.</b> Hidden cards land in a "tap to re-add" section. Discoverability preserved; the manager just removed them from their default scroll.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surface: per-store dashboard.</b> Each card on the dashboard becomes one item in a per-user ordered list. Order stored in <code>user_dashboard_layout</code> table (user_id, store_slug, card_slug, position, is_hidden).</li>
+      <li><b>Default order ships sensibly</b> for the GM role. Most managers will never touch it — that's fine. The reordering serves the ~20% who care to customize.</li>
+      <li><b>Cards inventoryable.</b> Each renderable dashboard component declares itself as a card with {slug, default_position, role_visibility}. Adding a new card to the app = adding a row to the inventory, not editing every user's layout.</li>
+      <li><b>Persistence model:</b> localStorage for instant feel + server-sync on edit-mode exit. Survives browser switches once synced.</li>
+      <li><b>Don't ship full drag-drop yet.</b> Up/down arrows + hide/show + reset-to-default button gets you the win without the engineering investment. Drag-drop is a future polish item if reorder usage proves significant.</li>
+      <li><b>"Reset to default" escape hatch.</b> If a manager creates a layout they regret, one button restores the role's default. Cheap to ship, prevents support tickets.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Backend: small new table + 2 endpoints (get layout, save layout). ~half day. Frontend: refactor dashboard render to iterate over a user-ordered card list rather than hardcoded sections (~1 day if dashboard is component-based today, ~2 days if it's a single template), edit-mode toggle + arrows + hide chips (~half day). Total: ~2-3 days. Defer drag-drop entirely; arrows + hide cover 90% of the value.</p>
+
+    <h3>Citation</h3>
+    <p>Square for Restaurants — see <code>squareup.com/help/us/en/article/7804-organize-your-menu-with-square-for-restaurants</code>. Similar customization in Toast Manager (home tile reorder) + Lavu POS (button layout editor). Square is the cleanest reference because the editor itself is dead-simple — no Photoshop-style grid, just tap-and-arrange.</p>
+  </div>
+</div>
+</body>
+</html>

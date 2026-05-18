@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #10 — Flash on new/changed (Toast KDS pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35); }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* Flash animation — the heart of this pattern */
+  @keyframes flash-arrive {
+    0%   { background: rgba(228,179,64,0.45); transform: scale(1.015); box-shadow: 0 0 20px rgba(228,179,64,0.5); }
+    100% { background: var(--ck-glass);       transform: scale(1);     box-shadow: 0 0 0 rgba(228,179,64,0); }
+  }
+  @keyframes flash-change {
+    0%   { background: rgba(255,217,112,0.35); box-shadow: 0 0 16px rgba(255,217,112,0.4); }
+    100% { background: var(--ck-glass);        box-shadow: 0 0 0 rgba(255,217,112,0); }
+  }
+  @keyframes flash-urgent {
+    0%   { background: rgba(226,100,92,0.4); box-shadow: 0 0 20px rgba(226,100,92,0.5); transform: scale(1.02); }
+    100% { background: var(--ck-glass);      box-shadow: 0 0 0 rgba(226,100,92,0); transform: scale(1); }
+  }
+
+  /* Cards demo (auto-cycling flashes for demo purposes) */
+  .demo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .demo-card {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px;
+    padding: 14px 16px; transition: background 600ms var(--ck-ease);
+  }
+  .demo-card.is-new { animation: flash-arrive 1.4s ease-out 1; }
+  .demo-card.is-changed { animation: flash-change 1.6s ease-out 1; }
+  .demo-card.is-urgent { animation: flash-urgent 1.4s ease-out 1; }
+  .dc-label { font-size: 10.5px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
+  .dc-title { font-size: 13px; font-weight: 600; color: var(--ck-text-hover); margin-bottom: 4px; }
+  .dc-meta { font-size: 11.5px; color: var(--ck-text-muted); }
+
+  .btn-row { display: flex; gap: 8px; margin: 14px 0; align-items: center; }
+  .btn-trigger { padding: 7px 14px; border-radius: 6px; background: var(--ck-gold-bright); color: #140A06; border: none; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-trigger.secondary { background: rgba(0,0,0,0.3); border: 0.5px solid var(--ck-border); color: var(--ck-text); }
+  .btn-trigger.urgent { background: var(--ck-status-warn); color: #FFFAEC; }
+  .demo-hint { font-size: 11.5px; color: var(--ck-text-soft); font-style: italic; }
+
+  /* Inline number diff for sparkline change demo */
+  .stat-card {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px;
+    padding: 16px 18px; transition: background 600ms var(--ck-ease);
+  }
+  .stat-card.is-changed { animation: flash-change 1.6s ease-out 1; }
+  .stat-label { font-size: 11px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
+  .stat-value { font-size: 26px; font-weight: 600; color: var(--ck-text-hover); }
+  .stat-delta { font-size: 11.5px; color: var(--ck-status-open); margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Flash on new / changed events
+      <span class="badge">RESEARCH 10/10</span>
+    </h1>
+    <div class="sub">Source pattern: Toast KDS · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — tap a button to flash the corresponding card</div>
+
+  <div class="btn-row">
+    <button class="btn-trigger" onclick="flash('demoA', 'is-new')">Flash NEW (gold burst)</button>
+    <button class="btn-trigger secondary" onclick="flash('demoB', 'is-changed')">Flash CHANGED (gold soft)</button>
+    <button class="btn-trigger urgent" onclick="flash('demoC', 'is-urgent')">Flash URGENT (red burst)</button>
+    <span class="demo-hint">Animations are 1.4–1.6s, ease-out, single play.</span>
+  </div>
+
+  <div class="demo-grid">
+    <div id="demoA" class="demo-card is-new">
+      <div class="dc-label">EzCater · arrived 10s ago</div>
+      <div class="dc-title">Acme Corp · 24 ppl</div>
+      <div class="dc-meta">EZ-44218 · Pickup 12:30 · $384</div>
+    </div>
+    <div id="demoB" class="demo-card is-changed">
+      <div class="dc-label">EzCater · order modified</div>
+      <div class="dc-title">ConfTech · 14 ppl <span style="color:var(--ck-gold-bright); font-size:10.5px;">(was 12)</span></div>
+      <div class="dc-meta">EZ-44219 · Pickup 1:00 · $224 (was $192)</div>
+    </div>
+    <div id="demoC" class="demo-card is-urgent">
+      <div class="dc-label">Driver · late by 9 min</div>
+      <div class="dc-title">R. Hernandez · EZ-44204</div>
+      <div class="dc-meta">Phoenix Law · should have arrived 11:24</div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">KPI delta flash — when a number changes (e.g. EzCater order count ticks up)</div>
+
+  <div class="btn-row">
+    <button class="btn-trigger secondary" onclick="flash('statA', 'is-changed'); bumpStat();">Increment EzCater count</button>
+    <span class="demo-hint">Stat card flashes gold-soft for ~1.6s when its value changes — pre-attentive signal of "something just moved" without an interruption modal.</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+    <div class="stat-card">
+      <div class="stat-label">Covers</div>
+      <div class="stat-value">312</div>
+      <div class="stat-delta"><i class="ti ti-trending-up"></i> +14%</div>
+    </div>
+    <div id="statA" class="stat-card">
+      <div class="stat-label">EzCater Orders</div>
+      <div class="stat-value" id="statA-value">8</div>
+      <div class="stat-delta"><i class="ti ti-trending-up"></i> +3 today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Driver Runs</div>
+      <div class="stat-value">47</div>
+      <div class="stat-delta"><i class="ti ti-trending-up"></i> +5 from morning</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Delivery</div>
+      <div class="stat-value">28<span style="font-size:14px; color:var(--ck-text-soft);"> min</span></div>
+      <div class="stat-delta"><i class="ti ti-trending-down"></i> 4 min faster</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>Toast KDS.</b> Toast's KDS briefly flashes ticket headers when a new ticket arrives or an existing ticket is modified. The flash is pre-attentive — kitchen doesn't have to be looking at the screen to register that something changed; the motion catches peripheral vision. Combined with the persistent ticket-age color (research #2), it's a two-channel attention system: color says "this ticket needs to move soon," flash says "this ticket just changed (look at it)."</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Pre-attentive motion processing.</b> The human visual system detects movement faster than it parses text or color. A 1.4s flash on a previously-static page is impossible to miss with peripheral vision.</li>
+      <li><b>One-shot, not loop.</b> The flash plays ONCE on the triggering event, then settles. A looping animation would become wallpaper after 5 seconds — operators tune it out.</li>
+      <li><b>Three flash flavors, three meanings.</b> NEW (gold burst + scale-up) / CHANGED (gold soft) / URGENT (red burst + scale-up). Operators learn the semantics quickly: gold = something new arrived, red = something needs immediate attention.</li>
+      <li><b>Tied to data events, not to UI events.</b> The flash fires when a row enters/changes in the data — not when the operator clicks something. Operator-driven changes don't need to flash because the operator already knows about them.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surfaces:</b>
+        <ul>
+          <li>EzCater pipeline cards — flash NEW on order-arrival, flash CHANGED on order-modify, flash URGENT when an order crosses the late threshold</li>
+          <li>Driver dispatch tiles — flash NEW on dispatch, flash CHANGED on status-update (en-route→arrived), flash URGENT when ETA slips past late</li>
+          <li>KPI cards on the dashboard — flash CHANGED when the number updates from the live poll (the demo button above demos this)</li>
+          <li>Notifications page cards — flash NEW on incoming notification (gold burst draws eye to the new card without needing a separate "new!" badge)</li>
+        </ul>
+      </li>
+      <li><b>Trigger source: the polling layer.</b> chat_tail / samples_watch / future order-watch already poll for new state. When a poll surfaces a delta, add an <code>is-new</code> / <code>is-changed</code> / <code>is-urgent</code> class to the affected DOM node for 1.5s, then JS removes it. CSS handles the animation.</li>
+      <li><b>Don't flash on initial page load.</b> Only flash when something changes WHILE the user is viewing. Initial render with 14 EzCater orders doesn't need 14 simultaneous flashes — that's noise, not signal.</li>
+      <li><b>Respect "Reduce motion" preference.</b> If research #9's reduce-motion toggle is on, swap the keyframe for a subtler background-color-only fade (no scale, no glow). The signal stays; the motion goes.</li>
+      <li><b>Coexists with ticket-age color (research #2).</b> A late ticket can flash URGENT once when it crosses the threshold, then settle into the persistent red border. Two-channel attention.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>CSS: ~30 lines (3 keyframes + 3 modifier classes). JS: ~10 lines per polling layer to detect delta + set/remove class. Total: ~half day across all surfaces. Cheap pattern, high signal-to-cost ratio.</p>
+
+    <h3>Citation</h3>
+    <p>Toast KDS — see <code>support.toasttab.com/en/article/Customize-the-Appearance-of-KDS-Tickets</code>. Pattern also in Olo Expo + Square KDS. The Slack "new message" highlight on a channel is the same idea applied to chat — brief background flash to draw the eye, then settle.</p>
+  </div>
+</div>
+
+<script>
+  function flash(id, className) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove(className);
+    void el.offsetWidth; // restart animation
+    el.classList.add(className);
+  }
+  function bumpStat() {
+    const v = document.getElementById('statA-value');
+    if (v) v.textContent = (parseInt(v.textContent) + 1).toString();
+  }
+</script>
+</body>
+</html>

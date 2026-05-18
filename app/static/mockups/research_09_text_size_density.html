@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #9 — Text size + density as first-class settings (ChowNow pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+    /* Density tier scalar — all sizes derive from this */
+    --ck-density: 1;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* Settings panel demo */
+  .settings-pane {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 12px;
+    padding: 18px 22px;
+  }
+  .settings-title { font-size: 13px; color: var(--ck-text); font-weight: 600; margin-bottom: 14px; }
+
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 0.5px solid var(--ck-border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 13px; color: var(--ck-text); }
+  .setting-help { font-size: 11.5px; color: var(--ck-text-soft); margin-top: 3px; }
+
+  /* Segmented control */
+  .seg { display: inline-flex; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 7px; border: 0.5px solid var(--ck-border); }
+  .seg button { padding: 6px 12px; border-radius: 5px; background: transparent; border: none; color: var(--ck-text-soft); font-size: 11.5px; font-family: inherit; cursor: pointer; }
+  .seg button.is-active { background: var(--ck-gold-bright); color: #140A06; font-weight: 600; }
+  .seg button i { margin-right: 4px; font-size: 12px; }
+
+  /* Switch */
+  .switch { width: 36px; height: 20px; background: rgba(0,0,0,0.4); border-radius: 20px; position: relative; cursor: pointer; border: 0.5px solid var(--ck-border); transition: background 200ms var(--ck-ease); }
+  .switch.is-on { background: var(--ck-gold-bright); }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #FFFAEC; border-radius: 50%; transition: left 200ms var(--ck-ease); }
+  .switch.is-on::after { left: 18px; background: #140A06; }
+
+  /* Density preview cards — three columns side by side */
+  .preview-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .preview-card {
+    background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 10px;
+    overflow: hidden;
+  }
+  .preview-card.compact   { --density-scale: 0.85; }
+  .preview-card.regular   { --density-scale: 1;    }
+  .preview-card.large     { --density-scale: 1.2;  }
+  .preview-card .pc-head { padding: 10px 12px; background: rgba(0,0,0,0.3); border-bottom: 0.5px solid var(--ck-border); display: flex; align-items: center; justify-content: space-between; }
+  .preview-card .pc-density-label { font-size: 10px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.1em; }
+  .preview-card .pc-px { font-size: 10px; color: var(--ck-text-faint); }
+  .preview-card .pc-body { padding: calc(10px * var(--density-scale)); }
+  .preview-card .pc-row {
+    display: flex; align-items: center; gap: calc(8px * var(--density-scale));
+    padding: calc(8px * var(--density-scale)) calc(4px * var(--density-scale));
+    border-bottom: 0.5px solid var(--ck-border);
+    font-size: calc(12px * var(--density-scale));
+  }
+  .preview-card .pc-row:last-child { border-bottom: none; }
+  .preview-card .pc-num { font-weight: 700; color: var(--ck-text-hover); font-size: calc(14px * var(--density-scale)); }
+  .preview-card .pc-name { flex: 1; color: var(--ck-text); }
+  .preview-card .pc-meta { color: var(--ck-text-soft); font-size: calc(10.5px * var(--density-scale)); }
+  .preview-card .pc-action { padding: calc(5px * var(--density-scale)) calc(10px * var(--density-scale)); background: var(--ck-gold-soft); border: 1px solid var(--ck-gold); border-radius: 5px; color: var(--ck-gold); font-size: calc(10.5px * var(--density-scale)); cursor: pointer; font-family: inherit; }
+  .pc-rows-per-screen { padding: 8px 12px; background: rgba(20,12,8,0.4); font-size: 10.5px; color: var(--ck-text-faint); text-align: center; border-top: 0.5px solid var(--ck-border); }
+
+  /* Live preview annotation */
+  .live-tag { display: inline-block; background: var(--ck-status-open); color: #0a1f0a; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Text size + density as first-class user preferences
+      <span class="badge">RESEARCH 9/10</span>
+    </h1>
+    <div class="sub">Source pattern: ChowNow Business Manager · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — Settings → Display section, top-level</div>
+
+  <div class="settings-pane">
+    <div class="settings-title">Display</div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Density</div>
+        <div class="setting-help">Adjusts spacing + font size across all data lists. Compact = more rows per screen; Large = easier in dim light / on small screens.</div>
+      </div>
+      <div class="seg">
+        <button><i class="ti ti-minimize"></i>Compact</button>
+        <button class="is-active">Regular</button>
+        <button><i class="ti ti-maximize"></i>Large</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Theme</div>
+        <div class="setting-help">Cenas is dark by default. Light mode coming soon — for now we respect system preference if you've set one.</div>
+      </div>
+      <div class="seg">
+        <button class="is-active"><i class="ti ti-moon"></i>Dark</button>
+        <button><i class="ti ti-sun"></i>Light</button>
+        <button><i class="ti ti-device-laptop"></i>System</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">High contrast</div>
+        <div class="setting-help">Boosts text contrast for outdoor sunlight readability. Some accent colors become more saturated.</div>
+      </div>
+      <div class="switch"></div>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Reduce motion</div>
+        <div class="setting-help">Disables pulse + slide animations. Useful in kitchen environments where moving UI is distracting.</div>
+      </div>
+      <div class="switch"></div>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Bigger tap targets</div>
+        <div class="setting-help">Increases all button heights to 48px+ for thicker gloves / line cooks with wet hands. Independent of density.</div>
+      </div>
+      <div class="switch is-on"></div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">Live preview — same data, three density settings <span class="live-tag">live</span></div>
+
+  <div class="preview-row">
+    <div class="preview-card compact">
+      <div class="pc-head"><span class="pc-density-label">Compact</span><span class="pc-px">scale 0.85</span></div>
+      <div class="pc-body">
+        <div class="pc-row"><span class="pc-num">3</span><span class="pc-name">Avocado</span><span class="pc-meta">$90</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">0</span><span class="pc-name">Tomato Roma</span><span class="pc-meta">—</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">2</span><span class="pc-name">Onion Yellow</span><span class="pc-meta">$25.50</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">5</span><span class="pc-name">Cilantro</span><span class="pc-meta">$15</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">1</span><span class="pc-name">Garlic Bulb</span><span class="pc-meta">$8</span><button class="pc-action">Edit</button></div>
+      </div>
+      <div class="pc-rows-per-screen">~28 rows per phone screen</div>
+    </div>
+
+    <div class="preview-card regular">
+      <div class="pc-head"><span class="pc-density-label">Regular <span class="live-tag" style="background:var(--ck-gold-bright); color:#140A06;">DEFAULT</span></span><span class="pc-px">scale 1.0</span></div>
+      <div class="pc-body">
+        <div class="pc-row"><span class="pc-num">3</span><span class="pc-name">Avocado</span><span class="pc-meta">$90</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">0</span><span class="pc-name">Tomato Roma</span><span class="pc-meta">—</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">2</span><span class="pc-name">Onion Yellow</span><span class="pc-meta">$25.50</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">5</span><span class="pc-name">Cilantro</span><span class="pc-meta">$15</span><button class="pc-action">Edit</button></div>
+      </div>
+      <div class="pc-rows-per-screen">~22 rows per phone screen</div>
+    </div>
+
+    <div class="preview-card large">
+      <div class="pc-head"><span class="pc-density-label">Large</span><span class="pc-px">scale 1.2</span></div>
+      <div class="pc-body">
+        <div class="pc-row"><span class="pc-num">3</span><span class="pc-name">Avocado</span><span class="pc-meta">$90</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">0</span><span class="pc-name">Tomato Roma</span><span class="pc-meta">—</span><button class="pc-action">Edit</button></div>
+        <div class="pc-row"><span class="pc-num">2</span><span class="pc-name">Onion Yellow</span><span class="pc-meta">$25.50</span><button class="pc-action">Edit</button></div>
+      </div>
+      <div class="pc-rows-per-screen">~16 rows per phone screen</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>ChowNow Business Manager + general restaurant-ops convention.</b> ChowNow specifically calls out dark mode + text size as top-level preferences (not buried under "Advanced → Accessibility → ..."). The principle: <b>display preferences are working conditions in restaurant ops, not aesthetic preferences.</b> A line cook on the 5pm rush trying to read an order on a flour-dusted phone in dim kitchen lighting isn't going to dig through 3 menus to find text size.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Operators use phones in extreme conditions.</b> Walk-ins (dim, cold). Patios (bright sun glare). Kitchens (wet, dusty hands). Late-shift fatigue (smaller text = eye strain). Display flexibility isn't accessibility — it's basic ergonomic respect.</li>
+      <li><b>Three density tiers > continuous scale.</b> Compact / Regular / Large covers the use cases (max info density / balanced / max readability) without offering 47 knobs. Decision fatigue stays low.</li>
+      <li><b>Density scales SPACING + FONT together.</b> Just changing font-size leaves cramped padding; just changing padding leaves tiny text. Single density scalar drives both via CSS var arithmetic.</li>
+      <li><b>System theme respect.</b> If the OS is set to light mode and the user hasn't explicitly picked dark in the app, honor the OS. Don't override unless explicitly requested.</li>
+      <li><b>Reduce motion + bigger tap targets are separate.</b> Some users want low-density + bigger taps (small text but easy tap). Decoupled controls let them mix.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Add a Display section to user settings.</b> Three controls v1: Density (Compact/Regular/Large), High contrast (on/off), Bigger tap targets (on/off). Reduce motion can come later. Light theme is honest "coming soon" until you build the V2 light tokens.</li>
+      <li><b>Density via CSS variable:</b> <code>--ck-density: 1</code> at <code>:root</code>, all type/spacing tokens derive: <code>--ck-text-size-md: calc(13px * var(--ck-density))</code>. User preference flips the var; entire app rescales without touching component CSS.</li>
+      <li><b>Persistence:</b> server-side per-user (so it follows the user across devices). localStorage as the fast-cache.</li>
+      <li><b>Highest-impact surfaces for density:</b> orders list, drivers list, produce order page, notifications page. KPI cards already breathe; they don't need to shrink.</li>
+      <li><b>Bigger-tap-targets toggle = 48px minimum on every button + 24px+ spacing between tap zones.</b> Independent of density (a manager might want Compact rows + Large tap targets).</li>
+      <li><b>High contrast toggle: WCAG AAA</b> on text/background. Boost --ck-text to pure white, deepen --ck-bg-page. Some accent shifts. ~30 minutes of work to add the toggle once tokens are set up.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Refactor to density-scaled tokens: ~2-3 days IF the app already uses tokens consistently. If not, longer — but the V2 token system you have is most of the prep. Settings UI: ~1 day for the panel + persistence + per-user storage. Live preview in settings: ~half day. Total: ~3-5 days for the full pattern. Phased shippable: Density first (highest impact), High Contrast + Tap Targets second, Motion later.</p>
+
+    <h3>Citation</h3>
+    <p>ChowNow Business Manager — see <code>apps.apple.com/us/app/chownow-business-manager/id581010873</code>. Pattern also embedded in Toast (line-cook KDS has font-size config), Square Restaurants (POS display density), iOS/Android system-level (Dynamic Type, Display Size). The general lesson is universal in apps used in physical-labor contexts.</p>
+  </div>
+</div>
+</body>
+</html>

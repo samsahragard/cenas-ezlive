@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #4 — "Needs you" pending-action strip (7shifts pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root { --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805; --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF; --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4); --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14); --ck-border:rgba(217,164,54,0.10); --ck-status-open:#9CCB76; --ck-status-warn:#E2645C; --ck-glass:rgba(40,22,14,0.55); --ck-ease:cubic-bezier(0.22,0.8,0.24,1); --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35); }
+  * { box-sizing: border-box; }
+  body { background: var(--ck-bg-page); background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%); color: var(--ck-text); font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; margin: 0; padding: 32px 24px 80px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* Page chrome mockup — sidebar + main with the strip at the top */
+  .page-mock {
+    background: rgba(15,8,5,0.6); border: 0.5px solid var(--ck-border); border-radius: 12px;
+    display: grid; grid-template-columns: 220px 1fr; min-height: 560px; overflow: hidden;
+  }
+  .mp-side { background: var(--ck-bg-sidebar); padding: 14px 10px; border-right: 0.5px solid var(--ck-border); }
+  .mp-side-label { font-size: 10px; color: var(--ck-text-faint); text-transform: uppercase; letter-spacing: 0.12em; margin: 10px 8px 4px; }
+  .mp-side-item { padding: 6px 10px; border-radius: 5px; font-size: 11.5px; color: var(--ck-text-soft); margin-bottom: 1px; }
+  .mp-side-item.active { background: rgba(228,179,64,0.12); color: var(--ck-gold); }
+  .mp-main { padding: 20px 24px; }
+  .mp-h1 { font-size: 17px; color: var(--ck-text); margin: 0 0 4px; }
+  .mp-sub { font-size: 11.5px; color: var(--ck-text-soft); margin-bottom: 18px; }
+
+  /* === THE STRIP === */
+  .needs-you {
+    background: linear-gradient(90deg, rgba(199,59,54,0.10) 0%, rgba(228,179,64,0.06) 60%, transparent 100%);
+    border: 0.5px solid var(--ck-border);
+    border-left: 3px solid var(--ck-status-warn);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .needs-you-label { font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+  .needs-you-label i { color: var(--ck-status-warn); font-size: 13px; }
+  .ny-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 6px;
+    background: rgba(0,0,0,0.3); border: 0.5px solid var(--ck-border);
+    color: var(--ck-text); font-size: 11.5px; cursor: pointer;
+    transition: border-color 160ms var(--ck-ease), background 160ms var(--ck-ease);
+    font-family: inherit;
+  }
+  .ny-chip:hover { border-color: var(--ck-gold); background: rgba(228,179,64,0.08); }
+  .ny-chip i { font-size: 13px; color: var(--ck-gold); }
+  .ny-chip .badge { background: var(--ck-status-warn); color: #FFFAEC; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 2px; }
+  .ny-chip.urgent { border-color: var(--ck-status-warn); }
+  .ny-chip.urgent i { color: var(--ck-status-warn); }
+
+  .empty-state { text-align: center; padding: 80px 20px; color: var(--ck-text-faint); font-style: italic; border: 1px dashed var(--ck-border); border-radius: 10px; }
+
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 10px; padding: 18px 22px; margin-top: 28px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>"Needs you" pending-action strip at top of dashboard
+      <span class="badge">RESEARCH 4/10</span>
+    </h1>
+    <div class="sub">Source pattern: 7shifts · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — dashboard with typed pending-action chips</div>
+
+  <div class="page-mock">
+    <aside class="mp-side">
+      <div style="font-size: 10px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px;">[ left sidebar ]</div>
+      <div class="mp-side-label">Today</div>
+      <div class="mp-side-item active">Dashboard</div>
+      <div class="mp-side-item">Notifications</div>
+      <div class="mp-side-label">Operations</div>
+      <div class="mp-side-item">Drivers</div>
+      <div class="mp-side-item">EzCater</div>
+      <div class="mp-side-item">Produce</div>
+    </aside>
+
+    <main class="mp-main">
+      <h1 class="mp-h1">Tomball · Tuesday May 18</h1>
+      <div class="mp-sub">Sunny · 78°F · Open 11am-9pm</div>
+
+      <!-- THE STRIP -->
+      <div class="needs-you">
+        <span class="needs-you-label"><i class="ti ti-alert-triangle-filled"></i> Needs you</span>
+        <button class="ny-chip urgent">
+          <i class="ti ti-truck"></i>
+          Driver no-show <span class="badge">1</span>
+        </button>
+        <button class="ny-chip">
+          <i class="ti ti-tools-kitchen-2"></i>
+          EzCater unconfirmed <span class="badge">3</span>
+        </button>
+        <button class="ny-chip">
+          <i class="ti ti-shopping-cart"></i>
+          Produce order awaiting send <span class="badge">1</span>
+        </button>
+        <button class="ny-chip">
+          <i class="ti ti-receipt-2"></i>
+          Vendor invoice flagged <span class="badge">2</span>
+        </button>
+      </div>
+
+      <!-- Rest of the dashboard (placeholder) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+        <div style="background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 8px; padding: 14px;">
+          <div style="font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em;">Covers</div>
+          <div style="font-size: 22px; font-weight: 600; color: var(--ck-text-hover); margin-top: 4px;">312</div>
+        </div>
+        <div style="background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 8px; padding: 14px;">
+          <div style="font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em;">Ticket Avg</div>
+          <div style="font-size: 22px; font-weight: 600; color: var(--ck-text-hover); margin-top: 4px;">$18.40</div>
+        </div>
+        <div style="background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 8px; padding: 14px;">
+          <div style="font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em;">Driver Runs</div>
+          <div style="font-size: 22px; font-weight: 600; color: var(--ck-text-hover); margin-top: 4px;">47</div>
+        </div>
+      </div>
+      <div style="background: var(--ck-glass); border: 0.5px solid var(--ck-border); border-radius: 8px; padding: 60px 20px; text-align: center; color: var(--ck-text-faint); font-style: italic; font-size: 12px;">
+        Rest of dashboard renders below (KPI grid, today's runs, schedule preview, etc.)
+      </div>
+    </main>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">Empty state — when nothing needs the operator</div>
+
+  <div style="background: rgba(40,22,14,0.4); border: 0.5px solid var(--ck-border); border-left: 3px solid var(--ck-status-open); border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 12px;">
+    <i class="ti ti-circle-check-filled" style="color: var(--ck-status-open); font-size: 18px;"></i>
+    <span style="color: var(--ck-text); font-size: 13px;">All caught up — no actions need you right now.</span>
+    <span style="margin-left: auto; color: var(--ck-text-faint); font-size: 11px; font-style: italic;">strip auto-hides when count drops to 0</span>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>7shifts.</b> Time-off, shift-pool, and availability requests appear as count badges at the very top of the manager home — selecting one jumps straight to the approval screen for that type. Approvals never get lost in a generic inbox; each chip is typed by what kind of action it represents and clicking it deep-links to that exact surface.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Typed > generic.</b> Generic "12 notifications" buries the urgent inside the routine. Typed chips ("Driver no-show: 1 / EzCater unconfirmed: 3") tell the operator exactly what kind of attention is needed, so they triage at a glance.</li>
+      <li><b>Top of fold.</b> Most operators open the dashboard, glance at the top, and react. The strip is the first thing they see. KPIs are secondary — what needs ACTION beats what shows STATUS.</li>
+      <li><b>Click = action, not list.</b> Each chip deep-links to the screen where the operator can dispatch the action immediately. No "view all" → "select item" → "click action" three-step funnel.</li>
+      <li><b>Auto-hides when empty.</b> When count drops to 0 the strip collapses to a quiet "all caught up" or hides entirely. Dashboard isn't permanently apologizing for nothing being wrong.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Primary surface: per-store dashboard home</b> (<code>/dos/</code> + <code>/uno/</code>). Strip sits above the KPI grid, below the page title.</li>
+      <li><b>Chip types for Cenas v1:</b>
+        <ul>
+          <li>Driver no-show / late-acknowledge (deep-link → /dos/drivers with filter)</li>
+          <li>EzCater unconfirmed orders (deep-link → /dos/orders/&lt;date&gt; with status=pending)</li>
+          <li>Produce order awaiting send (deep-link → /produce/ with cart loaded)</li>
+          <li>Vendor invoice flagged (deep-link → flagged invoices)</li>
+          <li>(future) Maintenance ticket open / Catering bid awaiting response / etc.</li>
+        </ul>
+      </li>
+      <li><b>Distinct from /partner/notifications.</b> Notifications page is the inbox of EVERYTHING; the strip is the JUST-NEEDS-ACTION subset hoisted to dashboard. Notifications has 30 items; the strip has at most 4-6.</li>
+      <li><b>Urgent variant.</b> Driver no-show chip uses border-color: status-warn + label color: status-warn — escalates visually because it's time-critical. EzCater unconfirmed is gold (warm but not panic).</li>
+      <li><b>Empty state is a feature.</b> The reassuring "all caught up" message becomes a small but real morale boost when an operator clears their queue. Don't skip it.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Backend: define an "operator-action-queue" aggregator query that hits 4-6 tables (driver_runs, ezcater_orders, produce_carts, vendor_invoices) and returns typed counts. ~half day. Frontend: ~half day for the strip component + per-chip deep-link routes. Refresh: polls every 30-60s OR taps existing notification poll if /partner/notifications event stream is wired (which it now is via samples_watch.py + the approval-events endpoint pattern).</p>
+
+    <h3>Citation</h3>
+    <p>7shifts — see <code>kb.7shifts.com/hc/en-us/articles/4417513719699</code> ("Who's Working Dashboard Overview") + the 7shifts mobile redesign writeup at <code>7shifts.com/blog/mobile-app-redesign/</code>. Similar pattern in Square Dashboard ("requires your attention" banner) and Toast Manager ("alerts strip").</p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research #1 — Compare-to-last-period chip (Uber Eats Manager pattern)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root {
+    --ck-bg-page:        #140A06;
+    --ck-bg-sidebar:     #0F0805;
+    --ck-text:           #FAF6EC;
+    --ck-text-hover:     #FFFFFF;
+    --ck-text-muted:     rgba(236, 227, 208, 0.7);
+    --ck-text-soft:      rgba(236, 227, 208, 0.55);
+    --ck-text-faint:     rgba(236, 227, 208, 0.4);
+    --ck-red:            #C73B36;
+    --ck-gold:           #E4B340;
+    --ck-gold-bright:    #FFD970;
+    --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+    --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-status-open:    #9CCB76;
+    --ck-status-warn:    #E2645C;
+    --ck-glass:          rgba(40, 22, 14, 0.55);
+    --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+    --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ck-bg-page);
+    background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.08), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.06), transparent 50%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 32px 24px 80px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 12px; text-shadow: var(--ck-glow-gold-soft); }
+
+  /* === RANGE SELECTOR (global, single, controls all cards) === */
+  .range-bar {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--ck-glass);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    padding: 12px 18px;
+    margin-bottom: 18px;
+  }
+  .range-bar-label { font-size: 11px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em; }
+  .range-pills { display: flex; gap: 4px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 8px; }
+  .range-pill { padding: 6px 14px; border-radius: 6px; font-size: 12px; color: var(--ck-text-soft); cursor: pointer; border: none; background: transparent; font-family: inherit; }
+  .range-pill.is-active { background: var(--ck-gold-bright); color: #140A06; font-weight: 600; }
+  .range-bar-spacer { flex: 1; }
+  .range-bar-meta { font-size: 11px; color: var(--ck-text-faint); }
+
+  /* === KPI CARD === */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .kpi-card {
+    background: var(--ck-glass);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    transition: border-color 160ms var(--ck-ease);
+  }
+  .kpi-card:hover { border-color: var(--ck-gold-soft); }
+  .kpi-label {
+    font-size: 10.5px; color: var(--ck-text-soft);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-size: 28px; font-weight: 600;
+    color: var(--ck-text-hover);
+    line-height: 1.1; margin-bottom: 6px;
+  }
+  .kpi-compare {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600;
+    padding: 3px 8px; border-radius: 4px;
+  }
+  .kpi-compare.up   { background: rgba(156, 203, 118, 0.12); color: var(--ck-status-open); }
+  .kpi-compare.down { background: rgba(226, 100, 92, 0.12);  color: var(--ck-status-warn); }
+  .kpi-compare.flat { background: rgba(236, 227, 208, 0.08); color: var(--ck-text-soft); }
+  .kpi-compare-vs {
+    color: var(--ck-text-faint); margin-left: 4px;
+    font-size: 10.5px; font-weight: 400;
+  }
+  .kpi-spark {
+    margin-top: 10px; height: 28px;
+    background: linear-gradient(180deg, rgba(228,179,64,0.1) 0%, transparent 100%);
+    border-radius: 4px;
+    position: relative; overflow: hidden;
+  }
+  .kpi-spark svg { display: block; width: 100%; height: 100%; }
+
+  .notes {
+    background: rgba(228, 179, 64, 0.06);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-top: 28px;
+    font-size: 13px;
+    color: rgba(236, 227, 208, 0.85);
+    line-height: 1.65;
+  }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 20px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Compare-to-last-period chip on every KPI
+      <span class="badge">RESEARCH 1/10</span>
+    </h1>
+    <div class="sub">Source pattern: Uber Eats Manager · dck competitor research batch 2026-05-18</div>
+  </div>
+
+  <div class="section-label">Pattern demo — per-store dashboard hero strip</div>
+
+  <!-- GLOBAL range selector — drives EVERY card below -->
+  <div class="range-bar">
+    <span class="range-bar-label">Compare to</span>
+    <div class="range-pills">
+      <button class="range-pill">Yesterday</button>
+      <button class="range-pill is-active">Last Tue</button>
+      <button class="range-pill">Last 7 days</button>
+      <button class="range-pill">Last 30 days</button>
+      <button class="range-pill">Last year, this week</button>
+    </div>
+    <div class="range-bar-spacer"></div>
+    <span class="range-bar-meta">Tomball · Today vs. Tue 5/11</span>
+  </div>
+
+  <div class="kpi-grid">
+    <!-- Covers -->
+    <div class="kpi-card">
+      <div class="kpi-label">Covers</div>
+      <div class="kpi-value">312</div>
+      <span class="kpi-compare up"><i class="ti ti-trending-up"></i> +14%</span>
+      <span class="kpi-compare-vs">vs. 274 last Tue</span>
+      <div class="kpi-spark">
+        <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#E4B340" stroke-width="1.5" points="0,20 10,18 20,22 30,16 40,14 50,12 60,15 70,10 80,8 90,6 100,4"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Ticket Avg -->
+    <div class="kpi-card">
+      <div class="kpi-label">Ticket Avg</div>
+      <div class="kpi-value">$18.40</div>
+      <span class="kpi-compare down"><i class="ti ti-trending-down"></i> −$0.85</span>
+      <span class="kpi-compare-vs">vs. $19.25 last Tue</span>
+      <div class="kpi-spark">
+        <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#E4B340" stroke-width="1.5" points="0,12 10,10 20,14 30,16 40,18 50,16 60,18 70,20 80,18 90,20 100,22"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- EzCater Orders -->
+    <div class="kpi-card">
+      <div class="kpi-label">EzCater Orders</div>
+      <div class="kpi-value">8</div>
+      <span class="kpi-compare up"><i class="ti ti-trending-up"></i> +3</span>
+      <span class="kpi-compare-vs">vs. 5 last Tue</span>
+      <div class="kpi-spark">
+        <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#E4B340" stroke-width="1.5" points="0,22 10,22 20,20 30,18 40,16 50,18 60,14 70,12 80,10 90,8 100,6"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Driver Runs -->
+    <div class="kpi-card">
+      <div class="kpi-label">Driver Runs</div>
+      <div class="kpi-value">47</div>
+      <span class="kpi-compare flat"><i class="ti ti-minus"></i> 0%</span>
+      <span class="kpi-compare-vs">vs. 47 last Tue</span>
+      <div class="kpi-spark">
+        <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#E4B340" stroke-width="1.5" points="0,14 10,16 20,14 30,16 40,14 50,16 60,14 70,16 80,14 90,16 100,14"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Avg Delivery Time -->
+    <div class="kpi-card">
+      <div class="kpi-label">Avg Delivery Time</div>
+      <div class="kpi-value">28<span style="font-size:16px;color:var(--ck-text-soft);"> min</span></div>
+      <span class="kpi-compare up"><i class="ti ti-trending-down"></i> −4 min</span>
+      <span class="kpi-compare-vs">vs. 32 min last Tue</span>
+      <div class="kpi-spark">
+        <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#E4B340" stroke-width="1.5" points="0,8 10,10 20,12 30,14 40,16 50,15 60,17 70,19 80,21 90,22 100,24"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Food Cost % -->
+    <div class="kpi-card">
+      <div class="kpi-label">Food Cost %</div>
+      <div class="kpi-value">29.2<span style="font-size:16px;color:var(--ck-text-soft);">%</span></div>
+      <span class="kpi-compare down"><i class="ti ti-trending-up"></i> +1.4 pts</span>
+      <span class="kpi-compare-vs">vs. 27.8% last Tue</span>
+      <div class="kpi-spark">
+        <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#E4B340" stroke-width="1.5" points="0,18 10,16 20,14 30,14 40,12 50,10 60,12 70,10 80,8 90,6 100,4"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>Source pattern</h3>
+    <p><b>Uber Eats Manager.</b> Every metric in their analytics view carries a delta vs. the prior 7d / 12w / 12mo window, with the comparison range user-selectable <b>at the top of the screen</b> rather than per-card. The chip turns a static number into a verdict ("good day" vs. "slow day") without a second click. The single global range selector beats per-card range selectors because most operators want to compare ALL their numbers to the same baseline — not slice one metric one way and another differently.</p>
+
+    <h3>Why it works</h3>
+    <ul>
+      <li><b>Cognitive load: zero.</b> Operator doesn't have to remember last Tue's covers — the chip does the math + the comparison + the verdict in one glance.</li>
+      <li><b>Pre-attentive color.</b> Green up / red down / gray flat. Operator can scan the dashboard with peripheral vision and spot anomalies (red food-cost %) without reading anything.</li>
+      <li><b>Single global control.</b> No drift between cards. One range pick = one consistent picture.</li>
+    </ul>
+
+    <h3>How it adapts to Cenas</h3>
+    <ul>
+      <li><b>Per-store dashboards:</b> hang the chip under <em>every</em> KPI on /Tomball and /Copperfield home pages. Initial set above: Covers / Ticket Avg / EzCater Orders / Driver Runs / Avg Delivery Time / Food Cost %. Add Labor % / Top SKU as they become available.</li>
+      <li><b>Range selector at top.</b> "Yesterday / Last [same day-of-week] / Last 7 days / Last 30 days / Last year same week" — the same-day-of-week comparison is the one Tex-Mex managers care about most (Tue ≠ Sat).</li>
+      <li><b>Color semantics flip per metric.</b> Higher Covers = good (green up). Higher Food Cost % = bad (red up). The mockup demos both — see Food Cost card showing red "up" because the direction is bad even though the value rose.</li>
+      <li><b>Sparkline is bonus, not the headline.</b> Optional small inline chart per card — shows trend trajectory at a glance. ~30px high, no axes, no labels. Cheap retention of context.</li>
+    </ul>
+
+    <h3>Implementation cost</h3>
+    <p>Backend: extend each KPI query to also fetch the comparison-period value (parameterized by the range selector). Frontend: one new <code>.kpi-card</code> component (~30 lines CSS, ~15 lines template), one range-bar component (~20 lines), one delta-classifier helper (returns up/down/flat + direction-is-good boolean per metric). Total: ~2 days for one engineer to ship across both store dashboards.</p>
+
+    <h3>Citation</h3>
+    <p>Pattern observed in Uber Eats Manager analytics screens. See: <code>uber.com/us/en/blog/restaurant-manager/</code> + Uber Eats Manager performance-data docs. Pattern also exists in Square Dashboard + Toast Analytics with smaller surface area.</p>
+  </div>
+</div>
+</body>
+</html>

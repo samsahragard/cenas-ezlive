@@ -2324,6 +2324,48 @@ def _jsonable(v):
     return v
 
 
+@cena_bp.route("/sam/cena/run-scan-vendor-inbox", methods=["POST"])
+def cena_run_scan_vendor_inbox():
+    """One-shot scan of orders@cenaskitchen.com IMAP inbox for vendor
+    emails. Per Sam /sam/chat #871 — the existing inbox already has
+    real vendor emails, no need to wait on Sam to forward samples.
+    Returns sender-domain counts + sample subjects/bodies per vendor."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    import io
+    import contextlib
+    import sys as _sys
+    import pathlib as _pl
+
+    repo_root = _pl.Path(current_app.root_path).parent
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+    try:
+        from scripts import scan_vendor_inbox as _scan
+    except ImportError as e:
+        return jsonify({"ok": False,
+                        "error": f"import failed: {e}"}), 500
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = _scan.main()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: scan_vendor_inbox crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "stdout": buf.getvalue()}), 500
+
+    return jsonify({
+        "ok": rc == 0,
+        "return_code": rc,
+        "stdout": buf.getvalue(),
+    })
+
+
 @cena_bp.route("/sam/cena/run-probe-ezcater-order", methods=["POST"])
 def cena_run_probe_ezcater_order():
     gate = _require_gateway_token()

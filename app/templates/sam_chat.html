@@ -125,6 +125,7 @@
   .sc-msg.role-user { align-items: flex-end; }
   .sc-msg.role-assistant { align-items: flex-start; }
   .sc-msg.role-dck { align-items: flex-start; }
+  .sc-msg.role-aick { align-items: flex-start; }
   .sc-bubble {
     max-width: 78%;
     padding: 10px 14px;
@@ -149,6 +150,12 @@
   .role-dck .sc-bubble {
     background: rgba(200, 130, 200, 0.10);
     border: 1px solid rgba(200, 130, 200, 0.30);
+    color: #ECE3D0;
+    white-space: normal;
+  }
+  .role-aick .sc-bubble {
+    background: rgba(80, 170, 210, 0.10);
+    border: 1px solid rgba(80, 170, 210, 0.30);
     color: #ECE3D0;
     white-space: normal;
   }
@@ -282,6 +289,7 @@
   .role-user .sc-msg-author { text-align: right; color: rgba(232, 122, 62, 0.72); }
   .role-assistant .sc-msg-author { color: rgba(217, 164, 54, 0.70); }
   .role-dck .sc-msg-author { color: rgba(200, 130, 200, 0.85); }
+  .role-aick .sc-msg-author { color: rgba(140, 200, 230, 0.90); }
   /* ---- participant strip ---- */
   .sc-participants {
     display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
@@ -301,6 +309,7 @@
   .sc-part-cena { background: rgba(217,164,54,0.10); border: 1px solid rgba(217,164,54,0.25); color: rgba(217,164,54,0.85); }
   .sc-part-agent { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: rgba(236,227,208,0.50); }
   .sc-part-dck  { background: rgba(200,130,200,0.10); border: 1px solid rgba(200,130,200,0.40); color: rgba(220,170,220,0.90); }
+  .sc-part-aick { background: rgba(80,170,210,0.10); border: 1px solid rgba(80,170,210,0.40); color: rgba(140,200,230,0.90); }
 </style>
 {% endblock %}
 
@@ -326,6 +335,7 @@
       <span class="sc-participants-label">In chat</span>
       <span class="sc-part sc-part-sam">Sam</span>
       <span class="sc-part sc-part-cena" id="sc-cena-chip">Cena</span>
+      <span class="sc-part sc-part-aick" id="sc-aick-chip">aick</span>
     </div>
     <div class="sc-msgs" id="sc-msgs"></div>
     <div class="sc-warn" id="sc-warn"></div>
@@ -434,11 +444,13 @@
     const authorEl = document.createElement("div");
     authorEl.className = "sc-msg-author";
     authorEl.textContent = role === "user" ? "Sam"
-      : role === "dck" ? "dck" : "Cena";
+      : role === "dck" ? "dck"
+      : role === "aick" ? "aick"
+      : "Cena";
     wrap.appendChild(authorEl);
     const bubble = document.createElement("div");
     bubble.className = "sc-bubble";
-    if ((role === "assistant" || role === "dck") && !opts.streaming) {
+    if ((role === "assistant" || role === "dck" || role === "aick") && !opts.streaming) {
       try { bubble.innerHTML = marked.parse(content || ""); }
       catch (e) { bubble.textContent = content || ""; }
     } else {

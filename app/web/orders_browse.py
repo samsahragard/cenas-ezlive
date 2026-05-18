@@ -134,6 +134,79 @@ def combined_day(location: str, date: str):
         db.close()
 
 
+@browse.route("/orders/both/<date>")
+def combined_day_both(date: str):
+    """Combined view of Tomball + Copperfield orders for a given date.
+
+    Per Sam #2870 (orders dashboard item 3): the existing /orders/both/<date>
+    URL was 404'ing because the route only handled per-location paths
+    (/orders/<location>/<date>). This adds the both-locations rollup.
+
+    Same shape as combined_day() but filters origin_store_id IN the full
+    LOCATION_TO_ORIGIN values set + sorts by (origin_store_id, deliver_at)
+    so each store's block stays clustered while still showing both.
+    """
+    db = next(get_db())
+    try:
+        origin_ids = list(LOCATION_TO_ORIGIN.values())
+        orders = (
+            db.query(Order)
+            .filter(Order.origin_store_id.in_(origin_ids),
+                    Order.delivery_date == date)
+            .filter(Order.status != "cancelled")
+            .order_by(Order.origin_store_id, Order.deliver_at)
+            .all()
+        )
+        if not orders:
+            abort(404, f"No orders for both locations on {date}")
+        collapse = request.args.get("collapse_empty_rows") == "1"
+        result = build_grids_for_orders(db, orders, collapse_empty_rows=collapse)
+        return render_template(
+            "order_view.html",
+            order=None,
+            grids=result["grids"],
+            active_view="master",
+            title=f"All Tomball + Copperfield orders — {date}",
+            mode="combined",
+            combined_count=len(orders),
+            location="both",
+            location_label="Tomball + Copperfield",
+            date=date,
+            collapse_empty_rows=collapse,
+        )
+    finally:
+        db.close()
+
+
+@browse.route("/orders/both/<date>/xlsx")
+def combined_day_both_xlsx(date: str):
+    """xlsx export of the combined Tomball + Copperfield day view."""
+    db = next(get_db())
+    try:
+        origin_ids = list(LOCATION_TO_ORIGIN.values())
+        orders = (
+            db.query(Order)
+            .filter(Order.origin_store_id.in_(origin_ids),
+                    Order.delivery_date == date)
+            .filter(Order.status != "cancelled")
+            .order_by(Order.origin_store_id, Order.deliver_at)
+            .all()
+        )
+        if not orders:
+            abort(404)
+        collapse = request.args.get("collapse_empty_rows") == "1"
+        result = build_grids_for_orders(db, orders, collapse_empty_rows=collapse)
+        xlsx = export_view_grids_to_xlsx(result["grids"])
+        return send_file(
+            io.BytesIO(xlsx),
+            as_attachment=True,
+            download_name=f"both_{date}.xlsx",
+            mimetype=XLSX_MIME,
+        )
+    finally:
+        db.close()
+
+
 @browse.route("/orders/<location>/<date>/xlsx")
 def combined_day_xlsx(location: str, date: str):
     location = location.lower()

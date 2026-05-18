@@ -62,6 +62,34 @@
   .samples-empty { color: var(--text-3); font-size: 14px; padding: 32px 0; text-align: center; }
   @media (max-width: 600px) { .samples-grid { grid-template-columns: 1fr; } }
 
+  /* Approved-filter toggle (Sam #2677 + cena #2710) — hide approved cards
+     by default so the page becomes an active work queue. */
+  .dvs-filter-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px; margin-bottom: 16px;
+    border: 0.5px solid rgba(217,164,54,0.20);
+    border-radius: 8px;
+    background: rgba(40,22,14,0.45);
+    font-size: 12px; color: var(--text-2);
+  }
+  .dvs-filter-summary { font-weight: 500; }
+  .dvs-filter-summary b { color: var(--ck-gold); font-weight: 700; }
+  .dvs-filter-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 12px; font-weight: 600;
+    background: rgba(217,164,54,0.10);
+    color: var(--ck-gold);
+    border: 0.5px solid rgba(217,164,54,0.30);
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .dvs-filter-toggle:hover {
+    background: rgba(217,164,54,0.18);
+    border-color: rgba(217,164,54,0.55);
+  }
+
   /* ==== Samples approval workflow (spec_samples_approval_workflow §5) ==== */
   .dvs-approval {
     border-top: 0.5px solid var(--ck-border, rgba(217,164,54,0.20));
@@ -194,6 +222,23 @@
   }
 
 </style>
+
+{% if approved_total > 0 %}
+<div class="dvs-filter-bar">
+  <div class="dvs-filter-summary">
+    {% if show_approved %}
+      Showing <b>all {{ samples|length }}</b> samples — including <b>{{ approved_total }}</b> approved (live in production).
+    {% else %}
+      Showing <b>{{ samples|length }}</b> active samples · <b>{{ approved_total }}</b> approved card{{ 's' if approved_total != 1 else '' }} hidden (live in production).
+    {% endif %}
+  </div>
+  {% if show_approved %}
+    <a class="dvs-filter-toggle" href="/partner/developer/samples">Hide approved</a>
+  {% else %}
+    <a class="dvs-filter-toggle" href="/partner/developer/samples?show_approved=1">Show approved ({{ approved_total }})</a>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="samples-grid">
 {% if samples %}

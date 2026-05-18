@@ -609,10 +609,28 @@ def developer_samples():
             })
     finally:
         db.close()
+
+    # Status filter per Sam #2677 + cena #2681 + #2710: hide approved
+    # cards by default so the Samples page becomes an active work queue;
+    # "Show approved" toggle reveals them for audit/pattern reference.
+    # Don't hard-delete SAMPLES dict entries (history preserved).
+    show_approved = request.args.get("show_approved", "").lower() in (
+        "1", "true", "yes", "on"
+    )
+    approved_total = sum(
+        1 for s in enriched if s["approval_status"] == "approved"
+    )
+    visible = enriched if show_approved else [
+        s for s in enriched if s["approval_status"] != "approved"
+    ]
+
     return render_template(
         "developer_samples.html",
         active="dev_samples",
-        samples=enriched,
+        samples=visible,
+        all_samples=enriched,
+        approved_total=approved_total,
+        show_approved=show_approved,
         doc_pages=DOC_PAGES,
         is_sam=is_sam_chat_user(),
     )

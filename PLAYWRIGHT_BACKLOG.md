@@ -42,6 +42,28 @@ File written: tests/test_sample_approval_playwright.py
 
 ck #2549 Item 3 lane. Tests written but deferred per Sam #2547 batch model.
 
+### 2f9e26a — Samples approval-events endpoint (2026-05-18)
+Spec: scope ck #2736 + cena #2738/#2741 (route shape + cursor monotonicity + partner gate)
+
+- **Test A — Cursor monotonicity across polls**: Sam-session GETs
+  /partner/developer/samples/approval-events?since=2026-01-01,
+  captures response.now. Sam-session approves a new sample.
+  GET ?since=<captured-now> → returns ONLY the new approval, sorted
+  by marked_at desc.
+- **Test B — Reject-with-image vs reject-text-only path**: Sam rejects
+  one sample with text-only notes, rejects another with an image
+  attachment. GET endpoint → both events present; the attachment-bearing
+  event has attachments[].id + filename + url populated, the text-only
+  event has attachments: [].
+- **Test C — Latest-state-only per slug (single-row trade-off)**: Sam
+  approves a sample, then rejects it within one polling window.
+  GET → single event with status='rejected' (NOT two events). Matches
+  scope #2736 §PERSISTENCE trade-off documentation.
+- **Test D — Partner-auth gate**: unauthenticated GET → 302/401, not
+  200. Authenticated GET → 200 + valid payload.
+
+aick #2745 lane. Tests deferred per Sam #2547 batch model.
+
 ---
 
 ---

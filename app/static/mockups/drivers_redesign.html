@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Drivers Page — Design Mockup (dck)</title>
+<title>Drivers Page — Design Mockup (dck) v2</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
 <style>
   :root {
     --ck-bg-page:        #140A06;
@@ -17,6 +18,7 @@
     --ck-gold-bright:    #FFD970;
     --ck-gold-soft:      rgba(217, 164, 54, 0.14);
     --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-status-open:    #9CCB76;
     --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
     --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
   }
@@ -43,6 +45,17 @@
   .mockup-head .sub {
     font-size: 12px; color: var(--ck-text-soft);
     text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .v2-badge {
+    display: inline-block;
+    background: var(--ck-gold);
+    color: #140A06;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+    vertical-align: middle;
   }
   .section-label {
     font-size: 11px; color: var(--ck-gold);
@@ -85,12 +98,8 @@
     background: rgba(228, 179, 64, 0.12);
     color: var(--ck-gold);
   }
-  .mock-desktop .nav-item .ico {
-    width: 14px; opacity: 0.7;
-  }
-  .mock-desktop .main {
-    flex: 1; padding: 20px 26px;
-  }
+  .mock-desktop .nav-item .ico { width: 14px; opacity: 0.7; }
+  .mock-desktop .main { flex: 1; padding: 20px 26px; }
   .mock-desktop .topbar {
     display: flex; align-items: center; justify-content: space-between;
     padding-bottom: 14px;
@@ -100,13 +109,20 @@
   .mock-desktop .page-title {
     font-size: 22px; font-weight: 600; margin: 0; color: var(--ck-text);
   }
-  .mock-desktop .topbar-meta {
-    font-size: 11px; color: var(--ck-text-faint);
+  /* v2: location-only pill, no count duplication */
+  .mock-desktop .location-pill {
+    display: inline-block;
+    padding: 4px 12px; border-radius: 999px;
+    background: rgba(232, 122, 62, 0.18);
+    color: rgba(245, 180, 142, 1);
+    border: 1px solid rgba(232, 122, 62, 0.3);
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
   }
 
   /* PHONE MOCK */
   .mock-phone {
-    width: 340px; height: 620px;
+    width: 340px; height: 640px;
     background: var(--ck-bg-page);
     border: 0.5px solid var(--ck-border);
     border-radius: 22px;
@@ -174,14 +190,24 @@
     background: rgba(0, 0, 0, 0.55);
   }
 
-  /* SHARED — driver rows */
+  /* SHARED — driver rows (v2: hover state + chevron tappability) */
   .driver-row {
     display: flex; align-items: center; gap: 12px;
-    padding: 12px 0;
+    padding: 12px 10px;
     border-bottom: 0.5px solid var(--ck-border);
     font-size: 13px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 150ms var(--ck-ease);
+    margin: 0 -10px;
   }
   .driver-row:last-child { border-bottom: none; }
+  .driver-row:hover {
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .driver-row.is-hover-demo {
+    background: rgba(228, 179, 64, 0.06);
+  }
   .avatar {
     width: 36px; height: 36px;
     background: rgba(199, 59, 54, 0.65);
@@ -191,10 +217,31 @@
     font-size: 12px; font-weight: 500;
     flex-shrink: 0;
   }
-  .driver-name { color: var(--ck-text); flex: 1; }
+  .driver-name-block { flex: 1; min-width: 0; }
+  .driver-name { color: var(--ck-text); display: block; }
+  .driver-status {
+    color: var(--ck-text-soft); font-size: 11px;
+    margin-top: 3px;
+    display: block;
+  }
+  .driver-status.on-shift {
+    color: var(--ck-status-open);
+  }
   .driver-meta {
     color: var(--ck-text-soft); font-size: 11px;
     text-align: right; flex-shrink: 0;
+  }
+  .driver-chevron {
+    color: var(--ck-text-faint);
+    font-size: 16px;
+    flex-shrink: 0;
+    transition: transform 200ms var(--ck-ease),
+                color 200ms var(--ck-ease);
+  }
+  .driver-row:hover .driver-chevron,
+  .driver-row.is-hover-demo .driver-chevron {
+    color: var(--ck-gold);
+    transform: translateX(2px);
   }
 
   /* NOTES */
@@ -219,8 +266,18 @@
   }
   .notes ul { margin: 8px 0 0; padding-left: 20px; }
   .notes li { margin: 5px 0; }
+  .changelog {
+    background: rgba(156, 203, 118, 0.06);
+    border: 0.5px solid rgba(156, 203, 118, 0.25);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 28px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.85);
+    line-height: 1.65;
+  }
+  .changelog b { color: var(--ck-status-open); }
 
-  /* PHONE CENTERED */
   .phone-frame {
     display: flex; justify-content: center; padding: 12px 0;
   }
@@ -230,8 +287,17 @@
 <div class="mockup-wrap">
 
   <div class="mockup-head">
-    <h1>Drivers Page — Design Mockup</h1>
-    <div class="sub">dck · 2026-05-17 · responding to cena #2393</div>
+    <h1>Drivers Page — Design Mockup <span class="v2-badge">v2</span></h1>
+    <div class="sub">dck · 2026-05-17 · v2 lands cena #2415 review pushbacks</div>
+  </div>
+
+  <div class="changelog">
+    <b>v2 changelog (per cena #2415):</b>
+    <ul>
+      <li><b>1. Topbar-meta no longer duplicates tab counts</b> — desktop topbar shows just the location pill ("Tomball"). Tab counts carry the magnitude.</li>
+      <li><b>2. Phone driver rows now carry one status-meta line</b> ("on shift" in <span style="color:#9CCB76;">--ck-status-open</span> or "last shift 2h ago" in soft cream). Stats (rating, delivery count) live on the driver-detail page. Status &gt; stats for live ops.</li>
+      <li><b>3. Tappability affordance shipped in the mockup</b> — driver rows have hover state (gold-soft bg) + <code>ti ti-chevron-right</code> that nudges right + colors gold on hover. One row in each view is shown in its hover state so the affordance reads.</li>
+    </ul>
   </div>
 
   <!-- DESKTOP -->
@@ -250,31 +316,43 @@
       <main class="main">
         <div class="topbar">
           <h2 class="page-title">Drivers</h2>
-          <div class="topbar-meta">Tomball · 12 active · 4 inactive</div>
+          <span class="location-pill">Tomball</span>
         </div>
         <div class="tabs">
           <button class="tab active">Active <span class="count">(12)</span></button>
           <button class="tab">Inactive <span class="count">(4)</span></button>
         </div>
-        <div class="driver-row">
+        <div class="driver-row is-hover-demo">
           <div class="avatar">JM</div>
-          <div class="driver-name">Jamal Martinez</div>
-          <div class="driver-meta">4.9★ · 87 deliveries · last shift 2h ago</div>
+          <div class="driver-name-block">
+            <span class="driver-name">Jamal Martinez</span>
+            <span class="driver-status">4.9★ · 87 deliveries · last shift 2h ago</span>
+          </div>
+          <i class="ti ti-chevron-right driver-chevron"></i>
         </div>
         <div class="driver-row">
           <div class="avatar">SR</div>
-          <div class="driver-name">Sara Rodriguez</div>
-          <div class="driver-meta">4.8★ · 56 deliveries · on shift</div>
+          <div class="driver-name-block">
+            <span class="driver-name">Sara Rodriguez</span>
+            <span class="driver-status">4.8★ · 56 deliveries · on shift</span>
+          </div>
+          <i class="ti ti-chevron-right driver-chevron"></i>
         </div>
         <div class="driver-row">
           <div class="avatar">DK</div>
-          <div class="driver-name">Diego Kim</div>
-          <div class="driver-meta">4.9★ · 142 deliveries · last shift yesterday</div>
+          <div class="driver-name-block">
+            <span class="driver-name">Diego Kim</span>
+            <span class="driver-status">4.9★ · 142 deliveries · last shift yesterday</span>
+          </div>
+          <i class="ti ti-chevron-right driver-chevron"></i>
         </div>
         <div class="driver-row">
           <div class="avatar">MN</div>
-          <div class="driver-name">Maya Nguyen</div>
-          <div class="driver-meta">5.0★ · 31 deliveries · on shift</div>
+          <div class="driver-name-block">
+            <span class="driver-name">Maya Nguyen</span>
+            <span class="driver-status">5.0★ · 31 deliveries · on shift</span>
+          </div>
+          <i class="ti ti-chevron-right driver-chevron"></i>
         </div>
       </main>
     </div>
@@ -282,11 +360,11 @@
     <div class="notes">
       <b>Desktop view — design decisions:</b>
       <ul>
-        <li><b>No hamburger button rendered</b> — sidebar is always-visible at ≥1024px, so hamburger is redundant. Hidden via <code>@media (max-width: 1024px) { .menu-toggle { display: flex } }</code> else <code>display: none</code> in base_dashboard chrome. Closes the "hamburger covering page title" issue at root rather than padding-hacking around it.</li>
-        <li><b>Page title clears cleanly</b> — sits flush against the main-pane padding (26px left). Title <code>font-size: 22px / weight 600 / color var(--ck-text)</code>.</li>
-        <li><b>Active / Inactive tabs</b> use the V2 <code>.ezm-tab</code> underline pattern from <code>ez_manage.html</code>. Active state: <code>2px var(--ck-gold-bright)</code> bottom border + <code>rgba(0,0,0,0.55)</code> recess bg + <code>var(--ck-text-hover)</code> text. Counts in dim parens beside each label so the operator knows magnitudes before clicking.</li>
-        <li><b>STATUS column removed</b> — redundant with tab filter.</li>
-        <li><b>Topbar meta line</b> — "Tomball · 12 active · 4 inactive" sits at-a-glance right of title, replacing the lost STATUS column information density.</li>
+        <li><b>No hamburger</b> at ≥1024px — sidebar is always-visible, hamburger redundant. Hidden via <code>@media (max-width: 1024px) { .menu-toggle { display: flex } }</code> in base_dashboard chrome.</li>
+        <li><b>Topbar = title + location pill only</b> (v2 change). Tab counts carry the active/inactive magnitudes; no duplication.</li>
+        <li><b>Active / Inactive tabs</b> — V2 <code>.ezm-tab</code> pattern. Active = <code>2px var(--ck-gold-bright)</code> bottom border + <code>rgba(0,0,0,0.55)</code> recess bg + <code>var(--ck-text-hover)</code> text.</li>
+        <li><b>Driver rows are tappable</b> (v2 change). First row shows the hover state — gold-soft bg + chevron-right nudged + colored gold. Real implementation: <code>:hover</code> drives this; row click → <code>/drivers/&lt;id&gt;</code>.</li>
+        <li><b>Status-meta inline on desktop</b> (rating · deliveries · last-shift) — desktop has the horizontal room, so all three pieces stay on the row.</li>
       </ul>
     </div>
   </div>
@@ -310,25 +388,45 @@
             <button class="tab active">Active <span class="count">(12)</span></button>
             <button class="tab">Inactive <span class="count">(4)</span></button>
           </div>
-          <div class="driver-row">
+          <div class="driver-row is-hover-demo">
             <div class="avatar">JM</div>
-            <div class="driver-name">Jamal Martinez</div>
+            <div class="driver-name-block">
+              <span class="driver-name">Jamal Martinez</span>
+              <span class="driver-status">last shift 2h ago</span>
+            </div>
+            <i class="ti ti-chevron-right driver-chevron"></i>
           </div>
           <div class="driver-row">
             <div class="avatar">SR</div>
-            <div class="driver-name">Sara Rodriguez</div>
+            <div class="driver-name-block">
+              <span class="driver-name">Sara Rodriguez</span>
+              <span class="driver-status on-shift">on shift</span>
+            </div>
+            <i class="ti ti-chevron-right driver-chevron"></i>
           </div>
           <div class="driver-row">
             <div class="avatar">DK</div>
-            <div class="driver-name">Diego Kim</div>
+            <div class="driver-name-block">
+              <span class="driver-name">Diego Kim</span>
+              <span class="driver-status">last shift yesterday</span>
+            </div>
+            <i class="ti ti-chevron-right driver-chevron"></i>
           </div>
           <div class="driver-row">
             <div class="avatar">MN</div>
-            <div class="driver-name">Maya Nguyen</div>
+            <div class="driver-name-block">
+              <span class="driver-name">Maya Nguyen</span>
+              <span class="driver-status on-shift">on shift</span>
+            </div>
+            <i class="ti ti-chevron-right driver-chevron"></i>
           </div>
           <div class="driver-row">
             <div class="avatar">RT</div>
-            <div class="driver-name">Rafael Torres</div>
+            <div class="driver-name-block">
+              <span class="driver-name">Rafael Torres</span>
+              <span class="driver-status">last shift 4h ago</span>
+            </div>
+            <i class="ti ti-chevron-right driver-chevron"></i>
           </div>
         </div>
       </div>
@@ -337,10 +435,10 @@
     <div class="notes">
       <b>Phone view — design decisions:</b>
       <ul>
-        <li><b>Hamburger = 48×48 touch target.</b> iOS HIG + Material a11y standard (current ~32 was too small). Background <code>var(--ck-gold-soft)</code>, border <code>1px solid var(--ck-gold)</code>, radius 10px. Hover bg deepens to <code>rgba(217,164,54,0.28)</code>. Bars are <code>var(--ck-gold-bright)</code> 22×2.5px, gap 5px — high-contrast against the dark glass.</li>
-        <li><b>Hamburger lives INSIDE the topbar</b> as the leftmost flex element (12px gap to title). NOT <code>position: fixed</code>. This is the structural fix — collision with page title becomes architecturally impossible regardless of viewport width or page content. Hamburger is also predictably present at the top of every mobile page (visible affordance, not floating-overlay surprise).</li>
-        <li><b>Tabs row uses <code>overflow-x: auto</code></b> for narrow widths. With two tabs they fit; future 3rd/4th tab states scroll horizontally.</li>
-        <li><b>Driver-meta hidden on phone</b> (rating / delivery count) to keep rows scannable at small width. Tap on a row navigates to the driver-detail page where full meta lives.</li>
+        <li><b>Hamburger = 48×48 touch target</b> inside the topbar (not <code>position: fixed</code>). Bg <code>var(--ck-gold-soft)</code>, border <code>1px solid var(--ck-gold)</code>, radius 10px. Bars are <code>var(--ck-gold-bright)</code> 22×2.5px.</li>
+        <li><b>One status-meta line per row</b> (v2 change). "on shift" in <code>var(--ck-status-open)</code> for live drivers; "last shift Xh ago" in soft cream for the rest. Rating + delivery count moved to the driver-detail page — status &gt; stats for live ops (GMs during lunch rush).</li>
+        <li><b>Tappability affordance</b> (v2 change) — row hover state + <code>ti ti-chevron-right</code>. First row shown in hover state. On tap → <code>/drivers/&lt;id&gt;</code>.</li>
+        <li><b>Tabs row uses <code>overflow-x: auto</code></b> for narrow widths.</li>
       </ul>
     </div>
   </div>
@@ -350,13 +448,17 @@
     <div class="section-label">Tokens, rationale, implementation notes</div>
     <div class="notes">
       <ul>
-        <li><b>All colors from V2 <code>--ck-*</code> tokens</b> defined in <code>app/static/css/sidebar.css:8-50</code>. No raw hex outside <code>:root</code>. This closes design-debt items §5.7 (V1↔V2 token bridge) and §5.4 (breakpoint alignment) from the design-system-reference doc when shipped.</li>
-        <li><b>Hamburger fix is cross-cutting</b> — base_dashboard.html chrome change, every authenticated page benefits, not Drivers-specific.</li>
-        <li><b>Tabs pattern</b> is <code>.ezm-tab</code> reuse — no new tabs class. Don't introduce a fourth tab pattern when V2 already has one that fits.</li>
-        <li><b>Filter shape:</b> recommend server-side <code>/drivers?status=active|inactive</code> querystring (shareable URLs, cleaner state, doesn't slow growing rosters) over client-side row hiding.</li>
-        <li><b>Breakpoint:</b> standardize on <code>--ck-bp-mobile: 1024px</code>. Currently dashboard.css has 900px + 720px; sidebar.css has 1024px. Pick 1024 per the V2 token system.</li>
+        <li><b>All colors from V2 <code>--ck-*</code> tokens</b> in <code>app/static/css/sidebar.css:8-50</code>. Adds <code>--ck-status-open: #9CCB76</code> as the "on shift" green per existing token vocabulary.</li>
+        <li><b>Cross-cutting fixes (closing design-debt items from design-system-reference §5):</b>
+          <ul>
+            <li>§5.4 — breakpoint standardization to <code>--ck-bp-mobile: 1024px</code> (closes the dashboard.css 900/720 vs sidebar.css 1024 split)</li>
+            <li>§5.7 — V1↔V2 token bridge (this mockup uses V2 exclusively, demonstrating the migration shape)</li>
+          </ul>
+        </li>
+        <li><b>Tabs pattern</b> = <code>.ezm-tab</code> reuse, not a new class.</li>
+        <li><b>Filter shape:</b> recommend server-side <code>/drivers?status=active|inactive</code> querystring.</li>
+        <li><b>Animation:</b> hover transitions use <code>150ms var(--ck-ease)</code> (the cubic-bezier(0.22, 0.8, 0.24, 1) brand motion).</li>
         <li><b>Three-gate (samai):</b> visual confirm Drivers + one other page (suggest home dashboard) on phone AND desktop + hamburger 48×48 touch target measured.</li>
-        <li><b>Animation:</b> hover transitions use <code>200ms var(--ck-ease)</code> (the cubic-bezier(0.22, 0.8, 0.24, 1) brand motion).</li>
       </ul>
     </div>
   </div>

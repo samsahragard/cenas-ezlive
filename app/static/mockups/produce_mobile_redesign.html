@@ -121,7 +121,7 @@
   }
   .nm-section-title .muted { color: var(--ck-text-soft); font-weight: 400; }
 
-  /* The card */
+  /* The card — 2-column layout: text left, photo right (per Sam #2637) */
   .pcard {
     background: var(--glass);
     backdrop-filter: blur(20px);
@@ -129,11 +129,48 @@
     border-radius: 10px;
     padding: 12px 14px;
     margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 1fr 96px;
+    gap: 12px;
+    align-items: stretch;
   }
   .pcard.is-noprice { opacity: 0.55; }
+  .pcard-content {
+    display: flex; flex-direction: column;
+    min-width: 0;
+  }
+  .pcard-photo {
+    width: 96px; height: 96px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--glass-border);
+    object-fit: cover;
+    align-self: center;
+  }
+  .pcard-photo-placeholder {
+    width: 96px; height: 96px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(255,217,112,0.08) 0%, rgba(232,122,62,0.06) 100%);
+    border: 1px dashed var(--ck-gold-soft);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    align-self: center;
+    color: var(--ck-text-soft); font-size: 9.5px;
+    text-align: center; line-height: 1.3;
+    padding: 4px;
+  }
+  .pcard-photo-placeholder .emoji {
+    font-size: 28px; line-height: 1;
+    margin-bottom: 3px; filter: grayscale(0.3) opacity(0.85);
+  }
+  .pcard-photo-placeholder .label {
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--ck-text-faint); font-size: 8.5px;
+  }
   .pcard-head {
     display: flex; justify-content: space-between; align-items: baseline;
     margin-bottom: 4px;
+    gap: 6px;
   }
   .pcard-name {
     font-size: 15px; font-weight: 700; color: var(--ck-text-hover);
@@ -432,93 +469,117 @@
 
       <div class="nm-section-title">This Week's Items <span class="muted">(8 available)</span></div>
 
-      <!-- Item card with qty > 0 (active state) -->
+      <!-- Item card with qty > 0 (active state) — NEW: photo slot on the right per Sam #2637 -->
       <div class="pcard">
-        <div class="pcard-head">
-          <div class="pcard-name">Avocado <span class="marker-star">★</span></div>
-          <div class="pcard-price">$30.00</div>
-        </div>
-        <div class="pcard-meta">
-          <span>48 ct</span>
-          <span class="sep">·</span>
-          <span class="badge jluna">J. Luna</span>
-          <span class="sep">·</span>
-          <span>5/15 – 5/16</span>
-        </div>
-        <div class="pcard-row">
-          <div class="stepper">
-            <button type="button" aria-label="Decrease quantity">−</button>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" value="3" aria-label="Quantity">
-            <button type="button" aria-label="Increase quantity">+</button>
+        <div class="pcard-content">
+          <div class="pcard-head">
+            <div class="pcard-name">Avocado <span class="marker-star">★</span></div>
+            <div class="pcard-price">$30.00</div>
           </div>
-          <div class="pcard-subtotal">$90.00</div>
+          <div class="pcard-meta">
+            <span>48 ct</span>
+            <span class="sep">·</span>
+            <span class="badge jluna">J. Luna</span>
+            <span class="sep">·</span>
+            <span>5/15 – 5/16</span>
+          </div>
+          <div class="pcard-row">
+            <div class="stepper">
+              <button type="button" aria-label="Decrease quantity">−</button>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="3" aria-label="Quantity">
+              <button type="button" aria-label="Increase quantity">+</button>
+            </div>
+            <div class="pcard-subtotal">$90.00</div>
+          </div>
+        </div>
+        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Avocado">
+          <div class="emoji">🥑</div>
+          <div class="label">photo<br>here</div>
         </div>
       </div>
 
       <!-- Item card with qty = 0 (resting state) -->
       <div class="pcard">
-        <div class="pcard-head">
-          <div class="pcard-name">Tomato Roma</div>
-          <div class="pcard-price">$18.50</div>
-        </div>
-        <div class="pcard-meta">
-          <span>25 lb</span>
-          <span class="sep">·</span>
-          <span class="badge alvarado">Alvarado</span>
-          <span class="sep">·</span>
-          <span>5/16 only</span>
-        </div>
-        <div class="pcard-row">
-          <div class="stepper">
-            <button type="button" aria-label="Decrease quantity" disabled>−</button>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Quantity">
-            <button type="button" aria-label="Increase quantity">+</button>
+        <div class="pcard-content">
+          <div class="pcard-head">
+            <div class="pcard-name">Tomato Roma</div>
+            <div class="pcard-price">$18.50</div>
           </div>
-          <div class="pcard-subtotal" style="color: var(--ck-text-faint);">—</div>
+          <div class="pcard-meta">
+            <span>25 lb</span>
+            <span class="sep">·</span>
+            <span class="badge alvarado">Alvarado</span>
+            <span class="sep">·</span>
+            <span>5/16 only</span>
+          </div>
+          <div class="pcard-row">
+            <div class="stepper">
+              <button type="button" aria-label="Decrease quantity" disabled>−</button>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Quantity">
+              <button type="button" aria-label="Increase quantity">+</button>
+            </div>
+            <div class="pcard-subtotal" style="color: var(--ck-text-faint);">—</div>
+          </div>
+        </div>
+        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Tomato Roma">
+          <div class="emoji">🍅</div>
+          <div class="label">photo<br>here</div>
         </div>
       </div>
 
       <!-- Item card with both vendor markers (★ = J Luna preferred, ○ if Alvarado cheaper) -->
       <div class="pcard">
-        <div class="pcard-head">
-          <div class="pcard-name">Onion Yellow <span class="marker-circle">○</span></div>
-          <div class="pcard-price">$12.75</div>
-        </div>
-        <div class="pcard-meta">
-          <span>50 lb</span>
-          <span class="sep">·</span>
-          <span class="badge alvarado">Alvarado</span>
-          <span class="sep">·</span>
-          <span>5/15 – 5/17</span>
-        </div>
-        <div class="pcard-row">
-          <div class="stepper">
-            <button type="button" aria-label="Decrease quantity">−</button>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" value="2" aria-label="Quantity">
-            <button type="button" aria-label="Increase quantity">+</button>
+        <div class="pcard-content">
+          <div class="pcard-head">
+            <div class="pcard-name">Onion Yellow <span class="marker-circle">○</span></div>
+            <div class="pcard-price">$12.75</div>
           </div>
-          <div class="pcard-subtotal">$25.50</div>
+          <div class="pcard-meta">
+            <span>50 lb</span>
+            <span class="sep">·</span>
+            <span class="badge alvarado">Alvarado</span>
+            <span class="sep">·</span>
+            <span>5/15 – 5/17</span>
+          </div>
+          <div class="pcard-row">
+            <div class="stepper">
+              <button type="button" aria-label="Decrease quantity">−</button>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="2" aria-label="Quantity">
+              <button type="button" aria-label="Increase quantity">+</button>
+            </div>
+            <div class="pcard-subtotal">$25.50</div>
+          </div>
+        </div>
+        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Onion Yellow">
+          <div class="emoji">🧅</div>
+          <div class="label">photo<br>here</div>
         </div>
       </div>
 
       <!-- No-price item: disabled stepper -->
       <div class="pcard is-noprice">
-        <div class="pcard-head">
-          <div class="pcard-name">Cilantro</div>
-          <div class="pcard-price" style="color: var(--ck-text-faint);">no price</div>
-        </div>
-        <div class="pcard-meta">
-          <span>bunch</span>
-          <span class="sep">·</span>
-          <span style="color: var(--ck-text-faint);">no vendor this week</span>
-        </div>
-        <div class="pcard-row">
-          <div class="stepper">
-            <button type="button" disabled aria-label="Decrease quantity">−</button>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Quantity" disabled>
-            <button type="button" disabled aria-label="Increase quantity">+</button>
+        <div class="pcard-content">
+          <div class="pcard-head">
+            <div class="pcard-name">Cilantro</div>
+            <div class="pcard-price" style="color: var(--ck-text-faint);">no price</div>
           </div>
-          <div class="pcard-subtotal">—</div>
+          <div class="pcard-meta">
+            <span>bunch</span>
+            <span class="sep">·</span>
+            <span style="color: var(--ck-text-faint);">no vendor this week</span>
+          </div>
+          <div class="pcard-row">
+            <div class="stepper">
+              <button type="button" disabled aria-label="Decrease quantity">−</button>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Quantity" disabled>
+              <button type="button" disabled aria-label="Increase quantity">+</button>
+            </div>
+            <div class="pcard-subtotal">—</div>
+          </div>
+        </div>
+        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Cilantro">
+          <div class="emoji">🌿</div>
+          <div class="label">photo<br>here</div>
         </div>
       </div>
 
@@ -723,6 +784,54 @@
   </div>
 
   <b>Approval workflow exercise:</b> This mockup ships to <code>/partner/developer/samples</code> as the next dck deliverable through the workflow that just shipped (spec_samples_approval_workflow.html, ck Phase 2 in edce2bb). Sam reviews this mockup on the Samples page directly — clicks Approve to proceed to ck implementation, or Reject + notes/screenshots for iteration. Pipeline per Sam #2660: dck mockup → cena review → Sam approves → ck builds → aick wires → samai gates.
+
+  <hr style="border: none; border-top: 1px solid var(--ck-gold-soft); margin: 18px 0;">
+
+  <b>v1.1 — product photo slots (per Sam #2637 + cena #2638):</b>
+  <ul>
+    <li><b>Layout change:</b> <code>.pcard</code> is now a 2-column grid (<code>1fr 96px</code>) — text content left, 96×96 photo right. Sam's #2637 screenshot squiggle covered the right side of every card; this is that placement.</li>
+    <li><b>Mockup uses styled placeholders, NOT production photos.</b> Each card has a <code>.pcard-photo-placeholder</code> div with a dashed gold-soft border, gradient bg, food emoji + "photo here" label. Pure CSS, no external image dependencies. This demonstrates the LAYOUT + SLOT — Sam can confirm the placement and size before generation.</li>
+    <li><b>Production swap:</b> ck replaces <code>.pcard-photo-placeholder</code> with <code>&lt;img class="pcard-photo" src="..." alt="..."&gt;</code> per the .pcard-photo CSS rule already in the mockup (96×96 object-fit:cover, matching border-radius). One-line markup swap per card.</li>
+  </ul>
+
+  <b>Production photo pipeline — dck CANNOT generate the images (no image-gen tool in dck's harness). Handoff required:</b>
+  <ul>
+    <li><b>Style spec per cena #2638:</b>
+      <ul>
+        <li>Style anchor: <strong>soft top-down on neutral cream backdrop, even diffuse light, slight shadow under product, centered crop, square frame (1:1).</strong></li>
+        <li>Realistic photography style — not illustrated, not stylized, not on-color-backdrop.</li>
+        <li>Uniform: same backdrop color (cream/off-white), same lighting angle (top-down ~80°), same shadow direction + intensity, same crop ratio, same color grade.</li>
+      </ul>
+    </li>
+    <li><b>Prompt scaffold (ready-to-fire for any image-gen API):</b>
+      <pre style="background: rgba(0,0,0,0.4); padding: 10px; border-radius: 6px; font-size: 12px; overflow-x: auto; color: var(--ck-text);">"Top-down product photograph of {ITEM_NAME} on a neutral cream backdrop. Soft diffuse studio lighting from above, gentle natural shadow beneath. Centered, square 1:1 crop. Photographic style — realistic, sharp focus, even color, no text, no labels, no packaging. Slight matte finish."</pre>
+      <p>Substitute <code>{ITEM_NAME}</code> per item (e.g. "a single ripe avocado", "a cluster of roma tomatoes", "a yellow onion", "a bunch of cilantro"). Run all items in one batch with the same prompt scaffold so style holds.</p>
+    </li>
+    <li><b>Full catalog list (from current produce data — ck pulls live list from <code>ProduceItem</code> table or wherever items live, this is the sample-set baseline for prompt generation):</b>
+      <ul style="columns: 2;">
+        <li>Avocado (48 ct)</li>
+        <li>Tomato Roma (25 lb)</li>
+        <li>Onion Yellow (50 lb)</li>
+        <li>Cilantro (bunch)</li>
+        <li>+ all currently-available items in ProduceItem table</li>
+      </ul>
+      <p>Real catalog is dynamic — ck queries the actual ProduceItem set at image-gen time. Mockup shows 4 representative items.</p>
+    </li>
+    <li><b>Image storage:</b> drop into <code>app/static/produce_photos/{slug}.jpg</code> (e.g. <code>avocado.jpg</code>, <code>tomato-roma.jpg</code>). Slug derived from canonical_name (lowercase, dashes for spaces). 96×96 source minimum; production may want 2× resolution (192×192) for retina.</li>
+    <li><b>Wiring in template:</b> ck adds <code>photo_url</code> property to ProduceItem (or a helper) that returns the static path; template renders <code>&lt;img class="pcard-photo" src="{{ it.photo_url }}" alt="{{ it.canonical_name }}"&gt;</code>. Missing photo falls back to the .pcard-photo-placeholder div (mockup CSS already handles both).</li>
+    <li><b>Handoff sequence per cena #2638:</b>
+      <ol>
+        <li>Whoever-has-image-gen (Sam directly, aick via Anthropic image API, or third-party service) generates 3-4 sample images per the prompt scaffold above.</li>
+        <li>dck posts the 3-4 samples to dev chat for Sam's style sign-off.</li>
+        <li>Sam approves the style sample → full catalog generates in one batch.</li>
+        <li>Images drop into <code>app/static/produce_photos/</code>.</li>
+        <li>aick commits + pushes the image set + ck wires the template <code>photo_url</code>.</li>
+        <li>samai light-gate (static assets only).</li>
+      </ol>
+    </li>
+  </ul>
+
+  <b>Above 640px (table view) — photos NOT included.</b> The table mode is already information-dense (6 cols + qty); adding a 7th photo column would force the QTY column off the right edge again. Photos are intentionally a mobile-only enhancement. If Sam wants photos in the table view too, that's a v2 iteration — would require shrinking the price/vendor/size columns or going to a sub-row pattern.
 </div>
 
 </body>

@@ -17,6 +17,8 @@ Canonical source: `/partner/developer/app/session-start` + `/partner/developer/a
 
 **samai** — Spec + review. Authors specs (samai-spec lane) and gates every behavior-touching commit via the three-gate review rubric.
 
+**dck** — Design lead. Produces the design system, mockups, visual language, layout structure, and UX recommendations. Lives on the Design machine. All dck work is reviewed and green-lit by Cena before ck implements. Mockups and pattern references live at `/partner/developer/samples`.
+
 ### samai's Three-Gate Review (every behavior-touching commit must clear all three)
 
 - **Gate 1 — Local pytest:** full suite passes on the working tree.
@@ -24,6 +26,10 @@ Canonical source: `/partner/developer/app/session-start` + `/partner/developer/a
 - **Gate 3 — Build-specific deploy probe:** confirms *that commit* is live — not just "service is up" but something unique to the new commit is verified in production.
 
 **samai PASS = shipped.** Merged ≠ shipped. samai's three-gate clear is what makes it done.
+
+### Playwright Testing — Required for Every Milestone
+
+Every milestone or project ships with a Playwright interactive browser test. The team runs it, sees it pass visually in the browser, and reports confirmation before calling anything done. Automated probes alone are not sufficient for user-facing changes. **This requirement is waived ONLY if Sam explicitly says so.**
 
 ### samai's 6 Standing Rules (codified in methodology_rules.html)
 
@@ -44,6 +50,22 @@ Cena's recent tool additions (`post_to_dev_chat` / `read_dev_chat`) inherit the 
 
 ---
 
+## Charter File Locations
+
+All charters are repo-tracked at the repo root unless noted. Canonical addresses:
+
+| Charter | File Path | Status |
+|---|---|---|
+| CENA_CHARTER.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/CENA_CHARTER.md` | ✅ Live, auto-loaded |
+| AICK_CHARTER.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/AICK_CHARTER.md` | ✅ Live (8c88552) |
+| CK_CHARTER.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/CK_CHARTER.md` | ✅ Live (8ab61cd) |
+| SAMAI_CHARTER.md | `C:/Users/ck 2/cenas-ezlive/SAMAI_CHARTER.md` (local) → repo root pending | ⏳ SCP/push pending (permissions issue) |
+| DCK_CHARTER.md | `C:/Users/Design aick/cenas-kitchen-claude/DCK_CHARTER.md` | ✅ Live, repo-tracked |
+
+Note: Sam also has the original Word file versions on the Desktop (`aick charter.docx` etc.) — repo-tracked .md files are now canonical.
+
+---
+
 ## Human-Style Testing — Required Before Calling Anything Done
 
 **Don't just check logs or HTTP status codes.** Actually log into the app as a real user would and click through the affected surface. If something looks broken to a person using it, it's broken — regardless of what the probe says.
@@ -53,6 +75,12 @@ When delegating test coverage, know the current live sessions:
 - **ck** is logged in with **partner-level access** on his PC (Mini_IT13).
 
 Use this when assigning test tasks — aick can verify driver-facing flows, ck can verify partner/admin-facing flows without either of them having to log in fresh.
+
+---
+
+## Secrets Policy
+
+All credentials live in **1Password** and **Render env vars** only. No credential files on machines (Track 4 migration completed 2026-05-18). No credentials in chat surfaces, repo, or any .txt/.secrets files. Sam's personal credentials are never requested, stored, or relayed through any agent.
 
 ---
 
@@ -69,29 +97,45 @@ Use this when assigning test tasks — aick can verify driver-facing flows, ck c
 | `read_dev_chat` tool (start-point filter) | ✅ Live | Cena reads from session-start forward only |
 | Auto-load of CENA.md / CENA_CHARTER.md / APP_STATUS.md | ✅ Live | Appended to system context at session start |
 | `session_id` + `message_id` threading | ✅ Live | Commit `aa6074b` |
-| **Sam Chat participant indicator + per-msg author labels** | ✅ Light-gate PASS (83af3aa) | samai PASS gate 1+2 evidence-reviewer; gate-3 deferred pending Render pipeline-minutes recovery. Two flags: observer roster hard-coded (ck+dck); assistant label hard-coded 'Cena' — needs role/author-aware lookup when dck-summon ships. |
+| Sam Chat participant strip (Sam + Cena only) | ✅ Live | dck chip + summon daemon removed per Sam direction 2026-05-18 |
+| Samples page | ✅ Live | `/partner/developer/samples` — dck's canonical mockup + pattern reference home (8ab61cd) |
+| AICK_CHARTER.md repo-tracked | ✅ Live | 8c88552 |
+| CK_CHARTER.md repo-tracked | ✅ Live | 8ab61cd |
+| DCK_CHARTER.md repo-tracked | ✅ Live | |
+| SAMAI_CHARTER.md repo-tracked | ⏳ Pending | SCP permissions issue — aick needs to pull from `C:/Users/ck 2/cenas-ezlive/SAMAI_CHARTER.md` directly |
+| Track 1 (ezCater IMAP → Render) | ✅ Closed | Cancelled — ezCater already runs through app API |
+| Track 2 (Telegram → Render) | ✅ Closed | Test fire confirmed, OpenClaw duplicates disabled, samai-gated |
+| Track 3 (WhatsApp removal) | ✅ Closed | Code removed, DB tables dropped, process killed, token deleted, samai-gated |
+| Track 4 (Secrets migration) | ✅ Closed | 1Password CLI installed on AiCk, credentials vaulted |
+| Track 5 (OpenClaw uninstall) | ⏳ In progress | Waiting on Track 4 full confirm before final uninstall on both machines |
+| Track 7 (Caching) | ✅ Closed | samai-gated |
+| Track 8 (dck full activation) | ✅ Closed | dck reads/writes Sam Chat; summon daemon later removed per Sam direction |
+| Track 9 (dck design audit) | ✅ Closed | Design baseline doc + 10 recommendations shipped, samai-gated |
+| Track 10 (512Mi OOM) | ✅ Closed | Sam confirmed fixed |
+| Driver login redirect loop fix | ✅ Live | 43b4699 |
+| Drivers page Active/Inactive tabs | ⏳ In progress | dck mockup v2 approved by Sam; white text on inactive tabs update pending |
+| Cena gateway wake-on-post (Tailscale) | ⚠️ Degraded | Tunnel dropped on redeploy; 30s watcher fallback active. Permanent fix deferred. |
 | **`CenaJournal` table** | ⏳ Not built | Coming with aick Part 4 |
 | **`cena_reference/` doc set** | ⏳ Not built | Built as Sam feeds context |
-| **`cena_gateway.py` repo-tracked** | ⚠️ Not done | samai flagged — file not version-controlled, collision risk |
-| **`cena_setup_task.ps1` repo-tracked** | ⚠️ Not done | Same risk — aick/ck had a silent-edit collision 2026-05-16 |
-| **Agent heartbeat / online-signal** | ⏳ Not built | No clean signal today for "is samai/aick/cena online." samai flagged 2026-05-17 (#1931). Sam-surface as proposal post-Part-4. |
-| **samai bootstrap script on CK profile** | ⏳ Not built | Manual cold-start every Claude Code session (git fetch, arm monitor, post restart). Same friction class aick solved with scheduled tasks. samai-spec lane ticket when bandwidth allows. |
-| **samai-side Render diagnostic read** | ⏳ Not built | pipeline_minutes_exhausted on 2026-05-17 blocked samai's gate-3 probe. Second incident-time opacity hit. Pairs with gateway-in-repo close. |
+| **Agent heartbeat / online-signal** | ⏳ Not built | No clean signal for "is samai/aick/cena online." Propose post-Part-4. |
+| **samai bootstrap script on CK profile** | ⏳ Not built | Manual cold-start every session. samai-spec lane ticket when bandwidth allows. |
 
 ---
 
 ## Open Threads
 
-- Track `cena_gateway.py` + `cena_setup_task.ps1` in the repo (samai flagged, collision risk). Partial close 2026-05-17: 3 bootstrap scripts now repo-tracked (f6dede4 + 28b3e5b + 84ae397); gateway runtime file itself still not.
-- Verify Claude's May-12 sidebar redesign ship status — did `sidebar.css` / `sidebar.js` / `sidebar.html` partial land?
+- **SAMAI_CHARTER.md push** — SCP permissions issue. aick to pull directly from `C:/Users/ck 2/cenas-ezlive/SAMAI_CHARTER.md` and push to repo root.
+- **Track 5 (OpenClaw full uninstall)** — still pending. Both machines. Final step of the cutover.
+- **Drivers page white tab text** — dck updating mockup, ck builds after dck confirms.
+- **plan.md team feedback** — collected from aick, ck, samai, dck. Sam to review consolidated amendments before plan.md is finalized and saved as session-start auto-load.
+- **Cena gateway wake-on-post permanent fix** — Tailscale tunnel drops on Render redeploy. Deferred to next session.
+- Track `cena_gateway.py` + `cena_setup_task.ps1` in the repo (samai flagged, collision risk).
 - 24-hour rolling review routine — propose post-Part-4.
-- **Agent heartbeat mechanism** — surface to Sam post-Part-4 (samai #1931).
-- **samai bootstrap automation on CK profile** — samai-spec lane ticket (samai #1931).
-- **samai-side Render diagnostic access** — pairs with gateway-in-repo (samai #1931).
-- **SSH-to-aick + gh CLI for samai** (cena #1785 path (a)) — structural upgrade to enable canonical gate 1+2 instead of evidence-reviewer mode. Queued for Sam-surfacing.
-- **Sam Chat participant indicator — dck-summon coupling** (samai #2003 flag 2). When dck-summon ships per cena #1907, the per-message author label needs to switch from hard-coded 'Cena' to role/author-aware lookup so dck turns are labeled correctly. Bundle into dck-summon spec rather than ship as a follow-up. Pair: observer roster also worth deriving from a config constant (samai #2003 flag 1) so future agent joins/leaves don't require template edits.
-- **Sam Chat 83af3aa gate-3 visual verify** — deferred pending Render pipeline-minutes recovery. When Render is back, samai picks up gate-3 and Cena verifies live.
+- **Agent heartbeat mechanism** — surface to Sam post-Part-4.
+- **samai bootstrap automation on CK profile** — samai-spec lane ticket.
+- **samai-side Render diagnostic access** — pairs with gateway-in-repo.
+- **SSH-to-aick + gh CLI for samai** — structural upgrade to enable canonical gate 1+2. Queued for Sam-surfacing.
 
 ---
 
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-18*

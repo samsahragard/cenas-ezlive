@@ -110,7 +110,43 @@
         {% for d in drivers %}
         <tr style="{% if not d.active %}opacity:0.5;{% endif %}">
           <td>
-            {{ d.name }}
+            <details>
+              <summary style="cursor:pointer;font-weight:600;list-style:none;display:inline;">{{ d.name }} <span style="font-size:10px;color:var(--text-3);">▾</span></summary>
+              {# Inline edit panel per Sam #837 item 6b — location / email
+                 / phone / address + reset PIN, same pattern as the Team
+                 page disclosure widget. Submits to store.drivers_update. #}
+              <form method="POST" action="{{ url_for('store.drivers_update', driver_id=d.id) }}"
+                    style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;padding:8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;font-size:12px;">
+                <label style="display:flex;flex-direction:column;gap:2px;">
+                  <span style="font-size:10.5px;color:var(--text-3);">Location</span>
+                  <select name="location" style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+                    <option value="tomball" {% if d.location == 'tomball' %}selected{% endif %}>Tomball</option>
+                    <option value="copperfield" {% if d.location == 'copperfield' %}selected{% endif %}>Copperfield</option>
+                  </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:2px;">
+                  <span style="font-size:10.5px;color:var(--text-3);">Email</span>
+                  <input type="email" name="email" value="{{ d.email or '' }}" placeholder="email"
+                         style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:2px;">
+                  <span style="font-size:10.5px;color:var(--text-3);">Phone</span>
+                  <input type="tel" name="phone" value="{{ d.phone or '' }}" placeholder="phone"
+                         style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:2px;grid-column:1 / -1;">
+                  <span style="font-size:10.5px;color:var(--text-3);">Address</span>
+                  <input type="text" name="address" value="{{ d.address or '' }}" placeholder="address"
+                         style="padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:6px;color:#fff;font-size:12px;">
+                </label>
+                <div style="grid-column:1 / -1;display:flex;gap:8px;align-items:center;margin-top:4px;">
+                  <button type="submit" class="btn-login" style="padding:5px 12px;font-size:11px;">Save</button>
+                  <button type="submit" formaction="{{ url_for('store.drivers_reset', driver_id=d.id) }}" formmethod="POST"
+                          onclick="return confirm('Reset PIN for {{ d.name }}? You’ll get a new temp PIN to read to them.');"
+                          class="btn-logout" style="padding:5px 12px;font-size:11px;background:rgba(232,122,62,0.85);color:#fff;">Reset PIN</button>
+                </div>
+              </form>
+            </details>
             <div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">
             {% if not d.active %}
               <span style="font-size:10.5px;color:#c0392b;font-weight:600;background:rgba(192,57,43,0.10);border:1px solid rgba(192,57,43,0.30);border-radius:6px;padding:1px 7px;">Inactive</span>

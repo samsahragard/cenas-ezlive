@@ -765,6 +765,37 @@ def drivers_admin():
         db.close()
 
 
+@store_bp.route("/drivers/<int:driver_id>/update", methods=["POST"])
+@requires_permission("drivers.admin")
+def drivers_update(driver_id: int):
+    """Update editable driver fields per Sam #837 item 6b — inline
+    dropdown panel on /partner/drivers. Accepts location / email /
+    phone / address. Each field updated only if present in the form
+    (so the form can be partial). Returns to the drivers admin list."""
+    db = next(get_db())
+    try:
+        row = db.get(Driver, driver_id)
+        if not row or (g.current_location != "both" and row.location != g.current_location):
+            return redirect(url_for("store.drivers_admin",
+                                    error="Driver not found at this store."))
+        loc = (request.form.get("location") or "").strip().lower()
+        if loc in ("tomball", "copperfield"):
+            row.location = loc
+        if "email" in request.form:
+            v = (request.form.get("email") or "").strip()
+            row.email = v or None
+        if "phone" in request.form:
+            v = (request.form.get("phone") or "").strip()
+            row.phone = v or None
+        if "address" in request.form:
+            v = (request.form.get("address") or "").strip()
+            row.address = v or None
+        db.commit()
+        return redirect(url_for("store.drivers_admin"))
+    finally:
+        db.close()
+
+
 @store_bp.route("/drivers/<int:driver_id>/reset", methods=["POST"])
 @requires_permission("drivers.reset_passcode")
 def drivers_reset(driver_id: int):

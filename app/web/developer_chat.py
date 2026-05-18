@@ -541,6 +541,7 @@ DOC_PAGES = [
     ("spec-dev-samples-page",    "Spec: Dev Samples Page", "doc_spec_dev_samples_page"),
     ("spec-drivers-redesign",     "Spec: Drivers Redesign",  "doc_spec_drivers_redesign"),
     ("spec-samples-approval-workflow", "Spec: Samples Approval Workflow", "doc_spec_samples_approval_workflow"),
+    ("spec-produce-mobile-redesign", "Spec: Produce Mobile Redesign", "doc_spec_produce_mobile_redesign"),
 ]
 
 # Per-session chat handoff docs. Lives in its own list (not DOC_PAGES) so the

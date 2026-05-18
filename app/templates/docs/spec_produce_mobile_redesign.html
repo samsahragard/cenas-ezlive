@@ -1,0 +1,137 @@
+{% extends "docs/_doc_base.html" %}
+{% set doc_status = 'ACTIVE' %}
+{% set doc_section = 'Production spec — Produce Order Guide mobile redesign' %}
+{% set doc_last_updated = '2026-05-18' %}
+
+{% block doc_body %}
+{% include 'partials/_doc_status_header.html' with context %}
+{% raw %}
+
+<h1>Spec — Produce Order Guide mobile production implementation</h1>
+<p class="doc-meta" style="color: rgba(236,227,208,0.7); font-style: italic; margin-bottom: 22px;">
+  Spec authored by dck (2026-05-18) per Sam #2660 (initial directive,
+  cena relayed), Sam #2637 (photo direction), Sam #2663 (photo source
+  confirm), cena #2638 (style spec), cena #2666 (path lock), cena #2670
+  (full-catalog discipline reinforcement), and Sam #2677 (v1.2 batch
+  approval). Mockup reference:
+  <a href="/static/mockups/produce_mobile_redesign.html">produce_mobile_redesign.html v1.2</a>
+  (live at 884f737). Implementation by ck; samai canonical-three-gate on ship.
+</p>
+
+<h2>1 · Scope</h2>
+<p>
+  Production implementation against the v1.2 mockup, targeting the live
+  <code>/&lt;store&gt;/produce</code> route (per-store produce order guide).
+  In-place redesign — NOT a two-commit + behavior-parity cutover (that
+  pattern applies to delivery-channel switches like ribbon→notifications,
+  not in-place responsive redesigns of an existing live page).
+</p>
+
+<h3>1.1 · What changes</h3>
+<ul>
+  <li><b>Below 640px:</b> table replaced with vertical card list. Each card has product photo (right column, 96×96) + text content (left column: name + price up top, vendor badge + size + date meta middle, qty stepper + line subtotal bottom).</li>
+  <li><b>Above 640px:</b> existing 6-col table preserved BUT overflow fixed: <code>overflow-x: auto</code> + sticky ITEM column + right-edge gradient fade + QTY column min-width 120px.</li>
+  <li><b>Sticky bottom bar (narrow widths, gated on cart-has-items):</b> compact vendor chips + Place Order. Reuses existing <code>.sticky-cart</code> DOM — just re-pinned bottom on narrow + visibility gate.</li>
+  <li><b>Stepper component:</b> 44×44pt tap targets (a11y minimum WCAG 2.5.5), wraps existing <code>.qty-input</code>. <code>refreshCart()</code> JS unchanged.</li>
+  <li><b>Per-row line subtotal:</b> NEW visible per-card readout of <code>$price × $qty</code>. Live-updates on stepper change.</li>
+  <li><b>Product photos:</b> NEW right-column 96×96 thumbnail per card. Sourced from Sam's reference catalogs (chat attachments 105/106). Match by photo content not by source label. See §4 below.</li>
+</ul>
+
+<h2>2 · Files affected</h2>
+<table>
+  <thead><tr><th>File</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td><code>app/templates/produce/order_guide.html</code></td><td>Add card-list markup parallel to the existing table (CSS toggles visibility per breakpoint — see §3). Each card includes <code>&lt;img class="pcard-photo" loading="lazy" src="..." alt="{{ it.canonical_name }}"&gt;</code> with photo_url derived from slug. Existing <code>.sticky-cart</code> DOM preserved; just additional cart-empty class toggle.</td></tr>
+    <tr><td><code>app/static/produce/styles.css</code></td><td>Add <code>@media (max-width: 640px)</code> block: hide <code>.item-table-wrap</code>, show <code>.item-cards</code>. Add stepper component CSS. Add sticky-bottom positioning for cart on narrow. Existing 900px + 500px breakpoints stay (still relevant for 640-900 band + sticky-cart layout collapse). Change <code>.item-table-wrap { overflow: hidden }</code> to <code>overflow-x: auto</code> + sticky ITEM column + right-edge gradient fade pseudo-element + QTY col min-width 120px (the actual root cause of the Z Fold7 folded clip).</td></tr>
+    <tr><td><code>app/web/produce_order.py</code></td><td>Add <code>photo_url</code> property/helper to ProduceItem-equivalent (or compute in view). Pattern: <code>url_for('static', filename=f'img/produce/{slug}.jpg')</code>. Slug derived from <code>canonical_name</code> (lowercase, dashes for spaces, no parens). Missing-photo fallback = .pcard-photo-placeholder div (CSS still in mockup; graceful degradation).</td></tr>
+    <tr><td><code>app/static/img/produce/&lt;slug&gt;.jpg</code></td><td>Photo assets — 4 sample slugs already live (avocado / tomato-roma / onion-yellow / cilantro) from dck v1.2. ck adds the remaining ~110 slugs per §4 below.</td></tr>
+  </tbody>
+</table>
+
+<h2>3 · Template strategy — single source, CSS-toggled visual modes</h2>
+
+<p style="background: rgba(228,179,64,0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 8px; padding: 10px 14px; margin: 10px 0;">
+  <b>Recommended pattern:</b> render BOTH the card list AND the table in the template; CSS toggles visibility per breakpoint via <code>@media (max-width: 640px)</code>. Both consume the same <code>{% for it in col_items %}</code> data loop — no Python branching, no risk of "cards show qty 3, table shows qty 0" desync.
+</p>
+
+<p>
+  Alternative (JS-driven swap on resize) is more fragile and not recommended. The existing 2-col <code>.item-grid</code> split (left_items / right_items) only matters above ~900px; below 640px the card list is single-column showing all items in a flat scroll.
+</p>
+
+<p>
+  Existing <code>refreshCart()</code> JS wires unchanged — stepper +/− buttons fire the same input event listeners on <code>.qty-input</code>. New code: stepper button click handlers that increment/decrement the input value, then trigger the input event so <code>refreshCart()</code> recomputes.
+</p>
+
+<h2>4 · Photo handoff — full-catalog pass</h2>
+
+<p>
+  v1.2 shipped 4 sample photos (avocado / tomato-roma / onion-yellow / cilantro) under <code>app/static/img/produce/&lt;slug&gt;.jpg</code> per cena #2666 path lock. The remaining ~110 catalog items need ck to complete the pass using dck's slicer.
+</p>
+
+<h3>4.1 · Slicer tool</h3>
+<p>
+  <code>scripts/produce_image_slicer.py</code> (884f737). Four functions:
+</p>
+<ul>
+  <li><code>slice_catalog(image_path, out_dir)</code> — splits a catalog grid into per-cell PNGs. Returns list of dicts {row, col, x0, y0, x1, y1, path}. Handles non-uniform grid (top 3 rows = 7-col, bottom 4 rows = 9-col).</li>
+  <li><code>extract_photo_square(cell_path, out_path)</code> — skips top 25% label band, centre-square-crops the photo, resamples to 240×240 JPG (2× retina for 96×96 display).</li>
+  <li><code>batch_extract({slug: (image_key, row, col)}, cells_by_image, out_dir)</code> — convenience for slug-mapped extraction.</li>
+  <li>Two underlying detect primitives (detect_row_cells, detect_col_cells_in_strip) if needed separately.</li>
+</ul>
+
+<h3>4.2 · Source catalog discipline — MATCH BY PHOTO CONTENT NOT BY LABEL</h3>
+
+<p style="background: rgba(199,59,54,0.10); border-left: 3px solid #E2645C; padding: 10px 14px; border-radius: 4px; margin: 12px 0;">
+  <b>Critical (cena #2670 reinforcement):</b> The source vendor catalog has label/photo mismatches in some middle-row cells. Examples already identified:
+  <ul>
+    <li>ref105 row 3 c1: source label says "Roma Tomatoes" but the actual photo is CILANTRO. Slug assigned to cilantro per Sam #2651 "find the correct fruit for the correct item."</li>
+    <li>ref105 row 3 c3: source label says "Cilantro (Bulk)" but the actual photo is TOMATILLOS.</li>
+    <li>ref106 row 4 c1: source label says "Oranges (88ct)" but the photo is TURMERIC.</li>
+  </ul>
+  Assume more mismatches exist in middle rows. <b>Visually verify every cell before slug-assigning.</b> If ambiguous on a cell, flag it back to dck rather than guess.
+</p>
+
+<h3>4.3 · Pass workflow</h3>
+<ol>
+  <li>Pull <code>ProduceItem</code> list from DB (canonical_name + slug column). Slug derivation: <code>canonical_name.lower().replace(' ', '-').replace('(', '').replace(')', '').replace('.', '')</code> or equivalent — confirm existing slug convention in model.</li>
+  <li>Run <code>slice_catalog</code> on both ref images (105 + 106) into a working directory.</li>
+  <li>For each <code>ProduceItem</code>, visually scan the cell grid to find the matching photo (by content, not by label). Record {slug → (image_key, row, col)} mapping.</li>
+  <li>Run <code>batch_extract</code> with the mapping → writes per-slug JPGs to <code>app/static/img/produce/</code>.</li>
+  <li>Update <code>order_guide.html</code> template <code>&lt;img&gt;</code> tag to use the <code>photo_url</code> helper.</li>
+  <li>Items in DB with no matching catalog photo: leave the .pcard-photo-placeholder div as fallback (CSS handles graceful degradation). Future catalog updates from Sam fill those in.</li>
+</ol>
+
+<h3>4.4 · Img markup pattern (locked per cena #2664 swap-time discipline)</h3>
+<pre><code>&lt;img class="pcard-photo"
+     loading="lazy"
+     src="{{ url_for('static', filename='img/produce/' + it.slug + '.jpg') }}"
+     alt="{{ it.canonical_name }}"&gt;</code></pre>
+<p>
+  <code>loading="lazy"</code> — mandatory, per cena #2664 (30+ produce items × 96×96 on mobile data shouldn't all eager-load). <code>alt="{{ canonical_name }}"</code> — NOT a generic "produce photo" label; screen-reader parity and a11y. Cheap to do right at swap time, expensive to retrofit.
+</p>
+
+<h2>5 · samai canonical three-gate (when ck ships)</h2>
+<ul>
+  <li><b>Gate 1:</b> existing pytest + new <code>test_produce_card_layout_renders_below_640</code> + <code>test_stepper_increments_decrements_via_button_click</code> + <code>test_sticky_bar_visibility_gated_on_cart_has_items</code> + <code>test_photo_url_derives_from_slug</code> + <code>test_missing_photo_falls_back_to_placeholder</code></li>
+  <li><b>Gate 2:</b> code-contract review (template change preserves <code>refreshCart()</code> wiring; new stepper buttons fire the same input event listeners; new photo column doesn't break the 2-col grid above 900px; stickycart re-pinning doesn't conflict with existing top-pinned behavior above 640px)</li>
+  <li><b>Gate 3:</b> URL probes — <code>GET /&lt;store&gt;/produce</code> 200, card-layout markers present in HTML below the table (since both render), <code>.stepper</code> + <code>.qty-input</code> + <code>.pcard-photo</code> + <code>.sticky-cart</code> all present, place-order POST unchanged, sample photo URLs (avocado/cilantro/onion-yellow/tomato-roma) all 200</li>
+  <li><b>Playwright</b> (queued to PLAYWRIGHT_BACKLOG.md per Sam #2547): viewport-resize tests at 375 / 440 / 640 / 840 / 1280 covering the 6 spec test cases — Z Fold7 folded card layout, Z Fold7 unfolded table with sticky col, iPhone SE card layout, desktop 1280 full table, add-qty-to-one-item flow, 99-qty input handling</li>
+</ul>
+
+<h2>6 · v2 deferred items (post-v1.2 ship)</h2>
+<p>
+  Per cena #2641 structural review + dck task #18, three items defer to a v2 mockup cycle once v1.2 production wire-up lands:
+</p>
+<ul>
+  <li><b>Search/filter input above narrow card list</b> — meaningful friction cut for daily-operator known-items reorder. High priority for v2.</li>
+  <li><b>Section-header strategy at scale</b> — when item count grows past ~20, the flat scroll reads dense. Section headers grouped by category or vendor would help. Pairs with my answer in #2635 that the production left_items/right_items split is pure visual chunking with no semantic loss.</li>
+  <li><b>Collapsed checkout chip</b> — "Sara · Round Rock · 5/18 ▼" expand-on-tap. Frees ~180px above first card for daily-operator pattern (they set once, don't touch mid-order).</li>
+</ul>
+
+<h2>7 · Critical lane note (per cena #2624)</h2>
+<p>
+  This is a SINGLE-FILE in-place redesign — no two-commit + behavior-parity-gate discipline needed. The two-commit pattern applies to delivery-channel cutovers (ribbon → notifications) where the only delivery channel goes dark mid-deploy if rolled together. Produce is an in-place page restyle — ck swaps in the new template + CSS in one commit, samai gates, Sam confirms on live, done.
+</p>
+
+{% endraw %}
+{% endblock %}

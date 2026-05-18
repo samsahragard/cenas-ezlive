@@ -735,8 +735,28 @@ input[type=password]:focus, textarea:focus, select:focus {
 .submit-cell { padding: 12px !important; text-align: right; }
 
 /* Desktop: hide mobile-only elements */
-.menu-toggle { display: none; }
+.menu-toggle {
+  width: 48px; height: 48px;
+  background: var(--ck-gold-soft, rgba(217, 164, 54, 0.14));
+  border: 1px solid var(--ck-gold, #E4B340);
+  border-radius: 10px;
+  display: none;
+  align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  transition: background 200ms var(--ck-ease, ease);
+}
+.menu-toggle:hover { background: rgba(217, 164, 54, 0.28); }
+.menu-toggle-bars { display: flex; flex-direction: column; gap: 5px; }
+.menu-toggle-bars span {
+  display: block; width: 22px; height: 2.5px;
+  background: var(--ck-gold-bright, #FFD970); border-radius: 1px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
 .sidebar-overlay { display: none; }
+
+@media (max-width: 1024px) {
+  .menu-toggle { display: flex; }
+}
 
 /* ============ Responsive (collapsing sidebar on small screens) ============ */
 @media (max-width: 900px) {
@@ -775,45 +795,15 @@ input[type=password]:focus, textarea:focus, select:focus {
     pointer-events: all;
   }
 
-  /* Hamburger button */
-  .menu-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(16px);
-    color: var(--text-2);
-    padding: 8px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 13px;
-    font-family: inherit;
-    font-weight: 600;
-    margin-bottom: 10px;
-    transition: background 0.15s, color 0.15s;
-  }
-  .menu-toggle:hover { background: rgba(255,255,255,0.10); color: #fff; }
-
-  .menu-toggle-bars {
-    display: flex; flex-direction: column; gap: 4px;
-    width: 16px;
-  }
-  .menu-toggle-bars span {
-    display: block;
-    height: 2px;
-    border-radius: 2px;
-    background: currentColor;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-  }
+  /* Hamburger open-state animation (size/color in base + 1024px block) */
   body.sidebar-open .menu-toggle-bars span:nth-child(1) {
-    transform: translateY(6px) rotate(45deg);
+    transform: translateY(7.5px) rotate(45deg);
   }
   body.sidebar-open .menu-toggle-bars span:nth-child(2) {
     opacity: 0;
   }
   body.sidebar-open .menu-toggle-bars span:nth-child(3) {
-    transform: translateY(-6px) rotate(-45deg);
+    transform: translateY(-7.5px) rotate(-45deg);
   }
 
   .brand-mark { height: 100px; }

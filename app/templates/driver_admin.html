@@ -6,14 +6,48 @@
 {% block page_subtitle %}
   <p class="greeting-sub">
     {% if current_location == 'both' %}
-      All locations · {{ drivers|length }} driver{{ '' if drivers|length == 1 else 's' }}
+      All locations
     {% else %}
-      <span class="location-badge">{{ store_label }}</span> · {{ drivers|length }} driver{{ '' if drivers|length == 1 else 's' }}
+      <span class="location-badge">{{ store_label }}</span>
     {% endif %}
   </p>
 {% endblock %}
 
 {% block content %}
+<style>
+.da-tabs { display:flex; gap:4px; margin-bottom:20px; }
+.da-tab {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600;
+  text-decoration:none; cursor:pointer;
+  border:1px solid rgba(217,164,54,0.20); background:transparent;
+  color:rgba(236,227,208,0.55); transition:all 0.15s;
+}
+.da-tab:hover { color:var(--ck-cream,#FAF6EC); background:rgba(255,255,255,0.04); }
+.da-tab.is-active {
+  background:rgba(217,164,54,0.12); color:var(--ck-gold,#D9A436);
+  border-color:rgba(217,164,54,0.40);
+}
+.da-tab-count {
+  font-size:10px; font-weight:700;
+  background:rgba(217,164,54,0.20); color:var(--ck-gold,#D9A436);
+  border-radius:10px; padding:1px 7px;
+}
+.da-tab.is-active .da-tab-count { background:rgba(217,164,54,0.30); }
+</style>
+
+{% set base_url = request.path %}
+<div class="da-tabs">
+  <a href="{{ base_url }}?status=active"
+     class="da-tab{% if current_status == 'active' %} is-active{% endif %}">
+    Active <span class="da-tab-count">{{ active_count }}</span>
+  </a>
+  <a href="{{ base_url }}?status=inactive"
+     class="da-tab{% if current_status == 'inactive' %} is-active{% endif %}">
+    Inactive <span class="da-tab-count">{{ inactive_count }}</span>
+  </a>
+</div>
+
 {% if temp_pw %}
   <div class="banner banner-success" style="margin-bottom:18px;">
     <strong>Temp PIN for {{ temp_for }}:</strong>
@@ -40,7 +74,6 @@
   <table class="log-table log-table-view">
     <thead>
       <tr class="group-header">
-        <th>Status</th>
         <th>Name</th>
         {% if current_location == 'both' %}<th>Location</th>{% endif %}
         <th>Email</th>
@@ -55,33 +88,32 @@
         {% for d in drivers %}
         <tr style="{% if not d.active %}opacity:0.5;{% endif %}">
           <td>
+            {{ d.name }}
+            <div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;">
             {% if not d.active %}
-              <span style="color:#c0392b;font-weight:600;">Inactive</span>
-            {% elif not d.passcode_hash and not d.password_hash %}
-              <span style="color:#d4af37;font-weight:600;">No PIN</span>
-            {% elif d.lockout_until %}
-              <span style="color:#d4af37;font-weight:600;">Locked out</span>
-            {% elif latest_shift_for.get(d.id) %}
-              <a href="{{ url_for('store.driver_shift_playback', driver_id=d.id, shift_id=latest_shift_for[d.id]) }}"
-                 title="See {{ d.name }}'s last known location"
-                 style="display:inline-block;color:#7bb87b;font-weight:600;text-decoration:none;
-                        padding:3px 10px;border:1px solid rgba(123,184,123,0.45);border-radius:6px;">
-                Active →
-              </a>
+              <span style="font-size:10.5px;color:#c0392b;font-weight:600;background:rgba(192,57,43,0.10);border:1px solid rgba(192,57,43,0.30);border-radius:6px;padding:1px 7px;">Inactive</span>
             {% else %}
-              <span style="color:#7bb87b;">Active</span>
+              {% if latest_shift_for.get(d.id) %}
+                <a href="{{ url_for('store.driver_shift_playback', driver_id=d.id, shift_id=latest_shift_for[d.id]) }}"
+                   title="See {{ d.name }}'s last known location"
+                   style="font-size:10.5px;color:#7bb87b;font-weight:600;text-decoration:none;background:rgba(123,184,123,0.10);border:1px solid rgba(123,184,123,0.35);border-radius:6px;padding:1px 7px;">
+                  On shift →
+                </a>
+              {% endif %}
+              {% if not d.passcode_hash and not d.password_hash %}
+                <span style="font-size:10.5px;color:#d4af37;font-weight:600;background:rgba(212,175,55,0.10);border:1px solid rgba(212,175,55,0.30);border-radius:6px;padding:1px 7px;">No PIN</span>
+              {% elif d.lockout_until %}
+                <span style="font-size:10.5px;color:#d4af37;font-weight:600;background:rgba(212,175,55,0.10);border:1px solid rgba(212,175,55,0.30);border-radius:6px;padding:1px 7px;">Locked out</span>
+              {% endif %}
             {% endif %}
             {% if verified_for and verified_for.get(d.id) %}
               <span title="Phone matches an entry in our ezCater driver roster"
-                    style="display:inline-block;margin-left:6px;font-size:10.5px;
-                           color:#7bb87b;background:rgba(123,184,123,0.10);
-                           border:1px solid rgba(123,184,123,0.35);
-                           border-radius:6px;padding:1px 7px;font-weight:600;">
+                    style="font-size:10.5px;color:#7bb87b;background:rgba(123,184,123,0.10);border:1px solid rgba(123,184,123,0.35);border-radius:6px;padding:1px 7px;font-weight:600;">
                 ✓ ezCater
               </span>
             {% endif %}
+            </div>
           </td>
-          <td>{{ d.name }}</td>
           {% if current_location == 'both' %}<td>{{ location_labels.get(d.location, d.location) }}</td>{% endif %}
           <td>{% if d.email %}<a href="mailto:{{ d.email }}" style="color:var(--accent-soft);">{{ d.email }}</a>{% else %}<span style="opacity:0.45;">—</span>{% endif %}</td>
           <td>{{ d.phone or '—' }}</td>
@@ -112,11 +144,15 @@
         {% endfor %}
       {% else %}
         <tr>
-          <td colspan="{% if current_location == 'both' %}8{% else %}7{% endif %}"
+          <td colspan="{% if current_location == 'both' %}7{% else %}6{% endif %}"
               style="color:var(--text-3);font-style:italic;text-align:center;padding:30px;">
-            No drivers yet.
-            {% if current_location != 'both' %}
-              Drivers can sign up at <a href="/driver/signup" style="color:var(--accent-soft);">/driver/signup</a>.
+            {% if current_status == 'inactive' %}
+              No inactive drivers.
+            {% else %}
+              No active drivers.
+              {% if current_location != 'both' %}
+                New drivers sign up at <a href="/driver/signup" style="color:var(--accent-soft);">/driver/signup</a>.
+              {% endif %}
             {% endif %}
           </td>
         </tr>

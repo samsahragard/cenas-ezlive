@@ -178,17 +178,18 @@
      .sidebar (max-width:900px) doesn't drag it offscreen too. Toggles the new
      .ck-sidebar-host[data-open] AND the legacy body.sidebar-open class so both
      sliding mechanisms cooperate. #}
-  <button class="menu-toggle" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation" style="position: fixed; top: 12px; left: 12px; z-index: 250;">
-    <span class="menu-toggle-bars">
-      <span></span><span></span><span></span>
-    </span>
-  </button>
+
   <div class="sidebar-overlay" onclick="window.toggleSidebar && window.toggleSidebar();"></div>
 
   <main class="main">
     {% block topbar %}
     <div class="topbar">
       <div class="topbar-left">
+        <button class="menu-toggle" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation">
+          <span class="menu-toggle-bars">
+            <span></span><span></span><span></span>
+          </span>
+        </button>
         <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
         {% block page_subtitle %}{% endblock %}
       </div>

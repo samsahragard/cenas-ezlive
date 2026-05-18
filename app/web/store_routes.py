@@ -645,14 +645,30 @@ def drivers_admin():
     """
     from app.models import EzcaterKnownDriver
     from app.services.ezcater_known_drivers_seed import normalize_phone
+    # Tab filter — defaults to active. Intentional default-state change; see spec §3.
+    status = request.args.get("status", "active")
+    if status not in ("active", "inactive"):
+        status = "active"
+    show_active = (status == "active")
+
     db = next(get_db())
     try:
-        q = db.query(Driver)
+        from sqlalchemy import func
+        q = db.query(Driver).filter(Driver.active == show_active)
         if g.current_location != "both":
             q = q.filter(Driver.location == g.current_location)
         rows = q.order_by(Driver.location, Driver.name).all()
+
+        # Count both tabs for pill labels
+        active_q = db.query(Driver).filter(Driver.active == True)
+        inactive_q = db.query(Driver).filter(Driver.active == False)
+        if g.current_location != "both":
+            active_q = active_q.filter(Driver.location == g.current_location)
+            inactive_q = inactive_q.filter(Driver.location == g.current_location)
+        active_count = active_q.count()
+        inactive_count = inactive_q.count()
+
         # latest shift per driver — drives the click-Active-to-see-location link
-        from sqlalchemy import func
         latest_shift_for = {}
         if rows:
             ids = [d.id for d in rows]
@@ -686,6 +702,9 @@ def drivers_admin():
             temp_for=request.args.get("temp_for"),
             error=request.args.get("error"),
             active="drivers_admin",
+            current_status=status,
+            active_count=active_count,
+            inactive_count=inactive_count,
         )
     finally:
         db.close()

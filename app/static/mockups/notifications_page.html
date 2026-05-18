@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notifications page — replaces ribbon (dck)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root {
+    --ck-bg-page:        #140A06;
+    --ck-bg-sidebar:     #0F0805;
+    --ck-text:           #FAF6EC;
+    --ck-text-hover:     #FFFFFF;
+    --ck-text-muted:     rgba(236, 227, 208, 0.7);
+    --ck-text-soft:      rgba(236, 227, 208, 0.55);
+    --ck-text-faint:     rgba(236, 227, 208, 0.4);
+    --ck-red:            #C73B36;
+    --ck-gold:           #E4B340;
+    --ck-gold-bright:    #FFD970;
+    --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+    --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-status-warn:    #E2645C;       /* alert severity (was ribbon "alert") */
+    --ck-status-active:  #FFD970;       /* warn severity (was ribbon "warn") */
+    --ck-status-open:    #9CCB76;       /* info severity (was ribbon "info") */
+    --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+    --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ck-bg-page);
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(232, 122, 62, 0.08), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251, 191, 36, 0.06), transparent 50%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 32px 24px 80px;
+    min-height: 100vh;
+  }
+  .mockup-wrap { max-width: 1400px; margin: 0 auto; }
+  .mockup-head {
+    border-bottom: 0.5px solid var(--ck-border);
+    padding-bottom: 18px; margin-bottom: 22px;
+  }
+  .mockup-head h1 {
+    font-size: 22px; font-weight: 600; margin: 0 0 4px;
+    color: var(--ck-text); text-shadow: var(--ck-glow-gold-soft);
+  }
+  .mockup-head .v1-badge {
+    display: inline-block;
+    background: var(--ck-gold-bright);
+    color: #140A06;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .mockup-head .sub {
+    font-size: 12px; color: var(--ck-text-soft);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+
+  .changelog {
+    background: rgba(156, 203, 118, 0.06);
+    border: 0.5px solid rgba(156, 203, 118, 0.25);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.85);
+    line-height: 1.65;
+  }
+  .changelog b { color: var(--ck-status-open); }
+
+  /* === Mock-app layout: existing sidebar + main with the notifications page === */
+  .mock-app {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 14px;
+    min-height: 720px;
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--ck-bg-page);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    margin-bottom: 22px;
+  }
+  .mock-left {
+    background: var(--ck-bg-sidebar);
+    border-right: 0.5px solid var(--ck-border);
+    padding: 16px 12px;
+  }
+  .mock-left-label {
+    font-size: 10px; color: var(--ck-text-faint);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin: 12px 8px 6px;
+  }
+  .mock-left-item {
+    padding: 7px 10px; border-radius: 6px;
+    color: var(--ck-text-soft); font-size: 12px; margin-bottom: 1px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mock-left-item .ico { font-size: 13px; opacity: 0.7; }
+  .mock-left-item.active {
+    background: rgba(228, 179, 64, 0.12);
+    color: var(--ck-gold);
+  }
+  .mock-left-item .badge {
+    margin-left: auto;
+    background: var(--ck-status-warn);
+    color: #2a0a08;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  /* === MAIN PAGE === */
+  .mock-main {
+    padding: 22px 28px;
+  }
+  .page-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 0.5px solid var(--ck-border);
+    margin-bottom: 18px;
+  }
+  .page-title {
+    font-size: 22px; font-weight: 600; margin: 0;
+    color: var(--ck-text);
+  }
+  .page-meta {
+    font-size: 11px; color: var(--ck-text-faint);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+
+  /* TAB ROW — V2 .lg-nav pill pattern (per Sam #2485 standard) */
+  .notif-tabs {
+    display: flex; gap: 6px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 0.5px solid var(--ck-border);
+    overflow-x: auto;
+  }
+  .notif-tab {
+    background: transparent;
+    border: 0.5px solid var(--ck-border);
+    border-radius: 14px;
+    padding: 8px 14px;
+    color: #FFFFFF;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 150ms var(--ck-ease),
+                border-color 150ms var(--ck-ease),
+                color 150ms var(--ck-ease);
+  }
+  .notif-tab .count {
+    font-size: 10.5px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    color: var(--ck-text-soft);
+  }
+  .notif-tab .count.has-alert {
+    background: rgba(226, 100, 92, 0.22);
+    color: var(--ck-status-warn);
+  }
+  .notif-tab:hover {
+    border-color: var(--ck-gold-soft);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .notif-tab.active {
+    color: #140A06;
+    background: var(--ck-gold-bright);
+    border-color: var(--ck-gold-bright);
+    font-weight: 600;
+    box-shadow: 0 0 14px rgba(255, 200, 80, 0.32);
+  }
+  .notif-tab.active .count {
+    background: rgba(20, 10, 6, 0.20);
+    color: rgba(20, 10, 6, 0.85);
+  }
+  .notif-tab.active .count.has-alert {
+    background: rgba(255, 255, 255, 0.30);
+    color: #2a0a08;
+  }
+
+  /* CARDS */
+  .notif-list {
+    display: flex; flex-direction: column; gap: 8px;
+    max-width: 920px;
+  }
+  .notif-card {
+    background: rgba(40, 22, 14, 0.55);
+    border: 0.5px solid var(--ck-border);
+    border-left: 3px solid var(--ck-status-open);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    transition: background 150ms var(--ck-ease);
+  }
+  .notif-card:hover { background: rgba(40, 22, 14, 0.72); }
+  .notif-card.sev-alert { border-left-color: var(--ck-status-warn); }
+  .notif-card.sev-warn  { border-left-color: var(--ck-status-active); }
+  .notif-card.sev-info  { border-left-color: var(--ck-status-open); }
+
+  .notif-icon {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .notif-card.sev-alert .notif-icon { color: var(--ck-status-warn); background: rgba(226, 100, 92, 0.14); }
+  .notif-card.sev-warn  .notif-icon { color: var(--ck-status-active); background: rgba(255, 217, 112, 0.14); }
+  .notif-card.sev-info  .notif-icon { color: var(--ck-status-open); background: rgba(156, 203, 118, 0.14); }
+
+  .notif-body { flex: 1; min-width: 0; }
+  .notif-text {
+    color: var(--ck-text); font-size: 13.5px;
+    line-height: 1.4;
+  }
+  .notif-sub {
+    color: var(--ck-text-soft); font-size: 11.5px;
+    margin-top: 3px;
+  }
+  .notif-meta {
+    color: var(--ck-text-faint); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  .notif-actions {
+    display: flex; align-items: center; gap: 4px;
+    flex-shrink: 0;
+  }
+  .notif-action-btn {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--ck-border);
+    color: var(--ck-text-soft);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 150ms var(--ck-ease), color 150ms var(--ck-ease), border-color 150ms var(--ck-ease);
+  }
+  .notif-action-btn:hover {
+    background: rgba(226, 100, 92, 0.10);
+    border-color: rgba(226, 100, 92, 0.45);
+    color: var(--ck-status-warn);
+  }
+  .notif-action-btn.check:hover {
+    background: rgba(156, 203, 118, 0.10);
+    border-color: rgba(156, 203, 118, 0.45);
+    color: var(--ck-status-open);
+  }
+
+  /* EMPTY STATE */
+  .notif-empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--ck-text-faint);
+    font-size: 13px;
+    background: rgba(40, 22, 14, 0.35);
+    border: 1px dashed var(--ck-border);
+    border-radius: 8px;
+  }
+  .notif-empty .ti { font-size: 32px; display: block; margin-bottom: 10px; opacity: 0.5; }
+
+  /* NOTES */
+  .notes {
+    background: rgba(228, 179, 64, 0.06);
+    border: 0.5px solid var(--ck-gold-soft);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.78);
+    line-height: 1.65;
+  }
+  .notes b { color: var(--ck-gold); }
+  .notes code {
+    background: rgba(0,0,0,0.4);
+    border: 0.5px solid var(--ck-border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: var(--ck-gold-bright);
+  }
+  .notes ul { margin: 8px 0 0; padding-left: 20px; }
+  .notes li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<div class="mockup-wrap">
+
+  <div class="mockup-head">
+    <h1>Notifications page <span class="v1-badge">v1</span></h1>
+    <div class="sub">dck · 2026-05-17 · per cena #2569 · replaces top-of-page ribbon</div>
+  </div>
+
+  <div class="changelog">
+    <b>What this is + what it replaces:</b>
+    <ul>
+      <li><b>Removes the universal top-of-page ribbon</b> (partials/_ribbon.html + ribbon.css + ribbon.js). Per cena #2569 / Sam direction: ribbon goes away entirely.</li>
+      <li><b>New "Notifications" sidebar entry</b> under Dashboard (left sidebar, Today section). Same icon vocabulary, sits as a sibling to the Dashboard link.</li>
+      <li><b>Same 7 categories</b> the ribbon had — To-do, Caterings, Events, Employee, Vendors, Maintenance, Sales — now as tabs at the top of the Notifications page.</li>
+      <li><b>Same severity model</b> — alert/warn/info → <code>--ck-status-warn</code> / <code>--ck-status-active</code> / <code>--ck-status-open</code>. Identical token mapping to the ribbon.</li>
+      <li><b>Same dismiss behavior</b> — each notification has an X button. Per-user dismissal state already exists (ribbon_item_dismissals table per plan §2.3).</li>
+      <li><b>Same data source</b> — ribbon_render_context() from app/web/ribbon_routes.py wired into a new notifications_page() view. No new data shape needed.</li>
+    </ul>
+  </div>
+
+  <div class="mock-app">
+
+    <!-- LEFT sidebar with new Notifications entry under Dashboard -->
+    <aside class="mock-left">
+      <div style="font-size:11px;color:var(--ck-gold);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px;">[Existing sidebar]</div>
+      <div class="mock-left-label">Today</div>
+      <div class="mock-left-item">
+        <i class="ti ti-layout-dashboard ico"></i>
+        <span>Dashboard</span>
+      </div>
+      <div class="mock-left-item active">
+        <i class="ti ti-bell ico"></i>
+        <span>Notifications</span>
+        <span class="badge">7</span>
+      </div>
+      <div class="mock-left-label">Operations</div>
+      <div class="mock-left-item">Corporate Order</div>
+      <div class="mock-left-item">Drivers (admin)</div>
+      <div class="mock-left-item">Ez Cater</div>
+      <div class="mock-left-item">Schedule</div>
+      <div class="mock-left-label">Insights</div>
+      <div class="mock-left-item">Performance</div>
+      <div class="mock-left-item">Sales</div>
+      <div class="mock-left-item">Labor</div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="mock-main">
+      <div class="page-topbar">
+        <h1 class="page-title">Notifications</h1>
+        <span class="page-meta">Tomball · 12 active</span>
+      </div>
+
+      <div class="notif-tabs">
+        <button class="notif-tab active">
+          <i class="ti ti-checkbox"></i>
+          To-do
+          <span class="count has-alert">3</span>
+        </button>
+        <button class="notif-tab">
+          <i class="ti ti-bowl"></i>
+          Caterings
+          <span class="count">2</span>
+        </button>
+        <button class="notif-tab">
+          <i class="ti ti-calendar-event"></i>
+          Events
+          <span class="count">1</span>
+        </button>
+        <button class="notif-tab">
+          <i class="ti ti-user"></i>
+          Employee
+          <span class="count">2</span>
+        </button>
+        <button class="notif-tab">
+          <i class="ti ti-truck"></i>
+          Vendors
+          <span class="count">1</span>
+        </button>
+        <button class="notif-tab">
+          <i class="ti ti-tool"></i>
+          Maintenance
+          <span class="count">3</span>
+        </button>
+        <button class="notif-tab">
+          <i class="ti ti-chart-bar"></i>
+          Sales
+          <span class="count">0</span>
+        </button>
+      </div>
+
+      <div class="notif-list">
+
+        <!-- ALERT severity sample -->
+        <div class="notif-card sev-alert">
+          <div class="notif-icon"><i class="ti ti-alert-triangle"></i></div>
+          <div class="notif-body">
+            <div class="notif-text">Walk-in cooler temp above threshold for 14 minutes</div>
+            <div class="notif-sub">Currently 42°F · alert at 40°F · escalates to Sam at 30 min</div>
+            <div class="notif-meta">Maintenance · 2 min ago</div>
+          </div>
+          <div class="notif-actions">
+            <button class="notif-action-btn check" title="Mark complete"><i class="ti ti-check"></i></button>
+            <button class="notif-action-btn" title="Dismiss"><i class="ti ti-x"></i></button>
+          </div>
+        </div>
+
+        <!-- WARN severity sample -->
+        <div class="notif-card sev-warn">
+          <div class="notif-icon"><i class="ti ti-flag"></i></div>
+          <div class="notif-body">
+            <div class="notif-text">Sara Rodriguez requested approval for 2 catering bids</div>
+            <div class="notif-sub">Awaiting Ez Manage review · oldest 47 min</div>
+            <div class="notif-meta">To-do · 9 min ago</div>
+          </div>
+          <div class="notif-actions">
+            <button class="notif-action-btn check" title="Mark complete"><i class="ti ti-check"></i></button>
+            <button class="notif-action-btn" title="Dismiss"><i class="ti ti-x"></i></button>
+          </div>
+        </div>
+
+        <!-- INFO severity sample -->
+        <div class="notif-card sev-info">
+          <div class="notif-icon"><i class="ti ti-circle-check"></i></div>
+          <div class="notif-body">
+            <div class="notif-text">Pre-shift checklist due by 4:00 PM</div>
+            <div class="notif-sub">5 of 12 items complete · BOH FOH split done</div>
+            <div class="notif-meta">To-do · 22 min ago</div>
+          </div>
+          <div class="notif-actions">
+            <button class="notif-action-btn check" title="Mark complete"><i class="ti ti-check"></i></button>
+            <button class="notif-action-btn" title="Dismiss"><i class="ti ti-x"></i></button>
+          </div>
+        </div>
+
+        <!-- Dismissable-only sample -->
+        <div class="notif-card sev-info">
+          <div class="notif-icon"><i class="ti ti-info-circle"></i></div>
+          <div class="notif-body">
+            <div class="notif-text">Briefing posted — morning brief for 2026-05-17 ready</div>
+            <div class="notif-sub">Click to read · 3 highlights flagged for partner review</div>
+            <div class="notif-meta">To-do · 1 hr ago</div>
+          </div>
+          <div class="notif-actions">
+            <button class="notif-action-btn" title="Dismiss"><i class="ti ti-x"></i></button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Show empty state inline below to illustrate -->
+      <div style="margin-top: 24px;">
+        <h3 style="font-size: 11px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin: 0 0 8px;">Sales tab — empty state (illustration)</h3>
+        <div class="notif-empty">
+          <i class="ti ti-bell-off"></i>
+          No notifications in Sales · you're clear here
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- DESIGN NOTES -->
+  <div class="notes">
+    <b>Page-first design notes (per Sam #2531):</b>
+    <ul>
+      <li><b>Source data is the existing ribbon data path.</b> <code>ribbon_render_context()</code> in <code>app/web/ribbon_routes.py</code> already returns the 7 fixed-order categories with per-item entries (text, sub_text, severity styling_class, can_dismiss, can_check). New <code>notifications_page()</code> view passes the same context to a new template; no data shape change.</li>
+      <li><b>Tabs use the V2 <code>.lg-nav</code> pill pattern</b> Sam locked in at #2485 — pure white inactive text on transparent + gold-soft border, dark text on gold-bright pill for active. Same shape as Drivers v3 tabs. Counts inside the pill; counts with alert items get red tint so the eye lands.</li>
+      <li><b>Cards use V2 glass primitive</b> (<code>rgba(40,22,14,0.55)</code> bg, 0.5px gold-soft border, 8px radius) with a 3px left border in the severity color. Border-left = severity is a standard alerts/log convention; aligns with the existing ribbon styling tokens.</li>
+      <li><b>Severity tokens identical to ribbon:</b> <code>--ck-status-warn</code> (alert/red) → <code>--ck-status-active</code> (warn/gold) → <code>--ck-status-open</code> (info/green). Zero retraining for operators.</li>
+      <li><b>Action buttons (X / check)</b> mirror the existing ribbon's per-item controls. X is universal; check renders only when the item has <code>can_check</code> (To-do items, mostly). Same controls, new chrome.</li>
+      <li><b>Sidebar entry under Dashboard</b> in the Today section. Bell icon (<code>ti ti-bell</code>) + red unread-count badge so the operator sees pending notifications at a glance from any page. Same role-gating as Dashboard (no driver/expo restrictions in v1; matches the ribbon's audience).</li>
+      <li><b>Empty state per tab</b> with <code>ti ti-bell-off</code> + "No notifications in &lt;Category&gt; · you're clear here." Friendly affordance.</li>
+    </ul>
+
+    <b>Implementation notes for ck:</b>
+    <ul>
+      <li><b>Route:</b> <code>/&lt;store_slug&gt;/notifications</code> as the store-scoped version (matches the per-store data model); plus <code>/partner/notifications</code> for partner-tier rollup if needed. v1 = store-scoped only.</li>
+      <li><b>View:</b> <code>notifications_page()</code> in <code>app/web/store_routes.py</code> (or new <code>app/web/notifications.py</code> module). Reuse <code>ribbon_render_context()</code> as the data source; just render into the new template.</li>
+      <li><b>Tab filter:</b> client-side first (all categories in DOM, JS toggles a <code>.is-active</code> class on the matching <code>.notif-cat-pane</code>). If categories grow large enough that this slows page load, switch to server-side <code>?cat=todo</code> querystring + URL-shareable tab state.</li>
+      <li><b>Dismiss endpoint:</b> reuse existing <code>POST /partner/ribbon/dismiss/&lt;item_id&gt;</code> (ribbon already has this per Block 1D). No new endpoint.</li>
+      <li><b>Sidebar badge count:</b> total non-dismissed notifications, fetched on page load + refreshed on dismiss. v1 = no live updates (page reload refreshes); v2 = SSE or poll if Sam wants real-time.</li>
+      <li><b>Ribbon removal — two commits, behavior-parity gate between them (per cena #2624):</b>
+        <ul>
+          <li><b>Commit 1:</b> ship Notifications page (route + view + template + sidebar entry + base_dashboard.html still includes _ribbon.html). Notifications and ribbon coexist briefly.</li>
+          <li><b>Behavior-parity gate (Sam on live, not a smoke check):</b> Sam uses the Notifications page on production for at least one real operational beat — an actual alert lands in a category tab, Sam dismisses it via the X, the unread sidebar badge decrements. The ribbon has been the single delivery channel for operational signals; do not pull it until the replacement has earned trust under real load.</li>
+          <li><b>Commit 2 (separate PR/commit, after gate clears):</b> remove <code>{% include 'partials/_ribbon.html' %}</code> from <code>base_dashboard.html</code>, delete <code>partials/_ribbon.html</code>, retire <code>ribbon.css</code> + <code>ribbon.js</code>, remove ribbon-related routes/context from <code>app/web/ribbon_routes.py</code> (keep <code>ribbon_render_context()</code> if Notifications still reuses it — rename if cleaner).</li>
+          <li><strong>Critical:</strong> "while we're in there" ribbon removal in the Notifications-ship commit is the exact failure mode that takes the only delivery channel dark mid-deploy. ck + aick — strictly two commits.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <b>Mobile responsive (v1 expectations):</b>
+    <ul>
+      <li>Tabs row uses <code>overflow-x: auto</code> — 7 tabs scroll horizontally on narrow widths.</li>
+      <li>Cards stay full-width single-column.</li>
+      <li>Page sits below the hamburger + page-title in the existing topbar (no special mobile treatment needed).</li>
+    </ul>
+
+    <b>Accessibility:</b>
+    <ul>
+      <li>Tabs are <code>&lt;button&gt;</code> with <code>role="tab"</code> + <code>aria-selected</code>; the list below is <code>role="tabpanel"</code>. Keyboard arrow-left/right cycles tabs.</li>
+      <li>Severity color is reinforced by the icon (<code>ti-alert-triangle</code> / <code>ti-flag</code> / <code>ti-circle-check</code>) so color isn't the sole signal.</li>
+      <li>X/check buttons have <code>aria-label</code> and 28×28 touch target. Larger on mobile if testing shows it (44×44 a11y minimum).</li>
+    </ul>
+
+    <b>samai canonical three-gate (when ck ships):</b>
+    <ul>
+      <li>Gate 1: existing pytest + new <code>test_notifications_page_renders</code> + <code>test_notifications_dismiss_reuses_ribbon_endpoint</code></li>
+      <li>Gate 2: code-contract review</li>
+      <li>Gate 3: URL probes — <code>GET /&lt;store&gt;/notifications</code> 200 + 7 tab markers + per-category card markers; <code>POST /partner/ribbon/dismiss/&lt;id&gt;</code> still 200 (no regression)</li>
+      <li>Playwright (queued to PLAYWRIGHT_BACKLOG.md per Sam #2547): tab-switching, dismiss interaction, sidebar badge updates after dismiss</li>
+    </ul>
+
+    <b>Approval workflow exercise:</b> This mockup is intended to be the first dck deliverable to flow through the new approval workflow that just shipped (spec_samples_approval_workflow.html, ck Phase 2 in edce2bb). Sam reviews this mockup on the Samples page directly — clicks Approve to implement, or Reject + notes/screenshots for iteration.
+  </div>
+
+</div>
+</body>
+</html>

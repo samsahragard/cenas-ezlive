@@ -44,6 +44,19 @@ VENDOR_DOMAIN_HINTS = {
 }
 
 
+VENDOR_BODY_HINTS = {
+    "webstaurant":      ("webstaurantstore", "webstaurant.com", "WebstaurantStore",
+                         "order #", "WebstaurantStore.com"),
+    "performance-food": ("performance food", "pfgc.com", "CustomerFirst",
+                         "AGUIRRE'S TEX MEX", "performance foodservice"),
+    "restaurant-depot": ("restaurant depot", "restaurantdepot.com",
+                         "RD-Online", "pickup order", "delivery order",
+                         "Aguirre's Tex Mex"),
+    "specs":            ("specsfoodservice", "specsonline", "spec's",
+                         "spec's foodservice", "specs.com"),
+}
+
+
 def _classify_domain(addr: str) -> str | None:
     """Return vendor slug if the address matches any known vendor hint."""
     a = (addr or "").lower()
@@ -52,6 +65,19 @@ def _classify_domain(addr: str) -> str | None:
             if h in a:
                 return slug
     return None
+
+
+def _classify_by_body(subject: str, body: str) -> set[str]:
+    """For forwarded emails the From is the forwarder, not the vendor.
+    Scan subject+body for vendor brand strings to catch those too."""
+    haystack = (subject + "\n" + body).lower()
+    matched: set[str] = set()
+    for slug, hints in VENDOR_BODY_HINTS.items():
+        for h in hints:
+            if h.lower() in haystack:
+                matched.add(slug)
+                break
+    return matched
 
 
 def _body_preview(msg, max_chars: int = 600) -> str:
@@ -125,25 +151,45 @@ def main() -> int:
             domain = addr.rsplit("@", 1)[-1].lower() if addr and "@" in addr else "(unknown)"
             all_domain_counts[domain] += 1
 
-            slug = _classify_domain(addr)
-            if slug and len(vendor_matches[slug]) < 5:
-                subject = _decode_h(msg_hdr.get("Subject", ""))
-                date_h = _decode_h(msg_hdr.get("Date", ""))
+            # First check from address; for forwarded emails, fall
+            # through to body-keyword scan.
+            slugs: set[str] = set()
+            from_slug = _classify_domain(addr)
+            if from_slug:
+                slugs.add(from_slug)
+
+            # Always fetch body if any matched slot has room — body scan
+            # catches forwarded emails the From address misses (Sam forwards
+            # vendor confirmations from his personal inbox to orders@).
+            subject = _decode_h(msg_hdr.get("Subject", ""))
+            date_h = _decode_h(msg_hdr.get("Date", ""))
+            need_body = bool(slugs) or any(
+                len(vendor_matches[s]) < 5 for s in VENDOR_BODY_HINTS
+            )
+            preview = ""
+            if need_body:
                 typ2, full = M.fetch(nid, "(RFC822)")
-                preview = ""
                 if typ2 == "OK" and full and full[0]:
                     try:
                         full_msg = email.message_from_bytes(full[0][1])
-                        preview = _body_preview(full_msg)
+                        preview = _body_preview(full_msg, max_chars=2000)
                     except Exception as e:  # noqa: BLE001
                         preview = f"[body fetch error: {e}]"
+                # Body-keyword scan as fallback / additional signal
+                body_slugs = _classify_by_body(subject, preview)
+                slugs |= body_slugs
+
+            for slug in slugs:
+                if len(vendor_matches[slug]) >= 5:
+                    continue
                 vendor_matches[slug].append({
                     "mid": nid.decode() if isinstance(nid, bytes) else str(nid),
                     "from": from_raw,
                     "addr": addr,
                     "subject": subject,
                     "date": date_h,
-                    "body_preview": preview,
+                    "matched_by": "from" if from_slug == slug else "body",
+                    "body_preview": preview[:1500],
                 })
 
         top_domains = sorted(all_domain_counts.items(), key=lambda kv: -kv[1])[:25]

@@ -97,6 +97,7 @@ SAMPLES = [
         date="2026-05-17",
         description="Active/Inactive tab filter, mobile-friendly hamburger inside topbar, 48px touch targets, breakpoint unified to 1024px.",
         url="/static/mockups/drivers_redesign.html",
+        type="mockup",
     ),
     dict(
         title="Legal — Overview",
@@ -104,6 +105,7 @@ SAMPLES = [
         date="2026-05-16",
         description="Reference implementation of the V2 .lg-* pattern: glass cards, gold uppercase section labels, --ck-ease motion. Top-level legal subsystem entry.",
         url="/partner/legal",
+        type="reference",
     ),
     dict(
         title="Legal — Matters List",
@@ -111,6 +113,7 @@ SAMPLES = [
         date="2026-05-16",
         description="V2 list pattern with .lg-grid-stats responsive 4→1 at 1024px. Reference for CRUD-list surfaces under V2.",
         url="/partner/legal/matters",
+        type="reference",
     ),
     dict(
         title="Legal — Matter Detail",
@@ -118,6 +121,7 @@ SAMPLES = [
         date="2026-05-16",
         description="V2 detail-page pattern. Reference for record-detail surfaces.",
         url="/partner/legal/matters/1",
+        type="reference",
     ),
 ]
 

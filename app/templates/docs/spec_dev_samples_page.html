@@ -48,11 +48,27 @@ DEV_SAMPLES = [
                  "(closes title-collision class), tappability affordance "
                  "with chevron+hover. Desktop + phone.",
         "url": "/static/mockups/drivers_redesign.html",
-        "type": "mockup",
+        "type": "mockup",          # "mockup" | "reference"
+        "button_label": "Open mockup",
     },
     # ... see §8 for v1 seed entries
 ]
 </code></pre>
+<p>
+  <b>Type field</b> (added per cena #2451 finding 2): distinguishes
+  sandbox mockups (<code>"mockup"</code> — static HTML in
+  <code>/static/mockups/</code>, safe to click through) from live
+  pattern references (<code>"reference"</code> — shipped production
+  pages used as V2 design system examples; operators clicking through
+  land in real data). The type drives both the tag pill (§6.2) and the
+  per-entry button label (§6.4).
+</p>
+<p>
+  <b>button_label</b>: per-entry primary CTA text. Computed in template
+  if not stored (simple if-else on <code>type</code>). "Open mockup" for
+  type=mockup, "Open page" for type=reference. Extensible if future
+  types need different verbs.
+</p>
 <p>
   Pass <code>samples=DEV_SAMPLES</code> into the template render. Most-recent-first
   is sort-by-date desc — module-level can be hand-ordered for v1, swap to
@@ -103,7 +119,13 @@ DEV_SAMPLES = [
 <ul>
   <li><b>Layout:</b> flex row, align-items baseline, gap 12px, margin-bottom 6px</li>
   <li><b>Title (<code>&lt;h2&gt;</code>):</b> 16px / 600 / <code>var(--ck-text)</code></li>
-  <li><b>Version badge:</b> 10px / 700 / uppercase / letter-spacing 0.06em / bg <code>var(--ck-gold)</code> / color <code>#140A06</code> (dark on gold) / padding <code>2px 8px</code> / radius 4px. Render only when <code>s.version</code> is present and not '—'.</li>
+  <li><b>Version badge:</b> 10px / 700 / uppercase / letter-spacing 0.06em / bg <code>var(--ck-gold)</code> / color <code>#140A06</code> (dark on gold) / padding <code>2px 8px</code> / radius 4px. Render only when <code>s.version</code> is present and not '—'. <strong>Jinja conditional:</strong> <code>{% if s.version and s.version != '—' %}...{% endif %}</code></li>
+  <li><b>Type tag pill (added per cena #2451 finding 2):</b> 10px / 700 / uppercase / letter-spacing 0.06em / padding <code>2px 8px</code> / radius 4px. Rendered for every entry — semantic signal about "what kind of thing this is." Two variants:
+    <ul>
+      <li><code>.dvs-tag-mockup</code> — bg <code>var(--ck-gold-soft)</code>, color <code>var(--ck-gold)</code>, border <code>0.5px solid var(--ck-gold-soft)</code>. Renders as label "MOCKUP".</li>
+      <li><code>.dvs-tag-reference</code> — bg <code>rgba(232, 122, 62, 0.18)</code>, color <code>rgba(245, 180, 142, 1)</code>, border <code>0.5px solid rgba(232, 122, 62, 0.3)</code>. Same orange-pill family as <code>.location-pill</code> in drivers_redesign.html. Renders as label "REFERENCE".</li>
+    </ul>
+    Both palette-aligned (gold + orange brand family). No teal — keeps the same brand discipline samai #2018 called for.</li>
   <li><b>Meta (author · date):</b> margin-left auto (right-aligned) / 11px / uppercase / letter-spacing 0.1em / <code>var(--ck-text-soft)</code></li>
 </ul>
 
@@ -121,7 +143,7 @@ DEV_SAMPLES = [
       <li>bg <code>var(--ck-gold)</code> / color <code>#140A06</code> (dark on gold)</li>
       <li>padding <code>8px 14px</code>, radius 8px</li>
       <li>13px / 600</li>
-      <li>icon <code>ti ti-external-link</code> + label "Open" with 6px gap</li>
+      <li>icon <code>ti ti-external-link</code> + <strong>per-entry label from <code>s.button_label</code></strong> ("Open mockup" for type=mockup, "Open page" for type=reference) with 6px gap. Simple template fallback if not stored: <code>{{ s.button_label or ('Open mockup' if s.type == 'mockup' else 'Open page') }}</code></li>
       <li><code>target="_blank" rel="noopener"</code></li>
       <li>hover: <code>filter: brightness(1.08)</code>, 150ms <code>var(--ck-ease)</code></li>
     </ul>
@@ -157,13 +179,13 @@ DEV_SAMPLES = [
 
 <table>
   <thead>
-    <tr><th>slug</th><th>title</th><th>version</th><th>date</th><th>author</th><th>url</th></tr>
+    <tr><th>slug</th><th>title</th><th>version</th><th>type</th><th>button_label</th><th>date</th><th>author</th><th>url</th></tr>
   </thead>
   <tbody>
-    <tr><td>drivers-redesign-v2</td><td>Drivers (Admin) — Redesign Mockup</td><td>v2</td><td>2026-05-17</td><td>dck</td><td><code>/static/mockups/drivers_redesign.html</code></td></tr>
-    <tr><td>legal-overview</td><td>Legal — Overview</td><td>—</td><td>2026-05-16</td><td>ck/dck V2</td><td><code>/partner/legal/overview</code></td></tr>
-    <tr><td>legal-matters</td><td>Legal — Matters list</td><td>—</td><td>2026-05-16</td><td>ck/dck V2</td><td><code>/partner/legal/matters</code></td></tr>
-    <tr><td>legal-matter-detail</td><td>Legal — Matter Detail (example)</td><td>—</td><td>2026-05-16</td><td>ck/dck V2</td><td><code>/partner/legal/matters/1</code> (or any extant matter id)</td></tr>
+    <tr><td>drivers-redesign-v2</td><td>Drivers (Admin) — Redesign Mockup</td><td>v2</td><td>mockup</td><td>Open mockup</td><td>2026-05-17</td><td>dck</td><td><code>/static/mockups/drivers_redesign.html</code></td></tr>
+    <tr><td>legal-overview</td><td>Legal — Overview</td><td>None</td><td>reference</td><td>Open page</td><td>2026-05-16</td><td>ck/dck V2</td><td><code>/partner/legal/overview</code></td></tr>
+    <tr><td>legal-matters</td><td>Legal — Matters list</td><td>None</td><td>reference</td><td>Open page</td><td>2026-05-16</td><td>ck/dck V2</td><td><code>/partner/legal/matters</code></td></tr>
+    <tr><td>legal-matter-detail</td><td>Legal — Matter Detail (example)</td><td>None</td><td>reference</td><td>Open page</td><td>2026-05-16</td><td>ck/dck V2</td><td><code>/partner/legal/matters/1</code> (or any extant matter id)</td></tr>
   </tbody>
 </table>
 

@@ -1,9 +1,9 @@
-{% extends "base_dashboard.html" %}
+﻿{% extends "base_dashboard.html" %}
 {% set active = active|default('dev_samples') %}
 {% block title %}Design Samples — Cenas Kitchen{% endblock %}
 {% block page_title %}Design Samples{% endblock %}
 {% block page_subtitle %}
-  <p class="greeting-sub">dck’s design mockups and renderings. Click any card to preview in a new tab.</p>
+  <p class="greeting-sub">dck's design mockups and pattern references. Click any card to preview or open.</p>
 {% endblock %}
 
 {% block content %}
@@ -25,14 +25,29 @@
     border-color: rgba(217,164,54,0.7);
     box-shadow: 0 0 0 1px rgba(217,164,54,0.18);
   }
-  .sample-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-  .sample-title { font-size: 15px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
+  .sample-card-head { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+  .sample-title { font-size: 15px; font-weight: 600; color: var(--text-1); line-height: 1.3; flex: 1; }
   .sample-badge {
     flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: .04em;
     padding: 2px 7px; border-radius: 5px;
     background: rgba(217,164,54,0.15);
     border: 1px solid rgba(217,164,54,0.3);
     color: var(--ck-gold);
+  }
+  .dvs-tag {
+    flex-shrink: 0; font-size: 10px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .dvs-tag-mockup {
+    background: rgba(217,164,54,0.15);
+    color: var(--ck-gold);
+    border: 0.5px solid rgba(217,164,54,0.3);
+  }
+  .dvs-tag-reference {
+    background: rgba(232,122,62,0.18);
+    color: rgba(245,180,142,1);
+    border: 0.5px solid rgba(232,122,62,0.3);
   }
   .sample-meta { font-size: 12px; color: var(--text-3); }
   .sample-desc { font-size: 13px; color: var(--text-2); line-height: 1.5; flex: 1; }
@@ -54,12 +69,14 @@
   <div class="sample-card">
     <div class="sample-card-head">
       <span class="sample-title">{{ s.title }}</span>
-      <span class="sample-badge">{{ s.version }}</span>
+      {% if s.version %}<span class="sample-badge">{{ s.version }}</span>{% endif %}
+      <span class="dvs-tag dvs-tag-{{ s.get('type', 'mockup') }}">{{ s.get('type', 'mockup') }}</span>
     </div>
     <div class="sample-meta">{{ s.date }} &middot; dck</div>
     <div class="sample-desc">{{ s.description }}</div>
     <a class="sample-open" href="{{ s.url }}" target="_blank" rel="noopener">
-      <i class="ti ti-external-link"></i> Open mockup
+      <i class="ti ti-external-link"></i>
+      {% if s.get('type') == 'reference' %}Open page{% else %}Open mockup{% endif %}
     </a>
   </div>
   {% endfor %}

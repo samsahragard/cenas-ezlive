@@ -492,17 +492,20 @@ def orders_list():
     would lose store context (same shape as the driver-tracking bug)."""
     if g.current_location == "both":
         from app.web.orders_browse import list_orders_for_location, group_orders_by_date
+        from app.services.orders_query import rotated_dispatch_letters
         db = next(get_db())
         try:
             tom = list_orders_for_location(db, "tomball")
             cop = list_orders_for_location(db, "copperfield")
             combined = tom + cop
             groups = group_orders_by_date(combined)
+            display_drivers = rotated_dispatch_letters(groups)
             return render_template(
                 "orders_by_store.html",
                 location="both",
                 location_label="All Orders",
                 groups=groups,
+                display_drivers=display_drivers,
             )
         finally:
             db.close()

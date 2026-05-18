@@ -1,0 +1,70 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('dev_samples') %}
+{% block title %}Design Samples — Cenas Kitchen{% endblock %}
+{% block page_title %}Design Samples{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">dck’s design mockups and renderings. Click any card to preview in a new tab.</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .samples-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px; padding: 4px 0;
+  }
+  .sample-card {
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid rgba(217,164,54,0.35);
+    border-radius: 12px;
+    padding: 18px 20px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  .sample-card:hover {
+    border-color: rgba(217,164,54,0.7);
+    box-shadow: 0 0 0 1px rgba(217,164,54,0.18);
+  }
+  .sample-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .sample-title { font-size: 15px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
+  .sample-badge {
+    flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 5px;
+    background: rgba(217,164,54,0.15);
+    border: 1px solid rgba(217,164,54,0.3);
+    color: var(--ck-gold);
+  }
+  .sample-meta { font-size: 12px; color: var(--text-3); }
+  .sample-desc { font-size: 13px; color: var(--text-2); line-height: 1.5; flex: 1; }
+  .sample-open {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--ck-gold-bright); color: #1a0e05;
+    font-size: 13px; font-weight: 700;
+    padding: 8px 16px; border-radius: 8px;
+    text-decoration: none; transition: background .15s;
+  }
+  .sample-open:hover { background: #f0c84a; }
+  .samples-empty { color: var(--text-3); font-size: 14px; padding: 32px 0; text-align: center; }
+  @media (max-width: 600px) { .samples-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="samples-grid">
+{% if samples %}
+  {% for s in samples %}
+  <div class="sample-card">
+    <div class="sample-card-head">
+      <span class="sample-title">{{ s.title }}</span>
+      <span class="sample-badge">{{ s.version }}</span>
+    </div>
+    <div class="sample-meta">{{ s.date }} &middot; dck</div>
+    <div class="sample-desc">{{ s.description }}</div>
+    <a class="sample-open" href="{{ s.url }}" target="_blank" rel="noopener">
+      <i class="ti ti-external-link"></i> Open mockup
+    </a>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="samples-empty">No design samples yet.</div>
+{% endif %}
+</div>
+{% endblock %}

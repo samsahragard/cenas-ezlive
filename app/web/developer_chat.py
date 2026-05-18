@@ -90,6 +90,17 @@ def _enforce_partner():
     return None
 
 
+SAMPLES = [
+    dict(
+        title="Drivers Page Redesign",
+        version="v2",
+        date="2026-05-17",
+        description="Active/Inactive tab filter, mobile-friendly hamburger inside topbar, 48px touch targets, breakpoint unified to 1024px.",
+        url="/static/mockups/drivers_redesign.html",
+    ),
+]
+
+
 @dev_chat.route("/partner/developer/chat", methods=["GET"])
 @requires_permission("developer.view_chat")
 def chat_page():
@@ -470,6 +481,20 @@ CHAT_PAGES = [
     ("aick-session-2026-05-13",  "aick — 5/13",  "doc_aick_session_2026_05_13"),
     ("samai-session-2026-05-13", "samai — 5/13", "doc_samai_session_2026_05_13"),
 ]
+
+
+@dev_chat.route("/partner/developer/samples")
+@requires_permission("developer.view_chat")
+def developer_samples():
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    return render_template(
+        "developer_samples.html",
+        active="dev_samples",
+        samples=SAMPLES,
+        doc_pages=DOC_PAGES,
+    )
 
 
 @dev_chat.route("/partner/developer/ezcater")

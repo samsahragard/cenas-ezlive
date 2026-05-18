@@ -68,6 +68,59 @@
 </div>
 {% endif %}
 
+
+<!-- Mobile card list — visible <640px only. CSS hides .item-grid below, this above.
+     Each card has its own .qty-input; only the visible set takes interaction at a
+     given viewport. Per dck spec_produce_mobile_redesign §3 (single-source-CSS-toggled). -->
+<div class="item-cards">
+  {% for it in items %}
+  <div class="pcard item-row {% if not it.orderable %}item-row-noprice is-noprice{% endif %}"
+       data-name="{{ it.canonical_name }}"
+       data-size="{{ it.canonical_size }}"
+       data-price="{{ it.price if it.price is not none else 0 }}"
+       data-vendor="{{ it.vendor or '' }}"
+       data-vendor-label="{{ it.vendor_label or '' }}">
+    <div class="pcard-content">
+      <div class="pcard-head">
+        <div class="pcard-name">{{ it.canonical_name }}{% if it.marker == 'star' %}<span class="marker marker-star" title="What we want">★</span>{% elif it.marker == 'circle' %}<span class="marker marker-circle" title="If price is better">○</span>{% endif %}</div>
+        <div class="pcard-price">
+          {% if it.price is not none %}${{ "%.2f"|format(it.price) }}{% else %}<span class="muted">—</span>{% endif %}
+        </div>
+      </div>
+      <div class="pcard-meta">
+        <span>{{ it.canonical_size }}</span>
+        {% if it.vendor_label %}
+          <span class="sep">·</span>
+          <span class="badge badge-{{ it.vendor }}">{{ it.vendor_label }}</span>
+        {% endif %}
+        {% if it.date_range %}
+          <span class="sep">·</span>
+          <span>{{ it.date_range }}</span>
+        {% endif %}
+      </div>
+      <div class="pcard-row">
+        <div class="stepper">
+          <button type="button" class="stepper-minus" aria-label="Decrease quantity" {% if not it.orderable %}disabled{% endif %}>−</button>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" class="qty-input" value="0" aria-label="Quantity" {% if not it.orderable %}disabled title="No vendor price this week"{% endif %}>
+          <button type="button" class="stepper-plus" aria-label="Increase quantity" {% if not it.orderable %}disabled{% endif %}>+</button>
+        </div>
+        <div class="pcard-subtotal" data-subtotal>{% if it.orderable %}$0.00{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    {% if it.photo_slug %}
+      <img class="pcard-photo" loading="lazy"
+           src="{{ url_for('static', filename='img/produce/' + it.photo_slug + '.jpg') }}"
+           alt="{{ it.canonical_name }}">
+    {% else %}
+      <div class="pcard-photo-placeholder">
+        <div class="emoji">🌿</div>
+        <div class="label">no photo</div>
+      </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
 {% set half = (items|length + 1) // 2 %}
 {% set left_items = items[:half] %}
 {% set right_items = items[half:] %}
@@ -211,6 +264,54 @@ function refreshManagerHint() {
 document.querySelectorAll('.qty-input').forEach(inp => {
   inp.addEventListener('input', refreshCart);
 });
+
+// Stepper +/- buttons (mobile card view per spec_produce_mobile_redesign §3).
+// Mutate the sibling .qty-input value and fire the input event so refreshCart() picks it up.
+document.querySelectorAll('.pcard .stepper-plus, .pcard .stepper-minus').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const stepper = btn.closest('.stepper');
+    if (!stepper) return;
+    const inp = stepper.querySelector('.qty-input');
+    if (!inp || inp.disabled) return;
+    const cur = parseInt(inp.value || '0', 10) || 0;
+    const delta = btn.classList.contains('stepper-plus') ? 1 : -1;
+    const next = Math.max(0, Math.min(999, cur + delta));
+    if (next === cur) return;
+    inp.value = String(next);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+});
+
+// Per-card live line subtotal (cards only — table view has its own price column).
+function refreshCardSubtotals() {
+  document.querySelectorAll('.pcard').forEach(card => {
+    const inp = card.querySelector('.qty-input');
+    const out = card.querySelector('[data-subtotal]');
+    if (!inp || !out) return;
+    if (inp.disabled) { out.textContent = '—'; return; }
+    const qty = parseInt(inp.value || '0', 10) || 0;
+    const price = parseFloat(card.dataset.price || '0') || 0;
+    out.textContent = '$' + (qty * price).toFixed(2);
+  });
+}
+document.querySelectorAll('.pcard .qty-input').forEach(inp => {
+  inp.addEventListener('input', refreshCardSubtotals);
+});
+
+// Sticky-bottom-bar visibility on narrow viewports — toggles .is-empty on
+// .sticky-cart based on cart-has-items. CSS uses .sticky-cart.is-empty to hide.
+function refreshStickyCartVisibility() {
+  const cart = document.querySelector('.sticky-cart');
+  if (!cart) return;
+  const hasItems = document.querySelectorAll('.qty-input').length > 0 &&
+    [...document.querySelectorAll('.qty-input')].some(i => !i.disabled && parseInt(i.value || '0', 10) > 0);
+  cart.classList.toggle('is-empty', !hasItems);
+}
+document.querySelectorAll('.qty-input').forEach(inp => {
+  inp.addEventListener('input', refreshStickyCartVisibility);
+});
+refreshCardSubtotals();
+refreshStickyCartVisibility();
 managerSelect.addEventListener('change', refreshManagerHint);
 
 submitBtn.addEventListener('click', async () => {

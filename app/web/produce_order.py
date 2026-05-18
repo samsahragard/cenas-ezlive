@@ -113,6 +113,49 @@ def _short_id() -> str:
     return uuid.uuid4().hex[:10]
 
 
+# ============ Produce photo lookup (spec_produce_mobile_redesign §4) ============
+#
+# Maps canonical_name (and a couple of common variant phrasings) → slug.
+# Slug → /static/img/produce/<slug>.jpg. Phase A ships 4 photos at 6af6d13;
+# the full-catalog pass (dck slicer + ck markup) will add the remaining
+# ~110 entries via append. Match-by-photo-content discipline applies (cena
+# #2670 — source vendor catalog has shifted labels in middle rows).
+#
+# Lookup is exact-match-then-stripped — adding aliases here is cheaper than
+# a regex-or-fuzzy matcher and keeps the surprise surface zero.
+
+PRODUCE_PHOTO_SLUGS = {
+    # ---- Phase A (4 sample photos, dck 6af6d13) ----
+    "Avocados":           "avocado",
+    "Avocados (Small)":   "avocado",
+    "Avocado":            "avocado",
+    "Tomato Roma":        "tomato-roma",
+    "Tomate Roma":        "tomato-roma",
+    "Tomate Roma (25lb)": "tomato-roma",
+    "Onion Yel. Jumbo":   "onion-yellow",
+    "Onion Yellow":       "onion-yellow",
+    "Onion Yel.":         "onion-yellow",
+    "Cilantro":           "cilantro",
+    "Cilantro (Bulk)":    "cilantro",
+}
+
+
+def _photo_slug_for(canonical_name: str | None) -> str | None:
+    """Return the static photo slug for this canonical_name, or None if no
+    photo is shipped yet. Template renders the placeholder div in the None
+    case for graceful degradation."""
+    if not canonical_name:
+        return None
+    name = canonical_name.strip()
+    slug = PRODUCE_PHOTO_SLUGS.get(name)
+    if slug is None:
+        # Try a normalized lookup: drop trailing parenthetical, collapse case
+        bare = name.split("(")[0].strip()
+        slug = PRODUCE_PHOTO_SLUGS.get(bare)
+    return slug
+
+
+
 # ============ Domain logic ============
 def load_winners() -> list[dict]:
     """For each canonical item, return the cheaper vendor + price.
@@ -189,6 +232,7 @@ def load_winners() -> list[dict]:
             "available": winner is not None,
             "show_in_grid": (winner is not None) or always_show,
             "orderable": winner is not None,
+            "photo_slug": _photo_slug_for(c["name"]),
         })
     return out
 

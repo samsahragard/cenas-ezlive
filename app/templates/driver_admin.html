@@ -15,36 +15,56 @@
 
 {% block content %}
 <style>
-.da-tabs { display:flex; gap:4px; margin-bottom:20px; }
+.da-tabs {
+  display: flex; gap: 6px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 0.5px solid var(--ck-border, rgba(217, 164, 54, 0.10));
+}
 .da-tab {
-  display:inline-flex; align-items:center; gap:6px;
-  padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600;
-  text-decoration:none; cursor:pointer;
-  border:1px solid rgba(217,164,54,0.20); background:transparent;
-  color:rgba(236,227,208,0.55); transition:all 0.15s;
+  background: transparent;
+  border: 0.5px solid var(--ck-border, rgba(217, 164, 54, 0.10));
+  border-radius: 14px;
+  padding: 8px 16px;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 150ms var(--ck-ease, ease),
+              border-color 150ms var(--ck-ease, ease);
 }
-.da-tab:hover { color:var(--ck-cream,#FAF6EC); background:rgba(255,255,255,0.04); }
+.da-tab .count {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+.da-tab:hover {
+  border-color: var(--ck-gold-soft, rgba(217, 164, 54, 0.14));
+  background: rgba(228, 179, 64, 0.06);
+}
 .da-tab.is-active {
-  background:rgba(217,164,54,0.12); color:var(--ck-gold,#D9A436);
-  border-color:rgba(217,164,54,0.40);
+  color: #140A06;
+  background: var(--ck-gold-bright, #FFD970);
+  border-color: var(--ck-gold-bright, #FFD970);
+  font-weight: 600;
+  box-shadow: 0 0 14px rgba(255, 200, 80, 0.32);
 }
-.da-tab-count {
-  font-size:10px; font-weight:700;
-  background:rgba(217,164,54,0.20); color:var(--ck-gold,#D9A436);
-  border-radius:10px; padding:1px 7px;
-}
-.da-tab.is-active .da-tab-count { background:rgba(217,164,54,0.30); }
+.da-tab.is-active .count { opacity: 0.85; }
 </style>
 
 {% set base_url = request.path %}
 <div class="da-tabs">
   <a href="{{ base_url }}?status=active"
      class="da-tab{% if current_status == 'active' %} is-active{% endif %}">
-    Active <span class="da-tab-count">{{ active_count }}</span>
+    Active <span class="count">{{ active_count }}</span>
   </a>
   <a href="{{ base_url }}?status=inactive"
      class="da-tab{% if current_status == 'inactive' %} is-active{% endif %}">
-    Inactive <span class="da-tab-count">{{ inactive_count }}</span>
+    Inactive <span class="count">{{ inactive_count }}</span>
   </a>
 </div>
 

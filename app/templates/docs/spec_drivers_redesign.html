@@ -47,10 +47,22 @@
 </table>
 
 <h2>3 · Route change (store_routes.py)</h2>
+
+<p style="background: rgba(228,179,64,0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 8px; padding: 10px 14px; margin: 10px 0;">
+  <b>Intentional default-state change (cena #2522):</b> today
+  <code>/<store>/drivers</code> shows active + inactive in one table.
+  After this spec ships, the default view shows ACTIVE ONLY. Inactive
+  drivers are one tab-click away. This is a deliberate UX call (most
+  GMs reach for this list to see who's currently working, not who's
+  been deactivated) — flagging here so future-Sam reading the spec
+  doesn't have to infer the intent change.
+</p>
+
 <pre><code>@store_bp.route("/drivers", methods=["GET"])
 @requires_permission("drivers.admin")
 def drivers_admin():
     # NEW: tab-filter via querystring. Defaults to 'active'.
+    # See callout above re: intentional default-state change.
     status = request.args.get("status", "active")
     if status not in ("active", "inactive"):
         status = "active"
@@ -139,7 +151,7 @@ def drivers_admin():
 <p>Other template changes:</p>
 <ul>
   <li><b>Remove the STATUS column</b> from the <code>&lt;thead&gt;</code> + the corresponding <code>&lt;td&gt;</code> in the row loop. The "No PIN" / "Locked out" / "Active →" link / "✓ ezCater" badge that was inside the STATUS cell needs to move into the <b>Name</b> column as inline meta beneath the driver name (preserves the per-driver state signal). The "Inactive" cell rendering can be dropped — the Inactive tab IS the inactive view.</li>
-  <li><b>Topbar polish:</b> the existing <code>greeting-sub</code> already shows location + count. Drop the count from the subtitle when on the Active tab (the active-tab count duplicates it). Keep the location-badge.</li>
+  <li><b>Topbar polish (revised per cena #2522):</b> drop the driver count from <code>greeting-sub</code> ENTIRELY on both tabs. The tab pills already carry magnitudes for both Active and Inactive states — consistent treatment, no asymmetry that reads as a bug when the operator toggles tabs. Keep just the location pill in the subtitle.</li>
   <li><b>"Add new driver" button</b> stays where it is (right side, above the table). Acceptable for Phase A.</li>
   <li><b>Empty state</b> when no drivers match the current tab: change copy to "No {{ current_status }} drivers" instead of the generic "No drivers yet."</li>
 </ul>

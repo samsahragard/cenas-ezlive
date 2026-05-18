@@ -397,6 +397,7 @@
   let currentSessionId = D.currentSession ? D.currentSession.id : null;
   let attachments = [];
   let streaming = false;
+    let msgQueue = [];
 
   // ---- model selector ----
   D.models.forEach((m) => {
@@ -629,13 +630,22 @@
   function setStreaming(on) {
     streaming = on;
     sendBtn.disabled = on;
-    inputEl.disabled = on;
   }
 
-  async function sendMessage() {
-    if (streaming) return;
-    const text = inputEl.value.trim();
-    if (!text && attachments.length === 0) return;
+  async function sendMessage(_q) {
+    const text = _q ? _q.text : inputEl.value.trim();
+    const _atts = _q ? _q.atts : [...attachments];
+    if (!text && _atts.length === 0) return;
+
+    if (streaming && !_q) {
+      msgQueue.push({ text, atts: _atts });
+      addMessage("user", text || "(attachments only)", {});
+      inputEl.value = "";
+      inputEl.style.height = "auto";
+      attachments = [];
+      renderChips();
+      return;
+    }
 
     addMessage("user", text || "(attachments only)", {});
     const streamBubble = addMessage("assistant", "", { streaming: true });
@@ -647,12 +657,14 @@
     fd.append("message", text);
     fd.append("model", modelEl.value);
     if (currentSessionId) fd.append("session_id", String(currentSessionId));
-    attachments.forEach((f) => fd.append("attachments", f));
+    _atts.forEach((f) => fd.append("attachments", f));
 
-    inputEl.value = "";
-    inputEl.style.height = "auto";
-    attachments = [];
-    renderChips();
+    if (!_q) {
+      inputEl.value = "";
+      inputEl.style.height = "auto";
+      attachments = [];
+      renderChips();
+    }
     setStreaming(true);
 
     try {
@@ -716,7 +728,8 @@
         streamBubble.classList.remove("streaming");
       }
       setStreaming(false);
-      inputEl.focus();
+      if (msgQueue.length > 0) { sendMessage(msgQueue.shift()); }
+      else { inputEl.focus(); }
     }
   }
 

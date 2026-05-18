@@ -1586,7 +1586,7 @@ def cena_telegram_test_fire():
 # this endpoint would bypass the cost+streaming pathway, which is
 # not what this endpoint is for).
 
-_VALID_POST_ROLES = {"dck"}
+_VALID_POST_ROLES = {"dck", "cena"}
 
 
 @cena_bp.route("/sam/cena/sam-chat-post", methods=["POST"])

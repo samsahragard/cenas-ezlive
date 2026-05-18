@@ -287,6 +287,16 @@ def _build_api_messages_from_rows(rows) -> list[dict]:
         elif m.role == "dck":
             mapped.append({"role": "user",
                            "content": f"[dck]: {m.content}"})
+        elif m.role == "cena":
+            # Cena-injected posts from dev-chat-watcher-triggered turns
+            # (per Sam #2533: cena uses post_to_sam_chat to surface
+            # cross-channel acks). Treat as assistant turns from Cena
+            # since she IS the canonical assistant in /sam/chat; tag
+            # the body so future Cena reads see it as her own prior
+            # post, not user input.
+            mapped.append({"role": "assistant",
+                           "content": _strip_cena_tool_blocks(
+                               f"[cena (cross-channel)] {m.content}")})
         # else: skip (system rows etc. aren't sent in the conversation list)
 
     merged: list[dict] = []

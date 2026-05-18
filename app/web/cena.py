@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import (
-    Blueprint, abort, current_app, g, jsonify, redirect, render_template, request, url_for,
+    Blueprint, Response, abort, current_app, g, jsonify, redirect, render_template, request, url_for,
 )
 from sqlalchemy import func
 
@@ -1626,13 +1626,17 @@ def cena_sam_chat_attachment_get(att_id: int):
     try:
         att = db.get(_SCA, att_id)
         if not att:
-            abort(404)
+            return jsonify({"ok": False, "error": f"attachment {att_id} not found"}), 404
         try:
-            data = _b64.b64decode(att.data_base64)
-        except Exception:
-            abort(500)
-        from flask import Response as _Resp
-        return _Resp(data, mimetype=att.content_type or "application/octet-stream")
+            data = _b64.b64decode(att.data_base64 or "")
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False,
+                            "error": f"base64 decode failed: {type(e).__name__}: {e}"}), 500
+        return Response(data, mimetype=att.content_type or "application/octet-stream")
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena_sam_chat_attachment_get crashed att_id=%s", att_id)
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
     finally:
         db.close()
 

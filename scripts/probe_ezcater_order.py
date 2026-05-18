@@ -87,6 +87,32 @@ INTROSPECT_Q = """
 }
 """
 
+INTROSPECT_ORDER_Q = """
+{
+  __type(name: "Order") {
+    name
+    fields {
+      name
+      type { name kind ofType { name kind ofType { name kind } } }
+    }
+  }
+}
+"""
+
+INTROSPECT_QUERY_Q = """
+{
+  __schema {
+    queryType {
+      fields {
+        name
+        args { name type { name kind ofType { name } } }
+        type { name kind ofType { name } }
+      }
+    }
+  }
+}
+"""
+
 
 def candidate_field_names() -> list[str]:
     """Field names likely to hold the assigned courier/driver on a Delivery."""
@@ -132,24 +158,40 @@ def main() -> int:
     out["delivery_type_field_count"] = len(field_names)
     out["delivery_type_field_names"] = field_names
 
-    matched = [n for n in field_names
-               if any(c.lower() in (n or "").lower()
-                      for c in ("courier", "driver", "agent"))]
-    out["matched_courier_driver_fields"] = matched
+    intro_order = gql(INTROSPECT_ORDER_Q)
+    order_type = (intro_order.get("data") or {}).get("__type") or {}
+    order_fields = order_type.get("fields") or []
+    order_field_names = [f.get("name") for f in order_fields]
+    out["order_type_field_count"] = len(order_field_names)
+    out["order_type_field_names"] = order_field_names
 
-    if matched:
-        sub_selection = "id name "
-        nested = " ".join(f"{m} {{ __typename id name email phone }}" for m in matched)
-        query = "query($id: ID!) { delivery(id: $id) { id " + nested + " } }"
-        try:
-            delivery_res = gql(query, {"id": delivery_id})
-            out["delivery_query"] = delivery_res
-        except Exception as e:
-            out["delivery_query_error"] = f"{type(e).__name__}: {e}"
-    else:
-        candidates_guess = " ".join(f"{m} {{ __typename }}" for m in candidate_field_names())
-        query = "query($id: ID!) { delivery(id: $id) { id " + candidates_guess + " } }"
-        out["delivery_query_guess"] = gql(query, {"id": delivery_id})
+    intro_query = gql(INTROSPECT_QUERY_Q)
+    query_fields = (((intro_query.get("data") or {}).get("__schema") or {}).get("queryType") or {}).get("fields") or []
+    out["root_query_field_names"] = [f.get("name") for f in query_fields]
+    out["root_query_field_count"] = len(out["root_query_field_names"])
+
+    matched_delivery = [n for n in field_names
+        if any(c.lower() in (n or "").lower() for c in ("courier", "driver", "agent"))]
+    matched_order = [n for n in order_field_names
+        if any(c.lower() in (n or "").lower() for c in ("courier", "driver", "agent", "delivery"))]
+    out["matched_delivery_fields"] = matched_delivery
+    out["matched_order_fields"] = matched_order
+
+    if matched_order:
+        nested = " ".join(f"{m} {{ __typename }}" for m in matched_order)
+        q = "query($id: ID!) { order(id: $id) { " + nested + " } }"
+        out["order_nested_probe"] = gql(q, {"id": out["lookup_cand_used"]})
+
+    common_nested_attempts = [
+        "{ order(id: $id) { delivery { __typename id assignedCourier { __typename name } courier { __typename name } } } }",
+        "{ order(id: $id) { courier { __typename name email phone } } }",
+        "{ order(id: $id) { assignedDriver { __typename name } } }",
+        "{ order(id: $id) { fulfillmentDelivery { __typename id courier { name } } } }",
+    ]
+    out["common_nested_attempts"] = {}
+    for q_body in common_nested_attempts:
+        q = "query($id: ID!) " + q_body
+        out["common_nested_attempts"][q_body] = gql(q, {"id": out["lookup_cand_used"]})
 
     db = SessionLocal()
     try:

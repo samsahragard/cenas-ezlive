@@ -595,6 +595,43 @@ def driver_tracking():
         db.close()
 
 
+@store_bp.route("/driver-paycheck/by-driver/<int:driver_id>", methods=["GET"])
+def driver_paycheck_by_driver(driver_id: int):
+    """Per Sam #837 item 6a + 6d — paycheck history keyed on Driver.id
+    instead of EzcaterKnownDriver.id. Lets deactivated / hard-deleted
+    drivers still surface their historical paycheck rows because
+    paycheck_for() looks up by NAME against Order.ezcater_driver_name,
+    not by the roster table (which item 6 wiped today). Replaces the
+    old EzcaterKnownDriver-keyed driver_paycheck route for the new
+    Payroll column on /partner/drivers."""
+    from app.services.ezcater_payroll import paycheck_history
+
+    db = next(get_db())
+    try:
+        d = db.get(Driver, driver_id)
+        if not d:
+            from flask import abort as _abort
+            _abort(404)
+        # store-scope guard: a tomball manager shouldn't be able to peek
+        # at a copperfield driver's paychecks. partner / corporate see all.
+        if g.current_location == "tomball" and (d.location or "") == "copperfield":
+            from flask import abort as _abort
+            _abort(404)
+        if g.current_location == "copperfield" and (d.location or "") == "tomball":
+            from flask import abort as _abort
+            _abort(404)
+        history = paycheck_history(d.name, periods=6)
+        return render_template(
+            "driver_paycheck.html",
+            active="drivers_admin",
+            page_title=f"Paycheck — {d.name}",
+            driver=d,
+            history=history,
+        )
+    finally:
+        db.close()
+
+
 @store_bp.route("/driver-tracking/<int:known_id>", methods=["GET"])
 def driver_paycheck(known_id: int):
     """Per-driver paycheck history. Shows the current bi-weekly period plus
@@ -685,11 +722,25 @@ def drivers_admin():
         # the green Active badge should reflect whether the driver's signup
         # phone matches an entry in our seeded ezCater roster, not the
         # manual on/off toggle alone. The toggle still exists as an override.
-        known_phones = {p for (p,) in db.query(EzcaterKnownDriver.phone_e164).all()}
+        known_by_phone = {kd.phone_e164: kd for kd in
+                          db.query(EzcaterKnownDriver).all()}
         verified_for = {}
+        ezcater_name_for = {}
         for d in rows:
             if d.phone:
-                verified_for[d.id] = normalize_phone(d.phone) in known_phones
+                norm = normalize_phone(d.phone)
+                kd = known_by_phone.get(norm)
+                verified_for[d.id] = kd is not None
+                # Per Sam #837 item 6c — show "CK #X · Kitchen" on the
+                # combined drivers page so managers see ezCater identity
+                # alongside the internal driver record.
+                if kd:
+                    if kd.ck_prefix == 1:
+                        ezcater_name_for[d.id] = "CK #1 · Copperfield"
+                    elif kd.ck_prefix == 2:
+                        ezcater_name_for[d.id] = "CK #2 · Tomball"
+                    else:
+                        ezcater_name_for[d.id] = kd.name
             else:
                 verified_for[d.id] = False
 
@@ -698,6 +749,7 @@ def drivers_admin():
             drivers=rows,
             latest_shift_for=latest_shift_for,
             verified_for=verified_for,
+            ezcater_name_for=ezcater_name_for,
             store_label=g.store_label,
             current_location=g.current_location,
             location_labels=LOCATION_LABELS,

@@ -159,11 +159,11 @@
               <span class="ck-sb-subitem-label">Ez Manage</span>
               <span id="ezm-sidebar-badge" style="display:none;background:rgba(228,179,64,0.22);color:#E4B340;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto;line-height:1.5;"></span>
             </a>
-            <a href="/{{ store_slug }}/driver-tracking" class="ck-sb-subitem{% if active == 'driver_tracking' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Driver payroll</span>
-            </a>
-            <a href="/{{ store_slug }}/drivers" class="ck-sb-subitem{% if active == 'drivers_admin' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Drivers (admin)</span>
+            {# Driver Payroll merged into Drivers per Sam #837 item 6 —
+               the combined /{{ store_slug }}/drivers page now carries
+               both the payroll View Payroll column and the admin actions. #}
+            <a href="/{{ store_slug }}/drivers" class="ck-sb-subitem{% if active == 'drivers_admin' or active == 'driver_tracking' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Ez Drivers</span>
             </a>
           </div></div>
         </div>

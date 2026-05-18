@@ -95,12 +95,14 @@
     <thead>
       <tr class="group-header">
         <th>Name</th>
-        {% if current_location == 'both' %}<th>Location</th>{% endif %}
+        <th>Location</th>
+        <th>Ez Cater Name</th>
         <th>Email</th>
         <th>Phone</th>
         <th>Address</th>
         <th>Account</th>
         <th>Actions</th>
+        <th>Payroll</th>
       </tr>
     </thead>
     <tbody>
@@ -134,7 +136,11 @@
             {% endif %}
             </div>
           </td>
-          {% if current_location == 'both' %}<td>{{ location_labels.get(d.location, d.location) }}</td>{% endif %}
+          <td>{{ location_labels.get(d.location, d.location) }}</td>
+          <td>
+            {% set ezc = ezcater_name_for and ezcater_name_for.get(d.id) %}
+            {% if ezc %}{{ ezc }}{% else %}<span style="opacity:0.45;">—</span>{% endif %}
+          </td>
           <td>{% if d.email %}<a href="mailto:{{ d.email }}" style="color:var(--accent-soft);">{{ d.email }}</a>{% else %}<span style="opacity:0.45;">—</span>{% endif %}</td>
           <td>{{ d.phone or '—' }}</td>
           <td>{{ d.address or '—' }}</td>
@@ -160,11 +166,15 @@
             <a href="{{ url_for('store.driver_shifts', driver_id=d.id) }}"
                class="btn-logout" style="display:inline-block;font-size:11px;padding:5px 10px;text-decoration:none;">Shifts</a>
           </td>
+          <td>
+            <a href="{{ url_for('store.driver_paycheck_by_driver', driver_id=d.id) }}"
+               class="btn-logout" style="display:inline-block;font-size:11px;padding:5px 10px;text-decoration:none;color:var(--accent-soft);">View Payroll</a>
+          </td>
         </tr>
         {% endfor %}
       {% else %}
         <tr>
-          <td colspan="{% if current_location == 'both' %}7{% else %}6{% endif %}"
+          <td colspan="9"
               style="color:var(--text-3);font-style:italic;text-align:center;padding:30px;">
             {% if current_status == 'inactive' %}
               No inactive drivers.

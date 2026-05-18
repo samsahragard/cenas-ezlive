@@ -342,14 +342,12 @@
     <span class="dc-part dc-part-aick">aick</span>
     <span class="dc-part dc-part-ck">ck</span>
     <span class="dc-part dc-part-samai">samai</span>
-    <span class="dc-part dc-part-cena">Cena</span>
     <span class="dc-part dc-part-dck">dck</span>
   </div>
   <div class="chat-status">
     <span id="poll-status">Last sync: never</span>
     &nbsp;·&nbsp;
     <span id="msg-count">{{ messages | length }} message{{ 's' if (messages | length) != 1 else '' }}</span>
-    <span class="cena-cost-total" id="cena-cost-total" style="display:none;">Cena ~$0.0000</span>
   </div>
 
   {% if upload_error %}
@@ -416,7 +414,6 @@
         <option value="ck-claude">ck-claude</option>
         <option value="dck-claude">dck-claude</option>
         <option value="samai">samai</option>
-        <option value="cena">cena</option>
         <option value="system">system</option>
       </select>
       <textarea name="body" placeholder="Type a message…"></textarea>
@@ -443,40 +440,6 @@
   const attachPreview = document.getElementById('attach-preview');
   const form = document.getElementById('chat-form');
   const bodyTextarea = form.querySelector('textarea[name=body]');
-
-  // ---- Cena cost estimation (output-token estimate, Sonnet pricing $15/1M) ----
-  let cenaCostTotal = 0;
-  const costTotalEl = document.getElementById('cena-cost-total');
-
-  function estimateCenaCost(body) {
-    const tokens = Math.max(1, Math.round((body || '').length / 4));
-    return tokens * 15 / 1_000_000;
-  }
-
-  function addCenaCostBadge(msgEl, body) {
-    const cost = estimateCenaCost(body);
-    cenaCostTotal += cost;
-    const meta = msgEl.querySelector('.msg-meta');
-    if (!meta) return;
-    const badge = document.createElement('span');
-    badge.className = 'cena-cost';
-    badge.textContent = '~$' + cost.toFixed(4);
-    badge.title = 'Estimated output-token cost (Sonnet $15/1M)';
-    // Insert after the timestamp text node, before actions span
-    const actionsEl = meta.querySelector('.msg-meta-actions');
-    meta.insertBefore(badge, actionsEl || null);
-    if (costTotalEl) {
-      costTotalEl.textContent = 'Cena ~$' + cenaCostTotal.toFixed(4);
-      costTotalEl.style.display = '';
-    }
-  }
-
-  function initCenaCosts() {
-    document.querySelectorAll('.msg-cena').forEach(el => {
-      const body = el.querySelector('.msg-body');
-      if (body) addCenaCostBadge(el, body.textContent || '');
-    });
-  }
 
   function authorClass(author) {
     const a = (author || '').toLowerCase();
@@ -578,7 +541,6 @@
 
     list.insertBefore(div, bottom);
     maybeClip(div);
-    if ((m.author || '').toLowerCase() === 'cena' && m.body) addCenaCostBadge(div, m.body);
   }
 
   // Long-message collapse: clip msg-body past ~220px height with a "Show more" toggle
@@ -1056,8 +1018,6 @@
 
   selCancelBtn.addEventListener('click', exitSelectionMode);
 
-  // Seed Cena cost totals from server-rendered messages
-  initCenaCosts();
   // Initial scroll-to-bottom
   setTimeout(() => bottom.scrollIntoView(), 100);
   // Poll every 4s

@@ -492,10 +492,7 @@
             <div class="pcard-subtotal">$90.00</div>
           </div>
         </div>
-        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Avocado">
-          <div class="emoji">🥑</div>
-          <div class="label">photo<br>here</div>
-        </div>
+        <img class="pcard-photo" loading="lazy" src="../img/produce/avocado.jpg" alt="Avocado">
       </div>
 
       <!-- Item card with qty = 0 (resting state) -->
@@ -521,10 +518,7 @@
             <div class="pcard-subtotal" style="color: var(--ck-text-faint);">—</div>
           </div>
         </div>
-        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Tomato Roma">
-          <div class="emoji">🍅</div>
-          <div class="label">photo<br>here</div>
-        </div>
+        <img class="pcard-photo" loading="lazy" src="../img/produce/tomato-roma.jpg" alt="Tomato Roma">
       </div>
 
       <!-- Item card with both vendor markers (★ = J Luna preferred, ○ if Alvarado cheaper) -->
@@ -550,10 +544,7 @@
             <div class="pcard-subtotal">$25.50</div>
           </div>
         </div>
-        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Onion Yellow">
-          <div class="emoji">🧅</div>
-          <div class="label">photo<br>here</div>
-        </div>
+        <img class="pcard-photo" loading="lazy" src="../img/produce/onion-yellow.jpg" alt="Onion Yellow">
       </div>
 
       <!-- No-price item: disabled stepper -->
@@ -577,10 +568,7 @@
             <div class="pcard-subtotal">—</div>
           </div>
         </div>
-        <div class="pcard-photo-placeholder" role="img" aria-label="Photo placeholder — Cilantro">
-          <div class="emoji">🌿</div>
-          <div class="label">photo<br>here</div>
-        </div>
+        <img class="pcard-photo" loading="lazy" src="../img/produce/cilantro.jpg" alt="Cilantro">
       </div>
 
       <!-- Sticky bottom bar: collapses vendor trackers + Place Order when qty > 0 -->
@@ -787,11 +775,28 @@
 
   <hr style="border: none; border-top: 1px solid var(--ck-gold-soft); margin: 18px 0;">
 
-  <b>v1.1 — product photo slots (per Sam #2637 + cena #2638):</b>
+  <b>v1.1 — product photo slots layout (per Sam #2637 + cena #2638):</b>
   <ul>
     <li><b>Layout change:</b> <code>.pcard</code> is now a 2-column grid (<code>1fr 96px</code>) — text content left, 96×96 photo right. Sam's #2637 screenshot squiggle covered the right side of every card; this is that placement.</li>
-    <li><b>Mockup uses styled placeholders, NOT production photos.</b> Each card has a <code>.pcard-photo-placeholder</code> div with a dashed gold-soft border, gradient bg, food emoji + "photo here" label. Pure CSS, no external image dependencies. This demonstrates the LAYOUT + SLOT — Sam can confirm the placement and size before generation.</li>
-    <li><b>Production swap:</b> ck replaces <code>.pcard-photo-placeholder</code> with <code>&lt;img class="pcard-photo" src="..." alt="..."&gt;</code> per the .pcard-photo CSS rule already in the mockup (96×96 object-fit:cover, matching border-radius). One-line markup swap per card.</li>
+    <li>v1.1 originally shipped with CSS-only placeholder slots — superseded by v1.2 photo population below.</li>
+  </ul>
+
+  <b>v1.2 — real photo population (per Sam #2663 confirm + ref images 105/106):</b>
+  <ul>
+    <li><b>Source:</b> Sam-provided produce vendor catalog grids (chat attachments 105 + 106, ~57 items per image, combined ~114 cells). Style across the full set is already uniform — top-down on white backdrop, even diffuse light, soft natural shadow, centered crop, no packaging — matches cena #2638 style spec exactly.</li>
+    <li><b>Slicing:</b> dck wrote a per-row column-aware slicer (Pillow + numpy). The catalog isn't uniform 7×7 — top 3 rows are 7-col, bottom 4 rows are 9-col. Row boundaries detected via horizontal-white-band analysis (cells separated by 5-row pure-white gutters). Column boundaries detected per-row (top-row-strip analysis). Each cell ~150-205 px wide × 100-119 px tall, photo region square-cropped (top ~25% is the label band — skipped) and upscaled to 240×240 JPG for retina (displayed at 96×96 in the .pcard-photo slot, 2× density).</li>
+    <li><b>4 sample swaps live in this mockup:</b>
+      <ul>
+        <li><code>avocado.jpg</code> (ref105 r6 c2 "Avocados (Small)")</li>
+        <li><code>tomato-roma.jpg</code> (ref105 r2 c2 "Tomates Roma (25lb)")</li>
+        <li><code>onion-yellow.jpg</code> (ref105 r0 c4 "Onion Yel. Jumbo (50lb)")</li>
+        <li><code>cilantro.jpg</code> (ref105 r3 c1 — SOURCE LABEL says "Roma Tomatoes" but PHOTO is cilantro; matched by photo content per Sam #2651 "find the correct fruit for the correct item")</li>
+      </ul>
+    </li>
+    <li><b>Source catalog has label/photo mismatches</b> (e.g. ref105 row 3 has label-shifted-from-photo for several cells; ref106 row 4 c1 labeled "Oranges (88ct)" but shows turmeric). Matching MUST be by photo content, not by source label text. Flagging for Sam awareness.</li>
+    <li><b>Path:</b> photos live at <code>app/static/img/produce/&lt;canonical_slug&gt;.jpg</code> per cena #2666. Slug derived from canonical_name (lowercase, dashes). The 4 sample slugs above pre-populate; remaining catalog items need ck to pull the ProduceItem list + match against the remaining 110 cells.</li>
+    <li><b>cena swap-time discipline applied:</b> <code>loading="lazy"</code> on every <code>&lt;img&gt;</code> + <code>alt</code> = canonical_name (NOT "produce photo"). Per cena #2664.</li>
+    <li><b>Full-catalog handoff for ck (production wire):</b> The full 114-cell slice sits in dck's local workspace as <code>ref{105,106}_r{N}_c{M}.png</code>. For production, ck pulls ProduceItem list from DB, identifies each item visually in the catalog (handling the label-shift cases), saves each photo to <code>app/static/img/produce/&lt;slug&gt;.jpg</code>, then renders the same one-line `&lt;img&gt;` markup the 4 samples here use. Production template line: <code>&lt;img class="pcard-photo" loading="lazy" src="{{ url_for('static', filename='img/produce/' + it.slug + '.jpg') }}" alt="{{ it.canonical_name }}"&gt;</code>. If photo file is missing for an item, fall back to the .pcard-photo-placeholder div (CSS still in mockup).</li>
   </ul>
 
   <b>Production photo pipeline — dck CANNOT generate the images (no image-gen tool in dck's harness). Handoff required:</b>

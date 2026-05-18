@@ -487,6 +487,7 @@ DOC_PAGES = [
     ("denials",                  "Permission Denials", "doc_denials"),
     ("chats",                    "Chats",             "doc_chats"),
     ("spec-dev-samples-page",    "Spec: Dev Samples Page", "doc_spec_dev_samples_page"),
+    ("spec-drivers-redesign",     "Spec: Drivers Redesign",  "doc_spec_drivers_redesign"),
 ]
 
 # Per-session chat handoff docs. Lives in its own list (not DOC_PAGES) so the

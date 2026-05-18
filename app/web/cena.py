@@ -2041,6 +2041,44 @@ def cena_run_flip_buildplan_approval():
     })
 
 
+@cena_bp.route("/sam/cena/run-list-upcoming-orders", methods=["POST"])
+def cena_run_list_upcoming_orders():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    import io
+    import contextlib
+    import sys as _sys
+    import pathlib as _pl
+
+    repo_root = _pl.Path(current_app.root_path).parent
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+    try:
+        from scripts import list_upcoming_orders as _list
+    except ImportError as e:
+        return jsonify({"ok": False,
+                        "error": f"import failed: {e}"}), 500
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = _list.main()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: list_upcoming_orders crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "stdout": buf.getvalue()}), 500
+
+    return jsonify({
+        "ok": rc == 0,
+        "return_code": rc,
+        "stdout": buf.getvalue(),
+    })
+
+
 @cena_bp.route("/sam/cena/run-wipe-ezcater-roster", methods=["POST"])
 def cena_run_wipe_ezcater_roster():
     gate = _require_gateway_token()

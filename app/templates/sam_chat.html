@@ -398,14 +398,26 @@
         title = arguments[1];
         text = arguments[2];
       }
-      // text may be empty when the link is rendered through nested
-      // tokens (e.g. inside **bold**) — parse the child tokens back to
-      // string in that case so we don't show "undefined".
+      // text may be empty for autolinks (raw URLs / email addresses
+      // that marked GFM auto-linkifies) and for links inside other
+      // inline tokens (**bold** etc). Walk the available shapes in
+      // order so the rendered <a> always has visible text instead of
+      // the literal string "undefined".
       let display = text;
-      if ((!display || display === 'undefined') && tokens && tokens.length) {
+      if (display === undefined || display === null || display === 'undefined') {
+        display = '';
+      }
+      if (!display && tokens && tokens.length) {
         display = tokens.map(t => t.raw || t.text || '').join('');
       }
-      if (!display) display = href || '';
+      if (!display) {
+        // Last resort: use the href, with mailto: stripped so emails
+        // render as plain "name@domain" instead of "mailto:name@domain"
+        // (Sam #864 2026-05-18 — bare emails were rendering as
+        // "undefined" because token.text wasn't populated by marked
+        // v12 for email autolinks).
+        display = (href || '').replace(/^mailto:/, '');
+      }
       const titleAttr = title ? ' title="' + _esc(title) + '"' : '';
       return '<a href="' + _esc(href || '#') + '"' + titleAttr
            + ' target="_blank" rel="noopener">' + _esc(display) + '</a>';

@@ -48,7 +48,7 @@ _KITCHEN_ADDRESS = {
     "store_1": "15650 FM 529, Houston, TX 77095",
     "store_2": "27727 Tomball Pkwy, Tomball, TX 77375",
 }
-_LABEL_TEMPLATE = "{kitchen} Kitchen — {address}"
+_LABEL_TEMPLATE = "{kitchen} Kitchen"
 
 
 def pickup_label(order) -> str:

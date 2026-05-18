@@ -34,7 +34,6 @@
             <th>Order #</th>
             <th>Deliver at</th>
             <th>Customer</th>
-            <th>Setup</th>
             <th>Address</th>
             <th>Location</th>
             <th>Ez Cater Driver</th>
@@ -49,7 +48,6 @@
             <td class="order-num">{{ o.external_order_id }}</td>
             <td class="deliver-at">{{ o.deliver_at or '' }}</td>
             <td>{{ o.client or '—' }}</td>
-            <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
             <td>{{ o.delivery_address or '—' }}</td>
             {# Location column: per-row store (Tomball / Copperfield) derived
                from origin_store_id, not the route's location_label (which is
@@ -80,7 +78,7 @@
           </tr>
           {% endfor %}
           <tr class="all-row" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">
-            <td colspan="10">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
+            <td colspan="9">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
           </tr>
         </tbody>
       </table>

@@ -86,6 +86,7 @@ def build_master_output(
     master["meta.date"] = _fmt_value(ctx["date"])
     master["meta.store_origin"] = _fmt_value(ctx["origin_store_label"])
     master["meta.driver"] = _fmt_value(ctx["driver_name"])
+    master["meta.ezcater_driver"] = _fmt_value(order.get("ezcater_driver_name"))
     master["meta.client"] = _fmt_value(ctx["client"])
     master["meta.ask_for"] = _fmt_value(ctx["upon_delivery_ask_for"])
     master["meta.phone"] = _fmt_value(ctx["customer_phone"])
@@ -393,7 +394,8 @@ MASTER_ROWS: list[RowSpec] = [
     {"key": "meta.order_id", "label": "Order #", "section": "Header", "sort": 10},
     {"key": "meta.date", "label": "Date", "section": "Header", "sort": 20},
     {"key": "meta.store_origin", "label": "Location Origin", "section": "Header", "sort": 30},
-    {"key": "meta.driver", "label": "Driver", "section": "Header", "sort": 40},
+    {"key": "meta.ezcater_driver", "label": "Ez Cater Driver", "section": "Header", "sort": 35},
+    {"key": "meta.driver", "label": "Dispatch", "section": "Header", "sort": 40},
     {"key": "meta.client", "label": "Client", "section": "Header", "sort": 50},
     {"key": "meta.ask_for", "label": "Ask For", "section": "Header", "sort": 60},
     {"key": "meta.phone", "label": "Phone", "section": "Header", "sort": 70},
@@ -587,7 +589,7 @@ KITCHEN_ROWS: list[RowSpec] = [
 
 DRIVER_ROWS: list[RowSpec] = [
     {"key": "meta.order_id", "label": "Order #", "section": "Header", "sort": 5 },
-    {"key": "meta.driver", "label": "Driver", "section": "Header", "sort": 10},
+    {"key": "meta.driver", "label": "Dispatch", "section": "Header", "sort": 10},
     {"key": "meta.date", "label": "Date", "section": "Header", "sort": 30},
     {"key": "meta.store_origin", "label": "Location Origin", "section": "Header", "sort": 40},
     {"key": "meta.client", "label": "Client Name", "section": "Header", "sort": 50},
@@ -604,7 +606,8 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     {"key": "meta.order_id", "label": "Order #", "section": "Header", "sort": 10},
     {"key": "meta.date", "label": "Date", "section": "Header", "sort": 20},
     {"key": "meta.store_origin", "label": "Location Origin", "section": "Header", "sort": 30},
-    {"key": "meta.driver", "label": "Driver", "section": "Header", "sort": 40},
+    {"key": "meta.ezcater_driver", "label": "Ez Cater Driver", "section": "Header", "sort": 35},
+    {"key": "meta.driver", "label": "Dispatch", "section": "Header", "sort": 40},
     {"key": "meta.client", "label": "Client Name", "section": "Header", "sort": 50},
     {"key": "meta.headcount", "label": "Headcount", "section": "Header", "sort": 60},
     {"key": "meta.deliver_at", "label": "Deliver At", "section": "Header", "sort": 70},

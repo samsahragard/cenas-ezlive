@@ -973,6 +973,18 @@ def sample_approval_events():
                their next-poll cursor to close the race window where an
                approval lands mid-serialization (cena #2739).
 
+    CONSUMER GOTCHA — URL-encode the `since` parameter (cena #2760 +
+    samai #2756 + dck #2759):
+      The `now` field returned in the response is a server UTC ISO with
+      explicit `+00:00` suffix (e.g. "2026-05-18T16:14:16.603406+00:00").
+      Consumers passing it back as `?since=<now>` MUST urlencode — the
+      raw `+` decodes to space on the server side, the resulting string
+      fails ISO parse, the route silently falls back to no-filter, and
+      the consumer appears stuck replaying every event each poll.
+      Canonical pattern: `urllib.parse.quote(since_ts)` →
+      `+` becomes `%2B`. See scripts/samples_watch.py:129 for the
+      reference consumer implementation.
+
     Response:
       {
         "now": "2026-05-18T11:05:00.123456+00:00",

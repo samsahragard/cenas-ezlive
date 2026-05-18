@@ -1,0 +1,249 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('dev_cena_stats') %}
+{% block title %}Cena Wake Stats — Cenas Kitchen{% endblock %}
+{% block page_title %}Cena Wake Decisions{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Shadow-mode Haiku classifier telemetry. Watcher fires under current rules; classifier verdicts are observation-only until we cut over (Sam #2576 Phase A).</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .cws-section { margin-bottom: 28px; }
+  .cws-section h3 {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--ck-gold);
+    margin: 0 0 12px 0; padding-bottom: 8px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.25);
+  }
+  .cws-summary-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 12px;
+  }
+  .cws-stat-card {
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid rgba(217,164,54,0.35);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .cws-stat-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-3);
+    margin-bottom: 6px;
+  }
+  .cws-stat-value {
+    font-size: 22px; font-weight: 700; color: var(--text-1);
+    line-height: 1.1;
+  }
+  .cws-stat-sub {
+    font-size: 11px; color: var(--text-3); margin-top: 4px;
+  }
+  .cws-stat-good { color: var(--ck-status-open, #9CCB76); }
+  .cws-stat-warn { color: var(--ck-status-warn, #E2645C); }
+  .cws-stat-info { color: var(--ck-gold); }
+
+  .cws-table-wrap { overflow-x: auto; }
+  .cws-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  .cws-table th, .cws-table td {
+    padding: 8px 10px; text-align: left;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18);
+    vertical-align: top;
+  }
+  .cws-table th {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--text-3);
+    background: rgba(40,22,14,0.4);
+  }
+  .cws-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .cws-table tr:hover td { background: rgba(217,164,54,0.04); }
+
+  .cws-label-pill {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px; text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .cws-label-wake {
+    background: rgba(156,203,118,0.16); color: var(--ck-status-open, #9CCB76);
+    border: 0.5px solid rgba(156,203,118,0.45);
+  }
+  .cws-label-skip {
+    background: rgba(236,227,208,0.08); color: var(--text-3);
+    border: 0.5px solid rgba(236,227,208,0.20);
+  }
+  .cws-label-uncertain {
+    background: rgba(217,164,54,0.16); color: var(--ck-gold);
+    border: 0.5px solid rgba(217,164,54,0.45);
+  }
+  .cws-label-error {
+    background: rgba(226,100,92,0.18); color: var(--ck-status-warn, #E2645C);
+    border: 0.5px solid rgba(226,100,92,0.45);
+  }
+
+  .cws-fire-yes { color: var(--ck-status-open, #9CCB76); font-weight: 700; }
+  .cws-fire-no  { color: var(--text-3); }
+
+  .cws-snippet {
+    max-width: 360px; color: var(--text-2); font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cws-reason {
+    max-width: 280px; color: var(--text-3); font-size: 11px;
+    font-style: italic;
+  }
+
+  .cws-empty {
+    color: var(--text-3); font-size: 13px; padding: 24px 0;
+    text-align: center;
+  }
+  .cws-note {
+    font-size: 11px; color: var(--text-3); margin-top: 6px;
+    line-height: 1.45;
+  }
+</style>
+
+<div class="cws-section">
+  <h3>Last 24h — Top-line</h3>
+  <div class="cws-summary-row">
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Decisions</div>
+      <div class="cws-stat-value">{{ total_24h }}</div>
+      <div class="cws-stat-sub">Classifier calls in 24h</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Cost (24h)</div>
+      <div class="cws-stat-value cws-stat-info">${{ "%.4f"|format(cost_24h) }}</div>
+      <div class="cws-stat-sub">Haiku 4.5 @ ${{ "%.2f"|format(haiku_input_price) }}/MTok in · ${{ "%.2f"|format(haiku_output_price) }}/MTok out</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Watcher fires</div>
+      <div class="cws-stat-value">{{ did_fire_24h }}</div>
+      <div class="cws-stat-sub">Actual cena wakes triggered</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Classifier would-fire</div>
+      <div class="cws-stat-value cws-stat-info">{{ would_fire_24h }}</div>
+      <div class="cws-stat-sub">Haiku label = wake</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Wasted wakes</div>
+      <div class="cws-stat-value {% if false_negative_count > 0 %}cws-stat-warn{% else %}cws-stat-good{% endif %}">{{ false_negative_count }}</div>
+      <div class="cws-stat-sub">Watcher fired + classifier=skip</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Missed wakes</div>
+      <div class="cws-stat-value {% if false_positive_count > 0 %}cws-stat-warn{% else %}cws-stat-good{% endif %}">{{ false_positive_count }}</div>
+      <div class="cws-stat-sub">Classifier=wake + watcher didn't (rare in shadow)</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Errors</div>
+      <div class="cws-stat-value {% if error_count > 0 %}cws-stat-warn{% else %}cws-stat-good{% endif %}">{{ error_count }}</div>
+      <div class="cws-stat-sub">Classifier API/parse failures</div>
+    </div>
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">Latency p50 / p95</div>
+      <div class="cws-stat-value">{% if latency_p50 is not none %}{{ latency_p50 }}<span style="font-size:13px;color:var(--text-3)">/{{ latency_p95 }}ms</span>{% else %}—{% endif %}</div>
+      <div class="cws-stat-sub">Classifier wall time</div>
+    </div>
+  </div>
+  <p class="cws-note">"Wasted wakes" is the headline number for the cutover decision — once it's high enough that gating on the classifier label saves real money, we flip the watcher from shadow to enforce. Per cena #2547 contract, we'll review together before flipping.</p>
+</div>
+
+<div class="cws-section">
+  <h3>Label distribution (24h)</h3>
+  {% if total_24h > 0 %}
+  <div class="cws-summary-row">
+    {% for lbl in ['wake', 'skip', 'uncertain', 'error'] %}
+    <div class="cws-stat-card">
+      <div class="cws-stat-label">{{ lbl }}</div>
+      <div class="cws-stat-value">
+        <span class="cws-label-pill cws-label-{{ lbl }}">{{ lbl }}</span>
+        <span style="margin-left:8px">{{ label_counts_24h.get(lbl, 0) }}</span>
+      </div>
+      <div class="cws-stat-sub">{{ "%.1f"|format(100.0 * label_counts_24h.get(lbl, 0) / total_24h) }}% of 24h</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="cws-empty">No decisions logged in the last 24 hours.</div>
+  {% endif %}
+</div>
+
+<div class="cws-section">
+  <h3>Per-author breakdown (24h)</h3>
+  {% if author_breakdown %}
+  <div class="cws-table-wrap">
+    <table class="cws-table">
+      <thead>
+        <tr>
+          <th>Author</th>
+          <th class="num">Wake</th>
+          <th class="num">Skip</th>
+          <th class="num">Uncertain</th>
+          <th class="num">Error</th>
+          <th class="num">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for author, counts, total in author_breakdown %}
+        <tr>
+          <td><strong>{{ author }}</strong></td>
+          <td class="num">{{ counts.get('wake', 0) }}</td>
+          <td class="num">{{ counts.get('skip', 0) }}</td>
+          <td class="num">{{ counts.get('uncertain', 0) }}</td>
+          <td class="num">{{ counts.get('error', 0) }}</td>
+          <td class="num"><strong>{{ total }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="cws-note">If Haiku is consistently over- or under-firing on a specific agent's traffic, that's the signal — not just the aggregate (cena #2575).</p>
+  {% else %}
+  <div class="cws-empty">No author traffic in the last 24 hours.</div>
+  {% endif %}
+</div>
+
+<div class="cws-section">
+  <h3>Recent decisions (last 50)</h3>
+  {% if recent_decisions %}
+  <div class="cws-table-wrap">
+    <table class="cws-table">
+      <thead>
+        <tr>
+          <th>Time (CT)</th>
+          <th>Author</th>
+          <th>Snippet</th>
+          <th>Label</th>
+          <th class="num">Conf</th>
+          <th>Reason</th>
+          <th>Would</th>
+          <th>Did</th>
+          <th class="num">Tok&nbsp;in/out</th>
+          <th class="num">ms</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in recent_decisions %}
+        <tr>
+          <td><span style="color:var(--text-3);font-size:10px">{{ d.created_at_date }}</span><br>{{ d.created_at_ct }}</td>
+          <td>{{ d.author }}</td>
+          <td><span class="cws-snippet" title="{{ d.snippet }}">{{ d.snippet }}</span></td>
+          <td><span class="cws-label-pill cws-label-{{ d.label }}">{{ d.label }}</span></td>
+          <td class="num">{% if d.confidence is not none %}{{ "%.2f"|format(d.confidence) }}{% else %}—{% endif %}</td>
+          <td><span class="cws-reason" title="{{ d.reason or '' }}">{{ d.reason or '' }}</span></td>
+          <td>{% if d.would_fire %}<span class="cws-fire-yes">YES</span>{% else %}<span class="cws-fire-no">no</span>{% endif %}</td>
+          <td>{% if d.did_fire %}<span class="cws-fire-yes">YES</span>{% else %}<span class="cws-fire-no">no</span>{% endif %}</td>
+          <td class="num">{% if d.input_tokens %}{{ d.input_tokens }}/{{ d.output_tokens or 0 }}{% else %}—{% endif %}</td>
+          <td class="num">{% if d.latency_ms %}{{ d.latency_ms }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="cws-empty">No recent decisions to show. Post in the dev chat and refresh — the watcher classifies each non-self post.</div>
+  {% endif %}
+</div>
+{% endblock %}

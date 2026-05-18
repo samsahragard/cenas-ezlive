@@ -29,7 +29,7 @@ from werkzeug.utils import secure_filename
 from app.db import SessionLocal
 from app.models import (
     DeveloperChatMessage, DeveloperChatAttachment, PermissionDenial,
-    SampleApproval, SampleApprovalAttachment,
+    SampleApproval, SampleApprovalAttachment, CenaWakeDecision,
 )
 # Phase 0 Block 4: gate routes on the permission system. Decorator
 # runs first; the in-handler _enforce_partner() helper stays as
@@ -110,6 +110,15 @@ SAMPLES = [
         date="2026-05-17",
         description="Right-side navigation panel sourced from plan.md §5 surfaces. Per-section completion counts, status legend (live/soon/planned), 'new' pills on last-24h ships. V2 .ck-sb-* token reuse — sibling-not-foreign to the existing left sidebar.",
         url="/static/mockups/right_sidebar_plan_status.html",
+        type="mockup",
+    ),
+    dict(
+        slug="notifications-page-v1",
+        title="Notifications page (replaces ribbon)",
+        version="v1",
+        date="2026-05-17",
+        description="Tabbed Notifications page replacing the inline ribbon. Same 7 categories (To-do / Caterings / Events / Employee / Vendors / Maintenance / Sales) + severity tokens, restructured as V2 .lg-nav pill tabs + glass cards with X/check actions. Per cena #2569 — dck mockup awaiting Sam approval before ck implementation.",
+        url="/static/mockups/notifications_page.html",
         type="mockup",
     ),
     dict(
@@ -880,6 +889,184 @@ def sample_attachment_serve(att_id: int):
         )
     finally:
         db.close()
+
+
+# ============================================================
+# Cena wake-decision telemetry dashboard
+# ============================================================
+# Read-only viewer for cena_wake_decisions (migration 29). Per Sam #2576
+# 6-piece proposal Phase A #4 + cena #2572 + #2575 refinements: shows
+# the data we'll need to decide when to flip the watcher from shadow to
+# enforce. Per-author label breakdown + daily cost estimate at top per
+# cena's two asks.
+
+# Haiku 4.5 pricing (USD per 1M tokens, as of 2026-01). Update these
+# when Anthropic publishes new rates.
+_HAIKU_INPUT_PRICE_PER_MTOK = 1.00
+_HAIKU_OUTPUT_PRICE_PER_MTOK = 5.00
+_HAIKU_CACHE_READ_PRICE_PER_MTOK = 0.10
+_HAIKU_CACHE_WRITE_5M_PRICE_PER_MTOK = 1.25
+
+
+def _cena_decision_cost_usd(d: CenaWakeDecision) -> float:
+    """Per-row USD cost from token columns. Returns 0.0 if all token
+    columns are None (e.g., classifier_label='error' before API call)."""
+    inp = d.classifier_input_tokens or 0
+    outp = d.classifier_output_tokens or 0
+    cache_r = d.classifier_cache_read_tokens or 0
+    cache_c = d.classifier_cache_create_tokens or 0
+    return (
+        inp * _HAIKU_INPUT_PRICE_PER_MTOK / 1_000_000
+        + outp * _HAIKU_OUTPUT_PRICE_PER_MTOK / 1_000_000
+        + cache_r * _HAIKU_CACHE_READ_PRICE_PER_MTOK / 1_000_000
+        + cache_c * _HAIKU_CACHE_WRITE_5M_PRICE_PER_MTOK / 1_000_000
+    )
+
+
+@dev_chat.route("/partner/developer/cena-stats")
+@requires_permission("developer.view_chat")
+def developer_cena_stats():
+    """Cena wake-decision shadow-mode dashboard. Per Sam #2576 6-piece
+    Phase A #4 (cena #2572 + #2575 refinements).
+
+    Surfaces:
+      - 24h aggregate: total decisions, label distribution, total cost
+      - Per-author label breakdown (cena #2575 ask #1)
+      - Disagreement count: classifier-would-fire vs watcher-did-fire
+        delta — the headline number that gates the cutover decision
+      - Recent 50 decisions: timestamp, author, snippet, label,
+        confidence, would_fire, did_fire, tokens, latency
+    """
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+
+    from datetime import datetime, timedelta
+    db = SessionLocal()
+    try:
+        cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+
+        # 24-hour aggregate set
+        rows_24h = (
+            db.query(CenaWakeDecision)
+              .filter(CenaWakeDecision.created_at >= cutoff_24h)
+              .all()
+        )
+        total_24h = len(rows_24h)
+        cost_24h = sum(_cena_decision_cost_usd(d) for d in rows_24h)
+
+        # Label counts (24h)
+        label_counts_24h: dict[str, int] = {}
+        for d in rows_24h:
+            label_counts_24h[d.classifier_label] = (
+                label_counts_24h.get(d.classifier_label, 0) + 1
+            )
+
+        # Per-author x label breakdown (24h) — cena #2575 ask #1
+        author_label_counts: dict[str, dict[str, int]] = {}
+        for d in rows_24h:
+            a = d.author or "(unknown)"
+            author_label_counts.setdefault(a, {})
+            author_label_counts[a][d.classifier_label] = (
+                author_label_counts[a].get(d.classifier_label, 0) + 1
+            )
+        # Order authors by total descending for table stability
+        author_breakdown = sorted(
+            ((a, counts, sum(counts.values()))
+             for a, counts in author_label_counts.items()),
+            key=lambda x: -x[2],
+        )
+
+        # Would-fire vs did-fire delta (24h) — the cutover signal
+        would_fire_24h = sum(1 for d in rows_24h if d.would_fire)
+        did_fire_24h = sum(1 for d in rows_24h if d.did_fire)
+        # Disagreements: classifier said skip but watcher fired, OR
+        # classifier said wake but watcher didn't (shouldn't happen in
+        # shadow mode under current rules, but useful to surface either
+        # direction).
+        false_negative_count = sum(
+            1 for d in rows_24h
+            if d.did_fire and not d.would_fire
+            and d.classifier_label != "error"
+        )  # watcher fired, classifier would've skipped → "wasted wake"
+        false_positive_count = sum(
+            1 for d in rows_24h
+            if d.would_fire and not d.did_fire
+            and d.classifier_label != "error"
+        )  # classifier says wake, watcher didn't (rare under current rules)
+        error_count = sum(
+            1 for d in rows_24h if d.classifier_label == "error"
+        )
+
+        # Latency stats (24h, ignoring error rows since they often have 0ms)
+        latencies = sorted(
+            d.classifier_latency_ms for d in rows_24h
+            if d.classifier_latency_ms is not None
+            and d.classifier_label != "error"
+        )
+        latency_p50 = latencies[len(latencies) // 2] if latencies else None
+        latency_p95 = (
+            latencies[int(len(latencies) * 0.95)]
+            if latencies else None
+        )
+
+        # Recent 50 decisions (most recent first for display)
+        recent_rows = (
+            db.query(CenaWakeDecision)
+              .order_by(CenaWakeDecision.created_at.desc())
+              .limit(50)
+              .all()
+        )
+        recent_decisions = []
+        for d in recent_rows:
+            recent_decisions.append({
+                "id": d.id,
+                "created_at_ct": (
+                    d.created_at.replace(tzinfo=timezone.utc)
+                                .astimezone(CT).strftime("%H:%M:%S")
+                    if d.created_at else "—"
+                ),
+                "created_at_date": (
+                    d.created_at.replace(tzinfo=timezone.utc)
+                                .astimezone(CT).strftime("%Y-%m-%d")
+                    if d.created_at else "—"
+                ),
+                "author": d.author or "(unknown)",
+                "snippet": (d.message_snippet or "")[:120],
+                "label": d.classifier_label,
+                "confidence": d.classifier_confidence,
+                "reason": d.classifier_reason,
+                "would_fire": d.would_fire,
+                "did_fire": d.did_fire,
+                "rule_trigger": d.actual_rule_trigger,
+                "input_tokens": d.classifier_input_tokens,
+                "output_tokens": d.classifier_output_tokens,
+                "latency_ms": d.classifier_latency_ms,
+                "shadow_mode": d.shadow_mode,
+                "row_cost_usd": _cena_decision_cost_usd(d),
+            })
+    finally:
+        db.close()
+
+    return render_template(
+        "developer_cena_stats.html",
+        active="dev_cena_stats",
+        doc_pages=DOC_PAGES,
+        total_24h=total_24h,
+        cost_24h=cost_24h,
+        label_counts_24h=label_counts_24h,
+        author_breakdown=author_breakdown,
+        would_fire_24h=would_fire_24h,
+        did_fire_24h=did_fire_24h,
+        false_negative_count=false_negative_count,
+        false_positive_count=false_positive_count,
+        error_count=error_count,
+        latency_p50=latency_p50,
+        latency_p95=latency_p95,
+        recent_decisions=recent_decisions,
+        haiku_input_price=_HAIKU_INPUT_PRICE_PER_MTOK,
+        haiku_output_price=_HAIKU_OUTPUT_PRICE_PER_MTOK,
+    )
 
 
 @dev_chat.route("/partner/developer/ezcater")

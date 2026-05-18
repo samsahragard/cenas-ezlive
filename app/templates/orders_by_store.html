@@ -36,8 +36,10 @@
             <th>Customer</th>
             <th>Setup</th>
             <th>Address</th>
-            <th>Store</th>
-            <th>Driver</th>
+            <th>Location</th>
+            <th>Ez Cater Driver</th>
+            <th>Unhook Driver</th>
+            <th>Dispatch</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -49,9 +51,27 @@
             <td>{{ o.client or '—' }}</td>
             <td>{% if o.setup_required is true %}Yes{% elif o.setup_required is false %}No{% else %}—{% endif %}</td>
             <td>{{ o.delivery_address or '—' }}</td>
-            {# audit surface — raw ezCater storefront, intentionally pre-collapse #}
-            <td>{{ o.reported_store or '—' }}</td>
-            <td>{{ o.assigned_driver or '—' }}</td>
+            {# Location column: short label (Tomball / Copperfield) per Sam #2842 item 1.
+               Was raw `o.reported_store` (audit surface, intentionally pre-collapse);
+               now uses the route's location_label which is already the collapsed value. #}
+            <td>{{ location_label }}</td>
+            <td>{{ o.ezcater_driver_name or '—' }}</td>
+            <td>
+              {% if o.ezcater_driver_name %}
+                <button type="button"
+                        class="btn-portal"
+                        style="background:rgba(220,38,38,0.30); border-color:rgba(239,68,68,0.5); color:#fecaca; padding:4px 10px; font-size:12px;"
+                        data-order="{{ o.external_order_id }}"
+                        data-store-scope="{{ location }}"
+                        onclick="event.stopPropagation(); unhookCourier(this);"
+                        title="Unhook the ezCater courier from this order">
+                  Unhook
+                </button>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>{{ o.assigned_driver or '—' }}{# TODO Sam #2842 item 2: +1 multi-delivery badge needs backend `is_paired` flag; coord with aick #}</td>
             <td>
               {% if o.needs_review %}
                 <span class="pill pill-review">Needs review</span>
@@ -62,11 +82,46 @@
           </tr>
           {% endfor %}
           <tr class="all-row" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">
-            <td colspan="8">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
+            <td colspan="10">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
 {% endfor %}
+
+<script>
+// Per-row unhook-courier button per Sam #2842 item 5. Reuses the same
+// /<scope>/orders/view/<order_id>/unassign-courier endpoint that
+// order_view.html's per-order button hits — same auth gate, same body
+// shape, same effect on the row.
+async function unhookCourier(btn) {
+  const order = btn.dataset.order;
+  const scope = btn.dataset.storeScope;
+  if (!order || !scope) return;
+  if (!confirm(`Unhook the ezCater courier from order ${order}?`)) return;
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(
+      `/${scope}/orders/view/${encodeURIComponent(order)}/unassign-courier`,
+      { method: 'POST' },
+    );
+    if (r.ok) {
+      // Refresh in place so the row's Ez Cater Driver clears + Unhook button drops to —
+      window.location.reload();
+    } else {
+      btn.disabled = false;
+      btn.textContent = original;
+      alert(`Unhook failed (HTTP ${r.status}).`);
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = original;
+    alert(`Unhook failed: ${e}`);
+  }
+}
+</script>
+
 {% endblock %}

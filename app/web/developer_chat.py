@@ -113,6 +113,15 @@ SAMPLES = [
         type="mockup",
     ),
     dict(
+        slug="right-sidebar-v3",
+        title="Right-Side Roadmap — Implementation-ready Component",
+        version="v3",
+        date="2026-05-18",
+        description="Component-in-isolation desktop view (280px), mobile chip-toggle + drawer-slide-in-from-right at <=720px, interactive states demo (hover/collapse-animation/current-phase pulse). .ck-rsb-* class namespace parallel to .ck-sb-*. Production integration spec in notes block: base_dashboard.html include, ribbon-collapse endpoint reuse, plan.md-at-request-time data source. Per cena #2698 — v3 mockup awaiting structural review then Sam approval before ck implementation.",
+        url="/static/mockups/right_sidebar_v3.html",
+        type="mockup",
+    ),
+    dict(
         slug="notifications-page-v1",
         title="Notifications page (replaces ribbon)",
         version="v1",

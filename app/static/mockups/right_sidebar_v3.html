@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Right-side roadmap v3 — implementation-ready component (dck)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  /* V2 token set (sidebar.css :root excerpt) */
+  :root {
+    --ck-bg-page:        #140A06;
+    --ck-bg-sidebar:     #0F0805;
+    --ck-text:           #FAF6EC;
+    --ck-text-hover:     #FFFFFF;
+    --ck-text-muted:     rgba(236, 227, 208, 0.7);
+    --ck-text-soft:      rgba(236, 227, 208, 0.55);
+    --ck-text-faint:     rgba(236, 227, 208, 0.4);
+    --ck-red:            #C73B36;
+    --ck-gold:           #E4B340;
+    --ck-gold-bright:    #FFD970;
+    --ck-gold-soft:      rgba(217, 164, 54, 0.14);
+    --ck-border:         rgba(217, 164, 54, 0.10);
+    --ck-border-subtle:  rgba(236, 227, 208, 0.06);
+    --ck-hover:          rgba(236, 227, 208, 0.05);
+    --ck-status-open:    #9CCB76;
+    --ck-status-warn:    #E2645C;
+    --ck-status-active:  var(--ck-gold-bright);
+    --ck-ease:           cubic-bezier(0.22, 0.8, 0.24, 1);
+    --ck-glow-gold-soft: 0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+    --ck-glow-cream:     0 1px 1px rgba(0,0,0,0.55), 0 0 12px rgba(255,240,215,0.18);
+    --ck-bp-mobile:      1024px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ck-bg-page);
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(232, 122, 62, 0.08), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251, 191, 36, 0.06), transparent 50%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 28px 22px 80px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+
+  /* === MOCKUP CHROME === */
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 16px; margin-bottom: 22px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; color: var(--ck-text); text-shadow: var(--ck-glow-gold-soft); }
+  .head .v3-badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; box-shadow: 0 0 10px rgba(255, 200, 80, 0.32); }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; }
+
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 28px 0 10px; text-shadow: var(--ck-glow-gold-soft); display: flex; align-items: baseline; gap: 10px; }
+  .section-label .sub { color: var(--ck-text-faint); letter-spacing: 0.06em; text-transform: none; font-size: 11px; }
+
+  .panel-row { display: grid; gap: 18px; margin-bottom: 22px; }
+  .panel-row.two { grid-template-columns: 1fr 1fr; }
+  .panel-row.three { grid-template-columns: 1fr 1fr 1fr; }
+
+  .panel {
+    background: rgba(20, 12, 8, 0.5);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .panel-title { font-size: 11px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .panel-title .px { color: var(--ck-gold-bright); margin-left: auto; font-family: SFMono-Regular, Consolas, monospace; }
+
+  /* === RIGHT-SIDEBAR COMPONENT (.ck-rsb-*) === */
+  /* Renamed from v2's .ck-roadmap-* per cena #2693 (.ck-rsb-* parallel to .ck-sb-* convention).
+     Internals are otherwise the same battle-tested CSS from v2 (48b9289). */
+
+  .ck-rsb {
+    width: 280px;
+    background: var(--ck-bg-sidebar);
+    border: 0.5px solid var(--ck-border);
+    border-radius: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    color: var(--ck-text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    max-height: 720px;
+  }
+  .ck-rsb::-webkit-scrollbar { width: 6px; }
+  .ck-rsb::-webkit-scrollbar-thumb { background: rgba(236,227,208,0.1); border-radius: 3px; }
+
+  .ck-rsb-head {
+    padding: 14px 16px;
+    border-bottom: 0.5px solid var(--ck-border);
+    background: rgba(20, 12, 8, 0.6);
+  }
+  .ck-rsb-head-title { font-size: 13px; font-weight: 600; color: var(--ck-text); margin: 0 0 2px; display: flex; align-items: center; gap: 6px; }
+  .ck-rsb-head-sub { font-size: 10.5px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  .ck-rsb-overall { padding: 10px 16px; border-bottom: 0.5px solid var(--ck-border); font-size: 11px; color: var(--ck-text-soft); display: flex; align-items: center; gap: 10px; }
+  .ck-rsb-overall-bar { flex: 1; height: 6px; background: rgba(236, 227, 208, 0.08); border-radius: 3px; overflow: hidden; position: relative; }
+  .ck-rsb-overall-bar-fill { position: absolute; top: 0; left: 0; bottom: 0; background: linear-gradient(90deg, var(--ck-status-open), var(--ck-gold)); border-radius: 3px; }
+  .ck-rsb-overall-pct { color: var(--ck-gold); font-weight: 600; font-size: 12px; }
+
+  .ck-rsb-legend { display: flex; gap: 10px; padding: 8px 16px; border-bottom: 0.5px solid var(--ck-border); font-size: 10px; color: var(--ck-text-soft); flex-wrap: wrap; }
+  .ck-rsb-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* Phase block */
+  .ck-rsb-phase { border-bottom: 0.5px solid var(--ck-border); padding: 12px 16px; transition: background 160ms var(--ck-ease); }
+  .ck-rsb-phase:hover { background: var(--ck-hover); }
+  .ck-rsb-phase.is-current { background: rgba(228, 179, 64, 0.04); }
+  .ck-rsb-phase-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+  .ck-rsb-phase-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ck-gold-soft); color: var(--ck-gold);
+    border: 1px solid var(--ck-gold);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
+  }
+  .ck-rsb-phase.is-done .ck-rsb-phase-num { background: var(--ck-status-open); color: #0a1f0a; border-color: var(--ck-status-open); }
+  .ck-rsb-phase.is-current .ck-rsb-phase-num {
+    background: var(--ck-gold-bright); color: #140A06; border-color: var(--ck-gold-bright);
+    box-shadow: 0 0 8px rgba(255, 200, 80, 0.45);
+    animation: rsb-current-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes rsb-current-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 200, 80, 0.45); }
+    50% { box-shadow: 0 0 14px rgba(255, 200, 80, 0.85), 0 0 22px rgba(255, 200, 80, 0.25); }
+  }
+  .ck-rsb-phase.is-planned .ck-rsb-phase-num { background: transparent; color: var(--ck-text-faint); border-color: var(--ck-border); }
+
+  .ck-rsb-phase-title { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--ck-text); }
+  .ck-rsb-phase.is-planned .ck-rsb-phase-title { color: var(--ck-text-soft); }
+  .ck-rsb-phase-pct { font-size: 11px; color: var(--ck-gold); font-weight: 600; }
+  .ck-rsb-phase.is-done .ck-rsb-phase-pct { color: var(--ck-status-open); }
+  .ck-rsb-phase.is-planned .ck-rsb-phase-pct { color: var(--ck-text-faint); }
+  .ck-rsb-chev { font-size: 12px; color: rgba(228, 179, 64, 0.5); transition: transform 300ms var(--ck-ease); flex-shrink: 0; }
+  .ck-rsb-phase.collapsed .ck-rsb-chev { transform: rotate(-90deg); }
+
+  .ck-rsb-bar { height: 4px; background: rgba(236, 227, 208, 0.08); border-radius: 2px; overflow: hidden; margin-bottom: 10px; position: relative; }
+  .ck-rsb-bar-fill { position: absolute; top: 0; left: 0; bottom: 0; border-radius: 2px; transition: width 220ms var(--ck-ease); }
+  .ck-rsb-phase.is-done .ck-rsb-bar-fill { background: var(--ck-status-open); }
+  .ck-rsb-phase.is-current .ck-rsb-bar-fill { background: linear-gradient(90deg, var(--ck-status-open), var(--ck-gold-bright)); }
+  .ck-rsb-phase.is-planned .ck-rsb-bar-fill { background: var(--ck-border); }
+
+  /* Collapsible body — grid-template-rows animation pattern from sidebar.css */
+  .ck-rsb-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 320ms var(--ck-ease), opacity 220ms; opacity: 1; }
+  .ck-rsb-phase.collapsed .ck-rsb-body { grid-template-rows: 0fr; opacity: 0; }
+  .ck-rsb-body-inner { overflow: hidden; }
+  .ck-rsb-items { display: flex; flex-direction: column; gap: 2px; margin-left: 32px; }
+  .ck-rsb-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 2px 0; }
+  .ck-rsb-item .status-icon { width: 12px; text-align: center; flex-shrink: 0; font-size: 10px; }
+  .ck-rsb-item.is-built { color: var(--ck-text); }
+  .ck-rsb-item.is-built .status-icon { color: var(--ck-status-open); }
+  .ck-rsb-item.is-progress { color: var(--ck-text-muted); }
+  .ck-rsb-item.is-progress .status-icon { color: var(--ck-gold); }
+  .ck-rsb-item.is-coming { color: var(--ck-text-faint); }
+  .ck-rsb-item.is-coming .status-icon { color: rgba(236, 227, 208, 0.25); }
+  .ck-rsb-item .new-tag { margin-left: auto; font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; background: var(--ck-gold-soft); color: var(--ck-gold); }
+
+  /* Standing track (Design system) */
+  .ck-rsb-standing {
+    border-bottom: 0.5px solid var(--ck-border); padding: 12px 16px;
+    background: linear-gradient(90deg, rgba(228,179,64,0.05), transparent 70%);
+    border-left: 2px solid var(--ck-gold);
+  }
+  .ck-rsb-standing-label { font-size: 9.5px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .ck-rsb-standing-title { font-size: 12.5px; font-weight: 600; color: var(--ck-text); margin-bottom: 8px; }
+
+  /* === MOBILE DRAWER STATE (when applied, drawer slides in from right edge) === */
+  .ck-rsb-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 320px; max-width: 86vw;
+    z-index: 800;
+    transform: translateX(100%);
+    transition: transform 280ms var(--ck-ease);
+    background: var(--ck-bg-sidebar);
+    border-left: 0.5px solid var(--ck-border);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+    max-height: none;
+    border-radius: 0;
+    border: none;
+    border-left: 0.5px solid var(--ck-border);
+  }
+  .ck-rsb-drawer.is-open { transform: translateX(0); }
+  .ck-rsb-backdrop {
+    position: fixed; inset: 0; z-index: 799;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0; pointer-events: none;
+    transition: opacity 220ms var(--ck-ease);
+  }
+  .ck-rsb-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+  /* === TOPBAR CHIP TOGGLE (mobile only — opens drawer) === */
+  .rsb-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 8px;
+    background: var(--ck-gold-soft);
+    border: 1px solid var(--ck-gold);
+    color: var(--ck-gold);
+    font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    cursor: pointer; font-family: inherit;
+    transition: background 160ms var(--ck-ease);
+  }
+  .rsb-chip:hover { background: rgba(228, 179, 64, 0.22); }
+  .rsb-chip i { font-size: 13px; }
+  .rsb-chip .badge {
+    background: var(--ck-gold);
+    color: #140A06;
+    font-size: 9.5px; font-weight: 800;
+    padding: 1px 5px; border-radius: 3px;
+    margin-left: 2px;
+  }
+
+  /* === FAKE TOPBAR (for mobile drawer demo context) === */
+  .fake-topbar {
+    background: var(--ck-bg-sidebar);
+    border-bottom: 0.5px solid var(--ck-border);
+    padding: 8px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-radius: 8px 8px 0 0;
+  }
+  .fake-topbar .hamburger { width: 32px; height: 32px; border-radius: 6px; background: var(--ck-gold-soft); border: 1px solid var(--ck-gold); display: flex; align-items: center; justify-content: center; color: var(--ck-gold); }
+  .fake-topbar .page-title { font-size: 13px; font-weight: 600; color: var(--ck-text); flex: 1; }
+  .fake-mobile-frame {
+    width: 375px;
+    border-radius: 18px;
+    border: 1px solid var(--ck-border);
+    overflow: hidden;
+    background: var(--ck-bg-page);
+    position: relative;
+    margin: 0 auto;
+  }
+  .fake-mobile-body { padding: 14px; min-height: 480px; color: var(--ck-text-soft); font-size: 12px; }
+
+  /* === NOTES === */
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 8px; padding: 16px 20px; margin-top: 22px; font-size: 12.5px; color: rgba(236, 227, 208, 0.82); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes ul { margin: 8px 0 14px; padding-left: 20px; }
+  .notes li { margin: 5px 0; }
+  .notes h3 { font-size: 13px; color: var(--ck-text); margin: 16px 0 6px; }
+  .notes pre { background: rgba(0,0,0,0.45); border: 0.5px solid var(--ck-border); border-radius: 6px; padding: 10px 12px; font-size: 11.5px; color: var(--ck-text); overflow-x: auto; margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="head">
+    <h1>Right-side roadmap — implementation-ready component
+      <span class="v3-badge">v3</span>
+    </h1>
+    <div class="sub">dck · 2026-05-18 · per cena #2682 (real component mockup) + #2693 (scope greenlight)</div>
+  </div>
+
+  <!-- ============================== DESKTOP, STANDALONE ============================== -->
+  <div class="section-label">Desktop standalone — 280px sidebar component <span class="sub">always-visible at ≥1024px viewport, sits right of main content area</span></div>
+
+  <div class="panel" style="display:flex; justify-content:center; padding:24px;">
+    <aside class="ck-rsb">
+
+      <div class="ck-rsb-head">
+        <div class="ck-rsb-head-title">
+          <i class="ti ti-route"></i> Build roadmap
+        </div>
+        <div class="ck-rsb-head-sub">plan.md · live</div>
+      </div>
+
+      <div class="ck-rsb-overall">
+        <span>Overall</span>
+        <div class="ck-rsb-overall-bar">
+          <div class="ck-rsb-overall-bar-fill" style="width: 64%;"></div>
+        </div>
+        <span class="ck-rsb-overall-pct">64%</span>
+      </div>
+
+      <div class="ck-rsb-legend">
+        <span class="ck-rsb-legend-item"><span style="color:var(--ck-status-open);">●</span> built</span>
+        <span class="ck-rsb-legend-item"><span style="color:var(--ck-gold);">●</span> in progress</span>
+        <span class="ck-rsb-legend-item"><span style="color:rgba(236,227,208,0.25);">●</span> coming</span>
+      </div>
+
+      <!-- Standing track -->
+      <div class="ck-rsb-standing">
+        <div class="ck-rsb-standing-label">Standing · parallel to all phases</div>
+        <div class="ck-rsb-standing-title">Design system</div>
+        <div class="ck-rsb-bar">
+          <div class="ck-rsb-bar-fill" style="width: 70%; background: linear-gradient(90deg, var(--ck-status-open), var(--ck-gold-bright));"></div>
+        </div>
+        <div class="ck-rsb-items" style="margin-left: 0;">
+          <div class="ck-rsb-item is-built"><span class="status-icon">✓</span> V2 --ck-* token system</div>
+          <div class="ck-rsb-item is-built"><span class="status-icon">✓</span> design-system-reference</div>
+          <div class="ck-rsb-item is-built"><span class="status-icon">✓</span> Samples page</div>
+          <div class="ck-rsb-item is-progress"><span class="status-icon">●</span> approval workflow <span class="new-tag">new</span></div>
+          <div class="ck-rsb-item is-progress"><span class="status-icon">●</span> V1→V2 token migration</div>
+          <div class="ck-rsb-item is-coming"><span class="status-icon">○</span> chart palette tokenization</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 (done) -->
+      <div class="ck-rsb-phase is-done collapsed">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">1</span>
+          <span class="ck-rsb-phase-title">Foundation</span>
+          <span class="ck-rsb-phase-pct">100%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 100%;"></div></div>
+      </div>
+
+      <!-- Phase 2 (done) -->
+      <div class="ck-rsb-phase is-done collapsed">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">2</span>
+          <span class="ck-rsb-phase-title">Operations core</span>
+          <span class="ck-rsb-phase-pct">100%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 100%;"></div></div>
+      </div>
+
+      <!-- Phase 3 (current — pulse animation) -->
+      <div class="ck-rsb-phase is-current">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">3</span>
+          <span class="ck-rsb-phase-title">Driver workflows</span>
+          <span class="ck-rsb-phase-pct">72%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 72%;"></div></div>
+        <div class="ck-rsb-body"><div class="ck-rsb-body-inner">
+          <div class="ck-rsb-items">
+            <div class="ck-rsb-item is-built"><span class="status-icon">✓</span> Drivers admin (v3 pill tabs) <span class="new-tag">new</span></div>
+            <div class="ck-rsb-item is-built"><span class="status-icon">✓</span> Ez Market bid pool</div>
+            <div class="ck-rsb-item is-progress"><span class="status-icon">●</span> Driver app shell</div>
+            <div class="ck-rsb-item is-progress"><span class="status-icon">●</span> Bid-acceptance flow</div>
+            <div class="ck-rsb-item is-coming"><span class="status-icon">○</span> Tier reputation engine</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- Phase 4 -->
+      <div class="ck-rsb-phase">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">4</span>
+          <span class="ck-rsb-phase-title">Communications</span>
+          <span class="ck-rsb-phase-pct">35%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 35%; background: var(--ck-gold);"></div></div>
+        <div class="ck-rsb-body"><div class="ck-rsb-body-inner">
+          <div class="ck-rsb-items">
+            <div class="ck-rsb-item is-built"><span class="status-icon">✓</span> Notifications page (replaces ribbon) <span class="new-tag">new</span></div>
+            <div class="ck-rsb-item is-progress"><span class="status-icon">●</span> Twilio SMS gate</div>
+            <div class="ck-rsb-item is-coming"><span class="status-icon">○</span> Manager alerts (Slack)</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- Phase 5 (planned) -->
+      <div class="ck-rsb-phase is-planned collapsed">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">5</span>
+          <span class="ck-rsb-phase-title">Insights &amp; reporting</span>
+          <span class="ck-rsb-phase-pct">0%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 0%;"></div></div>
+      </div>
+
+      <!-- Phase 6 (planned) -->
+      <div class="ck-rsb-phase is-planned collapsed">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">6</span>
+          <span class="ck-rsb-phase-title">Catering pipeline</span>
+          <span class="ck-rsb-phase-pct">0%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 0%;"></div></div>
+      </div>
+
+      <!-- Phase 7 (planned) -->
+      <div class="ck-rsb-phase is-planned collapsed">
+        <div class="ck-rsb-phase-head">
+          <span class="ck-rsb-phase-num">7</span>
+          <span class="ck-rsb-phase-title">Multi-store rollout</span>
+          <span class="ck-rsb-phase-pct">0%</span>
+          <span class="ck-rsb-chev">›</span>
+        </div>
+        <div class="ck-rsb-bar"><div class="ck-rsb-bar-fill" style="width: 0%;"></div></div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- ============================== MOBILE: CHIP + DRAWER ============================== -->
+  <div class="section-label">Mobile — chip toggle + drawer slide-in from right <span class="sub">below 1024px: collapsed by default, opens via topbar chip per cena #2693</span></div>
+
+  <div class="panel-row two">
+
+    <!-- Mobile A: closed state -->
+    <div class="panel">
+      <div class="panel-title"><span>Mobile · closed (default)</span><span class="px">375 px</span></div>
+      <div class="fake-mobile-frame">
+        <div class="fake-topbar">
+          <div class="hamburger"><i class="ti ti-menu-2"></i></div>
+          <div class="page-title">Drivers (admin)</div>
+          <button class="rsb-chip">
+            <i class="ti ti-route"></i>
+            Roadmap
+            <span class="badge">64%</span>
+          </button>
+        </div>
+        <div class="fake-mobile-body">
+          <div style="font-size:11px; color:var(--ck-text-faint); text-transform:uppercase; letter-spacing:0.1em;">page content area</div>
+          <div style="margin-top:18px; padding:60px 18px; border:1px dashed var(--ck-border); border-radius:8px; text-align:center; color:var(--ck-text-faint); font-style:italic; font-size:12px;">
+            Roadmap sidebar collapsed.<br>
+            Tap the chip to open the drawer.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile B: drawer-open state -->
+    <div class="panel">
+      <div class="panel-title"><span>Mobile · drawer open (after chip tap)</span><span class="px">375 px + drawer</span></div>
+      <div class="fake-mobile-frame">
+        <div class="fake-topbar">
+          <div class="hamburger"><i class="ti ti-menu-2"></i></div>
+          <div class="page-title">Drivers (admin)</div>
+          <button class="rsb-chip" style="background: rgba(228,179,64,0.22);">
+            <i class="ti ti-x"></i>
+            Close
+          </button>
+        </div>
+        <div class="fake-mobile-body" style="position: relative;">
+          <!-- Backdrop -->
+          <div style="position:absolute; inset:0; background:rgba(0,0,0,0.45);"></div>
+          <!-- Drawer (slid in) -->
+          <div style="position:absolute; top:0; right:0; bottom:0; width:88%; background:var(--ck-bg-sidebar); border-left:0.5px solid var(--ck-border); box-shadow:-8px 0 32px rgba(0,0,0,0.5); padding:14px; overflow-y:auto;">
+            <div style="font-size:12px; font-weight:600; color:var(--ck-text); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <i class="ti ti-route" style="color:var(--ck-gold);"></i> Build roadmap
+            </div>
+            <div style="font-size:10px; color:var(--ck-text-soft); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:14px;">plan.md · live</div>
+            <div style="font-size:11px; color:var(--ck-text-soft); display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+              Overall
+              <div style="flex:1; height:6px; background:rgba(236,227,208,0.08); border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:64%; background:linear-gradient(90deg, var(--ck-status-open), var(--ck-gold));"></div>
+              </div>
+              <span style="color:var(--ck-gold); font-weight:600;">64%</span>
+            </div>
+            <div style="font-size:11px; color:var(--ck-text-faint); font-style:italic;">
+              (full roadmap renders here — same .ck-rsb internals as desktop, just inside .ck-rsb-drawer wrapper)
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================== INTERACTIVE STATES ============================== -->
+  <div class="section-label">Interactive states <span class="sub">click to demo each — all wired in production</span></div>
+
+  <div class="panel-row three">
+
+    <!-- Hover -->
+    <div class="panel">
+      <div class="panel-title"><span>Hover on phase</span></div>
+      <div style="background: var(--ck-bg-sidebar); border-radius: 8px; padding: 12px 16px; border-left: 0.5px solid var(--ck-border); background-color: var(--ck-hover);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+          <span style="width:22px; height:22px; border-radius:50%; background:var(--ck-gold-soft); color:var(--ck-gold); border:1px solid var(--ck-gold); display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">4</span>
+          <span style="flex:1; font-size:12.5px; font-weight:600; color:var(--ck-text);">Communications</span>
+          <span style="font-size:11px; color:var(--ck-gold); font-weight:600;">35%</span>
+        </div>
+        <div style="height:4px; background:rgba(236,227,208,0.08); border-radius:2px; position:relative;">
+          <div style="position:absolute; top:0; left:0; bottom:0; width:35%; background:var(--ck-gold); border-radius:2px;"></div>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--ck-text-soft); margin-top:8px; font-style:italic;">Hover applies <code>var(--ck-hover)</code> to phase block. Same affordance as left sidebar items.</div>
+    </div>
+
+    <!-- Collapse -->
+    <div class="panel">
+      <div class="panel-title"><span>Collapse animation</span></div>
+      <div style="background: var(--ck-bg-sidebar); border-radius: 8px; padding: 12px 16px; border-left: 0.5px solid var(--ck-border);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <span style="width:22px; height:22px; border-radius:50%; background:var(--ck-status-open); color:#0a1f0a; border:1px solid var(--ck-status-open); display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">2</span>
+          <span style="flex:1; font-size:12.5px; font-weight:600; color:var(--ck-text);">Operations core</span>
+          <span style="font-size:11px; color:var(--ck-status-open); font-weight:600;">100%</span>
+          <span style="font-size:12px; color:rgba(228,179,64,0.5); transform: rotate(-90deg); display:inline-block;">›</span>
+        </div>
+        <div style="height:4px; background:rgba(236,227,208,0.08); border-radius:2px; position:relative;">
+          <div style="position:absolute; top:0; left:0; bottom:0; width:100%; background:var(--ck-status-open); border-radius:2px;"></div>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--ck-text-soft); margin-top:8px; font-style:italic;">Collapsed chevron rotates -90°. Body uses <code>grid-template-rows: 0fr→1fr</code> animation pattern from sidebar.css (proven; no jumps).</div>
+    </div>
+
+    <!-- Current pulse -->
+    <div class="panel">
+      <div class="panel-title"><span>Current phase pulse</span></div>
+      <div style="background: rgba(228, 179, 64, 0.04); border-radius: 8px; padding: 12px 16px; border-left: 0.5px solid var(--ck-border);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <span style="width:22px; height:22px; border-radius:50%; background:var(--ck-gold-bright); color:#140A06; border:1px solid var(--ck-gold-bright); display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; animation: rsb-current-pulse 2.4s ease-in-out infinite;">3</span>
+          <span style="flex:1; font-size:12.5px; font-weight:600; color:var(--ck-text);">Driver workflows</span>
+          <span style="font-size:11px; color:var(--ck-gold); font-weight:600;">72%</span>
+        </div>
+        <div style="height:4px; background:rgba(236,227,208,0.08); border-radius:2px; position:relative;">
+          <div style="position:absolute; top:0; left:0; bottom:0; width:72%; background:linear-gradient(90deg, var(--ck-status-open), var(--ck-gold-bright)); border-radius:2px;"></div>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--ck-text-soft); margin-top:8px; font-style:italic;">Glow-pulse on the active-phase number ring — 2.4s ease-in-out, infinite. Soft, not attention-grabbing. Operator can scan once → knows where they are.</div>
+    </div>
+
+  </div>
+
+  <!-- ============================== INTEGRATION NOTES ============================== -->
+  <div class="notes">
+    <h3 style="margin-top:0;">Production integration spec (per cena #2693)</h3>
+
+    <b>Class convention:</b> <code>.ck-rsb-*</code> namespace (parallel to <code>.ck-sb-*</code> for left sidebar). The internal class family from v2's <code>.ck-roadmap-*</code> is renamed to <code>.ck-rsb-*</code> verbatim — same battle-tested CSS, just namespaced.
+
+    <h3>1 · base_dashboard.html integration</h3>
+    <p>Mount the partial in <code>base_dashboard.html</code> as a sibling to the existing left sidebar + main content:</p>
+    <pre>&lt;div class="ck-app-shell"&gt;
+  {% include 'partials/_left_sidebar.html' %}     {# existing #}
+  &lt;main class="ck-main"&gt;
+    {% include 'partials/_topbar.html' %}         {# add .rsb-chip on mobile here #}
+    {% block content %}{% endblock %}
+  &lt;/main&gt;
+  {% include 'partials/_right_sidebar.html' %}    {# NEW #}
+&lt;/div&gt;</pre>
+    <p>Layout: CSS Grid <code>grid-template-columns: 264px 1fr 280px</code> on <code>.ck-app-shell</code> at desktop. Below <code>--ck-bp-mobile</code> (1024px), drop to <code>1fr</code> single-column and the right sidebar becomes a fixed-position drawer.</p>
+
+    <h3>2 · Mobile drawer toggle</h3>
+    <p>Topbar gets a <code>.rsb-chip</code> button (gold-soft bg + gold-bright border, parallels the left hamburger affordance). Tap fires:</p>
+    <pre>document.querySelector('.ck-rsb-drawer').classList.toggle('is-open');
+document.querySelector('.ck-rsb-backdrop').classList.toggle('is-open');</pre>
+    <p>Backdrop click closes. ESC key closes. Drawer width: <code>320px max-width: 86vw</code> — never edge-to-edge so a tap-strip remains for closing.</p>
+
+    <h3>3 · Collapse persistence — reuse <code>/partner/ribbon/collapse/&lt;slug&gt;</code> (cena #2693)</h3>
+    <p>Per-phase collapse state persists per-user. Reuse the existing endpoint with namespaced slugs:</p>
+    <ul>
+      <li>Phase 1: <code>POST /partner/ribbon/collapse/rsb_phase_1</code></li>
+      <li>Phase 2: <code>rsb_phase_2</code> · etc.</li>
+      <li>The right-sidebar-itself open/closed (mobile drawer): <code>rsb_drawer_open</code> (ephemeral; don't persist drawer state across sessions — restart fresh-collapsed each load)</li>
+    </ul>
+    <p>The <code>ribbon_collapse</code> endpoint handler doesn't care about the slug prefix; the <code>rsb_*</code> namespace just keeps it cleanly grep-able. No new endpoint, no new table, no new migration.</p>
+
+    <h3>4 · Data source: parse plan.md at request time (cena #2693)</h3>
+    <p>Single source of truth: <code>plan.md</code> at repo root. View function reads + parses on each render:</p>
+    <pre>def right_sidebar_context():
+    phases = parse_plan_md(Path('plan.md'))  # new helper
+    return {
+        'phases': phases,
+        'overall_pct': sum(p.pct for p in phases) / len(phases),
+        'standing': parse_standing_track(Path('plan.md')),
+    }</pre>
+    <p>No pre-built JSON file to keep in sync. plan.md edits are immediately reflected. Partner-tier pages have low traffic, parsing cost is negligible. If perf becomes an issue later, cache to <code>g._rsb_context</code> per-request (already in-process for that view).</p>
+
+    <h3>5 · Audience eligibility</h3>
+    <p>Right-sidebar renders only for <code>partner</code>-tier authenticated users (same scope as the existing samples + plan-doc surfaces). Driver-tier + manager-tier users don't see it — they don't read plan.md and shouldn't see internal roadmap state. Gate via <code>{% if g.current_user.tier == 'partner' %}</code> in <code>base_dashboard.html</code>.</p>
+
+    <h3>6 · samai canonical three-gate (when ck ships)</h3>
+    <ul>
+      <li><b>Gate 1:</b> pytest — new <code>test_right_sidebar_renders_for_partner</code> + <code>test_right_sidebar_hidden_for_non_partner</code> + <code>test_parse_plan_md_returns_phases</code> + <code>test_rsb_collapse_endpoint_accepts_phase_slugs</code></li>
+      <li><b>Gate 2:</b> code-contract review (ribbon_collapse endpoint accepts rsb_* slugs without modification; parse_plan_md handles missing/malformed phase blocks gracefully; CSS Grid breakpoint at 1024px doesn't conflict with existing dashboard.css rules)</li>
+      <li><b>Gate 3:</b> URL probes — partner GET on any base_dashboard page returns 200 + <code>.ck-rsb</code> + <code>.ck-rsb-phase</code> + <code>.ck-rsb-overall-bar</code> markers present; manager-tier GET on same page returns 200 + zero <code>.ck-rsb</code> markers; POST <code>/partner/ribbon/collapse/rsb_phase_3</code> returns 200</li>
+      <li><b>Playwright</b> (queued to PLAYWRIGHT_BACKLOG.md per Sam #2547): desktop renders at ≥1024px; mobile chip toggle opens/closes drawer; ESC closes drawer; phase collapse persists across page reload</li>
+    </ul>
+
+    <h3>7 · Critical lane note (per cena #2624)</h3>
+    <p>This is an ADDITIVE feature — no two-commit + behavior-parity-gate discipline needed. Net add to <code>base_dashboard.html</code> + new partial + new CSS rules; nothing existing changes. Single commit, samai three-gate, Sam visual confirm on live, done.</p>
+  </div>
+
+</div>
+</body>
+</html>

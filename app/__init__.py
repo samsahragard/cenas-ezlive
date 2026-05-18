@@ -28,6 +28,7 @@ from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
+from app.web import notifications as eznotifications
 from app.web import sam_chat as ezsamchat
 from app.web import cena as ezcena
 from app.services import produce_ingest
@@ -165,6 +166,12 @@ def create_app():
     # that _ribbon.html actually calls). The partial is mounted from
     # base_dashboard.html above {% block content %}.
     ezribbon.install(app)
+    # Notifications page (Sam approved dck mockup #2641, cena #2569 + #2628
+    # two-commit + behavior-parity-gate). Commit 1: /partner/notifications
+    # route + ribbon_render_context() reuse. Ribbon stays live as the
+    # parity-test baseline; commit 2 retires the ribbon in a separate PR
+    # only after Sam validates a real operational beat on live.
+    eznotifications.install(app)
     # Sam Chat (standalone, Sam request 2026-05-14). Registers /sam/chat
     # + the is_sam_chat_user Jinja global (the sidebar link uses it).
     # Hard-gated to SAM_CHAT_USER_ID — dormant/safe-closed until that

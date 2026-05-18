@@ -1,0 +1,255 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('notifications') %}
+{% block title %}Notifications — Cenas Kitchen{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">All operational signals in one place. Tap a category tab to filter; dismiss with the X. (Ribbon stays live during behavior-parity validation per cena #2628.)</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* === Notifications page — V2 .lg-nav pill tabs + glass cards.
+        Source: dck mockup 5dd0088 / 3f6745e .notif-* component.
+        Severity tokens identical to ribbon for zero retraining. === */
+  .notif-tabs {
+    display: flex; gap: 6px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    overflow-x: auto;
+  }
+  .notif-tab {
+    background: transparent;
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    border-radius: 14px;
+    padding: 8px 14px;
+    color: #FFFFFF;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 150ms var(--ck-ease, cubic-bezier(0.22,0.8,0.24,1)),
+                border-color 150ms var(--ck-ease, cubic-bezier(0.22,0.8,0.24,1)),
+                color 150ms var(--ck-ease, cubic-bezier(0.22,0.8,0.24,1));
+  }
+  .notif-tab .count {
+    font-size: 10.5px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    color: var(--text-3, rgba(236,227,208,0.55));
+  }
+  .notif-tab .count.has-alert {
+    background: rgba(226, 100, 92, 0.22);
+    color: var(--ck-status-warn, #E2645C);
+  }
+  .notif-tab:hover {
+    border-color: rgba(217,164,54,0.30);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .notif-tab.active {
+    color: #140A06;
+    background: var(--ck-gold-bright, #FFD970);
+    border-color: var(--ck-gold-bright, #FFD970);
+    font-weight: 600;
+    box-shadow: 0 0 14px rgba(255, 200, 80, 0.32);
+  }
+  .notif-tab.active .count {
+    background: rgba(20, 10, 6, 0.20);
+    color: rgba(20, 10, 6, 0.85);
+  }
+  .notif-tab.active .count.has-alert {
+    background: rgba(255, 255, 255, 0.30);
+    color: #2a0a08;
+  }
+
+  .notif-panes { max-width: 920px; }
+  .notif-cat-pane { display: none; }
+  .notif-cat-pane.active { display: block; }
+
+  .notif-list { display: flex; flex-direction: column; gap: 8px; }
+  .notif-card {
+    background: rgba(40, 22, 14, 0.55);
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    border-left: 3px solid var(--ck-status-open, #9CCB76);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    transition: background 150ms var(--ck-ease, cubic-bezier(0.22,0.8,0.24,1));
+  }
+  .notif-card:hover { background: rgba(40, 22, 14, 0.72); }
+  .notif-card.sev-alert { border-left-color: var(--ck-status-warn, #E2645C); }
+  .notif-card.sev-warn  { border-left-color: var(--ck-status-active, #FFD970); }
+  .notif-card.sev-info  { border-left-color: var(--ck-status-open, #9CCB76); }
+
+  .notif-icon {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .notif-card.sev-alert .notif-icon { color: var(--ck-status-warn, #E2645C); background: rgba(226, 100, 92, 0.14); }
+  .notif-card.sev-warn  .notif-icon { color: var(--ck-status-active, #FFD970); background: rgba(255, 217, 112, 0.14); }
+  .notif-card.sev-info  .notif-icon { color: var(--ck-status-open, #9CCB76); background: rgba(156, 203, 118, 0.14); }
+
+  .notif-body { flex: 1; min-width: 0; }
+  .notif-text { color: var(--text-1, #FAF6EC); font-size: 13.5px; line-height: 1.4; }
+  .notif-sub  { color: var(--text-3, rgba(236,227,208,0.55)); font-size: 11.5px; margin-top: 3px; }
+  .notif-meta { color: rgba(236,227,208,0.4); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+
+  .notif-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .notif-action-btn {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--ck-border, rgba(217,164,54,0.10));
+    color: var(--text-3, rgba(236,227,208,0.55));
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 150ms var(--ck-ease, cubic-bezier(0.22,0.8,0.24,1));
+  }
+  .notif-action-btn:hover {
+    background: rgba(226, 100, 92, 0.10);
+    border-color: rgba(226, 100, 92, 0.45);
+    color: var(--ck-status-warn, #E2645C);
+  }
+
+  .notif-empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: rgba(236,227,208,0.4);
+    font-size: 13px;
+    background: rgba(40, 22, 14, 0.35);
+    border: 1px dashed var(--ck-border, rgba(217,164,54,0.10));
+    border-radius: 8px;
+  }
+  .notif-empty .ti { font-size: 32px; display: block; margin-bottom: 10px; opacity: 0.5; }
+</style>
+
+{# Map ribbon category slug -> tabler icon. Matches dck mockup. #}
+{% set _icon_by_slug = {
+    'todo':        'ti-checkbox',
+    'caterings':   'ti-bowl',
+    'events':      'ti-calendar-event',
+    'employee':    'ti-user',
+    'vendors':     'ti-truck',
+    'maintenance': 'ti-tool',
+    'sales':       'ti-chart-bar'
+} %}
+
+{# Map ribbon styling_class (sev-alert / sev-warn / sev-info) -> card icon. #}
+{% set _icon_by_sev = {
+    'sev-alert': 'ti-alert-triangle',
+    'sev-warn':  'ti-flag',
+    'sev-info':  'ti-circle-check'
+} %}
+
+<div class="notif-tabs" role="tablist">
+  {% for cat in categories %}
+    {# A category has-alert if any entry styling_class == 'sev-alert' #}
+    {% set _has_alert = cat.entries | selectattr('styling_class', 'equalto', 'sev-alert') | list | length > 0 %}
+    <button class="notif-tab{% if loop.first %} active{% endif %}"
+            data-cat="{{ cat.slug }}"
+            role="tab"
+            aria-selected="{% if loop.first %}true{% else %}false{% endif %}">
+      <i class="ti {{ _icon_by_slug.get(cat.slug, 'ti-bell') }}" aria-hidden="true"></i>
+      {{ cat.label }}
+      <span class="count{% if _has_alert %} has-alert{% endif %}">{{ cat.count }}</span>
+    </button>
+  {% endfor %}
+</div>
+
+<div class="notif-panes" role="tabpanel">
+  {% for cat in categories %}
+    <div class="notif-cat-pane{% if loop.first %} active{% endif %}" data-cat="{{ cat.slug }}">
+      {% if cat.entries %}
+        <div class="notif-list">
+          {% for entry in cat.entries %}
+            <div class="notif-card {{ entry.styling_class }}"
+                 data-item-type="{{ entry.item_type }}"
+                 data-item-id="{{ entry.item_id }}">
+              <div class="notif-icon">
+                <i class="ti {{ _icon_by_sev.get(entry.styling_class, 'ti-info-circle') }}" aria-hidden="true"></i>
+              </div>
+              <div class="notif-body">
+                <div class="notif-text">{{ entry.text }}</div>
+                {% if entry.sub_text %}
+                  <div class="notif-sub">{{ entry.sub_text }}</div>
+                {% endif %}
+                <div class="notif-meta">{{ cat.label }}</div>
+              </div>
+              <div class="notif-actions">
+                {% if entry.can_dismiss %}
+                  <button class="notif-action-btn js-notif-dismiss"
+                          aria-label="Dismiss this notification"
+                          title="Dismiss">
+                    <i class="ti ti-x" aria-hidden="true"></i>
+                  </button>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="notif-empty">
+          <i class="ti ti-bell-off" aria-hidden="true"></i>
+          No notifications in {{ cat.label }} · you're clear here
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  // Tab switching — client-side only, all panes in DOM, toggle .active.
+  document.querySelectorAll('.notif-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var cat = tab.getAttribute('data-cat');
+      document.querySelectorAll('.notif-tab').forEach(function (t) {
+        var on = t.getAttribute('data-cat') === cat;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      document.querySelectorAll('.notif-cat-pane').forEach(function (p) {
+        p.classList.toggle('active', p.getAttribute('data-cat') === cat);
+      });
+    });
+  });
+
+  // Dismiss — reuses POST /partner/ribbon/dismiss/<item_type>/<item_id>.
+  // Same endpoint the ribbon's X button hits; same backing store.
+  document.querySelectorAll('.js-notif-dismiss').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var card = btn.closest('.notif-card');
+      if (!card) return;
+      var itemType = card.getAttribute('data-item-type');
+      var itemId = card.getAttribute('data-item-id');
+      if (!itemType || !itemId) return;
+      btn.disabled = true;
+      fetch('/partner/ribbon/dismiss/' + encodeURIComponent(itemType) + '/' + encodeURIComponent(itemId), {
+        method: 'POST',
+        headers: {'X-Requested-With': 'fetch'},
+        credentials: 'same-origin'
+      }).then(function (r) {
+        if (r.ok) {
+          card.style.transition = 'opacity 160ms';
+          card.style.opacity = '0';
+          setTimeout(function () { card.remove(); }, 180);
+        } else {
+          btn.disabled = false;
+        }
+      }).catch(function () { btn.disabled = false; });
+    });
+  });
+})();
+</script>
+{% endblock %}

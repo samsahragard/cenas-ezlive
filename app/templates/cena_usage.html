@@ -1,0 +1,158 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Cena Usage & Cost — Cenas Kitchen{% endblock %}
+
+{% block page_title %}Cena Usage &amp; Cost{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    Token + dollar usage of the Cena gateway. Rollups for today, the last 7 days, and the last 30 days,
+    plus per-turn detail for the last 25 turns.
+  </p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .ck-usage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .ck-usage-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .ck-usage-card h3 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-2);
+  }
+  .ck-usage-cost {
+    font-size: 28px;
+    font-weight: 600;
+    color: #f4b48a;
+  }
+  .ck-usage-sub {
+    font-size: 11.5px;
+    color: var(--text-3);
+    margin-top: 4px;
+  }
+  .ck-usage-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+  }
+  .ck-usage-table th, .ck-usage-table td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 13px;
+  }
+  .ck-usage-table th {
+    color: var(--text-2);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11.5px;
+  }
+  .ck-usage-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="ck-usage-grid">
+  <div class="ck-usage-card">
+    <h3>Today</h3>
+    <div class="ck-usage-cost">${{ '%.4f'|format(today.cost_usd) }}</div>
+    <div class="ck-usage-sub">
+      {{ today.turns }} turns · {{ '{:,}'.format(today.in_tokens) }} in · {{ '{:,}'.format(today.out_tokens) }} out
+    </div>
+  </div>
+  <div class="ck-usage-card">
+    <h3>Last 7 days</h3>
+    <div class="ck-usage-cost">${{ '%.4f'|format(week.cost_usd) }}</div>
+    <div class="ck-usage-sub">
+      {{ week.turns }} turns · {{ '{:,}'.format(week.in_tokens) }} in · {{ '{:,}'.format(week.out_tokens) }} out
+    </div>
+  </div>
+  <div class="ck-usage-card">
+    <h3>Last 30 days</h3>
+    <div class="ck-usage-cost">${{ '%.4f'|format(month.cost_usd) }}</div>
+    <div class="ck-usage-sub">
+      {{ month.turns }} turns · {{ '{:,}'.format(month.in_tokens) }} in · {{ '{:,}'.format(month.out_tokens) }} out
+    </div>
+  </div>
+</div>
+
+<h2 style="font-size:15px;margin:10px 0 8px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-2);">By model (last 30 days)</h2>
+{% if not by_model %}
+  <p style="opacity:0.7;">No usage recorded yet.</p>
+{% else %}
+<table class="ck-usage-table">
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th class="num">Turns</th>
+      <th class="num">In tokens</th>
+      <th class="num">Out tokens</th>
+      <th class="num">Cache read</th>
+      <th class="num">Cache write</th>
+      <th class="num">Cost (USD)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in by_model %}
+    <tr>
+      <td>{{ m.model }}</td>
+      <td class="num">{{ m.turns }}</td>
+      <td class="num">{{ '{:,}'.format(m.in_tokens) }}</td>
+      <td class="num">{{ '{:,}'.format(m.out_tokens) }}</td>
+      <td class="num">{{ '{:,}'.format(m.cache_read_tokens) }}</td>
+      <td class="num">{{ '{:,}'.format(m.cache_write_tokens) }}</td>
+      <td class="num">${{ '%.4f'|format(m.cost_usd) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2 style="font-size:15px;margin:10px 0 8px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-2);">Last 25 turns</h2>
+{% if not recent %}
+  <p style="opacity:0.7;">No turns logged yet.</p>
+{% else %}
+<table class="ck-usage-table">
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>Model</th>
+      <th class="num">In</th>
+      <th class="num">Out</th>
+      <th class="num">Cache R/W</th>
+      <th class="num">Tool rounds</th>
+      <th class="num">Session</th>
+      <th class="num">Cost</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in recent %}
+    <tr>
+      <td>{{ r.started_at.strftime('%b %d %H:%M') if r.started_at else '—' }}</td>
+      <td>{{ r.model }}</td>
+      <td class="num">{{ '{:,}'.format(r.in_tokens) }}</td>
+      <td class="num">{{ '{:,}'.format(r.out_tokens) }}</td>
+      <td class="num">{{ '{:,}'.format(r.cache_read_tokens) }}/{{ '{:,}'.format(r.cache_write_tokens) }}</td>
+      <td class="num">{{ r.tool_rounds }}</td>
+      <td class="num">{{ r.session_id or '—' }}</td>
+      <td class="num">${{ '%.4f'|format(r.cost_usd) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<p style="margin-top:18px;font-size:11.5px;color:var(--text-3);">
+  Pricing: claude-opus-4-7 = $15/$75 per 1M (in/out), cache read $1.50, cache write $18.75.
+  Claude Sonnet 4.6 = $3/$15. Haiku 4.5 = $0.80/$4. Source: Anthropic pricing as of 2026-05-18.
+</p>
+{% endblock %}

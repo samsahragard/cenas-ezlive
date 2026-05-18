@@ -2041,6 +2041,165 @@ def cena_run_flip_buildplan_approval():
     })
 
 
+@cena_bp.route("/sam/cena/usage-log", methods=["POST"])
+def cena_usage_log():
+    """Persist one row of per-turn token usage from the cena gateway.
+
+    Body: {model, in_tokens, out_tokens, cache_read_tokens,
+           cache_write_tokens, tool_rounds, started_at, finished_at,
+           session_id?, message_id?}
+    Per Sam /sam/chat session 13 #11 — cost + usage telemetry on cena.
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    from app.models import CenaUsageLog
+    body = request.get_json(silent=True) or {}
+    from datetime import datetime as _dt
+    def _parse_iso(s):
+        if not s: return None
+        try:
+            return _dt.fromisoformat(s.rstrip("Z"))
+        except Exception:
+            return None
+
+    db = next(get_db())
+    try:
+        row = CenaUsageLog(
+            model=str(body.get("model") or "unknown")[:64],
+            in_tokens=int(body.get("in_tokens") or 0),
+            out_tokens=int(body.get("out_tokens") or 0),
+            cache_read_tokens=int(body.get("cache_read_tokens") or 0),
+            cache_write_tokens=int(body.get("cache_write_tokens") or 0),
+            tool_rounds=int(body.get("tool_rounds") or 0),
+            started_at=_parse_iso(body.get("started_at")) or _dt.utcnow(),
+            finished_at=_parse_iso(body.get("finished_at")),
+            session_id=body.get("session_id"),
+            message_id=body.get("message_id"),
+        )
+        db.add(row)
+        db.commit()
+        return jsonify({"ok": True, "id": row.id})
+    finally:
+        db.close()
+
+
+# Claude 4 pricing per 1M tokens. Adjust here when Anthropic re-prices.
+_PRICE_PER_MTOK = {
+    "claude-opus-4-7":   {"in": 15.0,  "out": 75.0, "cache_read": 1.50, "cache_write": 18.75},
+    "claude-sonnet-4-6": {"in":  3.0,  "out": 15.0, "cache_read": 0.30, "cache_write":  3.75},
+    "claude-haiku-4-5":  {"in":  0.80, "out":  4.0, "cache_read": 0.08, "cache_write":  1.00},
+    "claude-haiku-4-5-20251001": {"in":  0.80, "out":  4.0, "cache_read": 0.08, "cache_write":  1.00},
+}
+_DEFAULT_PRICE = _PRICE_PER_MTOK["claude-opus-4-7"]
+
+
+def _cost_for_row(r) -> float:
+    p = _PRICE_PER_MTOK.get(r.model, _DEFAULT_PRICE)
+    return (
+        (r.in_tokens or 0)         * p["in"]          / 1_000_000.0 +
+        (r.out_tokens or 0)        * p["out"]         / 1_000_000.0 +
+        (r.cache_read_tokens or 0) * p["cache_read"]  / 1_000_000.0 +
+        (r.cache_write_tokens or 0)* p["cache_write"] / 1_000_000.0
+    )
+
+
+@cena_bp.route("/partner/cena-usage", methods=["GET"])
+def cena_usage_view():
+    """Partner-tier view of cena's daily cost + token usage.
+
+    Sam-facing rollup of CenaUsageLog rows. Shows today / 7-day / 30-day
+    spend, breakdown by model and by session.
+    """
+    from flask import g, render_template
+    if (getattr(g, "permission_level", None) or "") not in ("partner", "corporate"):
+        abort(403)
+
+    from app.models import CenaUsageLog
+    from sqlalchemy import func as _f
+    from datetime import datetime as _dt, timedelta as _td
+    db = next(get_db())
+    try:
+        now = _dt.utcnow()
+        since_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        since_7d = now - _td(days=7)
+        since_30d = now - _td(days=30)
+
+        def _agg(since):
+            rows = (db.query(CenaUsageLog)
+                .filter(CenaUsageLog.started_at >= since).all())
+            total_in = sum(r.in_tokens for r in rows)
+            total_out = sum(r.out_tokens for r in rows)
+            total_cache_read = sum(r.cache_read_tokens for r in rows)
+            total_cache_write = sum(r.cache_write_tokens for r in rows)
+            total_cost = sum(_cost_for_row(r) for r in rows)
+            return {
+                "turns": len(rows),
+                "in_tokens": total_in,
+                "out_tokens": total_out,
+                "cache_read_tokens": total_cache_read,
+                "cache_write_tokens": total_cache_write,
+                "cost_usd": total_cost,
+            }
+
+        today = _agg(since_today)
+        week = _agg(since_7d)
+        month = _agg(since_30d)
+
+        by_model_rows = (db.query(
+                CenaUsageLog.model,
+                _f.count(CenaUsageLog.id).label("turns"),
+                _f.sum(CenaUsageLog.in_tokens).label("in_tok"),
+                _f.sum(CenaUsageLog.out_tokens).label("out_tok"),
+                _f.sum(CenaUsageLog.cache_read_tokens).label("cache_read"),
+                _f.sum(CenaUsageLog.cache_write_tokens).label("cache_write"),
+            )
+            .filter(CenaUsageLog.started_at >= since_30d)
+            .group_by(CenaUsageLog.model)
+            .all())
+        by_model = []
+        for r in by_model_rows:
+            p = _PRICE_PER_MTOK.get(r.model, _DEFAULT_PRICE)
+            cost = (
+                (r.in_tok or 0)*p["in"] + (r.out_tok or 0)*p["out"] +
+                (r.cache_read or 0)*p["cache_read"] + (r.cache_write or 0)*p["cache_write"]
+            ) / 1_000_000.0
+            by_model.append({
+                "model": r.model,
+                "turns": r.turns,
+                "in_tokens": r.in_tok or 0,
+                "out_tokens": r.out_tok or 0,
+                "cache_read_tokens": r.cache_read or 0,
+                "cache_write_tokens": r.cache_write or 0,
+                "cost_usd": cost,
+            })
+
+        recent = (db.query(CenaUsageLog)
+            .order_by(CenaUsageLog.started_at.desc())
+            .limit(25).all())
+        recent_view = [{
+            "id": r.id,
+            "started_at": r.started_at,
+            "model": r.model,
+            "in_tokens": r.in_tokens,
+            "out_tokens": r.out_tokens,
+            "cache_read_tokens": r.cache_read_tokens,
+            "cache_write_tokens": r.cache_write_tokens,
+            "tool_rounds": r.tool_rounds,
+            "session_id": r.session_id,
+            "cost_usd": _cost_for_row(r),
+        } for r in recent]
+
+        return render_template(
+            "cena_usage.html",
+            today=today, week=week, month=month,
+            by_model=by_model, recent=recent_view,
+        )
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/db-probe/query", methods=["POST"])
 def cena_db_probe_query():
     """Read-only SQL surface for the cena gateway's sql_query tool.

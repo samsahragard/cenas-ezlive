@@ -2033,3 +2033,39 @@ class CenaActionLog(Base):
         ForeignKey("sam_chat_messages.id", ondelete="SET NULL"),
         nullable=True, index=True)
 
+
+class CenaUsageLog(Base):
+    """Per-turn token + cost telemetry for the cena gateway.
+
+    One row per Anthropic API turn cena runs. Captures input/output/cache
+    token counts so we can roll up "what did cena cost me today" — the
+    #11 ask from Sam /sam/chat session 13.
+
+    Cost is computed at query time from the token counts using
+    claude-opus-4-7 pricing (input $15/MTok, output $75/MTok, cache_read
+    $1.50/MTok, cache_write $18.75/MTok) so price changes don't require
+    a backfill.
+    """
+    __tablename__ = "cena_usage_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    model: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    in_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    out_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    tool_rounds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sam_chat_sessions.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sam_chat_messages.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+

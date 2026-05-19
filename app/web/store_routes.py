@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, g, abort, request, render_template, redirect, url_for, session, jsonify
+from flask import Blueprint, Response, g, abort, request, render_template, redirect, url_for, session, jsonify
 
 from datetime import datetime, timedelta
 
@@ -1316,6 +1316,421 @@ def manager_page_update(page: str, entry_id: int):
         db.commit()
         return redirect(url_for(
             "store.manager_page_detail", page=page, entry_id=entry_id))
+    finally:
+        db.close()
+
+
+# ============================================================
+# RECIPES — Sam dev #3074 + cena #1209. Single Recipe table; 33
+# recipes across 5 categories. Audience: everyone except expo
+# (same gate as manager pages).
+# ============================================================
+_RECIPE_CATEGORIES = ["cold", "hot", "sauces", "marinated", "chop"]
+
+
+@store_bp.route("/recipes", methods=["GET"])
+def recipes_index():
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import Recipe
+    import json as _json
+    db = next(get_db())
+    try:
+        rows = db.query(Recipe).order_by(Recipe.category, Recipe.name).all()
+        recipes = []
+        for r in rows:
+            try:
+                ings = _json.loads(r.ingredients_json) if r.ingredients_json else []
+            except Exception:
+                ings = []
+            try:
+                bsizes = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else []
+            except Exception:
+                bsizes = []
+            recipes.append({
+                "id": r.id, "category": r.category, "name": r.name,
+                "prep_time": r.prep_time, "shelf_life": r.shelf_life,
+                "batch_sizes": bsizes, "ingredients": ings,
+                "spanish_instructions": r.spanish_instructions,
+                "notes": r.notes,
+            })
+        return render_template(
+            "recipes.html", recipes=recipes, recipe=None, form_mode=None,
+            categories=[{"slug": c, "label": c.title()} for c in _RECIPE_CATEGORIES],
+            active="recipes",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/recipes/new", methods=["GET"])
+def recipes_new():
+    if not _manager_role_ok():
+        abort(403)
+    return render_template(
+        "recipes.html", recipes=[], recipe=None, form_mode="new",
+        categories=[{"slug": c, "label": c.title()} for c in _RECIPE_CATEGORIES],
+        active="recipes",
+    )
+
+
+@store_bp.route("/recipes", methods=["POST"])
+def recipes_create():
+    if not _manager_role_ok():
+        abort(403)
+    import json as _json
+    from app.models import Recipe
+    db = next(get_db())
+    try:
+        ing_raw = (request.form.get("ingredients_json") or "").strip()
+        bsz_raw = (request.form.get("batch_sizes_csv") or "").strip()
+        try:
+            ing = _json.loads(ing_raw) if ing_raw else []
+        except Exception:
+            ing = []
+        bsz = [s.strip() for s in bsz_raw.split(",") if s.strip()] if bsz_raw else []
+        row = Recipe(
+            category=(request.form.get("category") or "").strip()[:40] or "hot",
+            name=(request.form.get("name") or "").strip()[:200] or "Untitled",
+            prep_time=(request.form.get("prep_time") or "").strip()[:80] or None,
+            shelf_life=(request.form.get("shelf_life") or "").strip()[:80] or None,
+            spanish_instructions=(request.form.get("spanish_instructions") or "").strip() or None,
+            ingredients_json=_json.dumps(ing) if ing else None,
+            batch_sizes_json=_json.dumps(bsz) if bsz else None,
+            notes=(request.form.get("notes") or "").strip() or None,
+        )
+        db.add(row)
+        db.commit()
+        return redirect(url_for("store.recipes_index"))
+    finally:
+        db.close()
+
+
+@store_bp.route("/recipes/<int:recipe_id>", methods=["GET"])
+def recipes_detail(recipe_id: int):
+    if not _manager_role_ok():
+        abort(403)
+    import json as _json
+    from app.models import Recipe
+    db = next(get_db())
+    try:
+        r = db.get(Recipe, recipe_id)
+        if r is None:
+            abort(404)
+        try:
+            ings = _json.loads(r.ingredients_json) if r.ingredients_json else []
+        except Exception:
+            ings = []
+        try:
+            bsizes = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else []
+        except Exception:
+            bsizes = []
+        recipe = {
+            "id": r.id, "category": r.category, "name": r.name,
+            "prep_time": r.prep_time, "shelf_life": r.shelf_life,
+            "batch_sizes": bsizes, "ingredients": ings,
+            "spanish_instructions": r.spanish_instructions, "notes": r.notes,
+        }
+        return render_template(
+            "recipes.html", recipes=[], recipe=recipe, form_mode=None,
+            categories=[{"slug": c, "label": c.title()} for c in _RECIPE_CATEGORIES],
+            active="recipes",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/recipes/<int:recipe_id>/edit", methods=["GET"])
+def recipes_edit(recipe_id: int):
+    if not _manager_role_ok():
+        abort(403)
+    import json as _json
+    from app.models import Recipe
+    db = next(get_db())
+    try:
+        r = db.get(Recipe, recipe_id)
+        if r is None:
+            abort(404)
+        try:
+            ings = _json.loads(r.ingredients_json) if r.ingredients_json else []
+        except Exception:
+            ings = []
+        try:
+            bsizes = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else []
+        except Exception:
+            bsizes = []
+        recipe = {
+            "id": r.id, "category": r.category, "name": r.name,
+            "prep_time": r.prep_time, "shelf_life": r.shelf_life,
+            "batch_sizes": bsizes, "ingredients": ings,
+            "spanish_instructions": r.spanish_instructions, "notes": r.notes,
+        }
+        return render_template(
+            "recipes.html", recipes=[], recipe=recipe, form_mode="edit",
+            categories=[{"slug": c, "label": c.title()} for c in _RECIPE_CATEGORIES],
+            active="recipes",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/recipes/<int:recipe_id>", methods=["POST"])
+def recipes_update(recipe_id: int):
+    if not _manager_role_ok():
+        abort(403)
+    import json as _json
+    from app.models import Recipe
+    db = next(get_db())
+    try:
+        r = db.get(Recipe, recipe_id)
+        if r is None:
+            abort(404)
+        ing_raw = (request.form.get("ingredients_json") or "").strip()
+        bsz_raw = (request.form.get("batch_sizes_csv") or "").strip()
+        try:
+            ing = _json.loads(ing_raw) if ing_raw else []
+        except Exception:
+            ing = []
+        bsz = [s.strip() for s in bsz_raw.split(",") if s.strip()] if bsz_raw else []
+        r.category = (request.form.get("category") or "").strip()[:40] or r.category
+        r.name = (request.form.get("name") or "").strip()[:200] or r.name
+        r.prep_time = (request.form.get("prep_time") or "").strip()[:80] or None
+        r.shelf_life = (request.form.get("shelf_life") or "").strip()[:80] or None
+        r.spanish_instructions = (request.form.get("spanish_instructions") or "").strip() or None
+        r.ingredients_json = _json.dumps(ing) if ing else None
+        r.batch_sizes_json = _json.dumps(bsz) if bsz else None
+        r.notes = (request.form.get("notes") or "").strip() or None
+        db.commit()
+        return redirect(url_for("store.recipes_detail", recipe_id=recipe_id))
+    finally:
+        db.close()
+
+
+# ============================================================
+# FRESH FOOD — Sam dev #3074 + /sam/chat #1120-#1144. Cross-store
+# visibility (no store_scope filter on reads), audience = everyone
+# except expo. Rolling 7-day grid for Place Order, ACTIVE/COMPLETED
+# state on Recent Orders, rolling-30-day-avg backend-computed,
+# CSV report export.
+# ============================================================
+_FRESH_FOOD_ITEMS = [
+    ("MEAT",     ["beef-fajita", "chicken-fajita", "ribs", "cochinita", "ground-beef", "pollo-ranchero"]),
+    ("SAUCES",   ["poblano", "queso-dzlf", "chili-gravy", "seafood", "ranchera", "bbq",
+                  "tomatillo", "street-taco", "cilantro-ginger", "chipotle-mayo", "chipotle-cream"]),
+    ("BEANS",    ["black", "charros", "charros-mix", "refried"]),
+    ("MISC",     ["spinach", "mexican-butter", "steam-vegetables", "chicken-stock",
+                  "masa-flour", "empanadas", "stuffed-jalapenos"]),
+    ("FOH",      ["red-sauce", "green-sauce", "chips"]),
+    ("NON PREP", ["burger-beef", "taco-crispy", "tamales", "sausage"]),
+    ("SEAFOOD",  ["cancun", "shrimp-salad"]),
+]
+
+
+def _ff_items_flat():
+    out = []
+    for cat, items in _FRESH_FOOD_ITEMS:
+        for slug in items:
+            label = slug.replace("-", " ").title()
+            out.append({"slug": slug, "label": label, "category": cat})
+    return out
+
+
+def _ff_rolling_avg_by_slug(db, days: int = 30):
+    """Compute rolling N-day average OR quantity per item slug across
+    all stores. Returns {slug: float_avg}."""
+    from datetime import timedelta
+    from app.models import FreshFoodOrderLine, FreshFoodOrder
+    from sqlalchemy import func
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (db.query(FreshFoodOrderLine.item_slug,
+                     func.avg(FreshFoodOrderLine.or_qty))
+              .join(FreshFoodOrder, FreshFoodOrder.id == FreshFoodOrderLine.order_id)
+              .filter(FreshFoodOrder.placed_at >= cutoff)
+              .filter(FreshFoodOrderLine.or_qty.isnot(None))
+              .group_by(FreshFoodOrderLine.item_slug)
+              .all())
+    return {slug: float(avg or 0) for slug, avg in rows}
+
+
+@store_bp.route("/fresh-food/place-order", methods=["GET"])
+def fresh_food_place_order():
+    if not _manager_role_ok():
+        abort(403)
+    db = next(get_db())
+    try:
+        avg_by_slug = _ff_rolling_avg_by_slug(db, days=30)
+    finally:
+        db.close()
+    from datetime import timedelta
+    today = datetime.utcnow().date()
+    rolling_days = [today + timedelta(days=i - 3) for i in range(7)]
+    return render_template(
+        "fresh_food_place_order.html",
+        categories=_FRESH_FOOD_ITEMS,
+        rolling_days=rolling_days,
+        rolling_avg_by_slug=avg_by_slug,
+        active="fresh_food_place_order",
+    )
+
+
+@store_bp.route("/fresh-food/place-order", methods=["POST"])
+def fresh_food_place_order_submit():
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import FreshFoodOrder, FreshFoodOrderLine
+    body = request.get_json(silent=True) or {}
+    od_str = (body.get("order_date") or "").strip()
+    try:
+        order_date = datetime.fromisoformat(od_str).date() if od_str else datetime.utcnow().date()
+    except Exception:
+        order_date = datetime.utcnow().date()
+    lines = body.get("lines") or []
+    user = getattr(g, "current_user", None)
+    db = next(get_db())
+    try:
+        order = FreshFoodOrder(
+            order_date=order_date,
+            store_scope=(g.current_location if g.current_location in ("tomball", "copperfield") else None),
+            placed_by_user_id=(user.id if user else None),
+            placed_by_name=(getattr(user, "full_name", None) if user else None),
+            status="active",
+        )
+        db.add(order)
+        db.flush()
+        for ln in lines:
+            try:
+                slug = (ln.get("item_slug") or "").strip()[:60]
+                if not slug:
+                    continue
+                db.add(FreshFoodOrderLine(
+                    order_id=order.id,
+                    item_slug=slug,
+                    item_category=(ln.get("category") or "").strip()[:40] or None,
+                    inv_qty=_coerce_float(ln.get("inv")),
+                    or_qty=_coerce_float(ln.get("or")),
+                ))
+            except Exception:
+                continue
+        db.commit()
+        return jsonify({"ok": True, "order_id": order.id})
+    finally:
+        db.close()
+
+
+@store_bp.route("/fresh-food/recent-orders", methods=["GET"])
+def fresh_food_recent_orders():
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import FreshFoodOrder
+    db = next(get_db())
+    try:
+        rows = (db.query(FreshFoodOrder)
+                  .order_by(FreshFoodOrder.placed_at.desc())
+                  .limit(100).all())
+        return render_template(
+            "fresh_food_recent_orders.html",
+            orders=rows,
+            active="fresh_food_recent_orders",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/fresh-food/recent-orders/<int:order_id>/fulfill",
+                methods=["POST"])
+def fresh_food_recent_orders_fulfill(order_id: int):
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import FreshFoodOrder, FreshFoodOrderLine
+    body = request.get_json(silent=True) or {}
+    user = getattr(g, "current_user", None)
+    db = next(get_db())
+    try:
+        order = db.get(FreshFoodOrder, order_id)
+        if order is None:
+            abort(404)
+        order.fulfilled_at = datetime.utcnow()
+        order.fulfilled_by_user_id = (user.id if user else None)
+        order.fulfilled_by_name = (
+            body.get("fulfilled_by_name") or "").strip()[:120] or None
+        sd = (body.get("sent_date") or "").strip()
+        try:
+            order.sent_date = datetime.fromisoformat(sd).date() if sd else None
+        except Exception:
+            order.sent_date = None
+        sent_lines = body.get("sent_lines") or {}
+        for line_id_str, sent_qty in sent_lines.items():
+            try:
+                line_id = int(line_id_str)
+                ln = db.get(FreshFoodOrderLine, line_id)
+                if ln and ln.order_id == order_id:
+                    ln.sent_qty = _coerce_float(sent_qty)
+            except Exception:
+                continue
+        # Mark COMPLETED if every line has a sent_qty
+        all_filled = all(
+            ln.sent_qty is not None
+            for ln in db.query(FreshFoodOrderLine)
+                        .filter(FreshFoodOrderLine.order_id == order_id).all()
+        )
+        if all_filled:
+            order.status = "completed"
+        db.commit()
+        return jsonify({"ok": True, "status": order.status})
+    finally:
+        db.close()
+
+
+@store_bp.route("/fresh-food/recent-orders/report.csv", methods=["GET"])
+def fresh_food_recent_orders_report():
+    if not _manager_role_ok():
+        abort(403)
+    import csv
+    import io as _io
+    from app.models import FreshFoodOrder, FreshFoodOrderLine
+    db = next(get_db())
+    try:
+        q = (db.query(FreshFoodOrderLine, FreshFoodOrder)
+               .join(FreshFoodOrder, FreshFoodOrder.id == FreshFoodOrderLine.order_id))
+        from_str = request.args.get("from", "").strip()
+        to_str = request.args.get("to", "").strip()
+        item = request.args.get("item", "").strip()
+        if from_str:
+            try:
+                q = q.filter(FreshFoodOrder.placed_at >= datetime.fromisoformat(from_str))
+            except Exception:
+                pass
+        if to_str:
+            try:
+                q = q.filter(FreshFoodOrder.placed_at <= datetime.fromisoformat(to_str))
+            except Exception:
+                pass
+        if item:
+            q = q.filter(FreshFoodOrderLine.item_slug == item)
+        q = q.order_by(FreshFoodOrder.placed_at.desc()).limit(5000)
+        buf = _io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["placed_at", "order_date", "store", "placed_by",
+                    "status", "item", "inv_qty", "or_qty", "sent_qty",
+                    "fulfilled_at", "fulfilled_by"])
+        for ln, order in q.all():
+            w.writerow([
+                order.placed_at.isoformat() if order.placed_at else "",
+                order.order_date.isoformat() if order.order_date else "",
+                order.store_scope or "",
+                order.placed_by_name or "",
+                order.status,
+                ln.item_slug,
+                ln.inv_qty if ln.inv_qty is not None else "",
+                ln.or_qty if ln.or_qty is not None else "",
+                ln.sent_qty if ln.sent_qty is not None else "",
+                order.fulfilled_at.isoformat() if order.fulfilled_at else "",
+                order.fulfilled_by_name or "",
+            ])
+        return Response(
+            buf.getvalue(), mimetype="text/csv",
+            headers={"Content-Disposition":
+                     "attachment; filename=fresh_food_orders.csv"})
     finally:
         db.close()
 

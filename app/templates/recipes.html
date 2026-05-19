@@ -1,0 +1,700 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'kitchen_recipes' %}
+{% block title %}Recipes — Cenas Kitchen{% endblock %}
+{% block page_title %}Recipes{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Kitchen recipe library. Spanish instructions preserved, ingredient names in English. Click a recipe for full details.</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Recipes page — Sam #3074 / cena spec.
+     33 recipes across 5 categories (cold/hot/sauces/marinated/chop).
+     Audience: everyone except expo (per Sam #1109).
+     Layout matches manager_log.html shape (2-col list+detail). */
+
+  .rec-page {
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 12px;
+  }
+
+  .rec-head {
+    padding: 14px 18px;
+    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .rec-h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #FFFFFF;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rec-h1 i { color: #E4B340; font-size: 18px; }
+  .rec-count {
+    font-size: 11.5px;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    padding: 2px 8px;
+    background: rgba(228,179,64,0.06);
+    border: 0.5px solid rgba(217,164,54,0.20);
+    border-radius: 4px;
+  }
+  .rec-access-pill {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: rgba(156,203,118,0.14);
+    color: #9CCB76;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .rec-access-pill i { font-size: 11px; }
+  .rec-head-spacer { flex: 1; }
+  .rec-new-btn {
+    background: #FFD970;
+    color: #140A06;
+    border: 0;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .rec-new-btn:hover { background: #FFE085; }
+
+  .rec-filters {
+    padding: 10px 18px;
+    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    background: rgba(0,0,0,0.20);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .rec-search {
+    flex: 1;
+    min-width: 200px;
+    background: rgba(0,0,0,0.35);
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    border-radius: 5px;
+    padding: 7px 12px;
+    color: #FFFFFF;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .rec-search::placeholder { color: rgba(255,255,255,0.40); }
+  .rec-cat-seg {
+    display: inline-flex;
+    background: rgba(0,0,0,0.30);
+    padding: 3px;
+    border-radius: 6px;
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    flex-wrap: wrap;
+  }
+  .rec-cat-seg button {
+    padding: 5px 10px;
+    border-radius: 4px;
+    background: transparent;
+    border: 0;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: capitalize;
+  }
+  .rec-cat-seg button.is-active {
+    background: rgba(228,179,64,0.16);
+    color: #E4B340;
+  }
+  .rec-filter-meta {
+    font-size: 11px;
+    color: var(--text-3, rgba(255,255,255,0.45));
+    margin-left: auto;
+  }
+
+  .rec-body {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    min-height: 540px;
+  }
+  .rec-list {
+    border-right: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .rec-cat-header {
+    padding: 10px 18px;
+    background: rgba(228,179,64,0.06);
+    border-bottom: 0.5px solid rgba(217,164,54,0.10);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #E4B340;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .rec-list-empty {
+    padding: 32px 18px;
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--text-3, rgba(255,255,255,0.45));
+    font-style: italic;
+  }
+  .rec-list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.06);
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+  }
+  .rec-list-item:hover { background: rgba(228,179,64,0.04); }
+  .rec-list-item.is-active {
+    background: rgba(228,179,64,0.10);
+    border-left: 2px solid #E4B340;
+    padding-left: 16px;
+  }
+  .rec-list-title {
+    font-size: 13px;
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .rec-list-meta {
+    font-size: 10.5px;
+    color: var(--text-3, rgba(255,255,255,0.55));
+    display: flex;
+    gap: 10px;
+  }
+  .rec-list-meta span { display: inline-flex; align-items: center; gap: 4px; }
+  .rec-list-meta i { font-size: 11px; }
+
+  .rec-detail { padding: 22px 24px; overflow-y: auto; }
+  .rec-detail.is-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3, rgba(255,255,255,0.40));
+    font-style: italic;
+    font-size: 12.5px;
+    padding: 60px 20px;
+    text-align: center;
+  }
+  .rec-detail-mode {
+    font-size: 10px;
+    color: #E4B340;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+  .rec-detail-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFFFFF;
+    margin: 0 0 6px;
+  }
+  .rec-detail-meta {
+    font-size: 11.5px;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    margin-bottom: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .rec-detail-meta span { display: inline-flex; align-items: center; gap: 5px; }
+  .rec-detail-meta i { color: #E4B340; font-size: 12px; }
+  .rec-detail-cat-pill {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: rgba(228,179,64,0.18);
+    color: #E4B340;
+  }
+
+  .rec-section {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 0.5px solid var(--ck-border, rgba(217,164,54,0.08));
+  }
+  .rec-section-label {
+    font-size: 10.5px;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .rec-batch-tabs {
+    display: inline-flex;
+    background: rgba(0,0,0,0.30);
+    padding: 3px;
+    border-radius: 6px;
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    margin-bottom: 10px;
+  }
+  .rec-batch-tabs button {
+    padding: 5px 12px;
+    border-radius: 4px;
+    background: transparent;
+    border: 0;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: capitalize;
+  }
+  .rec-batch-tabs button.is-active {
+    background: rgba(228,179,64,0.18);
+    color: #E4B340;
+  }
+  .rec-ingredient-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .rec-ingredient-table th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    font-size: 10.5px;
+    color: var(--text-3, rgba(255,255,255,0.55));
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+  .rec-ingredient-table td {
+    padding: 7px 10px;
+    border-bottom: 0.5px solid rgba(255,255,255,0.05);
+    color: var(--text-2, rgba(255,255,255,0.85));
+  }
+  .rec-ingredient-table tr.hidden { display: none; }
+  .rec-instructions {
+    background: rgba(0,0,0,0.25);
+    border-left: 2px solid rgba(217,164,54,0.30);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    color: #FFFFFF;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .rec-instructions.empty {
+    color: var(--text-3, rgba(255,255,255,0.40));
+    font-style: italic;
+  }
+  .rec-notes {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-2, rgba(255,255,255,0.70));
+    line-height: 1.5;
+  }
+
+  /* Form mode */
+  .rec-field { margin-bottom: 14px; }
+  .rec-field label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+  }
+  .rec-field label .req { color: #E2645C; }
+  .rec-field input,
+  .rec-field textarea,
+  .rec-field select {
+    width: 100%;
+    background: rgba(0,0,0,0.35);
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    color: #FFFFFF;
+    padding: 9px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .rec-field textarea {
+    resize: vertical;
+    min-height: 120px;
+    line-height: 1.5;
+  }
+  .rec-field input:focus,
+  .rec-field textarea:focus,
+  .rec-field select:focus {
+    outline: none;
+    border-color: rgba(228,179,64,0.50);
+  }
+  .rec-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .rec-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+  }
+  .rec-form-actions button,
+  .rec-form-actions a.rec-form-btn {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+    background: transparent;
+    color: var(--text-2, rgba(255,255,255,0.65));
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .rec-form-actions button:hover,
+  .rec-form-actions a.rec-form-btn:hover { color: #FFFFFF; }
+  .rec-form-actions button.primary,
+  .rec-form-actions a.primary {
+    background: #FFD970;
+    color: #140A06;
+    border-color: #FFD970;
+  }
+  .rec-form-actions button.primary:hover,
+  .rec-form-actions a.primary:hover { background: #FFE085; }
+
+  @media (max-width: 760px) {
+    .rec-body { grid-template-columns: 1fr; }
+    .rec-list {
+      border-right: none;
+      border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
+      max-height: 320px;
+    }
+    .rec-form-row { grid-template-columns: 1fr; }
+    .rec-filters { flex-direction: column; align-items: stretch; }
+    .rec-filter-meta { margin-left: 0; }
+  }
+</style>
+
+<div class="rec-page">
+
+  <!-- Header -->
+  <div class="rec-head">
+    <h2 class="rec-h1"><i class="ti ti-book-2"></i>Recipes</h2>
+    <span class="rec-count">{{ recipes|length }} recipe{{ '' if recipes|length == 1 else 's' }}</span>
+    <span class="rec-access-pill"><i class="ti ti-users"></i>everyone except expo</span>
+    <span class="rec-head-spacer"></span>
+    {% if form_mode != 'new' and form_mode != 'edit' and can_create|default(true) %}
+      <a href="/{{ store_slug }}/recipes/new" class="rec-new-btn">
+        <i class="ti ti-plus"></i>New recipe
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Filter row -->
+  <div class="rec-filters">
+    <input type="text" class="rec-search" id="rec-search" placeholder="Search by name...">
+    <div class="rec-cat-seg" id="rec-cat-seg">
+      <button data-cat="" class="is-active">All</button>
+      {% for cat in (categories|default([
+          {'slug': 'cold', 'label': 'Cold'},
+          {'slug': 'hot', 'label': 'Hot'},
+          {'slug': 'sauces', 'label': 'Sauces'},
+          {'slug': 'marinated', 'label': 'Marinated'},
+          {'slug': 'chop', 'label': 'Chop'},
+      ])) %}
+        <button data-cat="{{ cat.slug }}">{{ cat.label }}</button>
+      {% endfor %}
+    </div>
+    <span class="rec-filter-meta"><span id="rec-visible-count">{{ recipes|length }}</span> of {{ recipes|length }}</span>
+  </div>
+
+  <!-- 2-col body -->
+  <div class="rec-body">
+
+    <!-- LEFT: category-grouped list -->
+    <div class="rec-list" id="rec-list">
+      {% if recipes %}
+        {% set ordered_cats = categories|default([
+            {'slug': 'cold', 'label': 'Cold'},
+            {'slug': 'hot', 'label': 'Hot'},
+            {'slug': 'sauces', 'label': 'Sauces'},
+            {'slug': 'marinated', 'label': 'Marinated'},
+            {'slug': 'chop', 'label': 'Chop'},
+        ]) %}
+        {% set ns = namespace(any_in_cat=False) %}
+        {% for cat in ordered_cats %}
+          {% set cat_recipes = recipes|selectattr('category', 'equalto', cat.slug)|list %}
+          {% if cat_recipes %}
+            <div class="rec-cat-header" data-cat="{{ cat.slug }}">{{ cat.label }} — {{ cat_recipes|length }}</div>
+            {% for r in cat_recipes %}
+              <a href="/{{ store_slug }}/recipes/{{ r.id }}"
+                 class="rec-list-item{% if recipe and recipe.id == r.id %} is-active{% endif %}"
+                 data-cat="{{ r.category }}"
+                 data-name="{{ (r.name|default(''))|lower }}">
+                <div class="rec-list-title">{{ r.name|default('(untitled)') }}</div>
+                <div class="rec-list-meta">
+                  {% if r.prep_time %}<span><i class="ti ti-clock"></i>{{ r.prep_time }}</span>{% endif %}
+                  {% if r.shelf_life %}<span><i class="ti ti-hourglass"></i>{{ r.shelf_life }}</span>{% endif %}
+                </div>
+              </a>
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="rec-list-empty">
+          No recipes yet. Click "New recipe" to add the first one.
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- RIGHT: detail / form / empty -->
+    <div class="rec-detail{% if not recipe and not form_mode %} is-empty{% endif %}">
+
+      {% if form_mode == 'new' or form_mode == 'edit' %}
+        <!-- NEW or EDIT form -->
+        <div class="rec-detail-mode">{{ 'New recipe' if form_mode == 'new' else 'Editing recipe' }}</div>
+        <form method="POST" action="{% if form_mode == 'edit' and recipe %}/{{ store_slug }}/recipes/{{ recipe.id }}{% else %}/{{ store_slug }}/recipes{% endif %}">
+          <div class="rec-field">
+            <label for="rec-name">Recipe name <span class="req">*</span></label>
+            <input type="text" id="rec-name" name="name" maxlength="200" required autofocus
+                   value="{{ recipe.name|default('') if form_mode == 'edit' else '' }}">
+          </div>
+          <div class="rec-form-row">
+            <div class="rec-field">
+              <label for="rec-category">Category <span class="req">*</span></label>
+              <select id="rec-category" name="category" required>
+                {% for cat in (categories|default([
+                    {'slug': 'cold', 'label': 'Cold'},
+                    {'slug': 'hot', 'label': 'Hot'},
+                    {'slug': 'sauces', 'label': 'Sauces'},
+                    {'slug': 'marinated', 'label': 'Marinated'},
+                    {'slug': 'chop', 'label': 'Chop'},
+                ])) %}
+                  <option value="{{ cat.slug }}"{% if form_mode == 'edit' and recipe.category == cat.slug %} selected{% endif %}>{{ cat.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="rec-field">
+              <label for="rec-prep-time">Prep time (listo en)</label>
+              <input type="text" id="rec-prep-time" name="prep_time" maxlength="80"
+                     placeholder="e.g. 45 min"
+                     value="{{ recipe.prep_time|default('') if form_mode == 'edit' else '' }}">
+            </div>
+          </div>
+          <div class="rec-form-row">
+            <div class="rec-field">
+              <label for="rec-shelf-life">Shelf life (duración)</label>
+              <input type="text" id="rec-shelf-life" name="shelf_life" maxlength="80"
+                     placeholder="e.g. 4 days"
+                     value="{{ recipe.shelf_life|default('') if form_mode == 'edit' else '' }}">
+            </div>
+            <div class="rec-field">
+              <label for="rec-batch-sizes">Batch sizes (comma-separated)</label>
+              <input type="text" id="rec-batch-sizes" name="batch_sizes_csv"
+                     placeholder="single, double, triple"
+                     value="{{ (recipe.batch_sizes|join(', ')) if form_mode == 'edit' and recipe.batch_sizes else 'single' }}">
+            </div>
+          </div>
+          <div class="rec-field">
+            <label for="rec-ingredients-json">Ingredients (JSON: list of {name, qty, batch_size})</label>
+            <textarea id="rec-ingredients-json" name="ingredients_json"
+                      placeholder='[{"name": "rice", "qty": "5 lb", "batch_size": "single"}, ...]'>{{ recipe.ingredients_raw|default('') if form_mode == 'edit' else '' }}</textarea>
+            <div class="field-help" style="font-size:10.5px;color:rgba(255,255,255,0.40);margin-top:4px;font-style:italic;">JSON array. Each item: {"name": "...", "qty": "...", "batch_size": "single|double|triple"}. Backend parses + stores as JSON.</div>
+          </div>
+          <div class="rec-field">
+            <label for="rec-spanish-instructions">Instructions (Spanish, preserved as-written)</label>
+            <textarea id="rec-spanish-instructions" name="spanish_instructions"
+                      placeholder="Step-by-step prep instructions...">{{ recipe.spanish_instructions|default('') if form_mode == 'edit' else '' }}</textarea>
+          </div>
+          <div class="rec-field">
+            <label for="rec-notes">Notes</label>
+            <textarea id="rec-notes" name="notes" style="min-height:60px;"
+                      placeholder="Anything else worth noting.">{{ recipe.notes|default('') if form_mode == 'edit' else '' }}</textarea>
+          </div>
+          <div class="rec-form-actions">
+            <button type="submit" class="primary"><i class="ti ti-check"></i> Save</button>
+            <a class="rec-form-btn" href="{% if form_mode == 'edit' and recipe %}/{{ store_slug }}/recipes/{{ recipe.id }}{% else %}/{{ store_slug }}/recipes{% endif %}"><i class="ti ti-arrow-left"></i> Cancel</a>
+          </div>
+        </form>
+
+      {% elif recipe %}
+        <!-- DETAIL view -->
+        <div class="rec-detail-mode">Recipe</div>
+        <h3 class="rec-detail-title">{{ recipe.name|default('(untitled)') }}</h3>
+        <div class="rec-detail-meta">
+          <span class="rec-detail-cat-pill">{{ recipe.category|default('uncategorized')|capitalize }}</span>
+          {% if recipe.prep_time %}<span><i class="ti ti-clock"></i>{{ recipe.prep_time }}</span>{% endif %}
+          {% if recipe.shelf_life %}<span><i class="ti ti-hourglass"></i>{{ recipe.shelf_life }}</span>{% endif %}
+          {% if recipe.batch_sizes %}<span><i class="ti ti-scale"></i>{{ recipe.batch_sizes|join(' / ') }}</span>{% endif %}
+        </div>
+
+        {% if recipe.ingredients %}
+        <div class="rec-section">
+          <div class="rec-section-label">Ingredients</div>
+          {% if recipe.batch_sizes and recipe.batch_sizes|length > 1 %}
+          <div class="rec-batch-tabs" id="rec-batch-tabs">
+            {% for sz in recipe.batch_sizes %}
+              <button data-size="{{ sz }}"{% if loop.first %} class="is-active"{% endif %}>{{ sz|capitalize }}</button>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <table class="rec-ingredient-table" id="rec-ingredient-table">
+            <thead><tr><th>Ingredient</th><th>Quantity</th></tr></thead>
+            <tbody>
+              {% for ing in recipe.ingredients %}
+                <tr data-batch-size="{{ ing.batch_size|default('single') }}">
+                  <td>{{ ing.name }}</td>
+                  <td>{{ ing.qty|default('—') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+
+        {% if recipe.spanish_instructions %}
+        <div class="rec-section">
+          <div class="rec-section-label">Instructions (Spanish, as-written)</div>
+          <div class="rec-instructions">{{ recipe.spanish_instructions }}</div>
+        </div>
+        {% else %}
+        <div class="rec-section">
+          <div class="rec-section-label">Instructions</div>
+          <div class="rec-instructions empty">(no instructions recorded)</div>
+        </div>
+        {% endif %}
+
+        {% if recipe.notes %}
+        <div class="rec-section">
+          <div class="rec-section-label">Notes</div>
+          <div class="rec-notes">{{ recipe.notes }}</div>
+        </div>
+        {% endif %}
+
+        <div class="rec-form-actions">
+          {% if can_edit|default(true) %}
+            <a class="rec-form-btn primary" href="/{{ store_slug }}/recipes/{{ recipe.id }}/edit">
+              <i class="ti ti-edit"></i> Edit
+            </a>
+          {% endif %}
+          <a class="rec-form-btn" href="/{{ store_slug }}/recipes"><i class="ti ti-arrow-left"></i> Back to list</a>
+        </div>
+
+      {% else %}
+        <!-- Empty state -->
+        <div>
+          {% if recipes %}
+            Pick a recipe from the list on the left to see ingredients, batch sizes, and instructions.
+          {% else %}
+            No recipes yet — click "New recipe" above to add the first.
+          {% endif %}
+        </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Search + category filter — operates on rendered list, no round-trip.
+  var listEl    = document.getElementById('rec-list');
+  var searchEl  = document.getElementById('rec-search');
+  var catSeg    = document.getElementById('rec-cat-seg');
+  var countEl   = document.getElementById('rec-visible-count');
+  if (!listEl) return;
+
+  var activeCat = '';
+  var search    = '';
+
+  function applyFilters() {
+    var items = listEl.querySelectorAll('.rec-list-item');
+    var q = search.trim().toLowerCase();
+    var visible = 0;
+    var catVisibleCount = {};
+    items.forEach(function (item) {
+      var cat = item.dataset.cat || '';
+      var name = item.dataset.name || '';
+      var passCat = !activeCat || cat === activeCat;
+      var passSearch = !q || name.indexOf(q) !== -1;
+      var show = passCat && passSearch;
+      item.style.display = show ? '' : 'none';
+      if (show) {
+        visible++;
+        catVisibleCount[cat] = (catVisibleCount[cat] || 0) + 1;
+      }
+    });
+    // Hide category headers whose group is now empty
+    listEl.querySelectorAll('.rec-cat-header').forEach(function (h) {
+      var c = h.dataset.cat;
+      h.style.display = catVisibleCount[c] > 0 ? '' : 'none';
+    });
+    if (countEl) countEl.textContent = visible;
+  }
+
+  if (searchEl) {
+    searchEl.addEventListener('input', function () { search = searchEl.value; applyFilters(); });
+  }
+  if (catSeg) {
+    catSeg.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-cat]');
+      if (!btn) return;
+      catSeg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+      activeCat = btn.dataset.cat;
+      applyFilters();
+    });
+  }
+
+  // Batch-size tabs in detail view — switch which rows are visible in the ingredient table
+  var batchTabs = document.getElementById('rec-batch-tabs');
+  var ingTable  = document.getElementById('rec-ingredient-table');
+  if (batchTabs && ingTable) {
+    function applyBatchFilter(size) {
+      ingTable.querySelectorAll('tbody tr').forEach(function (r) {
+        r.classList.toggle('hidden', r.dataset.batchSize !== size);
+      });
+    }
+    batchTabs.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-size]');
+      if (!btn) return;
+      batchTabs.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+      applyBatchFilter(btn.dataset.size);
+    });
+    // Init: filter to first batch size
+    var first = batchTabs.querySelector('button.is-active');
+    if (first) applyBatchFilter(first.dataset.size);
+  }
+
+  applyFilters();
+})();
+</script>
+{% endblock %}

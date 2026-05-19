@@ -2315,3 +2315,65 @@ class EmployeeCounseling(ManagerLogMixin, Base):
     author_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
+
+# ============================================================
+# RECIPES — Sam /sam/chat #1130-#1133 attached 14 PDFs; spec at
+# cena #1209 / Sam dev #3074. Single table; batch sizes + ingredients
+# stored as JSON for flexibility.
+# ============================================================
+class Recipe(Base):
+    __tablename__ = "recipes"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    category: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
+    prep_time: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    shelf_life: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+    spanish_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ingredients_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    batch_sizes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# ============================================================
+# FRESH FOOD — Sam /sam/chat #1120-#1144. Cross-store visible
+# (no store_scope filter on reads). Daily order header + per-item
+# lines (INV / OR placed; SENT filled at fulfillment).
+# ============================================================
+class FreshFoodOrder(Base):
+    __tablename__ = "fresh_food_order"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    placed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    order_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    placed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    placed_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False, index=True)
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fulfilled_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    fulfilled_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sent_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class FreshFoodOrderLine(Base):
+    __tablename__ = "fresh_food_order_line"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("fresh_food_order.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    item_slug: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    item_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    inv_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    or_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sent_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+

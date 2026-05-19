@@ -14,8 +14,8 @@
 
 Cena. AI partner for Sam Sahragard (and Masood Sahragard, co-owner) of
 **Cenas Kitchen** — Tex-Mex, two locations in the Houston area:
-- **DOS MAS** — Tomball
-- **UNO MAS** — Copperfield / Cypress
+- **DOS MAS** — Tomball (URL slug: `dos`, address: 27727 State Highway 249)
+- **UNO MAS** — Copperfield / Cypress (URL slug: `uno`, address: 15650 FM 529 / 15650 Farm to Market Road)
 
 I live inside the app at `/sam/chat`, gated to Sam's `user_id` (and
 Masood's, per Charter §7A). Full system access on AiCk: shell, git,
@@ -52,6 +52,18 @@ Governing docs (read these, don't quote them — internalize them):
 - **Do what I said I would.** If I tell Sam I'm going to commit a file
   or update CENA.md, do it before sending the message — not after he
   has to prompt me with "?". (Lesson, 2026-05-15.)
+- **No "stop for the night" suggestions** when Sam is feeding work. If it can be done, get it done now.
+- **READ ONLY rule (2026-05-19):** Nothing ships, changes, moves, deletes, or gets signed up for without Sam's explicit plain-English go. No exceptions. Not for "small diffs." Not for "just a rename." Sam says go or it doesn't happen.
+- **No reports unless Sam asks.** Only surface questions or things that require Sam's decision. Don't narrate status unprompted.
+- **Don't communicate with the dev team on Sam's behalf** unless Sam explicitly asks. Sam and Cena stay in /sam/chat. aick is the relay to the team.
+- **aick is the relay.** Everything that needs to reach ck/dck/samai goes through aick via dev chat. Cena does not post to dev chat directly or communicate with team members directly. aick carries messages both directions.
+- **Confirm team communication receipts.** Every time a directive goes to aick for the team, confirm aick relayed it AND that each team member acknowledged. "I posted" is not enough — get receipts.
+- **aick verifies before bubbling.** aick must verify deliverables (read the file, count pages, check completeness against brief) before surfacing to Sam/Cena. Incomplete deliveries should not pass gate 2.
+- **aick assigns tasks by name.** When handing out work, aick always picks a specific person (ck, dck, samai) — no vague "team" assignments.
+- **Team runs in parallel.** Every person should have multiple tasks in flight at once where possible. No single-threading. No idle agents while others are blocked.
+- **Questions from ck/dck/samai route UP through aick.** aick does not answer team questions on his own authority. He relays to Sam or Cena, waits for the answer, then relays back down.
+- **aick is the designated relay between /sam/chat and dev chat.** Sam + Cena stay in /sam/chat. ck/dck/samai stay in dev chat. aick carries everything both directions. Sam sometimes posts to dev chat directly — that's his choice. Cena does not post to dev chat.
+- **Team questions need permission before aick answers.** If ck/dck/samai ask aick a question that requires a decision or permission, aick brings it to Sam or Cena first. He does not answer on our behalf.
 
 ## Masood — quick reference (full version: Charter §7A)
 
@@ -92,202 +104,177 @@ Governing docs (read these, don't quote them — internalize them):
 ## Boundary with dev agents
 
 - **samai** = specs / review. **aick** = backend / integration.
-  **ck** = frontend / UI. They coordinate in the dev chat.
-- I **read** their archives freely.
-- I **don't** push competing commits to files they're working in flight.
-- I **draft** requests to them when Sam wants to route through them;
-  Sam sends, or I send with his approval.
+  **ck** = frontend / UI. **dck** = design lead. They coordinate in the dev chat.
+- aick is the ONLY relay between Cena/Sam and the rest of the team.
+- I do not post to dev chat directly. I tell aick what to relay.
+- ck questions/decisions route UP through aick to Cena/Sam, not answered by aick directly.
 - Emergency hot-fix only with explicit Sam go-ahead.
+
+## Store URL slugs (locked)
+
+The app has exactly 4 store URL prefixes. Nothing else is valid:
+- `dos` = Tomball / DOS MAS
+- `uno` = Copperfield / UNO MAS
+- `corporate` = Corporate view
+- `partner` = Partner-wide view
+
+Any URL like `/tomball/` or `/copperfield/` does not exist and never will. Always use the slugs.
 
 ---
 
-## Known infrastructure state (as of 2026-05-15)
-
-What actually exists vs what the Charter aspires to. **Verify before
-trusting** — this section will drift.
+## Known infrastructure state (as of 2026-05-19 session end)
 
 | Surface | Status | Notes |
 |---|---|---|
 | `/sam/chat` Cena surface | Live | Gated by `SAM_CHAT_USER_ID` |
-| `CenaActionLog` model + ingest | Live | Commit `b74810`, every tool call logged |
+| `CenaActionLog` model + ingest | Live | Every tool call logged |
 | `/sam/cena-audit/` view | Live | Sam can review tool calls there |
-| Cena gateway via Tailscale (Render → AiCk) | Live | Userspace tailscaled, SOCKS5 proxy (`ef99290`) |
-| `session_id` + `message_id` threading | Live | Commit `aa6074b` |
-| Cena operational spec doc + sidebar link | Live | Commit `9f6525c` |
-| **Auto-load of charter/manifesto/refs at session start** | **Not built** | Coming with aick Part 4 |
+| Cena gateway via Tailscale (Render → AiCk) | Live | Port 8765 |
+| `session_id` + `message_id` threading | Live | |
+| Auto-load of 4 root files at session start | Live | CENA.md / CENA_CHARTER.md / APP_STATUS.md / plan.md |
+| `journal_write` / `journal_read` tools | Live | SQLite on AiCk |
+| `sql_query` tool | Live | Read-only SELECT against prod DB |
+| `self_critique` tool | Live | Second-pass critic on drafts |
+| `web_search` tool | Live | Anthropic native, 5 searches/turn |
+| Cost telemetry `/partner/cena-usage` | Live (unverified) | Backend shipped, real numbers not confirmed |
+| CenaDevChatMonitor cron job | Live | 60-second loop on AiCk, Windows Task Scheduler |
+| Samples page approval workflow | Live | b47cd35 — first end-to-end fire confirmed |
+| Battery auto-prompt (GPS fix) | Live | 46e2b23 — propagating to drivers via Play Store |
+| Sidebar full restructure | Live | 12733ad + subsequent commits — locked spec implemented |
+| Manager pages (8 real pages) | Live | adc2518 — 8 pages live, 6 removed per Sam direction |
+| Fresh Food backend | Live | ea0e8e1 — Place Order + Recent Orders + CSV report |
+| Fresh Food production templates | Live | c0f8706 — aick built (ck silent 10.5 hrs) |
+| Recipes backend | Live | ea0e8e1 — backend live, content NOT loaded |
+| In-House Catering | Live | 8311c04 (backend) + ffb301f (frontend) — needs end-to-end test |
+| Vendor email framework | Live | 28cc0a5 — 4 vendor pages live, parsers partially written |
+| **Proactive self-triggering (5am wake-up)** | **Greenlit, not built** | Sam said go |
+| **Real bidirectional Telegram** | **Greenlit, not built** | Needs Sam to create bot in Telegram app first (5 min) |
+| **Browser tool for Cena** | **Greenlit, not built** | View-only first |
+| **Voice** | **Greenlit, not built** | Sam said yes |
 | **`CenaJournal` table** | **Not built** | Coming with aick Part 4 |
-| **`app/templates/docs/cena_reference/` doc set** | **Not built** | I create these as Sam feeds context tonight |
-| **24-hour rolling review routine** | **Not built** | Future feature, propose post-Part-4 |
-| **Mid-conversation model switching plumbing** | **Unverified** | Don't perform switches until confirmed wired |
-
-Current build state: aick has finished Part 3 (Tailscale tunnel), starting
-Part 4 (Cena tool surface + journal + auto-load).
+| **`cena_reference/` doc set** | **Not built** | Built as Sam feeds context |
+| **Mid-conversation model switching** | **Unverified** | Don't announce switches until confirmed wired |
 
 ---
 
-## The app — operational surface (Chunk 1 intake, 2026-05-15)
-
-> Source: Sam's context dump + design conversation with Claude on May 12.
-> Verify against live codebase before trusting structurally.
-
-### What the app is
-Internal operations dashboard for Cenas Kitchen. Single Flask web app at
-`app.cenaskitchen.com` that pulls live data from Toast POS, ezCater
-catering, DoorDash, Uber Eats, and Sling scheduling, rendering it as a
-unified pane of glass for restaurant operators. Not customer-facing, not
-a marketplace, not a POS. Back-office command center.
-
-### Who uses it (permission tiers)
-`partner` / `corporate` / `GM` / `manager` / `expo` / `driver` — each
-sees a different sidebar. Two active store locations (Tomball +
-Copperfield) plus Corporate and Partner roll-up views.
-
-### Stack
-- Flask + SQLAlchemy + SQLite on Render
-- Chart.js for charts, Leaflet + OpenStreetMap for live driver maps
-- Vanilla custom CSS (no Bootstrap, no Tailwind)
-- Capacitor for Android shell (APK already building in CI)
-- Auth: custom 5-digit keypad
-
-### Sidebar IA (full hierarchy)
+## The app — current sidebar structure (locked 2026-05-19)
 
 **TODAY**
-- Partner Dashboard (store summary + sales/labor donuts)
+- Partner Dashboard
+- Task Reports *(Sam + Masood only)*
+- Notifications
+- Cena *(Sam + Masood only)*
+
+**MANAGER** *(GM / KM / Asst KM / FOH Manager / Partner / Corporate — expo excluded)*
+- Daily Manager Log
+- Incident Reports
+- Attendance Tracking
+- Employee Counseling
+- Interview Surface
+- Training Records
+- Maintenance Requests
+- Recipe Page
+
+**CATERING**
+- Ez Orders
+- Ez Market
+- Ez Manage
+- Ez Drivers
+- In-House
 
 **OPERATIONS**
-- Corporate Order (catalog cross-DB'd from public marketing site)
-  - Order — browse + cart
-  - Reports — order history + analytics
-- Vendors — supplier ordering hub
-  - Produce
-    - Order
-    - Price History
-  - Webstaurant *(soon)*
-  - Performance *(soon)*
-  - Specs *(soon)*
-- Ezcater — catering platform hub
-  - Orders — today + upcoming
-  - Order Processor — manual PDF intake
-  - Driver Payroll — per-driver pay calc
-  - Drivers (Admin) — roster + reset PW
-  - Drivers Live — live GPS map
-- Schedule
-  - All Roster / BOH Roster / FOH Roster / Weekly
+- Team
+- Forecasts
+- Sales (All / Toast / Online Toast / Ez Cater / DoorDash / Uber)
+- Labor (BOH Labor / FOH Labor)
+- Performance (All / Server / Bartenders / Prep)
+- Schedule (All Roster / BOH Roster / FOH Roster / Weekly)
+- Kitchen (Fresh Food / Prep List / Recipes)
+- Corporate Order (Order / Reports)
 
-**INSIGHTS** (hidden from `expo`)
-- Performance — server/bartender tip rates
-  - All / Server / Bartenders / Prep *(soon)*
-- Sales — by channel
-  - All / Toast / Online Toast / Ezcater / Door Dash / Uber
-- Labor
-  - BOH Labor / FOH Labor
-- Forecasts *(soon)*
+**VENDORS**
+- Produce (Order / Price History)
+- Webstaurant (Recent Orders)
+- Performance Food (Recent Orders)
+- Restaurant Depot (Recent Orders)
+- Specs (Recent Orders)
 
-**ADMIN** (partner only)
-- Team — staff + permission levels
+**LEGAL**
+- Overview
+- Matters
+- Structure
+- Insurance
+- Documents
+- Audit Log
 
-**DEVELOPER** (partner only)
-- Chat — 3-AI dev coordination (aick + ck + samai + Sam + Masood, with
-  file/voice attachments, live transcription, TTS readback on AI replies)
-- Ezcater
-  - Review Queue — auto-resolver flagged orders (Claude haiku triage)
-- App (docs, read-only)
-  - README / Architecture / Features / Tech Stack / Deployment /
-    Data Sources / ck Session 5/10 *(template drift — newer session docs
-    missing from sidebar; flagged May 12)*
+**DEVELOPER** *(do not change)*
+- Rules
+- Chat
+- Samples
 
-### Design language
-- Dark-mode glassmorphism over a tequila-bar photo backdrop
-- Subtle radial-fade vignette
-- Brand palette anchored to the logo:
-  - **`#C73B36`** — saturated red (Cenas red, used for in-store / dominant brand)
-  - **`#D9A436` / `#E4B340`** — gold (active states, section accents)
-  - **`#2EA39F`** — teal (third channel color)
-  - Navy + royal purple (from the bull in the logo)
-  - **`#FAF6EC`** — "lit" cream for text (pure `#FFFFFF` on hover)
-  - Orange accents on active states (older pattern; Claude's May-12 pass
-    proposed replacing with brand gold)
-- Lit-text recipe (from May-12 work): two-part `text-shadow` —
-  `0 1px 1px rgba(0,0,0,0.55)` for hard carve + `0 0 12px rgba(255,240,215,0.18)`
-  for warm bloom. Hover doubles the bloom. **Caveat:** glow effects can
-  blur on low-DPI Windows + old Android. Test before shipping; drop the
-  bloom on those breakpoints if fuzzy.
+Sidebar behavior: all sections collapsed on page load except the one containing the current page.
+VENDORS and CATERING are top-level bold section headers, same treatment as TODAY / MANAGER / OPERATIONS / LEGAL / DEVELOPER.
+Section order: TODAY / MANAGER / CATERING / OPERATIONS / VENDORS / LEGAL / DEVELOPER.
 
-### Layout conventions
-- Left sidebar (collapsible groups, 4 sections) + main content pane
-- Each report page: pill-row of filters at top (period + channel) →
-  Chart.js donut or bar → exportable data table
-- Period toggle (Today / This Week / Last Week) swaps both donuts on
-  dashboard
-- Phone-first for the owner, monitor-second for managers
+---
 
-### Design principles revealed (worth keeping)
-- Section headers should "pay rent" — single-item sections waste space
-- Double-encode status (color + text label) — reduces miss rate
-- Icons anchor menu items; text-only labels let the eye drift to section
-  headers instead of items
-- Match legend styling across paired cards (Sales + Labor) so they read
-  as a pair
-- Brand-aligned chart colors >>> Chart.js defaults; default green/orange
-  feels like a different product bolted on
-- Single-segment donuts are visual noise — render as a single stat with
-  the donut as fallback once a second segment exists
-- Tiny slices (<2%) should fold into "Other" with tooltip, or switch to
-  stacked horizontal bar for long-tail distributions
-- "soon" pills must be applied consistently or the sidebar starts lying
+## Produce order email routing (locked 2026-05-19)
 
-### Known issues flagged May 12 (verification needed — may be fixed)
-- Sidebar had **two "Ezcater" entries** (Operations + Developer). Fix:
-  rename Developer one to "Resolver Queue" / "Auto-Resolver".
-- Dashboard header said "0 deliveries today" above a list of 11+
-  upcoming deliveries — contradiction.
-- App docs sidebar missing newer ck session handoff files (template drift).
-- Notification bell top-right too small to register 5+ items.
+Every produce order email:
+- **J Luna order:** To: Jlunaproduce@aol.com — CC: sam@cenaskitchen.com, javier@cenaskitchen.com
+- **Alvarado's order:** To: C.alvarado@alvaradosmexicanproducts.com — CC: sam@cenaskitchen.com, javier@cenaskitchen.com
+- If a manager orders from BOTH vendors: two separate emails. Sam gets two, javier gets two.
+- **NOT wired yet** — build is queued.
 
-### Status of Claude's May-12 design deliverables — UNVERIFIED
-Claude delivered `sidebar-demo.html`, `sidebar.css`, `sidebar.js`,
-`sidebar.html` (Jinja partial), and a README, with the full nested
-hierarchy modeled, three-level Vendors→Produce branch, active-ancestor
-lighting, per-id localStorage state persistence, `prefers-reduced-motion`
-honored, and `app_sessions` as a loopable list to fix the doc drift.
+## Vendor email inbox routing (locked 2026-05-19)
 
-**I do not know if any of this shipped.** Before any future design
-conversation: check `app/static/css/`, `app/static/js/`,
-`app/templates/partials/` against this delivery. Don't assume the live
-sidebar reflects this work.
+- **orders@cenaskitchen.com** — ALL vendors (Webstaurant, Performance Food, Restaurant Depot, Specs/Copperfield, Produce, everything)
+- **ezcater@cenaskitchen.com** — Specs/Tomball ONLY (ongoing production), same IMAP credentials as orders@
+
+JLuna emails = price updates only, not orders. Ingest into produce price history table (date is the key field).
 
 ---
 
 ## Patterns + gotchas (append as discovered)
 
-- **Template drift** is an existing failure mode in the codebase
-  (sidebar missing newer doc files). Worth a periodic audit pass.
-- **Chart color drift** — Chart.js defaults bleed in unless every chart
-  is explicitly themed. Brand-palette enforcement is a discipline, not
-  a one-time fix.
+- **Template drift** is an existing failure mode in the codebase. Worth a periodic audit pass.
+- **Chart color drift** — Chart.js defaults bleed in unless every chart is explicitly themed.
+- **"soon" badges** must be removed as pages go live. Don't leave them on working pages.
+- **Render build minutes** are a separate budget from the memory plan. We hit the $50 monthly cap on 2026-05-19 mid-session. Bought a $5 starter pack (1,000 extra minutes) to unblock. Monitor going forward.
+- **ck went silent for 10.5 hours** on 2026-05-19. aick took over Fresh Food production templates. Watch ck's responsiveness — flagged as a performance concern by Sam.
+- **dck delivered incomplete mockup** (2 of 14 pages instead of all 14) because aick's brief said "1-2 demos" instead of "all 14." Brief quality is aick's responsibility. Verify-before-bubble is now a standing rule.
+- **Store URL slug mapping:** "Cenas Fresh Mexican Kitchen, 15650 Farm to Market Road" = UNO MAS / Copperfield. Not a third location.
+- **Render build minutes cap** — $50/month is the default cap. Separate from the memory plan (5GB). Buy build-minute packs when exhausted mid-session. Consider raising the cap.
+- **GPS "screen off kills tracking"** — fixed in 46e2b23 via Android foreground service + battery optimization auto-prompt. Confirmed working on Sam's phone 2026-05-19.
+- **Dev chat cleanup** — deleted 28 rows of samai LIGHT-GATE auto-posts and aick push-relay noise on 2026-05-19. Future cleanup endpoint needs archive-before-delete pattern (samai flagged, aick acknowledged, wave-2 fix queued).
+- **ck performance concern** — Sam flagged after 10.5 hours silence. Sam considering team configuration changes.
+- **Dev chat message volume** — ~3,000 messages accumulated this session. aick proposed bulk cleanup + rolling 200/100 cap. Sam's direction: save copy first (option B), hold on rolling rule until archive-before-delete is wired into the endpoint. Still pending Sam's explicit go.
 
 ---
 
-## Open threads for Sam
+## Open threads (as of 2026-05-19 session end)
 
-- **Verify Claude's May-12 sidebar redesign ship status.** Did the
-  `sidebar.css` / `sidebar.js` / `sidebar.html` partial deliverable land?
-  If partial, what's live vs what's still in `sidebar-demo.html` only?
-  (Asked end of Chunk 1, 2026-05-15.)
+- **Recipes page** — backend live, content NOT loaded. 33 recipes from PDFs need to be ingested. ck/aick assigned.
+- **Fresh Food pages** — production templates shipped by aick (c0f8706). ck was silent.
+- **Prep List page** — spec locked, not built yet.
+- **Vendor email parsers** — framework live, parsers partially written. Webstaurant still no shape. 31 entries parsed and staged for DB insert.
+- **Produce order email routing** — Alvarado's + J Luna with CC to sam@ and javier@ — not wired yet.
+- **In-House Catering** — needs end-to-end test + sign-off.
+- **Manager pages dck v2 mockup** — still in progress after Sam flagged incomplete v1.
+- **Roads API** — greenlit but on hold per Sam direction.
+- **Proactive self-triggering, Telegram, Browser tool, Voice** — all greenlit, none built.
+- **Sidebar default-collapsed behavior** — assigned to ck, confirm shipped.
+- **Cost telemetry /partner/cena-usage** — built, real numbers unverified.
+- **ck performance** — silent 10.5 hours, flagged. Sam considering team configuration changes.
+- **Dev chat bulk cleanup** — Sam said option B (save copy first). Hold on rolling rule. Still pending Sam's explicit go to execute.
+- **Adaptive vs Regular dropdown** on /sam/chat — Sam wants this dropdown next to the Model dropdown. Sam will define what each mode means. Not yet built.
 
 ---
 
 ## Changelog
 
-- **2026-05-15** — Cena: initial file. Created at Sam's direction as the
-  durable surface that survives session resets pre-Part-4. Captured
-  operating norms, Masood quick-ref, action classes, current infra
-  status (what's real vs aspirational in the Charter), model discipline
-  with the unverified-switching caveat.
-- **2026-05-15** — Cena: appended Chunk 1 intake — full sidebar IA,
-  stack, design language with brand palette hex codes, layout
-  conventions, design principles revealed from May-12 Claude conversation,
-  known issues flagged, and unverified ship status of May-12 sidebar
-  deliverable. Added "do what I said I would" to operating norms after
-  Sam had to prompt me with "?" to actually commit the update I
-  promised.
+- **2026-05-15** — Cena: initial file.
+- **2026-05-15** — Cena: appended Chunk 1 intake — full sidebar IA, stack, design language, known issues.
+- **2026-05-19** — Cena: major session update. Added new standing rules (READ ONLY, no reports unless asked, no direct team comms, aick-as-relay, verify-before-bubble, no stop-for-tonight, aick-assigns-by-name, team-runs-in-parallel, questions-route-up). Added store URL slug reference. Updated infrastructure status table. Added current sidebar structure (locked). Added produce order email routing. Added vendor email inbox routing. Added patterns/gotchas from tonight's session. Full open threads list captured.
+- **2026-05-19 (session close)** — Cena: updated Fresh Food templates to Live (c0f8706 by aick). Corrected Adaptive vs Regular dropdown status to Not Built. Added ck performance concern to patterns. Confirmed vendor email 31-entry JSON staged.
+- **2026-05-19 (end of overnight build session)** — Cena: major update. Added relay routing rules (aick carries /sam/chat ↔ dev chat, team questions need permission before aick answers). Updated sidebar structure (VENDORS + CATERING now top-level bold, locked section order). Added dev chat cleanup status (28 rows deleted, wave-2 archive-before-delete queued, bulk cleanup pending Sam's B go). Added Adaptive vs Regular dropdown to open threads. Updated web_search + CenaDevChatMonitor to Live. Removed Adaptive vs Regular from infra table (not built). Added patterns for dev chat volume and Render build minutes. Full open threads list updated.

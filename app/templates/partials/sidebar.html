@@ -107,13 +107,7 @@
       <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
         {% for slug, label, icon in [
           ('daily-log', 'Daily manager log', 'ti-clipboard-text'),
-          ('shift-handoff', 'Shift handoff', 'ti-arrows-left-right'),
           ('incident-reports', 'Incident reports', 'ti-alert-triangle'),
-          ('supply-requests', 'Supply requests', 'ti-package'),
-          ('daily-goals', 'Daily goals', 'ti-target'),
-          ('staff-feedback', 'Staff feedback', 'ti-message-circle'),
-          ('pre-shift-checklist', 'Pre-shift checklist', 'ti-checklist'),
-          ('close-of-day-audit', 'Close of day audit', 'ti-receipt'),
           ('recipe-page', 'Recipe page', 'ti-book-2'),
           ('attendance', 'Attendance tracking', 'ti-calendar-time'),
           ('interview', 'Interview surface', 'ti-user-plus'),
@@ -125,7 +119,6 @@
            class="ck-sb-item{% if active == 'manager_' + slug.replace('-','_') %} active{% endif %}">
           <i class="ti {{ icon }} ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">{{ label }}</span>
-          <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
         </a>
         {% endfor %}
       </div></div>

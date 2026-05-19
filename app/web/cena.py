@@ -2328,6 +2328,42 @@ def _jsonable(v):
     return v
 
 
+@cena_bp.route("/sam/cena/run-ingest-vendor-emails", methods=["POST"])
+def cena_run_ingest_vendor_emails():
+    """Full ingest pass — scan orders@ and ezcater@ inboxes, parse
+    each matched vendor email via LLM, upsert into vendor_recent_orders.
+    Idempotent on (vendor, source_email_mid)."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    import io
+    import contextlib
+    import sys as _sys
+    import pathlib as _pl
+
+    repo_root = _pl.Path(current_app.root_path).parent
+    if str(repo_root) not in _sys.path:
+        _sys.path.insert(0, str(repo_root))
+
+    try:
+        from scripts import ingest_vendor_emails as _ing
+    except ImportError as e:
+        return jsonify({"ok": False, "error": f"import failed: {e}"}), 500
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = _ing.main()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: ingest_vendor_emails crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                        "stdout": buf.getvalue()}), 500
+
+    return jsonify({"ok": rc == 0, "return_code": rc, "stdout": buf.getvalue()})
+
+
 @cena_bp.route("/sam/cena/run-scan-vendor-inbox", methods=["POST"])
 def cena_run_scan_vendor_inbox():
     """One-shot scan of orders@cenaskitchen.com IMAP inbox for vendor

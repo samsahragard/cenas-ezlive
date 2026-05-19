@@ -1,1221 +1,471 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Daily Manager Log — Cenas Kitchen</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    /* Cenas palette */
-    --ck-red: #C73B36;
-    --ck-red-deep: #9B2A26;
-    --ck-gold: #E4B340;
-    --ck-gold-bright: #FFD970;
-    --ck-gold-dim: #D9A436;
-    --ck-teal: #2EA39F;
-    --ck-cream: #FAF6EC;
-    --ck-cream-dim: rgba(250, 246, 236, 0.62);
-    --ck-cream-faint: rgba(250, 246, 236, 0.38);
-    --ck-bg-deep: #1a0d08;
-    --ck-bg-warm: #28160e;
-    --ck-bg-card: rgba(40, 22, 14, 0.65);
-    --ck-bg-card-hover: rgba(40, 22, 14, 0.85);
-    --ck-border-subtle: rgba(217, 164, 54, 0.18);
-    --ck-border-active: rgba(228, 179, 64, 0.5);
-    --ck-shadow-glow: 0 0 24px rgba(228, 179, 64, 0.15);
-    /* Severity */
-    --sev-urgent: #C73B36;
-    --sev-attention: #E4B340;
-    --sev-info: #2EA39F;
-    --sev-done: rgba(250, 246, 236, 0.3);
-    /* Spacing */
-    --space-1: 4px;
-    --space-2: 8px;
-    --space-3: 12px;
-    --space-4: 16px;
-    --space-5: 20px;
-    --space-6: 24px;
-    --space-8: 32px;
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-  }
-
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html, body {
-    background: var(--ck-bg-deep);
-    color: var(--ck-cream);
-    font-family: 'Manrope', system-ui, sans-serif;
-    font-size: 16px;
-    line-height: 1.5;
-    overflow-x: hidden;
-    min-height: 100vh;
-  }
-
-  body {
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
-      linear-gradient(180deg, var(--ck-bg-deep) 0%, #0d0604 100%);
-    background-attachment: fixed;
-    padding-bottom: 100px;
-  }
-
-  /* Subtle texture overlay */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.5;
-  }
-
-  .container {
-    position: relative;
-    z-index: 1;
-    max-width: 480px;
-    margin: 0 auto;
-    padding: 0 var(--space-4);
-  }
-
-  /* ===== HEADER ===== */
-  header {
-    padding: var(--space-6) 0 var(--space-4);
-    border-bottom: 0.5px solid var(--ck-border-subtle);
-    margin-bottom: var(--space-5);
-  }
-
-  .header-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-4);
-  }
-
-  .menu-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-md);
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    color: var(--ck-gold);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .menu-btn:active {
-    background: var(--ck-bg-card-hover);
-    transform: scale(0.96);
-  }
-
-  .store-badge {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--ck-gold);
-    background: rgba(228, 179, 64, 0.1);
-    border: 0.5px solid var(--ck-border-subtle);
-    padding: 6px 12px;
-    border-radius: 999px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    font-family: 'Instrument Serif', serif;
-    font-weight: 400;
-    font-size: 38px;
-    line-height: 1.05;
-    letter-spacing: -0.01em;
-    margin-bottom: var(--space-2);
-    color: var(--ck-cream);
-  }
-
-  h1 .accent {
-    font-style: italic;
-    color: var(--ck-gold-bright);
-    text-shadow: 0 0 24px rgba(255, 217, 112, 0.35);
-  }
-
-  .subtitle {
-    color: var(--ck-cream-dim);
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  /* ===== STATUS BAR ===== */
-  .status-strip {
-    display: flex;
-    gap: var(--space-2);
-    margin-bottom: var(--space-5);
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: 2px;
-  }
-
-  .status-strip::-webkit-scrollbar { display: none; }
-
-  .status-pill {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 10px 14px;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ck-cream);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .status-pill.urgent {
-    border-color: rgba(199, 59, 54, 0.4);
-    background: rgba(199, 59, 54, 0.12);
-  }
-
-  .status-pill.urgent .dot { background: var(--sev-urgent); }
-  .status-pill .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ck-gold);
-    box-shadow: 0 0 8px currentColor;
-  }
-
-  .status-pill .count {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 600;
-    color: var(--ck-gold-bright);
-  }
-
-  /* ===== FILTER ROW ===== */
-  .filter-section {
-    margin-bottom: var(--space-5);
-  }
-
-  .filter-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-cream-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-bottom: var(--space-3);
-  }
-
-  .filter-chips {
-    display: flex;
-    gap: var(--space-2);
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: 2px;
-  }
-
-  .filter-chips::-webkit-scrollbar { display: none; }
-
-  .chip {
-    flex-shrink: 0;
-    padding: 8px 14px;
-    background: transparent;
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: 999px;
-    color: var(--ck-cream-dim);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .chip.active {
-    background: rgba(228, 179, 64, 0.15);
-    color: var(--ck-gold-bright);
-    border-color: var(--ck-border-active);
-  }
-
-  .chip:active { transform: scale(0.96); }
-
-  /* ===== SECTION ===== */
-  .section {
-    margin-bottom: var(--space-6);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-3);
-    padding: 0 var(--space-1);
-  }
-
-  .section-title {
-    font-family: 'Instrument Serif', serif;
-    font-style: italic;
-    font-size: 20px;
-    color: var(--ck-gold);
-    letter-spacing: -0.005em;
-  }
-
-  .section-count {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--ck-cream-faint);
-    letter-spacing: 0.05em;
-  }
-
-  /* ===== ENTRY CARD ===== */
-  .entry-card {
-    position: relative;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-md);
-    padding: var(--space-4);
-    margin-bottom: var(--space-3);
-    overflow: hidden;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-  }
-
-  .entry-card::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: var(--cat-color, var(--ck-gold));
-  }
-
-  .entry-card.pinned {
-    background: rgba(228, 179, 64, 0.06);
-    border-color: var(--ck-border-active);
-  }
-
-  .entry-card.urgent::before {
-    background: var(--sev-urgent);
-    box-shadow: 0 0 12px var(--sev-urgent);
-  }
-
-  .entry-card:active {
-    background: var(--ck-bg-card-hover);
-  }
-
-  .entry-card.expanded {
-    background: var(--ck-bg-card-hover);
-    border-color: var(--ck-border-active);
-  }
-
-  .entry-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-2);
-    flex-wrap: wrap;
-  }
-
-  .cat-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--cat-color, var(--ck-gold));
-  }
-
-  .cat-tag .icon {
-    width: 12px;
-    height: 12px;
-    fill: currentColor;
-  }
-
-  .sev-tag {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 4px;
-  }
-
-  .sev-tag.urgent {
-    background: rgba(199, 59, 54, 0.2);
-    color: #FF6E68;
-    border: 0.5px solid rgba(199, 59, 54, 0.4);
-  }
-
-  .sev-tag.attention {
-    background: rgba(228, 179, 64, 0.15);
-    color: var(--ck-gold-bright);
-  }
-
-  .sev-tag.info {
-    background: rgba(46, 163, 159, 0.15);
-    color: #5BCAC5;
-  }
-
-  .pin-icon {
-    width: 14px;
-    height: 14px;
-    fill: var(--ck-gold);
-    margin-left: auto;
-  }
-
-  .entry-title {
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 1.35;
-    color: var(--ck-cream);
-    margin-bottom: var(--space-2);
-  }
-
-  .entry-body {
-    font-size: 14px;
-    color: var(--ck-cream-dim);
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    margin-bottom: var(--space-3);
-  }
-
-  .entry-card.expanded .entry-body {
-    -webkit-line-clamp: unset;
-    display: block;
-  }
-
-  .entry-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--ck-cream-faint);
-  }
-
-  .entry-author {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .author-avatar {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--ck-gold), var(--ck-red));
-    display: grid;
-    place-items: center;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-bg-deep);
-  }
-
-  .entry-time {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-  }
-
-  /* Expanded actions */
-  .entry-actions {
-    display: none;
-    gap: var(--space-2);
-    margin-top: var(--space-4);
-    padding-top: var(--space-3);
-    border-top: 0.5px solid var(--ck-border-subtle);
-    flex-wrap: wrap;
-  }
-
-  .entry-card.expanded .entry-actions {
-    display: flex;
-  }
-
-  .action-btn {
-    flex: 1;
-    min-width: fit-content;
-    padding: 8px 12px;
-    background: transparent;
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--ck-cream);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .action-btn:active { transform: scale(0.97); }
-
-  .action-btn.primary {
-    background: var(--ck-gold);
-    color: var(--ck-bg-deep);
-    border-color: var(--ck-gold);
-  }
-
-  .action-btn.danger {
-    color: #FF6E68;
-    border-color: rgba(199, 59, 54, 0.4);
-  }
-
-  /* ===== CATEGORIES ===== */
-  .cat-equipment { --cat-color: #6BAED6; }
-  .cat-staff { --cat-color: #2EA39F; }
-  .cat-customer { --cat-color: #E4B340; }
-  .cat-vendor { --cat-color: #B19CD9; }
-  .cat-safety { --cat-color: #C73B36; }
-  .cat-prep { --cat-color: #F4A261; }
-  .cat-sales { --cat-color: #95C75F; }
-  .cat-incident { --cat-color: #C73B36; }
-  .cat-general { --cat-color: #D9A436; }
-
-  /* ===== FAB ===== */
-  .fab {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 14px 24px;
-    background: linear-gradient(135deg, var(--ck-gold), var(--ck-gold-dim));
-    color: var(--ck-bg-deep);
-    border: none;
-    border-radius: 999px;
-    font-family: 'Manrope', sans-serif;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    box-shadow: 0 8px 32px rgba(228, 179, 64, 0.4), 0 0 0 1px rgba(255, 217, 112, 0.5);
-    transition: all 0.2s;
-  }
-
-  .fab:active {
-    transform: translateX(-50%) scale(0.95);
-  }
-
-  .fab svg {
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
-  }
-
-  /* ===== MODAL ===== */
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(8px);
-    z-index: 200;
-    display: none;
-    align-items: flex-end;
-    animation: fadeIn 0.2s;
-  }
-
-  .modal-backdrop.open {
-    display: flex;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .modal {
-    width: 100%;
-    max-width: 480px;
-    margin: 0 auto;
-    background: linear-gradient(180deg, var(--ck-bg-warm) 0%, var(--ck-bg-deep) 100%);
-    border-top: 1px solid var(--ck-border-active);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    padding: var(--space-5) var(--space-4) var(--space-4);
-    max-height: 88vh;
-    overflow-y: auto;
-    animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
-
-  .modal-handle {
-    width: 40px;
-    height: 4px;
-    background: var(--ck-border-active);
-    border-radius: 2px;
-    margin: 0 auto var(--space-4);
-  }
-
-  .modal-title {
-    font-family: 'Instrument Serif', serif;
-    font-size: 28px;
-    color: var(--ck-cream);
-    margin-bottom: var(--space-1);
-  }
-
-  .modal-title .accent {
-    font-style: italic;
-    color: var(--ck-gold-bright);
-  }
-
-  .modal-sub {
-    color: var(--ck-cream-dim);
-    font-size: 13px;
-    margin-bottom: var(--space-5);
-  }
-
-  .form-group {
-    margin-bottom: var(--space-4);
-  }
-
-  .form-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-cream-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-bottom: var(--space-2);
-    display: block;
-  }
-
-  .category-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-2);
-  }
-
-  .cat-option {
-    padding: var(--space-3);
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--ck-cream);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-    position: relative;
-  }
-
-  .cat-option .cat-icon {
-    width: 20px;
-    height: 20px;
-    margin: 0 auto var(--space-1);
-    fill: var(--cat-color, var(--ck-gold));
-  }
-
-  .cat-option.selected {
-    background: rgba(228, 179, 64, 0.15);
-    border-color: var(--ck-border-active);
-    color: var(--ck-gold-bright);
-  }
-
-  .severity-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--space-2);
-  }
-
-  .sev-option {
-    padding: var(--space-3);
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--ck-cream);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-  }
-
-  .sev-option.selected.info { background: rgba(46, 163, 159, 0.2); border-color: var(--sev-info); color: #5BCAC5; }
-  .sev-option.selected.attention { background: rgba(228, 179, 64, 0.2); border-color: var(--sev-attention); color: var(--ck-gold-bright); }
-  .sev-option.selected.urgent { background: rgba(199, 59, 54, 0.2); border-color: var(--sev-urgent); color: #FF6E68; }
-
-  input[type="text"], textarea {
-    width: 100%;
-    padding: var(--space-3);
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--ck-cream);
-    font-family: 'Manrope', sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    resize: none;
-  }
-
-  input[type="text"]:focus, textarea:focus {
-    outline: none;
-    border-color: var(--ck-gold);
-  }
-
-  textarea { min-height: 80px; }
-
-  .attach-row {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  .attach-btn {
-    flex: 1;
-    padding: var(--space-3);
-    background: transparent;
-    border: 0.5px dashed var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--ck-cream-dim);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-  }
-
-  .attach-btn svg { width: 16px; height: 16px; fill: currentColor; }
-
-  .modal-footer {
-    display: flex;
-    gap: var(--space-2);
-    margin-top: var(--space-5);
-    padding-top: var(--space-4);
-    border-top: 0.5px solid var(--ck-border-subtle);
-  }
-
-  .btn-primary {
-    flex: 2;
-    padding: var(--space-4);
-    background: var(--ck-gold);
-    color: var(--ck-bg-deep);
-    border: none;
-    border-radius: var(--radius-md);
-    font-family: 'Manrope', sans-serif;
-    font-size: 15px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform 0.15s;
-  }
-
-  .btn-secondary {
-    flex: 1;
-    padding: var(--space-4);
-    background: transparent;
-    color: var(--ck-cream);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-md);
-    font-family: 'Manrope', sans-serif;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .btn-primary:active { transform: scale(0.97); }
-
-  /* ===== DAY DIVIDER ===== */
-  .day-divider {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin: var(--space-6) 0 var(--space-3);
-    color: var(--ck-cream-faint);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .day-divider::after {
-    content: '';
-    flex: 1;
-    height: 0.5px;
-    background: var(--ck-border-subtle);
-  }
-
-  /* Resolved/done state */
-  .entry-card.resolved {
-    opacity: 0.55;
-  }
-
-  .entry-card.resolved .entry-title {
-    text-decoration: line-through;
-    text-decoration-color: var(--ck-cream-faint);
-  }
-
-  .entry-card.resolved::before {
-    background: var(--sev-done);
-  }
-
-  /* ===== EMPTY STATE ===== */
-  .empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
-    color: var(--ck-cream-faint);
-  }
-
-  /* ===== SHIFT HANDOFF ===== */
-  .handoff-box {
-    background: linear-gradient(135deg, rgba(199, 59, 54, 0.08), rgba(228, 179, 64, 0.05));
-    border: 0.5px solid rgba(199, 59, 54, 0.3);
-    border-radius: var(--radius-md);
-    padding: var(--space-4);
-    margin-bottom: var(--space-5);
-  }
-
-  .handoff-label {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--ck-red);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: var(--space-2);
-  }
-
-  .handoff-label .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ck-red);
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  .handoff-text {
-    font-size: 14px;
-    color: var(--ck-cream);
-    line-height: 1.5;
-  }
-
-  .handoff-from {
-    font-size: 12px;
-    color: var(--ck-cream-dim);
-    margin-top: var(--space-2);
-    font-style: italic;
-  }
-</style>
-</head>
-<body>
-<div class="container">
-
-  <!-- HEADER -->
-  <header>
-    <div class="header-top">
-      <button class="menu-btn" aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <div class="store-badge">DOS · TOMBALL</div>
-    </div>
-    <h1>Manager <span class="accent">Log</span></h1>
-    <p class="subtitle">Your shift's eyes, ears, and accountability. Capture once, act once, hand off clean.</p>
-  </header>
-
-  <!-- STATUS STRIP -->
-  <div class="status-strip">
-    <div class="status-pill urgent">
-      <span class="dot"></span>
-      <span><span class="count">3</span> open · needs action</span>
-    </div>
-    <div class="status-pill">
-      <span class="dot"></span>
-      <span><span class="count">2</span> assigned to you</span>
-    </div>
-    <div class="status-pill">
-      <span>Last entry · 14m ago</span>
-    </div>
-  </div>
-
-  <!-- SHIFT HANDOFF (from last manager) -->
-  <div class="handoff-box">
-    <div class="handoff-label">
-      <span class="dot"></span>
-      <span>Handoff from Lunch · unread</span>
-    </div>
-    <div class="handoff-text">
-      Walk-in cooler running 38°F since Mon — vendor Thu 9 AM. POS terminal 3 is fine after restart, watch it. Soraya covering Maria tonight (called out).
-    </div>
-    <div class="handoff-from">— Daniela, KM · 2:47 PM</div>
-  </div>
-
-  <!-- FILTERS -->
-  <div class="filter-section">
-    <div class="filter-label">Filter</div>
-    <div class="filter-chips">
-      <button class="chip active">All</button>
-      <button class="chip">Open</button>
-      <button class="chip">Mine</button>
-      <button class="chip">Urgent</button>
-      <button class="chip">Equipment</button>
-      <button class="chip">Staff</button>
-      <button class="chip">Customer</button>
-      <button class="chip">Vendor</button>
-      <button class="chip">Prep</button>
-      <button class="chip">Safety</button>
-    </div>
-  </div>
-
-  <!-- PINNED -->
-  <section class="section">
-    <div class="section-header">
-      <div class="section-title">Pinned</div>
-      <div class="section-count">2 STANDING</div>
-    </div>
-
-    <div class="entry-card pinned cat-equipment" onclick="toggleCard(this)">
-      <svg class="pin-icon" style="position: absolute; top: 14px; right: 14px;" viewBox="0 0 24 24"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>
-      <div class="entry-meta">
-        <span class="cat-tag">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4z"/></svg>
-          EQUIPMENT
-        </span>
-        <span class="sev-tag attention">ATTENTION</span>
-      </div>
-      <div class="entry-title">Walk-in cooler temp 38°F (target 34°F)</div>
-      <div class="entry-body">Compressor cycling longer than normal since Mon AM. Refrigeration vendor scheduled Thu 9 AM. Watch produce shelf-life; pull anything questionable. Don't reload past 75% capacity until serviced.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">SS</div>
-          <span>Sam · Partner</span>
-        </div>
-        <div class="entry-time">MON 7:22 AM</div>
-      </div>
-      <div class="entry-actions">
-        <button class="action-btn primary">Acknowledge</button>
-        <button class="action-btn">Add note</button>
-        <button class="action-btn">Unpin</button>
-      </div>
-    </div>
-
-    <div class="entry-card pinned cat-safety" onclick="toggleCard(this)">
-      <svg class="pin-icon" style="position: absolute; top: 14px; right: 14px;" viewBox="0 0 24 24"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>
-      <div class="entry-meta">
-        <span class="cat-tag">SAFETY</span>
-        <span class="sev-tag info">INFO</span>
-      </div>
-      <div class="entry-title">Fire extinguisher inspection due May 25</div>
-      <div class="entry-body">Vendor coming Wednesday between 10 AM – 12 PM. All managers ensure access to kitchen line and dry storage.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">JC</div>
-          <span>Javier · GM</span>
-        </div>
-        <div class="entry-time">MAY 12 · 9:14 AM</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- OPEN -->
-  <section class="section">
-    <div class="section-header">
-      <div class="section-title">Open · Needs action</div>
-      <div class="section-count">3 UNRESOLVED</div>
-    </div>
-
-    <div class="entry-card urgent cat-vendor" onclick="toggleCard(this)">
-      <div class="entry-meta">
-        <span class="cat-tag">VENDOR</span>
-        <span class="sev-tag urgent">URGENT</span>
-      </div>
-      <div class="entry-title">J Luna delivery short — 2 cases cilantro missing</div>
-      <div class="entry-body">Driver Marco confirmed shortage on receipt. Need cilantro for tomorrow's prep (street taco sauce + chimichurri). Already called J Luna — promised redelivery by 7 AM. If no show, fall back to HEB pickup.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">DR</div>
-          <span>Daniela · KM</span>
-        </div>
-        <div class="entry-time">5:42 PM</div>
-      </div>
-      <div class="entry-actions">
-        <button class="action-btn primary">Mark resolved</button>
-        <button class="action-btn">Add note</button>
-        <button class="action-btn">Create task</button>
-        <button class="action-btn danger">Escalate</button>
-      </div>
-    </div>
-
-    <div class="entry-card cat-customer expanded" onclick="toggleCard(this)">
-      <div class="entry-meta">
-        <span class="cat-tag">CUSTOMER</span>
-        <span class="sev-tag attention">ATTENTION</span>
-      </div>
-      <div class="entry-title">Table 14 — 45 min ticket wait, comped dessert</div>
-      <div class="entry-body">Family of 6. Kitchen backed up 1–1:20 PM. Father asked for manager. Apologized, comped flan + churros (~$24). Guest said "we'll be back" — good recovery. Pattern: Mon 1 PM rush is hitting kitchen harder than Tue/Wed. Worth reviewing prep par for Mon lunch.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">DR</div>
-          <span>Daniela · KM</span>
-        </div>
-        <div class="entry-time">1:52 PM</div>
-      </div>
-      <div class="entry-actions">
-        <button class="action-btn primary">Mark resolved</button>
-        <button class="action-btn">Add note</button>
-        <button class="action-btn">Create task</button>
-        <button class="action-btn">Pin</button>
-        <button class="action-btn danger">Escalate</button>
-      </div>
-    </div>
-
-    <div class="entry-card cat-equipment" onclick="toggleCard(this)">
-      <div class="entry-meta">
-        <span class="cat-tag">EQUIPMENT</span>
-        <span class="sev-tag attention">ATTENTION</span>
-      </div>
-      <div class="entry-title">POS terminal 3 froze during lunch rush</div>
-      <div class="entry-body">Restarted around 12:48 PM. Fine since. Already in Toast support queue — case #88412.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">SR</div>
-          <span>Soraya · FOH Mgr</span>
-        </div>
-        <div class="entry-time">12:48 PM</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TODAY · RESOLVED -->
-  <section class="section">
-    <div class="section-header">
-      <div class="section-title">Today · Resolved</div>
-      <div class="section-count">4 CLOSED</div>
-    </div>
-
-    <div class="entry-card resolved cat-staff" onclick="toggleCard(this)">
-      <div class="entry-meta">
-        <span class="cat-tag">STAFF</span>
-        <span class="sev-tag info">RESOLVED</span>
-      </div>
-      <div class="entry-title">Maria called out — covered by Soraya</div>
-      <div class="entry-body">Flu. Out at least 2 days. Soraya doubled. Updated Sling.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">DR</div>
-          <span>Daniela · KM</span>
-        </div>
-        <div class="entry-time">11:08 AM</div>
-      </div>
-    </div>
-
-    <div class="entry-card resolved cat-prep" onclick="toggleCard(this)">
-      <div class="entry-meta">
-        <span class="cat-tag">PREP</span>
-        <span class="sev-tag info">FYI</span>
-      </div>
-      <div class="entry-title">Aguirre's rice burned — 1 batch lost</div>
-      <div class="entry-body">Inattention during dinner prep. Replaced before service. Worth a refresher with prep team on burner discipline.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">LM</div>
-          <span>Lupe · Prep Mgr</span>
-        </div>
-        <div class="entry-time">3:30 PM</div>
-      </div>
-    </div>
-
-    <div class="entry-card resolved cat-sales" onclick="toggleCard(this)">
-      <div class="entry-meta">
-        <span class="cat-tag">SALES</span>
-        <span class="sev-tag info">NOTE</span>
-      </div>
-      <div class="entry-title">Lunch covers up 12% vs last Mon</div>
-      <div class="entry-body">218 covers. Strong takeout. Catering driver pickup smooth.</div>
-      <div class="entry-footer">
-        <div class="entry-author">
-          <div class="author-avatar">SR</div>
-          <span>Soraya · FOH Mgr</span>
-        </div>
-        <div class="entry-time">2:14 PM</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- DAY DIVIDER -->
-  <div class="day-divider">
-    <span>Yesterday · May 17</span>
-  </div>
-
-  <div class="entry-card resolved cat-customer" onclick="toggleCard(this)">
-    <div class="entry-meta">
-      <span class="cat-tag">CUSTOMER</span>
-      <span class="sev-tag info">RESOLVED</span>
-    </div>
-    <div class="entry-title">Repeat customer left positive Google review</div>
-    <div class="entry-body">5 stars, named Daniela. Forwarded to GM.</div>
-    <div class="entry-footer">
-      <div class="entry-author">
-        <div class="author-avatar">SR</div>
-        <span>Soraya</span>
-      </div>
-      <div class="entry-time">YDAY · 8:14 PM</div>
-    </div>
-  </div>
-
-</div>
-
-<!-- FAB -->
-<button class="fab" onclick="openModal()">
-  <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-  New entry
-</button>
-
-<!-- MODAL -->
-<div class="modal-backdrop" id="modal" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h2 class="modal-title">New <span class="accent">entry</span></h2>
-    <p class="modal-sub">Quick capture. Pick category → severity → write. Photo optional. Most entries are done in under 30 seconds.</p>
-
-    <div class="form-group">
-      <label class="form-label">Category</label>
-      <div class="category-grid">
-        <button class="cat-option cat-equipment" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
-          Equipment
-        </button>
-        <button class="cat-option cat-staff selected" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-          Staff
-        </button>
-        <button class="cat-option cat-customer" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M12 2 9 9H2l5.5 4-2 7L12 16l6.5 4-2-7L22 9h-7z"/></svg>
-          Customer
-        </button>
-        <button class="cat-option cat-vendor" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>
-          Vendor
-        </button>
-        <button class="cat-option cat-prep" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
-          Prep
-        </button>
-        <button class="cat-option cat-safety" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 16-4-4 1.41-1.41L11 14.17l5.59-5.59L18 10l-7 7z"/></svg>
-          Safety
-        </button>
-        <button class="cat-option cat-sales" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
-          Sales
-        </button>
-        <button class="cat-option cat-incident" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-          Incident
-        </button>
-        <button class="cat-option cat-general" onclick="selectCat(this)">
-          <svg class="cat-icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-          General
-        </button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Severity</label>
-      <div class="severity-row">
-        <button class="sev-option info" onclick="selectSev(this, 'info')">FYI</button>
-        <button class="sev-option attention selected" onclick="selectSev(this, 'attention')">Attention</button>
-        <button class="sev-option urgent" onclick="selectSev(this, 'urgent')">Urgent</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Title</label>
-      <input type="text" placeholder="e.g. Maria called out, Soraya covering">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Details (optional)</label>
-      <textarea placeholder="Context anyone reading later will need..."></textarea>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Attach</label>
-      <div class="attach-row">
-        <button class="attach-btn">
-          <svg viewBox="0 0 24 24"><path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
-          Photo
-        </button>
-        <button class="attach-btn">
-          <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
-          Voice note
-        </button>
-        <button class="attach-btn">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-          Doc
-        </button>
-      </div>
-    </div>
-
-    <div class="modal-footer">
-      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn-primary">Save</button>
-    </div>
-  </div>
-</div>
-
-<script>
-  function toggleCard(card) {
-    document.querySelectorAll('.entry-card.expanded').forEach(c => {
-      if (c !== card) c.classList.remove('expanded');
-    });
-    card.classList.toggle('expanded');
-  }
-
-  function openModal() {
-    document.getElementById('modal').classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeModal() {
-    document.getElementById('modal').classList.remove('open');
-    document.body.style.overflow = '';
-  }
-
-  function selectCat(btn) {
-    document.querySelectorAll('.cat-option').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-  }
-
-  function selectSev(btn, lvl) {
-    document.querySelectorAll('.sev-option').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-  }
-
-  // Filter chip selection
-  document.querySelectorAll('.filter-chips .chip').forEach(c => {
-    c.addEventListener('click', () => {
-      document.querySelectorAll('.filter-chips .chip').forEach(b => b.classList.remove('active'));
-      c.classList.add('active');
-    });
-  });
-</script>
-</body>
-</html>    for mgr log
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_daily_log' %}
+{% block title %}Daily Manager Log — Cenas Kitchen{% endblock %}
+{% block page_title %}Daily Manager Log{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Your shift's eyes, ears, and accountability. Capture once, act once, hand off clean.</p>
+{% endblock %}
+
+{# Sam #2952 verbatim mockup adapted to Jinja + existing DailyManagerLog model.
+   Scoped under .dml-page so mockup :root vars don't leak.
+   Audience: gm / km / asst_km / foh_manager / partner / corporate (per Sam #1109).
+   Store-scoped: g.current_location.
+   v1 field mapping: mockup.category → existing type_tag; mockup.severity → derive
+   from type_tag prefix or default 'attention'; pinned/resolved not in model v1
+   (defaults all entries to OPEN). Schema extension for pinned/resolved/severity
+   queued as samai-spec follow-up. #}
+
+{% block content %}
+<style>
+  .dml-page {
+    --ck-red: #C73B36;
+    --ck-red-deep: #9B2A26;
+    --ck-gold: #E4B340;
+    --ck-gold-bright: #FFD970;
+    --ck-gold-dim: #D9A436;
+    --ck-teal: #2EA39F;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250, 246, 236, 0.62);
+    --ck-cream-faint: rgba(250, 246, 236, 0.38);
+    --ck-bg-deep: #1a0d08;
+    --ck-bg-warm: #28160e;
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+    --ck-bg-card-hover: rgba(40, 22, 14, 0.85);
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+    --sev-urgent: #C73B36;
+    --sev-attention: #E4B340;
+    --sev-info: #2EA39F;
+    --sev-done: rgba(250, 246, 236, 0.3);
+    --dml-space-1: 4px;
+    --dml-space-2: 8px;
+    --dml-space-3: 12px;
+    --dml-space-4: 16px;
+    --dml-space-5: 20px;
+    --dml-space-6: 24px;
+    --dml-space-8: 32px;
+    --dml-radius-sm: 8px;
+    --dml-radius-md: 12px;
+    --dml-radius-lg: 16px;
+    color: var(--ck-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    position: relative;
+    padding-bottom: 100px;
+  }
+  .dml-page .status-strip {
+    display: flex; gap: var(--dml-space-2); flex-wrap: wrap;
+    margin-bottom: var(--dml-space-5);
+  }
+  .dml-page .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ck-cream-dim);
+  }
+  .dml-page .status-pill.urgent { border-color: rgba(199,59,54,0.4); color: var(--ck-red); }
+  .dml-page .status-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  }
+  .dml-page .status-pill .count { color: var(--ck-cream); font-weight: 700; }
+
+  .dml-page .handoff-box {
+    background: linear-gradient(135deg, rgba(199, 59, 54, 0.08), rgba(228, 179, 64, 0.05));
+    border: 0.5px solid rgba(199, 59, 54, 0.3);
+    border-radius: var(--dml-radius-md);
+    padding: var(--dml-space-4);
+    margin-bottom: var(--dml-space-5);
+  }
+  .dml-page .handoff-label {
+    display: flex; align-items: center; gap: var(--dml-space-2);
+    font-size: 11px; font-weight: 700; color: var(--ck-red);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: var(--dml-space-2);
+  }
+  .dml-page .handoff-label .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--ck-red);
+    animation: dmlPulse 2s infinite;
+  }
+  @keyframes dmlPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .dml-page .handoff-text { font-size: 14px; color: var(--ck-cream); line-height: 1.5; }
+  .dml-page .handoff-from { font-size: 12px; color: var(--ck-cream-dim); margin-top: var(--dml-space-2); font-style: italic; }
+
+  .dml-page .filter-section { margin-bottom: var(--dml-space-5); }
+  .dml-page .filter-label {
+    font-size: 10px; font-weight: 700; color: var(--ck-cream-faint);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: var(--dml-space-2);
+  }
+  .dml-page .filter-chips {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .dml-page .chip {
+    padding: 6px 12px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 999px;
+    color: var(--ck-cream-dim);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .dml-page .chip.active {
+    background: var(--ck-gold);
+    color: var(--ck-bg-deep);
+    border-color: var(--ck-gold);
+  }
+
+  .dml-page .section { margin-bottom: var(--dml-space-6); }
+  .dml-page .section-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: var(--dml-space-3);
+  }
+  .dml-page .section-title { font-size: 14px; font-weight: 700; color: var(--ck-cream); }
+  .dml-page .section-count { font-size: 10px; color: var(--ck-cream-faint); letter-spacing: 0.1em; }
+
+  .dml-page .entry-card {
+    position: relative;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--dml-radius-md);
+    padding: var(--dml-space-4);
+    margin-bottom: var(--dml-space-2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .dml-page .entry-card:hover { background: var(--ck-bg-card-hover); }
+  .dml-page .entry-card::before {
+    content: '';
+    position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+    background: var(--cat-color, var(--ck-gold-dim));
+    border-radius: 0 2px 2px 0;
+  }
+  .dml-page .entry-card.urgent::before { background: var(--sev-urgent); }
+  .dml-page .entry-card.attention::before { background: var(--sev-attention); }
+  .dml-page .entry-card.info::before { background: var(--sev-info); }
+  .dml-page .entry-card.resolved { opacity: 0.55; }
+  .dml-page .entry-card.resolved .entry-title { text-decoration: line-through; text-decoration-color: var(--ck-cream-faint); }
+  .dml-page .entry-card.resolved::before { background: var(--sev-done); }
+
+  .dml-page .entry-meta { display: flex; gap: 6px; margin-bottom: var(--dml-space-2); flex-wrap: wrap; }
+  .dml-page .cat-tag, .dml-page .sev-tag {
+    padding: 3px 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  .dml-page .cat-tag { color: var(--cat-color, var(--ck-gold)); border: 0.5px solid var(--cat-color, var(--ck-border-subtle)); }
+  .dml-page .sev-tag.urgent { color: var(--sev-urgent); background: rgba(199,59,54,0.15); }
+  .dml-page .sev-tag.attention { color: var(--sev-attention); background: rgba(228,179,64,0.15); }
+  .dml-page .sev-tag.info { color: var(--sev-info); background: rgba(46,163,159,0.15); }
+
+  .dml-page .entry-title { font-size: 15px; font-weight: 600; color: var(--ck-cream); margin-bottom: var(--dml-space-1); line-height: 1.35; }
+  .dml-page .entry-body { font-size: 13px; color: var(--ck-cream-dim); line-height: 1.5; margin-bottom: var(--dml-space-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .dml-page .entry-card.expanded .entry-body { -webkit-line-clamp: unset; display: block; }
+  .dml-page .entry-footer { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ck-cream-faint); }
+  .dml-page .entry-author { display: flex; align-items: center; gap: 6px; }
+  .dml-page .author-avatar {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--ck-gold), var(--ck-red));
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 700; color: var(--ck-bg-deep);
+  }
+  .dml-page .entry-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .dml-page .entry-actions {
+    display: none; gap: var(--dml-space-2);
+    margin-top: var(--dml-space-4); padding-top: var(--dml-space-3);
+    border-top: 0.5px solid var(--ck-border-subtle); flex-wrap: wrap;
+  }
+  .dml-page .entry-card.expanded .entry-actions { display: flex; }
+  .dml-page .action-btn {
+    flex: 1; min-width: fit-content;
+    padding: 8px 12px;
+    background: transparent;
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--dml-radius-sm);
+    color: var(--ck-cream);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .dml-page .action-btn.primary { background: var(--ck-gold); color: var(--ck-bg-deep); border-color: var(--ck-gold); }
+  .dml-page .action-btn.danger { color: #FF6E68; border-color: rgba(199, 59, 54, 0.4); }
+
+  /* Category color tokens */
+  .dml-page .cat-equipment { --cat-color: #6BAED6; }
+  .dml-page .cat-staff { --cat-color: #2EA39F; }
+  .dml-page .cat-customer { --cat-color: #E4B340; }
+  .dml-page .cat-vendor { --cat-color: #B19CD9; }
+  .dml-page .cat-safety { --cat-color: #C73B36; }
+  .dml-page .cat-prep { --cat-color: #F4A261; }
+  .dml-page .cat-sales { --cat-color: #95C75F; }
+  .dml-page .cat-incident { --cat-color: #C73B36; }
+  .dml-page .cat-general { --cat-color: #D9A436; }
+
+  .dml-page .empty-state { text-align: center; padding: var(--dml-space-8) var(--dml-space-4); color: var(--ck-cream-faint); }
+
+  /* FAB */
+  .dml-page .fab {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex; align-items: center; gap: var(--dml-space-2);
+    padding: 14px 24px;
+    background: linear-gradient(135deg, var(--ck-gold), var(--ck-gold-dim));
+    color: var(--ck-bg-deep);
+    border: none; border-radius: 999px;
+    font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 32px rgba(228, 179, 64, 0.4), 0 0 0 1px rgba(255, 217, 112, 0.5);
+  }
+  .dml-page .fab:active { transform: translateX(-50%) scale(0.95); }
+  .dml-page .fab svg { width: 18px; height: 18px; fill: currentColor; }
+
+  /* Modal */
+  .dml-page .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+    z-index: 200;
+    display: none;
+    align-items: flex-end;
+  }
+  .dml-page .modal-backdrop.open { display: flex; }
+  .dml-page .modal {
+    width: 100%; max-width: 480px; margin: 0 auto;
+    background: linear-gradient(180deg, var(--ck-bg-warm) 0%, var(--ck-bg-deep) 100%);
+    border-top: 1px solid var(--ck-border-active);
+    border-radius: var(--dml-radius-lg) var(--dml-radius-lg) 0 0;
+    padding: var(--dml-space-5) var(--dml-space-4) var(--dml-space-4);
+    max-height: 88vh; overflow-y: auto;
+    animation: dmlSlideUp 0.3s cubic-bezier(0.4,0,0.2,1);
+  }
+  @keyframes dmlSlideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  .dml-page .modal-handle { width: 40px; height: 4px; background: var(--ck-border-active); border-radius: 2px; margin: 0 auto var(--dml-space-4); }
+  .dml-page .modal-title { font-family: 'Instrument Serif', serif; font-size: 28px; color: var(--ck-cream); margin-bottom: var(--dml-space-1); }
+  .dml-page .modal-title .accent { font-style: italic; color: var(--ck-gold-bright); }
+  .dml-page .modal-sub { color: var(--ck-cream-dim); font-size: 13px; margin-bottom: var(--dml-space-5); }
+  .dml-page .form-group { margin-bottom: var(--dml-space-4); }
+  .dml-page .form-label {
+    font-size: 10px; font-weight: 700; color: var(--ck-cream-faint);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: var(--dml-space-2); display: block;
+  }
+  .dml-page .category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .dml-page .cat-option {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 8px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--dml-radius-sm);
+    color: var(--ck-cream-dim); font-size: 12px; font-weight: 600;
+    cursor: pointer;
+  }
+  .dml-page .cat-option.selected { background: rgba(228,179,64,0.15); border-color: var(--ck-gold); color: var(--ck-cream); }
+  .dml-page .severity-row { display: flex; gap: 6px; }
+  .dml-page .sev-option {
+    flex: 1;
+    padding: 10px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--dml-radius-sm);
+    color: var(--ck-cream-dim); font-size: 12px; font-weight: 700;
+    cursor: pointer;
+  }
+  .dml-page .sev-option.selected.urgent { background: rgba(199,59,54,0.2); border-color: var(--sev-urgent); color: var(--sev-urgent); }
+  .dml-page .sev-option.selected.attention { background: rgba(228,179,64,0.2); border-color: var(--sev-attention); color: var(--sev-attention); }
+  .dml-page .sev-option.selected.info { background: rgba(46,163,159,0.2); border-color: var(--sev-info); color: var(--sev-info); }
+  .dml-page .modal input[type="text"], .dml-page .modal textarea {
+    width: 100%;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--dml-radius-sm);
+    color: var(--ck-cream);
+    padding: 10px 12px;
+    font-family: inherit; font-size: 14px;
+  }
+  .dml-page .modal textarea { min-height: 90px; resize: vertical; }
+  .dml-page .modal-footer { display: flex; gap: var(--dml-space-2); margin-top: var(--dml-space-5); padding-top: var(--dml-space-4); border-top: 0.5px solid var(--ck-border-subtle); }
+  .dml-page .btn-primary { flex: 2; padding: var(--dml-space-4); background: var(--ck-gold); color: var(--ck-bg-deep); border: none; border-radius: var(--dml-radius-md); font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .dml-page .btn-secondary { flex: 1; padding: var(--dml-space-4); background: transparent; color: var(--ck-cream); border: 0.5px solid var(--ck-border-subtle); border-radius: var(--dml-radius-md); font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; }
+</style>
+
+<div class="dml-page">
+
+  <div class="status-strip">
+    <div class="status-pill">
+      <span class="dot"></span>
+      <span><span class="count">{{ entries|length }}</span> entries today</span>
+    </div>
+    {% if g.current_location %}
+    <div class="status-pill">
+      <span>{{ g.current_location|upper }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="filter-section">
+    <div class="filter-label">Filter</div>
+    <div class="filter-chips" id="dml-filter-chips">
+      <button type="button" class="chip active" data-filter="all">All</button>
+      <button type="button" class="chip" data-filter="urgent">Urgent</button>
+      <button type="button" class="chip" data-filter="equipment">Equipment</button>
+      <button type="button" class="chip" data-filter="staff">Staff</button>
+      <button type="button" class="chip" data-filter="customer">Customer</button>
+      <button type="button" class="chip" data-filter="vendor">Vendor</button>
+      <button type="button" class="chip" data-filter="prep">Prep</button>
+      <button type="button" class="chip" data-filter="safety">Safety</button>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="section-header">
+      <div class="section-title">Open · Needs action</div>
+      <div class="section-count">{{ entries|length }} ENTR{% if entries|length == 1 %}Y{% else %}IES{% endif %}</div>
+    </div>
+
+    {% if not entries %}
+      <div class="empty-state">
+        No entries yet. Tap <strong>New entry</strong> to capture the first one.
+      </div>
+    {% endif %}
+
+    {% for e in entries %}
+      {% set cat = (e.type_tag or 'general')|lower %}
+      {% set sev = 'attention' %}
+      {% if 'urgent' in cat %}{% set sev = 'urgent' %}{% endif %}
+      {% if 'info' in cat or 'fyi' in cat %}{% set sev = 'info' %}{% endif %}
+      <div class="entry-card cat-{{ cat }} {{ sev }}" data-cat="{{ cat }}" data-sev="{{ sev }}" onclick="dmlToggleCard(this)">
+        <div class="entry-meta">
+          <span class="cat-tag">{{ cat|upper }}</span>
+          <span class="sev-tag {{ sev }}">{{ sev|upper }}</span>
+        </div>
+        <div class="entry-title">{{ e.title or '(no title)' }}</div>
+        <div class="entry-body">{{ e.body or '' }}</div>
+        <div class="entry-footer">
+          <div class="entry-author">
+            <div class="author-avatar">{% if e.author and e.author.full_name %}{{ e.author.full_name[:1] }}{% else %}?{% endif %}</div>
+            <span>{% if e.author and e.author.full_name %}{{ e.author.full_name }}{% else %}Unknown{% endif %}</span>
+          </div>
+          <div class="entry-time">{% if e.created_at %}{{ e.created_at.strftime('%b %d · %I:%M %p') }}{% endif %}</div>
+        </div>
+        <div class="entry-actions">
+          <a class="action-btn" href="{{ url_for('store.manager_page_detail', page='daily-log', entry_id=e.id) }}">View</a>
+          {% if e.author_id == g.current_user.id or g.current_user.role in ('partner','corporate','gm') %}
+          <a class="action-btn primary" href="{{ url_for('store.manager_page_edit', page='daily-log', entry_id=e.id) }}">Edit</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+
+</div>
+
+<button class="fab dml-fab" onclick="dmlOpenModal()">
+  <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+  New entry
+</button>
+
+<div class="dml-page">
+<div class="modal-backdrop" id="dml-modal" onclick="if(event.target===this)dmlCloseModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title">New <span class="accent">entry</span></h2>
+    <p class="modal-sub">Quick capture. Pick category → severity → write. Most entries done under 30 seconds.</p>
+
+    <form method="POST" action="{{ url_for('store.manager_page_create', page='daily-log') }}">
+      <input type="hidden" name="type_tag" id="dml-type-tag" value="general">
+
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <div class="category-grid">
+          <button type="button" class="cat-option cat-equipment" data-cat="equipment" onclick="dmlSelectCat(this)">Equipment</button>
+          <button type="button" class="cat-option cat-staff" data-cat="staff" onclick="dmlSelectCat(this)">Staff</button>
+          <button type="button" class="cat-option cat-customer" data-cat="customer" onclick="dmlSelectCat(this)">Customer</button>
+          <button type="button" class="cat-option cat-vendor" data-cat="vendor" onclick="dmlSelectCat(this)">Vendor</button>
+          <button type="button" class="cat-option cat-prep" data-cat="prep" onclick="dmlSelectCat(this)">Prep</button>
+          <button type="button" class="cat-option cat-safety" data-cat="safety" onclick="dmlSelectCat(this)">Safety</button>
+          <button type="button" class="cat-option cat-sales" data-cat="sales" onclick="dmlSelectCat(this)">Sales</button>
+          <button type="button" class="cat-option cat-incident" data-cat="incident" onclick="dmlSelectCat(this)">Incident</button>
+          <button type="button" class="cat-option cat-general selected" data-cat="general" onclick="dmlSelectCat(this)">General</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Severity</label>
+        <div class="severity-row">
+          <button type="button" class="sev-option info" data-sev="info" onclick="dmlSelectSev(this)">FYI</button>
+          <button type="button" class="sev-option attention selected" data-sev="attention" onclick="dmlSelectSev(this)">Attention</button>
+          <button type="button" class="sev-option urgent" data-sev="urgent" onclick="dmlSelectSev(this)">Urgent</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input type="text" name="title" required placeholder="e.g. Maria called out, Soraya covering">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Details (optional)</label>
+        <textarea name="body" placeholder="Context anyone reading later will need..."></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="dmlCloseModal()">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+
+<script>
+  function dmlToggleCard(card) {
+    document.querySelectorAll('.dml-page .entry-card.expanded').forEach(c => {
+      if (c !== card) c.classList.remove('expanded');
+    });
+    card.classList.toggle('expanded');
+  }
+  function dmlOpenModal() {
+    document.getElementById('dml-modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function dmlCloseModal() {
+    document.getElementById('dml-modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  function dmlSelectCat(btn) {
+    document.querySelectorAll('.dml-page .cat-option').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    var cat = btn.getAttribute('data-cat') || 'general';
+    var sev = document.querySelector('.dml-page .sev-option.selected');
+    var sevVal = sev ? (sev.getAttribute('data-sev') || 'attention') : 'attention';
+    document.getElementById('dml-type-tag').value = cat + ':' + sevVal;
+  }
+  function dmlSelectSev(btn) {
+    document.querySelectorAll('.dml-page .sev-option').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    var sevVal = btn.getAttribute('data-sev') || 'attention';
+    var cat = document.querySelector('.dml-page .cat-option.selected');
+    var catVal = cat ? (cat.getAttribute('data-cat') || 'general') : 'general';
+    document.getElementById('dml-type-tag').value = catVal + ':' + sevVal;
+  }
+  document.querySelectorAll('#dml-filter-chips .chip').forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll('#dml-filter-chips .chip').forEach(b => b.classList.remove('active'));
+      c.classList.add('active');
+      var f = c.getAttribute('data-filter') || 'all';
+      document.querySelectorAll('.dml-page .entry-card').forEach(card => {
+        if (f === 'all') { card.style.display = ''; return; }
+        var cat = card.getAttribute('data-cat') || '';
+        var sev = card.getAttribute('data-sev') || '';
+        card.style.display = (cat.indexOf(f) >= 0 || sev === f) ? '' : 'none';
+      });
+    });
+  });
+</script>
+{% endblock %}

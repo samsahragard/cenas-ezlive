@@ -1136,7 +1136,9 @@ def _manager_role_ok():
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_page_list(page: str):
     """List view for a manager-section page. Renders the shared
-    manager_log.html template with rows newest first, store-scoped."""
+    manager_log.html template with rows newest first, store-scoped.
+    Special-case: daily-log uses Sam's custom-designed standalone
+    template (Sam dev #2952 2026-05-19)."""
     Model = _manager_model_for_slug(page)
     label = _MANAGER_PAGE_LABELS.get(page)
     if Model is None or label is None:
@@ -1153,8 +1155,10 @@ def manager_page_list(page: str):
                 (Model.store_scope.is_(None))
             )
         rows = q.order_by(Model.created_at.desc()).limit(100).all()
+        template_name = ("manager_daily_log.html"
+                         if page == "daily-log" else "manager_log.html")
         return render_template(
-            "manager_log.html",
+            template_name,
             page_slug=page,
             page_label=label,
             entries=rows,

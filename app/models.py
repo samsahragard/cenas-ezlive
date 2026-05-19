@@ -2258,6 +2258,53 @@ class DailyManagerLog(ManagerLogMixin, Base):
     author_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # v3 design fields (dck build-order #2, 2026-05-19). The Daily
+    # Manager Log gets a richer structured entry than the shared
+    # ManagerLogMixin shape — real columns instead of a type_tag
+    # composite (samai #3.49 flagged the 'STAFF:URGENT' composite
+    # display bug; discrete columns avoid it). All have defaults so
+    # the additive migration is safe on existing rows.
+    module: Mapped[str] = mapped_column(String(20), nullable=False, default="general")
+    subject: Mapped[str] = mapped_column(String(24), nullable=False, default="general")
+    issue: Mapped[str] = mapped_column(String(16), nullable=False, default="general")
+    priority: Mapped[str] = mapped_column(String(10), nullable=False, default="low")
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    show_on_roster: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    author: Mapped["User | None"] = relationship("User")
+    images: Mapped[list["DailyLogEntryImage"]] = relationship(
+        back_populates="entry", cascade="all, delete-orphan",
+        order_by="DailyLogEntryImage.position")
+
+
+class DailyLogEntryImage(Base):
+    """Image attached to a Daily Manager Log entry (dck build-order #2,
+    2026-05-19 — the v3 design's modal image upload + detail-pane
+    gallery). Mirrors the DeveloperChatAttachment pattern: file on disk,
+    row holds the path; served via the daily-log image route. The .url
+    property is what the template's e.images|map('url') consumes."""
+    __tablename__ = "daily_log_entry_image"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entry_id: Mapped[int] = mapped_column(
+        ForeignKey("manager_daily_log.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+
+    entry: Mapped["DailyManagerLog"] = relationship(back_populates="images")
+
+    @property
+    def url(self) -> str:
+        # Store-prefixed so it resolves under the current /<store>/ scope.
+        # g.current_store is set by store_routes' url_value_preprocessor
+        # during the request the template renders in.
+        from flask import g as _g
+        store = getattr(_g, "current_store", None) or "partner"
+        return f"/{store}/manager/daily-log/image/{self.id}"
+
 
 class ShiftHandoff(ManagerLogMixin, Base):
     __tablename__ = "manager_shift_handoff"

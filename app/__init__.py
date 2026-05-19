@@ -651,6 +651,46 @@ def create_app():
         logging.getLogger(__name__).exception(
             "developer_chat_archive backfill failed (non-fatal)")
 
+    # manager_daily_log v3 fields + daily_log_entry_image (migration 31,
+    # dck build-order #2 2026-05-19). Additive: 6 columns on the existing
+    # manager_daily_log table + a new image table. Render runs no alembic
+    # — this idempotent backfill is the real schema apply.
+    try:
+        from sqlalchemy import inspect as _sa_insp_31, text as _sa_text_31
+        from app.db import engine as _eng_31m
+        from app.models import Base as _Base_31m, DailyLogEntryImage as _DLEI
+        if _eng_31m is not None:
+            insp_31 = _sa_insp_31(_eng_31m)
+            tables_31 = set(insp_31.get_table_names())
+            if "manager_daily_log" in tables_31:
+                existing_31 = {c["name"]
+                               for c in insp_31.get_columns("manager_daily_log")}
+                _cols_31 = [
+                    ("module",         "VARCHAR(20) NOT NULL DEFAULT 'general'"),
+                    ("subject",        "VARCHAR(24) NOT NULL DEFAULT 'general'"),
+                    ("issue",          "VARCHAR(16) NOT NULL DEFAULT 'general'"),
+                    ("priority",       "VARCHAR(10) NOT NULL DEFAULT 'low'"),
+                    ("entry_date",     "DATE NOT NULL DEFAULT CURRENT_DATE"),
+                    ("show_on_roster", "BOOLEAN NOT NULL DEFAULT 0"),
+                ]
+                with _eng_31m.begin() as _conn_31:
+                    for _name, _ddl in _cols_31:
+                        if _name not in existing_31:
+                            _conn_31.execute(_sa_text_31(
+                                f"ALTER TABLE manager_daily_log "
+                                f"ADD COLUMN {_name} {_ddl}"))
+                            logging.getLogger(__name__).info(
+                                "manager_daily_log: backfilled %s (migration 31)",
+                                _name)
+            if "daily_log_entry_image" not in tables_31:
+                _Base_31m.metadata.create_all(
+                    bind=_eng_31m, tables=[_DLEI.__table__])
+                logging.getLogger(__name__).info(
+                    "daily_log_entry_image (migration 31): table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "manager_daily_log v3 backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

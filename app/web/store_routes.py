@@ -19,10 +19,12 @@ templates can write `url_for('store.reports_labor')` and Flask will produce
 from __future__ import annotations
 
 import logging
+import os
 
-from flask import Blueprint, Response, g, abort, request, render_template, redirect, url_for, session, jsonify
+from flask import Blueprint, Response, g, abort, request, render_template, redirect, url_for, session, jsonify, send_file
+from werkzeug.utils import secure_filename
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from app.db import get_db
 from app.models import Driver, DriverShift, DriverLocation
@@ -1133,12 +1135,143 @@ def _manager_role_ok():
     return role not in _MANAGER_ROLES_DENIED
 
 
+# ---- Daily Manager Log v3 (dck build-order #2, 2026-05-19) ----------
+# The daily-log page diverged from the shared manager_log shape into a
+# 12-day windowed, day-grouped view with structured entry fields +
+# image attachments. These helpers + the image route serve it.
+
+def _daily_log_image_dir():
+    """Directory holding Daily Manager Log entry images — one subdir per
+    entry id. Mirrors the dev-chat attachment storage convention."""
+    base = os.getenv("DAILY_LOG_IMAGE_DIR")
+    if not base:
+        base = os.path.join(
+            os.getenv("CHAT_ATTACHMENTS_DIR", "/var/data/chat-attachments"),
+            "daily-log-images",
+        )
+    return base
+
+
+_DAILY_LOG_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_DAILY_LOG_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+
+def _render_daily_log_v3(db, label, active_key):
+    """Daily Manager Log v3 — a 12-day windowed, day-grouped view.
+    ?date=<iso> sets the window end (default today)."""
+    from app.models import DailyManagerLog
+    raw = request.args.get("date") or ""
+    try:
+        sel = date.fromisoformat(raw) if raw else date.today()
+    except ValueError:
+        sel = date.today()
+    today = date.today()
+    window = [sel - timedelta(days=i) for i in range(12)]  # reverse-chrono
+    win_lo = window[-1]
+    q = db.query(DailyManagerLog).filter(
+        DailyManagerLog.entry_date >= win_lo,
+        DailyManagerLog.entry_date <= sel,
+    )
+    if g.current_location in ("tomball", "copperfield"):
+        q = q.filter(
+            (DailyManagerLog.store_scope == g.current_location) |
+            (DailyManagerLog.store_scope.is_(None))
+        )
+    rows = q.order_by(DailyManagerLog.created_at.desc()).all()
+    by_date: dict = {}
+    for r in rows:
+        by_date.setdefault(r.entry_date, []).append(r)
+    days = []
+    for d in window:
+        days.append({
+            "iso": d.isoformat(),
+            "dow": d.strftime("%a").upper(),
+            "label": f"{d:%b} {d.day}",
+            "is_today": d == today,
+            "entries": by_date.get(d, []),
+        })
+    return render_template(
+        "manager_daily_log.html",
+        page_slug="daily-log",
+        page_label=label,
+        days=days,
+        selected_date=sel.isoformat(),
+        today_iso=today.isoformat(),
+        active=active_key,
+    )
+
+
+def _create_daily_log_v3_entry(db, store_scope, user):
+    """Create a Daily Manager Log v3 entry from the multipart form, and
+    save any uploaded images as DailyLogEntryImage rows + files."""
+    from app.models import DailyManagerLog, DailyLogEntryImage
+    raw_date = request.form.get("entry_date") or ""
+    try:
+        entry_date = date.fromisoformat(raw_date) if raw_date else date.today()
+    except ValueError:
+        entry_date = date.today()
+
+    def _field(name, default, cap):
+        return ((request.form.get(name) or default).strip()[:cap] or default)
+
+    row = DailyManagerLog(
+        body=(request.form.get("body") or "").strip() or None,
+        module=_field("module", "general", 20),
+        subject=_field("subject", "general", 24),
+        issue=_field("issue", "general", 16),
+        priority=_field("priority", "low", 10),
+        entry_date=entry_date,
+        show_on_roster=(request.form.get("show_on_roster") == "1"),
+        store_scope=store_scope,
+        author_id=(user.id if user else None),
+    )
+    db.add(row)
+    db.flush()  # need row.id for the image subdir + FK
+
+    files = [f for f in request.files.getlist("images") if f and f.filename]
+    if files:
+        entry_dir = os.path.join(_daily_log_image_dir(), str(row.id))
+        os.makedirs(entry_dir, exist_ok=True)
+        pos = 0
+        for f in files:
+            ext = os.path.splitext(f.filename)[1].lower()
+            if ext not in _DAILY_LOG_IMAGE_EXTS:
+                continue
+            data = f.read()
+            if not data or len(data) > _DAILY_LOG_MAX_IMAGE_BYTES:
+                continue
+            safe = secure_filename(f.filename) or f"image{ext}"
+            target = os.path.join(entry_dir, f"{pos}_{safe}")
+            with open(target, "wb") as fh:
+                fh.write(data)
+            db.add(DailyLogEntryImage(
+                entry_id=row.id, storage_path=target, position=pos))
+            pos += 1
+    db.commit()
+
+
+@store_bp.route("/manager/daily-log/image/<int:image_id>", methods=["GET"])
+def daily_log_image(image_id: int):
+    """Serve a Daily Manager Log entry image. Manager-tier gated."""
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import DailyLogEntryImage
+    db = next(get_db())
+    try:
+        img = db.get(DailyLogEntryImage, image_id)
+        if img is None or not os.path.exists(img.storage_path):
+            abort(404)
+        return send_file(img.storage_path)
+    finally:
+        db.close()
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_page_list(page: str):
     """List view for a manager-section page. Renders the shared
     manager_log.html template with rows newest first, store-scoped.
-    Special-case: daily-log uses Sam's custom-designed standalone
-    template (Sam dev #2952 2026-05-19)."""
+    Special-case: daily-log uses the v3 windowed day-grouped view
+    (dck build-order #2 2026-05-19)."""
     Model = _manager_model_for_slug(page)
     label = _MANAGER_PAGE_LABELS.get(page)
     if Model is None or label is None:
@@ -1148,6 +1281,8 @@ def manager_page_list(page: str):
     active_key = "manager_" + page.replace("-", "_")
     db = next(get_db())
     try:
+        if page == "daily-log":
+            return _render_daily_log_v3(db, label, active_key)
         q = db.query(Model)
         if g.current_location in ("tomball", "copperfield"):
             q = q.filter(
@@ -1155,10 +1290,8 @@ def manager_page_list(page: str):
                 (Model.store_scope.is_(None))
             )
         rows = q.order_by(Model.created_at.desc()).limit(100).all()
-        template_name = ("manager_daily_log.html"
-                         if page == "daily-log" else "manager_log.html")
         return render_template(
-            template_name,
+            "manager_log.html",
             page_slug=page,
             page_label=label,
             entries=rows,
@@ -1205,6 +1338,9 @@ def manager_page_create(page: str):
         store_scope = (g.current_location
                        if g.current_location in ("tomball", "copperfield")
                        else None)
+        if page == "daily-log":
+            _create_daily_log_v3_entry(db, store_scope, user)
+            return redirect(url_for("store.manager_page_list", page=page))
         row = Model(
             title=(request.form.get("title") or "").strip()[:300] or None,
             body=(request.form.get("body") or "").strip() or None,

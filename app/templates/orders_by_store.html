@@ -8,6 +8,22 @@
 {% endblock %}
 
 {% block content %}
+<style>
+  /* Sam #5:42 — order rows read as clickable (hand cursor on hover). */
+  .order-list-table tbody tr { cursor: pointer; }
+  /* Sam #5:42 — the "combined view" row: a glowing yellow bar with */
+  /* white text so it stands out.                                   */
+  .order-list-table tr.all-row td {
+    background: linear-gradient(180deg, #f6cb45 0%, #e3a008 100%);
+    color: #fff; font-weight: 700; text-align: center;
+    letter-spacing: .04em; text-shadow: 0 1px 2px rgba(0,0,0,.4);
+    animation: all-row-glow 2.4s ease-in-out infinite;
+  }
+  @keyframes all-row-glow {
+    0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 0 14px 1px rgba(246,203,69,.45); }
+    50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 0 26px 5px rgba(246,203,69,.85); }
+  }
+</style>
 <div style="margin: 0 0 16px; display: flex; gap: 10px; flex-wrap: wrap;">
   <a class="btn-portal" href="/orders">Manually Processed PDF</a>
   <a class="btn-portal" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
@@ -70,7 +86,7 @@
                       data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
                       onclick="event.stopPropagation(); unhookCourier(this);"
                       title="Unhook the ezCater courier from this order">
-                Unhook
+                Unhook driver
               </button>
             </td>
             <td>{{ (display_drivers or {}).get(o.id) or o.assigned_driver or '—' }}{# TODO Sam #2842 item 2: +1 multi-delivery badge needs backend `is_paired` flag; coord with aick #}</td>

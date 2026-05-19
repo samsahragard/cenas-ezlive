@@ -460,6 +460,31 @@ def driver_shift_end():
         db.close()
 
 
+@driver.route("/driver/battery-opt-status", methods=["POST"])
+def driver_battery_opt_status():
+    """Record whether this driver's phone has Cenas Kitchen whitelisted
+    from battery optimization. The native plugin calls this at shift start
+    with {granted: bool, prompted: bool} so partners can see who's
+    whitelisted (GPS will keep streaming on screen-off) vs not.
+    Sam #1025 2026-05-19."""
+    driver_id = session.get("driver_id")
+    if not driver_id:
+        return jsonify({"error": "not signed in"}), 401
+    data = request.get_json(silent=True) or {}
+    granted = bool(data.get("granted"))
+    db = next(get_db())
+    try:
+        d = db.get(Driver, driver_id)
+        if d is None:
+            return jsonify({"error": "driver not found"}), 404
+        d.battery_opt_ignored = granted
+        d.battery_opt_checked_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True, "granted": granted})
+    finally:
+        db.close()
+
+
 @driver.route("/driver/track", methods=["POST"])
 def driver_track():
     """Accept one GPS fix from the driver's phone. Body is JSON:

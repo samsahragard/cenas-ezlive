@@ -5,7 +5,10 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.webkit.CookieManager;
 
 import com.getcapacitor.JSObject;
@@ -184,5 +187,72 @@ public class CenasGpsPlugin extends Plugin {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         ctx.startActivity(intent);
         call.resolve();
+    }
+
+    /**
+     * Returns whether the app is currently whitelisted from battery
+     * optimization (Doze / App Standby). Pure read — does not prompt.
+     */
+    @PluginMethod
+    public void checkBatteryOptimizations(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            // Pre-Doze (API < 23) — no battery optimization concept.
+            ret.put("granted", true);
+            ret.put("supported", false);
+            call.resolve(ret);
+            return;
+        }
+        Context ctx = getContext();
+        PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        boolean ignoring = pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+        ret.put("granted", ignoring);
+        ret.put("supported", true);
+        call.resolve(ret);
+    }
+
+    /**
+     * Pops the system dialog asking the user to whitelist this app from
+     * battery optimization (so the GPS foreground service is not killed
+     * when the screen is off). If already granted, resolves immediately
+     * with granted=true and prompted=false. Driver shift-start flow calls
+     * this once on first start after install.
+     */
+    @PluginMethod
+    public void requestIgnoreBatteryOptimizations(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            ret.put("granted", true);
+            ret.put("prompted", false);
+            ret.put("supported", false);
+            call.resolve(ret);
+            return;
+        }
+        Context ctx = getContext();
+        PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        String pkg = ctx.getPackageName();
+        if (pm != null && pm.isIgnoringBatteryOptimizations(pkg)) {
+            ret.put("granted", true);
+            ret.put("prompted", false);
+            ret.put("supported", true);
+            call.resolve(ret);
+            return;
+        }
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + pkg));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+            ret.put("granted", false);
+            ret.put("prompted", true);
+            ret.put("supported", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            ret.put("granted", false);
+            ret.put("prompted", false);
+            ret.put("supported", true);
+            ret.put("error", e.getMessage());
+            call.resolve(ret);
+        }
     }
 }

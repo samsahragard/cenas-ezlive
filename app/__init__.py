@@ -324,6 +324,10 @@ def create_app():
                 ("last_known_lng",          "FLOAT"),
                 ("last_location_at",        "TIMESTAMP"),
                 ("photo_url",               "VARCHAR(500)"),
+                # Sam #1025 2026-05-19 — battery-optimization whitelist state
+                # reported by the native plugin at shift start.
+                ("battery_opt_ignored",     "BOOLEAN"),
+                ("battery_opt_checked_at",  "TIMESTAMP"),
             ]
             added_orders, added_drivers = [], []
             with _eng_15.begin() as conn:

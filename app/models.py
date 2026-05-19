@@ -337,6 +337,13 @@ class Driver(Base):
     last_location_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Battery-optimization whitelist state (Sam #1025 2026-05-19). True when
+    # the driver's phone has Cenas Kitchen whitelisted from Doze / battery
+    # saver — required for the GPS foreground service to survive screen off.
+    # Reported by the native plugin at shift start.
+    battery_opt_ignored: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    battery_opt_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
 
 class DriverLog(Base):
     __tablename__ = "driver_logs"

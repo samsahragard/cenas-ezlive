@@ -283,6 +283,19 @@
     }
   }
 
+  async function reportBatteryOptStatus(granted, prompted) {
+    // Fire-and-forget POST so the server has a record of whether each
+    // driver's phone is whitelisted from battery optimization. Helps Sam
+    // see which drivers will keep GPS streaming when the screen is off.
+    try {
+      await fetch('/driver/battery-opt-status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({granted: !!granted, prompted: !!prompted}),
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
   async function startCenasNativeTracking() {
     if (!CenasNative) return false;
     try {
@@ -291,6 +304,19 @@
         permDenied = true;
         statusEl.textContent = 'location permission denied — tap status for help';
         return false;
+      }
+      // Battery-optimization auto-prompt per Sam #1025. First shift start
+      // after install pops the system dialog asking the user to whitelist
+      // Cenas Kitchen from Doze / battery saver. If already granted, this
+      // resolves immediately without prompting. Result is reported to the
+      // server either way so we can see who's whitelisted.
+      if (typeof CenasNative.requestIgnoreBatteryOptimizations === 'function') {
+        try {
+          const bat = await CenasNative.requestIgnoreBatteryOptimizations();
+          reportBatteryOptStatus(bat && bat.granted, bat && bat.prompted);
+        } catch (_) {
+          reportBatteryOptStatus(false, false);
+        }
       }
       const trackUrl = window.location.origin + '/driver/track';
       const res = await CenasNative.start({

@@ -81,6 +81,64 @@
     background: rgba(228, 179, 64, 0.12);
     color: #E4B340;
   }
+  /* ---- pinned cena start files panel (Sam 2026-05-19 4:12pm) ---- */
+  .sc-pin {
+    margin-bottom: 8px;
+    background: rgba(15, 8, 5, 0.55);
+    border: 1px solid rgba(217, 164, 54, 0.18);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    color: rgba(236, 227, 208, 0.78);
+  }
+  .sc-pin > summary {
+    cursor: pointer;
+    color: #E4B340;
+    font-weight: 600;
+    padding: 4px 0;
+    user-select: none;
+    list-style: none;
+  }
+  .sc-pin > summary::-webkit-details-marker { display: none; }
+  .sc-pin > summary::before { content: "▸ "; font-size: 10px; }
+  .sc-pin[open] > summary::before { content: "▾ "; }
+  .sc-pin-file {
+    margin: 6px 0 6px 14px;
+    border-left: 2px solid rgba(217, 164, 54, 0.15);
+    padding-left: 10px;
+  }
+  .sc-pin-file > summary {
+    cursor: pointer;
+    padding: 3px 0;
+    color: rgba(236, 227, 208, 0.85);
+    user-select: none;
+    list-style: none;
+  }
+  .sc-pin-file > summary::-webkit-details-marker { display: none; }
+  .sc-pin-file > summary::before { content: "▸ "; font-size: 10px; color: rgba(236,227,208,0.5); }
+  .sc-pin-file[open] > summary::before { content: "▾ "; color: rgba(236,227,208,0.5); }
+  .sc-pin-file > summary:hover { color: #fff; }
+  .sc-pin-name { font-weight: 600; }
+  .sc-pin-meta {
+    color: rgba(236, 227, 208, 0.5);
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .sc-pin-missing { color: #E87A3E; }
+  .sc-pin-content {
+    background: rgba(0, 0, 0, 0.35);
+    color: rgba(236, 227, 208, 0.88);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin: 4px 0;
+    max-height: 380px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
   .sc-session .sc-arch {
     margin-left: auto; opacity: 0; font-size: 13px;
     color: rgba(236,227,208,0.5);
@@ -337,6 +395,26 @@
       <span class="sc-part sc-part-cena" id="sc-cena-chip">Cena</span>
       <span class="sc-part sc-part-aick" id="sc-aick-chip">aick</span>
     </div>
+    {% if start_files %}
+    <details class="sc-pin">
+      <summary>Cena start files ({{ start_files|length }}) — most recent copy auto-loaded on every chat open</summary>
+      {% for f in start_files %}
+      <details class="sc-pin-file">
+        <summary>
+          <span class="sc-pin-name">{{ f.name }}</span>
+          {% if f.missing %}
+          <span class="sc-pin-meta sc-pin-missing">— file missing on disk</span>
+          {% else %}
+          <span class="sc-pin-meta">{{ f.lines }} lines · {{ f.size_h }} · modified {{ f.mtime_h }}</span>
+          {% endif %}
+        </summary>
+        {% if not f.missing %}
+        <pre class="sc-pin-content">{{ f.content }}</pre>
+        {% endif %}
+      </details>
+      {% endfor %}
+    </details>
+    {% endif %}
     <div class="sc-msgs" id="sc-msgs"></div>
     <div class="sc-warn" id="sc-warn"></div>
     <div class="sc-composer">

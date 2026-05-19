@@ -40,6 +40,7 @@ import os
 import re
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 
 from flask import (
     Blueprint, Response, abort, g, jsonify, redirect, render_template,
@@ -453,6 +454,46 @@ def _process_attachments(files):
     return api_blocks, "".join(text_parts)
 
 
+# ---- start files panel (Sam dev chat 2026-05-19 4:12pm — pin cena's
+# auto-loaded start docs at the top of /sam/chat so the most recent
+# copy is always visible at chat open). Read at request time from
+# project root, embed server-side; collapsed by default so they don't
+# dominate the view. List matches CENA_CHARTER.md autoload section.
+_START_FILES = (
+    "CENA_CHARTER.md",
+    "CENA.md",
+    "APP_STATUS.md",
+    "plan.md",
+)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _read_start_files() -> list[dict]:
+    out: list[dict] = []
+    for name in _START_FILES:
+        p = _PROJECT_ROOT / name
+        try:
+            stat = p.stat()
+            text = p.read_text(encoding="utf-8", errors="replace")
+            mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+            out.append({
+                "name": name,
+                "size_h": f"{stat.st_size:,} bytes",
+                "lines": text.count("\n") + 1,
+                "mtime_h": mtime,
+                "content": text,
+                "missing": False,
+            })
+        except FileNotFoundError:
+            out.append({"name": name, "size_h": "—", "lines": 0,
+                        "mtime_h": "—", "content": "", "missing": True})
+        except Exception as e:  # noqa: BLE001
+            out.append({"name": name, "size_h": "?", "lines": 0,
+                        "mtime_h": "?", "content": f"(read failed: {e})",
+                        "missing": False})
+    return out
+
+
 # ============================================================
 # Routes
 # ============================================================
@@ -515,6 +556,7 @@ def sam_chat_page():
             cost_30d=_cost_last_30d(db),
             token_estimate=token_estimate,
             context_warn_tokens=_CONTEXT_WARN_TOKENS,
+            start_files=_read_start_files(),
         )
     finally:
         db.close()

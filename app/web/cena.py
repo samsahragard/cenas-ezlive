@@ -2747,6 +2747,13 @@ def cena_run_archive_and_wipe_dev_chat():
             }), 500
 
         deleted = db.query(DeveloperChatMessage).delete(synchronize_session=False)
+        # Wiping every message orphans every attachment row — SQLite does
+        # not fire the ON DELETE CASCADE on a bulk delete, so clear
+        # attachments explicitly in the same transaction. (The gap behind
+        # the 2026-05-19 phantom-image incident: orphaned attachment rows
+        # collided onto new messages once message ids reset.)
+        from app.models import DeveloperChatAttachment as _DCAtt
+        att_deleted = db.query(_DCAtt).delete(synchronize_session=False)
         db.commit()
 
         post_live = db.query(DeveloperChatMessage).count()
@@ -2755,12 +2762,62 @@ def cena_run_archive_and_wipe_dev_chat():
             "pre_live": pre_live,
             "archived": archived,
             "deleted": deleted,
+            "attachments_deleted": att_deleted,
             "post_live": post_live,
             "post_archive_total": post_arch,
         })
     except Exception as e:  # noqa: BLE001
         db.rollback()
         logger.exception("cena: run-archive-and-wipe-dev-chat crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
+@cena_bp.route("/sam/cena/run-cleanup-orphan-attachments", methods=["POST"])
+def cena_run_cleanup_orphan_attachments():
+    """Delete dev-chat attachment rows orphaned by the archive-and-wipe.
+    The wipe deleted messages but SQLite did not fire the ON DELETE
+    CASCADE on the bulk delete, so pre-wipe attachment rows survived.
+    After the message-id reset they collide onto new messages by
+    message_id (the 2026-05-19 phantom-image incident).
+
+    Orphans = attachments created before the oldest surviving (post-
+    wipe) message. That boundary is self-computed from live data — no
+    hardcoded id or timestamp cutoff. Returns pre/post counts.
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    from app.models import DeveloperChatAttachment as _DCAtt
+    db = SessionLocal()
+    try:
+        oldest_live = db.query(func.min(DeveloperChatMessage.created_at)).scalar()
+        if oldest_live is None:
+            return jsonify({"ok": False,
+                            "error": "no live messages — cannot compute cutoff"}), 400
+        pre = db.query(_DCAtt).count()
+        orphan_ids = [a.id for a in
+                      db.query(_DCAtt).filter(_DCAtt.created_at < oldest_live).all()]
+        deleted = 0
+        if orphan_ids:
+            deleted = db.query(_DCAtt).filter(
+                _DCAtt.id.in_(orphan_ids)
+            ).delete(synchronize_session=False)
+        db.commit()
+        post = db.query(_DCAtt).count()
+        return jsonify({
+            "ok": True,
+            "cutoff": oldest_live.isoformat() if oldest_live else None,
+            "pre": pre,
+            "deleted": deleted,
+            "post": post,
+        })
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-cleanup-orphan-attachments crashed")
         return jsonify({"ok": False,
                         "error": f"{type(e).__name__}: {e}"}), 500
     finally:

@@ -265,6 +265,12 @@
   }
   .ihc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .ihc-form-row .ihc-field { display: flex; flex-direction: column; gap: 3px; }
+  /* Collapse to single-col when the cart width drops below ~360px (mobile +
+     narrow desktop) so Email/Phone + Event-date/Guest-count don't get cramped.
+     Per dck #2885 / aick #3026 Lane 3 polish. */
+  @media (max-width: 380px) {
+    .ihc-form-row { grid-template-columns: 1fr; }
+  }
 
   .ihc-ctas { display: flex; flex-direction: column; gap: 8px; }
   .ihc-cta {
@@ -480,8 +486,11 @@
 
   /* --- Toast --- */
   .ihc-toast {
+    /* Top-anchored so the toast floats above the item card grid
+       reliably in narrow viewports (per dck #2885 / aick #3026 Lane 3
+       polish — bottom anchor got visually overlapped by the grid). */
     position: fixed;
-    bottom: 24px;
+    top: 24px;
     left: 50%;
     transform: translateX(-50%);
     padding: 12px 20px;
@@ -490,6 +499,7 @@
     font-weight: 500;
     z-index: 2000;
     display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.40);
   }
   .ihc-toast.ok { background: rgba(34,197,94,0.20); color: #86EFAC; border: 0.5px solid rgba(34,197,94,0.50); }
   .ihc-toast.err { background: rgba(220,38,38,0.20); color: #FECACA; border: 0.5px solid rgba(239,68,68,0.50); }

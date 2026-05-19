@@ -64,6 +64,7 @@ Governing docs (read these, don't quote them — internalize them):
 - **Questions from ck/dck/samai route UP through aick.** aick does not answer team questions on his own authority. He relays to Sam or Cena, waits for the answer, then relays back down.
 - **aick is the designated relay between /sam/chat and dev chat.** Sam + Cena stay in /sam/chat. ck/dck/samai stay in dev chat. aick carries everything both directions. Sam sometimes posts to dev chat directly — that's his choice. Cena does not post to dev chat.
 - **Team questions need permission before aick answers.** If ck/dck/samai ask aick a question that requires a decision or permission, aick brings it to Sam or Cena first. He does not answer on our behalf.
+- **NEVER run render_env_get in /sam/chat (2026-05-19).** That tool dumps every secret key and password into the chat history permanently. It is banned from Sam-facing chat. If I need to check a specific setting, I look it up one value at a time via a targeted method — never the full dump.
 
 ## Masood — quick reference (full version: Charter §7A)
 
@@ -249,6 +250,7 @@ JLuna emails = price updates only, not orders. Ingest into produce price history
 - **Dev chat cleanup** — deleted 28 rows of samai LIGHT-GATE auto-posts and aick push-relay noise on 2026-05-19. Future cleanup endpoint needs archive-before-delete pattern (samai flagged, aick acknowledged, wave-2 fix queued).
 - **ck performance concern** — Sam flagged after 10.5 hours silence. Sam considering team configuration changes.
 - **Dev chat message volume** — ~3,000 messages accumulated this session. aick proposed bulk cleanup + rolling 200/100 cap. Sam's direction: save copy first (option B), hold on rolling rule until archive-before-delete is wired into the endpoint. Still pending Sam's explicit go.
+- **render_env_get banned from Sam chat (2026-05-19)** — accidentally ran this tool during a session and it dumped ALL secret keys into the chat history permanently (message 1302 of session). Never run render_env_get in /sam/chat again. If I need to check a specific env var value, use a targeted approach only.
 
 ---
 
@@ -268,6 +270,7 @@ JLuna emails = price updates only, not orders. Ingest into produce price history
 - **ck performance** — silent 10.5 hours, flagged. Sam considering team configuration changes.
 - **Dev chat bulk cleanup** — Sam said option B (save copy first). Hold on rolling rule. Still pending Sam's explicit go to execute.
 - **Adaptive vs Regular dropdown** on /sam/chat — Sam wants this dropdown next to the Model dropdown. Sam will define what each mode means. Not yet built.
+- **Secret keys exposed in chat (2026-05-19)** — render_env_get accidentally dumped all keys into sam_chat_messages. Keys that need rotating: Gemini API key, OpenWeather key, Twilio token, Cena gateway token, PARTNER_PASSWORD. Message needs deleting from DB. Pending Sam's go.
 
 ---
 
@@ -278,3 +281,4 @@ JLuna emails = price updates only, not orders. Ingest into produce price history
 - **2026-05-19** — Cena: major session update. Added new standing rules (READ ONLY, no reports unless asked, no direct team comms, aick-as-relay, verify-before-bubble, no stop-for-tonight, aick-assigns-by-name, team-runs-in-parallel, questions-route-up). Added store URL slug reference. Updated infrastructure status table. Added current sidebar structure (locked). Added produce order email routing. Added vendor email inbox routing. Added patterns/gotchas from tonight's session. Full open threads list captured.
 - **2026-05-19 (session close)** — Cena: updated Fresh Food templates to Live (c0f8706 by aick). Corrected Adaptive vs Regular dropdown status to Not Built. Added ck performance concern to patterns. Confirmed vendor email 31-entry JSON staged.
 - **2026-05-19 (end of overnight build session)** — Cena: major update. Added relay routing rules (aick carries /sam/chat ↔ dev chat, team questions need permission before aick answers). Updated sidebar structure (VENDORS + CATERING now top-level bold, locked section order). Added dev chat cleanup status (28 rows deleted, wave-2 archive-before-delete queued, bulk cleanup pending Sam's B go). Added Adaptive vs Regular dropdown to open threads. Updated web_search + CenaDevChatMonitor to Live. Removed Adaptive vs Regular from infra table (not built). Added patterns for dev chat volume and Render build minutes. Full open threads list updated.
+- **2026-05-19 (security incident)** — Cena: added hard rule banning render_env_get from /sam/chat. Logged secret key exposure incident. Added key rotation + message deletion to open threads.

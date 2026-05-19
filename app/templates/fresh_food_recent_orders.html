@@ -1,43 +1,638 @@
 {% extends "base_dashboard.html" %}
-{% block body %}
-<div style="padding:16px;max-width:1200px;margin:0 auto;">
-  <h1 style="font-size:24px;margin-bottom:12px;">Fresh Food — Recent Orders</h1>
-  <p style="color:#888;font-size:13px;margin-bottom:16px;">All orders across both locations. Click an ACTIVE order to fulfill (record SENT quantities). Audience: everyone except expo.</p>
-  <p style="color:#aaa;font-size:12px;font-style:italic;">v1 stub — full 3-section UI (live trackers + variance + history) from ck pending. Pull Report:
-    <a href="{{ url_for('store.fresh_food_recent_orders_report') }}?from=&to=" style="color:#2a8a4e;">download CSV</a>
-  </p>
+{% set active = 'fresh_food_recent_orders' %}
+{% block title %}Fresh Food — Recent Orders — Cenas Kitchen{% endblock %}
+{% block page_title %}Fresh Food — Recent Orders{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Live trackers, SENT-vs-ordered variance, and full order history. Click an ACTIVE order to record what was sent. Visible to both locations.</p>
+{% endblock %}
 
-  {% if orders %}
-    <table style="border-collapse:collapse;width:100%;font-size:13px;">
-      <thead>
-        <tr style="background:#222;color:white;">
-          <th style="padding:6px 8px;text-align:left;">#</th>
-          <th style="padding:6px 8px;text-align:left;">Placed</th>
-          <th style="padding:6px 8px;text-align:left;">Order date</th>
-          <th style="padding:6px 8px;text-align:left;">Store</th>
-          <th style="padding:6px 8px;text-align:left;">Placed by</th>
-          <th style="padding:6px 8px;text-align:left;">Status</th>
-          <th style="padding:6px 8px;text-align:left;">Fulfilled by</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for o in orders %}
-          <tr style="background:{{ '#fff' if loop.index is odd else '#f7f7f7' }};">
-            <td style="padding:4px 8px;">{{ o.id }}</td>
-            <td style="padding:4px 8px;">{{ o.placed_at.strftime('%Y-%m-%d %H:%M') if o.placed_at else '' }}</td>
-            <td style="padding:4px 8px;">{{ o.order_date.isoformat() if o.order_date else '' }}</td>
-            <td style="padding:4px 8px;">{{ o.store_scope or 'both' }}</td>
-            <td style="padding:4px 8px;">{{ o.placed_by_name or '' }}</td>
-            <td style="padding:4px 8px;"><span style="background:{{ '#9CCB76' if o.status == 'completed' else '#E4B340' }};color:#000;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:600;">{{ o.status }}</span></td>
-            <td style="padding:4px 8px;color:#666;">{{ o.fulfilled_by_name or '—' }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <div style="background:#f7f7f7;padding:32px;text-align:center;color:#888;border-radius:8px;">
-      No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}" style="color:#2a8a4e;">Place Order</a>.
+{% block content %}
+<style>
+  .ffro-page { margin-top: 12px; }
+
+  .ffro-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+  .ffro-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: rgba(228,179,64,0.10);
+    color: #E4B340;
+    border: 0.5px solid rgba(217,164,54,0.30);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+  }
+  .ffro-btn:hover { background: rgba(228,179,64,0.18); }
+  .ffro-btn.primary { background: #E4B340; color: #1a1208; border-color: transparent; }
+  .ffro-btn.primary:hover { background: #d9a436; }
+  .ffro-btn.ghost { background: transparent; }
+
+  .ffro-section {
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid rgba(217,164,54,0.10);
+    border-radius: 12px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .ffro-section h2 {
+    margin: 0;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.10);
+    font-size: 13px;
+    font-weight: 700;
+    color: #FAF6EC;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ffro-section h2 i { color: #E4B340; font-size: 16px; }
+  .ffro-section h2 .h-sub {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.50);
+    font-weight: 400;
+    margin-left: auto;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* SECTION 1: Live trackers ---------------------------------------------- */
+  .ffro-tracker-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  @media (max-width: 800px) { .ffro-tracker-grid { grid-template-columns: 1fr; } }
+
+  .ffro-tracker-card {
+    background: rgba(0,0,0,0.20);
+    border: 0.5px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .ffro-tracker-card .tc-head {
+    padding: 8px 12px;
+    background: rgba(228,179,64,0.04);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #E4B340;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ffro-tracker-card .tc-head .tc-window {
+    color: rgba(255,255,255,0.50);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    font-size: 10px;
+  }
+
+  table.ffro-tt {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    color: #FAF6EC;
+  }
+  table.ffro-tt th, table.ffro-tt td {
+    padding: 4px 12px;
+    text-align: right;
+    border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  }
+  table.ffro-tt th { font-weight: 600; color: rgba(255,255,255,0.55); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.ffro-tt th:first-child, table.ffro-tt td:first-child { text-align: left; }
+  table.ffro-tt td.muted { color: rgba(255,255,255,0.35); }
+  table.ffro-tt tr.cat-hdr td {
+    background: rgba(228,179,64,0.05);
+    color: #E4B340;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 9.5px;
+    padding: 3px 12px;
+  }
+
+  /* SECTION 2: Variance --------------------------------------------------- */
+  table.ffro-var {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    color: #FAF6EC;
+  }
+  table.ffro-var th, table.ffro-var td {
+    padding: 6px 14px;
+    text-align: right;
+    border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  }
+  table.ffro-var th { font-weight: 600; color: rgba(255,255,255,0.55); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; background: #0e0c08; }
+  table.ffro-var th:first-child, table.ffro-var td:first-child { text-align: left; }
+  table.ffro-var td.muted { color: rgba(255,255,255,0.40); }
+  table.ffro-var td.gap-pos { color: #9CCB76; }
+  table.ffro-var td.gap-neg { color: #E56B6B; }
+  .var-sev {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .var-sev.ok   { background: rgba(156,203,118,0.14); color: #9CCB76; }
+  .var-sev.low  { background: rgba(228,179,64,0.14); color: #E4B340; }
+  .var-sev.high { background: rgba(229,107,107,0.16); color: #E56B6B; }
+  .var-empty {
+    padding: 32px;
+    text-align: center;
+    color: rgba(255,255,255,0.40);
+    font-size: 12px;
+  }
+
+  /* SECTION 3: History ---------------------------------------------------- */
+  table.ffro-hist {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    color: #FAF6EC;
+  }
+  table.ffro-hist th, table.ffro-hist td {
+    padding: 7px 12px;
+    text-align: left;
+    border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  }
+  table.ffro-hist th { font-weight: 600; color: rgba(255,255,255,0.55); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; background: #0e0c08; }
+  table.ffro-hist tbody tr { cursor: pointer; transition: background 0.12s; }
+  table.ffro-hist tbody tr:hover { background: rgba(228,179,64,0.05); }
+  table.ffro-hist tbody tr.is-active { background: rgba(228,179,64,0.03); }
+
+  .status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .status-pill.active    { background: rgba(228,179,64,0.16); color: #E4B340; }
+  .status-pill.completed { background: rgba(156,203,118,0.14); color: #9CCB76; }
+
+  .store-tag {
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.70);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .store-tag.tomball     { background: rgba(135,179,224,0.10); color: #87b3e0; }
+  .store-tag.copperfield { background: rgba(214,166,86,0.10); color: #d6a656; }
+
+  .ffro-empty {
+    padding: 40px;
+    text-align: center;
+    color: rgba(255,255,255,0.40);
+    font-size: 13px;
+  }
+  .ffro-empty a { color: #E4B340; }
+
+  /* MODAL: filter / fulfill ---------------------------------------------- */
+  .ffro-modal-bg {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .ffro-modal-bg.is-open { display: flex; }
+  .ffro-modal {
+    background: #14110d;
+    border: 0.5px solid rgba(217,164,54,0.25);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 90vh;
+    overflow-y: auto;
+    color: #FAF6EC;
+  }
+  .ffro-modal .mh {
+    padding: 14px 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.10);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ffro-modal .mh h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .ffro-modal .mh .x {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.50);
+    cursor: pointer;
+    font-size: 20px;
+  }
+  .ffro-modal .mb { padding: 16px 18px; }
+  .ffro-modal .mf { padding: 12px 18px; border-top: 0.5px solid rgba(217,164,54,0.10); display: flex; gap: 8px; justify-content: flex-end; }
+
+  .ffro-modal .field { margin-bottom: 12px; }
+  .ffro-modal .field label {
+    display: block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.55);
+    margin-bottom: 5px;
+  }
+  .ffro-modal input[type="date"],
+  .ffro-modal input[type="text"],
+  .ffro-modal input[type="number"],
+  .ffro-modal select {
+    width: 100%;
+    background: rgba(0,0,0,0.30);
+    border: 0.5px solid rgba(217,164,54,0.25);
+    color: #FAF6EC;
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .ffro-modal .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  table.ffro-fulfill {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    color: #FAF6EC;
+  }
+  table.ffro-fulfill th, table.ffro-fulfill td {
+    padding: 5px 8px;
+    text-align: right;
+    border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  }
+  table.ffro-fulfill th { font-weight: 600; color: rgba(255,255,255,0.55); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.ffro-fulfill th:first-child, table.ffro-fulfill td:first-child { text-align: left; }
+  table.ffro-fulfill input.qty {
+    width: 70px;
+    background: rgba(0,0,0,0.30);
+    border: 0.5px solid rgba(217,164,54,0.25);
+    color: #FAF6EC;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: right;
+    font-family: inherit;
+  }
+</style>
+
+<div class="ffro-page">
+  {% set has_orders = orders|length > 0 %}
+
+  {# --- Toolbar -------------------------------------------------------- #}
+  <div class="ffro-toolbar">
+    <button class="ffro-btn" type="button" onclick="document.getElementById('ffro-report-bg').classList.add('is-open');">
+      <i class="ti ti-file-download"></i>Pull Report
+    </button>
+  </div>
+
+  {# --- SECTION 1: 7-day + 30-day live trackers (both locations) ------- #}
+  <div class="ffro-section">
+    <h2>
+      <i class="ti ti-chart-bar"></i>Live ordering trackers
+      <span class="h-sub">Sum of OR placed, by location</span>
+    </h2>
+    <div class="ffro-tracker-grid">
+      {% for win_name, win_data in [('Last 7 days', tracker_7d), ('Last 30 days', tracker_30d)] %}
+        <div class="ffro-tracker-card">
+          <div class="tc-head">{{ win_name }} <span class="tc-window">Tomball · Copperfield · Total</span></div>
+          <table class="ffro-tt">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Tomball</th>
+                <th>Copperfield</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% set rendered_any = namespace(v=False) %}
+              {% for cat, items in categories %}
+                {% set cat_has_any = namespace(v=False) %}
+                {% for slug in items %}
+                  {% if slug in win_data and win_data[slug].total > 0 %}
+                    {% set cat_has_any.v = True %}
+                    {% set rendered_any.v = True %}
+                  {% endif %}
+                {% endfor %}
+                {% if cat_has_any.v %}
+                  <tr class="cat-hdr"><td colspan="4">{{ cat }}</td></tr>
+                  {% for slug in items %}
+                    {% if slug in win_data and win_data[slug].total > 0 %}
+                      <tr>
+                        <td>{{ slug.replace('-', ' ').title() }}</td>
+                        <td>{% if win_data[slug].tomball > 0 %}{{ '%.1f'|format(win_data[slug].tomball) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                        <td>{% if win_data[slug].copperfield > 0 %}{{ '%.1f'|format(win_data[slug].copperfield) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                        <td><strong>{{ '%.1f'|format(win_data[slug].total) }}</strong></td>
+                      </tr>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              {% endfor %}
+              {% if not rendered_any.v %}
+                <tr><td colspan="4" style="color:rgba(255,255,255,0.35);text-align:center;padding:14px;">No orders in window.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      {% endfor %}
     </div>
-  {% endif %}
+  </div>
+
+  {# --- SECTION 2: SENT vs ordered variance --------------------------- #}
+  <div class="ffro-section">
+    <h2>
+      <i class="ti ti-arrows-diff"></i>SENT vs ordered variance
+      <span class="h-sub">Last 30 days · sorted by gap size</span>
+    </h2>
+    {% if variance_rows %}
+      <table class="ffro-var">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Ordered</th>
+            <th>Sent</th>
+            <th>Gap</th>
+            <th>Gap %</th>
+            <th>Flag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in variance_rows %}
+            <tr>
+              <td>{{ r.slug.replace('-', ' ').title() }}</td>
+              <td>{{ '%.1f'|format(r.total_or) }}</td>
+              <td>{{ '%.1f'|format(r.total_sent) }}</td>
+              <td class="{% if r.gap >= 0 %}gap-pos{% else %}gap-neg{% endif %}">{{ '%+.1f'|format(r.gap) }}</td>
+              <td class="muted">{{ '%+.1f'|format(r.gap_pct) }}%</td>
+              <td><span class="var-sev {{ r.sev }}">{{ r.sev }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="var-empty">No fulfilled orders in the last 30 days.</div>
+    {% endif %}
+  </div>
+
+  {# --- SECTION 3: Full history -------------------------------------- #}
+  <div class="ffro-section">
+    <h2>
+      <i class="ti ti-history"></i>Order history
+      <span class="h-sub">{{ orders|length }} most recent · click an ACTIVE row to fulfill</span>
+    </h2>
+    {% if has_orders %}
+      <table class="ffro-hist">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Placed</th>
+            <th>Order date</th>
+            <th>Store</th>
+            <th>Placed by</th>
+            <th>Status</th>
+            <th>Sent date</th>
+            <th>Fulfilled by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+            <tr class="{% if o.status == 'active' %}is-active{% endif %}" data-order-id="{{ o.id }}" data-status="{{ o.status }}">
+              <td>{{ o.id }}</td>
+              <td>{{ o.placed_at.strftime('%Y-%m-%d %H:%M') if o.placed_at else '' }}</td>
+              <td>{{ o.order_date.isoformat() if o.order_date else '' }}</td>
+              <td><span class="store-tag {{ (o.store_scope or 'both') }}">{{ (o.store_scope or 'both')|title }}</span></td>
+              <td>{{ o.placed_by_name or '—' }}</td>
+              <td><span class="status-pill {{ o.status }}">{{ o.status }}</span></td>
+              <td>{{ o.sent_date.isoformat() if o.sent_date else '—' }}</td>
+              <td>{{ o.fulfilled_by_name or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="ffro-empty">
+        No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>.
+      </div>
+    {% endif %}
+  </div>
 </div>
+
+{# --- MODAL: Pull Report filter ---------------------------------------- #}
+<div id="ffro-report-bg" class="ffro-modal-bg">
+  <div class="ffro-modal">
+    <div class="mh">
+      <i class="ti ti-file-download" style="color:#E4B340;"></i>
+      <h3>Pull report</h3>
+      <button class="x" type="button" onclick="document.getElementById('ffro-report-bg').classList.remove('is-open');">×</button>
+    </div>
+    <div class="mb">
+      <div class="field-row">
+        <div class="field">
+          <label>From date</label>
+          <input type="date" id="ffro-rep-from">
+        </div>
+        <div class="field">
+          <label>To date</label>
+          <input type="date" id="ffro-rep-to">
+        </div>
+      </div>
+      <div class="field">
+        <label>Item (optional)</label>
+        <select id="ffro-rep-item">
+          <option value="">All items</option>
+          {% for cat, items in categories %}
+            <optgroup label="{{ cat }}">
+              {% for slug in items %}
+                <option value="{{ slug }}">{{ slug.replace('-', ' ').title() }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Orderer (optional, filters CSV after download)</label>
+        <input type="text" id="ffro-rep-orderer" placeholder="e.g. John Smith">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="ffro-btn ghost" type="button" onclick="document.getElementById('ffro-report-bg').classList.remove('is-open');">Cancel</button>
+      <button class="ffro-btn" type="button" id="ffro-rep-print"><i class="ti ti-printer"></i>Printable view</button>
+      <button class="ffro-btn primary" type="button" id="ffro-rep-csv"><i class="ti ti-download"></i>Download CSV</button>
+    </div>
+  </div>
+</div>
+
+{# --- MODAL: Fulfill ACTIVE order -------------------------------------- #}
+<div id="ffro-fulfill-bg" class="ffro-modal-bg">
+  <div class="ffro-modal">
+    <div class="mh">
+      <i class="ti ti-truck-delivery" style="color:#E4B340;"></i>
+      <h3>Fulfill order <span id="ffro-ff-id" style="color:#E4B340;"></span></h3>
+      <button class="x" type="button" onclick="document.getElementById('ffro-fulfill-bg').classList.remove('is-open');">×</button>
+    </div>
+    <div class="mb">
+      <div class="field-row">
+        <div class="field">
+          <label>Fulfilled by</label>
+          <input type="text" id="ffro-ff-name" value="{{ (g.current_user.full_name if g.current_user else '') }}">
+        </div>
+        <div class="field">
+          <label>Sent date</label>
+          <input type="date" id="ffro-ff-date">
+        </div>
+      </div>
+      <table class="ffro-fulfill" id="ffro-ff-lines">
+        <thead>
+          <tr><th>Item</th><th>INV</th><th>OR (ordered)</th><th>Sent qty</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div id="ffro-ff-banner" style="margin-top:10px;display:none;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+    </div>
+    <div class="mf">
+      <button class="ffro-btn ghost" type="button" onclick="document.getElementById('ffro-fulfill-bg').classList.remove('is-open');">Cancel</button>
+      <button class="ffro-btn primary" type="button" id="ffro-ff-submit"><i class="ti ti-check"></i>Save fulfillment</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Lines lookup embedded server-side
+  var LINES_BY_ORDER = {{ lines_by_order | tojson }};
+
+  // ---- Pull Report modal ----
+  var repBg = document.getElementById('ffro-report-bg');
+  document.getElementById('ffro-rep-csv').addEventListener('click', function(){
+    var f = (document.getElementById('ffro-rep-from').value || '').trim();
+    var t = (document.getElementById('ffro-rep-to').value || '').trim();
+    var it = (document.getElementById('ffro-rep-item').value || '').trim();
+    var q = [];
+    if(f) q.push('from=' + encodeURIComponent(f));
+    if(t) q.push('to='   + encodeURIComponent(t));
+    if(it) q.push('item=' + encodeURIComponent(it));
+    var url = "{{ url_for('store.fresh_food_recent_orders_report') }}" + (q.length ? ('?' + q.join('&')) : '');
+    window.location.href = url;
+  });
+  document.getElementById('ffro-rep-print').addEventListener('click', function(){
+    repBg.classList.remove('is-open');
+    window.print();
+  });
+
+  // ---- Fulfill ACTIVE row ----
+  var ffBg     = document.getElementById('ffro-fulfill-bg');
+  var ffIdEl   = document.getElementById('ffro-ff-id');
+  var ffName   = document.getElementById('ffro-ff-name');
+  var ffDate   = document.getElementById('ffro-ff-date');
+  var ffLines  = document.querySelector('#ffro-ff-lines tbody');
+  var ffBanner = document.getElementById('ffro-ff-banner');
+  var ffSubmit = document.getElementById('ffro-ff-submit');
+  var currentOrderId = null;
+
+  document.querySelectorAll('table.ffro-hist tbody tr').forEach(function(tr){
+    tr.addEventListener('click', function(){
+      var status = tr.getAttribute('data-status');
+      var oid    = parseInt(tr.getAttribute('data-order-id'), 10);
+      if(status !== 'active') return;  // only ACTIVE rows open the modal
+
+      currentOrderId = oid;
+      ffIdEl.textContent = '#' + oid;
+      ffBanner.style.display = 'none';
+      ffDate.value = new Date().toISOString().slice(0,10);
+
+      var lines = LINES_BY_ORDER[oid] || LINES_BY_ORDER[String(oid)] || [];
+      var html = '';
+      for(var i=0; i<lines.length; i++){
+        var ln = lines[i];
+        html += '<tr>';
+        html += '<td>' + (ln.item_slug || '').replace(/-/g, ' ').replace(/\b\w/g, function(c){return c.toUpperCase();}) + '</td>';
+        html += '<td>' + (ln.inv_qty != null ? ln.inv_qty : '—') + '</td>';
+        html += '<td>' + (ln.or_qty  != null ? ln.or_qty  : '—') + '</td>';
+        html += '<td><input type="number" step="0.1" min="0" class="qty" data-line-id="' + ln.id + '" value="' + (ln.sent_qty != null ? ln.sent_qty : '') + '"></td>';
+        html += '</tr>';
+      }
+      if(!html) html = '<tr><td colspan="4" style="color:rgba(255,255,255,0.40);text-align:center;padding:14px;">No line items found for this order.</td></tr>';
+      ffLines.innerHTML = html;
+      ffBg.classList.add('is-open');
+    });
+  });
+
+  ffSubmit.addEventListener('click', function(){
+    if(!currentOrderId) return;
+    var sent_lines = {};
+    var inputs = ffLines.querySelectorAll('input.qty');
+    for(var i=0; i<inputs.length; i++){
+      var raw = inputs[i].value.trim();
+      if(raw === '') continue;
+      var val = parseFloat(raw);
+      if(isNaN(val) || val < 0) continue;
+      sent_lines[inputs[i].getAttribute('data-line-id')] = val;
+    }
+    var body = {
+      fulfilled_by_name: ffName.value.trim(),
+      sent_date: ffDate.value,
+      sent_lines: sent_lines,
+    };
+
+    ffSubmit.disabled = true; ffSubmit.textContent = 'Saving...';
+    fetch("{{ url_for('store.fresh_food_recent_orders') }}" + '/' + currentOrderId + '/fulfill', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      ffSubmit.disabled = false; ffSubmit.innerHTML = '<i class="ti ti-check"></i>Save fulfillment';
+      if(j && j.ok){
+        ffBanner.style.display = 'block';
+        ffBanner.style.background = 'rgba(156,203,118,0.10)';
+        ffBanner.style.color = '#9CCB76';
+        ffBanner.style.border = '0.5px solid rgba(156,203,118,0.30)';
+        ffBanner.textContent = 'Saved (status: ' + j.status + '). Reloading...';
+        setTimeout(function(){ window.location.reload(); }, 700);
+      } else {
+        ffBanner.style.display = 'block';
+        ffBanner.style.background = 'rgba(229,107,107,0.10)';
+        ffBanner.style.color = '#E56B6B';
+        ffBanner.style.border = '0.5px solid rgba(229,107,107,0.30)';
+        ffBanner.textContent = 'Save failed: ' + (j.error || 'unknown error');
+      }
+    })
+    .catch(function(e){
+      ffSubmit.disabled = false; ffSubmit.innerHTML = '<i class="ti ti-check"></i>Save fulfillment';
+      ffBanner.style.display = 'block';
+      ffBanner.style.background = 'rgba(229,107,107,0.10)';
+      ffBanner.style.color = '#E56B6B';
+      ffBanner.style.border = '0.5px solid rgba(229,107,107,0.30)';
+      ffBanner.textContent = 'Network error: ' + e.message;
+    });
+  });
+})();
+</script>
 {% endblock %}

@@ -1556,6 +1556,97 @@ def _ff_rolling_avg_by_slug(db, days: int = 30):
     return {slug: float(avg or 0) for slug, avg in rows}
 
 
+def _ff_window_tracker(db, days: int):
+    """For Recent Orders top section. Returns
+    {slug: {'tomball': float, 'copperfield': float, 'total': float}}
+    aggregating sum(or_qty) per item per store across window."""
+    from datetime import timedelta
+    from app.models import FreshFoodOrderLine, FreshFoodOrder
+    from sqlalchemy import func
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (db.query(FreshFoodOrderLine.item_slug,
+                     FreshFoodOrder.store_scope,
+                     func.sum(FreshFoodOrderLine.or_qty))
+              .join(FreshFoodOrder, FreshFoodOrder.id == FreshFoodOrderLine.order_id)
+              .filter(FreshFoodOrder.placed_at >= cutoff)
+              .filter(FreshFoodOrderLine.or_qty.isnot(None))
+              .group_by(FreshFoodOrderLine.item_slug,
+                        FreshFoodOrder.store_scope)
+              .all())
+    out: dict = {}
+    for slug, store, total in rows:
+        d = out.setdefault(slug, {'tomball': 0.0, 'copperfield': 0.0, 'total': 0.0})
+        t = float(total or 0)
+        if store == 'tomball':
+            d['tomball'] += t
+        elif store == 'copperfield':
+            d['copperfield'] += t
+        d['total'] += t
+    return out
+
+
+def _ff_variance_rows(db, days: int = 30):
+    """For Recent Orders middle section. Aggregates SENT vs ordered per
+    item across fulfilled orders in window. Severity tag for flagging
+    big gaps."""
+    from datetime import timedelta
+    from app.models import FreshFoodOrderLine, FreshFoodOrder
+    from sqlalchemy import func
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (db.query(FreshFoodOrderLine.item_slug,
+                     func.sum(FreshFoodOrderLine.or_qty),
+                     func.sum(FreshFoodOrderLine.sent_qty))
+              .join(FreshFoodOrder, FreshFoodOrder.id == FreshFoodOrderLine.order_id)
+              .filter(FreshFoodOrder.placed_at >= cutoff)
+              .filter(FreshFoodOrderLine.sent_qty.isnot(None))
+              .group_by(FreshFoodOrderLine.item_slug)
+              .all())
+    out = []
+    for slug, total_or, total_sent in rows:
+        total_or = float(total_or or 0)
+        total_sent = float(total_sent or 0)
+        gap = total_sent - total_or
+        gap_pct = (gap / total_or * 100.0) if total_or > 0 else 0.0
+        sev = 'ok'
+        if abs(gap_pct) >= 15:
+            sev = 'high'
+        elif abs(gap_pct) >= 5:
+            sev = 'low'
+        out.append({
+            'slug': slug,
+            'total_or': total_or,
+            'total_sent': total_sent,
+            'gap': gap,
+            'gap_pct': gap_pct,
+            'sev': sev,
+        })
+    out.sort(key=lambda r: -abs(r['gap']))
+    return out
+
+
+def _ff_lines_by_order(db, order_ids):
+    """Returns {order_id: [lines]} for the given order_ids. Lines are
+    plain dicts ready for JSON serialization (the fulfillment modal
+    reads them via a data-attribute embed)."""
+    from app.models import FreshFoodOrderLine
+    if not order_ids:
+        return {}
+    rows = (db.query(FreshFoodOrderLine)
+              .filter(FreshFoodOrderLine.order_id.in_(order_ids))
+              .all())
+    out: dict = {}
+    for ln in rows:
+        out.setdefault(ln.order_id, []).append({
+            'id': ln.id,
+            'item_slug': ln.item_slug,
+            'item_category': ln.item_category or '',
+            'inv_qty': ln.inv_qty,
+            'or_qty': ln.or_qty,
+            'sent_qty': ln.sent_qty,
+        })
+    return out
+
+
 @store_bp.route("/fresh-food/place-order", methods=["GET"])
 def fresh_food_place_order():
     if not _manager_role_ok():
@@ -1631,9 +1722,20 @@ def fresh_food_recent_orders():
         rows = (db.query(FreshFoodOrder)
                   .order_by(FreshFoodOrder.placed_at.desc())
                   .limit(100).all())
+        tracker_7d = _ff_window_tracker(db, days=7)
+        tracker_30d = _ff_window_tracker(db, days=30)
+        variance_rows = _ff_variance_rows(db, days=30)
+        avg_by_slug = _ff_rolling_avg_by_slug(db, days=30)
+        lines_by_order = _ff_lines_by_order(db, [o.id for o in rows])
         return render_template(
             "fresh_food_recent_orders.html",
             orders=rows,
+            categories=_FRESH_FOOD_ITEMS,
+            tracker_7d=tracker_7d,
+            tracker_30d=tracker_30d,
+            variance_rows=variance_rows,
+            rolling_avg_by_slug=avg_by_slug,
+            lines_by_order=lines_by_order,
             active="fresh_food_recent_orders",
         )
     finally:

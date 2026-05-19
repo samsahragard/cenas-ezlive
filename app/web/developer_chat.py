@@ -230,6 +230,15 @@ SAMPLES = [
         type="mockup",
     ),
     dict(
+        slug="manager-pages-shell-v1",
+        title="Manager Pages Shared Shell",
+        version="v1",
+        date="2026-05-18",
+        description="Shared shell design for the 14 manager pages (Daily Manager Log, Shift Handoff, Incident Reports, Supply Requests, Daily Goals, Staff Feedback, Pre-shift Checklist, Close-of-day Audit, Recipe Page, Attendance Tracking, Interview Surface, Training Records, Maintenance Requests, Employee Counseling). Same audience gate for all 14: GM / KM / Asst KM / FOH manager (read-write own store), Partner/Corporate (read all). Page header with access pill + New entry CTA, filter row (search + time-range + author-scope chips), 2-col body (list left + detail/form right with click-to-load + mode-flip), color-coded type tags where useful (e.g. Incident Reports: Injury/Theft/Complaint), mobile collapse at \u2264760px. Two example pages applied: Daily Manager Log (no type tags) + Incident Reports (with type tags). Approach A text-heavy v1 per Sam direction \u2014 every page = title + free-text body + auto-stamped author + date.",
+        url="/static/mockups/manager_pages_shell_v1.html",
+        type="mockup",
+    ),
+        dict(
         slug="in-house-catering-quote-builder-v1",
         title="In-House Catering Quote Builder",
         version="v1",

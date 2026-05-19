@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manager Pages — Shared shell + 2 examples (dck per Sam-approved plan via aick #29xx)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+<style>
+  :root {
+    --ck-bg-page:#140A06; --ck-bg-sidebar:#0F0805;
+    --ck-text:#FAF6EC; --ck-text-hover:#FFFFFF;
+    --ck-text-muted:rgba(236,227,208,0.7); --ck-text-soft:rgba(236,227,208,0.55); --ck-text-faint:rgba(236,227,208,0.4);
+    --ck-red:#C73B36; --ck-gold:#E4B340; --ck-gold-bright:#FFD970; --ck-gold-soft:rgba(217,164,54,0.14);
+    --ck-border:rgba(217,164,54,0.10); --ck-border-subtle:rgba(236,227,208,0.06);
+    --ck-status-open:#9CCB76; --ck-status-warn:#E2645C;
+    --ck-glass:rgba(40,22,14,0.55); --ck-glass-strong:rgba(40,22,14,0.75);
+    --ck-ease:cubic-bezier(0.22,0.8,0.24,1);
+    --ck-glow-gold-soft:0 1px 0 rgba(0,0,0,0.55), 0 0 10px rgba(228,179,64,0.35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ck-bg-page);
+    background-image: radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.06), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.05), transparent 50%);
+    color: var(--ck-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 28px 22px 80px; min-height: 100vh;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+
+  /* === MOCKUP CHROME === */
+  .head { border-bottom: 0.5px solid var(--ck-border); padding-bottom: 18px; margin-bottom: 28px; }
+  .head h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; text-shadow: var(--ck-glow-gold-soft); }
+  .head .badge { display: inline-block; background: var(--ck-gold-bright); color: #140A06; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+  .head .sub { font-size: 12px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .section-label { font-size: 11px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.14em; margin: 32px 0 12px; text-shadow: var(--ck-glow-gold-soft); display: flex; align-items: baseline; gap: 10px; }
+  .section-label .pageref { font-size: 10.5px; color: var(--ck-text-faint); text-transform: none; letter-spacing: 0.06em; font-style: italic; }
+
+  /* === SHARED PAGE SHELL — header + filter row + 2-col body === */
+  .mgr-page {
+    background: var(--ck-bg-sidebar); border: 0.5px solid var(--ck-border); border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* Page header */
+  .mgr-head {
+    padding: 16px 22px; border-bottom: 0.5px solid var(--ck-border);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .mgr-h1 { font-size: 17px; font-weight: 600; color: var(--ck-text-hover); margin: 0; display: flex; align-items: center; gap: 8px; }
+  .mgr-h1 i { color: var(--ck-gold); font-size: 18px; }
+  .mgr-count { font-size: 11.5px; color: var(--ck-text-soft); padding: 2px 8px; background: rgba(228,179,64,0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 4px; }
+  .mgr-access-pill { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 7px; border-radius: 3px; background: rgba(156,203,118,0.14); color: var(--ck-status-open); display: inline-flex; align-items: center; gap: 5px; }
+  .mgr-access-pill i { font-size: 11px; }
+  .mgr-head-spacer { flex: 1; }
+  .mgr-new-btn {
+    background: var(--ck-gold-bright); color: #140A06;
+    border: none; padding: 8px 14px; border-radius: 6px;
+    font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .mgr-new-btn:hover { background: #FFE085; }
+
+  /* Filter row (search + scope + role visibility) */
+  .mgr-filters {
+    padding: 10px 22px; border-bottom: 0.5px solid var(--ck-border);
+    background: rgba(15,8,5,0.4);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .mgr-search {
+    flex: 1; min-width: 200px;
+    background: rgba(0,0,0,0.35); border: 0.5px solid var(--ck-border);
+    border-radius: 5px; padding: 7px 12px;
+    color: var(--ck-text); font-size: 12px; font-family: inherit;
+  }
+  .mgr-search::placeholder { color: var(--ck-text-faint); }
+  .mgr-filter-seg { display: inline-flex; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 6px; border: 0.5px solid var(--ck-border); }
+  .mgr-filter-seg button {
+    padding: 5px 10px; border-radius: 4px;
+    background: transparent; border: none;
+    color: var(--ck-text-soft); font-size: 11px;
+    cursor: pointer; font-family: inherit;
+  }
+  .mgr-filter-seg button.is-active { background: var(--ck-gold-bright); color: #140A06; font-weight: 600; }
+  .mgr-filter-meta { font-size: 10.5px; color: var(--ck-text-faint); margin-left: auto; }
+
+  /* 2-col body: list (left) + form/detail (right) */
+  .mgr-body {
+    display: grid; grid-template-columns: 1fr 1.2fr;
+    min-height: 460px;
+  }
+  .mgr-list {
+    border-right: 0.5px solid var(--ck-border);
+    overflow-y: auto;
+  }
+  .mgr-list-item {
+    padding: 12px 18px; border-bottom: 0.5px solid var(--ck-border-subtle);
+    cursor: pointer; transition: background 120ms;
+    display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: baseline;
+  }
+  .mgr-list-item:hover { background: rgba(228,179,64,0.04); }
+  .mgr-list-item.is-active { background: rgba(228,179,64,0.08); border-left: 2px solid var(--ck-gold); padding-left: 16px; }
+  .mgr-list-author { font-size: 11px; color: var(--ck-gold); font-weight: 600; }
+  .mgr-list-date { font-size: 10.5px; color: var(--ck-text-faint); font-variant-numeric: tabular-nums; }
+  .mgr-list-title { font-size: 13px; color: var(--ck-text-hover); font-weight: 600; margin-top: 3px; grid-column: 1 / -1; }
+  .mgr-list-snippet { font-size: 11.5px; color: var(--ck-text-soft); margin-top: 2px; grid-column: 1 / -1; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mgr-list-tag {
+    display: inline-block; font-size: 9.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 1px 6px; border-radius: 3px;
+    margin-top: 6px; grid-column: 1 / -1; align-self: start;
+  }
+  .mgr-list-tag.injury { background: rgba(226,100,92,0.18); color: var(--ck-status-warn); }
+  .mgr-list-tag.theft  { background: rgba(199,59,54,0.22);  color: #E69995; }
+  .mgr-list-tag.complaint { background: rgba(228,179,64,0.18); color: var(--ck-gold); }
+
+  /* Detail/form pane */
+  .mgr-detail { padding: 20px 24px; overflow-y: auto; }
+  .mgr-detail.is-empty {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ck-text-faint); font-style: italic; font-size: 12px;
+    text-align: center;
+  }
+  .mgr-detail-mode { font-size: 10px; color: var(--ck-gold); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+  .mgr-detail-title { font-size: 16px; font-weight: 600; color: var(--ck-text-hover); margin: 0 0 4px; }
+  .mgr-detail-meta { font-size: 11px; color: var(--ck-text-soft); margin-bottom: 16px; }
+  .mgr-field { margin-bottom: 14px; }
+  .mgr-field label { display: block; font-size: 10px; color: var(--ck-text-soft); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 5px; }
+  .mgr-field label .req { color: var(--ck-status-warn); }
+  .mgr-field input, .mgr-field textarea, .mgr-field select {
+    width: 100%; background: rgba(0,0,0,0.35);
+    border: 0.5px solid var(--ck-border); color: var(--ck-text);
+    padding: 9px 12px; border-radius: 6px;
+    font-size: 13px; font-family: inherit;
+  }
+  .mgr-field textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
+  .mgr-field .field-help { font-size: 10.5px; color: var(--ck-text-faint); margin-top: 4px; font-style: italic; }
+  .mgr-field .read-value {
+    background: rgba(0,0,0,0.2); border-left: 2px solid var(--ck-gold-soft);
+    padding: 8px 12px; border-radius: 0 6px 6px 0;
+    font-size: 13px; color: var(--ck-text); line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .mgr-field .read-value.empty { color: var(--ck-text-faint); font-style: italic; }
+
+  .mgr-form-actions {
+    display: flex; gap: 8px; margin-top: 18px;
+    padding-top: 16px; border-top: 0.5px solid var(--ck-border);
+  }
+  .mgr-form-actions button {
+    padding: 9px 16px; border-radius: 6px;
+    border: 0.5px solid var(--ck-border);
+    background: transparent; color: var(--ck-text-soft);
+    font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .mgr-form-actions button:hover { color: var(--ck-text); }
+  .mgr-form-actions button.primary {
+    background: var(--ck-gold-bright); color: #140A06; border-color: var(--ck-gold-bright);
+  }
+  .mgr-form-actions button.primary:hover { background: #FFE085; }
+  .mgr-form-actions button.danger {
+    color: var(--ck-status-warn); border-color: rgba(226,100,92,0.3);
+    margin-left: auto;
+  }
+  .mgr-form-actions button.danger:hover { background: rgba(226,100,92,0.08); }
+
+  /* === MOBILE collapse — list on top of detail === */
+  @media (max-width: 760px) {
+    .mgr-body { grid-template-columns: 1fr; }
+    .mgr-list { border-right: none; border-bottom: 0.5px solid var(--ck-border); max-height: 280px; }
+    .mgr-filters { flex-direction: column; align-items: stretch; }
+    .mgr-filter-meta { margin-left: 0; }
+  }
+
+  /* === NOTES === */
+  .notes { background: rgba(228, 179, 64, 0.06); border: 0.5px solid var(--ck-gold-soft); border-radius: 12px; padding: 20px 24px; margin-top: 32px; font-size: 13px; color: rgba(236, 227, 208, 0.85); line-height: 1.65; }
+  .notes b { color: var(--ck-gold); }
+  .notes code { background: rgba(0,0,0,0.4); border: 0.5px solid var(--ck-border); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--ck-gold-bright); font-family: SFMono-Regular, Consolas, monospace; }
+  .notes h2 { font-size: 15px; color: var(--ck-text); margin: 0 0 4px; }
+  .notes h3 { font-size: 12.5px; color: var(--ck-text); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .notes ul { margin: 4px 0 12px; padding-left: 22px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <h1>Manager Pages — shared shell + 2 examples
+      <span class="badge">v1 MOCKUP</span>
+    </h1>
+    <div class="sub">dck · 2026-05-18 · per Sam-approved plan via aick relay #29xx · 14 pages share this one shell</div>
+  </div>
+
+  <!-- ============================== EXAMPLE 1: Daily Manager Log ============================== -->
+  <div class="section-label">Example 1 — Daily Manager Log <span class="pageref">/dos/manager/daily-log</span></div>
+
+  <div class="mgr-page">
+    <div class="mgr-head">
+      <h2 class="mgr-h1"><i class="ti ti-notebook"></i>Daily Manager Log</h2>
+      <span class="mgr-count">12 entries · last 30 days</span>
+      <span class="mgr-access-pill"><i class="ti ti-users"></i>GM / KM / Asst KM / FOH manager</span>
+      <span class="mgr-head-spacer"></span>
+      <button class="mgr-new-btn"><i class="ti ti-plus"></i>New entry</button>
+    </div>
+
+    <div class="mgr-filters">
+      <input type="text" class="mgr-search" placeholder="Search entries...">
+      <div class="mgr-filter-seg">
+        <button class="is-active">Last 30d</button>
+        <button>Last 7d</button>
+        <button>Today</button>
+        <button>All</button>
+      </div>
+      <div class="mgr-filter-seg">
+        <button class="is-active">All authors</button>
+        <button>Mine only</button>
+      </div>
+      <span class="mgr-filter-meta">Tomball · 12 of 47 total</span>
+    </div>
+
+    <div class="mgr-body">
+      <!-- LEFT: list -->
+      <div class="mgr-list">
+        <div class="mgr-list-item is-active">
+          <span class="mgr-list-author">Sara R</span>
+          <span class="mgr-list-date">May 18 · 3:14p</span>
+          <div class="mgr-list-title">Pre-rush prep + walk-in cooler temp</div>
+          <div class="mgr-list-snippet">Walk-in temp normalized after Sat morning swing. All prep done by 11am. Sara training new line cook on the fajita marinade — checked it twice with her, looks solid.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">Marcus T</span>
+          <span class="mgr-list-date">May 17 · 9:42p</span>
+          <div class="mgr-list-title">Close of day · 350 covers · 1 walk-out</div>
+          <div class="mgr-list-snippet">Solid Friday. Walk-out was table 14, server attempted to retain but party rushed out. Comped following table $20 for the wait. Cash drawer balanced.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">Sara R</span>
+          <span class="mgr-list-date">May 17 · 11:22a</span>
+          <div class="mgr-list-title">EzCater order surge — needed extra hands</div>
+          <div class="mgr-list-snippet">3 EzCater orders hit between 11-12. Pulled prep cook to assemble. Two went out on time, one ran 8 min late. Worth a chat about staging earlier on Fridays.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">Anna L</span>
+          <span class="mgr-list-date">May 16 · 4:08p</span>
+          <div class="mgr-list-title">Vendor delivery issue — Alvarado cilantro short</div>
+          <div class="mgr-list-snippet">Alvarado short on cilantro again (3 bunches vs 6 ordered). Subbed from J. Luna at the higher price. Flagged to GM. Asked driver to note for tomorrow's delivery.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">DeShawn K</span>
+          <span class="mgr-list-date">May 15 · 10:54p</span>
+          <div class="mgr-list-title">POS glitch on Square — duplicate ticket</div>
+          <div class="mgr-list-snippet">Square duplicated ticket #4421 during the dinner rush. Voided one side, kept the other. Cash totals reconcile. Reported to Square support.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">Sara R</span>
+          <span class="mgr-list-date">May 15 · 11:05a</span>
+          <div class="mgr-list-title">Restock + cash drop done</div>
+          <div class="mgr-list-snippet">Restocked all lines per prep sheet. Cash drop $1,200 to safe at 11. New employee Tyler started today, did orientation walk-through.</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: detail view of selected entry -->
+      <div class="mgr-detail">
+        <div class="mgr-detail-mode">Viewing entry</div>
+        <h3 class="mgr-detail-title">Pre-rush prep + walk-in cooler temp</h3>
+        <div class="mgr-detail-meta">Posted by <b style="color:var(--ck-gold);">Sara R</b> · Sun May 18 at 3:14 PM · Tomball</div>
+
+        <div class="mgr-field">
+          <label>Body</label>
+          <div class="read-value">Walk-in temp normalized after Sat morning swing — sat at 42°F for ~14 min before settling back to 38°F. Maintenance was already on the calendar for next week; flagged as a watch item, not a callout yet.
+
+All prep done by 11am. Sara training new line cook (Tyler, 2nd day) on the fajita marinade — checked it twice with her, looks solid. He's quick but needs to watch portion sizes — overdid the cumin first batch, corrected it on the second.
+
+Expecting solid Sunday. Sales pacing 12% over last Sun based on lunch covers. Will check back in at close.</div>
+        </div>
+
+        <div class="mgr-form-actions">
+          <button class="primary"><i class="ti ti-edit"></i> Edit</button>
+          <button>← Back to list</button>
+          <button class="danger"><i class="ti ti-trash"></i> Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== EXAMPLE 2: Incident Reports ============================== -->
+  <div class="section-label">Example 2 — Incident Reports <span class="pageref">/dos/manager/incidents · same shell · different content</span></div>
+
+  <div class="mgr-page">
+    <div class="mgr-head">
+      <h2 class="mgr-h1"><i class="ti ti-alert-triangle"></i>Incident Reports</h2>
+      <span class="mgr-count">4 entries · last 30 days</span>
+      <span class="mgr-access-pill"><i class="ti ti-users"></i>GM / KM / Asst KM / FOH manager</span>
+      <span class="mgr-head-spacer"></span>
+      <button class="mgr-new-btn"><i class="ti ti-plus"></i>New incident</button>
+    </div>
+
+    <div class="mgr-filters">
+      <input type="text" class="mgr-search" placeholder="Search incidents...">
+      <div class="mgr-filter-seg">
+        <button class="is-active">Last 30d</button>
+        <button>Last 7d</button>
+        <button>YTD</button>
+      </div>
+      <div class="mgr-filter-seg">
+        <button class="is-active">All types</button>
+        <button>Injury</button>
+        <button>Theft</button>
+        <button>Complaint</button>
+      </div>
+      <span class="mgr-filter-meta">Tomball · 4 of 11 total</span>
+    </div>
+
+    <div class="mgr-body">
+      <div class="mgr-list">
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">Marcus T</span>
+          <span class="mgr-list-date">May 14 · 7:30p</span>
+          <span class="mgr-list-tag injury">Injury</span>
+          <div class="mgr-list-title">Line cook minor burn (back of hand)</div>
+          <div class="mgr-list-snippet">Tyler grabbed the comal handle without a towel during dinner rush. Light first-degree burn back of right hand. Ran cold water 5 min, antibiotic ointment, gauze. Refused to leave shift.</div>
+        </div>
+        <div class="mgr-list-item is-active">
+          <span class="mgr-list-author">Sara R</span>
+          <span class="mgr-list-date">May 12 · 1:45p</span>
+          <span class="mgr-list-tag complaint">Complaint</span>
+          <div class="mgr-list-title">Customer found hair in queso</div>
+          <div class="mgr-list-snippet">Table 8, 2-top, lunch. Customer found a hair in their queso. Comped the entire table ($48). Apologized in person + offered free dessert which they declined. Re-trained kitchen on hair coverings end of shift.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">Anna L</span>
+          <span class="mgr-list-date">May 9 · 9:18p</span>
+          <span class="mgr-list-tag theft">Theft</span>
+          <div class="mgr-list-title">Tip jar — small bills missing</div>
+          <div class="mgr-list-snippet">Tip jar at the host stand was lighter than usual at close. Estimated $30-40 in singles missing. No clear suspect; reviewed camera footage, nothing definitive. Moved tip jar behind counter going forward.</div>
+        </div>
+        <div class="mgr-list-item">
+          <span class="mgr-list-author">DeShawn K</span>
+          <span class="mgr-list-date">May 3 · 3:22p</span>
+          <span class="mgr-list-tag complaint">Complaint</span>
+          <div class="mgr-list-title">EzCater client unhappy with portion sizes</div>
+          <div class="mgr-list-snippet">EzCater order EZ-44021 (24-ppl). Client reported portions felt small. Refunded 15% via EzCater dispute, retained client. Reviewed line measure on fajitas — was on spec.</div>
+        </div>
+      </div>
+
+      <div class="mgr-detail">
+        <div class="mgr-detail-mode">New incident</div>
+        <h3 class="mgr-detail-title" style="color:var(--ck-text);">Customer found hair in queso</h3>
+        <div class="mgr-detail-meta">Posted by <b style="color:var(--ck-gold);">Sara R</b> · Mon May 12 at 1:45 PM · Tomball</div>
+
+        <div class="mgr-field">
+          <label>Title <span class="req">*</span></label>
+          <input type="text" value="Customer found hair in queso">
+        </div>
+
+        <div class="mgr-field">
+          <label>Type <span class="req">*</span></label>
+          <select>
+            <option>Complaint</option>
+            <option>Injury</option>
+            <option>Theft</option>
+            <option>Other</option>
+          </select>
+          <div class="field-help">Type tag shown in list view. Filter chip uses this.</div>
+        </div>
+
+        <div class="mgr-field">
+          <label>Body <span class="req">*</span></label>
+          <textarea rows="6">Table 8, 2-top, lunch. Customer found a hair in their queso. Comped the entire table ($48). Apologized in person + offered free dessert which they declined. Re-trained kitchen on hair coverings end of shift.
+
+Customer was gracious, said they'd return. No social media follow-up.</textarea>
+          <div class="field-help">Free-text. Author + date stamped automatically.</div>
+        </div>
+
+        <div class="mgr-form-actions">
+          <button class="primary"><i class="ti ti-check"></i> Save</button>
+          <button>Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== NOTES BLOCK ============================== -->
+  <div class="notes">
+    <h2>Manager Pages — shared shell pattern, v1 (text-heavy)</h2>
+    <p style="margin:0 0 10px;color:var(--ck-text-soft);font-size:11.5px;text-transform:uppercase;letter-spacing:0.12em;">14 pages share this one shell · iterate fields after Sam sees live</p>
+
+    <h3>What the shared shell defines (apply once, all 14 pages benefit)</h3>
+    <ul>
+      <li><b>Page header:</b> icon + title + entry count + access pill (KM+ green vs GM+ red) + "New entry" CTA right-aligned</li>
+      <li><b>Filter row:</b> search input + time-range chip seg (Last 30d / 7d / Today / All) + author-scope chip seg (All / Mine only) + count meta on right</li>
+      <li><b>2-col body:</b> list (left) + detail/form (right). Click a list item → detail view loads on right. "New entry" CTA flips right pane to form mode.</li>
+      <li><b>List item:</b> author + date in muted header row + bold title + 2-line snippet (CSS -webkit-line-clamp). Selected state = left gold border + soft bg.</li>
+      <li><b>Type tag</b> (optional, surface-specific): small color-coded pill on list items where a per-entry category exists (Incident Reports uses Injury/Theft/Complaint tags; Daily Manager Log doesn't because no per-entry type).</li>
+      <li><b>Detail view:</b> mode label + title + author/date/store meta + read-only body in monospace-ish read-value block + actions row (Edit / Back / Delete-danger).</li>
+      <li><b>Form view:</b> Title input + Type select (where applicable) + Body textarea + field-help tooltips + Save/Cancel actions.</li>
+      <li><b>Mobile collapse:</b> list stacks above detail, list max-height 280px so detail stays visible. Filters wrap to column.</li>
+    </ul>
+
+    <h3>14 pages this shell serves (per aick #29xx + correction #3018)</h3>
+    <p><b>All 14 share the SAME audience gate</b> per Sam clarification at /sam/chat #1109 (no per-page carveouts, no GM+-only exceptions):</p>
+    <ul>
+      <li>1. Daily Manager Log · 2. Shift Handoff · 3. Incident Reports · 4. Supply Requests · 5. Daily Goals</li>
+      <li>6. Staff Feedback · 7. Pre-shift Checklist · 8. Close-of-day Audit · 9. Recipe Page · 10. Attendance Tracking</li>
+      <li>11. Interview Surface · 12. Training Records · 13. Maintenance Requests · 14. Employee Counseling</li>
+    </ul>
+
+    <h3>Approach A v1 (text-heavy, per Sam direction)</h3>
+    <ul>
+      <li><b>Every page = same form-and-list shape.</b> Title + free-text body + auto-stamped author + date. Type-tag where useful (Incident Reports). No structured fields, no checklists, no attachments in v1.</li>
+      <li><b>Fields iterate after Sam sees the live page.</b> If Pre-shift Checklist needs actual checkbox items, that's v2 spec. v1 ships the text-heavy version and lets pattern emerge from real use.</li>
+      <li><b>"Mine only" filter on author scope</b> makes it cheap for an individual manager to find their own entries vs scanning the team's. Defaults to "All authors" so handoff visibility is preserved.</li>
+    </ul>
+
+    <h3>Access gating (one gate for all 14 pages, per Sam #1109 + cena #1111)</h3>
+    <ul>
+      <li><b>Writers (per their store):</b> GM, Kitchen Manager, Assistant KM, FOH Manager. cena confirmed <code>foh_manager</code> role exists in permissions.py at rank 2.</li>
+      <li><b>Readers (across all stores):</b> Partner, Corporate.</li>
+      <li><b>Locked out:</b> Expo. No access to Manager pages at all.</li>
+      <li><b>Code shape (cena suggested):</b> single helper <code>is_store_manager(user)</code> returns True for {gm, km, asst_km, foh_manager}. Applied uniformly to all 14 page route handlers. Partner/corporate read-all uses the existing read-tier helper.</li>
+      <li><b>Access pill in page header</b> reads "GM / KM / Asst KM / FOH manager" — same on every page since the gate is uniform. Single visual reminder of who's writing; no per-page differentiation.</li>
+      <li><b>Sidebar entries:</b> aick wires the 14 sidebar entries under Manager section after Sam approves this mockup + ck builds production + aick wires backend. Existing 7 entries shipped at 12733ad get the other 7 added.</li>
+    </ul>
+
+    <h3>Decisions deferred to ck implementation</h3>
+    <ul>
+      <li><b>List sort order</b> — mockup shows newest first; ck implements DESC by created_at. Saved-state pagination follows existing pattern.</li>
+      <li><b>Search backend:</b> simple ILIKE on title+body works for v1 (per-store small corpus). Postgres full-text if corpus grows.</li>
+      <li><b>Cross-store rollup view for partner:</b> show all stores' entries in one list, with per-row store badge. Mockup doesn't demo since it's role-gated; ck wires when GM/partner-tier session probes the page.</li>
+      <li><b>Optimistic save:</b> Save button sends POST; form disables until 200 returns. No autosave (free-text edits aren't critical-loss).</li>
+    </ul>
+
+    <h3>v2 backlog (post-Sam-approval, iterate after real use)</h3>
+    <ul>
+      <li><b>Per-page structured fields where patterns emerge</b> (Pre-shift Checklist → actual checkbox items, Attendance Tracking → per-employee daily grid, Recipe Page → photo + ingredient list)</li>
+      <li><b>Attachments</b> — photos for Incident Reports + Maintenance Requests + Recipe Page</li>
+      <li><b>Mentions/assignment</b> — @-mention an employee in Staff Feedback or Daily Goals; assigned items show in their personal queue</li>
+      <li><b>Recurring entries</b> — Pre-shift Checklist + Close-of-day Audit could auto-create blank entries each morning/evening so they're prompts not write-from-scratch</li>
+      <li><b>Filter by date range custom picker</b> — beyond Last 30d / 7d / Today chip presets</li>
+      <li><b>Export to PDF</b> — Incident Reports + Employee Counseling for compliance/legal retention</li>
+    </ul>
+
+    <h3>Approval workflow</h3>
+    <p>Ship to <code>/partner/developer/samples</code> as a card, Sam approves via the workflow (samples_watch.py at b47cd35 fires on approval). On approve: ck builds the production HTML + JS against this canonical shell (one shared partial + 14 per-page route handlers + form/list view templates that compose the partial), aick wires the 14 routes + the ManagerEntry model with type/store/role gating. Same end-to-end pattern as In-House Catering (Sam #837 item 16 / approved 2026-05-19T02:03:43 UTC).</p>
+
+    <h3>Implementation cost (ck + aick combined estimate)</h3>
+    <p>~3-4 days for ck (one shared partial + 14 route templates that include it + form/list view JS). ~2-3 days for aick (ManagerEntry model + migration + 14 routes + role/store gating). Backend gating is the most-careful piece — write the gate helper once and apply to all 14 routes uniformly. Total team-cost: ~1 week, parallel.</p>
+  </div>
+
+</div>
+</body>
+</html>

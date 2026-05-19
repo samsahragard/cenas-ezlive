@@ -1115,19 +1115,22 @@ def _manager_model_for_slug(slug: str):
 
 
 # Audience gate for the Manager section: per Sam #1109 + #1115, every
-# manager page is visible to gm / km / asst_km / foh_manager + the
-# partner/corporate tiers above. Expo excluded. Using existing roles
-# directly (no new helper or hierarchy per Sam #1115).
-_MANAGER_ROLES_ALLOWED = {"gm", "km", "asst_km", "foh_manager",
-                          "partner", "corporate"}
+# manager page is visible to all manager-tier roles + partner/corporate
+# above. Expo and drivers excluded. Using the existing User.permission_level
+# values (partner / corporate / gm / manager / expo / corporate-driver
+# per User model docstring) — no new role / helper / hierarchy needed.
+# Sam's user.permission_level == 'partner' grants access via this gate.
+_MANAGER_ROLES_DENIED = {"expo", "corporate-driver", "driver"}
 
 
 def _manager_role_ok():
     user = getattr(g, "current_user", None)
     if user is None:
         return False
-    role = (getattr(user, "role", None) or "").strip().lower()
-    return role in _MANAGER_ROLES_ALLOWED
+    role = (getattr(user, "permission_level", None) or "").strip().lower()
+    if not role:
+        return False
+    return role not in _MANAGER_ROLES_DENIED
 
 
 @store_bp.route("/manager/<page>", methods=["GET"])

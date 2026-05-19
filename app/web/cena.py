@@ -2534,6 +2534,97 @@ def cena_run_wipe_ezcater_roster():
     })
 
 
+@cena_bp.route("/sam/cena/run-vendor-orders-bulk-insert", methods=["POST"])
+def cena_run_vendor_orders_bulk_insert():
+    """Bulk-insert vendor_recent_orders rows from external JSON
+    (samai parsed orders@cenaskitchen.com inbox externally; #2913 the
+    in-process ingest crashes for unclear reasons, this is the bypass
+    path). Body: {"rows": [{vendor, store_scope, order_number,
+    customer_or_caterer, placed_at_iso, items_json, source_email_mid,
+    subject, from_addr, raw_body, kind?}, ...]}. Capped at 500 rows.
+    Idempotent on (vendor, source_email_mid) via UPSERT — re-running
+    the same JSON dump doesn't duplicate."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    raw_rows = body.get("rows") or []
+    if not isinstance(raw_rows, list) or not raw_rows:
+        return jsonify({"ok": False, "error": "rows (non-empty list) required"}), 400
+    if len(raw_rows) > 500:
+        return jsonify({"ok": False, "error": "max 500 rows per request"}), 400
+
+    from app.db import SessionLocal as _SL
+    from app.models import VendorRecentOrder as _VRO
+    from datetime import datetime as _dt
+
+    db = _SL()
+    inserted = 0
+    updated = 0
+    skipped = 0
+    errors = []
+    try:
+        for r in raw_rows:
+            try:
+                vendor = (r.get("vendor") or "").strip()[:40]
+                if not vendor:
+                    skipped += 1
+                    continue
+                mid = (r.get("source_email_mid") or "").strip()[:80] or None
+                # Idempotency lookup: vendor + source_email_mid
+                existing = None
+                if mid:
+                    existing = (db.query(_VRO)
+                                  .filter(_VRO.vendor == vendor,
+                                          _VRO.source_email_mid == mid)
+                                  .first())
+                placed_at = None
+                pa_str = (r.get("placed_at_iso") or r.get("date") or "").strip()
+                if pa_str:
+                    try:
+                        placed_at = _dt.fromisoformat(pa_str.replace("Z", "+00:00"))
+                    except Exception:
+                        placed_at = None
+                fields = dict(
+                    vendor=vendor,
+                    store_scope=(r.get("store_scope") or None),
+                    order_number=(r.get("order_number") or None),
+                    customer_or_caterer=(r.get("customer_or_caterer") or None),
+                    placed_at=placed_at,
+                    items_json=r.get("items_json") or r.get("items") or None,
+                    source_email_mid=mid,
+                    subject=(r.get("subject") or None),
+                    from_addr=(r.get("from_addr") or None),
+                    raw_body=(r.get("raw_body") or None),
+                    parse_status=(r.get("kind") or r.get("parse_status") or "parsed"),
+                )
+                if existing is not None:
+                    for k, v in fields.items():
+                        if v is not None:
+                            setattr(existing, k, v)
+                    updated += 1
+                else:
+                    db.add(_VRO(**fields))
+                    inserted += 1
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{type(e).__name__}: {str(e)[:120]}")
+                skipped += 1
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "inserted": inserted, "updated": updated, "skipped": skipped,
+            "errors": errors[:5],
+        })
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-vendor-orders-bulk-insert crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-cleanup-dev-chat", methods=["POST"])
 def cena_run_cleanup_dev_chat():
     """Delete developer_chat rows by explicit ID list. Sam #1047 + cena

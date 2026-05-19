@@ -45,15 +45,17 @@ VENDOR_DOMAIN_HINTS = {
 
 
 VENDOR_BODY_HINTS = {
-    "webstaurant":      ("webstaurantstore", "webstaurant.com", "WebstaurantStore",
-                         "order #", "WebstaurantStore.com"),
-    "performance-food": ("performance food", "pfgc.com", "CustomerFirst",
-                         "AGUIRRE'S TEX MEX", "performance foodservice"),
-    "restaurant-depot": ("restaurant depot", "restaurantdepot.com",
-                         "RD-Online", "pickup order", "delivery order",
-                         "Aguirre's Tex Mex"),
-    "specs":            ("specsfoodservice", "specsonline", "spec's",
-                         "spec's foodservice", "specs.com"),
+    # Webstaurant-specific brand strings only — dropped generic "order #"
+    # which was catching every Shopify confirmation in the inbox.
+    "webstaurant":      ("webstaurantstore.com", "webstaurant store",
+                         "WebstaurantStore"),
+    "performance-food": ("performancefoodservice", "pfgc.com",
+                         "Performance Foodservice", "CustomerFirst"),
+    "restaurant-depot": ("restaurantdepot.com", "no-reply@restaurantdepot",
+                         "Restaurant Depot order receipt",
+                         "Restaurant Depot - "),
+    "specs":            ("specsfoodservice", "specsonline", "Spec's",
+                         "spec's foodservice", "specsfs.com"),
 }
 
 
@@ -114,7 +116,7 @@ def _body_preview(msg, max_chars: int = 600) -> str:
 
 
 def main() -> int:
-    scan_limit = int(os.getenv("CENA_INBOX_SCAN_LIMIT", "300"))
+    scan_limit = int(os.getenv("CENA_INBOX_SCAN_LIMIT", "500"))
     pwd = _email_pwd()
     if not pwd:
         print(json.dumps({"ok": False,

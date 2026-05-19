@@ -1,0 +1,43 @@
+{% extends "base_dashboard.html" %}
+{% block body %}
+<div style="padding:16px;max-width:1200px;margin:0 auto;">
+  <h1 style="font-size:24px;margin-bottom:12px;">Fresh Food — Recent Orders</h1>
+  <p style="color:#888;font-size:13px;margin-bottom:16px;">All orders across both locations. Click an ACTIVE order to fulfill (record SENT quantities). Audience: everyone except expo.</p>
+  <p style="color:#aaa;font-size:12px;font-style:italic;">v1 stub — full 3-section UI (live trackers + variance + history) from ck pending. Pull Report:
+    <a href="{{ url_for('store.fresh_food_recent_orders_report') }}?from=&to=" style="color:#2a8a4e;">download CSV</a>
+  </p>
+
+  {% if orders %}
+    <table style="border-collapse:collapse;width:100%;font-size:13px;">
+      <thead>
+        <tr style="background:#222;color:white;">
+          <th style="padding:6px 8px;text-align:left;">#</th>
+          <th style="padding:6px 8px;text-align:left;">Placed</th>
+          <th style="padding:6px 8px;text-align:left;">Order date</th>
+          <th style="padding:6px 8px;text-align:left;">Store</th>
+          <th style="padding:6px 8px;text-align:left;">Placed by</th>
+          <th style="padding:6px 8px;text-align:left;">Status</th>
+          <th style="padding:6px 8px;text-align:left;">Fulfilled by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+          <tr style="background:{{ '#fff' if loop.index is odd else '#f7f7f7' }};">
+            <td style="padding:4px 8px;">{{ o.id }}</td>
+            <td style="padding:4px 8px;">{{ o.placed_at.strftime('%Y-%m-%d %H:%M') if o.placed_at else '' }}</td>
+            <td style="padding:4px 8px;">{{ o.order_date.isoformat() if o.order_date else '' }}</td>
+            <td style="padding:4px 8px;">{{ o.store_scope or 'both' }}</td>
+            <td style="padding:4px 8px;">{{ o.placed_by_name or '' }}</td>
+            <td style="padding:4px 8px;"><span style="background:{{ '#9CCB76' if o.status == 'completed' else '#E4B340' }};color:#000;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:600;">{{ o.status }}</span></td>
+            <td style="padding:4px 8px;color:#666;">{{ o.fulfilled_by_name or '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="background:#f7f7f7;padding:32px;text-align:center;color:#888;border-radius:8px;">
+      No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}" style="color:#2a8a4e;">Place Order</a>.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

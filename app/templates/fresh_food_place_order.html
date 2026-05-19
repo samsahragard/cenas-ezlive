@@ -1,0 +1,44 @@
+{% extends "base_dashboard.html" %}
+{% block body %}
+<div style="padding:16px;max-width:1200px;margin:0 auto;">
+  <h1 style="font-size:24px;margin-bottom:12px;">Fresh Food — Place Order</h1>
+  <p style="color:#888;font-size:13px;margin-bottom:16px;">Rolling 7-day grid. Inventory + Order quantity per item per day. Order assumed for next day. Audience: everyone except expo. Both locations share data.</p>
+  <p style="color:#aaa;font-size:12px;font-style:italic;">v1 stub — full UI from ck pending. Use the API directly to submit: POST {{ url_for('store.fresh_food_place_order_submit') }} with JSON {order_date, lines:[{item_slug,category,inv,or}]}.</p>
+
+  <table style="border-collapse:collapse;width:100%;font-size:12px;background:#f7f7f7;">
+    <thead>
+      <tr style="background:#222;color:white;">
+        <th style="padding:6px 8px;text-align:left;">Item</th>
+        <th style="padding:6px 8px;text-align:right;">Cat</th>
+        <th style="padding:6px 8px;text-align:right;">30d avg</th>
+        {% for d in rolling_days %}
+          <th style="padding:6px 8px;text-align:center;" colspan="2">{{ d.strftime('%a %m/%d') }}</th>
+        {% endfor %}
+      </tr>
+      <tr style="background:#444;color:white;">
+        <th></th><th></th><th></th>
+        {% for d in rolling_days %}
+          <th style="padding:4px 8px;text-align:center;font-size:10px;">INV</th>
+          <th style="padding:4px 8px;text-align:center;font-size:10px;">OR</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for cat, items in categories %}
+        <tr><td colspan="{{ 3 + rolling_days|length * 2 }}" style="background:#ddd;padding:4px 8px;font-weight:600;">{{ cat }}</td></tr>
+        {% for slug in items %}
+          <tr>
+            <td style="padding:4px 8px;">{{ slug.replace('-', ' ').title() }}</td>
+            <td style="padding:4px 8px;text-align:right;color:#888;">{{ cat }}</td>
+            <td style="padding:4px 8px;text-align:right;color:#888;">{{ '%.1f'|format(rolling_avg_by_slug.get(slug, 0)) }}</td>
+            {% for d in rolling_days %}
+              <td style="padding:2px 4px;"><input type="number" step="0.1" name="inv__{{ slug }}__{{ d.isoformat() }}" style="width:55px;font-size:11px;padding:2px 4px;"></td>
+              <td style="padding:2px 4px;"><input type="number" step="0.1" name="or__{{ slug }}__{{ d.isoformat() }}" style="width:55px;font-size:11px;padding:2px 4px;"></td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -230,6 +230,15 @@ SAMPLES = [
         type="mockup",
     ),
     dict(
+        slug="in-house-catering-quote-builder-v1",
+        title="In-House Catering Quote Builder",
+        version="v1",
+        date="2026-05-18",
+        description="Full page chrome (sidebar + breadcrumbs + location toggle) for the staff-tool In-House Catering Quote Builder. 3-col desktop layout (220px category nav | flex item grid | 340px cart drawer). All item prices default to $0 with ezCater reference shown as ghost. Modifier modal opens with prominent gold-bordered custom-price input + qty stepper + required-group validation + per-item special instructions. Tray/Individual Packaging omitted per Sam #910. Cart with line items + subtotal + customer form + 3 CTAs locked hierarchy (Quote primary blue / Pay Now secondary green / Pay Later disabled gray with PCI-pending tooltip). Mobile collapse to single-col + bottom-bar 'View cart' opening drawer. Aligns with ck production plan #1049.",
+        url="/static/mockups/in_house_catering.html",
+        type="mockup",
+    ),
+    dict(
         slug="legal-overview",
         title="Legal — Overview",
         version=None,

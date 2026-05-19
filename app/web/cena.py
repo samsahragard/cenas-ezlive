@@ -2534,6 +2534,49 @@ def cena_run_wipe_ezcater_roster():
     })
 
 
+@cena_bp.route("/sam/cena/run-cleanup-dev-chat", methods=["POST"])
+def cena_run_cleanup_dev_chat():
+    """Delete developer_chat rows by explicit ID list. Sam #1047 + cena
+    #1054/#1056 — sweep the agent auto-noise (samai LIGHT-GATE PASS posts,
+    aick raw-push relays) from dev chat. IDs come from the caller (cena
+    eyeballs the preview list first), capped at 200 per request."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    raw_ids = body.get("ids") or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({"ok": False, "error": "ids (non-empty list) required"}), 400
+    if len(raw_ids) > 200:
+        return jsonify({"ok": False, "error": "max 200 ids per request"}), 400
+    try:
+        ids = [int(x) for x in raw_ids]
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "ids must be integers"}), 400
+
+    from sqlalchemy import delete as _sa_delete
+    from app.db import SessionLocal as _SL
+    from app.models import DeveloperChatMessage as _DCM
+    db = _SL()
+    try:
+        stmt = _sa_delete(_DCM).where(_DCM.id.in_(ids))
+        result = db.execute(stmt)
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "deleted": result.rowcount,
+            "requested": len(ids),
+        })
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-cleanup-dev-chat crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

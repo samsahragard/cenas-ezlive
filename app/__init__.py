@@ -534,6 +534,25 @@ def create_app():
         logging.getLogger(__name__).exception(
             "cena_usage_logs backfill failed (non-fatal)")
 
+    # Idempotent table create — in_house_catering_quotes (Sam #837 item 16
+    # + cena #1031 2026-05-19). Staff-built custom quotes for in-house
+    # catering orders off the Cenas Fajitas menu.
+    try:
+        from sqlalchemy import inspect as _sa_insp_33
+        from app.db import engine as _eng_33
+        from app.models import (Base as _Base_33,
+                                InHouseCateringQuote as _IHCQ_33)
+        if _eng_33 is not None:
+            insp_33 = _sa_insp_33(_eng_33)
+            if "in_house_catering_quotes" not in set(insp_33.get_table_names()):
+                _Base_33.metadata.create_all(
+                    bind=_eng_33, tables=[_IHCQ_33.__table__])
+                logging.getLogger(__name__).info(
+                    "in_house_catering_quotes: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "in_house_catering_quotes backfill failed (non-fatal)")
+
     # Idempotent table create — cena_wake_decisions (migration 29,
     # Sam #2576 6-piece proposal Phase A piece #3 — telemetry-first).
     # One row per dev chat message considered by the watcher; captures

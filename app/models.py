@@ -2149,3 +2149,54 @@ class CenaUsageLog(Base):
         ForeignKey("sam_chat_messages.id", ondelete="SET NULL"),
         nullable=True, index=True)
 
+
+class InHouseCateringQuote(Base):
+    """One row per In-House Catering quote built by Cenas staff.
+
+    Sam #837 item 16 + cena #1031: staff-facing tool that lets a manager
+    build a custom-priced quote off the (zeroed) Cenas Fajitas Tomball
+    menu. Two checkout flows:
+      - Quote   → email summary to customer for approval
+      - Payment → Pay Now (links to new Order row with the In-House
+                 indicator set) or Pay Later (placeholder fields per
+                 Sam #1041 — no PCI exposure, free-text payment notes)
+
+    items_json: serialized list[{"slug","label","qty","unit_price",
+                                 "line_total","modifiers": [...]}]
+    """
+    __tablename__ = "in_house_catering_quotes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+
+    customer_name:  Mapped[str | None] = mapped_column(String(200), nullable=True)
+    customer_email: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(50),  nullable=True)
+    event_date:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    event_address:  Mapped[str | None] = mapped_column(String(500), nullable=True)
+    guest_count:    Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    items_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    subtotal:   Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes:      Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # status moves: draft → sent | pay_now_pending | pay_later_pending →
+    #               paid | canceled
+    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False, index=True)
+
+    email_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Pay Now path links to the ezOrder row created from this quote.
+    ezorder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Pay Later path is a free-text bucket per Sam #1041 — staff fills
+    # check #, account reference, paypal handle, or whatever payment
+    # mechanism we eventually wire. No CC validation, no PCI exposure.
+    payment_method:  Mapped[str | None] = mapped_column(String(80),  nullable=True)
+    payment_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+

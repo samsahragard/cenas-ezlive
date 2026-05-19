@@ -18,6 +18,8 @@ templates can write `url_for('store.reports_labor')` and Flask will produce
 """
 from __future__ import annotations
 
+import logging
+
 from flask import Blueprint, g, abort, request, render_template, redirect, url_for, session, jsonify
 
 from datetime import datetime, timedelta
@@ -1139,19 +1141,129 @@ def kitchen_placeholder(page: str):
 
 
 # ============================================================
-# IN-HOUSE CATERING placeholder (Sam #837 item 15 — sidebar entry
-# under Catering branch ships first; the actual In-House page is
-# Sam #837 item 16, still queued).
+# IN-HOUSE CATERING (Sam #837 item 16 + cena #1031 2026-05-19)
+# Staff tool: build a custom-priced quote off the Cenas Fajitas
+# Tomball menu (mirrored from ezCater, prices zeroed for staff
+# to enter). Two checkout flows: Quote (email to customer) and
+# Payment (Pay Now → ezOrder / Pay Later → placeholder fields).
+# Frontend page is built by ck. Backend routes:
+#   GET  /<store>/in-house-catering            — picker page
+#   GET  /<store>/in-house-catering/menu.json  — menu data API
+#   POST /<store>/in-house-catering/quote      — create quote + email
+#   POST /<store>/in-house-catering/pay-now    — create ezOrder
 # ============================================================
 @store_bp.route("/in-house-catering", methods=["GET"])
-def in_house_catering_placeholder():
-    """Placeholder for the In-House Catering page."""
-    return render_template(
-        "coming_soon.html",
-        section_label="Catering",
-        page_label="In-House",
-        active="in_house_catering",
-    )
+def in_house_catering_page():
+    """Render the In-House Catering picker page (ck-built template).
+    Falls back to coming_soon if the template hasn't landed yet."""
+    try:
+        return render_template(
+            "in_house_catering.html",
+            active="in_house_catering",
+        )
+    except Exception:
+        return render_template(
+            "coming_soon.html",
+            section_label="Catering",
+            page_label="In-House",
+            active="in_house_catering",
+        )
+
+
+@store_bp.route("/in-house-catering/menu.json", methods=["GET"])
+def in_house_catering_menu_json():
+    """Return the Cenas Fajitas Tomball menu as JSON for the picker UI."""
+    from app.data.in_house_catering_menu import CATEGORIES
+    return jsonify({"categories": CATEGORIES})
+
+
+@store_bp.route("/in-house-catering/quote", methods=["POST"])
+def in_house_catering_quote_create():
+    """Create an InHouseCateringQuote from the picker's selection +
+    customer info. If `send_email=True` in the body, also email the
+    customer the quote summary. Returns the new quote id."""
+    import json as _json
+    from app.models import InHouseCateringQuote
+    body = request.get_json(silent=True) or {}
+    items = body.get("items") or []
+    db = next(get_db())
+    try:
+        q = InHouseCateringQuote(
+            created_by_user_id = (g.current_user.id if getattr(g, "current_user", None) else None),
+            store_scope        = (g.current_location if g.current_location in ("tomball","copperfield") else None),
+            customer_name      = (body.get("customer_name") or "").strip() or None,
+            customer_email     = (body.get("customer_email") or "").strip() or None,
+            customer_phone     = (body.get("customer_phone") or "").strip() or None,
+            event_address      = (body.get("event_address") or "").strip() or None,
+            guest_count        = body.get("guest_count"),
+            items_json         = _json.dumps(items, ensure_ascii=False),
+            subtotal           = _coerce_float(body.get("subtotal")),
+            notes              = (body.get("notes") or "").strip() or None,
+            status             = "draft",
+        )
+        # Optional event_date (ISO string)
+        ed = body.get("event_date")
+        if ed:
+            try:
+                q.event_date = datetime.fromisoformat(ed.replace("Z", "+00:00"))
+            except Exception:
+                pass
+        db.add(q)
+        db.commit()
+        db.refresh(q)
+        # Email send is a follow-up (cena #1031 mentioned email-on-Quote).
+        # Wiring real SMTP send is iterative; the row exists either way.
+        if body.get("send_email") and q.customer_email:
+            try:
+                _email_in_house_quote(q)
+                q.status = "sent"
+                q.email_sent_at = datetime.utcnow()
+                db.commit()
+            except Exception:
+                # Quote row is preserved even if email fails; staff can resend.
+                logging.getLogger(__name__).exception(
+                    "in_house_catering: email send failed for quote %s", q.id)
+        return jsonify({"ok": True, "quote_id": q.id, "status": q.status})
+    finally:
+        db.close()
+
+
+@store_bp.route("/in-house-catering/pay-now", methods=["POST"])
+def in_house_catering_pay_now():
+    """Mark an existing InHouseCateringQuote as Pay Now pending. Body:
+    {quote_id}. Full promotion to an ezOrder row (with the In-House
+    indicator on /partner/orders) is a follow-up wave — for v1 this
+    endpoint just transitions status so the frontend can confirm
+    submission.  Returns the quote id."""
+    from app.models import InHouseCateringQuote
+    body = request.get_json(silent=True) or {}
+    qid = body.get("quote_id")
+    if not qid:
+        return jsonify({"error": "quote_id required"}), 400
+    db = next(get_db())
+    try:
+        q = db.get(InHouseCateringQuote, int(qid))
+        if not q:
+            return jsonify({"error": "quote not found"}), 404
+        q.status = "pay_now_pending"
+        db.commit()
+        return jsonify({"ok": True, "quote_id": q.id, "status": q.status})
+    finally:
+        db.close()
+
+
+def _coerce_float(v):
+    try:
+        return float(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _email_in_house_quote(q):
+    """Stub — wire the real SMTP send pipeline once the customer-facing
+    email template + sending infra is finalized. For now, raise so the
+    caller treats the email as not-yet-sent (quote stays in draft)."""
+    raise NotImplementedError("in_house_catering email send not yet wired")
 
 
 @store_bp.route("/drivers/<int:driver_id>/toggle-active", methods=["POST"])

@@ -2702,6 +2702,71 @@ def cena_run_vendor_orders_bulk_insert():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-archive-and-wipe-dev-chat", methods=["POST"])
+def cena_run_archive_and_wipe_dev_chat():
+    """One-time bulk archive + wipe of developer_chat per Sam dev chat
+    2026-05-19 4:07pm ("remember max 200msgs on this chage. the rest
+    consistently archive"). Honors samai #2887 PASS-WITH-CONCERN-FLAG +
+    samai #2980 spec: INSERT INTO archive SELECT * FROM live BEFORE the
+    DELETE; archive count must equal pre-live count or transaction
+    rolls back.
+
+    Returns pre/post counts so the caller can verify the safety
+    invariant (archived == pre_live) the way samai gated the
+    7d8e390 EzcaterKnownDriver wipe at #2885.
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    from app.models import DeveloperChatMessageArchive as _DCMA
+    db = SessionLocal()
+    try:
+        pre_live = db.query(DeveloperChatMessage).count()
+        pre_arch = db.query(_DCMA).count()
+
+        for m in db.query(DeveloperChatMessage).order_by(DeveloperChatMessage.id.asc()).all():
+            db.add(_DCMA(
+                original_id=m.id,
+                created_at=m.created_at,
+                author=m.author,
+                body=m.body,
+            ))
+        db.flush()
+
+        post_arch = db.query(_DCMA).count()
+        archived = post_arch - pre_arch
+        if archived != pre_live:
+            db.rollback()
+            return jsonify({
+                "ok": False,
+                "error": f"archive count mismatch: pre_live={pre_live} archived={archived}",
+                "pre_live": pre_live,
+                "pre_archive": pre_arch,
+                "post_archive": post_arch,
+            }), 500
+
+        deleted = db.query(DeveloperChatMessage).delete(synchronize_session=False)
+        db.commit()
+
+        post_live = db.query(DeveloperChatMessage).count()
+        return jsonify({
+            "ok": True,
+            "pre_live": pre_live,
+            "archived": archived,
+            "deleted": deleted,
+            "post_live": post_live,
+            "post_archive_total": post_arch,
+        })
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-archive-and-wipe-dev-chat crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-cleanup-dev-chat", methods=["POST"])
 def cena_run_cleanup_dev_chat():
     """Delete developer_chat rows by explicit ID list. Sam #1047 + cena

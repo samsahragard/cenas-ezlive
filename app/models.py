@@ -444,6 +444,31 @@ class DeveloperChatMessage(Base):
     )
 
 
+class DeveloperChatMessageArchive(Base):
+    """Append-only archive of dev chat messages trimmed by the rolling
+    200/100 cap or the one-time bulk archive+wipe.
+
+    Per Sam dev chat 2026-05-19 4:07pm: "remember max 200msgs on this
+    chage. the rest consistently archive." Honors samai #2887 archive-
+    before-delete safety flag — INSERT here precedes any DELETE from
+    developer_chat per samai #2980 spec.
+
+    Schema mirrors DeveloperChatMessage (author/body/created_at) with
+    original_id preserving the source row id after delete + archived_at
+    marking when the row landed here. Attachments not archived — out of
+    scope; the source-row delete cascade handles file cleanup.
+    """
+    __tablename__ = "developer_chat_archive"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    original_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    author: Mapped[str] = mapped_column(String(60), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    archived_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+
+
 class DevChatAttributionCorrection(Base):
     """Sidecar table mapping a developer_chat row to its corrected author
     when the original author column got misattributed (e.g. the

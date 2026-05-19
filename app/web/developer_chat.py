@@ -214,6 +214,41 @@ def post_message():
         # primitives, never a SQLAlchemy row (avoids detached-instance
         # errors when the session closes in finally).
         wake_args = (m.id, author, body)
+
+        # Rolling cap per Sam dev chat 2026-05-19 4:07pm: hot table
+        # capped at 200; when count exceeds it, archive the oldest 100
+        # then delete those from live. Archive is append-only.
+        # samai #2980 spec — INSERT into archive before DELETE.
+        try:
+            live_count = db.query(DeveloperChatMessage).count()
+            if live_count > 200:
+                from app.models import DeveloperChatMessageArchive as _DCMA
+                oldest = (
+                    db.query(DeveloperChatMessage)
+                    .order_by(DeveloperChatMessage.id.asc())
+                    .limit(100)
+                    .all()
+                )
+                ids_to_drop = [o.id for o in oldest]
+                for old in oldest:
+                    db.add(_DCMA(
+                        original_id=old.id,
+                        created_at=old.created_at,
+                        author=old.author,
+                        body=old.body,
+                    ))
+                db.flush()
+                db.query(DeveloperChatMessage).filter(
+                    DeveloperChatMessage.id.in_(ids_to_drop)
+                ).delete(synchronize_session=False)
+                db.commit()
+                log.info(
+                    "dev-chat trim: archived+deleted %d oldest (live was %d)",
+                    len(ids_to_drop), live_count,
+                )
+        except Exception:
+            log.exception("dev-chat trim trigger failed (non-fatal)")
+            db.rollback()
     finally:
         db.close()
     # Sam #2342: wake cena on EVERY new dev-chat post (immediate, no

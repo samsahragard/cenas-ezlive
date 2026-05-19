@@ -631,6 +631,26 @@ def create_app():
         logging.getLogger(__name__).exception(
             "cena_wake_decisions backfill failed (non-fatal)")
 
+    # developer_chat_archive (migration 30, Sam dev chat 2026-05-19 4:07pm
+    # + samai #2980 spec). Append-only archive table; one-time bulk wipe
+    # + rolling 200/100 cap copy oldest-N here before DELETE from
+    # developer_chat.
+    try:
+        from sqlalchemy import inspect as _sa_insp_dca
+        from app.db import engine as _eng_dca
+        from app.models import (Base as _Base_dca,
+                                DeveloperChatMessageArchive as _DCMA)
+        if _eng_dca is not None:
+            insp_dca = _sa_insp_dca(_eng_dca)
+            if "developer_chat_archive" not in set(insp_dca.get_table_names()):
+                _Base_dca.metadata.create_all(
+                    bind=_eng_dca, tables=[_DCMA.__table__])
+                logging.getLogger(__name__).info(
+                    "developer_chat_archive (migration 30): table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "developer_chat_archive backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

@@ -1,0 +1,390 @@
+{% extends "docs/_doc_base.html" %}
+{% block doc_body %}
+
+<h2>What this page is</h2>
+<p>
+  Detailed handoff log for the work <strong>aick</strong> shipped during the
+  Tue May 19 2026 session. Format mirrors
+  <code>aick_session_2026_05_13.html</code> per the Session Closeout
+  routine.
+</p>
+<p>
+  Day in two sentences: pushed Sam #2870 dashboard rework + APK + GPS
+  battery-optimization auto-prompt in the morning, then shipped the
+  full backend + production-template surface for Manager pages (14),
+  Recipes, Fresh Food (place-order + recent-orders), In-House
+  Catering, Daily Manager Log custom design, and the sidebar
+  restructure. Picked up Fresh Food production templates myself
+  after ck went silent for 10.5 hours on my unblocking brief
+  (cena #1253 reassign). Closed the day at <code>c0f8706</code>.
+</p>
+
+<h2>Session bootstrap</h2>
+<ul>
+  <li>Re-attached chat tail under <code>Monitor</code> per
+      <code>cenas_chat_tail.md</code>.</li>
+  <li>Read prior-session handoffs + four new memory rules created
+      this session
+      (<code>read_only_unless_sam_approves</code> /
+      <code>aick_is_relay_between_sam_chat_and_dev_chat</code> /
+      <code>verify_before_bubble</code> /
+      <code>no_unsolicited_reports_to_sam</code>).</li>
+  <li>Naming unchanged: aick on AiCk (Mini_IT1), ck on AiCk,
+      samai on the CK mini-PC under user 'ck 2', dck on the dck
+      box.</li>
+</ul>
+
+<h2>Sam #2870 dashboard rework (carried over from 5/18)</h2>
+<p>
+  6-item dashboard rework shipped end-to-end; item 6 wiped 37 stale
+  rows. APK link fix + <code>/partner/orders</code> 500 fix landed
+  with it.
+</p>
+
+<h2>GPS battery-optimization auto-prompt (Capacitor plugin)</h2>
+<p>
+  Plugin: <code>mobile/plugins/cenas-gps-native/android/.../CenasGpsPlugin.java</code>.
+  Added <code>requestIgnoreBatteryOptimizations()</code> +
+  <code>checkBatteryOptimizations()</code> using
+  <code>PowerManager.isIgnoringBatteryOptimizations()</code> +
+  <code>Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</code>
+  Intent. <code>Driver.battery_opt_ignored</code> +
+  <code>battery_opt_checked_at</code> columns added. Sam confirmed
+  &ldquo;OMG ITS WORKING&rdquo; — the Play-Store-signed AAB carried it.
+</p>
+
+<h2>Sam #837 spec items 1-8 + sidebar restructure</h2>
+<table>
+  <tr><th>Item</th><th>What landed</th></tr>
+  <tr><td>14 — Catering rename</td><td>Sidebar updated.</td></tr>
+  <tr><td>15 — In-House entry</td><td>Added under Catering top-level section.</td></tr>
+  <tr><td>8 — Operations restructure</td><td>Vendors + Catering promoted from
+      under Operations to top-level <code>ck-sb-section</code>; all 8
+      sections default-collapsed-except-active via the
+      <code>openActiveChain</code> inline script.</td></tr>
+  <tr><td>Sidebar manager trim</td><td>Manager <code>for</code>-loop went 14
+      → 8 entries (Sam #1242). Removed 6 entries (shift-handoff /
+      supply-requests / daily-goals / staff-feedback /
+      pre-shift-checklist / close-of-day-audit). &lsquo;Soon&rsquo; badges removed
+      from all kept manager entries (<code>2a55de2</code>).</td></tr>
+</table>
+
+<h2>Manager pages backend + production HTML (14 pages)</h2>
+<p>
+  Full <code>ManagerLogMixin</code> with id / created_at / updated_at /
+  store_scope / title / body / type_tag. 14 concrete classes:
+  DailyManagerLog, ShiftHandoff, IncidentReport, SupplyRequest,
+  DailyGoals, StaffFeedback, PreShiftChecklist, CloseOfDayAudit,
+  RecipePage, AttendanceTracking, InterviewSurface, TrainingRecord,
+  MaintenanceRequest, EmployeeCounseling.
+</p>
+<p>
+  Six routes per page (list / new / create / detail / edit / update)
+  with slug-parameterized dispatch; daily-log special-case selects
+  <code>manager_daily_log.html</code> when <code>page=='daily-log'</code>,
+  everything else falls through to the shared
+  <code>manager_log.html</code>. ck shipped the shared
+  <code>manager_log.html</code> at <code>3de2657</code> (samai
+  HIGH-RIGOR PASS).
+</p>
+
+<h2>Audience-gate root-cause fix (<code>adc2518</code>)</h2>
+<p>
+  All 14 manager pages were returning 403 for Sam (and every other
+  user) because <code>_manager_role_ok()</code> read
+  <code>user.role</code> — but the User model exposes
+  <code>permission_level</code>, not <code>role</code>. <code>getattr</code>
+  returned None → not in the allowed set → 403 everywhere.
+  Switched to deny-list semantics:
+</p>
+<pre><code>_MANAGER_ROLES_DENIED = {"expo", "corporate-driver", "driver"}
+def _manager_role_ok():
+    user = getattr(g, "current_user", None)
+    if user is None: return False
+    role = (getattr(user, "permission_level", None) or "").strip().lower()
+    if not role: return False
+    return role not in _MANAGER_ROLES_DENIED</code></pre>
+<p>
+  Caught by ck at dev #2876. samai #2945 self-corrected their #2898
+  HIGH-RIGOR PASS for missing the attribute mismatch; new gate-2
+  lesson <code>#attribute-existence-gate-2-rule</code> added.
+</p>
+
+<h2>Recipes (33 across 14 PDFs) — <code>9629daa</code></h2>
+<p>
+  Recipe model (id / category / name / prep_time / shelf_life /
+  spanish_instructions / ingredients_json / batch_sizes_json /
+  notes) + 6 routes + ck production template + recipes bulk-insert
+  endpoint at <code>/sam/cena/run-recipes-bulk-insert</code>
+  (idempotent on category+name, max 200 rows) shipped at
+  <code>107837a</code>. PDFs ingested from
+  <code>sam_chat_attachments</code> (base64) into
+  <code>C:\ProgramData\cenas\</code> for cross-user samai parse;
+  cross-machine relay still blocked, 8 of 33 fully structured.
+</p>
+
+<h2>Fresh Food — production templates (<code>c0f8706</code>, day's headline)</h2>
+<p>
+  Backend was live since <code>9629daa</code>
+  (FreshFoodOrder header + FreshFoodOrderLine per-item, 5 routes
+  + audience gate + rolling-30d-avg helper).
+</p>
+<p>
+  ck went silent ~10.5 hours after I sent the unblocking ops brief
+  at dev #2947 (covered the 7-day grid spec, both pages, full
+  backend contract). Sam pinged /sam/chat #1250 that &ldquo;Cena fresh
+  food is not done&rdquo;. cena #1253 routed it to me with path B
+  (&ldquo;You build it. Ship it, commit it, push it.&rdquo;). Sam confirmed
+  at #1254.
+</p>
+<ul>
+  <li><strong>Place Order:</strong> rolling 7-day grid with INV/OR
+      inputs per day, today + tomorrow columns highlighted (tomorrow
+      is the active submit target), 30-day average column next to
+      each item, orderer name + location auto-filled from session,
+      JSON-POST submit on a date picker that defaults to tomorrow.
+      Sticky first columns for horizontal-scroll on mobile.</li>
+  <li><strong>Recent Orders:</strong> three sections + Pull Report
+      modal.
+      <em>Section 1</em>: live trackers — last-7-day and last-30-day
+      side-by-side, broken out Tomball / Copperfield / Total per
+      item, only renders rows where there's actual ordering data.
+      <em>Section 2</em>: SENT-vs-ordered variance — last-30-day
+      aggregate per item with severity flag (ok &lt;5% / low 5-15%
+      / high &gt;=15%), sorted by absolute gap.
+      <em>Section 3</em>: history — last 100 orders, ACTIVE rows
+      open a fulfillment modal that POSTs sent_qty per line
+      (backend auto-marks completed once every line has a value).
+      Pull Report opens a filter modal (from / to / item) with CSV
+      download + printable view.</li>
+  <li><strong>Backend helpers</strong>:
+      <code>_ff_window_tracker(db, days)</code>,
+      <code>_ff_variance_rows(db, days=30)</code>,
+      <code>_ff_lines_by_order(db, order_ids)</code> at
+      <code>store_routes.py:1559</code>; GET /recent-orders now
+      passes tracker_7d / tracker_30d / variance_rows /
+      rolling_avg_by_slug / lines_by_order alongside the existing
+      orders list.</li>
+  <li><strong>Verification:</strong> origin/main HEAD =
+      <code>c0f8706</code>; Render deploy rolled; both routes
+      return 302 (auth redirect, alive) for unauthed probes;
+      samai's HIGH-RIGOR PASS confirmed 7-of-7 brief items +
+      4&times;403 audience-gate firing uniformly across both
+      stores.</li>
+</ul>
+
+<h2>Daily Manager Log custom design</h2>
+<ul>
+  <li><strong>v1 (<code>6e7b2b7</code>)</strong>: Sam pasted full
+      custom HTML mockup across 79 chunks at developer_chat
+      <code>id=2952</code>. I pulled the body from
+      <code>dev_chat_messages</code>, saved verbatim to
+      <code>manager_daily_log.html</code> + route special-case.
+      Static demo, no dynamic entries.</li>
+  <li><strong>v2 (<code>cd602db</code>)</strong>: samai delivered
+      Jinja-adapted version with <code>.dml-page</code> CSS scoping
+      (avoided <code>:root</code> leakage) + dynamic
+      <code>{% raw %}{% for e in entries %}{% endraw %}</code>
+      loop from the entries list the route already passes. I
+      grabbed samai's payload from chat msg #2974 and overwrote
+      v1.</li>
+</ul>
+
+<h2>In-House Catering (<code>223efd0</code>)</h2>
+<p>
+  Sam pasted custom HTML mockup at developer_chat
+  <code>id=2956</code>. Saved verbatim;
+  <code>in_house_catering.html</code> route already serves it.
+  Earlier ck shipped a Jinja-adapted version at
+  <code>ffb301f</code> (Sam-approved 02:03 UTC); Sam-custom
+  replaced it.
+</p>
+
+<h2>Cena gateway endpoints</h2>
+<ul>
+  <li><code>/sam/cena/run-cleanup-dev-chat</code> — bulk delete by
+      ID list.</li>
+  <li><code>/sam/cena/run-vendor-orders-bulk-insert</code>
+      (<code>27d28ff</code>) — vendor JSON ingest, max 500 rows,
+      idempotent on <code>vendor + source_email_mid</code>.</li>
+  <li><code>/sam/cena/run-recipes-bulk-insert</code>
+      (<code>107837a</code>) — recipe JSON ingest, max 200 rows,
+      idempotent on <code>category + name</code>.</li>
+</ul>
+
+<h2>Vendor email pull + ingest (cross-Claude relay)</h2>
+<p>
+  IMAP polling on orders@cenaskitchen.com via produce_ingest.py
+  infra. samai parsed 31 emails on CK box → cross-user copied
+  parsed JSON to <code>C:\ProgramData\cenas\</code> → aick fired
+  the bulk-insert endpoint with the payload → 26 rows landed in
+  <code>vendor_recent_orders</code> (5 skipped on dedup). Standing
+  pattern for cross-machine ingest where samai parses + aick
+  fires the gateway endpoint (per-agent token equivalence — samai
+  doesn't hold gateway credentials).
+</p>
+
+<h2>ezCater FVC-TG4 cross-store driver unhook (data-only)</h2>
+<p>
+  Sam DM: unhook driver from FVC-TG4. Standard
+  <code>unassign-courier</code> route tried only Copperfield
+  couriers (origin_store_id=store_1) but the order had
+  <code>sam-ck-2</code> (Tomball courier) hooked. Latent bug in
+  the route's <code>_COURIER_ID_FOR_STORE</code> mapping — flagged
+  to Sam. Workaround: fired
+  <code>courierUnassign</code> mutation directly against ezCater
+  GraphQL with <code>courierId=&quot;sam-ck-2&quot;</code>. First
+  attempt failed on
+  <code>errors { message }</code> shape; corrected to
+  <code>userErrors { __typename ... on UserError { message }
+  ... on DeliveryValidationError { message } }</code> per the
+  schema's union pattern. Unhook landed.
+</p>
+
+<h2>Render minute exhaustion incident</h2>
+<p>
+  Mid-day, all my deploys failed in &lt;1 second with no
+  <code>build_started</code> event. Diagnosed via
+  <code>/v1/services/{sid}/events</code> API:
+  <code>pipeline_minutes_exhausted</code>. Sam bought a $5
+  Render Starter build pack to unblock; deploys resumed. Sam's
+  prior &ldquo;It will go. Pan is 5g&rdquo; was about memory not
+  minutes; samai/cena clarified.
+</p>
+
+<h2>Four new memory rules (this session)</h2>
+<ul>
+  <li><strong><code>cenas_read_only_unless_sam_approves.md</code></strong>
+      — Per Sam via cena #945 2026-05-19: nothing ships without
+      Sam's plain-English go. Cena can advise/triage; only Sam
+      approves state changes. Overrides cena's Sam-equivalent
+      authority for ship actions specifically.</li>
+  <li><strong><code>cenas_aick_is_relay_between_sam_chat_and_dev_chat.md</code></strong>
+      — Per Sam #962 2026-05-19: Sam + cena stay on /sam/chat;
+      aick carries everything to/from dev chat (ck / dck / samai).
+      General authorization, no per-message permission.</li>
+  <li><strong><code>cenas_verify_before_bubble.md</code></strong>
+      — Per Sam #1162 + cena #1163/#1165 2026-05-19: open the
+      file, count items, ask the explicit completeness question
+      before bubbling team deliverables. Bake the spec scope into
+      outgoing briefs (dck v1 mockup only had 2 of 14 pages →
+      Sam flagged performance).</li>
+  <li><strong><code>cenas_no_unsolicited_reports_to_sam.md</code></strong>
+      — Per Sam #1168 2026-05-19: stop FYI/status/heads-up to
+      /sam/chat. Only specific questions Sam needs to answer or
+      asked-for status. Supersedes
+      <code>cenas_report_to_cena_consistently.md</code>.</li>
+</ul>
+
+<h2>Commit chain (my pushes today)</h2>
+<table>
+  <tr><th>#</th><th>SHA</th><th>What</th></tr>
+  <tr><td>1</td><td><code>adc2518</code></td><td>Manager-pages audience gate fix (permission_level not role, deny-list)</td></tr>
+  <tr><td>2</td><td><code>9629daa</code></td><td>Recipes + Fresh Food backend (Sam #1130-#1144 + #3074)</td></tr>
+  <tr><td>3</td><td><code>27d28ff</code></td><td>Cena vendor-orders bulk-insert endpoint</td></tr>
+  <tr><td>4</td><td><code>2a55de2</code></td><td>Sidebar manager-section 14 → 8 + soon-badge removal (Sam #1242)</td></tr>
+  <tr><td>5</td><td><code>107837a</code></td><td>Cena recipes bulk-insert endpoint (Sam #1246)</td></tr>
+  <tr><td>6</td><td><code>6e7b2b7</code></td><td>Manager daily-log: Sam custom-designed template v1 (verbatim, #2952)</td></tr>
+  <tr><td>7</td><td><code>223efd0</code></td><td>In-house catering: Sam custom-designed template (verbatim, #2956)</td></tr>
+  <tr><td>8</td><td><code>cd602db</code></td><td>Manager daily-log: samai Jinja-adapted template v2 (#2957)</td></tr>
+  <tr><td>9</td><td><code>c0f8706</code></td><td>Fresh Food production templates (place-order + recent-orders, cena #1253)</td></tr>
+  <tr><td>(end-of-day)</td>
+    <td><code>(this commit)</code></td>
+    <td>Docs: this session log + CHAT_PAGES entries (mine + agents' logs)</td></tr>
+</table>
+<p>
+  Plus push-orchestrator runs for ck (sidebar restructure
+  <code>29f01e1</code>, manager_log.html <code>3de2657</code>,
+  in-house catering v1 <code>ffb301f</code> + polish
+  <code>25c5d64</code>) and samai (template payload behind
+  <code>cd602db</code>).
+</p>
+
+<h2>Open threads for the next aick</h2>
+<ul>
+  <li><strong>Fresh Food behavioral PASS</strong> — samai's gate
+      deferred visual render-confirm to Sam's keypad-PIN session;
+      walk through Place Order grid + Recent Orders sections +
+      Pull Report modal + ACTIVE-row fulfillment flow once Sam
+      has logged in.</li>
+  <li><strong>FVC-TG4-shape route bug</strong> —
+      <code>orders_browse.py</code>'s
+      <code>_COURIER_ID_FOR_STORE</code> mapping doesn't try
+      cross-store couriers when the canonical courier slot is
+      empty but a peer-store courier is hooked. Latent. Fix:
+      probe both stores' couriers on unassign.</li>
+  <li><strong>25 stub recipes</strong> — 8 of 33 are fully
+      structured; the remaining 25 need the PDF parse that's
+      blocked on cross-machine path (PDFs on AiCk, samai on CK
+      box, <code>C:\ProgramData\</code> is cross-user not
+      cross-machine). Option (c) from samai #2956: aick parses
+      the PDFs locally.</li>
+  <li><strong>Per-vendor parsers</strong> (Webstaurant,
+      Performance Food, Restaurant Depot, Specs) — wave 4
+      framework live at <code>28cc0a5</code> with
+      VendorRecentOrder model + 4 Recent Orders routes + 4
+      sidebar entries + template. Real parsers await Sam sample
+      emails + <code>approved_senders.json</code> additions.</li>
+  <li><strong>Daily Manager Log v2 polish (samai-spec wave 2)</strong>
+      — ManagerLogMixin schema delta for severity / is_pinned /
+      is_resolved columns; ShiftHandoff join for the handoff-box
+      section. v2 ships first.</li>
+  <li><strong>Cena tool batch #2</strong> — #6 bidirectional
+      Telegram + #2 browser session.</li>
+  <li><strong>Manager pages content fill</strong> per Sam #1235
+      — pages need actual content per page-type instead of the
+      shared generic "coming" placeholder. Structured per-page
+      fields scoped to each ManagerLogMixin subclass.</li>
+  <li><strong>Trigger endpoint cleanup</strong> after Sam done
+      testing.</li>
+  <li><strong>Drivers Phase A hamburger 48px probe</strong>
+      (cena #2553).</li>
+  <li><strong>75ee0ce scrollIntoView</strong> on
+      <code>/ez-market</code>.</li>
+  <li><strong>Re-verify attachment fetch</strong> (got 500 first
+      try — retry after Render settles).</li>
+</ul>
+
+<h2>Cross-claude coordination notes</h2>
+<ul>
+  <li><strong>ck silent 10.5 hours on Fresh Food</strong> — sent
+      ops brief at dev #2947 (covered everything ck needed: 7-day
+      grid spec, 3-section Recent Orders, full backend contract,
+      audience gate). ck went silent immediately and stayed silent
+      through Sam's #1250 ping. cena routed Fresh Food to me with
+      path B. ck owned the gap post-recovery (dev #2971 acked the
+      reassign, named the failure mode: stayed in
+      &lsquo;waiting-for-spec-to-fully-land&rsquo; instead of pinging back
+      for re-paste after a 502 storm truncated chunks 7-20 of my
+      ops brief). Same shape as ck's prior
+      sit-silent-during-storm at #2840.</li>
+  <li><strong>dck v1 mockup completeness failure</strong> — dck
+      shipped only 2 of 14 manager pages in v1 (incident-report
+      + daily-log). My brief said &ldquo;1-2 example pages demoed&rdquo;
+      — too vague. Sam flagged at #1162 as performance issue;
+      cena said &ldquo;This coordination gap is yours too&rdquo;. Created
+      <code>cenas_verify_before_bubble.md</code>; tightened brief
+      for v2 to spell out all 14 page-type fields explicitly.</li>
+  <li><strong>samai's catch-up cadence</strong> — recurring
+      pattern: samai silent for ~10 hours, then performs
+      catch-up gate batch on the commits that landed during the
+      gap. Self-flagged at #2950 with
+      <code>#commit-poll-as-fallback-trigger</code> lesson —
+      samai now polls origin every ~30min during high-velocity
+      periods rather than only firing on @-mention.</li>
+  <li><strong>aick = relay between /sam/chat and dev chat</strong>
+      — per Sam #962, I carry everything from dev chat (ck / dck /
+      samai) to /sam/chat (Sam + cena) and vice versa. General
+      auth, no per-message permission. Combined with
+      <code>cenas_no_unsolicited_reports_to_sam.md</code>: I
+      filter dev-chat traffic into the small subset Sam actually
+      needs (decisions, blockers, asked-for status) rather than
+      forwarding everything.</li>
+  <li><strong>Sam-not-a-coder rule applied</strong> — when
+      reporting Fresh Food done to /sam/chat, used plain English
+      (&ldquo;7-day grid with INV/OR&rdquo;, &ldquo;3 sections + Pull
+      Report&rdquo;) instead of function names or SQL. Memory
+      <code>cenas_sam_chat_plain_language.md</code>.</li>
+</ul>
+
+{% endblock %}

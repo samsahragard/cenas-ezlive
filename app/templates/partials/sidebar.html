@@ -77,11 +77,12 @@
           <i class="ti ti-bell ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Notifications</span>
         </a>
-        {# Cena — Sam's personal direct-to-Claude surface. Per Sam #837
-           item 8: moved into TODAY (was its own bottom section), renamed
-           from "Sam Chat → Claude" to just "Cena". Gated by
-           is_sam_chat_user() (SAM_CHAT_USER_ID match) so it only renders
-           for Sam + Masood, NOT inherited via partner role. #}
+        {% if has_permission('team_reports.view') %}
+        <a href="/partner/team-reports/" class="ck-sb-item{% if active == 'team_reports' %} active{% endif %}">
+          <i class="ti ti-chart-bar ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Task Reports</span>
+        </a>
+        {% endif %}
         {% if is_sam_chat_user() %}
         <a href="/sam/chat" class="ck-sb-item{% if active == 'sam_chat' %} active{% endif %}"
            {% if active == 'sam_chat' %}aria-current="page"{% endif %}>
@@ -124,13 +125,143 @@
     </div>
     {% endif %}
 
-    {# ==== OPERATIONS ==== #}
+    {# ==== OPERATIONS ==== restructured per Sam #837 spec — Team
+       (moved from former Admin), Forecasts, Sales/Labor/Performance
+       (moved from former Insights), Schedule, Kitchen (new, item 17),
+       Corporate Order, Vendors, Catering (with In-House, item 15). #}
     <div class="ck-sb-section" data-id="operations">
       <button class="ck-sb-section-head" aria-expanded="true">
         <span class="ck-sb-section-label">Operations</span>
         <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
       </button>
       <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+
+        {% if has_permission('access.team_admin') %}
+        <a href="/partner/team" class="ck-sb-item{% if active == 'partner_team' %} active{% endif %}">
+          <i class="ti ti-users-group ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Team</span>
+        </a>
+        {% endif %}
+
+        <a href="#" class="ck-sb-item" aria-disabled="true">
+          <i class="ti ti-chart-arcs ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Forecasts</span>
+          <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
+        </a>
+
+        {% if user_role != 'expo' %}
+        <div class="ck-sb-branch" data-id="ops.sales">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-chart-bar ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Sales</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/reports/sales/total" class="ck-sb-subitem{% if active == 'sales_total' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">All</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/toast" class="ck-sb-subitem{% if active == 'sales_toast' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Toast</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/online" class="ck-sb-subitem{% if active == 'sales_online' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Online Toast</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/ezcater" class="ck-sb-subitem{% if active == 'sales_ezcater' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Ez Cater</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/doordash" class="ck-sb-subitem{% if active == 'sales_doordash' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">DoorDash</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/sales/uber" class="ck-sb-subitem{% if active == 'sales_uber' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Uber</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ops.labor">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-clock ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Labor</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/reports/labor/boh" class="ck-sb-subitem{% if active == 'boh_labor' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">BOH labor</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/labor/foh" class="ck-sb-subitem{% if active == 'foh_labor' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">FOH labor</span>
+            </a>
+          </div></div>
+        </div>
+
+        <div class="ck-sb-branch" data-id="ops.performance">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-trending-up ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Performance</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/reports/server-performance/all" class="ck-sb-subitem{% if active == 'perf_all' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">All</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/server-performance/server" class="ck-sb-subitem{% if active == 'perf_server' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Server</span>
+            </a>
+            <a href="/{{ store_slug }}/reports/server-performance/bartenders" class="ck-sb-subitem{% if active == 'perf_bartenders' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Bartenders</span>
+            </a>
+            <a href="#" class="ck-sb-subitem" aria-disabled="true">
+              <span class="ck-sb-subitem-label">Prep</span>
+              <span class="ck-sb-soon">soon</span>
+            </a>
+          </div></div>
+        </div>
+        {% endif %}{# end user_role != 'expo' #}
+
+        <div class="ck-sb-branch" data-id="ops.schedule">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-calendar ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Schedule</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/roster/all" class="ck-sb-subitem{% if active == 'all_roster' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">All roster</span>
+            </a>
+            <a href="/{{ store_slug }}/roster/boh" class="ck-sb-subitem{% if active == 'boh_roster' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">BOH roster</span>
+            </a>
+            <a href="/{{ store_slug }}/roster/foh" class="ck-sb-subitem{% if active == 'foh_roster' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">FOH roster</span>
+            </a>
+            <a href="/{{ store_slug }}/schedule" class="ck-sb-subitem{% if active == 'weekly_schedule' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Weekly</span>
+            </a>
+          </div></div>
+        </div>
+
+        {# Kitchen — Sam #837 item 17. Placeholder routes. #}
+        <div class="ck-sb-branch" data-id="ops.kitchen">
+          <button class="ck-sb-branch-head">
+            <i class="ti ti-chef-hat ck-sb-branch-icon" aria-hidden="true"></i>
+            <span class="ck-sb-branch-label">Kitchen</span>
+            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+          </button>
+          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
+            <a href="/{{ store_slug }}/kitchen/fresh-food" class="ck-sb-subitem{% if active == 'kitchen_fresh_food' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Fresh Food</span>
+              <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
+            </a>
+            <a href="/{{ store_slug }}/kitchen/prep-list" class="ck-sb-subitem{% if active == 'kitchen_prep_list' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Prep List</span>
+              <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
+            </a>
+            <a href="/{{ store_slug }}/kitchen/recipes" class="ck-sb-subitem{% if active == 'kitchen_recipes' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">Recipes</span>
+              <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
+            </a>
+          </div></div>
+        </div>
 
         <div class="ck-sb-branch" data-id="ops.corporate_order">
           <button class="ck-sb-branch-head">
@@ -171,10 +302,6 @@
               </div></div>
             </div>
 
-            {# Vendor Recent Orders pages per Sam #837 items 9-12. Each
-               vendor has a stub page that lists rows once the email
-               parser starts filling them. Routes mounted at
-               /<store>/vendors/<vendor>/recent-orders. #}
             {% for vendor_slug, vendor_label in [
               ('webstaurant',      'Webstaurant'),
               ('performance-food', 'Performance Food'),
@@ -214,125 +341,17 @@
               <span class="ck-sb-subitem-label">Ez Manage</span>
               <span id="ezm-sidebar-badge" style="display:none;background:rgba(228,179,64,0.22);color:#E4B340;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto;line-height:1.5;"></span>
             </a>
-            {# Driver Payroll merged into Drivers per Sam #837 item 6 —
-               the combined /{{ store_slug }}/drivers page now carries
-               both the payroll View Payroll column and the admin actions. #}
             <a href="/{{ store_slug }}/drivers" class="ck-sb-subitem{% if active == 'drivers_admin' or active == 'driver_tracking' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Ez Drivers</span>
             </a>
-          </div></div>
-        </div>
-
-        <div class="ck-sb-branch" data-id="ops.schedule">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-calendar ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Schedule</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/roster/all" class="ck-sb-subitem{% if active == 'all_roster' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">All roster</span>
-            </a>
-            <a href="/{{ store_slug }}/roster/boh" class="ck-sb-subitem{% if active == 'boh_roster' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">BOH roster</span>
-            </a>
-            <a href="/{{ store_slug }}/roster/foh" class="ck-sb-subitem{% if active == 'foh_roster' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">FOH roster</span>
-            </a>
-            <a href="/{{ store_slug }}/schedule" class="ck-sb-subitem{% if active == 'weekly_schedule' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Weekly</span>
+            <a href="/{{ store_slug }}/in-house-catering" class="ck-sb-subitem{% if active == 'in_house_catering' %} active{% endif %}">
+              <span class="ck-sb-subitem-label">In-House</span>
             </a>
           </div></div>
         </div>
 
       </div></div>
     </div>
-
-    {# ==== INSIGHTS — hidden for expo role ==== #}
-    {% if user_role != 'expo' %}
-    <div class="ck-sb-section" data-id="insights">
-      <button class="ck-sb-section-head" aria-expanded="true">
-        <span class="ck-sb-section-label">Insights</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-
-        <div class="ck-sb-branch" data-id="ins.performance">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-trending-up ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Performance</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/reports/server-performance/all" class="ck-sb-subitem{% if active == 'perf_all' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">All</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/server-performance/server" class="ck-sb-subitem{% if active == 'perf_server' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Server</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/server-performance/bartenders" class="ck-sb-subitem{% if active == 'perf_bartenders' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Bartenders</span>
-            </a>
-            <a href="#" class="ck-sb-subitem" aria-disabled="true">
-              <span class="ck-sb-subitem-label">Prep</span>
-              <span class="ck-sb-soon">soon</span>
-            </a>
-          </div></div>
-        </div>
-
-        <div class="ck-sb-branch" data-id="ins.sales">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-chart-bar ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Sales</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/reports/sales/total" class="ck-sb-subitem{% if active == 'sales_total' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">All</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/toast" class="ck-sb-subitem{% if active == 'sales_toast' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Toast</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/online" class="ck-sb-subitem{% if active == 'sales_online' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Online Toast</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/ezcater" class="ck-sb-subitem{% if active == 'sales_ezcater' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Ez Cater</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/doordash" class="ck-sb-subitem{% if active == 'sales_doordash' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">DoorDash</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/uber" class="ck-sb-subitem{% if active == 'sales_uber' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Uber</span>
-            </a>
-          </div></div>
-        </div>
-
-        <div class="ck-sb-branch" data-id="ins.labor">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-clock ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Labor</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/reports/labor/boh" class="ck-sb-subitem{% if active == 'boh_labor' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">BOH labor</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/labor/foh" class="ck-sb-subitem{% if active == 'foh_labor' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">FOH labor</span>
-            </a>
-          </div></div>
-        </div>
-
-        <a href="#" class="ck-sb-item" aria-disabled="true">
-          <i class="ti ti-chart-arcs ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Forecasts</span>
-          <span class="ck-sb-soon">soon</span>
-        </a>
-
-      </div></div>
-    </div>
-    {% endif %}
 
     {# ==== ADMIN / LEGAL / ANOMALIES / DEVELOPER — per-section gates ====
 
@@ -349,102 +368,6 @@
          developer.view_chat → Developer
        Partner's {"*"} wildcard matches every tag so the section set
        is unchanged for Sam. #}
-
-    {% if has_permission('access.team_admin') %}
-    <div class="ck-sb-section" data-id="admin">
-      <button class="ck-sb-section-head" aria-expanded="true">
-        <span class="ck-sb-section-label">Admin</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/partner/team" class="ck-sb-item{% if active == 'partner_team' %} active{% endif %}">
-          <i class="ti ti-users-group ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Team</span>
-        </a>
-      </div></div>
-    </div>
-    {% endif %}{# end has_permission('access.team_admin') #}
-
-    {# Phase 2 / Block 1G (ck 2026-05-14): the team-reports tab. Its
-       own section gated by has_permission('team_reports.view') —
-       partner + corporate + gm. NOT folded into the Admin section
-       above: Admin is access.team_admin-gated (partner + corporate
-       only), but team-reports is also GM-visible, so it needs its
-       own gate. A GM seeing this link is correct + intended; the
-       store-scoping that confines a GM to their own store is enforced
-       server-side at the query layer (1G spec §4), not by hiding the
-       link. #}
-    {% if has_permission('team_reports.view') %}
-    <div class="ck-sb-section" data-id="team-reports">
-      <button class="ck-sb-section-head" aria-expanded="true">
-        <span class="ck-sb-section-label">Team Reports</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/partner/team-reports/" class="ck-sb-item{% if active == 'team_reports' %} active{% endif %}">
-          <i class="ti ti-chart-bar ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Task Reports</span>
-        </a>
-      </div></div>
-    </div>
-    {% endif %}{# end has_permission('team_reports.view') #}
-
-    {% if has_permission('legal.view') %}
-    <div class="ck-sb-section" data-id="legal">
-      <button class="ck-sb-section-head" aria-expanded="true">
-        <span class="ck-sb-section-label">Legal</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/partner/legal"
-           class="ck-sb-item{% if active == 'legal_overview' %} active{% endif %}">
-          <i class="ti ti-gavel ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Overview</span>
-        </a>
-        <a href="/partner/legal/matters"
-           class="ck-sb-item{% if active in ('legal_matters', 'legal_matter_new') %} active{% endif %}">
-          <i class="ti ti-folders ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Matters</span>
-        </a>
-        <a href="/partner/legal/structure"
-           class="ck-sb-item{% if active == 'legal_structure' %} active{% endif %}">
-          <i class="ti ti-building ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Structure</span>
-        </a>
-        <a href="/partner/legal/insurance"
-           class="ck-sb-item{% if active == 'legal_insurance' %} active{% endif %}">
-          <i class="ti ti-shield-half ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Insurance</span>
-        </a>
-        <a href="/partner/legal/documents"
-           class="ck-sb-item{% if active == 'legal_documents' %} active{% endif %}">
-          <i class="ti ti-files ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Documents</span>
-        </a>
-        <a href="/partner/legal/audit"
-           class="ck-sb-item{% if active == 'legal_audit' %} active{% endif %}">
-          <i class="ti ti-shield-lock ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Audit log</span>
-        </a>
-      </div></div>
-    </div>
-    {% endif %}{# end has_permission('legal.view') #}
-
-    {% if has_permission('anomaly.admin') %}
-    <div class="ck-sb-section" data-id="anomalies">
-      <button class="ck-sb-section-head" aria-expanded="true">
-        <span class="ck-sb-section-label">Anomalies</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/partner/anomalies/rules"
-           class="ck-sb-item{% if active == 'anomaly_rules' %} active{% endif %}">
-          <i class="ti ti-radar ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Rules</span>
-        </a>
-      </div></div>
-    </div>
-    {% endif %}{# end has_permission('anomaly.admin') #}
 
     {% if has_permission('developer.view_chat') %}
     <div class="ck-sb-section" data-id="developer">
@@ -466,6 +389,13 @@
           <i class="ti ti-chart-bar ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Cena stats</span>
         </a>
+        {# Anomalies Rules — moved here from former Anomalies section per Sam #990. #}
+        {% if has_permission('anomaly.admin') %}
+        <a href="/partner/anomalies/rules" class="ck-sb-item{% if active == 'anomaly_rules' %} active{% endif %}">
+          <i class="ti ti-radar ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Anomaly rules</span>
+        </a>
+        {% endif %}
         <div class="ck-sb-branch" data-id="dev.resolver">
           <button class="ck-sb-branch-head">
             <i class="ti ti-clipboard-check ck-sb-branch-icon" aria-hidden="true"></i>

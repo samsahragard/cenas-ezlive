@@ -1112,6 +1112,48 @@ def legal_placeholder(page: str):
     )
 
 
+# ============================================================
+# KITCHEN placeholders (Sam #837 item 17 — sidebar entries ship
+# before the underlying Fresh Food / Prep List / Recipes pages).
+# ============================================================
+_KITCHEN_PAGE_LABELS = {
+    "fresh-food":  "Fresh Food",
+    "prep-list":   "Prep List",
+    "recipes":     "Recipes",
+}
+
+
+@store_bp.route("/kitchen/<page>", methods=["GET"])
+def kitchen_placeholder(page: str):
+    """Placeholder for the new Kitchen branch under Operations."""
+    label = _KITCHEN_PAGE_LABELS.get(page)
+    if not label:
+        abort(404)
+    active_key = "kitchen_" + page.replace("-", "_")
+    return render_template(
+        "coming_soon.html",
+        section_label="Kitchen",
+        page_label=label,
+        active=active_key,
+    )
+
+
+# ============================================================
+# IN-HOUSE CATERING placeholder (Sam #837 item 15 — sidebar entry
+# under Catering branch ships first; the actual In-House page is
+# Sam #837 item 16, still queued).
+# ============================================================
+@store_bp.route("/in-house-catering", methods=["GET"])
+def in_house_catering_placeholder():
+    """Placeholder for the In-House Catering page."""
+    return render_template(
+        "coming_soon.html",
+        section_label="Catering",
+        page_label="In-House",
+        active="in_house_catering",
+    )
+
+
 @store_bp.route("/drivers/<int:driver_id>/toggle-active", methods=["POST"])
 def drivers_toggle_active(driver_id: int):
     db = next(get_db())

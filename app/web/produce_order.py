@@ -491,19 +491,24 @@ def compose_manager_confirmation(manager_name, location_key, delivery_date, vend
 
 
 # ============ SMTP send ============
-def smtp_send(to_addr: str, subject: str, plain: str, html: str) -> None:
+def smtp_send(to_addr: str, subject: str, plain: str, html: str,
+              cc_addrs: list[str] | None = None) -> None:
     pwd = _email_pwd()
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_addr
+    if cc_addrs:
+        msg["Cc"] = ", ".join(cc_addrs)
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html, "html"))
+
+    envelope_recipients = [to_addr] + list(cc_addrs or [])
 
     ctx = ssl.create_default_context()
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx) as srv:
         srv.login(SMTP_USER, pwd)
-        srv.sendmail(SMTP_USER, [to_addr], msg.as_string())
+        srv.sendmail(SMTP_USER, envelope_recipients, msg.as_string())
 
 
 # ============ Telegram ============
@@ -549,6 +554,7 @@ def execute_order(order: dict) -> dict:
             errors.append(f"No routing for vendor {vendor_key}")
             continue
         to_addr = route["to"]
+        cc_addrs = list(route.get("cc") or [])
         vendor_label = route["label"]
 
         subject, plain, html, total = compose_vendor_email(
@@ -562,16 +568,18 @@ def execute_order(order: dict) -> dict:
         )
         sent_at = _now_iso()
         try:
-            smtp_send(to_addr, subject, plain, html)
+            smtp_send(to_addr, subject, plain, html, cc_addrs=cc_addrs)
             vendor_send_summaries.append({
-                "vendor": vendor_key, "vendor_label": vendor_label, "to_addr": to_addr,
+                "vendor": vendor_key, "vendor_label": vendor_label,
+                "to_addr": to_addr, "cc_addrs": cc_addrs,
                 "items": items, "total": total, "sent_at_iso": sent_at, "ok": True,
             })
         except Exception as e:
             logger.exception("vendor send failed for %s", vendor_key)
             errors.append(f"Vendor {vendor_key} send failed: {e}")
             vendor_send_summaries.append({
-                "vendor": vendor_key, "vendor_label": vendor_label, "to_addr": to_addr,
+                "vendor": vendor_key, "vendor_label": vendor_label,
+                "to_addr": to_addr, "cc_addrs": cc_addrs,
                 "items": items, "total": total, "sent_at_iso": sent_at, "ok": False, "error": str(e),
             })
 

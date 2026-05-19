@@ -2200,3 +2200,118 @@ class InHouseCateringQuote(Base):
     payment_method:  Mapped[str | None] = mapped_column(String(80),  nullable=True)
     payment_details: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+
+# ============================================================
+# MANAGER PAGES — 14 log-entry tables sharing one shape
+# (Sam #1102 + cena #1111 — approach A text-heavy v1).
+#
+# Each page is a simple "title + body + author + date" log. Tables
+# share columns via the ManagerLogMixin below so all 14 routes can
+# share rendering logic. Audience gate applies uniformly via existing
+# roles (gm / km / asst_km / foh_manager) — no new helper or hierarchy
+# per Sam #1112 + #1115. Store-scoped.
+# ============================================================
+class ManagerLogMixin:
+    """Shared shape for all manager-section log-entry tables."""
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Optional per-row type tag (e.g. Incident Reports = injury / theft /
+    # complaint). NULL for pages that don't use type tags (Daily Manager Log).
+    type_tag: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+
+
+class DailyManagerLog(ManagerLogMixin, Base):
+    __tablename__ = "manager_daily_log"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class ShiftHandoff(ManagerLogMixin, Base):
+    __tablename__ = "manager_shift_handoff"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class IncidentReport(ManagerLogMixin, Base):
+    __tablename__ = "manager_incident_report"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class SupplyRequest(ManagerLogMixin, Base):
+    __tablename__ = "manager_supply_request"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class DailyGoals(ManagerLogMixin, Base):
+    __tablename__ = "manager_daily_goals"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class StaffFeedback(ManagerLogMixin, Base):
+    __tablename__ = "manager_staff_feedback"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class PreShiftChecklist(ManagerLogMixin, Base):
+    __tablename__ = "manager_pre_shift_checklist"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class CloseOfDayAudit(ManagerLogMixin, Base):
+    __tablename__ = "manager_close_of_day_audit"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class RecipePage(ManagerLogMixin, Base):
+    """Note: also stores the 14 recipe PDFs Sam attached at /sam/chat
+    #1130-#1133 + #1134 (those are Cold/Hot/Marinated/Sauce recipes).
+    For v1, recipes are simple title + body text entries; uploaded PDF
+    referencing is a follow-up."""
+    __tablename__ = "manager_recipe_page"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class AttendanceTracking(ManagerLogMixin, Base):
+    __tablename__ = "manager_attendance_tracking"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class InterviewSurface(ManagerLogMixin, Base):
+    __tablename__ = "manager_interview_surface"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class TrainingRecord(ManagerLogMixin, Base):
+    __tablename__ = "manager_training_record"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class MaintenanceRequest(ManagerLogMixin, Base):
+    __tablename__ = "manager_maintenance_request"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class EmployeeCounseling(ManagerLogMixin, Base):
+    __tablename__ = "manager_employee_counseling"
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+

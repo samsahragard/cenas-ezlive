@@ -553,6 +553,38 @@ def create_app():
         logging.getLogger(__name__).exception(
             "in_house_catering_quotes backfill failed (non-fatal)")
 
+    # Idempotent table create — manager pages (14 tables, Sam #1102 +
+    # cena #1111 2026-05-19). All share ManagerLogMixin shape.
+    try:
+        from sqlalchemy import inspect as _sa_insp_34
+        from app.db import engine as _eng_34
+        from app.models import (
+            Base as _Base_34,
+            DailyManagerLog, ShiftHandoff, IncidentReport, SupplyRequest,
+            DailyGoals, StaffFeedback, PreShiftChecklist, CloseOfDayAudit,
+            RecipePage, AttendanceTracking, InterviewSurface, TrainingRecord,
+            MaintenanceRequest, EmployeeCounseling,
+        )
+        if _eng_34 is not None:
+            insp_34 = _sa_insp_34(_eng_34)
+            existing_tables = set(insp_34.get_table_names())
+            _MGR_MODELS = [
+                DailyManagerLog, ShiftHandoff, IncidentReport, SupplyRequest,
+                DailyGoals, StaffFeedback, PreShiftChecklist, CloseOfDayAudit,
+                RecipePage, AttendanceTracking, InterviewSurface,
+                TrainingRecord, MaintenanceRequest, EmployeeCounseling,
+            ]
+            to_create = [m.__table__ for m in _MGR_MODELS
+                         if m.__tablename__ not in existing_tables]
+            if to_create:
+                _Base_34.metadata.create_all(bind=_eng_34, tables=to_create)
+                logging.getLogger(__name__).info(
+                    "manager pages: created %d tables (%s)",
+                    len(to_create), [t.name for t in to_create])
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "manager pages table backfill failed (non-fatal)")
+
     # Idempotent table create — cena_wake_decisions (migration 29,
     # Sam #2576 6-piece proposal Phase A piece #3 — telemetry-first).
     # One row per dev chat message considered by the watcher; captures

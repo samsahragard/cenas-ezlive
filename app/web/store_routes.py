@@ -1016,13 +1016,20 @@ def driver_shift_track(driver_id: int, shift_id: int):
 # restructure ships the entries before the features land).
 # ============================================================
 _MANAGER_PAGE_LABELS = {
-    "daily-log":         "Daily Manager Log",
-    "incident-reports":  "Incident Reports",
-    "attendance":        "Attendance Tracking",
-    "counseling":        "Employee Counseling",
-    "interview":         "Interview Surface",
-    "training":          "Training Records",
-    "maintenance":       "Maintenance Requests",
+    "daily-log":            "Daily Manager Log",
+    "shift-handoff":        "Shift Handoff",
+    "incident-reports":     "Incident Reports",
+    "supply-requests":      "Supply Requests",
+    "daily-goals":          "Daily Goals",
+    "staff-feedback":       "Staff Feedback",
+    "pre-shift-checklist":  "Pre-shift Checklist",
+    "close-of-day-audit":   "Close-of-day Audit",
+    "recipe-page":          "Recipe Page",
+    "attendance":           "Attendance Tracking",
+    "interview":            "Interview Surface",
+    "training":             "Training Records",
+    "maintenance":          "Maintenance Requests",
+    "counseling":           "Employee Counseling",
 }
 _LEGAL_PAGE_LABELS = {
     "overview":   "Overview",
@@ -1079,22 +1086,235 @@ def vendor_recent_orders(vendor: str):
         db.close()
 
 
+# Slug → SQLAlchemy model class lookup. All 14 share ManagerLogMixin
+# (see app/models.py). Sam #1102 + cena #1111 — approach A text-heavy
+# v1, no per-page schema variations in this wave.
+def _manager_model_for_slug(slug: str):
+    from app.models import (
+        DailyManagerLog, ShiftHandoff, IncidentReport, SupplyRequest,
+        DailyGoals, StaffFeedback, PreShiftChecklist, CloseOfDayAudit,
+        RecipePage, AttendanceTracking, InterviewSurface, TrainingRecord,
+        MaintenanceRequest, EmployeeCounseling,
+    )
+    return {
+        "daily-log":            DailyManagerLog,
+        "shift-handoff":        ShiftHandoff,
+        "incident-reports":     IncidentReport,
+        "supply-requests":      SupplyRequest,
+        "daily-goals":          DailyGoals,
+        "staff-feedback":       StaffFeedback,
+        "pre-shift-checklist":  PreShiftChecklist,
+        "close-of-day-audit":   CloseOfDayAudit,
+        "recipe-page":          RecipePage,
+        "attendance":           AttendanceTracking,
+        "interview":            InterviewSurface,
+        "training":             TrainingRecord,
+        "maintenance":          MaintenanceRequest,
+        "counseling":           EmployeeCounseling,
+    }.get(slug)
+
+
+# Audience gate for the Manager section: per Sam #1109 + #1115, every
+# manager page is visible to gm / km / asst_km / foh_manager + the
+# partner/corporate tiers above. Expo excluded. Using existing roles
+# directly (no new helper or hierarchy per Sam #1115).
+_MANAGER_ROLES_ALLOWED = {"gm", "km", "asst_km", "foh_manager",
+                          "partner", "corporate"}
+
+
+def _manager_role_ok():
+    user = getattr(g, "current_user", None)
+    if user is None:
+        return False
+    role = (getattr(user, "role", None) or "").strip().lower()
+    return role in _MANAGER_ROLES_ALLOWED
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
-def manager_placeholder(page: str):
-    """Placeholder for the new Manager section per Sam #837 item 8.
-    Sidebar entries are live; the underlying features land in
-    follow-up waves. Renders a Coming Soon card with the page label
-    so the navigation flow stays intact."""
+def manager_page_list(page: str):
+    """List view for a manager-section page. Renders the shared
+    manager_log.html template with rows newest first, store-scoped."""
+    Model = _manager_model_for_slug(page)
     label = _MANAGER_PAGE_LABELS.get(page)
-    if not label:
+    if Model is None or label is None:
         abort(404)
+    if not _manager_role_ok():
+        abort(403)
+    active_key = "manager_" + page.replace("-", "_")
+    db = next(get_db())
+    try:
+        q = db.query(Model)
+        if g.current_location in ("tomball", "copperfield"):
+            q = q.filter(
+                (Model.store_scope == g.current_location) |
+                (Model.store_scope.is_(None))
+            )
+        rows = q.order_by(Model.created_at.desc()).limit(100).all()
+        return render_template(
+            "manager_log.html",
+            page_slug=page,
+            page_label=label,
+            entries=rows,
+            entry=None,
+            form_mode=None,
+            active=active_key,
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/manager/<page>/new", methods=["GET"])
+def manager_page_new(page: str):
+    """Render the create form for a manager-section page."""
+    Model = _manager_model_for_slug(page)
+    label = _MANAGER_PAGE_LABELS.get(page)
+    if Model is None or label is None:
+        abort(404)
+    if not _manager_role_ok():
+        abort(403)
     active_key = "manager_" + page.replace("-", "_")
     return render_template(
-        "coming_soon.html",
-        section_label="Manager",
+        "manager_log.html",
+        page_slug=page,
         page_label=label,
+        entries=[],
+        entry=None,
+        form_mode="new",
         active=active_key,
     )
+
+
+@store_bp.route("/manager/<page>", methods=["POST"])
+def manager_page_create(page: str):
+    """Create a new entry on a manager-section page."""
+    Model = _manager_model_for_slug(page)
+    if Model is None:
+        abort(404)
+    if not _manager_role_ok():
+        abort(403)
+    user = getattr(g, "current_user", None)
+    db = next(get_db())
+    try:
+        store_scope = (g.current_location
+                       if g.current_location in ("tomball", "copperfield")
+                       else None)
+        row = Model(
+            title=(request.form.get("title") or "").strip()[:300] or None,
+            body=(request.form.get("body") or "").strip() or None,
+            type_tag=(request.form.get("type_tag") or "").strip()[:80] or None,
+            store_scope=store_scope,
+            author_id=(user.id if user else None),
+        )
+        db.add(row)
+        db.commit()
+        return redirect(url_for("store.manager_page_list", page=page))
+    finally:
+        db.close()
+
+
+@store_bp.route("/manager/<page>/<int:entry_id>", methods=["GET"])
+def manager_page_detail(page: str, entry_id: int):
+    """Read view for a single manager-section entry."""
+    Model = _manager_model_for_slug(page)
+    label = _MANAGER_PAGE_LABELS.get(page)
+    if Model is None or label is None:
+        abort(404)
+    if not _manager_role_ok():
+        abort(403)
+    active_key = "manager_" + page.replace("-", "_")
+    db = next(get_db())
+    try:
+        row = db.get(Model, entry_id)
+        if row is None:
+            abort(404)
+        if g.current_location in ("tomball", "copperfield"):
+            if row.store_scope not in (None, g.current_location):
+                abort(404)
+        return render_template(
+            "manager_log.html",
+            page_slug=page,
+            page_label=label,
+            entries=[],
+            entry=row,
+            form_mode=None,
+            active=active_key,
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/manager/<page>/<int:entry_id>/edit", methods=["GET"])
+def manager_page_edit(page: str, entry_id: int):
+    """Render the edit form for a manager-section entry. Author or
+    partner/corporate only — KMs editing other KMs' entries is a v2
+    concern."""
+    Model = _manager_model_for_slug(page)
+    label = _MANAGER_PAGE_LABELS.get(page)
+    if Model is None or label is None:
+        abort(404)
+    if not _manager_role_ok():
+        abort(403)
+    user = getattr(g, "current_user", None)
+    db = next(get_db())
+    try:
+        row = db.get(Model, entry_id)
+        if row is None:
+            abort(404)
+        if g.current_location in ("tomball", "copperfield"):
+            if row.store_scope not in (None, g.current_location):
+                abort(404)
+        is_author = bool(user and row.author_id == user.id)
+        is_partner = (getattr(user, "role", "") or "").lower() in {
+            "partner", "corporate"}
+        if not (is_author or is_partner):
+            abort(403)
+        active_key = "manager_" + page.replace("-", "_")
+        return render_template(
+            "manager_log.html",
+            page_slug=page,
+            page_label=label,
+            entries=[],
+            entry=row,
+            form_mode="edit",
+            active=active_key,
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/manager/<page>/<int:entry_id>", methods=["POST"])
+def manager_page_update(page: str, entry_id: int):
+    """Update an existing manager-section entry."""
+    Model = _manager_model_for_slug(page)
+    if Model is None:
+        abort(404)
+    if not _manager_role_ok():
+        abort(403)
+    user = getattr(g, "current_user", None)
+    db = next(get_db())
+    try:
+        row = db.get(Model, entry_id)
+        if row is None:
+            abort(404)
+        if g.current_location in ("tomball", "copperfield"):
+            if row.store_scope not in (None, g.current_location):
+                abort(404)
+        is_author = bool(user and row.author_id == user.id)
+        is_partner = (getattr(user, "role", "") or "").lower() in {
+            "partner", "corporate"}
+        if not (is_author or is_partner):
+            abort(403)
+        new_title = (request.form.get("title") or "").strip()[:300] or None
+        new_body  = (request.form.get("body") or "").strip() or None
+        new_tag   = (request.form.get("type_tag") or "").strip()[:80] or None
+        row.title = new_title
+        row.body = new_body
+        row.type_tag = new_tag
+        db.commit()
+        return redirect(url_for(
+            "store.manager_page_detail", page=page, entry_id=entry_id))
+    finally:
+        db.close()
 
 
 @store_bp.route("/legal/<page>", methods=["GET"])

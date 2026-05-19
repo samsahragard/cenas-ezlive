@@ -1,0 +1,79 @@
+{% extends "base_dashboard.html" %}
+{% block body %}
+<div style="padding:16px;max-width:960px;margin:0 auto;">
+  <h1 style="font-size:24px;margin-bottom:8px;">{{ page_label }}</h1>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;color:#888;font-size:13px;">
+    <span>visible to: GM / KM / Asst KM / FOH manager</span>
+    <span style="margin-left:auto;">{{ entries|length }} entries</span>
+    {% if not form_mode and not entry %}
+      <a href="{{ url_for('store.manager_page_new', page=page_slug) }}"
+         style="margin-left:8px;background:#2a8a4e;color:white;padding:6px 12px;border-radius:6px;text-decoration:none;font-weight:600;">+ New entry</a>
+    {% endif %}
+  </div>
+
+  {% if form_mode in ('new','edit') %}
+    {# Form view #}
+    <form method="POST" action="{% if entry %}{{ url_for('store.manager_page_update', page=page_slug, entry_id=entry.id) }}{% else %}{{ url_for('store.manager_page_create', page=page_slug) }}{% endif %}"
+          style="display:flex;flex-direction:column;gap:12px;background:#f7f7f7;padding:16px;border-radius:8px;">
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-size:12px;color:#666;">Title (optional)</span>
+        <input type="text" name="title" maxlength="300" value="{{ entry.title or '' if entry else '' }}"
+               style="padding:8px;border:1px solid #ccc;border-radius:4px;">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-size:12px;color:#666;">Body</span>
+        <textarea name="body" required rows="8"
+                  style="padding:8px;border:1px solid #ccc;border-radius:4px;font-family:inherit;">{{ entry.body or '' if entry else '' }}</textarea>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-size:12px;color:#666;">Tag (optional — e.g. injury/theft/complaint for Incident Reports)</span>
+        <input type="text" name="type_tag" maxlength="80" value="{{ entry.type_tag or '' if entry else '' }}"
+               style="padding:8px;border:1px solid #ccc;border-radius:4px;">
+      </label>
+      <div style="display:flex;gap:8px;">
+        <button type="submit" style="background:#2a8a4e;color:white;padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Save</button>
+        <a href="{{ url_for('store.manager_page_list', page=page_slug) }}"
+           style="padding:8px 16px;color:#666;text-decoration:none;border:1px solid #ccc;border-radius:6px;">Cancel</a>
+      </div>
+    </form>
+  {% elif entry %}
+    {# Detail view #}
+    <div style="background:#f7f7f7;padding:16px;border-radius:8px;">
+      {% if entry.title %}<h2 style="font-size:20px;margin-bottom:8px;">{{ entry.title }}</h2>{% endif %}
+      <div style="font-size:12px;color:#888;margin-bottom:12px;">
+        {{ entry.created_at.strftime('%Y-%m-%d %H:%M') if entry.created_at else '' }}
+        {% if entry.type_tag %} · <span style="background:#ddd;padding:2px 6px;border-radius:4px;">{{ entry.type_tag }}</span>{% endif %}
+        {% if entry.store_scope %} · {{ entry.store_scope }}{% endif %}
+      </div>
+      <div style="white-space:pre-wrap;line-height:1.5;">{{ entry.body or '' }}</div>
+      <div style="margin-top:16px;display:flex;gap:8px;">
+        <a href="{{ url_for('store.manager_page_edit', page=page_slug, entry_id=entry.id) }}"
+           style="padding:6px 12px;color:#2a8a4e;text-decoration:none;border:1px solid #2a8a4e;border-radius:6px;">Edit</a>
+        <a href="{{ url_for('store.manager_page_list', page=page_slug) }}"
+           style="padding:6px 12px;color:#666;text-decoration:none;border:1px solid #ccc;border-radius:6px;">Back</a>
+      </div>
+    </div>
+  {% else %}
+    {# List view #}
+    {% if entries %}
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        {% for e in entries %}
+          <a href="{{ url_for('store.manager_page_detail', page=page_slug, entry_id=e.id) }}"
+             style="display:block;background:#f7f7f7;padding:12px;border-radius:8px;text-decoration:none;color:inherit;">
+            {% if e.title %}<div style="font-weight:600;margin-bottom:4px;">{{ e.title }}</div>{% endif %}
+            <div style="font-size:12px;color:#888;margin-bottom:6px;">
+              {{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '' }}
+              {% if e.type_tag %} · <span style="background:#ddd;padding:2px 6px;border-radius:4px;">{{ e.type_tag }}</span>{% endif %}
+            </div>
+            <div style="color:#444;font-size:14px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{ (e.body or '')[:200] }}</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="background:#f7f7f7;padding:32px;border-radius:8px;text-align:center;color:#888;">
+        No entries yet. Click <strong>+ New entry</strong> above to add the first one.
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

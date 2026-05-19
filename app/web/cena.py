@@ -2534,6 +2534,83 @@ def cena_run_wipe_ezcater_roster():
     })
 
 
+@cena_bp.route("/sam/cena/run-recipes-bulk-insert", methods=["POST"])
+def cena_run_recipes_bulk_insert():
+    """Bulk-insert Recipe rows from external JSON (Sam #1246 ask: load
+    the 33 recipes from the 14 PDFs Sam attached at /sam/chat msg ids
+    25-39). Body: {"rows": [{category, name, prep_time, shelf_life,
+    spanish_instructions, ingredients, batch_sizes, notes}, ...]}.
+    Max 200 rows per request. Idempotent on (category, name) — re-runs
+    upsert by name within a category."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    raw_rows = body.get("rows") or []
+    if not isinstance(raw_rows, list) or not raw_rows:
+        return jsonify({"ok": False, "error": "rows (non-empty list) required"}), 400
+    if len(raw_rows) > 200:
+        return jsonify({"ok": False, "error": "max 200 rows per request"}), 400
+
+    import json as _json
+    from app.db import SessionLocal as _SL
+    from app.models import Recipe as _R
+
+    db = _SL()
+    inserted = 0
+    updated = 0
+    skipped = 0
+    errors = []
+    try:
+        for r in raw_rows:
+            try:
+                name = (r.get("name") or "").strip()[:200]
+                category = (r.get("category") or "").strip()[:40].lower()
+                if not name or not category:
+                    skipped += 1
+                    continue
+                existing = (db.query(_R)
+                              .filter(_R.name == name, _R.category == category)
+                              .first())
+                ings = r.get("ingredients")
+                bsizes = r.get("batch_sizes")
+                fields = dict(
+                    category=category,
+                    name=name,
+                    prep_time=(r.get("prep_time") or None),
+                    shelf_life=(r.get("shelf_life") or None),
+                    spanish_instructions=(r.get("spanish_instructions") or None),
+                    ingredients_json=(_json.dumps(ings) if ings else None),
+                    batch_sizes_json=(_json.dumps(bsizes) if bsizes else None),
+                    notes=(r.get("notes") or None),
+                )
+                if existing is not None:
+                    for k, v in fields.items():
+                        if v is not None:
+                            setattr(existing, k, v)
+                    updated += 1
+                else:
+                    db.add(_R(**fields))
+                    inserted += 1
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{type(e).__name__}: {str(e)[:120]}")
+                skipped += 1
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "inserted": inserted, "updated": updated, "skipped": skipped,
+            "errors": errors[:5],
+        })
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-recipes-bulk-insert crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-vendor-orders-bulk-insert", methods=["POST"])
 def cena_run_vendor_orders_bulk_insert():
     """Bulk-insert vendor_recent_orders rows from external JSON

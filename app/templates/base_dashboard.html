@@ -167,7 +167,7 @@
                    'partner' if store_slug == 'partner' else (
                    'corporate' if store_slug == 'corporate' else 'gm'))) %}
 {% set user_name = (g.current_user.full_name.split()[0]) if g.current_user else '' %}
-<body>
+<body class="{% block body_class %}{% endblock %}">
 <div class="layout">
 
   <aside class="sidebar">

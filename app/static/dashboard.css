@@ -133,6 +133,10 @@ aside.sidebar {
 /* ============ Main ============ */
 /* min-width:0 lets the 1fr grid track shrink — without it a wide child (table, chip strip) overflows the viewport */
 main.main { padding: 28px 32px 60px; min-width: 0; }
+/* Dashboard content runs edge-to-edge L-R so every card spans the full
+   width with no side gap (Sam #1384). Gaps between cards are untouched.
+   Scoped to the dashboard via the body.page-dashboard class. */
+body.page-dashboard main.main { padding-left: 0; padding-right: 0; }
 
 .topbar {
   display: flex; justify-content: space-between; align-items: center;

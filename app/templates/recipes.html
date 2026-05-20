@@ -53,42 +53,57 @@
   }
   .rcp-page *, .rcp-page *::before, .rcp-page *::after { box-sizing: border-box; }
 
-  .rcp-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  /* Top "header band" — wraps controls + filters in a dark contrast backdrop
+     so they're legible against the base_dashboard restaurant-photo bleed. */
+  .rcp-topband {
+    background: rgba(15, 12, 8, 0.62);
+    border: 1px solid var(--rcp-border);
+    border-radius: var(--rcp-radius);
+    padding: 14px 18px 12px;
+    margin-bottom: 18px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .rcp-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; min-width: 0; }
   .rcp-search {
-    flex: 1; min-width: 240px; max-width: 380px;
+    flex: 1 1 240px; min-width: 0; max-width: 420px;
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 12px; background: var(--rcp-glass);
+    padding: 7px 12px; background: rgba(0,0,0,0.35);
     border: 1px solid var(--rcp-border); border-radius: 8px;
   }
   .rcp-search input {
     background: transparent; border: 0; color: var(--rcp-cream);
-    flex: 1; outline: 0; font: inherit; font-size: 13px;
+    flex: 1; outline: 0; font: inherit; font-size: 13px; min-width: 0;
   }
   .rcp-search input::placeholder { color: var(--rcp-cream-faint); }
-  .rcp-search .icon { opacity: .55; }
+  .rcp-search .icon { opacity: .7; }
   .rcp-count {
-    margin-left: auto; padding: 5px 12px;
-    background: var(--rcp-glass); border: 1px solid var(--rcp-border);
+    margin-left: auto; padding: 6px 12px;
+    background: rgba(0,0,0,0.4); border: 1px solid var(--rcp-gold-line);
     border-radius: 8px; font-size: 11px; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--rcp-cream-dim);
+    text-transform: uppercase; color: var(--rcp-gold);
+    font-weight: 600; white-space: nowrap; flex-shrink: 0;
   }
 
-  .rcp-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .rcp-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .rcp-chip {
-    padding: 6px 14px; background: var(--rcp-glass);
+    padding: 7px 14px; background: rgba(0,0,0,0.4);
     border: 1px solid var(--rcp-border); border-radius: 999px;
-    color: var(--rcp-cream-dim); font-size: 12px; letter-spacing: 0.04em;
-    text-transform: uppercase; cursor: pointer; font: inherit; font-weight: 500;
+    color: var(--rcp-cream); font-size: 12px; letter-spacing: 0.04em;
+    text-transform: uppercase; cursor: pointer; font: inherit; font-weight: 600;
     transition: all .15s var(--rcp-ease);
   }
-  .rcp-chip:hover { background: var(--rcp-glass-hover); color: var(--rcp-cream); }
-  .rcp-chip.active {
-    background: var(--rcp-gold-soft);
+  .rcp-chip:hover {
+    background: rgba(0,0,0,0.55);
     border-color: var(--rcp-gold-line);
-    color: var(--rcp-gold);
   }
-  .rcp-chip .count { margin-left: 4px; color: var(--rcp-cream-faint); font-weight: 400; }
-  .rcp-chip.active .count { color: var(--rcp-gold); opacity: .7; }
+  .rcp-chip.active {
+    background: var(--rcp-gold);
+    border-color: var(--rcp-gold);
+    color: var(--rcp-bg-deep);
+  }
+  .rcp-chip .count { margin-left: 6px; color: var(--rcp-cream-faint); font-weight: 500; }
+  .rcp-chip.active .count { color: var(--rcp-bg-deep); opacity: .65; font-weight: 700; }
   .rcp-cat-dot {
     width: 7px; height: 7px; border-radius: 50%; display: inline-block;
     flex-shrink: 0; vertical-align: middle;
@@ -298,23 +313,25 @@
 
 <div class="rcp-page">
 
-  {# ----- Controls + filter chips ----- #}
-  <div class="rcp-controls">
-    <div class="rcp-search">
-      <span class="icon">&#x2315;</span>
-      <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
+  {# ----- Top header band (controls + filter chips, with contrast backdrop) ----- #}
+  <div class="rcp-topband">
+    <div class="rcp-controls">
+      <div class="rcp-search">
+        <span class="icon">&#x2315;</span>
+        <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
+      </div>
+      <span class="rcp-count" id="rcpCount">{{ recipes|length }} {{ 'recipe' if recipes|length == 1 else 'recipes' }}</span>
     </div>
-    <span class="rcp-count" id="rcpCount">{{ recipes|length }} {{ 'recipe' if recipes|length == 1 else 'recipes' }}</span>
-  </div>
 
-  <div class="rcp-filters" id="rcpFilters">
-    <button type="button" class="rcp-chip active" data-cat="all">All <span class="count">{{ recipes|length }}</span></button>
-    {% for c in categories %}
-      {% set count = recipes|selectattr('category', 'equalto', c.slug)|list|length %}
-      <button type="button" class="rcp-chip" data-cat="{{ c.slug }}">
-        <span class="rcp-cat-dot {{ c.slug }}"></span>{{ c.label }} <span class="count">{{ count }}</span>
-      </button>
-    {% endfor %}
+    <div class="rcp-filters" id="rcpFilters">
+      <button type="button" class="rcp-chip active" data-cat="all">All <span class="count">{{ recipes|length }}</span></button>
+      {% for c in categories %}
+        {% set count = recipes|selectattr('category', 'equalto', c.slug)|list|length %}
+        <button type="button" class="rcp-chip" data-cat="{{ c.slug }}">
+          <span class="rcp-cat-dot {{ c.slug }}"></span>{{ c.label }} <span class="count">{{ count }}</span>
+        </button>
+      {% endfor %}
+    </div>
   </div>
 
   <div class="rcp-body">

@@ -1333,28 +1333,73 @@ def _render_incident_reports_v3(db, label, active_key, form_mode=None):
     now = datetime.utcnow()
     cutoff_30 = now - timedelta(days=30)
 
-    q = db.query(IncidentReport).filter(IncidentReport.archived_at.is_(None))
-    if g.current_location in ("tomball", "copperfield"):
-        q = q.filter(
-            (IncidentReport.store_scope == g.current_location) |
-            (IncidentReport.store_scope.is_(None))
-        )
-    # Default scope: last 30 days only (older = in archive view).
-    q_30 = q.filter(IncidentReport.created_at >= cutoff_30)
+    def _store_scope_filter(query):
+        if g.current_location in ("tomball", "copperfield"):
+            return query.filter(
+                (IncidentReport.store_scope == g.current_location) |
+                (IncidentReport.store_scope.is_(None))
+            )
+        return query
+
+    # Rolling 30-day window — active (non-archived) rows. This is the
+    # default view and the basis for the dashboard stat cards.
+    q_30 = _store_scope_filter(
+        db.query(IncidentReport).filter(IncidentReport.archived_at.is_(None))
+    ).filter(IncidentReport.created_at >= cutoff_30)
 
     active_filter = (request.args.get("f") or "all").strip()
     query_text = (request.args.get("q") or "").strip()
     just_filed = (request.args.get("just_filed") or "").strip()[:40] or None
 
-    rows = q_30.order_by(IncidentReport.created_at.desc()).limit(200).all()
+    # Archive date-range search (Sam #5:40 — "search archive" must let
+    # you pick a day range and pull every report in it). A from/to date
+    # or a text query switches to archive mode: the rolling-30-day window
+    # is dropped and the FULL table is searched (archived rows included).
+    # created_at is the range axis since it is always populated.
+    def _parse_date_arg(s):
+        s = (s or "").strip()
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        except ValueError:
+            return None
 
-    # Stats are computed across the full 30-day window (unfiltered).
+    date_from = _parse_date_arg(request.args.get("from"))
+    date_to = _parse_date_arg(request.args.get("to"))
+    archive_mode = bool(date_from or date_to or query_text)
+
+    # Stats always reflect the rolling 30-day window so the dashboard
+    # cards stay stable regardless of any archive search.
+    rows_30 = q_30.order_by(IncidentReport.created_at.desc()).limit(200).all()
     stats = {
-        "open":     sum(1 for r in rows if (r.status or "open") == "open"),
-        "review":   sum(1 for r in rows if (r.status or "") == "review"),
-        "resolved": sum(1 for r in rows if (r.status or "") == "resolved"),
-        "last_30":  len(rows),
+        "open":     sum(1 for r in rows_30 if (r.status or "open") == "open"),
+        "review":   sum(1 for r in rows_30 if (r.status or "") == "review"),
+        "resolved": sum(1 for r in rows_30 if (r.status or "") == "resolved"),
+        "last_30":  len(rows_30),
     }
+
+    if archive_mode:
+        aq = _store_scope_filter(db.query(IncidentReport))
+        if date_from:
+            aq = aq.filter(IncidentReport.created_at >= datetime.combine(
+                date_from, datetime.min.time()))
+        if date_to:
+            # Inclusive of the whole 'to' day → < midnight of the next day.
+            aq = aq.filter(IncidentReport.created_at < datetime.combine(
+                date_to + timedelta(days=1), datetime.min.time()))
+        if query_text:
+            like = f"%{query_text}%"
+            aq = aq.filter(
+                IncidentReport.title.ilike(like) |
+                IncidentReport.body.ilike(like) |
+                IncidentReport.report_id.ilike(like) |
+                IncidentReport.location_in_store.ilike(like) |
+                IncidentReport.people_involved.ilike(like)
+            )
+        rows = aq.order_by(IncidentReport.created_at.desc()).limit(500).all()
+    else:
+        rows = rows_30
 
     return render_template(
         "manager_incident_reports.html",
@@ -1367,6 +1412,10 @@ def _render_incident_reports_v3(db, label, active_key, form_mode=None):
         active_filter=active_filter,
         query=query_text,
         just_filed=just_filed,
+        archive_mode=archive_mode,
+        date_from=(date_from.strftime("%Y-%m-%d") if date_from else ""),
+        date_to=(date_to.strftime("%Y-%m-%d") if date_to else ""),
+        result_count=len(rows),
         active=active_key,
     )
 

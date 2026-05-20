@@ -1,33 +1,30 @@
 {# ============================================================
    attendance_tracking.html — Attendance Tracking (production)
-   dck conversion of attendance_tracker_v3 mockup (Sam #6:53 +
-   Sam #10:14 "make it just like that with everything functioning").
+   samai redesign of the v3 board per Sam #4:44 / #5:03 ("looks
+   good, push it, must be functional, must look like the rendering"
+   — samai_attendance_tracking_render.html, Sam-approved).
 
-   This is the manager-operated daily time-clock board. The render's
-   "pulled from the schedule" is aspirational — the app has no staff
-   schedule (Sling not wired). So the roster is built BY the manager:
-   "Add unscheduled shift" creates rows; clock in/out + event tiles
-   drive every status. Fully functional with zero external integration.
+   Manager-operated daily time-clock board. Roster is built BY the
+   manager (Add Entry creates rows / logs events). Functional with
+   zero external integration.
 
-   ROUTE CONTRACT (store_routes.py — aick wires; see dck handoff doc):
-     boh / foh / closed  -> list[shift]; closed = clocked-out shifts.
-     shift -> id, name, initials, role, section ('boh'|'foh'), phone,
-              status ('scheduled'|'clocked-in'|'late'|'no-show'|
-                      'callout'|'break'|'out'),
-              sched_start, sched_end, sched_hours,
-              clock_in, clock_out (display strings or None),
-              late_minutes (int), hours_worked (str or None), note,
-              events  -> list[ {time, kind, text} ]   (kind: in/late/break/out/note)
-              pattern -> list[30]{ letter, state, is_today }  (state: ''/on-time/late/no-show)
-              pattern_counts -> {on_time, late, no_show}
-     kpis   -> {scheduled, clocked_in, late, no_show, callouts}
-     counts -> {all, onclock, off, issues}
-     selected_date, today_iso, prev_date, next_date (iso strings),
+   ROUTE CONTRACT (store_routes.py _render_attendance_v3):
+     rows -> list[shift], one per AttendanceShift for the day:
+       id, name, initials, role, section ('boh'|'foh'), phone,
+       status ('scheduled'|'clocked-in'|'late'|'no-show'|
+               'callout'|'break'|'out'),
+       sched, clock_in, clock_out (display strings or ''),
+       late_minutes (int), hours_worked (str), note,
+       on_clock (bool), is_off (bool), has_prior_issue (bool),
+       issue_note (str), events -> list[{time,kind,text}],
+       history -> list[{date,kind,text}]   (prior-day events).
+     kpis  -> {scheduled, clocked_in, late, no_show, callouts}.
+     selected_date, today_iso, prev_date, next_date (iso),
      date_display, is_today, store_label.
-   Forms POST to store.manager_page_create (page='attendance') with a
-   hidden form_action: add_shift | clock_in | clock_out | log_event.
-   Audience gate at the route: _manager_role_ok (manager-tier, expo
-   excluded per CENA.md L165).
+   Forms POST to store.manager_page_create (page='attendance'),
+   hidden form_action: clock_in | clock_out | log_event | add_entry.
+   Audience gate at the route: _manager_role_ok (manager-tier,
+   expo excluded per CENA.md L165).
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'manager_attendance' %}
@@ -39,986 +36,671 @@
 {% block head_extra %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
 {% endblock %}
 
 {% block content %}
 <style>
-  /* All custom properties + classes scoped to .atr-page so the v3
+  /* Every custom property + class scoped under .atr-page so the v3
      warm palette never leaks into the global sheet (dml-/ir- pattern). */
   .atr-page {
-    --atr-red: #C73B36;
-    --atr-red-deep: #9B2A26;
-    --atr-red-bright: #E85852;
-    --atr-gold: #E4B340;
-    --atr-gold-bright: #FFD970;
-    --atr-teal: #2EA39F;
-    --atr-teal-bright: #5BCAC5;
-    --atr-cream: #FAF6EC;
-    --atr-cream-dim: rgba(250,246,236,0.62);
-    --atr-cream-faint: rgba(250,246,236,0.38);
-    --atr-bg-deep: #1a0d08;
-    --atr-bg-warm: #28160e;
-    --atr-bg-card: rgba(40,22,14,0.65);
-    --atr-bg-input: rgba(0,0,0,0.25);
-    --atr-border-subtle: rgba(217,164,54,0.18);
-    --atr-border-active: rgba(228,179,64,0.5);
-    --atr-radius-sm: 8px;
-    --atr-radius-md: 12px;
-    --atr-radius-lg: 16px;
-    --atr-st-clocked: #5BCAC5;
-    --atr-st-late: #E89B40;
-    --atr-st-noshow: #E85852;
-    --atr-st-out: rgba(250,246,236,0.4);
-    --atr-st-scheduled: #E4B340;
-    --atr-st-break: #9A8FE0;
-    position: relative;
-    isolation: isolate;
-    color: var(--atr-cream);
+    --red: #C73B36; --red-deep: #9B2A26; --red-bright: #E85852;
+    --gold: #E4B340; --gold-bright: #FFD970;
+    --teal: #2EA39F; --teal-bright: #5BCAC5;
+    --cream: #FAF6EC;
+    --cream-dim: rgba(250,246,236,0.82);
+    --cream-faint: rgba(250,246,236,0.52);
+    --cream-meta: rgba(250,246,236,0.40);
+    --bg-deep: #1a0d08; --bg-warm: #28160e;
+    --surface: #241409; --surface-2: #2e1a0d; --surface-hover: #34200f;
+    --border: rgba(217,164,54,0.18); --border-active: rgba(228,179,64,0.5);
+    --st-ontime: #5BCAC5; --st-late: #E8A33C; --st-noshow: #E85852;
+    --st-callout: #DA92E0; --st-break: #95C75F;
+    --st-out: rgba(250,246,236,0.45); --st-scheduled: #E4B340;
+    --st-off: rgba(250,246,236,0.32);
+    --radius: 12px;
     font-family: 'Manrope', system-ui, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    background: linear-gradient(180deg, var(--atr-bg-deep) 0%, #0d0604 100%);
-    border: 0.5px solid var(--atr-border-subtle);
-    border-radius: var(--atr-radius-lg);
-    padding: 20px;
-    margin: 0 0 48px;
-    overflow: hidden;
+    color: var(--cream);
+    /* opaque surface — the photo never bleeds through page content */
+    background: #1f1308;
+    border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px 20px 30px; margin-bottom: 40px;
   }
-  .atr-page::before {
-    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199,59,54,0.12), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228,179,64,0.08), transparent);
-  }
-  .atr-page > * { position: relative; z-index: 1; }
-  .atr-page *, .atr-page *::before, .atr-page *::after { box-sizing: border-box; }
-  .atr-page button { font-family: inherit; }
+  .atr-page * { box-sizing: border-box; }
 
-  /* ---- Top strip ---- */
-  .atr-topstrip { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  .atr-store-badge {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--atr-gold-bright);
-    background: rgba(228,179,64,0.12); padding: 6px 12px; border-radius: 999px;
-    letter-spacing: 0.08em; text-transform: uppercase;
+  .atr-page .atr-topstrip {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px;
   }
-  .atr-spacer { flex: 1; }
-  .atr-live-pill {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
-    color: var(--atr-st-clocked); background: rgba(91,202,197,0.12);
-    border: 0.5px solid rgba(91,202,197,0.3); padding: 6px 12px; border-radius: 999px;
-    letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
+  .atr-page .atr-badge {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--gold-bright); background: rgba(228,179,64,0.12);
+    padding: 6px 12px; border-radius: 999px; letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
-  .atr-live-pill .dot {
-    width: 6px; height: 6px; border-radius: 50%; background: var(--atr-st-clocked);
-    box-shadow: 0 0 6px var(--atr-st-clocked); animation: atr-pulse 2s infinite;
+  .atr-page .atr-spacer { flex: 1; }
+  .atr-page .atr-datenav {
+    display: inline-flex; align-items: center;
+    background: rgba(0,0,0,0.3); border: 0.5px solid var(--border);
+    border-radius: 10px; overflow: hidden;
   }
-  @keyframes atr-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .atr-page .atr-datenav a, .atr-page .atr-datenav .d {
+    height: 36px; display: flex; align-items: center;
+    color: var(--cream-dim); text-decoration: none; font-size: 12px;
+  }
+  .atr-page .atr-datenav a { width: 34px; justify-content: center; color: var(--gold); font-size: 15px; }
+  .atr-page .atr-datenav a:hover { background: rgba(228,179,64,0.1); }
+  .atr-page .atr-datenav .d {
+    padding: 0 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    border-left: 0.5px solid var(--border); border-right: 0.5px solid var(--border);
+    gap: 7px;
+  }
+  .atr-page .atr-datenav .live {
+    font-size: 9px; font-weight: 700; color: var(--gold-bright);
+    background: rgba(228,179,64,0.15); padding: 2px 6px; border-radius: 4px;
+    letter-spacing: 0.08em;
+  }
 
-  /* ---- Control bar ---- */
-  .atr-control-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-  .atr-date-nav {
-    display: inline-flex; align-items: center; background: var(--atr-bg-card);
-    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-md); overflow: hidden;
+  .atr-page .atr-kpis {
+    display: grid; grid-template-columns: repeat(5,1fr); gap: 10px;
+    margin-bottom: 16px;
   }
-  .atr-date-nav-btn {
-    width: 36px; height: 40px; background: transparent; border: none; color: var(--atr-gold);
-    cursor: pointer; display: grid; place-items: center; transition: background 0.15s; text-decoration: none;
+  .atr-page .atr-kpi {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 12px 13px;
+    position: relative; overflow: hidden;
   }
-  .atr-date-nav-btn:hover { background: rgba(228,179,64,0.08); }
-  .atr-date-nav-btn svg { width: 14px; height: 14px; fill: currentColor; }
-  .atr-date-display {
-    padding: 0 16px; color: var(--atr-cream); font-weight: 600; font-size: 13px;
-    border-left: 0.5px solid var(--atr-border-subtle); border-right: 0.5px solid var(--atr-border-subtle);
-    display: flex; align-items: center; gap: 6px; height: 40px;
+  .atr-page .atr-kpi::before {
+    content:''; position: absolute; left:0; top:0; bottom:0; width:3px;
+    background: var(--kc, var(--gold));
   }
-  .atr-today-tag {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    color: var(--atr-gold-bright); background: rgba(228,179,64,0.15);
-    padding: 2px 6px; border-radius: 4px; letter-spacing: 0.1em;
+  .atr-page .atr-kpi.k-sched { --kc: var(--st-scheduled); }
+  .atr-page .atr-kpi.k-clock { --kc: var(--st-ontime); }
+  .atr-page .atr-kpi.k-late  { --kc: var(--st-late); }
+  .atr-page .atr-kpi.k-no    { --kc: var(--st-noshow); }
+  .atr-page .atr-kpi.k-call  { --kc: var(--st-callout); }
+  .atr-page .atr-kpi .lbl {
+    font-size: 9px; font-weight: 700; color: var(--cream-meta);
+    text-transform: uppercase; letter-spacing: 0.12em;
   }
-  .atr-control-action {
-    height: 40px; padding: 0 14px; background: var(--atr-bg-card);
-    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-md);
-    color: var(--atr-cream); font-size: 12px; font-weight: 600; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; text-decoration: none;
+  .atr-page .atr-kpi .val {
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 30px; line-height: 1; color: var(--kc, var(--gold)); margin-top: 3px;
   }
-  .atr-control-action:hover { border-color: var(--atr-border-active); color: var(--atr-gold-bright); }
-  .atr-control-action svg { width: 14px; height: 14px; fill: currentColor; }
-  .atr-control-action.primary {
-    background: linear-gradient(135deg, var(--atr-red), var(--atr-red-deep));
-    border-color: var(--atr-red-bright); color: var(--atr-cream);
-    box-shadow: 0 4px 12px rgba(199,59,54,0.2);
-  }
-  .atr-control-action.primary:hover { color: var(--atr-cream); filter: brightness(1.08); }
 
-  /* ---- KPI strip ---- */
-  .atr-kpi-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 20px; }
-  .atr-kpi-box {
-    background: var(--atr-bg-card); border: 0.5px solid var(--atr-border-subtle);
-    border-radius: var(--atr-radius-md); padding: 12px 14px; position: relative; overflow: hidden;
+  .atr-page .atr-toolbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 6px;
   }
-  .atr-kpi-box::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--atr-kpi-color); }
-  .atr-kpi-box.scheduled { --atr-kpi-color: var(--atr-gold); }
-  .atr-kpi-box.clocked { --atr-kpi-color: var(--atr-st-clocked); }
-  .atr-kpi-box.late { --atr-kpi-color: var(--atr-st-late); }
-  .atr-kpi-box.noshow { --atr-kpi-color: var(--atr-st-noshow); }
-  .atr-kpi-box.callout { --atr-kpi-color: var(--atr-st-break); }
-  .atr-kpi-label {
-    font-size: 9px; font-weight: 700; color: var(--atr-cream-faint);
-    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 2px;
+  .atr-page .atr-tabs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .atr-page .atr-tab {
+    padding: 9px 15px; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: 999px;
+    color: var(--cream-dim); font-family: 'Manrope', sans-serif;
+    font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s;
+    letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 7px;
   }
-  .atr-kpi-value { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 28px; color: var(--atr-kpi-color); line-height: 1; }
-  .atr-kpi-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-faint); margin-top: 2px; }
-
-  /* ---- Two-pane layout ---- */
-  .atr-panes { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
-  .atr-list-pane { background: var(--atr-bg-card); border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-md); overflow: hidden; }
-  .atr-list-tabs { display: flex; gap: 4px; padding: 12px 12px 0; background: rgba(0,0,0,0.2); border-bottom: 0.5px solid var(--atr-border-subtle); }
-  .atr-list-tab {
-    flex: 1; padding: 10px 12px; background: transparent; border: none; color: var(--atr-cream-dim);
-    font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
-    transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .atr-list-tab.active { color: var(--atr-gold-bright); border-bottom-color: var(--atr-gold); }
-  .atr-list-tab .count {
+  .atr-page .atr-tab:hover { border-color: var(--border-active); color: var(--cream); }
+  .atr-page .atr-tab .ct {
     font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
-    background: rgba(228,179,64,0.12); color: var(--atr-gold); padding: 1px 5px; border-radius: 4px;
+    background: rgba(0,0,0,0.35); color: var(--cream-faint);
+    padding: 1px 6px; border-radius: 5px;
   }
-  .atr-list-tab.active .count { background: rgba(255,217,112,0.2); color: var(--atr-gold-bright); }
-  .atr-list-search { padding: 12px; border-bottom: 0.5px solid var(--atr-border-subtle); }
-  .atr-search-wrap { position: relative; }
-  .atr-search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; fill: var(--atr-cream-faint); }
-  .atr-search-input {
-    width: 100%; padding: 10px 12px 10px 36px; background: var(--atr-bg-input);
-    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-sm);
-    color: var(--atr-cream); font-family: inherit; font-size: 13px;
+  .atr-page .atr-tab.active { background: var(--gold); border-color: var(--gold); color: #2a1607; }
+  .atr-page .atr-tab.active .ct { background: rgba(0,0,0,0.22); color: #2a1607; }
+  .atr-page .atr-add {
+    margin-left: auto; height: 38px; padding: 0 16px;
+    background: linear-gradient(135deg, var(--red), var(--red-deep));
+    border: 0.5px solid var(--red-bright); border-radius: 10px;
+    color: var(--cream); font-family: 'Manrope', sans-serif; font-size: 13px;
+    font-weight: 700; cursor: pointer; display: inline-flex; align-items: center;
+    gap: 7px; box-shadow: 0 4px 12px rgba(199,59,54,0.22);
   }
-  .atr-search-input:focus { outline: none; border-color: var(--atr-gold); }
-  .atr-search-input::placeholder { color: var(--atr-cream-faint); }
+  .atr-page .atr-add:hover { filter: brightness(1.08); }
+  .atr-page .atr-add .pl { font-size: 17px; line-height: 1; }
+  .atr-page .atr-hint {
+    font-size: 12px; color: var(--cream-faint); font-style: italic;
+    margin: 8px 0 12px;
+  }
 
-  .atr-role-section { border-bottom: 0.5px solid var(--atr-border-subtle); }
-  .atr-role-section:last-child { border-bottom: none; }
-  .atr-role-header { display: flex; align-items: center; padding: 10px 16px; background: rgba(0,0,0,0.3); }
-  .atr-role-name {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--atr-gold);
-    letter-spacing: 0.15em; text-transform: uppercase; flex: 1;
+  .atr-page .atr-roster { display: flex; flex-direction: column; gap: 8px; }
+  .atr-page .atr-row {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px; cursor: pointer;
+    display: grid; grid-template-columns: 42px 1fr auto; gap: 13px;
+    align-items: center; transition: background .14s, border-color .14s;
+    border-left: 3px solid var(--rc, var(--st-scheduled));
   }
-  .atr-role-summary { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-faint); letter-spacing: 0.05em; }
+  .atr-page .atr-row:hover { background: var(--surface-hover); border-color: var(--border-active); }
+  .atr-page .atr-row.r-ontime  { --rc: var(--st-ontime); }
+  .atr-page .atr-row.r-late    { --rc: var(--st-late); }
+  .atr-page .atr-row.r-noshow  { --rc: var(--st-noshow); }
+  .atr-page .atr-row.r-callout { --rc: var(--st-callout); }
+  .atr-page .atr-row.r-break   { --rc: var(--st-break); }
+  .atr-page .atr-row.r-out     { --rc: var(--st-out); }
+  .atr-page .atr-row.r-scheduled { --rc: var(--st-scheduled); }
+  .atr-page .atr-av {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--bg-warm), var(--bg-deep));
+    border: 1px solid var(--border); color: var(--gold-bright);
+    display: grid; place-items: center; font-family: 'Instrument Serif', serif;
+    font-size: 15px; font-weight: 700;
+  }
+  .atr-page .atr-who { min-width: 0; }
+  .atr-page .atr-nm {
+    font-size: 14px; font-weight: 700; color: var(--cream);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .atr-page .atr-flag {
+    font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 700;
+    background: rgba(232,88,82,0.18); color: var(--red-bright);
+    padding: 1px 6px; border-radius: 4px; letter-spacing: 0.06em;
+  }
+  .atr-page .atr-role {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--cream-faint); text-transform: uppercase;
+    letter-spacing: 0.05em; margin-top: 2px;
+  }
+  .atr-page .atr-meta {
+    text-align: right; display: flex; flex-direction: column;
+    align-items: flex-end; gap: 4px;
+  }
+  .atr-page .atr-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+    letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .atr-page .p-ontime  { background: rgba(91,202,197,0.16); color: var(--st-ontime); }
+  .atr-page .p-late    { background: rgba(232,163,60,0.18); color: var(--st-late); }
+  .atr-page .p-noshow  { background: rgba(232,88,82,0.18); color: var(--st-noshow); }
+  .atr-page .p-callout { background: rgba(218,146,224,0.18); color: var(--st-callout); }
+  .atr-page .p-break   { background: rgba(149,199,95,0.18); color: var(--st-break); }
+  .atr-page .p-out     { background: rgba(250,246,236,0.10); color: var(--st-out); }
+  .atr-page .p-scheduled { background: rgba(228,179,64,0.16); color: var(--st-scheduled); }
+  .atr-page .atr-times {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cream-faint);
+  }
+  .atr-page .atr-empty {
+    text-align: center; padding: 44px 20px; color: var(--cream-faint); font-size: 14px;
+  }
 
-  .atr-emp-row {
-    display: flex; align-items: center; padding: 10px 16px;
-    border-top: 0.5px solid rgba(228,179,64,0.06); cursor: pointer;
-    transition: background 0.15s; gap: 12px; width: 100%; text-align: left; background: transparent; border-left: 0; border-right: 0; border-bottom: 0;
+  /* slide-over panel */
+  .atr-page .atr-scrim, .atr-scrim-fx {
+    position: fixed; inset: 0; background: rgba(8,4,2,0.66);
+    opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 1400;
   }
-  .atr-emp-row:hover { background: rgba(228,179,64,0.04); }
-  .atr-emp-row.selected { background: rgba(228,179,64,0.08); box-shadow: inset 3px 0 0 var(--atr-gold); }
-  .atr-avatar {
-    width: 36px; height: 36px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--atr-bg-warm), var(--atr-bg-deep));
-    color: var(--atr-gold-bright); display: grid; place-items: center;
-    font-family: 'Instrument Serif', serif; font-size: 14px; font-weight: 700;
-    flex-shrink: 0; border: 1px solid var(--atr-border-subtle); position: relative;
+  .atr-scrim-fx.show { opacity: 1; pointer-events: auto; }
+  .atr-panel-fx {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 92vw;
+    background: #2e1a0d; border-left: 0.5px solid rgba(228,179,64,0.5);
+    z-index: 1410; transform: translateX(102%); transition: transform .22s ease;
+    display: flex; flex-direction: column; box-shadow: -20px 0 50px rgba(0,0,0,0.5);
+    font-family: 'Manrope', system-ui, sans-serif; color: #FAF6EC;
   }
-  .atr-status-dot { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--atr-bg-deep); }
-  .atr-emp-info { flex: 1; min-width: 0; }
-  .atr-emp-name { font-size: 13px; font-weight: 700; color: var(--atr-cream); line-height: 1.2; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .atr-emp-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-faint); flex-wrap: wrap; }
-  .atr-emp-meta .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--atr-cream-faint); }
-  .atr-emp-meta .late-flag { color: var(--atr-st-late); font-weight: 600; }
-  .atr-emp-meta .actual { color: var(--atr-st-clocked); font-weight: 600; }
-  .atr-emp-meta .noshow-flag { color: var(--atr-st-noshow); font-weight: 600; }
-  .atr-emp-meta .callout-flag { color: var(--atr-st-break); font-weight: 600; }
-  .atr-pill {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    padding: 3px 8px; border-radius: 4px; letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0;
+  .atr-panel-fx.show { transform: translateX(0); }
+  .atr-panel-fx .ph {
+    padding: 18px; border-bottom: 0.5px solid rgba(217,164,54,0.18);
+    display: flex; align-items: center; gap: 12px;
   }
-  .atr-pill.clocked-in { background: rgba(91,202,197,0.15); color: var(--atr-st-clocked); }
-  .atr-pill.late { background: rgba(232,155,64,0.15); color: var(--atr-st-late); }
-  .atr-pill.no-show { background: rgba(232,88,82,0.15); color: var(--atr-st-noshow); }
-  .atr-pill.out { background: rgba(250,246,236,0.06); color: var(--atr-st-out); }
-  .atr-pill.scheduled { background: rgba(228,179,64,0.12); color: var(--atr-gold); }
-  .atr-pill.callout { background: rgba(154,143,224,0.15); color: var(--atr-st-break); }
-  .atr-pill.break { background: rgba(154,143,224,0.15); color: var(--atr-st-break); }
-  .atr-emp-row .chev { color: var(--atr-cream-faint); flex-shrink: 0; display: grid; }
-  .atr-emp-row .chev svg { width: 14px; height: 14px; fill: currentColor; }
-  .atr-list-empty { padding: 44px 24px; text-align: center; color: var(--atr-cream-faint); }
-  .atr-list-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--atr-cream-dim); margin-bottom: 6px; }
+  .atr-panel-fx .ph .atr-av { width: 48px; height: 48px; font-size: 17px; }
+  .atr-panel-fx .pnm { font-size: 17px; font-weight: 700; }
+  .atr-panel-fx .prole {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: rgba(250,246,236,0.52); text-transform: uppercase; margin-top: 2px;
+  }
+  .atr-x {
+    width: 32px; height: 32px; border-radius: 8px; background: rgba(0,0,0,0.3);
+    border: 0.5px solid rgba(217,164,54,0.18); color: rgba(250,246,236,0.82);
+    cursor: pointer; font-size: 16px; flex-shrink: 0;
+  }
+  .atr-panel-fx .pb { padding: 16px 18px; overflow-y: auto; flex: 1; }
+  .atr-seclbl {
+    font-size: 9px; font-weight: 700; color: rgba(250,246,236,0.40);
+    text-transform: uppercase; letter-spacing: 0.13em; margin: 14px 0 8px;
+  }
+  .atr-seclbl:first-child { margin-top: 0; }
+  .atr-info {
+    display: flex; justify-content: space-between; font-size: 13px;
+    padding: 6px 0; border-bottom: 0.5px solid rgba(250,246,236,0.06);
+  }
+  .atr-info .k { color: rgba(250,246,236,0.52); }
+  .atr-info .v { color: #FAF6EC; font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .atr-loggrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .atr-logact {
+    padding: 12px 10px; background: #241409; border-radius: 9px;
+    border: 0.5px solid rgba(217,164,54,0.18); cursor: pointer; text-align: center;
+    transition: all .14s; color: rgba(250,246,236,0.82);
+  }
+  .atr-logact:hover { border-color: var(--la, #E4B340); background: #34200f; }
+  .atr-logact .ic { font-size: 17px; }
+  .atr-logact .t { font-size: 11px; font-weight: 700; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.04em; }
+  .atr-logact.a-late { --la: #E8A33C; } .atr-logact.a-noshow { --la: #E85852; }
+  .atr-logact.a-ncns { --la: #E85852; } .atr-logact.a-callout { --la: #DA92E0; }
+  .atr-logact.a-early { --la: rgba(250,246,236,0.45); } .atr-logact.a-note { --la: #E4B340; }
+  .atr-tl { display: flex; flex-direction: column; gap: 7px; }
+  .atr-tlitem {
+    display: flex; gap: 9px; font-size: 12px; padding: 7px 9px;
+    background: #241409; border-radius: 8px; border-left: 2px solid var(--tc, #E4B340);
+  }
+  .atr-tlitem .tt { font-family: 'JetBrains Mono', monospace; color: rgba(250,246,236,0.52); flex-shrink: 0; }
+  .atr-tlitem .tx { color: rgba(250,246,236,0.82); }
+  .atr-tlitem.c-late { --tc: #E8A33C; } .atr-tlitem.c-noshow { --tc: #E85852; }
+  .atr-tlitem.c-callout { --tc: #DA92E0; } .atr-tlitem.c-in,.atr-tlitem.c-ontime { --tc: #5BCAC5; }
 
-  /* ---- Detail pane ---- */
-  .atr-detail-pane {
-    background: var(--atr-bg-card); border: 0.5px solid var(--atr-border-active);
-    border-radius: var(--atr-radius-md); overflow: hidden; position: sticky; top: 16px;
-  }
-  .atr-detail-empty { padding: 60px 24px; text-align: center; color: var(--atr-cream-faint); }
-  .atr-detail-empty svg { width: 44px; height: 44px; fill: var(--atr-cream-faint); opacity: 0.5; margin-bottom: 12px; }
-  .atr-detail-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--atr-cream-dim); margin-bottom: 6px; }
-  .atr-detail-card { display: none; }
-  .atr-detail-card.open { display: block; }
-
-  .atr-detail-header {
-    padding: 18px 18px 14px;
-    background: linear-gradient(135deg, rgba(228,179,64,0.08), rgba(199,59,54,0.04));
-    border-bottom: 0.5px solid var(--atr-border-subtle); position: relative;
-  }
-  .atr-detail-close {
-    position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%;
-    background: rgba(0,0,0,0.3); border: 0.5px solid var(--atr-border-subtle);
-    color: var(--atr-cream-dim); cursor: pointer; display: grid; place-items: center; transition: all 0.15s;
-  }
-  .atr-detail-close:hover { color: var(--atr-red-bright); border-color: var(--atr-red-bright); }
-  .atr-detail-close svg { width: 14px; height: 14px; fill: currentColor; }
-  .atr-detail-emp-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .atr-detail-avatar {
-    width: 56px; height: 56px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--atr-bg-warm), var(--atr-bg-deep));
-    color: var(--atr-gold-bright); display: grid; place-items: center;
-    font-family: 'Instrument Serif', serif; font-size: 22px; font-weight: 700;
-    flex-shrink: 0; border: 2px solid var(--atr-border-active); position: relative;
-  }
-  .atr-detail-avatar .atr-status-dot { width: 16px; height: 16px; }
-  .atr-detail-emp-name { font-family: 'Instrument Serif', serif; font-size: 22px; color: var(--atr-cream); line-height: 1.1; margin-bottom: 4px; }
-  .atr-detail-emp-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-dim); letter-spacing: 0.05em; flex-wrap: wrap; }
-  .atr-detail-emp-meta .role { color: var(--atr-gold); font-weight: 600; }
-  .atr-detail-emp-meta .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--atr-cream-faint); }
-
-  .atr-status-row {
-    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-    border-radius: var(--atr-radius-sm); border: 0.5px solid; --atr-srow: var(--atr-st-clocked);
-    background: color-mix(in srgb, var(--atr-srow) 8%, transparent);
-    border-color: color-mix(in srgb, var(--atr-srow) 30%, transparent);
-  }
-  .atr-status-row.st-late, .atr-status-row.st-callout, .atr-status-row.st-break { --atr-srow: var(--atr-st-late); }
-  .atr-status-row.st-callout, .atr-status-row.st-break { --atr-srow: var(--atr-st-break); }
-  .atr-status-row.st-no-show { --atr-srow: var(--atr-st-noshow); }
-  .atr-status-row.st-scheduled { --atr-srow: var(--atr-gold); }
-  .atr-status-row.st-out { --atr-srow: var(--atr-st-out); }
-  .atr-status-icon {
-    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
-    background: color-mix(in srgb, var(--atr-srow) 20%, transparent); color: var(--atr-srow);
-  }
-  .atr-status-icon svg { width: 16px; height: 16px; fill: currentColor; }
-  .atr-status-info { flex: 1; min-width: 0; }
-  .atr-status-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: var(--atr-srow); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
-  .atr-status-value { font-size: 13px; font-weight: 700; color: var(--atr-cream); }
-  .atr-status-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-dim); margin-top: 2px; }
-
-  .atr-detail-body { padding: 16px; max-height: calc(100vh - 230px); overflow-y: auto; }
-  .atr-section-block {
-    background: rgba(0,0,0,0.2); border: 0.5px solid var(--atr-border-subtle);
-    border-radius: var(--atr-radius-sm); padding: 14px; margin-bottom: 12px;
-  }
-  .atr-section-title {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--atr-gold);
-    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .atr-section-title svg { width: 12px; height: 12px; fill: currentColor; }
-
-  .atr-shift-times { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .atr-shift-block { background: var(--atr-bg-input); border-radius: var(--atr-radius-sm); padding: 10px; text-align: center; }
-  .atr-shift-label { font-size: 9px; font-weight: 700; color: var(--atr-cream-faint); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
-  .atr-shift-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--atr-cream); line-height: 1; margin-bottom: 2px; }
-  .atr-shift-value.sm { font-size: 13px; padding-top: 4px; }
-  .atr-shift-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--atr-cream-faint); }
-  .atr-shift-sub.late { color: var(--atr-st-late); font-weight: 600; }
-  .atr-shift-sub.on-time { color: var(--atr-st-clocked); font-weight: 600; }
-
-  .atr-clock-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .atr-clock-form { display: flex; }
-  .atr-clock-btn {
-    width: 100%; padding: 14px; background: var(--atr-bg-input);
-    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-sm);
-    color: var(--atr-cream); font-size: 12px; font-weight: 700; cursor: pointer;
-    display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
-    transition: all 0.15s; letter-spacing: 0.04em; text-transform: uppercase;
-  }
-  .atr-clock-btn.clock-in { background: linear-gradient(135deg, rgba(91,202,197,0.2), rgba(46,163,159,0.1)); border-color: var(--atr-st-clocked); color: var(--atr-st-clocked); }
-  .atr-clock-btn.clock-out { background: linear-gradient(135deg, rgba(232,88,82,0.18), rgba(199,59,54,0.08)); border-color: var(--atr-st-noshow); color: var(--atr-st-noshow); }
-  .atr-clock-btn:hover:not(:disabled) { transform: translateY(-1px); }
-  .atr-clock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .atr-clock-btn svg { width: 18px; height: 18px; fill: currentColor; }
-  .atr-clock-btn .sub { font-size: 9px; font-weight: 500; opacity: 0.7; text-transform: none; letter-spacing: 0; }
-
-  .atr-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .atr-action-tile {
-    background: var(--atr-bg-input); border: 0.5px solid var(--atr-border-subtle);
-    border-radius: var(--atr-radius-sm); padding: 12px 10px; cursor: pointer; transition: all 0.15s;
-    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
-  }
-  .atr-action-tile:hover { background: rgba(228,179,64,0.08); border-color: var(--atr-border-active); }
-  .atr-action-icon {
-    width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
-    color: var(--atr-action-color, var(--atr-gold));
-    background: color-mix(in srgb, var(--atr-action-color, var(--atr-gold)) 12%, transparent);
-  }
-  .atr-action-icon svg { width: 16px; height: 16px; fill: currentColor; }
-  .atr-action-tile.late { --atr-action-color: var(--atr-st-late); }
-  .atr-action-tile.no-show { --atr-action-color: var(--atr-st-noshow); }
-  .atr-action-tile.early-out { --atr-action-color: var(--atr-st-out); }
-  .atr-action-tile.callout { --atr-action-color: var(--atr-st-break); }
-  .atr-action-tile.break { --atr-action-color: var(--atr-st-break); }
-  .atr-action-tile.note { --atr-action-color: var(--atr-gold); }
-  .atr-action-label { font-size: 11px; font-weight: 700; color: var(--atr-cream); line-height: 1.2; }
-
-  /* ---- Inline event form ---- */
-  .atr-event-form {
-    display: none; margin-top: 10px;
-    background: linear-gradient(135deg, rgba(232,155,64,0.08), rgba(199,59,54,0.04));
-    border: 0.5px solid var(--atr-st-late); border-radius: var(--atr-radius-md); padding: 14px;
-  }
-  .atr-event-form.open { display: block; }
-  .atr-event-form-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 16px; color: var(--atr-st-late); margin-bottom: 10px; }
-  .atr-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .atr-field { margin-bottom: 10px; }
-  .atr-field.full { grid-column: 1 / -1; }
-  .atr-field label { display: block; font-size: 9px; font-weight: 700; color: var(--atr-cream-faint); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
-  .atr-field input, .atr-field select, .atr-field textarea {
-    width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.3);
-    border: 0.5px solid var(--atr-border-subtle); border-radius: 6px;
-    color: var(--atr-cream); font-family: inherit; font-size: 12px; color-scheme: dark;
-  }
-  .atr-field input:focus, .atr-field select:focus, .atr-field textarea:focus { outline: none; border-color: var(--atr-gold); }
-  .atr-field textarea { resize: vertical; min-height: 50px; line-height: 1.4; }
-  .atr-reason-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .atr-reason-chip {
-    padding: 5px 10px; background: rgba(0,0,0,0.25); border: 0.5px solid var(--atr-border-subtle);
-    border-radius: 999px; color: var(--atr-cream-dim); font-size: 10px; font-weight: 600;
-    cursor: pointer; transition: all 0.15s;
-  }
-  .atr-reason-chip:hover { color: var(--atr-cream); }
-  .atr-reason-chip.selected { background: rgba(232,155,64,0.15); border-color: var(--atr-st-late); color: var(--atr-st-late); }
-  .atr-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
-  .atr-btn-cancel, .atr-btn-save {
-    padding: 8px 14px; border-radius: 6px; font-family: inherit; font-size: 11px; font-weight: 700;
-    cursor: pointer; border: 0.5px solid; letter-spacing: 0.04em; text-transform: uppercase;
-  }
-  .atr-btn-cancel { background: transparent; border-color: var(--atr-border-subtle); color: var(--atr-cream-dim); }
-  .atr-btn-save { background: var(--atr-st-late); border-color: var(--atr-st-late); color: var(--atr-bg-deep); }
-
-  /* ---- Timeline ---- */
-  .atr-timeline { position: relative; padding-left: 20px; }
-  .atr-timeline::before { content: ''; position: absolute; left: 5px; top: 4px; bottom: 4px; width: 2px; background: var(--atr-border-subtle); border-radius: 1px; }
-  .atr-timeline-entry { position: relative; padding-bottom: 12px; --atr-ev: var(--atr-gold); }
-  .atr-timeline-entry:last-child { padding-bottom: 0; }
-  .atr-timeline-entry::before {
-    content: ''; position: absolute; left: -19px; top: 4px; width: 8px; height: 8px; border-radius: 50%;
-    background: var(--atr-ev); border: 2px solid var(--atr-bg-deep); box-shadow: 0 0 0 1px var(--atr-ev);
-  }
-  .atr-timeline-entry.in { --atr-ev: var(--atr-st-clocked); }
-  .atr-timeline-entry.late { --atr-ev: var(--atr-st-late); }
-  .atr-timeline-entry.break { --atr-ev: var(--atr-st-break); }
-  .atr-timeline-entry.callout { --atr-ev: var(--atr-st-break); }
-  .atr-timeline-entry.no-show { --atr-ev: var(--atr-st-noshow); }
-  .atr-timeline-entry.out { --atr-ev: var(--atr-cream-faint); }
-  .atr-timeline-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--atr-cream); margin-bottom: 2px; }
-  .atr-timeline-event { font-size: 12px; color: var(--atr-cream-dim); line-height: 1.4; }
-  .atr-timeline-event strong { color: var(--atr-ev); font-weight: 700; }
-  .atr-timeline-empty { font-size: 12px; color: var(--atr-cream-faint); font-style: italic; }
-
-  /* ---- 30-day pattern ---- */
-  .atr-pattern-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 8px; }
-  .atr-pattern-day {
-    aspect-ratio: 1; border-radius: 4px; background: var(--atr-bg-input);
-    display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 9px;
-    color: var(--atr-cream-faint); border: 0.5px solid transparent;
-  }
-  .atr-pattern-day.on-time { background: rgba(91,202,197,0.15); color: var(--atr-st-clocked); border-color: rgba(91,202,197,0.3); }
-  .atr-pattern-day.late { background: rgba(232,155,64,0.15); color: var(--atr-st-late); border-color: rgba(232,155,64,0.3); }
-  .atr-pattern-day.no-show { background: rgba(232,88,82,0.2); color: var(--atr-st-noshow); border-color: rgba(232,88,82,0.4); }
-  .atr-pattern-day.today { box-shadow: 0 0 0 2px var(--atr-gold); }
-  .atr-pattern-legend { display: flex; gap: 10px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--atr-cream-faint); margin-top: 8px; }
-  .atr-legend-item { display: inline-flex; align-items: center; gap: 4px; }
-  .atr-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
-
-  /* ---- Add-shift modal ---- */
-  .atr-modal-overlay {
-    position: fixed; inset: 0; background: rgba(15,8,5,0.8);
-    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-    display: none; align-items: center; justify-content: center; z-index: 1200; padding: 24px;
-  }
-  .atr-modal-overlay.open { display: flex; }
+  /* modal */
   .atr-modal {
-    width: min(460px,100%); max-height: calc(100vh - 48px); overflow-y: auto;
-    background: var(--atr-bg-warm); border: 1px solid var(--atr-border-active);
-    border-radius: var(--atr-radius-md); box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+    position: fixed; inset: 0; z-index: 1500; display: none;
+    align-items: flex-start; justify-content: center; padding: 7vh 16px 16px;
+    background: rgba(8,4,2,0.72); font-family: 'Manrope', system-ui, sans-serif; color: #FAF6EC;
   }
-  .atr-modal-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 0.5px solid var(--atr-border-subtle); }
-  .atr-modal-head h2 { margin: 0; font-family: 'Instrument Serif', serif; font-size: 20px; font-weight: 400; color: var(--atr-cream); }
-  .atr-modal-head h2 .accent { font-style: italic; color: var(--atr-gold-bright); }
-  .atr-modal-close { margin-left: auto; background: transparent; border: 0; color: var(--atr-cream-dim); font-size: 24px; line-height: 1; cursor: pointer; }
-  .atr-modal-close:hover { color: var(--atr-cream); }
-  .atr-modal-body { padding: 18px 20px; }
-  .atr-modal-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 6px; }
-  .atr-modal-save { padding: 9px 18px; background: var(--atr-gold); border: 0; border-radius: 8px; color: var(--atr-bg-deep); font-weight: 700; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; }
-  .atr-modal-save:hover { filter: brightness(1.08); }
+  .atr-modal.show { display: flex; }
+  .atr-sheet {
+    width: 480px; max-width: 100%; background: #2e1a0d;
+    border: 0.5px solid rgba(228,179,64,0.5); border-radius: 16px;
+    overflow: hidden; max-height: 86vh; display: flex; flex-direction: column;
+  }
+  .atr-sheet .sh {
+    padding: 16px 18px; border-bottom: 0.5px solid rgba(217,164,54,0.18);
+    display: flex; align-items: center;
+  }
+  .atr-sheet .sh h2 {
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 21px; font-weight: 400; color: #FFD970; margin: 0;
+  }
+  .atr-sheet .sb { padding: 16px 18px; overflow-y: auto; }
+  .atr-fl {
+    font-size: 10px; font-weight: 700; color: rgba(250,246,236,0.82);
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; display: block;
+  }
+  .atr-inp {
+    width: 100%; padding: 11px 12px; background: rgba(0,0,0,0.3);
+    border: 0.5px solid rgba(217,164,54,0.18); border-radius: 9px; color: #FAF6EC;
+    font-family: 'Manrope', sans-serif; font-size: 14px;
+  }
+  .atr-inp:focus { outline: none; border-color: rgba(228,179,64,0.5); }
+  .atr-matches {
+    margin-top: 6px; border: 0.5px solid rgba(217,164,54,0.18); border-radius: 9px;
+    background: #241409; overflow: hidden; display: none;
+  }
+  .atr-matches.show { display: block; }
+  .atr-match {
+    padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 9px;
+    border-bottom: 0.5px solid rgba(250,246,236,0.05);
+  }
+  .atr-match:last-child { border-bottom: none; }
+  .atr-match:hover { background: #34200f; }
+  .atr-match .atr-av { width: 30px; height: 30px; font-size: 12px; }
+  .atr-match .mr { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(250,246,236,0.52); }
+  .atr-match.free { color: #FFD970; font-weight: 600; }
+  .atr-match.free .fic {
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(228,179,64,0.15); color: #FFD970; font-size: 16px;
+  }
+  .atr-chosen {
+    display: none; margin-top: 8px; padding: 10px 12px; border-radius: 9px;
+    background: rgba(228,179,64,0.10); border: 0.5px solid rgba(228,179,64,0.5);
+    align-items: center; gap: 9px; font-size: 13px;
+  }
+  .atr-chosen.show { display: flex; }
+  .atr-chosen .atr-av { width: 30px; height: 30px; font-size: 12px; }
+  .atr-chosen .clr { margin-left: auto; cursor: pointer; color: rgba(250,246,236,0.52); font-size: 12px; }
+  .atr-taggrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .atr-tag {
+    padding: 11px 10px; background: #241409; border-radius: 9px;
+    border: 1px solid rgba(217,164,54,0.18); cursor: pointer; font-size: 12px;
+    font-weight: 700; text-align: center; transition: all .14s; color: rgba(250,246,236,0.82);
+  }
+  .atr-tag:hover { border-color: var(--tgc, #E4B340); }
+  .atr-tag.sel { border-color: var(--tgc, #E4B340); background: var(--tgbg, rgba(228,179,64,0.14)); color: #FAF6EC; }
+  .atr-tag.t-late { --tgc: #E8A33C; --tgbg: rgba(232,163,60,0.16); }
+  .atr-tag.t-ncns { --tgc: #E85852; --tgbg: rgba(232,88,82,0.16); }
+  .atr-tag.t-ncl  { --tgc: #E8A33C; --tgbg: rgba(232,163,60,0.16); }
+  .atr-tag.t-swap { --tgc: #DA92E0; --tgbg: rgba(218,146,224,0.16); }
+  .atr-swapx { display: none; margin-top: 10px; }
+  .atr-swapx.show { display: block; }
+  .atr-sheet .sf {
+    padding: 14px 18px; border-top: 0.5px solid rgba(217,164,54,0.18);
+    display: flex; gap: 9px;
+  }
+  .atr-btn {
+    flex: 1; height: 42px; border-radius: 10px; font-family: 'Manrope', sans-serif;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    border: 0.5px solid rgba(217,164,54,0.18);
+  }
+  .atr-btn.ghost { background: rgba(0,0,0,0.3); color: rgba(250,246,236,0.82); }
+  .atr-btn.go {
+    background: linear-gradient(135deg, #C73B36, #9B2A26);
+    border-color: #E85852; color: #FAF6EC;
+  }
+  .atr-btn.go:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  .atr-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 99; }
-
-  /* ---- Mobile (folds in the v3_mobile single-column design) ---- */
-  @media (max-width: 900px) {
-    .atr-panes { grid-template-columns: 1fr; }
-    .atr-detail-pane {
-      position: fixed; inset: 0; border-radius: 0; z-index: 100;
-      transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  @media (max-width: 720px) {
+    .atr-page { padding: 14px 13px 24px; }
+    .atr-page .atr-kpis { grid-template-columns: repeat(3,1fr); }
+    .atr-page .atr-add { margin-left: 0; width: 100%; justify-content: center; margin-top: 4px; }
+    .atr-page .atr-tabs { width: 100%; }
+    .atr-page .atr-tab { flex: 1; justify-content: center; }
+    .atr-page .atr-row { grid-template-columns: 38px 1fr; }
+    .atr-page .atr-meta {
+      grid-column: 1 / -1; flex-direction: row; align-items: center;
+      justify-content: space-between; padding-top: 8px; margin-top: 4px;
+      border-top: 0.5px solid rgba(250,246,236,0.06);
     }
-    .atr-detail-pane.mobile-open { transform: translateX(0); }
-    .atr-detail-body { max-height: calc(100vh - 200px); }
-    .atr-backdrop.show { display: block; }
+    .atr-page .atr-av { width: 38px; height: 38px; }
   }
-  @media (max-width: 800px) { .atr-kpi-strip { grid-template-columns: repeat(3,1fr); } }
-  @media (max-width: 540px) {
-    .atr-kpi-strip { grid-template-columns: 1fr 1fr; }
-    .atr-page { padding: 14px; }
-    .atr-shift-times { grid-template-columns: 1fr; }
-  }
+  @media (max-width: 460px) { .atr-page .atr-kpis { grid-template-columns: repeat(2,1fr); } }
 </style>
 
-{% macro emp_row(s) %}
-  {# Jinja macros don't see template-level {% set %} vars — keep these local. #}
-  {% set ATR_DOT = {'clocked-in':'clocked','late':'late','no-show':'noshow','out':'out','scheduled':'scheduled','callout':'break','break':'break'} %}
-  {% set ATR_LABEL = {'clocked-in':'In','late':'Late','no-show':'No-show','out':'Out','scheduled':'Scheduled','callout':'Callout','break':'Break'} %}
-  {% set cats = ['all'] %}
-  {% if s.status in ('clocked-in','late','break') %}{% set _ = cats.append('onclock') %}{% endif %}
-  {% if s.status in ('scheduled','no-show','callout','out') %}{% set _ = cats.append('off') %}{% endif %}
-  {% if s.status in ('late','no-show','callout') %}{% set _ = cats.append('issues') %}{% endif %}
-  <button type="button" class="atr-emp-row" data-shift="{{ s.id }}"
-          data-cats="{{ cats|join(' ') }}"
-          data-search="{{ (s.name ~ ' ' ~ s.role ~ ' ' ~ (s.phone or ''))|lower }}"
-          onclick="atrSelect('{{ s.id }}', this)">
-    <span class="atr-avatar">{{ s.initials }}<span class="atr-status-dot" style="background: var(--atr-st-{{ ATR_DOT[s.status] }});"></span></span>
-    <span class="atr-emp-info">
-      <span class="atr-emp-name">{{ s.name }}</span>
-      <span class="atr-emp-meta">
-        <span>{{ s.role }}</span>
-        {% if s.sched_start %}<span class="sep"></span><span>{{ s.sched_start }}{% if s.status == 'out' and s.sched_end %} - {{ s.sched_end }}{% endif %}</span>{% endif %}
-        {% if s.clock_in and s.status != 'out' %}<span class="sep"></span><span class="actual">In {{ s.clock_in }}</span>{% endif %}
-        {% if s.status == 'late' and s.late_minutes %}<span class="sep"></span><span class="late-flag">{{ s.late_minutes }}m late</span>{% endif %}
-        {% if s.status == 'no-show' %}<span class="sep"></span><span class="noshow-flag">No contact</span>{% endif %}
-        {% if s.status == 'callout' %}<span class="sep"></span><span class="callout-flag">Called out</span>{% endif %}
-        {% if s.status == 'out' and s.hours_worked %}<span class="sep"></span><span>{{ s.hours_worked }}</span>{% endif %}
-      </span>
-    </span>
-    <span class="atr-pill {{ s.status }}">{{ ATR_LABEL[s.status] }}</span>
-    <span class="chev">{{ atr_icon('chev') }}</span>
-  </button>
-{% endmacro %}
-
-{% macro atr_icon(name) %}
-  {%- if name == 'chev' -%}<svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-  {%- elif name == 'chev-l' -%}<svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-  {%- elif name == 'close' -%}<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-  {%- elif name == 'clock' -%}<svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
-  {%- elif name == 'cal' -%}<svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
-  {%- elif name == 'download' -%}<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
-  {%- elif name == 'plus' -%}<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
-  {%- elif name == 'search' -%}<svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
-  {%- elif name == 'in' -%}<svg viewBox="0 0 24 24"><path d="M10.59 16.59 12 18l6-6-6-6-1.41 1.41L14.17 11H4v2h10.17z"/></svg>
-  {%- elif name == 'out' -%}<svg viewBox="0 0 24 24"><path d="m17 8-1.41 1.41L17.17 11H9v2h8.17l-1.58 1.59L17 16l4-4zM5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5z"/></svg>
-  {%- elif name == 'xcircle' -%}<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12z"/></svg>
-  {%- elif name == 'phone' -%}<svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
-  {%- elif name == 'coffee' -%}<svg viewBox="0 0 24 24"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"/></svg>
-  {%- elif name == 'pencil' -%}<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-  {%- elif name == 'people' -%}<svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-  {%- endif -%}
-{% endmacro %}
-
-{% macro detail_card(s) %}
-  {% set ATR_DOT = {'clocked-in':'clocked','late':'late','no-show':'noshow','out':'out','scheduled':'scheduled','callout':'break','break':'break'} %}
-  {% set ATR_LABEL = {'clocked-in':'In','late':'Late','no-show':'No-show','out':'Out','scheduled':'Scheduled','callout':'Callout','break':'Break'} %}
-  {% set post_url = url_for('store.manager_page_create', page='attendance') %}
-  <div class="atr-detail-card" id="atr-d-{{ s.id }}" data-shift="{{ s.id }}">
-    <div class="atr-detail-header">
-      <button class="atr-detail-close" type="button" onclick="atrCloseDetail()" aria-label="Close">{{ atr_icon('close') }}</button>
-      <div class="atr-detail-emp-top">
-        <div class="atr-detail-avatar">{{ s.initials }}<span class="atr-status-dot" style="background: var(--atr-st-{{ ATR_DOT[s.status] }});"></span></div>
-        <div>
-          <div class="atr-detail-emp-name">{{ s.name }}</div>
-          <div class="atr-detail-emp-meta">
-            <span class="role">{{ s.role }} &middot; {{ s.section|upper }}</span>
-            {% if s.phone %}<span class="sep"></span><span>{{ s.phone }}</span>{% endif %}
-          </div>
-        </div>
-      </div>
-      <div class="atr-status-row st-{{ s.status }}">
-        <div class="atr-status-icon">{{ atr_icon('clock') }}</div>
-        <div class="atr-status-info">
-          {% if s.status == 'late' %}
-            <div class="atr-status-label">Late arrival</div>
-            <div class="atr-status-value">{{ s.late_minutes }} minutes past scheduled start</div>
-            <div class="atr-status-sub">Clocked in {{ s.clock_in }} &middot; scheduled {{ s.sched_start }}</div>
-          {% elif s.status == 'clocked-in' %}
-            <div class="atr-status-label">On the clock</div>
-            <div class="atr-status-value">Working since {{ s.clock_in or '—' }}</div>
-            <div class="atr-status-sub">Scheduled {{ s.sched_start }} - {{ s.sched_end }}</div>
-          {% elif s.status == 'no-show' %}
-            <div class="atr-status-label">No-show</div>
-            <div class="atr-status-value">Did not report for scheduled shift</div>
-            <div class="atr-status-sub">Scheduled start {{ s.sched_start }}</div>
-          {% elif s.status == 'callout' %}
-            <div class="atr-status-label">Callout</div>
-            <div class="atr-status-value">Called out of scheduled shift</div>
-            <div class="atr-status-sub">Scheduled {{ s.sched_start }} - {{ s.sched_end }}</div>
-          {% elif s.status == 'break' %}
-            <div class="atr-status-label">On break</div>
-            <div class="atr-status-value">Away from the floor</div>
-            <div class="atr-status-sub">Clocked in {{ s.clock_in or '—' }}</div>
-          {% elif s.status == 'out' %}
-            <div class="atr-status-label">Shift complete</div>
-            <div class="atr-status-value">{{ s.hours_worked or '—' }} worked</div>
-            <div class="atr-status-sub">{{ s.clock_in or '—' }} - {{ s.clock_out or '—' }}</div>
-          {% else %}
-            <div class="atr-status-label">Scheduled</div>
-            <div class="atr-status-value">Not yet clocked in</div>
-            <div class="atr-status-sub">Scheduled start {{ s.sched_start }}</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="atr-detail-body">
-      <!-- Today's shift -->
-      <div class="atr-section-block">
-        <div class="atr-section-title">{{ atr_icon('clock') }} Today's shift</div>
-        <div class="atr-shift-times">
-          <div class="atr-shift-block">
-            <div class="atr-shift-label">Scheduled start</div>
-            <div class="atr-shift-value">{{ s.sched_start or '—' }}</div>
-            <div class="atr-shift-sub">{{ date_display.split(',')[0] if date_display else '' }}</div>
-          </div>
-          <div class="atr-shift-block">
-            <div class="atr-shift-label">Actual in</div>
-            <div class="atr-shift-value">{{ s.clock_in or '—' }}</div>
-            {% if s.status == 'late' and s.late_minutes %}<div class="atr-shift-sub late">{{ s.late_minutes }}m late</div>
-            {% elif s.clock_in %}<div class="atr-shift-sub on-time">On time</div>
-            {% else %}<div class="atr-shift-sub">Not clocked in</div>{% endif %}
-          </div>
-          <div class="atr-shift-block">
-            <div class="atr-shift-label">Scheduled end</div>
-            <div class="atr-shift-value">{{ s.sched_end or '—' }}</div>
-            <div class="atr-shift-sub">{{ s.sched_hours or '' }}</div>
-          </div>
-          <div class="atr-shift-block">
-            <div class="atr-shift-label">Status</div>
-            <div class="atr-shift-value sm" style="color: var(--atr-st-{{ ATR_DOT[s.status] }});">{{ ATR_LABEL[s.status] }}</div>
-            <div class="atr-shift-sub">{% if s.clock_out %}out {{ s.clock_out }}{% elif s.clock_in %}since {{ s.clock_in }}{% endif %}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Clock controls -->
-      <div class="atr-section-block">
-        <div class="atr-section-title">{{ atr_icon('clock') }} Clock controls</div>
-        <div class="atr-clock-actions">
-          <form class="atr-clock-form" method="POST" action="{{ post_url }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-            <input type="hidden" name="form_action" value="clock_in">
-            <input type="hidden" name="shift_id" value="{{ s.id }}">
-            <input type="hidden" name="view_date" value="{{ selected_date }}">
-            <button class="atr-clock-btn clock-in" type="submit" {{ 'disabled' if s.clock_in else '' }}>
-              {{ atr_icon('in') }} Clock in
-              <span class="sub">{{ 'already in' if s.clock_in else 'start shift' }}</span>
-            </button>
-          </form>
-          <form class="atr-clock-form" method="POST" action="{{ post_url }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-            <input type="hidden" name="form_action" value="clock_out">
-            <input type="hidden" name="shift_id" value="{{ s.id }}">
-            <input type="hidden" name="view_date" value="{{ selected_date }}">
-            <button class="atr-clock-btn clock-out" type="submit" {{ 'disabled' if (not s.clock_in or s.clock_out) else '' }}>
-              {{ atr_icon('out') }} Clock out
-              <span class="sub">{{ 'shift ended' if s.clock_out else 'end shift' }}</span>
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <!-- Log an event -->
-      <div class="atr-section-block">
-        <div class="atr-section-title">{{ atr_icon('plus') }} Log an event</div>
-        <div class="atr-action-grid">
-          <div class="atr-action-tile late" onclick="atrOpenEvent('{{ s.id }}','late')">
-            <div class="atr-action-icon">{{ atr_icon('clock') }}</div><div class="atr-action-label">Log late arrival</div>
-          </div>
-          <div class="atr-action-tile no-show" onclick="atrOpenEvent('{{ s.id }}','no-show')">
-            <div class="atr-action-icon">{{ atr_icon('xcircle') }}</div><div class="atr-action-label">Mark no-show</div>
-          </div>
-          <div class="atr-action-tile early-out" onclick="atrOpenEvent('{{ s.id }}','early-out')">
-            <div class="atr-action-icon">{{ atr_icon('out') }}</div><div class="atr-action-label">Log early out</div>
-          </div>
-          <div class="atr-action-tile callout" onclick="atrOpenEvent('{{ s.id }}','callout')">
-            <div class="atr-action-icon">{{ atr_icon('phone') }}</div><div class="atr-action-label">Record callout</div>
-          </div>
-          <div class="atr-action-tile break" onclick="atrOpenEvent('{{ s.id }}','break')">
-            <div class="atr-action-icon">{{ atr_icon('coffee') }}</div><div class="atr-action-label">Start break</div>
-          </div>
-          <div class="atr-action-tile note" onclick="atrOpenEvent('{{ s.id }}','note')">
-            <div class="atr-action-icon">{{ atr_icon('pencil') }}</div><div class="atr-action-label">Add note</div>
-          </div>
-        </div>
-
-        <form class="atr-event-form" id="atr-ev-{{ s.id }}" method="POST" action="{{ post_url }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-          <input type="hidden" name="form_action" value="log_event">
-          <input type="hidden" name="shift_id" value="{{ s.id }}">
-          <input type="hidden" name="view_date" value="{{ selected_date }}">
-          <input type="hidden" name="kind" value="" data-ev-kind>
-          <input type="hidden" name="reason" value="" data-ev-reason>
-          <div class="atr-event-form-title" data-ev-title>Log event</div>
-          <div class="atr-form-grid" data-ev-late-only>
-            <div class="atr-field" style="margin:0;">
-              <label>Minutes late</label>
-              <input type="number" name="minutes" value="0" min="0" max="600">
-            </div>
-            <div class="atr-field" style="margin:0;">
-              <label>Counts as occurrence</label>
-              <select name="occurrence">
-                <option value="yes">Yes — record occurrence</option>
-                <option value="no">No — excused</option>
-              </select>
-            </div>
-          </div>
-          <div class="atr-field" data-ev-late-only>
-            <label>Reason</label>
-            <div class="atr-reason-chips">
-              <span class="atr-reason-chip" onclick="atrPickReason(this,'Traffic')">Traffic</span>
-              <span class="atr-reason-chip" onclick="atrPickReason(this,'Transportation')">Transportation</span>
-              <span class="atr-reason-chip" onclick="atrPickReason(this,'Family / personal')">Family / personal</span>
-              <span class="atr-reason-chip" onclick="atrPickReason(this,'Medical')">Medical</span>
-              <span class="atr-reason-chip" onclick="atrPickReason(this,'No call')">No call</span>
-              <span class="atr-reason-chip" onclick="atrPickReason(this,'Other')">Other</span>
-            </div>
-          </div>
-          <div class="atr-field full">
-            <label>Note</label>
-            <textarea name="note" placeholder="Context for whoever reviews this later..."></textarea>
-          </div>
-          <div class="atr-form-actions">
-            <button type="button" class="atr-btn-cancel" onclick="atrCloseEvent('{{ s.id }}')">Cancel</button>
-            <button type="submit" class="atr-btn-save">Save entry</button>
-          </div>
-        </form>
-      </div>
-
-      <!-- Today's timeline -->
-      <div class="atr-section-block">
-        <div class="atr-section-title">{{ atr_icon('clock') }} Today's timeline</div>
-        {% if s.events %}
-          <div class="atr-timeline">
-            {% for ev in s.events %}
-            <div class="atr-timeline-entry {{ ev.kind }}">
-              <div class="atr-timeline-time">{{ ev.time }}</div>
-              <div class="atr-timeline-event">{{ ev.text }}</div>
-            </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="atr-timeline-empty">No events logged yet today.</div>
-        {% endif %}
-      </div>
-
-      <!-- 30-day pattern -->
-      <div class="atr-section-block">
-        <div class="atr-section-title">{{ atr_icon('cal') }} Attendance pattern &middot; last 30 days</div>
-        <div class="atr-pattern-grid">
-          {% for p in s.pattern %}
-          <div class="atr-pattern-day {{ p.state }}{{ ' today' if p.is_today else '' }}">{{ p.letter }}</div>
-          {% endfor %}
-        </div>
-        <div class="atr-pattern-legend">
-          <span class="atr-legend-item"><span class="atr-legend-dot" style="background: rgba(91,202,197,0.4);"></span>On time ({{ s.pattern_counts.on_time }})</span>
-          <span class="atr-legend-item"><span class="atr-legend-dot" style="background: rgba(232,155,64,0.4);"></span>Late ({{ s.pattern_counts.late }})</span>
-          <span class="atr-legend-item"><span class="atr-legend-dot" style="background: rgba(232,88,82,0.4);"></span>No-show ({{ s.pattern_counts.no_show }})</span>
-        </div>
-      </div>
-    </div>
-  </div>
-{% endmacro %}
-
-<div class="atr-page">
+<div class="atr-page" id="atrPage" data-view="all">
 
   <div class="atr-topstrip">
-    <span class="atr-store-badge">DOS &middot; {{ store_label|upper }}</span>
+    <span class="atr-badge">{{ store_label }}</span>
     <span class="atr-spacer"></span>
-    <span class="atr-live-pill"><span class="dot"></span>{{ kpis.clocked_in }} ON THE CLOCK &middot; LIVE</span>
-  </div>
-
-  <div class="atr-control-bar">
-    <div class="atr-date-nav">
-      <a class="atr-date-nav-btn" href="?date={{ prev_date }}" aria-label="Previous day">{{ atr_icon('chev-l') }}</a>
-      <div class="atr-date-display">
-        {{ date_display }}
-        {% if is_today %}<span class="atr-today-tag">TODAY</span>{% endif %}
-      </div>
-      <a class="atr-date-nav-btn" href="?date={{ next_date }}" aria-label="Next day">{{ atr_icon('chev') }}</a>
-    </div>
-    <a class="atr-control-action" href="{{ url_for('store.schedule') }}">{{ atr_icon('cal') }} View schedule</a>
-    <button class="atr-control-action" type="button" id="atrExport">{{ atr_icon('download') }} Export day</button>
-    <span class="atr-spacer"></span>
-    <button class="atr-control-action primary" type="button" id="atrAddShift">{{ atr_icon('plus') }} Add unscheduled shift</button>
-  </div>
-
-  <div class="atr-kpi-strip">
-    <div class="atr-kpi-box scheduled">
-      <div class="atr-kpi-label">Scheduled</div>
-      <div class="atr-kpi-value">{{ kpis.scheduled }}</div>
-      <div class="atr-kpi-sub">on the roster</div>
-    </div>
-    <div class="atr-kpi-box clocked">
-      <div class="atr-kpi-label">Clocked in</div>
-      <div class="atr-kpi-value">{{ kpis.clocked_in }}</div>
-      <div class="atr-kpi-sub">on the floor</div>
-    </div>
-    <div class="atr-kpi-box late">
-      <div class="atr-kpi-label">Late</div>
-      <div class="atr-kpi-value">{{ kpis.late }}</div>
-      <div class="atr-kpi-sub">arrivals flagged</div>
-    </div>
-    <div class="atr-kpi-box noshow">
-      <div class="atr-kpi-label">No-show</div>
-      <div class="atr-kpi-value">{{ kpis.no_show }}</div>
-      <div class="atr-kpi-sub">unfilled</div>
-    </div>
-    <div class="atr-kpi-box callout">
-      <div class="atr-kpi-label">Callouts</div>
-      <div class="atr-kpi-value">{{ kpis.callouts }}</div>
-      <div class="atr-kpi-sub">called out</div>
+    <div class="atr-datenav">
+      <a href="?date={{ prev_date }}" aria-label="Previous day">&#8249;</a>
+      <span class="d">{{ date_display }}{% if is_today %}<span class="live">TODAY</span>{% endif %}</span>
+      <a href="?date={{ next_date }}" aria-label="Next day">&#8250;</a>
     </div>
   </div>
 
-  <div class="atr-panes">
-    <div class="atr-list-pane">
-      <div class="atr-list-tabs">
-        <button class="atr-list-tab active" type="button" data-tab="all">All <span class="count">{{ counts.all }}</span></button>
-        <button class="atr-list-tab" type="button" data-tab="onclock">On the clock <span class="count">{{ counts.onclock }}</span></button>
-        <button class="atr-list-tab" type="button" data-tab="off">Off / scheduled <span class="count">{{ counts.off }}</span></button>
-        <button class="atr-list-tab" type="button" data-tab="issues">Issues <span class="count">{{ counts.issues }}</span></button>
-      </div>
-      <div class="atr-list-search">
-        <div class="atr-search-wrap">
-          {{ atr_icon('search') }}
-          <input class="atr-search-input" id="atrSearch" placeholder="Search by name, role, or phone">
-        </div>
-      </div>
+  <div class="atr-kpis">
+    <div class="atr-kpi k-sched"><div class="lbl">Scheduled</div><div class="val">{{ kpis.scheduled }}</div></div>
+    <div class="atr-kpi k-clock"><div class="lbl">On the Clock</div><div class="val">{{ kpis.clocked_in }}</div></div>
+    <div class="atr-kpi k-late"><div class="lbl">Late</div><div class="val">{{ kpis.late }}</div></div>
+    <div class="atr-kpi k-no"><div class="lbl">No-Show</div><div class="val">{{ kpis.no_show }}</div></div>
+    <div class="atr-kpi k-call"><div class="lbl">Callouts</div><div class="val">{{ kpis.callouts }}</div></div>
+  </div>
 
-      {% if not boh and not foh and not closed %}
-      <div class="atr-list-empty">
-        <div class="big">No shifts on the roster yet</div>
-        <div>Use <strong>Add unscheduled shift</strong> to build today's roster, then clock teammates in.</div>
-      </div>
-      {% else %}
-      {% if boh %}
-      <div class="atr-role-section" data-role-section>
-        <div class="atr-role-header">
-          <div class="atr-role-name">BOH &middot; Kitchen</div>
-          <div class="atr-role-summary">{{ boh|length }} on roster</div>
-        </div>
-        {% for s in boh %}{{ emp_row(s) }}{% endfor %}
-      </div>
-      {% endif %}
-      {% if foh %}
-      <div class="atr-role-section" data-role-section>
-        <div class="atr-role-header">
-          <div class="atr-role-name">FOH &middot; Front of House</div>
-          <div class="atr-role-summary">{{ foh|length }} on roster</div>
-        </div>
-        {% for s in foh %}{{ emp_row(s) }}{% endfor %}
-      </div>
-      {% endif %}
-      {% if closed %}
-      <div class="atr-role-section" data-role-section>
-        <div class="atr-role-header">
-          <div class="atr-role-name">Closed shifts (clocked out)</div>
-          <div class="atr-role-summary">{{ closed|length }} finished</div>
-        </div>
-        {% for s in closed %}{{ emp_row(s) }}{% endfor %}
-      </div>
-      {% endif %}
-      {% endif %}
+  <div class="atr-toolbar">
+    <div class="atr-tabs" id="atrTabs">
+      <button type="button" class="atr-tab active" data-view="all">All <span class="ct" id="cAll">0</span></button>
+      <button type="button" class="atr-tab" data-view="clock">On the Clock <span class="ct" id="cClock">0</span></button>
+      <button type="button" class="atr-tab" data-view="off">Off <span class="ct" id="cOff">0</span></button>
+      <button type="button" class="atr-tab" data-view="issues">Issues <span class="ct" id="cIss">0</span></button>
     </div>
+    <button type="button" class="atr-add" id="atrAddBtn"><span class="pl">+</span> Add Entry</button>
+  </div>
+  <div class="atr-hint" id="atrHint"></div>
 
-    <div class="atr-detail-pane" id="atrDetailPane">
-      <div class="atr-detail-empty" id="atrDetailEmpty">
-        {{ atr_icon('people') }}
-        <div class="big">No teammate selected</div>
-        <div>Tap any teammate on the roster to clock them in, log an event, or review their shift.</div>
+  <div class="atr-roster" id="atrRoster"></div>
+</div>
+
+{# slide-over panel #}
+<div class="atr-scrim-fx" id="atrScrim"></div>
+<aside class="atr-panel-fx" id="atrPanel">
+  <div class="ph">
+    <div class="atr-av" id="pAv">--</div>
+    <div><div class="pnm" id="pNm">--</div><div class="prole" id="pRole">--</div></div>
+    <button type="button" class="atr-x" id="pClose" style="margin-left:auto;">&times;</button>
+  </div>
+  <div class="pb">
+    <div class="atr-seclbl">Today</div>
+    <div class="atr-info"><span class="k">Status</span><span class="v" id="pStatus">--</span></div>
+    <div class="atr-info"><span class="k">Scheduled shift</span><span class="v" id="pShift">--</span></div>
+    <div class="atr-info"><span class="k">Clock in / out</span><span class="v" id="pClk">--</span></div>
+    <div class="atr-seclbl">Log an attendance event</div>
+    <div class="atr-loggrid">
+      <div class="atr-logact a-late"    data-kind="late"      data-occ="yes"><div class="ic">&#9201;</div><div class="t">Late</div></div>
+      <div class="atr-logact a-noshow"  data-kind="no-show"   data-occ="yes"><div class="ic">&#10006;</div><div class="t">Missed shift</div></div>
+      <div class="atr-logact a-ncns"    data-kind="no-show"   data-occ="yes" data-reason="No call / no show"><div class="ic">&#128245;</div><div class="t">No call / no show</div></div>
+      <div class="atr-logact a-callout" data-kind="callout"   data-occ="yes"><div class="ic">&#128222;</div><div class="t">Callout</div></div>
+      <div class="atr-logact a-early"   data-kind="early-out"><div class="ic">&#8617;</div><div class="t">Left early</div></div>
+      <div class="atr-logact a-note"    data-kind="note"><div class="ic">&#9998;</div><div class="t">Note</div></div>
+    </div>
+    <div class="atr-seclbl">Attendance history</div>
+    <div class="atr-tl" id="pTl"></div>
+  </div>
+</aside>
+
+{# Add Entry modal #}
+<div class="atr-modal" id="atrModal">
+  <div class="atr-sheet">
+    <div class="sh"><h2>Add Entry</h2><button type="button" class="atr-x" id="mClose" style="margin-left:auto;">&times;</button></div>
+    <div class="sb">
+      <label class="atr-fl">Who? &mdash; type a name</label>
+      <div style="position:relative;">
+        <input class="atr-inp" id="mName" placeholder="Start typing a teammate's name..." autocomplete="off">
+        <div class="atr-matches" id="mMatches"></div>
+        <div class="atr-chosen" id="mChosen">
+          <div class="atr-av" id="mcAv">--</div>
+          <div><div style="font-weight:700;" id="mcNm">--</div><div class="mr" id="mcRole">--</div></div>
+          <span class="clr" id="mcClr">change</span>
+        </div>
       </div>
-      {% for s in boh %}{{ detail_card(s) }}{% endfor %}
-      {% for s in foh %}{{ detail_card(s) }}{% endfor %}
-      {% for s in closed %}{{ detail_card(s) }}{% endfor %}
+      <div style="margin-top:16px;">
+        <label class="atr-fl">What happened?</label>
+        <div class="atr-taggrid" id="mTags">
+          <div class="atr-tag t-late" data-tag="late"   data-label="Late">Late</div>
+          <div class="atr-tag t-ncns" data-tag="ncns"   data-label="No Call / No Show">No Call / No Show</div>
+          <div class="atr-tag t-ncl"  data-tag="ncl"    data-label="No Call / Late">No Call / Late</div>
+          <div class="atr-tag t-swap" data-tag="switch" data-label="Switched shift w/o permission">Switched shift &mdash; no permission</div>
+        </div>
+        <div class="atr-swapx" id="mSwapx">
+          <label class="atr-fl" style="margin-top:12px;">Picked up / covered for whom?</label>
+          <input class="atr-inp" id="mSwapWho" placeholder="Name of the teammate they covered for">
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <label class="atr-fl">Note (optional)</label>
+        <input class="atr-inp" id="mNote" placeholder="Any detail the manager should record">
+      </div>
+    </div>
+    <div class="sf">
+      <button type="button" class="atr-btn ghost" id="mCancel">Cancel</button>
+      <button type="button" class="atr-btn go" id="mSave" disabled>Save entry</button>
     </div>
   </div>
 </div>
 
-<div class="atr-backdrop" id="atrBackdrop" onclick="atrCloseDetail()"></div>
-
-{# ---- Add unscheduled shift modal ---- #}
-<div class="atr-modal-overlay" id="atrModal" role="dialog" aria-modal="true" aria-labelledby="atrModalTitle">
-  <div class="atr-modal">
-    <div class="atr-modal-head">
-      <h2 id="atrModalTitle">Add <span class="accent">shift</span></h2>
-      <button class="atr-modal-close" type="button" id="atrModalClose" aria-label="Close">&times;</button>
-    </div>
-    <form class="atr-modal-body" method="POST" action="{{ url_for('store.manager_page_create', page='attendance') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-      <input type="hidden" name="form_action" value="add_shift">
-      <input type="hidden" name="entry_date" value="{{ selected_date }}">
-      <div class="atr-field">
-        <label for="atrfName">Teammate name</label>
-        <input type="text" id="atrfName" name="name" required maxlength="120" placeholder="e.g. Marcus Reyes">
-      </div>
-      <div class="atr-form-grid">
-        <div class="atr-field" style="margin:0;">
-          <label for="atrfRole">Role / title</label>
-          <input type="text" id="atrfRole" name="role" maxlength="60" placeholder="e.g. Line cook">
-        </div>
-        <div class="atr-field" style="margin:0;">
-          <label for="atrfSection">Section</label>
-          <select id="atrfSection" name="section">
-            <option value="boh">BOH &middot; Kitchen</option>
-            <option value="foh">FOH &middot; Front of House</option>
-          </select>
-        </div>
-      </div>
-      <div class="atr-field">
-        <label for="atrfPhone">Phone (optional)</label>
-        <input type="text" id="atrfPhone" name="phone" maxlength="40" placeholder="(281) 555-0142">
-      </div>
-      <div class="atr-form-grid">
-        <div class="atr-field" style="margin:0;">
-          <label for="atrfStart">Scheduled start</label>
-          <input type="time" id="atrfStart" name="sched_start">
-        </div>
-        <div class="atr-field" style="margin:0;">
-          <label for="atrfEnd">Scheduled end</label>
-          <input type="time" id="atrfEnd" name="sched_end">
-        </div>
-      </div>
-      <div class="atr-modal-actions">
-        <button type="button" class="atr-btn-cancel" id="atrModalCancel">Cancel</button>
-        <button type="submit" class="atr-modal-save">Add to roster</button>
-      </div>
-    </form>
-  </div>
-</div>
+{# hidden POST forms — JS fills + submits these so every action hits the route #}
+<form method="POST" action="" id="atrEventForm" style="display:none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+  <input type="hidden" name="form_action" value="log_event">
+  <input type="hidden" name="shift_id" id="evShiftId">
+  <input type="hidden" name="kind" id="evKind">
+  <input type="hidden" name="reason" id="evReason">
+  <input type="hidden" name="note" id="evNote">
+  <input type="hidden" name="occurrence" id="evOcc">
+</form>
+<form method="POST" action="" id="atrAddForm" style="display:none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+  <input type="hidden" name="form_action" value="add_entry">
+  <input type="hidden" name="entry_date" value="{{ selected_date }}">
+  <input type="hidden" name="name" id="aeName">
+  <input type="hidden" name="kind" id="aeKind">
+  <input type="hidden" name="reason" id="aeReason">
+  <input type="hidden" name="note" id="aeNote">
+</form>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function () {
-  'use strict';
+  "use strict";
+  // Real roster from the route — one entry per AttendanceShift for the day.
+  var PEOPLE = {{ rows | tojson }};
 
-  // ---- Roster selection + detail pane ----
-  function atrSelect(id, row) {
-    document.querySelectorAll('.atr-emp-row').forEach(function (r) {
-      r.classList.toggle('selected', r === row);
-    });
-    document.querySelectorAll('.atr-detail-card').forEach(function (c) {
-      c.classList.toggle('open', c.id === 'atr-d-' + id);
-    });
-    var empty = document.getElementById('atrDetailEmpty');
-    if (empty) empty.style.display = 'none';
-    if (window.matchMedia('(max-width: 900px)').matches) {
-      document.getElementById('atrDetailPane').classList.add('mobile-open');
-      document.getElementById('atrBackdrop').classList.add('show');
-    }
-  }
-  function atrCloseDetail() {
-    document.getElementById('atrDetailPane').classList.remove('mobile-open');
-    document.getElementById('atrBackdrop').classList.remove('show');
-  }
-  window.atrSelect = atrSelect;
-  window.atrCloseDetail = atrCloseDetail;
-
-  // ---- Inline event form ----
-  var EV_TITLES = {
-    'late': 'Log late arrival', 'no-show': 'Mark no-show', 'early-out': 'Log early out',
-    'callout': 'Record callout', 'break': 'Start break', 'note': 'Add note'
+  var ST = {
+    "clocked-in": {pill:"On Time",  rc:"r-ontime",   pc:"p-ontime"},
+    "late":       {pill:"Late",     rc:"r-late",     pc:"p-late"},
+    "no-show":    {pill:"No-Show",  rc:"r-noshow",   pc:"p-noshow"},
+    "callout":    {pill:"Callout",  rc:"r-callout",  pc:"p-callout"},
+    "break":      {pill:"On Break", rc:"r-break",    pc:"p-break"},
+    "out":        {pill:"Clocked Out", rc:"r-out",   pc:"p-out"},
+    "scheduled":  {pill:"Scheduled",rc:"r-scheduled",pc:"p-scheduled"}
   };
-  function atrOpenEvent(id, kind) {
-    var form = document.getElementById('atr-ev-' + id);
-    if (!form) return;
-    form.classList.add('open');
-    form.querySelector('[data-ev-kind]').value = kind;
-    form.querySelector('[data-ev-title]').textContent = EV_TITLES[kind] || 'Log event';
-    var lateOnly = (kind === 'late' || kind === 'callout');
-    form.querySelectorAll('[data-ev-late-only]').forEach(function (el) {
-      el.style.display = lateOnly ? '' : 'none';
-    });
-    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-  function atrCloseEvent(id) {
-    var form = document.getElementById('atr-ev-' + id);
-    if (form) form.classList.remove('open');
-  }
-  function atrPickReason(chip, value) {
-    var wrap = chip.closest('.atr-reason-chips');
-    wrap.querySelectorAll('.atr-reason-chip').forEach(function (c) { c.classList.remove('selected'); });
-    chip.classList.add('selected');
-    chip.closest('form').querySelector('[data-ev-reason]').value = value;
-  }
-  window.atrOpenEvent = atrOpenEvent;
-  window.atrCloseEvent = atrCloseEvent;
-  window.atrPickReason = atrPickReason;
+  function meta(s){ return ST[s] || ST["scheduled"]; }
+  function esc(t){ var d=document.createElement("div"); d.textContent=(t==null?"":t); return d.innerHTML; }
 
-  // ---- List tabs ----
-  var activeTab = 'all';
-  function applyFilter() {
-    var q = (document.getElementById('atrSearch').value || '').toLowerCase().trim();
-    document.querySelectorAll('.atr-emp-row').forEach(function (row) {
-      var cats = (row.dataset.cats || '').split(' ');
-      var inTab = (activeTab === 'all') || cats.indexOf(activeTab) !== -1;
-      var inSearch = !q || (row.dataset.search || '').indexOf(q) !== -1;
-      row.style.display = (inTab && inSearch) ? '' : 'none';
-    });
-    document.querySelectorAll('[data-role-section]').forEach(function (sec) {
-      var anyVisible = Array.prototype.some.call(
-        sec.querySelectorAll('.atr-emp-row'),
-        function (r) { return r.style.display !== 'none'; });
-      sec.style.display = anyVisible ? '' : 'none';
-    });
+  function inView(p, v){
+    if (v==="all")    return true;
+    if (v==="clock")  return !!p.on_clock;
+    if (v==="off")    return !!p.is_off;
+    if (v==="issues") return !!p.has_prior_issue;
+    return true;
   }
-  document.querySelectorAll('.atr-list-tab').forEach(function (tab) {
-    tab.addEventListener('click', function () {
-      document.querySelectorAll('.atr-list-tab').forEach(function (t) { t.classList.remove('active'); });
-      tab.classList.add('active');
-      activeTab = tab.dataset.tab;
-      applyFilter();
+  var HINT = {
+    all:    "Everyone on today's schedule — whether they are working or off.",
+    clock:  "Everyone currently clocked in (on time, late, or on break).",
+    off:    "Teammates off the clock today — scheduled, no-show, callout, or clocked out.",
+    issues: "Scheduled today AND has a documented attendance issue on file."
+  };
+  var page = document.getElementById("atrPage");
+  var roster = document.getElementById("atrRoster");
+  var curView = "all";
+
+  function renderCounts(){
+    document.getElementById("cAll").textContent    = PEOPLE.filter(function(p){return inView(p,"all");}).length;
+    document.getElementById("cClock").textContent  = PEOPLE.filter(function(p){return inView(p,"clock");}).length;
+    document.getElementById("cOff").textContent    = PEOPLE.filter(function(p){return inView(p,"off");}).length;
+    document.getElementById("cIss").textContent    = PEOPLE.filter(function(p){return inView(p,"issues");}).length;
+  }
+  function renderRoster(){
+    document.getElementById("atrHint").textContent = HINT[curView];
+    var list = PEOPLE.filter(function(p){ return inView(p, curView); });
+    if (!list.length){ roster.innerHTML = '<div class="atr-empty">No teammates in this view.</div>'; return; }
+    roster.innerHTML = list.map(function(p){
+      var m = meta(p.status);
+      var t = p.sched || "";
+      if (p.clock_in) t += (t?"  &middot; ":"") + "in " + esc(p.clock_in);
+      return '<div class="atr-row '+m.rc+'" data-id="'+p.id+'">'
+        + '<div class="atr-av">'+esc(p.initials)+'</div>'
+        + '<div class="atr-who"><div class="atr-nm">'+esc(p.name)
+        +   (p.has_prior_issue?'<span class="atr-flag">ISSUE</span>':'')+'</div>'
+        + '<div class="atr-role">'+esc(p.role)+'</div></div>'
+        + '<div class="atr-meta"><span class="atr-pill '+m.pc+'">'+m.pill+'</span>'
+        + '<span class="atr-times">'+t+'</span></div></div>';
+    }).join("");
+  }
+
+  document.getElementById("atrTabs").addEventListener("click", function(e){
+    var t = e.target.closest(".atr-tab"); if(!t) return;
+    document.querySelectorAll(".atr-tab").forEach(function(x){ x.classList.remove("active"); });
+    t.classList.add("active");
+    curView = t.dataset.view;
+    page.setAttribute("data-view", curView);
+    renderRoster();
+  });
+
+  /* ---- person panel ---- */
+  var panel = document.getElementById("atrPanel"), scrim = document.getElementById("atrScrim");
+  roster.addEventListener("click", function(e){
+    var r = e.target.closest(".atr-row"); if(!r) return;
+    openPanel(PEOPLE.filter(function(p){return p.id===+r.dataset.id;})[0]);
+  });
+  function openPanel(p){
+    if(!p) return;
+    document.getElementById("pAv").textContent = p.initials;
+    document.getElementById("pNm").textContent = p.name;
+    document.getElementById("pRole").textContent = p.role;
+    document.getElementById("pStatus").textContent = meta(p.status).pill;
+    document.getElementById("pShift").textContent = p.sched || "Not set";
+    document.getElementById("pClk").textContent =
+      (p.clock_in||p.clock_out) ? ((p.clock_in||"--")+" / "+(p.clock_out||"--")) : "Not clocked in";
+    var hist = (p.history && p.history.length)
+      ? p.history.map(function(h){
+          return '<div class="atr-tlitem c-'+(h.kind||"note")+'"><span class="tt">'
+            +esc(h.date)+'</span><span class="tx">'+esc(h.text)+'</span></div>'; }).join("")
+      : '<div class="atr-tlitem"><span class="tx">No prior attendance events on file.</span></div>';
+    document.getElementById("pTl").innerHTML = hist;
+    panel.dataset.pid = p.id;
+    scrim.classList.add("show"); panel.classList.add("show");
+  }
+  function closePanel(){ scrim.classList.remove("show"); panel.classList.remove("show"); }
+  document.getElementById("pClose").addEventListener("click", closePanel);
+  scrim.addEventListener("click", closePanel);
+
+  document.querySelectorAll(".atr-logact").forEach(function(a){
+    a.addEventListener("click", function(){
+      var pid = +panel.dataset.pid;
+      if(!pid) return;
+      document.getElementById("evShiftId").value = pid;
+      document.getElementById("evKind").value = a.dataset.kind || "note";
+      document.getElementById("evReason").value = a.dataset.reason || "";
+      document.getElementById("evNote").value = "";
+      document.getElementById("evOcc").value = a.dataset.occ || "";
+      document.getElementById("atrEventForm").submit();
     });
   });
-  document.getElementById('atrSearch').addEventListener('input', applyFilter);
 
-  // ---- Add-shift modal ----
-  var modal = document.getElementById('atrModal');
-  function openModal() { modal.classList.add('open'); setTimeout(function () { document.getElementById('atrfName').focus(); }, 40); }
-  function closeModal() { modal.classList.remove('open'); }
-  document.getElementById('atrAddShift').addEventListener('click', openModal);
-  document.getElementById('atrModalClose').addEventListener('click', closeModal);
-  document.getElementById('atrModalCancel').addEventListener('click', closeModal);
-  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+  /* ---- Add Entry modal ---- */
+  var modal = document.getElementById("atrModal");
+  var chosen = null, chosenTag = null, chosenLabel = "";
+  function openModal(){
+    chosen=null; chosenTag=null; chosenLabel="";
+    document.getElementById("mName").value="";
+    document.getElementById("mMatches").classList.remove("show");
+    document.getElementById("mMatches").innerHTML="";
+    document.getElementById("mChosen").classList.remove("show");
+    document.getElementById("mSwapx").classList.remove("show");
+    document.getElementById("mSwapWho").value="";
+    document.getElementById("mNote").value="";
+    document.querySelectorAll(".atr-tag").forEach(function(t){ t.classList.remove("sel"); });
+    document.getElementById("mSave").disabled = true;
+    modal.classList.add("show");
+    setTimeout(function(){ document.getElementById("mName").focus(); }, 80);
+  }
+  function closeModal(){ modal.classList.remove("show"); }
+  document.getElementById("atrAddBtn").addEventListener("click", openModal);
+  document.getElementById("mClose").addEventListener("click", closeModal);
+  document.getElementById("mCancel").addEventListener("click", closeModal);
 
-  // ---- Export day (client-side CSV of the visible roster) ----
-  document.getElementById('atrExport').addEventListener('click', function () {
-    var rows = [['Name', 'Role', 'Section', 'Status', 'Scheduled', 'Clock in', 'Clock out']];
-    document.querySelectorAll('.atr-detail-card').forEach(function (card) {
-      var name = card.querySelector('.atr-detail-emp-name').textContent.trim();
-      var roleMeta = card.querySelector('.atr-detail-emp-meta .role').textContent.trim();
-      var status = card.querySelector('.atr-shift-value.sm').textContent.trim();
-      var blocks = card.querySelectorAll('.atr-shift-value');
-      rows.push([name, roleMeta, '', status, blocks[0] ? blocks[0].textContent.trim() : '',
-                 blocks[1] ? blocks[1].textContent.trim() : '', blocks[2] ? blocks[2].textContent.trim() : '']);
-    });
-    var csv = rows.map(function (r) {
-      return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
-    }).join('\r\n');
-    var blob = new Blob([csv], { type: 'text/csv' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'attendance-' + ('{{ selected_date }}' || 'day') + '.csv';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
+  var nameInp = document.getElementById("mName"), matches = document.getElementById("mMatches");
+  nameInp.addEventListener("input", function(){
+    var q = nameInp.value.trim().toLowerCase();
+    chosen=null; document.getElementById("mChosen").classList.remove("show"); refreshSave();
+    if(!q){ matches.classList.remove("show"); matches.innerHTML=""; return; }
+    var hits = PEOPLE.filter(function(p){ return p.name.toLowerCase().indexOf(q)>=0; }).slice(0,6);
+    var html = hits.map(function(p){
+      return '<div class="atr-match" data-id="'+p.id+'"><div class="atr-av">'+esc(p.initials)
+        +'</div><div><div style="font-weight:600">'+esc(p.name)+'</div><div class="mr">'
+        +esc(p.role)+'</div></div></div>'; }).join("");
+    html += '<div class="atr-match free" data-free="1"><div class="fic">+</div>'
+      + '<div>Use "<b>'+esc(nameInp.value.trim())+'</b>" as a new name'
+      + '<div class="mr">not on the roster — enter as typed</div></div></div>';
+    matches.innerHTML = html; matches.classList.add("show");
   });
+  matches.addEventListener("click", function(e){
+    var m = e.target.closest(".atr-match"); if(!m) return;
+    if(m.dataset.free){ chosen = {name: nameInp.value.trim(), role:"Entered manually"}; }
+    else { chosen = PEOPLE.filter(function(p){return p.id===+m.dataset.id;})[0]; }
+    document.getElementById("mcAv").textContent = chosen.initials
+      || chosen.name.split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
+    document.getElementById("mcNm").textContent = chosen.name;
+    document.getElementById("mcRole").textContent = chosen.role;
+    document.getElementById("mChosen").classList.add("show");
+    matches.classList.remove("show");
+    refreshSave();
+  });
+  document.getElementById("mcClr").addEventListener("click", function(){
+    chosen=null; document.getElementById("mChosen").classList.remove("show");
+    nameInp.value=""; nameInp.focus(); refreshSave();
+  });
+  document.getElementById("mTags").addEventListener("click", function(e){
+    var t = e.target.closest(".atr-tag"); if(!t) return;
+    document.querySelectorAll(".atr-tag").forEach(function(x){ x.classList.remove("sel"); });
+    t.classList.add("sel");
+    chosenTag = t.dataset.tag; chosenLabel = t.dataset.label;
+    document.getElementById("mSwapx").classList.toggle("show", chosenTag==="switch");
+    refreshSave();
+  });
+  function refreshSave(){ document.getElementById("mSave").disabled = !(chosen && chosenTag); }
+  document.getElementById("mSave").addEventListener("click", function(){
+    if(!(chosen && chosenTag)) return;
+    var reason = chosenLabel;
+    if(chosenTag==="switch"){
+      var who = document.getElementById("mSwapWho").value.trim();
+      reason = "Switched shift without permission" + (who ? " — covered for " + who : "");
+    }
+    document.getElementById("aeName").value = chosen.name;
+    document.getElementById("aeKind").value = chosenTag;
+    document.getElementById("aeReason").value = reason;
+    document.getElementById("aeNote").value = document.getElementById("mNote").value.trim();
+    document.getElementById("atrAddForm").submit();
+  });
+
+  renderCounts(); renderRoster();
 })();
 </script>
 {% endblock %}

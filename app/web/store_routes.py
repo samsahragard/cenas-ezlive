@@ -1589,7 +1589,15 @@ def _render_attendance_v3(db, label, active_key):
 
     def _view(s):
         pattern, pcounts = _pattern(s.employee_name)
-        sched_h = _attn_hours(s.scheduled_start, s.scheduled_end)
+        # Prior-day documented issues (strictly before the selected day) —
+        # drives the Issues view + the panel history (samai redesign).
+        _ilabel = {"late": "Late", "no-show": "No-show", "callout": "Callout"}
+        prior = []
+        for d, st in sorted(hist.get(s.employee_name, {}).items(), reverse=True):
+            if d < sel and st in _ilabel:
+                prior.append({"date": d.strftime("%b %d"), "kind": st,
+                              "text": _ilabel[st]})
+        ss, se = _attn_fmt(s.scheduled_start), _attn_fmt(s.scheduled_end)
         return {
             "id": s.id,
             "name": s.employee_name,
@@ -1598,14 +1606,16 @@ def _render_attendance_v3(db, label, active_key):
             "section": (s.section or "boh"),
             "phone": s.phone,
             "status": s.status,
-            "sched_start": _attn_fmt(s.scheduled_start),
-            "sched_end": _attn_fmt(s.scheduled_end),
-            "sched_hours": (f"{sched_h} scheduled" if sched_h else ""),
+            "sched": (f"{ss} - {se}" if (ss and se) else (ss or se or "")),
             "clock_in": _attn_fmt(s.clock_in),
             "clock_out": _attn_fmt(s.clock_out),
             "late_minutes": s.late_minutes or 0,
             "hours_worked": _attn_hours(s.clock_in, s.clock_out),
             "note": s.note,
+            "on_clock": s.status in ("clocked-in", "late", "break"),
+            "is_off": s.status in ("scheduled", "no-show", "callout", "out"),
+            "has_prior_issue": len(prior) > 0,
+            "history": prior,
             "events": [{"time": _attn_fmt(e.at), "kind": e.kind,
                         "text": e.text or ""}
                        for e in sorted(s.events, key=lambda e: e.at, reverse=True)],
@@ -1614,9 +1624,6 @@ def _render_attendance_v3(db, label, active_key):
         }
 
     rows = [_view(s) for s in shifts]
-    boh = [r for r in rows if r["section"] == "boh" and r["status"] != "out"]
-    foh = [r for r in rows if r["section"] == "foh" and r["status"] != "out"]
-    closed = [r for r in rows if r["status"] == "out"]
 
     def _n(pred):
         return sum(1 for r in rows if pred(r))
@@ -1627,16 +1634,10 @@ def _render_attendance_v3(db, label, active_key):
         "no_show": _n(lambda r: r["status"] == "no-show"),
         "callouts": _n(lambda r: r["status"] == "callout"),
     }
-    counts = {
-        "all": len(rows),
-        "onclock": kpis["clocked_in"],
-        "off": _n(lambda r: r["status"] in ("scheduled", "no-show", "callout", "out")),
-        "issues": _n(lambda r: r["status"] in ("late", "no-show", "callout")),
-    }
     return render_template(
         "attendance_tracking.html",
         page_slug="attendance", page_label=label,
-        boh=boh, foh=foh, closed=closed, kpis=kpis, counts=counts,
+        rows=rows, kpis=kpis,
         selected_date=sel.isoformat(), today_iso=today.isoformat(),
         prev_date=(sel - timedelta(days=1)).isoformat(),
         next_date=(sel + timedelta(days=1)).isoformat(),
@@ -1672,6 +1673,51 @@ def _attendance_v3_post(db, store_scope, user):
             scheduled_start=_attn_parse_time(request.form.get("sched_start"), d),
             scheduled_end=_attn_parse_time(request.form.get("sched_end"), d),
             status="scheduled", store_scope=store_scope, author_id=uid))
+        db.commit()
+        return
+
+    if action == "add_entry":
+        # Redesigned "Add Entry" flow (samai #5:03): name search + tag.
+        # Finds or creates today's shift for the named teammate, then
+        # logs the tagged attendance event. tag: late | ncns | ncl | switch.
+        raw_date = request.form.get("entry_date") or ""
+        try:
+            d = date.fromisoformat(raw_date) if raw_date else date.today()
+        except ValueError:
+            d = date.today()
+        name = (request.form.get("name") or "").strip()[:120]
+        if not name:
+            return
+        tag = (request.form.get("kind") or "").strip().lower()
+        reason = (request.form.get("reason") or "").strip()
+        note = (request.form.get("note") or "").strip() or None
+        shift = (db.query(AttendanceShift)
+                 .filter(AttendanceShift.entry_date == d,
+                         AttendanceShift.employee_name == name).first())
+        if shift is None:
+            shift = AttendanceShift(
+                entry_date=d, employee_name=name, section="boh",
+                status="scheduled", store_scope=store_scope, author_id=uid)
+            db.add(shift)
+            db.flush()
+        _tagmap = {
+            "late":   ("late",    "late",    "Late arrival"),
+            "ncns":   ("no-show", "no-show", "No call / no show"),
+            "ncl":    ("late",    "late",    "No call / late"),
+            "switch": ("switch",  None,      "Switched shift without permission"),
+        }
+        ev_kind, new_status, base_text = _tagmap.get(tag, ("note", None, "Entry"))
+        if new_status:
+            shift.status = new_status
+        text = base_text
+        if reason and reason != base_text:
+            text = f"{base_text} - {reason}"
+        if note:
+            text = f"{text} - {note}"
+        db.add(AttendanceEvent(
+            shift_id=shift.id, at=_attn_now(), kind=ev_kind, text=text,
+            reason=(reason[:60] or None), counts_as_occurrence=True))
+        shift.updated_at = _attn_now()
         db.commit()
         return
 

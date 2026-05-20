@@ -346,7 +346,7 @@
 
   /* ---- Detail panel ---- */
   .prep-detail-panel {
-    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-active);
+    background: var(--prep-bg-warm); border: 0.5px solid var(--prep-border-active);
     border-radius: var(--prep-radius-md); overflow: hidden; position: sticky; top: 16px;
   }
   .prep-detail-empty { padding: 60px 24px; text-align: center; color: var(--prep-cream-faint); }
@@ -749,7 +749,7 @@
 <div class="prep-page">
 
   <div class="prep-topstrip">
-    <span class="prep-store-badge">{{ store_slug|upper }} &middot; {{ store_label|upper }}</span>
+    <span class="prep-store-badge">{{ store_slug|upper }}{% if (store_label|upper) != (store_slug|upper) %} &middot; {{ store_label|upper }}{% endif %}</span>
     <span class="prep-spacer"></span>
     {% if lock_author %}
     <span class="prep-runner"><span class="dot"></span>{{ lock_author }} running prep{% if lock_hours %} &middot; {{ lock_hours }}{% endif %}</span>
@@ -900,6 +900,7 @@
   function prepCloseDetail() {
     document.getElementById('prepDetailPane').classList.remove('mobile-open');
     document.getElementById('prepBackdrop').classList.remove('show');
+    document.querySelectorAll('.prep-item-row').forEach(function (r) { r.classList.remove('active'); });
   }
   window.prepSelect = prepSelect;
   window.prepCloseDetail = prepCloseDetail;

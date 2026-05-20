@@ -259,7 +259,22 @@ def _strip_cena_tool_blocks(content: str) -> str:
     return stripped.rstrip() + _CENA_TOOL_STRIP_MARKER
 
 
-def _build_api_messages_from_rows(rows) -> list[dict]:
+def _merge_content(prev, curr):
+    """Combine two same-role turns into one. str+str joins with a blank
+    line; if either side is a content-block list (a turn carrying image
+    blocks), both are normalized to block lists and concatenated — the
+    merge never yields two consecutive same-role API messages, which the
+    Anthropic API rejects."""
+    if isinstance(prev, str) and isinstance(curr, str):
+        return prev + "\n\n" + curr
+
+    def _as_blocks(x):
+        return [{"type": "text", "text": x}] if isinstance(x, str) else list(x)
+
+    return _as_blocks(prev) + _as_blocks(curr)
+
+
+def _build_api_messages_from_rows(rows, images_by_msg=None) -> list[dict]:
     """Map persisted SamChatMessage rows to Anthropic's user/assistant
     message list, applying the conversation-flow rules /sam/chat needs:
 
@@ -281,7 +296,13 @@ def _build_api_messages_from_rows(rows) -> list[dict]:
     mapped: list[dict] = []
     for m in rows:
         if m.role == "user":
-            mapped.append({"role": "user", "content": m.content})
+            # Re-attach any images Sam sent on this turn so Cena can see
+            # a screenshot referenced from an earlier message, not just
+            # the current one (Sam #5:01 image-reading).
+            _imgs = (images_by_msg or {}).get(m.id) or []
+            mapped.append({"role": "user", "content": (
+                [{"type": "text", "text": m.content}] + _imgs
+                if _imgs else m.content)})
         elif m.role == "assistant":
             mapped.append({"role": "assistant",
                            "content": _strip_cena_tool_blocks(m.content)})
@@ -317,17 +338,37 @@ def _build_api_messages_from_rows(rows) -> list[dict]:
         if merged and merged[-1]["role"] == msg["role"]:
             prev = merged[-1]["content"]
             curr = msg["content"]
-            if isinstance(prev, str) and isinstance(curr, str):
-                merged[-1]["content"] = prev + "\n\n" + curr
-            else:
-                # Block-list content shouldn't appear in prior turns
-                # (only the new user turn has potential image blocks),
-                # but fall back to appending a fresh entry rather than
-                # losing data if it ever does.
-                merged.append(msg)
+            merged[-1]["content"] = _merge_content(prev, curr)
         else:
             merged.append(msg)
     return merged
+
+
+def _load_prior_images(db, message_ids):
+    """Return {message_id: [image content block, ...]} for prior /sam/chat
+    turns that carried image attachments, so _build_api_messages_from_rows
+    can re-attach them — Cena then sees screenshots from earlier in the
+    chat, not just the current turn (Sam #5:01). Capped at the 8 most
+    recent image attachments to bound per-turn token cost."""
+    if not message_ids:
+        return {}
+    try:
+        from app.models import SamChatAttachment as _SCA
+        rows = (db.query(_SCA)
+                .filter(_SCA.message_id.in_(message_ids))
+                .filter(_SCA.content_type.like("image/%"))
+                .order_by(_SCA.id.desc())
+                .limit(8)
+                .all())
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict = {}
+    for a in rows:
+        blk = {"type": "image", "source": {
+            "type": "base64", "media_type": a.content_type,
+            "data": a.data_base64}}
+        out.setdefault(a.message_id, []).insert(0, blk)
+    return out
 
 
 def _estimate_tokens(text: str) -> int:
@@ -807,7 +848,8 @@ def sam_chat_send():
                  .order_by(SamChatMessage.created_at.asc(),
                            SamChatMessage.id.asc())
                  .all())
-        api_messages = _build_api_messages_from_rows(prior)
+        _prior_imgs = _load_prior_images(db, [m.id for m in prior])
+        api_messages = _build_api_messages_from_rows(prior, _prior_imgs)
 
         # Persist the user message and capture its id so the Cena audit
         # log rows can link back to this exact chat turn.
@@ -866,11 +908,9 @@ def sam_chat_send():
     # for str+str; otherwise append as a separate entry and let Anthropic
     # surface the alternation error (very unusual code path — only fires
     # when Sam attaches an image immediately after a dck post).
-    if (api_messages and api_messages[-1]["role"] == "user"
-            and isinstance(api_messages[-1]["content"], str)
-            and isinstance(new_content, str)):
-        api_messages[-1]["content"] = (
-            api_messages[-1]["content"] + "\n\n" + new_content)
+    if api_messages and api_messages[-1]["role"] == "user":
+        api_messages[-1]["content"] = _merge_content(
+            api_messages[-1]["content"], new_content)
     else:
         api_messages.append({"role": "user", "content": new_content})
 

@@ -2,48 +2,130 @@
 {% set active = 'ezcater_orders' %}
 {% block title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %} — Cenas Kitchen{% endblock %}
 
-{# page_title appends " Orders" only when location_label doesn't already
-   end with it — the partner combined view passes "All Orders", which was
-   rendering as "All Orders Orders" (ck #8:48). #}
-{% block page_title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %}{% endblock %}
-{% block page_subtitle %}
-  <p class="greeting-sub">{{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries · today and upcoming</p>
-{% endblock %}
+{# Inline hero header inside the content block — matches the orders_dashboard_v1
+   rendering (Sam #10:04). #}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block content %}
 <style>
-  /* Sam #5:42 — order rows read as clickable (hand cursor on hover). */
-  .order-list-table tbody tr { cursor: pointer; }
-  /* Sam #5:42 — the "combined view" row: a glowing yellow bar with */
-  /* white text so it stands out.                                   */
-  .order-list-table tr.all-row td {
-    background: linear-gradient(180deg, #f6cb45 0%, #e3a008 100%);
-    color: #fff; font-weight: 700; text-align: center;
-    letter-spacing: .04em; text-shadow: 0 1px 2px rgba(0,0,0,.4);
-    animation: all-row-glow 2.4s ease-in-out infinite;
+  /* Orders dashboard v2 — converted from samples/orders_dashboard_v1.html
+     (Sam #10:04: "needs to look exactly like this"). Scoped under .od-page
+     so the page palette + table chrome don't leak into base_dashboard. */
+  .od-page {
+    --od-bg-deep: #1f1a12;
+    --od-bg-pane: #2a2419;
+    --od-gold: #d4af37;
+    --od-cream: #ece3d0;
+    --od-cream-dim: rgba(236,227,208,0.72);
+    --od-cream-faint: rgba(236,227,208,0.45);
+    --od-border: rgba(236,227,208,0.15);
+    --od-glass: rgba(236,227,208,0.05);
+    --od-radius: 12px;
+    color: var(--od-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    padding-bottom: 60px;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
   }
-  @keyframes all-row-glow {
+  /* Scoped solid background — same contained-card pattern attendance uses
+     (dck spec). overflow:hidden so the ::before bg respects the rounded
+     corners. */
+  .od-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--od-bg-deep);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .od-page > * { position: relative; z-index: 1; }
+
+  .od-h1 { font-size: 26px; font-weight: 600; margin: 0 0 4px; letter-spacing: .01em; }
+  .od-sub { color: var(--od-cream-faint); font-size: 13px; margin: 0 0 22px; }
+
+  .od-actions { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
+  .od-btn {
+    background: var(--od-glass); border: 1px solid var(--od-border);
+    color: var(--od-cream); padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block;
+    font-family: inherit;
+  }
+  .od-btn:hover { border-color: var(--od-gold); }
+
+  .od-day {
+    font-size: 13px; font-weight: 600; color: var(--od-gold);
+    letter-spacing: .06em; text-transform: uppercase; margin: 26px 0 8px;
+  }
+  .od-day .od-count { color: var(--od-cream-faint); font-weight: 400; margin-left: 6px; }
+
+  table.od-table {
+    width: 100%; border-collapse: collapse; background: var(--od-bg-pane);
+    border: 1px solid var(--od-border); border-radius: var(--od-radius); overflow: hidden;
+  }
+  .od-table th {
+    text-align: left; padding: 11px 12px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .05em; color: var(--od-cream-faint);
+    border-bottom: 1px solid var(--od-border); background: rgba(0,0,0,.22);
+  }
+  .od-table td { padding: 12px; border-bottom: 1px solid rgba(236,227,208,0.07); }
+  .od-table tbody tr:last-child td { border-bottom: 0; }
+  .od-num { font-weight: 600; color: var(--od-gold); font-variant-numeric: tabular-nums; }
+
+  /* Order rows show hand cursor + hover highlight, so they read as clickable. */
+  .od-row { cursor: pointer; transition: background .12s ease; }
+  .od-row:hover { background: var(--od-glass); }
+
+  /* "Unhook driver" — live, connected red button. */
+  .od-unhook {
+    cursor: pointer; background: rgba(220,38,38,0.30);
+    border: 1px solid rgba(239,68,68,0.55); color: #fecaca;
+    padding: 5px 12px; font-size: 12px; font-weight: 600;
+    border-radius: 6px; white-space: nowrap; transition: all .12s ease;
+    font-family: inherit;
+  }
+  .od-unhook:hover { background: rgba(220,38,38,0.5); color: #fff; border-color: #ef4444; }
+  .od-muted { color: var(--od-cream-faint); }
+
+  /* Glowing "combined view" row. */
+  .od-combined { cursor: pointer; }
+  .od-combined td {
+    background: linear-gradient(180deg, #f6cb45 0%, #e3a008 100%);
+    color: #ffffff; font-weight: 700; text-align: center;
+    letter-spacing: .05em; text-transform: uppercase; font-size: 13px;
+    padding: 13px 12px; border-bottom: 0;
+    text-shadow: 0 1px 2px rgba(0,0,0,.4);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.25),
+                0 0 16px 2px rgba(246,203,69,.55);
+    animation: od-glow 2.4s ease-in-out infinite;
+  }
+  @keyframes od-glow {
     0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 0 14px 1px rgba(246,203,69,.45); }
     50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 0 26px 5px rgba(246,203,69,.85); }
   }
-  /* dck #8:05 — phone layout: under 720px the 9-column order table   */
-  /* restacks into labelled cards so it stops being a desktop table   */
-  /* squeezed onto a phone. Each cell's label comes from data-label.  */
+  .od-combined:hover td { filter: brightness(1.06); }
+
+  /* Phone (≤720px): restack the 9-column table into labelled cards so it
+     stops being a desktop table squeezed onto a phone. dck #8:05 phone
+     pattern, preserved from the prior orders template. */
   @media (max-width: 720px) {
-    .table-scroll { overflow-x: visible; }
-    .order-list-table thead { display: none; }
-    .order-list-table,
-    .order-list-table tbody,
-    .order-list-table tr,
-    .order-list-table td { display: block; width: 100%; }
-    .order-list-table tr {
-      background: rgba(255,255,255,.04);
-      border: 1px solid rgba(255,255,255,.1);
-      border-radius: 12px;
+    .od-h1 { font-size: 22px; }
+    .od-table thead { display: none; }
+    .od-table,
+    .od-table tbody,
+    .od-table tr,
+    .od-table td { display: block; width: 100%; }
+    .od-table tbody tr.od-row {
+      background: var(--od-bg-pane);
+      border: 1px solid var(--od-border);
+      border-radius: var(--od-radius);
       margin-bottom: 10px;
       padding: 6px 12px;
     }
-    .order-list-table td {
+    .od-table tbody tr.od-row td {
       display: flex;
       justify-content: space-between;
       gap: 12px;
@@ -51,126 +133,95 @@
       padding: 7px 0;
       text-align: right;
     }
-    .order-list-table td::before {
+    .od-table tbody tr.od-row td::before {
       content: attr(data-label);
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .05em;
-      color: var(--text-3);
+      color: var(--od-cream-faint);
       text-align: left;
     }
-    .order-list-table .all-row td { justify-content: center; text-align: center; }
-    .order-list-table .all-row td::before { display: none; }
-  }
-
-  /* Dark photo overlay — keeps the base_dashboard brand photo but darkens
-     it so the order tables stay legible (Sam #8:38, ck #8:48; mirrors the
-     recipes 8273551 / fresh food 71677c2 overlay). */
-  .orders-page { position: relative; }
-  .orders-page::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 12, 8, 0.72);
-    z-index: 0;
-    pointer-events: none;
-  }
-  .orders-page > * { position: relative; z-index: 1; }
-  /* Action buttons in the V2 dark style instead of the bright portal red
-     (ck #8:48 — match the mockup). Scoped class, so the per-row red
-     Unhook buttons are untouched. */
-  .ord-action-btn {
-    background: transparent;
-    border: 1px solid rgba(236,227,208,0.30);
-    color: #ece3d0;
-  }
-  .ord-action-btn:hover {
-    border-color: #d4af37;
-    color: #d4af37;
+    .od-table tr.od-combined td { justify-content: center; text-align: center; }
+    .od-table tr.od-combined td::before { display: none; }
+    .od-table tr.od-combined { margin-bottom: 14px; }
   }
 </style>
-<div class="orders-page">
-<div style="margin: 0 0 16px; display: flex; gap: 10px; flex-wrap: wrap;">
-  <a class="btn-portal ord-action-btn" href="/orders">Manually Processed PDF</a>
-  <a class="btn-portal ord-action-btn" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
-</div>
-{% if not groups %}
-  <div class="empty-state">
-    <p style="margin:0 0 12px;font-size:15px;color:#fff;">No processed orders for {{ location_label }} yet.</p>
-    <a class="btn-portal ord-action-btn" href="/orders">Upload PDFs</a>
-  </div>
-{% endif %}
 
-{% for grp in groups %}
-  <section class="day-section">
-    <div class="day-header">
+<div class="od-page">
+  <h1 class="od-h1">{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %}</h1>
+  <p class="od-sub">{{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries · today and upcoming</p>
+
+  <div class="od-actions">
+    <a class="od-btn" href="/orders">Manually Processed PDF</a>
+    <a class="od-btn" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
+  </div>
+
+  {% if not groups %}
+    <div class="od-notes">
+      <p style="margin:0 0 12px;font-size:15px;color:var(--od-cream);">No processed orders for {{ location_label }} yet.</p>
+      <a class="od-btn" href="/orders">Upload PDFs</a>
+    </div>
+  {% endif %}
+
+  {% for grp in groups %}
+    <div class="od-day">
       {{ grp.display }}
-      <span style="font-weight:500; color:var(--text-3); font-size:12px; margin-left:6px;">
-        ({{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }})
-      </span>
+      <span class="od-count">({{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }})</span>
     </div>
-    <div class="table-scroll">
-      <table class="order-list-table">
-        <thead>
-          <tr>
-            <th>Order #</th>
-            <th>Deliver at</th>
-            <th>Customer</th>
-            <th>Address</th>
-            <th>Location</th>
-            <th>Ez Cater Driver</th>
-            <th>Unhook Driver</th>
-            <th>Dispatch</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for o in grp.orders %}
-          <tr class="{% if o.needs_review %}review-row{% endif %}" onclick="window.location='/orders/view/{{ o.external_order_id }}'">
-            <td class="order-num" data-label="Order #">{{ o.external_order_id }}</td>
-            <td class="deliver-at" data-label="Deliver at">{{ o.deliver_at or '' }}</td>
-            <td data-label="Customer">{{ o.client or '—' }}</td>
-            <td data-label="Address">{{ o.delivery_address or '—' }}</td>
-            {# Location column: per-row store (Tomball / Copperfield) derived
-               from origin_store_id, not the route's location_label (which is
-               "All Orders" on the partner view and would mis-stamp every row).
-               store_1/store_3 = Copperfield kitchen, store_2/store_4 = Tomball. #}
-            {% set _row_loc = 'Tomball' if o.origin_store_id in ('store_2', 'store_4') else ('Copperfield' if o.origin_store_id in ('store_1', 'store_3') else location_label) %}
-            {% set _row_scope = 'tomball' if o.origin_store_id in ('store_2', 'store_4') else ('copperfield' if o.origin_store_id in ('store_1', 'store_3') else location) %}
-            <td data-label="Location">{{ _row_loc }}</td>
-            <td data-label="Ez Cater Driver">{{ o.ezcater_driver_name or '—' }}</td>
-            <td data-label="Unhook Driver">
-              {# Always render the Unhook button per Sam #711 — was previously
-                 hidden on rows with no ezcater_driver_name, but Sam wants it
-                 visible on every row regardless. Click handler degrades to a
-                 no-op alert when there's no courier to unhook. #}
-              <button type="button"
-                      class="btn-portal"
-                      style="background:rgba(220,38,38,0.30); border-color:rgba(239,68,68,0.5); color:#fecaca; padding:4px 10px; font-size:12px;"
-                      data-order="{{ o.external_order_id }}"
-                      data-store-scope="{{ _row_scope }}"
-                      data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
-                      onclick="event.stopPropagation(); unhookCourier(this);"
-                      title="Unhook the ezCater courier from this order">
-                Unhook driver
-              </button>
-            </td>
-            <td data-label="Dispatch">{{ (display_drivers or {}).get(o.id) or o.assigned_driver or '—' }}{# TODO Sam #2842 item 2: +1 multi-delivery badge needs backend `is_paired` flag; coord with aick #}</td>
-            <td data-label="Status">{# Status column emptied per Sam #711 — will revisit later. #}</td>
-          </tr>
-          {% endfor %}
-          <tr class="all-row" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">
-            <td colspan="9">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-{% endfor %}
+    <table class="od-table">
+      <thead>
+        <tr>
+          <th>Order #</th>
+          <th>Deliver at</th>
+          <th>Customer</th>
+          <th>Address</th>
+          <th>Location</th>
+          <th>Ez Cater Driver</th>
+          <th>Unhook Driver</th>
+          <th>Dispatch</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in grp.orders %}
+        <tr class="od-row" onclick="window.location='/orders/view/{{ o.external_order_id }}'">
+          <td class="od-num" data-label="Order #">{{ o.external_order_id }}</td>
+          <td data-label="Deliver at">{{ o.deliver_at or '' }}</td>
+          <td data-label="Customer">{{ o.client or '—' }}</td>
+          <td data-label="Address">{{ o.delivery_address or '—' }}</td>
+          {# Per-row store derived from origin_store_id, not the route's
+             location_label (which is "All Orders" on the partner view and
+             would mis-stamp every row). store_1/store_3 = Copperfield
+             kitchen, store_2/store_4 = Tomball. #}
+          {% set _row_loc = 'Tomball' if o.origin_store_id in ('store_2', 'store_4') else ('Copperfield' if o.origin_store_id in ('store_1', 'store_3') else location_label) %}
+          {% set _row_scope = 'tomball' if o.origin_store_id in ('store_2', 'store_4') else ('copperfield' if o.origin_store_id in ('store_1', 'store_3') else location) %}
+          <td data-label="Location">{{ _row_loc }}</td>
+          <td data-label="Ez Cater Driver">{% if o.ezcater_driver_name %}{{ o.ezcater_driver_name }}{% else %}<span class="od-muted">—</span>{% endif %}</td>
+          <td data-label="Unhook Driver">
+            <button type="button"
+                    class="od-unhook"
+                    data-order="{{ o.external_order_id }}"
+                    data-store-scope="{{ _row_scope }}"
+                    data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
+                    onclick="event.stopPropagation(); unhookCourier(this);"
+                    title="Unhook the ezCater courier from this order">
+              Unhook driver
+            </button>
+          </td>
+          <td data-label="Dispatch">{{ (display_drivers or {}).get(o.id) or o.assigned_driver or '—' }}</td>
+          <td data-label="Status"><span class="od-muted">—</span></td>
+        </tr>
+        {% endfor %}
+        <tr class="od-combined" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">
+          <td colspan="9">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
+        </tr>
+      </tbody>
+    </table>
+  {% endfor %}
 </div>
 
 <script>
-// Per-row unhook-courier button per Sam #2842 item 5. Reuses the same
+// Per-row unhook-courier button. Reuses the same
 // /<scope>/orders/view/<order_id>/unassign-courier endpoint that
 // order_view.html's per-order button hits — same auth gate, same body
 // shape, same effect on the row.
@@ -178,9 +229,6 @@ async function unhookCourier(btn) {
   const order = btn.dataset.order;
   const scope = btn.dataset.storeScope;
   if (!order || !scope) return;
-  // Per Sam #711 the button now renders on every row, even rows with no
-  // assigned ezCater courier. Short-circuit those clicks with a clear
-  // message instead of firing the unassign endpoint pointlessly.
   if (btn.dataset.hasDriver === '0') {
     alert('No ezCater courier is assigned to this order, nothing to unhook.');
     return;
@@ -195,7 +243,6 @@ async function unhookCourier(btn) {
       { method: 'POST' },
     );
     if (r.ok) {
-      // Refresh in place so the row's Ez Cater Driver clears + Unhook button drops to —
       window.location.reload();
     } else {
       btn.disabled = false;

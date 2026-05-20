@@ -259,6 +259,11 @@
 
   /* ---- Mobile breakpoint — folds in the v3_mobile single-column design ---- */
   @media (max-width: 900px) {
+    /* Phone: page bg goes transparent so the restaurant photo shows
+       through the day-row gaps; topband goes solid so it stays readable
+       (dck #5:11 follow-up to ffc9788). */
+    .dml-page { background: transparent; }
+    .dml-topband { background: #0f0c08; }
     .dml-body { grid-template-columns: 1fr; }
     .dml-detail { position: static; min-height: 0; }
     .dml-detail:not(.has-entry) { display: none; }

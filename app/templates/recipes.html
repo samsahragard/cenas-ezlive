@@ -100,7 +100,36 @@
   .rcp-cat-dot.chop { background: var(--rcp-cat-chop); }
 
   .rcp-body { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
-  @media (max-width: 1000px) { .rcp-body { grid-template-columns: 1fr; } .rcp-detail { position: relative !important; top: auto !important; } }
+  @media (max-width: 1000px) {
+    .rcp-body { grid-template-columns: 1fr; }
+    .rcp-detail { position: relative !important; top: auto !important; }
+  }
+  /* Phone-specific tightening (ck 2026-05-19 responsive pass per Sam #8:00). */
+  @media (max-width: 700px) {
+    .rcp-page .rcp-controls { gap: 8px; }
+    .rcp-page .rcp-search { max-width: 100%; min-width: 0; flex: 1 1 100%; }
+    .rcp-page .rcp-count { margin-left: 0; font-size: 10px; padding: 4px 10px; }
+    .rcp-page .rcp-filters { gap: 6px; margin-bottom: 14px; }
+    .rcp-page .rcp-chip { padding: 8px 14px; font-size: 11px; min-height: 36px; display: inline-flex; align-items: center; }
+    .rcp-page .rcp-list { max-height: 56vh; }
+    .rcp-page .rcp-row { padding: 14px 16px; min-height: 48px; }
+    .rcp-page .rcp-row-code { width: 56px; font-size: 9px; }
+    .rcp-page .rcp-detail-header { padding: 18px 20px 14px; }
+    .rcp-page .rcp-detail-header::before { top: 18px; height: 28px; }
+    .rcp-page .rcp-detail-title { font-size: 20px; }
+    .rcp-page .rcp-meta-cell { padding: 12px 8px; text-align: center; }
+    .rcp-page .rcp-meta-label { font-size: 9px; letter-spacing: 0.10em; }
+    .rcp-page .rcp-meta-value { font-size: 13px; }
+    .rcp-page .rcp-section { padding: 18px 20px; }
+    .rcp-page .rcp-section-title { font-size: 10px; }
+    .rcp-page .rcp-ing-table thead th { padding: 9px 12px; font-size: 9px; }
+    .rcp-page .rcp-ing-table tbody td { padding: 10px 12px; font-size: 13px; }
+    .rcp-page .rcp-lang-toggle button { padding: 8px 14px; font-size: 11px; min-height: 36px; }
+    .rcp-page .rcp-variant-tab { padding: 10px 14px; min-height: 40px; }
+    .rcp-page .rcp-steps li { padding: 14px 0 14px 42px; font-size: 13px; }
+    .rcp-page .rcp-steps li::before { width: 26px; height: 26px; top: 14px; }
+    .rcp-page .rcp-footer { padding: 12px 20px; }
+  }
 
   .rcp-list {
     background: var(--rcp-bg-pane); border: 1px solid var(--rcp-border);
@@ -395,13 +424,26 @@
   function $(id) { return document.getElementById(id); }
   function $$(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
 
-  function selectRecipe(r) {
+  function selectRecipe(r, opts) {
+    opts = opts || {};
     $$('.rcp-row').forEach(function (n) {
       n.classList.toggle('selected',
         String(n.dataset.recipeId) === String(r.id));
     });
     $('rcpDetailEmpty').style.display = 'none';
     $('rcpDetailBody').style.display = '';
+    // Phone-pass scroll-into-view (ck 2026-05-19 responsive fix per Sam #8:00):
+    // on the single-column collapse, the detail pane sits BELOW the list;
+    // user-initiated row tap should scroll the detail into view so the
+    // selected recipe isn't off-screen.
+    if (!opts.skipScroll
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(max-width: 1000px)').matches) {
+      var d = $('rcpDetail');
+      if (d && typeof d.scrollIntoView === 'function') {
+        d.scrollIntoView({behavior: 'smooth', block: 'start'});
+      }
+    }
 
     $('rcpDetailCode').textContent = r.code || '—';
     $('rcpDetailTitle').textContent = r.name || '—';
@@ -548,7 +590,7 @@
     initial = DATA.filter(function (r) { return r.id === initialId; })[0];
   }
   if (!initial && DATA.length) initial = DATA[0];
-  if (initial) selectRecipe(initial);
+  if (initial) selectRecipe(initial, {skipScroll: true});
   else { $('rcpDetailEmpty').style.display = ''; $('rcpDetailBody').style.display = 'none'; }
 })();
 </script>

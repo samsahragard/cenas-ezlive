@@ -1704,8 +1704,9 @@ def _ff_rolling_avg_by_slug(db, days: int = 30):
 
 def _ff_window_tracker(db, days: int):
     """For Recent Orders top section. Returns
-    {slug: {'tomball': float, 'copperfield': float, 'total': float}}
-    aggregating sum(or_qty) per item per store across window."""
+    {slug: {'tomball': float, 'copperfield': float, 'total': float,
+            'sent': float}} — sum(or_qty) per item per store, plus
+    sum(sent_qty) per item across stores, over the window."""
     from datetime import timedelta
     from app.models import FreshFoodOrderLine, FreshFoodOrder
     from sqlalchemy import func
@@ -1721,13 +1722,28 @@ def _ff_window_tracker(db, days: int):
               .all())
     out: dict = {}
     for slug, store, total in rows:
-        d = out.setdefault(slug, {'tomball': 0.0, 'copperfield': 0.0, 'total': 0.0})
+        d = out.setdefault(slug, {'tomball': 0.0, 'copperfield': 0.0,
+                                  'total': 0.0, 'sent': 0.0})
         t = float(total or 0)
         if store == 'tomball':
             d['tomball'] += t
         elif store == 'copperfield':
             d['copperfield'] += t
         d['total'] += t
+    # SENT totals per item across stores — ck #8:46 added TOTAL SENT +
+    # VARIANCE columns to the Recent Orders tracker.
+    sent_rows = (db.query(FreshFoodOrderLine.item_slug,
+                          func.sum(FreshFoodOrderLine.sent_qty))
+                   .join(FreshFoodOrder,
+                         FreshFoodOrder.id == FreshFoodOrderLine.order_id)
+                   .filter(FreshFoodOrder.placed_at >= cutoff)
+                   .filter(FreshFoodOrderLine.sent_qty.isnot(None))
+                   .group_by(FreshFoodOrderLine.item_slug)
+                   .all())
+    for slug, sent in sent_rows:
+        d = out.setdefault(slug, {'tomball': 0.0, 'copperfield': 0.0,
+                                  'total': 0.0, 'sent': 0.0})
+        d['sent'] += float(sent or 0)
     return out
 
 

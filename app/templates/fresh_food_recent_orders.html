@@ -186,6 +186,26 @@
     font-size: 9.5px;
     padding: 3px 12px;
   }
+  /* SECTION 1 tracker — 7d/30d window toggle + 6-col table (ck #8:46). */
+  .ffro-win-toggle { display: flex; gap: 4px; padding: 12px 16px 0; }
+  .ffro-win-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    border: 0.5px solid rgba(217,164,54,0.25);
+    background: rgba(0,0,0,0.25);
+    color: rgba(255,255,255,0.60);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .ffro-win-btn.is-active { background: #E4B340; color: #1a1208; border-color: transparent; }
+  .ffro-tt-wrap { overflow-x: auto; padding: 10px 12px 6px; }
+  table.ffro-tt.ffro-tt-tracker { min-width: 560px; }
+  table.ffro-tt td.gap-pos { color: #9CCB76; }
+  table.ffro-tt td.gap-neg { color: #E56B6B; }
 
   /* SECTION 2: Variance --------------------------------------------------- */
   table.ffro-var {
@@ -422,56 +442,63 @@
     </button>
   </div>
 
-  {# --- SECTION 1: 7-day + 30-day live trackers (both locations) ------- #}
+  {# --- SECTION 1: live ordering tracker — one table, 7d/30d toggle --- #}
   <div class="ffro-section">
     <h2>
-      <i class="ti ti-chart-bar"></i>Live ordering trackers
-      <span class="h-sub">Sum of OR placed, by location</span>
+      <i class="ti ti-chart-bar"></i>Live ordering tracker
+      <span class="h-sub">Ordered + sent, by item</span>
     </h2>
-    <div class="ffro-tracker-grid">
-      {% for win_name, win_data in [('Last 7 days', tracker_7d), ('Last 30 days', tracker_30d)] %}
-        <div class="ffro-tracker-card">
-          <div class="tc-head">{{ win_name }} <span class="tc-window">Tomball · Copperfield · Total</span></div>
-          <table class="ffro-tt">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Tomball</th>
-                <th>Copperfield</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% set rendered_any = namespace(v=False) %}
-              {% for cat, items in categories %}
-                {% set cat_has_any = namespace(v=False) %}
-                {% for slug in items %}
-                  {% if slug in win_data and win_data[slug].total > 0 %}
-                    {% set cat_has_any.v = True %}
-                    {% set rendered_any.v = True %}
-                  {% endif %}
-                {% endfor %}
-                {% if cat_has_any.v %}
-                  <tr class="cat-hdr"><td colspan="4">{{ cat }}</td></tr>
-                  {% for slug in items %}
-                    {% if slug in win_data and win_data[slug].total > 0 %}
-                      <tr>
-                        <td>{{ slug.replace('-', ' ').title() }}</td>
-                        <td>{% if win_data[slug].tomball > 0 %}{{ '%.1f'|format(win_data[slug].tomball) }}{% else %}<span class="muted">—</span>{% endif %}</td>
-                        <td>{% if win_data[slug].copperfield > 0 %}{{ '%.1f'|format(win_data[slug].copperfield) }}{% else %}<span class="muted">—</span>{% endif %}</td>
-                        <td><strong>{{ '%.1f'|format(win_data[slug].total) }}</strong></td>
-                      </tr>
-                    {% endif %}
-                  {% endfor %}
+    <div class="ffro-win-toggle">
+      <button type="button" class="ffro-win-btn is-active" data-window="7">7-day</button>
+      <button type="button" class="ffro-win-btn" data-window="30">30-day</button>
+    </div>
+    <div class="ffro-tt-wrap">
+      <table class="ffro-tt ffro-tt-tracker">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Tomball ord</th>
+            <th>Copperfield ord</th>
+            <th>Total ord</th>
+            <th>Total sent</th>
+            <th>Variance</th>
+          </tr>
+        </thead>
+        {% for win_key, win_data in [('7', tracker_7d), ('30', tracker_30d)] %}
+          <tbody class="ffro-tt-body" data-window="{{ win_key }}"{% if win_key != '7' %} style="display:none;"{% endif %}>
+            {% set rendered_any = namespace(v=False) %}
+            {% for cat, items in categories %}
+              {% set cat_has_any = namespace(v=False) %}
+              {% for slug in items %}
+                {% if slug in win_data and win_data[slug].total > 0 %}
+                  {% set cat_has_any.v = True %}
+                  {% set rendered_any.v = True %}
                 {% endif %}
               {% endfor %}
-              {% if not rendered_any.v %}
-                <tr><td colspan="4" style="color:rgba(255,255,255,0.35);text-align:center;padding:14px;">No orders in window.</td></tr>
+              {% if cat_has_any.v %}
+                <tr class="cat-hdr"><td colspan="6">{{ cat }}</td></tr>
+                {% for slug in items %}
+                  {% if slug in win_data and win_data[slug].total > 0 %}
+                    {% set d = win_data[slug] %}
+                    {% set variance = d.sent - d.total %}
+                    <tr>
+                      <td>{{ slug.replace('-', ' ').title() }}</td>
+                      <td>{% if d.tomball > 0 %}{{ '%.1f'|format(d.tomball) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                      <td>{% if d.copperfield > 0 %}{{ '%.1f'|format(d.copperfield) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                      <td><strong>{{ '%.1f'|format(d.total) }}</strong></td>
+                      <td>{% if d.sent > 0 %}{{ '%.1f'|format(d.sent) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                      <td class="{% if d.sent > 0 and variance > 0 %}gap-pos{% elif d.sent > 0 and variance < 0 %}gap-neg{% endif %}">{% if d.sent > 0 %}{{ '%+.1f'|format(variance) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    </tr>
+                  {% endif %}
+                {% endfor %}
               {% endif %}
-            </tbody>
-          </table>
-        </div>
-      {% endfor %}
+            {% endfor %}
+            {% if not rendered_any.v %}
+              <tr><td colspan="6" style="color:rgba(255,255,255,0.35);text-align:center;padding:14px;">No orders in this window.</td></tr>
+            {% endif %}
+          </tbody>
+        {% endfor %}
+      </table>
     </div>
   </div>
 
@@ -510,41 +537,8 @@
     {% endif %}
   </div>
 
-  {# --- SECTION 2: SENT vs ordered variance --------------------------- #}
-  <div class="ffro-section">
-    <h2>
-      <i class="ti ti-arrows-diff"></i>SENT vs ordered variance
-      <span class="h-sub">Last 30 days · sorted by gap size</span>
-    </h2>
-    {% if variance_rows %}
-      <table class="ffro-var">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Ordered</th>
-            <th>Sent</th>
-            <th>Gap</th>
-            <th>Gap %</th>
-            <th>Flag</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in variance_rows %}
-            <tr>
-              <td>{{ r.slug.replace('-', ' ').title() }}</td>
-              <td>{{ '%.1f'|format(r.total_or) }}</td>
-              <td>{{ '%.1f'|format(r.total_sent) }}</td>
-              <td class="{% if r.gap >= 0 %}gap-pos{% else %}gap-neg{% endif %}">{{ '%+.1f'|format(r.gap) }}</td>
-              <td class="muted">{{ '%+.1f'|format(r.gap_pct) }}%</td>
-              <td><span class="var-sev {{ r.sev }}">{{ r.sev }}</span></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <div class="var-empty">No fulfilled orders in the last 30 days.</div>
-    {% endif %}
-  </div>
+  {# SECTION 2 (SENT-vs-ordered variance) removed — variance is now a
+     column inside the SECTION 1 tracker table (ck #8:46 #4). #}
 
   {# --- SECTION 3: Full history -------------------------------------- #}
   <div class="ffro-section">
@@ -786,6 +780,19 @@
       ffBanner.style.color = '#E56B6B';
       ffBanner.style.border = '0.5px solid rgba(229,107,107,0.30)';
       ffBanner.textContent = 'Network error: ' + e.message;
+    });
+  });
+
+  // Live ordering tracker — 7-day / 30-day window toggle (ck #8:46).
+  document.querySelectorAll('.ffro-win-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var win = btn.getAttribute('data-window');
+      document.querySelectorAll('.ffro-win-btn').forEach(function(b){
+        b.classList.toggle('is-active', b === btn);
+      });
+      document.querySelectorAll('.ffro-tt-body').forEach(function(tb){
+        tb.style.display = (tb.getAttribute('data-window') === win) ? '' : 'none';
+      });
     });
   });
 })();

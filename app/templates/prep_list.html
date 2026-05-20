@@ -594,8 +594,8 @@
     <div>Item</div>
     <div class="check">Prep?</div>
   </div>
-  {% if sec.items %}
-    {% for it in sec.items %}{{ item_row(it) }}{% endfor %}
+  {% if sec['items'] %}
+    {% for it in sec['items'] %}{{ item_row(it) }}{% endfor %}
   {% else %}
     <div class="prep-section-empty">No items in this section yet.</div>
   {% endif %}
@@ -890,7 +890,7 @@
         <div>Tap any item on the board to pull its recipe breakdown, assign the work, and track progress.</div>
       </div>
       {% for sec in sections %}
-        {% for it in sec.items %}{{ detail_card(it) }}{% endfor %}
+        {% for it in sec['items'] %}{{ detail_card(it) }}{% endfor %}
       {% endfor %}
     </div>
 

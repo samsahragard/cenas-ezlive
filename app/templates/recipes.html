@@ -50,7 +50,21 @@
     --rcp-cat-chop: #5a9c66;
     color: var(--rcp-cream);
     padding-bottom: 60px;
+    position: relative;
   }
+  /* Solid-dark backdrop that covers the base_dashboard restaurant photo
+     so the page reads like the recipes_v3 standalone mockup, not a layer
+     on top of the photo bleed. Sits BEHIND content (z-index:-1) so the
+     sidebar + nav stay clickable. */
+  .rcp-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--rcp-bg-deep);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .rcp-page > * { position: relative; z-index: 1; }
   .rcp-page *, .rcp-page *::before, .rcp-page *::after { box-sizing: border-box; }
 
   /* Top "header band" — wraps controls + filters in a dark contrast backdrop

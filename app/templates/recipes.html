@@ -22,8 +22,11 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'kitchen_recipes' %}
 {% block title %}Recipes — Cenas Kitchen{% endblock %}
-{% block page_title %}Recipes{% endblock %}
-{% block page_subtitle %}{{ store_label or '' }}{% endblock %}
+{# Page chrome lives inside the content block so the inline header
+   (title + search + store pill on one row, mockup-style) renders
+   without the base_dashboard stacked page_title/page_subtitle rows. #}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block content %}
 <style>
@@ -52,20 +55,56 @@
     padding-bottom: 60px;
     position: relative;
   }
-  /* Solid-dark backdrop that covers the base_dashboard restaurant photo
-     so the page reads like the recipes_v3 standalone mockup, not a layer
-     on top of the photo bleed. Sits BEHIND content (z-index:-1) so the
-     sidebar + nav stay clickable. */
+  /* Semi-transparent darkening layer on top of the base_dashboard
+     restaurant photo — KEEPS the brand photo (Sam #8:38 — 'keep ours'),
+     just darkens it so the recipe content is legible. Sits BEHIND
+     content (z-index:0) so the sidebar + nav stay clickable. */
   .rcp-page::before {
     content: '';
     position: fixed;
     inset: 0;
-    background: var(--rcp-bg-deep);
+    background: rgba(15, 12, 8, 0.72);
     z-index: 0;
     pointer-events: none;
   }
   .rcp-page > * { position: relative; z-index: 1; }
   .rcp-page *, .rcp-page *::before, .rcp-page *::after { box-sizing: border-box; }
+
+  /* ----- Inline hero header (mockup-style — title + search + store pill in ONE ROW) ----- */
+  .rcp-hero {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .rcp-hero-title {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 0;
+    color: var(--rcp-cream);
+    flex-shrink: 0;
+  }
+  .rcp-hero .rcp-search {
+    /* Override default search width — hero search is wider, pill on right */
+    max-width: 480px;
+    flex: 1 1 280px;
+  }
+  .rcp-hero-store {
+    margin-left: auto;
+    padding: 6px 14px;
+    background: var(--rcp-gold-soft);
+    border: 1px solid var(--rcp-gold-line);
+    border-radius: 8px;
+    color: var(--rcp-gold);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
 
   /* Top "header band" — wraps controls + filters in a dark contrast backdrop
      so they're legible against the base_dashboard restaurant-photo bleed. */
@@ -327,16 +366,18 @@
 
 <div class="rcp-page">
 
-  {# ----- Top header band (controls + filter chips, with contrast backdrop) ----- #}
-  <div class="rcp-topband">
-    <div class="rcp-controls">
-      <div class="rcp-search">
-        <span class="icon">&#x2315;</span>
-        <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
-      </div>
-      <span class="rcp-count" id="rcpCount">{{ recipes|length }} {{ 'recipe' if recipes|length == 1 else 'recipes' }}</span>
+  {# ----- Inline hero header (mockup style — title + search + DOS pill in one row) ----- #}
+  <div class="rcp-hero">
+    <h1 class="rcp-hero-title">Recipes</h1>
+    <div class="rcp-search">
+      <span class="icon">&#x2315;</span>
+      <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
     </div>
+    <span class="rcp-hero-store">{{ store_label or 'Cenas Kitchen' }}{% if store_slug %} · {{ store_slug|upper }}{% endif %}</span>
+  </div>
 
+  {# ----- Filter chips + recipe count (chips row, mockup style) ----- #}
+  <div class="rcp-topband">
     <div class="rcp-filters" id="rcpFilters">
       <button type="button" class="rcp-chip active" data-cat="all">All <span class="count">{{ recipes|length }}</span></button>
       {% for c in categories %}
@@ -345,6 +386,7 @@
           <span class="rcp-cat-dot {{ c.slug }}"></span>{{ c.label }} <span class="count">{{ count }}</span>
         </button>
       {% endfor %}
+      <span class="rcp-count" id="rcpCount" style="margin-left:auto">{{ recipes|length }} {{ 'recipe' if recipes|length == 1 else 'recipes' }}</span>
     </div>
   </div>
 

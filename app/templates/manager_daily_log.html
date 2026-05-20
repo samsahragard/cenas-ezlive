@@ -1,20 +1,29 @@
 {# ============================================================
-   manager_daily_log.html — Daily Manager Log (production)
-   dck build-order #2 conversion of daily_manager_log_v3 mockup.
+   manager_daily_log_production.html — Daily Manager Log (production)
+   dck conversion of the owner-approved dck_manager_log_redesign_render
+   mockup (warm --ck-* palette, 3 client-switched views: dashboard /
+   day-detail / new-entry form).
 
-   Replaces the cd602db Sam-custom design with the Sam-approved
-   v3 design (#4:07 format + #5:05 image upload).
+   Replaces manager_daily_log.html. Consumes the SAME route contract
+   and posts to the SAME endpoint, so aick's existing store_routes.py
+   route keeps working unchanged.
 
    ROUTE CONTRACT (store_routes.py — aick wires):
-     days   → list[ {iso, dow, label, is_today, entries} ]
-              reverse-chronological; entries = list of entry objs.
-     entry  → id, entry_date, module, subject, issue, priority,
-              body, show_on_roster, created_at, author(.full_name),
-              images (list of {url}).
-     store_label, store_slug → from base_dashboard context.
+     days   -> list[ {iso, dow, label, is_today, entries} ]
+               reverse-chronological; days[0] is the most-recent day
+               (rendered as the Today card), the rest are the list.
+               entries = list of entry objs.
+     entry  -> id, entry_date, module, subject, issue, priority,
+               body, show_on_roster, created_at, author(.full_name),
+               images (list of {url}).
+     selected_date, today_iso -> iso date strings.
+     store_label, store_slug  -> from base_dashboard context.
    Form posts to store.manager_page_create (page='daily-log'),
-   multipart (text fields + images[]). Audience gate at the route:
-   _manager_role_ok — manager-tier, expo excluded (CENA.md L165).
+   multipart (text fields + images[]). The redesign's form surfaces
+   only a body textarea; module/subject/issue/priority post as hidden
+   defaults so the route's required fields are still satisfied.
+   Audience gate at the route: _manager_role_ok — manager-tier, expo
+   excluded (CENA.md L165).
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'manager_daily_log' %}
@@ -22,592 +31,1302 @@
 {% block page_title %}Daily Manager Log{% endblock %}
 {% block page_subtitle %}{{ store_label }} — store logs{% endblock %}
 
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
 <style>
-  /* All custom properties scoped to .dml-page so the mockup tokens
-     never leak into the global sheet (samai pattern, cd602db). */
-  .dml-page {
-    --dml-bg-deep: #1f1a12;
-    --dml-bg-pane: #2a2419;
-    --dml-gold: #d4af37;
-    --dml-gold-soft: rgba(212,175,55,0.18);
-    --dml-gold-line: rgba(212,175,55,0.4);
-    --dml-cream: #ece3d0;
-    --dml-cream-dim: rgba(236,227,208,0.7);
-    --dml-cream-faint: rgba(236,227,208,0.45);
-    --dml-glass: rgba(236,227,208,0.05);
-    --dml-glass-hover: rgba(236,227,208,0.08);
-    --dml-border: rgba(236,227,208,0.15);
-    --dml-radius: 14px;
-    --dml-radius-sm: 8px;
-    --dml-ease: cubic-bezier(.22,.61,.36,1);
-    --dml-shadow: 0 8px 24px rgba(0,0,0,0.35);
-    --dml-pri-low: #5a9c66;
-    --dml-pri-medium: #d4af37;
-    --dml-pri-high: #e08a3c;
-    --dml-pri-urgent: #c25b4b;
-    color: var(--dml-cream);
-    background: #1f1a12;
-    padding-bottom: 60px;
+  /* All custom properties + classes scoped to .mdl-page so the mockup's
+     warm --ck-* palette never leaks into the global sheet (atr-/dml-
+     pattern). The render set globals on html/body/*/body::before — those
+     are re-rooted onto .mdl-page here. */
+  .mdl-page {
+    --ck-red: #C73B36;
+    --ck-red-deep: #9B2A26;
+    --ck-red-bright: #E85852;
+    --ck-gold: #E4B340;
+    --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F;
+    --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250, 246, 236, 0.82);
+    --ck-cream-faint: rgba(250, 246, 236, 0.55);
+    --ck-cream-meta: rgba(250, 246, 236, 0.4);
+    --ck-bg-deep: #1a0d08;
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --ck-bg-input: rgba(0, 0, 0, 0.3);
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    position: relative;
+    isolation: isolate;
+    color: var(--ck-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
+      linear-gradient(180deg, var(--ck-bg-deep) 0%, #0d0604 100%);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 16px;
+    margin: 0 0 48px;
+    overflow: hidden;
   }
-  .dml-page *, .dml-page *::before, .dml-page *::after { box-sizing: border-box; }
 
-  /* ---- Top header band — dark contrast backdrop so the controls + tabs
-     stay legible against the base_dashboard photo bleed (ck #8:34 + dck
-     #8:37 spec, mirrors the recipes .rcp-topband fix at 00801a9). ---- */
-  .dml-topband {
-    background: rgba(15, 12, 8, 0.62);
-    border: 1px solid var(--dml-border);
-    border-radius: var(--dml-radius);
-    padding: 14px 16px 2px;
+  .mdl-page *, .mdl-page *::before, .mdl-page *::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mdl-page button, .mdl-page textarea { font-family: inherit; }
+
+  /* Noise texture — re-rooted from body::before onto the page wrapper. */
+  .mdl-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+  .mdl-page > * { position: relative; z-index: 1; }
+
+  .mdl-page .frame {
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 16px 16px 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* === HEADER === */
+  .mdl-page .top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .mdl-page .menu-btn, .mdl-page .back-btn {
+    height: 40px;
+    border-radius: var(--radius-sm);
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-gold);
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .mdl-page .menu-btn {
+    width: 40px;
+    justify-content: center;
+  }
+
+  .mdl-page .back-btn {
+    padding: 0 14px;
+    gap: 6px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .mdl-page .menu-btn svg, .mdl-page .back-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .mdl-page .menu-btn svg {
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .mdl-page .back-btn svg { fill: currentColor; }
+
+  .mdl-page .top-spacer { flex: 1; }
+
+  .mdl-page h1 {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 32px;
+    line-height: 1;
+    color: var(--ck-cream);
     margin-bottom: 18px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
   }
-  .dml-topband .dml-controls { margin-bottom: 12px; }
-  .dml-topband .dml-tabs { margin-bottom: 0; }
-  /* ---- Date strip + store pill ---- */
-  .dml-controls {
-    display: flex; align-items: center; gap: 14px;
-    margin-bottom: 16px; flex-wrap: wrap;
-  }
-  .dml-date-pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 12px;
-    background: var(--dml-glass);
-    border: 1px solid var(--dml-border);
-    border-radius: 8px;
-    font-size: 13px; font-variant-numeric: tabular-nums;
-  }
-  .dml-date-pill input[type="date"] {
-    background: transparent; border: 0; color: inherit;
-    width: 130px; color-scheme: dark; font: inherit;
-  }
-  .dml-today-btn {
-    padding: 6px 14px; background: transparent;
-    border: 1px solid var(--dml-border); border-radius: 8px;
-    color: var(--dml-cream-dim); font-size: 12px;
-    letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer;
-    transition: all .18s var(--dml-ease);
-  }
-  .dml-today-btn:not(:disabled):hover { border-color: var(--dml-gold-line); color: var(--dml-gold); }
-  .dml-today-btn:disabled { opacity: .35; cursor: default; }
-  .dml-store-pill {
-    margin-left: auto; padding: 6px 14px;
-    background: var(--dml-gold-soft); border: 1px solid var(--dml-gold-line);
-    border-radius: 8px; color: var(--dml-gold);
-    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600;
-  }
-  .dml-tabs {
-    display: flex; align-items: center; gap: 4px;
-    border-bottom: 1px solid var(--dml-border); margin-bottom: 18px;
-  }
-  .dml-tab {
-    padding: 12px 18px; background: transparent; border: 0;
-    color: var(--dml-gold); font-size: 13px; font-weight: 500;
-    border-bottom: 2px solid var(--dml-gold); margin-bottom: -1px;
-  }
-  .dml-tab-spacer { flex: 1; }
-  .dml-create-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 8px 16px; background: var(--dml-gold); color: #1f1a12;
-    border: 0; border-radius: 8px; font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: filter .18s var(--dml-ease);
-  }
-  .dml-create-btn:hover { filter: brightness(1.08); }
-  .dml-create-btn .plus { font-size: 16px; font-weight: 700; }
 
-  /* ---- Two-column body ---- */
-  .dml-body { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(0,1fr); gap: 18px; align-items: start; }
-  .dml-day-list { display: flex; flex-direction: column; gap: 14px; max-height: 78vh; overflow-y: auto; padding-right: 6px; }
-  .dml-day { background: var(--dml-bg-pane); border: 1px solid var(--dml-border); border-radius: var(--dml-radius); overflow: hidden; }
-  .dml-day-head {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 18px; border-bottom: 1px solid var(--dml-border); background: var(--dml-glass);
+  .mdl-page h1 .accent {
+    font-style: italic;
+    color: var(--ck-gold-bright);
   }
-  .dml-day-head .dow { font-weight: 700; letter-spacing: 0.1em; font-size: 12px; text-transform: uppercase; }
-  .dml-day-head .date { color: var(--dml-cream-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
-  .dml-day-head .today-tag { margin-left: 6px; padding: 2px 8px; background: var(--dml-gold); color: #1f1a12; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; border-radius: 4px; }
-  .dml-day-head .count { margin-left: auto; color: var(--dml-cream-faint); font-size: 12px; }
-  .dml-day-empty { padding: 16px 18px; color: var(--dml-cream-faint); font-style: italic; font-size: 13px; }
 
-  /* ---- Per-day Add Entry button (dck #4:52 phone build) ---- */
-  .dml-add-entry {
-    width: 100%; display: none;
-    align-items: center; justify-content: center; gap: 7px;
-    padding: 13px 12px; cursor: pointer;
-    background: var(--dml-gold-soft); border: 0;
-    border-top: 1px solid var(--dml-gold-line);
-    color: var(--dml-gold); font-size: 12px; font-weight: 700;
-    letter-spacing: 0.06em; text-transform: uppercase; font-family: inherit;
-    transition: filter .15s var(--dml-ease);
+  .mdl-page h2 {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 26px;
+    line-height: 1;
+    color: var(--ck-cream);
+    margin-bottom: 4px;
   }
-  .dml-add-entry .plus {
-    width: 16px; height: 16px; border-radius: 50%;
-    background: var(--dml-gold); color: #1f1a12;
-    font-size: 13px; font-weight: 800; line-height: 16px;
-    display: inline-flex; align-items: center; justify-content: center;
+
+  .mdl-page h2 .accent {
+    font-style: italic;
+    color: var(--ck-gold-bright);
   }
-  .dml-add-entry:hover { filter: brightness(1.12); }
-  .dml-add-entry:active { background: var(--dml-gold-line); color: #fff; }
-  .dml-entry {
-    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
-    padding: 12px 18px; border-bottom: 1px solid var(--dml-border);
-    cursor: pointer; transition: background .15s var(--dml-ease);
+
+  .mdl-page .subtitle {
+    color: var(--ck-cream-dim);
+    font-size: 12px;
+    margin-bottom: 16px;
   }
-  .dml-entry:last-child { border-bottom: 0; }
-  .dml-entry:hover, .dml-entry.is-selected { background: var(--dml-glass-hover); }
-  .dml-entry.is-selected { box-shadow: inset 3px 0 0 var(--dml-gold); }
-  .dml-entry-pri { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .dml-entry-pri.pri-low { background: var(--dml-pri-low); }
-  .dml-entry-pri.pri-medium { background: var(--dml-pri-medium); }
-  .dml-entry-pri.pri-high { background: var(--dml-pri-high); }
-  .dml-entry-pri.pri-urgent { background: var(--dml-pri-urgent); box-shadow: 0 0 8px rgba(194,91,75,0.6); }
-  .dml-entry-main { min-width: 0; }
-  .dml-entry-line1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .dml-entry-module { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dml-gold); }
-  .dml-entry-sub { font-size: 11px; color: var(--dml-cream-dim); }
-  .dml-entry-issue { padding: 2px 7px; background: var(--dml-glass); border: 1px solid var(--dml-border); border-radius: 4px; font-size: 10px; letter-spacing: 0.04em; color: var(--dml-cream-dim); }
-  .dml-entry-roster { margin-left: 4px; color: var(--dml-gold); font-size: 12px; }
-  .dml-entry-photo-flag { color: var(--dml-gold); font-size: 11px; margin-left: 2px; }
-  .dml-entry-preview { color: var(--dml-cream); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
-  .dml-entry-meta { text-align: right; color: var(--dml-cream-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .dml-entry-meta .author { color: var(--dml-cream-dim); display: block; font-size: 12px; }
 
-  /* ---- Detail pane ---- */
-  .dml-detail {
-    position: sticky; top: 24px;
-    background: var(--dml-bg-pane); border: 1px solid var(--dml-border);
-    border-radius: var(--dml-radius); min-height: 360px; padding: 22px;
-    display: flex; flex-direction: column;
+  /* === TODAY CARD (DASHBOARD) === */
+  .mdl-page .today-wrap {
+    margin-bottom: 16px;
   }
-  .dml-detail-empty { margin: auto; color: var(--dml-cream-faint); font-style: italic; text-align: center; font-size: 14px; }
-  .dml-detail-body { display: none; }
-  .dml-detail.has-entry .dml-detail-empty { display: none; }
-  .dml-detail.has-entry .dml-detail-body { display: flex; flex-direction: column; gap: 14px; height: 100%; }
-  .dml-detail-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
-  .dml-detail-head .module { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dml-gold); }
-  .dml-detail-head .pri-tag { margin-left: auto; padding: 3px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-  .pri-tag.pri-low { background: rgba(90,156,102,0.16); color: var(--dml-pri-low); border: 1px solid rgba(90,156,102,0.4); }
-  .pri-tag.pri-medium { background: var(--dml-gold-soft); color: var(--dml-gold); border: 1px solid var(--dml-gold-line); }
-  .pri-tag.pri-high { background: rgba(224,138,60,0.16); color: var(--dml-pri-high); border: 1px solid rgba(224,138,60,0.4); }
-  .pri-tag.pri-urgent { background: rgba(194,91,75,0.18); color: var(--dml-pri-urgent); border: 1px solid rgba(194,91,75,0.5); }
-  .dml-detail-subline { color: var(--dml-cream-dim); font-size: 12px; }
-  .dml-detail-text { flex: 1; color: var(--dml-cream); font-size: 14px; line-height: 1.55; background: var(--dml-glass); border: 1px solid var(--dml-border); border-radius: var(--dml-radius-sm); padding: 14px 16px; white-space: pre-wrap; }
-  .dml-gallery-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dml-cream-dim); margin-bottom: 6px; }
-  .dml-detail-gallery { display: flex; flex-wrap: wrap; gap: 8px; }
-  .dml-gallery-thumb { width: 96px; height: 96px; border-radius: var(--dml-radius-sm); overflow: hidden; border: 1px solid var(--dml-border); background: var(--dml-glass); cursor: pointer; transition: border-color .15s var(--dml-ease); }
-  .dml-gallery-thumb:hover { border-color: var(--dml-gold-line); }
-  .dml-gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .dml-detail-foot { display: flex; gap: 10px; color: var(--dml-cream-faint); font-size: 11px; padding-top: 8px; border-top: 1px solid var(--dml-border); }
-  .dml-detail-foot .roster-flag { margin-left: auto; color: var(--dml-gold); font-weight: 600; }
 
-  /* ---- Modal ---- */
-  .dml-modal-overlay { position: fixed; inset: 0; background: rgba(15,12,8,0.78); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1200; padding: 24px; }
-  .dml-modal-overlay.is-open { display: flex; }
-  .dml-modal { width: min(960px, 100%); max-height: calc(100vh - 48px); background: var(--dml-bg-pane); border: 1px solid var(--dml-gold-line); border-radius: var(--dml-radius); box-shadow: var(--dml-shadow); display: flex; flex-direction: column; overflow: hidden; }
-  .dml-modal-head { display: flex; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--dml-border); background: var(--dml-glass); }
-  .dml-modal-head h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--dml-cream); }
-  .dml-modal-head h2 .accent { color: var(--dml-gold); }
-  .dml-modal-close { margin-left: auto; background: transparent; border: 0; color: var(--dml-cream-dim); font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
-  .dml-modal-close:hover { color: var(--dml-cream); background: var(--dml-glass); }
-  .dml-modal-body { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.3fr); gap: 24px; padding: 22px; overflow-y: auto; }
-  .dml-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  .dml-field label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dml-cream-dim); }
-  .dml-field input[type="date"], .dml-field select, .dml-field textarea, .dml-field input[type="text"] {
-    background: var(--dml-bg-deep); border: 1px solid var(--dml-border); border-radius: var(--dml-radius-sm);
-    padding: 10px 12px; color: var(--dml-cream); font-size: 14px; color-scheme: dark; font-family: inherit;
-    transition: border-color .15s var(--dml-ease);
+  .mdl-page .today {
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.1), rgba(199, 59, 54, 0.04));
+    border: 1px solid var(--ck-gold);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    cursor: pointer;
+    display: block;
+    margin-bottom: 8px;
   }
-  .dml-field input:focus, .dml-field select:focus, .dml-field textarea:focus { border-color: var(--dml-gold-line); outline: 0; }
-  .dml-field select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--dml-cream-dim) 50%), linear-gradient(135deg, var(--dml-cream-dim) 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
-  .dml-checkbox { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; color: var(--dml-cream-dim); font-size: 13px; cursor: pointer; user-select: none; }
-  .dml-checkbox input { appearance: none; width: 18px; height: 18px; border: 1px solid var(--dml-border); border-radius: 4px; background: var(--dml-bg-deep); cursor: pointer; position: relative; }
-  .dml-checkbox input:checked { background: var(--dml-gold); border-color: var(--dml-gold); }
-  .dml-checkbox input:checked::after { content: '\2713'; color: #1f1a12; font-size: 13px; font-weight: 700; position: absolute; left: 3px; top: -2px; }
-  .dml-form-right { display: flex; flex-direction: column; }
-  .dml-form-right .dml-field-text { flex: 1; }
-  .dml-form-right .dml-field-text textarea { flex: 1; min-height: 150px; resize: vertical; line-height: 1.5; }
-  .dml-upload-zone { border: 1.5px dashed var(--dml-gold-line); border-radius: var(--dml-radius-sm); padding: 18px; text-align: center; cursor: pointer; background: var(--dml-glass); transition: all .15s var(--dml-ease); }
-  .dml-upload-zone:hover, .dml-upload-zone.drag-over { border-color: var(--dml-gold); background: var(--dml-gold-soft); }
-  .dml-upload-zone:focus-visible { outline: 2px solid var(--dml-gold); outline-offset: 2px; }
-  .dml-upload-zone .uz-icon { font-size: 24px; display: block; margin-bottom: 5px; }
-  .dml-upload-zone .uz-text { color: var(--dml-cream-dim); font-size: 13px; }
-  .dml-upload-zone .uz-hint { color: var(--dml-cream-faint); font-size: 11px; margin-top: 3px; }
-  .dml-upload-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .dml-thumb { position: relative; width: 72px; height: 72px; border-radius: var(--dml-radius-sm); overflow: hidden; border: 1px solid var(--dml-border); background: var(--dml-bg-deep); }
-  .dml-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .dml-thumb-remove { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(15,12,8,0.85); color: var(--dml-cream); border: 0; font-size: 13px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .dml-thumb-remove:hover { background: var(--dml-pri-urgent); }
-  .dml-modal-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding-top: 14px; border-top: 1px solid var(--dml-border); }
-  .dml-send { padding: 10px 22px; background: var(--dml-gold); color: #1f1a12; border: 0; border-radius: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter .15s var(--dml-ease); }
-  .dml-send:hover { filter: brightness(1.08); }
-  .dml-cancel { background: transparent; border: 0; color: var(--dml-cream-dim); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-  .dml-cancel:hover { color: var(--dml-cream); }
-  .dml-modal-help { margin-left: auto; color: var(--dml-cream-faint); font-size: 11px; }
 
-  /* ---- FAB ---- */
-  .dml-fab { display: none; }
+  .mdl-page .today-top {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
 
-  /* ---- Lightbox ---- */
-  .dml-lightbox { position: fixed; inset: 0; background: rgba(10,8,5,0.93); display: none; align-items: center; justify-content: center; z-index: 1300; padding: 48px; }
-  .dml-lightbox.is-open { display: flex; }
-  .dml-lightbox img { max-width: 100%; max-height: 100%; border-radius: var(--dml-radius-sm); box-shadow: var(--dml-shadow); }
-  .dml-lightbox-close { position: absolute; top: 18px; right: 26px; background: transparent; border: 0; color: var(--dml-cream); font-size: 34px; line-height: 1; cursor: pointer; }
+  .mdl-page .today-day {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.2);
+    padding: 3px 9px;
+    border-radius: 4px;
+    letter-spacing: 0.12em;
+  }
 
-  .dml-empty-all { padding: 40px 18px; text-align: center; color: var(--dml-cream-faint); font-style: italic; }
+  .mdl-page .today-date {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ck-cream);
+    line-height: 1;
+    flex: 1;
+  }
 
-  /* ---- Mobile breakpoint — folds in the v3_mobile single-column design ---- */
-  @media (max-width: 900px) {
-    /* Phone: page bg goes transparent so the restaurant photo shows
-       through the day-row gaps; topband goes solid so it stays readable
-       (dck #5:11 follow-up to ffc9788). */
-    .dml-page { background: transparent; }
-    .dml-topband { background: #0f0c08; }
-    .dml-body { grid-template-columns: 1fr; }
-    .dml-detail { position: static; min-height: 0; }
-    .dml-detail:not(.has-entry) { display: none; }
-    .dml-modal-body { grid-template-columns: 1fr; }
-    .dml-controls { gap: 8px; }
-    .dml-store-pill { margin-left: 0; }
-    .dml-create-btn { display: none; }
-    /* Phone: day rows run full-width edge-to-edge, the photo backdrop
-       shows through the gap between rows, the per-day Add Entry button
-       replaces the FAB (dck #4:52). */
-    .dml-day-list { padding: 0; gap: 11px; max-height: none; overflow: visible; }
-    .dml-add-entry { display: flex; }
-    .dml-fab { display: none; }
+  .mdl-page .today-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ck-gold-bright);
+    font-weight: 700;
+  }
+
+  .mdl-page .today-latest {
+    font-size: 14px;
+    color: var(--ck-cream-dim);
+    line-height: 1.45;
+    margin-bottom: 8px;
+  }
+
+  .mdl-page .today-latest.muted {
+    font-style: italic;
+    color: var(--ck-cream-faint);
+  }
+
+  .mdl-page .today-by {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.06em;
+  }
+
+  .mdl-page .today-by strong {
+    color: var(--ck-cream);
+    font-weight: 700;
+  }
+
+  /* === Big Add Entry button — under today === */
+  .mdl-page .add-today-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+    border: 0.5px solid var(--ck-red-bright);
+    border-radius: var(--radius-md);
+    color: var(--ck-cream);
+    cursor: pointer;
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 14px rgba(199, 59, 54, 0.3);
+    letter-spacing: 0.03em;
+  }
+
+  .mdl-page .add-today-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+  /* === DAYS LIST === */
+  .mdl-page .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin: 12px 4px 10px;
+  }
+
+  .mdl-page .day {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .mdl-page .day:hover { background: var(--ck-bg-card-hover); }
+
+  .mdl-page .day-info {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .mdl-page .day-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.12em;
+    width: 38px;
+  }
+
+  .mdl-page .day-date {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 17px;
+    color: var(--ck-cream);
+    line-height: 1;
+  }
+
+  .mdl-page .day-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ck-gold);
+    font-weight: 700;
+  }
+
+  .mdl-page .day-arrow {
+    width: 16px;
+    height: 16px;
+    fill: var(--ck-cream-meta);
+  }
+
+  .mdl-page .day.empty {
+    background: transparent;
+    border-color: rgba(217, 164, 54, 0.08);
+    padding: 10px 16px;
+  }
+
+  .mdl-page .day.empty .day-name,
+  .mdl-page .day.empty .day-date { opacity: 0.45; }
+
+  .mdl-page .day.empty .day-count {
+    color: var(--ck-cream-faint);
+    font-weight: 500;
+  }
+
+  /* === DAY DETAIL VIEW === */
+  .mdl-page .day-detail-header {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-active);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mdl-page .day-detail-date {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ck-cream);
+    line-height: 1;
+    flex: 1;
+  }
+
+  .mdl-page .day-detail-date .day-prefix {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 700;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-right: 6px;
+  }
+
+  .mdl-page .today-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.2);
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.1em;
+  }
+
+  .mdl-page .past-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-cream-dim);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.1em;
+  }
+
+  /* Backdate notice when adding to past day */
+  .mdl-page .backdate-notice {
+    background: rgba(46, 163, 159, 0.08);
+    border: 0.5px solid rgba(46, 163, 159, 0.3);
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    color: var(--ck-cream);
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .mdl-page .backdate-notice svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--ck-teal-bright);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .mdl-page .backdate-notice strong {
+    color: var(--ck-teal-bright);
+    font-weight: 700;
+  }
+
+  /* === ENTRY CARD === */
+  .mdl-page .entry {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+  }
+
+  .mdl-page .entry-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .mdl-page .entry-author {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .mdl-page .author-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #28160e, #1a0d08);
+    color: var(--ck-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 12px;
+    font-weight: 700;
+    border: 0.5px solid var(--ck-border-active);
+    flex-shrink: 0;
+  }
+
+  .mdl-page .author-info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .mdl-page .author-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ck-cream);
+  }
+
+  .mdl-page .author-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  .mdl-page .entry-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.05em;
+    text-align: right;
+  }
+
+  .mdl-page .entry-time strong {
+    color: var(--ck-gold-bright);
+    font-weight: 700;
+  }
+
+  .mdl-page .entry-body {
+    font-size: 14px;
+    color: var(--ck-cream);
+    line-height: 1.5;
+    margin-bottom: 10px;
+    white-space: pre-wrap;
+  }
+
+  /* Entry meta tag row (module / subject / priority) */
+  .mdl-page .entry-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .mdl-page .entry-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(228, 179, 64, 0.12);
+    border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-gold);
+  }
+
+  .mdl-page .entry-tag.pri-low { color: var(--ck-teal-bright); }
+  .mdl-page .entry-tag.pri-medium { color: var(--ck-gold-bright); }
+  .mdl-page .entry-tag.pri-high { color: #E89B40; }
+  .mdl-page .entry-tag.pri-urgent {
+    color: var(--ck-red-bright);
+    background: rgba(232, 88, 82, 0.12);
+    border-color: rgba(232, 88, 82, 0.4);
+  }
+
+  .mdl-page .entry-tag.roster {
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.2);
+  }
+
+  /* Entry photo gallery */
+  .mdl-page .entry-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .mdl-page .entry-thumb {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 0.5px solid var(--ck-border-subtle);
+    background: var(--ck-bg-input);
+  }
+
+  .mdl-page .entry-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .mdl-page .entry-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 0.5px solid var(--ck-border-subtle);
+  }
+
+  /* Editable countdown badge */
+  .mdl-page .edit-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    background: rgba(228, 179, 64, 0.15);
+    border: 0.5px solid var(--ck-border-active);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-gold-bright);
+    letter-spacing: 0.05em;
+  }
+
+  .mdl-page .edit-badge svg {
+    width: 10px;
+    height: 10px;
+    fill: currentColor;
+  }
+
+  .mdl-page .locked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.08em;
+  }
+
+  .mdl-page .locked-badge svg {
+    width: 10px;
+    height: 10px;
+    fill: currentColor;
+  }
+
+  .mdl-page .entry-footer-spacer { flex: 1; }
+
+  .mdl-page .entry-action {
+    background: transparent;
+    border: none;
+    color: var(--ck-cream-faint);
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  .mdl-page .entry-action:hover { color: var(--ck-cream); background: rgba(228, 179, 64, 0.06); }
+
+  .mdl-page .entry-action.danger { color: var(--ck-red-bright); }
+  .mdl-page .entry-action.danger:hover { background: rgba(232, 88, 82, 0.08); }
+
+  /* Empty state on day detail */
+  .mdl-page .empty-state {
+    background: var(--ck-bg-card);
+    border: 1px dashed var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    padding: 32px 20px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .mdl-page .empty-state-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(228, 179, 64, 0.08);
+    color: var(--ck-cream-faint);
+    display: grid;
+    place-items: center;
+    margin: 0 auto 12px;
+  }
+
+  .mdl-page .empty-state-icon svg { width: 22px; height: 22px; fill: currentColor; }
+
+  .mdl-page .empty-state-text {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--ck-cream-dim);
+    margin-bottom: 14px;
+  }
+
+  /* === NEW ENTRY FORM === */
+  .mdl-page .form-card {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-active);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+
+  /* Auto-tagged metadata at top of form */
+  .mdl-page .auto-meta {
+    background: rgba(228, 179, 64, 0.06);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+
+  .mdl-page .auto-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+  }
+
+  .mdl-page .auto-meta-row + .auto-meta-row {
+    border-top: 0.5px solid var(--ck-border-subtle);
+    margin-top: 4px;
+    padding-top: 10px;
+  }
+
+  .mdl-page .auto-meta-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-gold);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    width: 80px;
+    flex-shrink: 0;
+  }
+
+  .mdl-page .auto-meta-value {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ck-cream);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mdl-page .auto-meta-value .small-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #28160e, #1a0d08);
+    color: var(--ck-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 11px;
+    font-weight: 700;
+    border: 0.5px solid var(--ck-border-active);
+  }
+
+  .mdl-page .auto-meta-value .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  .mdl-page .auto-lock-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.18);
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.08em;
+  }
+
+  /* Form fields */
+  .mdl-page .field-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ck-cream-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .mdl-page .field-label .req {
+    color: var(--ck-red-bright);
+    margin-left: 2px;
+  }
+
+  .mdl-page .field-select {
+    width: 100%;
+    padding: 11px 14px;
+    margin-bottom: 14px;
+    background: var(--ck-bg-input);
+    border: 1px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    color-scheme: dark;
+  }
+
+  .mdl-page .field-select:focus {
+    outline: none;
+    border-color: var(--ck-gold);
+  }
+
+  .mdl-page .field-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .mdl-page .field-row > div { flex: 1; }
+
+  .mdl-page .entry-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--ck-bg-input);
+    border: 1px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 120px;
+    line-height: 1.5;
+  }
+
+  .mdl-page .entry-textarea:focus {
+    outline: none;
+    border-color: var(--ck-gold);
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .mdl-page .entry-textarea::placeholder { color: var(--ck-cream-faint); }
+
+  /* Image upload */
+  .mdl-page .upload-zone {
+    border: 1.5px dashed var(--ck-border-active);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    background: rgba(228, 179, 64, 0.04);
+    margin-top: 6px;
+  }
+
+  .mdl-page .upload-zone:hover { background: rgba(228, 179, 64, 0.08); }
+  .mdl-page .upload-zone .uz-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+  .mdl-page .upload-zone .uz-text { color: var(--ck-cream-dim); font-size: 12px; }
+  .mdl-page .upload-zone .uz-hint { color: var(--ck-cream-faint); font-size: 10px; margin-top: 3px; }
+
+  .mdl-page .upload-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .mdl-page .upload-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 0.5px solid var(--ck-border-subtle);
+  }
+
+  .mdl-page .upload-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .mdl-page .form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .mdl-page .form-cancel {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream-dim);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mdl-page .form-submit {
+    flex: 2;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+    border: 0.5px solid var(--ck-red-bright);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(199, 59, 54, 0.25);
+  }
+
+  .mdl-page .form-submit:disabled {
+    background: rgba(50, 30, 22, 0.5);
+    border-color: var(--ck-border-subtle);
+    color: var(--ck-cream-faint);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .mdl-page .form-submit svg { width: 14px; height: 14px; fill: currentColor; }
+
+  /* Add-entry FAB (also on day detail) */
+  .mdl-page .fab {
+    position: fixed;
+    bottom: 80px;
+    right: 16px;
+    height: 52px;
+    padding: 0 22px 0 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+    border: 0.5px solid var(--ck-red-bright);
+    color: var(--ck-cream);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 6px 18px rgba(199, 59, 54, 0.45);
+    z-index: 50;
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  .mdl-page .fab svg { width: 20px; height: 20px; fill: currentColor; }
+
+  /* Toast */
+  .mdl-page .toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(20, 12, 8, 0.95);
+    border: 1px solid var(--ck-gold);
+    border-radius: var(--radius-md);
+    padding: 12px 18px;
+    color: var(--ck-cream);
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 200;
+    transition: transform 0.3s;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mdl-page .toast.show { transform: translateX(-50%) translateY(0); }
+  .mdl-page .toast svg { width: 16px; height: 16px; fill: var(--ck-gold-bright); }
+
+  .mdl-page .hidden { display: none !important; }
+
+  /* Desktop polish — the .frame stays a centered 440px column inside
+     base_dashboard's wider .main; nudge the FAB in from the edge. */
+  @media (min-width: 901px) {
+    .mdl-page .fab { right: calc(50% - 220px + 8px); }
   }
 </style>
 
-<div class="dml-page">
+<div class="mdl-page">
 
-  <div class="dml-topband">
-    <div class="dml-controls">
-      <div class="dml-date-pill">
-        <span aria-hidden="true">&#128197;</span>
-        <input type="date" id="dmlDate" value="{{ selected_date or '' }}">
+  {# ===== DASHBOARD VIEW =====
+     days[0] = most-recent day -> "Today" card; days[1:] -> recent list. #}
+  <div class="frame" id="dashboardView">
+
+    <h1>Manager <span class="accent">Log</span></h1>
+
+    {% if days %}
+    {% set today = days[0] %}
+    <div class="today-wrap">
+      <div class="today" onclick="openDay('{{ today.iso }}')">
+        <div class="today-top">
+          <span class="today-day">{% if today.is_today %}TODAY · {% endif %}{{ today.dow|upper }}</span>
+          <span class="today-date">{{ today.label }}</span>
+          <span class="today-count">{{ today.entries|length }} {{ 'entry' if today.entries|length == 1 else 'entries' }}</span>
+        </div>
+        {% if today.entries %}
+        {% set latest = today.entries[0] %}
+        <div class="today-latest">{{ latest.body|default('')|truncate(120) }}</div>
+        <div class="today-by">
+          {% if latest.created_at %}{{ latest.created_at.strftime('%I:%M %p') }} · {% endif %}
+          <strong>{% if latest.author and latest.author.full_name %}{{ latest.author.full_name }}{% else %}Unknown{% endif %}</strong>
+        </div>
+        {% else %}
+        <div class="today-latest muted">No entries logged for this day yet — tap to add the first.</div>
+        {% endif %}
       </div>
-      <button class="dml-today-btn" id="dmlTodayBtn">Today</button>
-      <div class="dml-store-pill">{{ store_label }}</div>
+
+      {# BIG ADD ENTRY BUTTON, right under today #}
+      <button class="add-today-btn" onclick="openNewEntry('{{ today.iso }}')">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+        Add entry for today
+      </button>
     </div>
 
-    <div class="dml-tabs">
-      <button class="dml-tab" type="button">Daily Log</button>
-      <span class="dml-tab-spacer"></span>
-      <button class="dml-create-btn" id="dmlOpenModal" type="button"><span class="plus">+</span> Create Entry</button>
+    {# Recent days — days[1:] #}
+    {% if days|length > 1 %}
+    <div class="label">Recent — tap a day to view or add entries</div>
+
+    {% for day in days[1:] %}
+    <div class="day{% if not day.entries %} empty{% endif %}" onclick="openDay('{{ day.iso }}')">
+      <div class="day-info">
+        <span class="day-name">{{ day.dow|upper }}</span>
+        <span class="day-date">{{ day.label }}</span>
+      </div>
+      <span class="day-count">
+        {%- if day.entries %}{{ day.entries|length }} {{ 'entry' if day.entries|length == 1 else 'entries' }}{% else %}none{% endif -%}
+      </span>
+      <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
     </div>
+    {% endfor %}
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+      </div>
+      <div class="empty-state-text">No log days in range</div>
+    </div>
+    {% endif %}
+
   </div>
 
-  <div class="dml-body">
-    <div class="dml-day-list">
-      {% for day in days %}
-      <div class="dml-day">
-        <div class="dml-day-head">
-          <span class="dow">{{ day.dow }}</span>
-          <span class="date">{{ day.label }}</span>
-          {% if day.is_today %}<span class="today-tag">TODAY</span>{% endif %}
-          <span class="count">{{ day.entries|length }} {{ 'entry' if day.entries|length == 1 else 'entries' }}</span>
-        </div>
-        {% if not day.entries %}
-        <div class="dml-day-empty">No entries for this day.</div>
-        {% else %}
-        {% for e in day.entries %}
-        <div class="dml-entry"
-             data-id="{{ e.id }}"
-             data-module="{{ e.module|default('general') }}"
-             data-subject="{{ e.subject|default('general') }}"
-             data-issue="{{ e.issue|default('general') }}"
-             data-priority="{{ e.priority|default('low') }}"
-             data-body="{{ e.body|default('')|e }}"
-             data-author="{% if e.author and e.author.full_name %}{{ e.author.full_name }}{% else %}Unknown{% endif %}"
-             data-time="{% if e.created_at %}{{ e.created_at.strftime('%b %d &middot; %I:%M %p') }}{% endif %}"
-             data-roster="{{ '1' if e.show_on_roster else '0' }}"
-             data-images="{{ e.images | map(attribute='url') | join(',') }}">
-          <span class="dml-entry-pri pri-{{ e.priority|default('low') }}"></span>
-          <div class="dml-entry-main">
-            <div class="dml-entry-line1">
-              <span class="dml-entry-module">{{ e.module|default('General')|upper }}</span>
-              <span class="dml-entry-sub">&middot; {{ e.subject|default('General')|title }}</span>
-              <span class="dml-entry-issue">{{ e.issue|default('General')|title }}</span>
-              {% if e.show_on_roster %}<span class="dml-entry-roster" title="Show on Roster">&#9733;</span>{% endif %}
-              {% if e.images %}<span class="dml-entry-photo-flag" title="{{ e.images|length }} photo(s)">&#128247; {{ e.images|length }}</span>{% endif %}
-            </div>
-            <div class="dml-entry-preview">{{ e.body|default('') }}</div>
-          </div>
-          <div class="dml-entry-meta">
-            <span class="author">{% if e.author and e.author.full_name %}{{ e.author.full_name }}{% else %}Unknown{% endif %}</span>
-            <span class="time">{% if e.created_at %}{{ e.created_at.strftime('%I:%M %p') }}{% endif %}</span>
-          </div>
-        </div>
-        {% endfor %}
-        {% endif %}
-        <button type="button" class="dml-add-entry" data-date="{{ day.iso }}">
-          <span class="plus">+</span> Add Entry
-        </button>
+
+  {# ===== DAY DETAIL VIEW =====
+     One frame per day; JS reveals the matching one via openDay(iso). #}
+  {% for day in days %}
+  <div class="frame hidden" id="dayDetailView-{{ day.iso }}" data-day-detail data-iso="{{ day.iso }}">
+
+    <div class="top">
+      <button class="back-btn" onclick="showDashboard()">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        Back
+      </button>
+    </div>
+
+    <div class="day-detail-header">
+      <div class="day-detail-date">
+        <span class="day-prefix">{{ day.dow|upper }}</span>
+        <span>{{ day.label }}</span>
       </div>
+      {% if day.is_today %}
+      <span class="today-tag">TODAY</span>
       {% else %}
-      <div class="dml-empty-all">No log days in range.</div>
+      <span class="past-tag">PAST DAY</span>
+      {% endif %}
+    </div>
+
+    {# Backdate notice for past days #}
+    {% if not day.is_today %}
+    <div class="backdate-notice">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <div><strong>Adding to a past day.</strong> Your entry will be filed for <span>{{ day.dow }}, {{ day.label }}</span>, but tagged with today's submission timestamp and your name.</div>
+    </div>
+    {% endif %}
+
+    {# Entries on this day #}
+    {% if day.entries %}
+    <div>
+      {% for e in day.entries %}
+      <div class="entry">
+        <div class="entry-top">
+          <div class="entry-author">
+            {% set _name = e.author.full_name if (e.author and e.author.full_name) else 'Unknown' %}
+            <div class="author-avatar">
+              {%- set _parts = _name.split() -%}
+              {%- if _parts|length > 1 -%}{{ _parts[0][0]|upper }}{{ _parts[-1][0]|upper }}
+              {%- elif _parts -%}{{ _parts[0][:2]|upper }}
+              {%- else -%}?{%- endif -%}
+            </div>
+            <div class="author-info">
+              <span class="author-name">{{ _name }}</span>
+              <span class="author-role">{{ store_label }}</span>
+            </div>
+          </div>
+          <div class="entry-time">
+            {% if e.created_at %}
+            <div>{{ e.created_at.strftime('%b %d') }}</div>
+            <strong>{{ e.created_at.strftime('%I:%M %p') }}</strong>
+            {% endif %}
+          </div>
+        </div>
+        <div class="entry-body">{{ e.body|default('') }}</div>
+        <div class="entry-footer">
+          <span class="locked-badge">
+            <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+            Logged
+          </span>
+          <span class="entry-footer-spacer"></span>
+        </div>
+      </div>
       {% endfor %}
     </div>
-
-    <aside class="dml-detail" id="dmlDetail">
-      <div class="dml-detail-empty">No Entry Selected</div>
-      <div class="dml-detail-body">
-        <div class="dml-detail-head">
-          <span class="module" id="detailModule"></span>
-          <span class="dml-detail-subline" id="detailSub"></span>
-          <span class="pri-tag" id="detailPri"></span>
-        </div>
-        <div class="dml-detail-text" id="detailText"></div>
-        <div id="detailGalleryWrap" style="display:none">
-          <div class="dml-gallery-label">Photos</div>
-          <div class="dml-detail-gallery" id="detailGallery"></div>
-        </div>
-        <div class="dml-detail-foot">
-          <span id="detailAuthor"></span>
-          <span id="detailTime"></span>
-          <span class="roster-flag" id="detailRoster" style="display:none">&#9733; On Roster</span>
-        </div>
+    {% else %}
+    {# Empty state — shown when the day has 0 entries #}
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
       </div>
-    </aside>
-  </div>
-</div>
-
-<button class="dml-fab" id="dmlFab" type="button" aria-label="Create entry">+</button>
-
-{# ---- Create Daily Log Entry modal ---- #}
-<div class="dml-modal-overlay" id="dmlOverlay" role="dialog" aria-modal="true" aria-labelledby="dmlModalTitle">
-  <div class="dml-modal">
-    <div class="dml-modal-head">
-      <h2 id="dmlModalTitle">Create Daily Log <span class="accent">Entry</span></h2>
-      <button class="dml-modal-close" id="dmlCloseModal" type="button" aria-label="Close">&times;</button>
+      <div class="empty-state-text">No entries on this day yet</div>
     </div>
-    <form class="dml-modal-body" id="dmlForm"
-          method="POST"
-          enctype="multipart/form-data"
+    {% endif %}
+
+  </div>
+  {% endfor %}
+
+
+  {# ===== NEW ENTRY FORM =====
+     Posts to the same store.manager_page_create endpoint as the
+     legacy template; module/subject/issue/priority post as hidden
+     defaults so the route's required fields stay satisfied. #}
+  <div class="frame hidden" id="newEntryView">
+
+    <div class="top">
+      <button class="back-btn" onclick="backFromForm()">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        Cancel
+      </button>
+    </div>
+
+    <h2>New <span class="accent">entry</span></h2>
+    <p class="subtitle" id="formSubtitle">Filing entry for <strong style="color: var(--ck-cream);">today</strong></p>
+
+    <form class="form-card" id="entryForm" method="POST" enctype="multipart/form-data"
           action="{{ url_for('store.manager_page_create', page='daily-log') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-      <div class="dml-form-left">
-        <div class="dml-field">
-          <label for="fEntryDate">Entry Date</label>
-          <input type="date" id="fEntryDate" name="entry_date" value="{{ selected_date or '' }}" required>
-        </div>
-        <div class="dml-field">
-          <label for="fModule">Module</label>
-          <select id="fModule" name="module" required>
-            <option value="shift">1. Shift Highlights</option>
-            <option value="operations">2. Operations</option>
-            <option value="managers">3. Managers</option>
-            <option value="general">General</option>
-          </select>
-        </div>
-        <div class="dml-field">
-          <label for="fSubject">Subject</label>
-          <select id="fSubject" name="subject" required>
-            <option value="general">General</option>
-            <option value="dinner">Dinner</option>
-            <option value="lunch">Lunch</option>
-            <option value="sales">Sales</option>
-            <option value="voids_comps">Voids/Comps</option>
-          </select>
-        </div>
-        <div class="dml-field">
-          <label for="fIssue">Issue</label>
-          <select id="fIssue" name="issue" required>
-            <option value="general">General</option>
-            <option value="busy">Busy</option>
-            <option value="high">High</option>
-            <option value="low">Low</option>
-            <option value="slow">Slow</option>
-            <option value="weather">Weather</option>
-          </select>
-        </div>
-        <div class="dml-field">
-          <label for="fPriority">Priority</label>
-          <select id="fPriority" name="priority" required>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
-        </div>
-        <label class="dml-checkbox">
-          <input type="checkbox" id="fRoster" name="show_on_roster" value="1">
-          <span>Show on Roster</span>
-        </label>
-      </div>
-      <div class="dml-form-right">
-        <div class="dml-field dml-field-text">
-          <label for="fText">Text Entry</label>
-          <textarea id="fText" name="body" placeholder="Context anyone reading later will need..." required></textarea>
-        </div>
-        <div class="dml-field">
-          <label>Images</label>
-          <div class="dml-upload-zone" id="dmlUploadZone" tabindex="0" role="button" aria-label="Upload images">
-            <span class="uz-icon">&#128247;</span>
-            <span class="uz-text">Drag photos here or click to browse</span>
-            <span class="uz-hint">JPG / PNG &middot; attach as many as you need</span>
+      <input type="hidden" name="entry_date" id="fEntryDate" value="{{ selected_date or today_iso or '' }}">
+
+      {# Auto-tagged metadata #}
+      <div class="auto-meta">
+        <div class="auto-meta-row">
+          <span class="auto-meta-label">By</span>
+          <div class="auto-meta-value">
+            {% set _me = (g.current_user.full_name if (g.current_user and g.current_user.full_name) else 'You') %}
+            <div class="small-avatar">
+              {%- set _mp = _me.split() -%}
+              {%- if _mp|length > 1 -%}{{ _mp[0][0]|upper }}{{ _mp[-1][0]|upper }}
+              {%- elif _mp -%}{{ _mp[0][:2]|upper }}
+              {%- else -%}?{%- endif -%}
+            </div>
+            {{ _me }}
           </div>
-          <input type="file" id="fImages" name="images" accept="image/*" multiple hidden>
-          <div class="dml-upload-thumbs" id="dmlUploadThumbs"></div>
+          <span class="auto-lock-tag">AUTO</span>
+        </div>
+        <div class="auto-meta-row">
+          <span class="auto-meta-label">Posted</span>
+          <div class="auto-meta-value">On submission</div>
+          <span class="auto-lock-tag">AUTO</span>
+        </div>
+        <div class="auto-meta-row">
+          <span class="auto-meta-label">Logged for</span>
+          <div class="auto-meta-value" id="loggedForDate">Today</div>
         </div>
       </div>
-      <div class="dml-modal-actions">
-        <button type="submit" class="dml-send" id="dmlSend">Send</button>
-        <button type="button" class="dml-cancel" id="dmlCancelBtn">Cancel</button>
-        <span class="dml-modal-help">Ctrl + Enter to send &middot; Esc to close</span>
+
+      {# module / subject / issue / priority — the redesign is a single
+         free-text log; these post as hidden defaults (all valid enum
+         values) so the route's required fields stay satisfied with no
+         route change. #}
+      <input type="hidden" name="module" value="general">
+      <input type="hidden" name="subject" value="general">
+      <input type="hidden" name="issue" value="general">
+      <input type="hidden" name="priority" value="low">
+
+      <label class="field-label" for="entryText">What happened? <span class="req">*</span></label>
+      <textarea class="entry-textarea" name="body" id="entryText" required
+        placeholder="Walk through what happened in your own words. Be specific — names, times, what action you took."></textarea>
+
+      <div class="form-actions">
+        <button class="form-cancel" type="button" onclick="backFromForm()">Cancel</button>
+        <button class="form-submit" id="submitBtn" type="submit" disabled>
+          <svg viewBox="0 0 24 24"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          Post entry
+        </button>
       </div>
     </form>
+
+    <p style="font-size: 11px; color: var(--ck-cream-faint); line-height: 1.5; padding: 0 4px;">
+      Your name and the exact submission timestamp are tagged automatically when you post.
+    </p>
+
   </div>
-</div>
 
-<div class="dml-lightbox" id="dmlLightbox" role="dialog" aria-modal="true">
-  <button class="dml-lightbox-close" id="dmlLightboxClose" type="button" aria-label="Close image">&times;</button>
-  <img id="dmlLightboxImg" alt="Entry photo">
-</div>
 
+  {# FAB visible on dashboard + day detail #}
+  <button class="fab" id="fab" onclick="fabClick()">
+    <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+    New entry
+  </button>
+
+
+  {# Toast #}
+  <div class="toast" id="toast">
+    <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    <span id="toastText">Entry posted</span>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
 (function() {
   'use strict';
+
   var TODAY_ISO = "{{ today_iso or '' }}";
-
-  // ---- Selection + detail pane (populates from entry data-attributes) ----
-  function titleCase(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-  function moduleLabel(m) {
-    return ({shift: 'Shift Highlights', operations: 'Operations', managers: 'Managers', general: 'General'}[m] || m || 'General');
-  }
-  function selectEntry(row) {
-    document.querySelectorAll('.dml-entry').forEach(function(n) { n.classList.toggle('is-selected', n === row); });
-    var detail = document.getElementById('dmlDetail');
-    detail.classList.add('has-entry');
-    var d = row.dataset;
-    document.getElementById('detailModule').textContent = moduleLabel(d.module).toUpperCase();
-    document.getElementById('detailSub').textContent = titleCase(d.subject) + ' · ' + titleCase(d.issue);
-    var pri = document.getElementById('detailPri');
-    pri.className = 'pri-tag pri-' + (d.priority || 'low');
-    pri.textContent = titleCase(d.priority || 'low');
-    document.getElementById('detailText').textContent = d.body || '';
-    document.getElementById('detailAuthor').textContent = d.author || '';
-    document.getElementById('detailTime').textContent = d.time || '';
-    document.getElementById('detailRoster').style.display = (d.roster === '1') ? '' : 'none';
-    var galleryWrap = document.getElementById('detailGalleryWrap');
-    var gallery = document.getElementById('detailGallery');
-    gallery.innerHTML = '';
-    var imgs = (d.images || '').split(',').filter(function(s) { return s; });
-    if (imgs.length) {
-      galleryWrap.style.display = '';
-      imgs.forEach(function(src) {
-        var th = document.createElement('div'); th.className = 'dml-gallery-thumb';
-        var im = document.createElement('img'); im.src = src; im.alt = 'Entry photo';
-        th.appendChild(im);
-        th.addEventListener('click', function() { openLightbox(src); });
-        gallery.appendChild(th);
-      });
-    } else {
-      galleryWrap.style.display = 'none';
-    }
-    if (window.matchMedia('(max-width: 900px)').matches) {
-      detail.scrollIntoView({behavior: 'smooth', block: 'start'});
-    }
-  }
-  document.querySelectorAll('.dml-entry').forEach(function(row) {
-    row.addEventListener('click', function() { selectEntry(row); });
-  });
-
-  // ---- Modal ----
-  var overlay = document.getElementById('dmlOverlay');
-  function openModal() { overlay.classList.add('is-open'); setTimeout(function() { document.getElementById('fText').focus(); }, 50); }
-  function closeModal() { overlay.classList.remove('is-open'); }
-  document.getElementById('dmlOpenModal').addEventListener('click', openModal);
-  document.getElementById('dmlFab').addEventListener('click', openModal);
-  document.getElementById('dmlCloseModal').addEventListener('click', closeModal);
-  document.getElementById('dmlCancelBtn').addEventListener('click', closeModal);
-  document.querySelectorAll('.dml-add-entry').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var d = btn.getAttribute('data-date');
-      var dateField = document.getElementById('fEntryDate');
-      if (d && dateField) dateField.value = d;
-      openModal();
-    });
-  });
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && overlay.classList.contains('is-open')) closeModal();
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && overlay.classList.contains('is-open')) {
-      document.getElementById('dmlForm').requestSubmit();
-    }
-  });
-
-  // ---- Module -> Subject cascade ----
-  var SUBJECTS_BY_MODULE = {
-    shift: [['general','General'],['dinner','Dinner'],['lunch','Lunch'],['sales','Sales'],['voids_comps','Voids/Comps']],
-    operations: [['general','General'],['equipment','Equipment'],['inventory','Inventory'],['cleaning','Cleaning'],['safety','Safety']],
-    managers: [['general','General'],['staffing','Staffing'],['training','Training'],['discipline','Discipline'],['handoff','Handoff']],
-    general: [['general','General']]
+  // day metadata for label rendering in the form ("Logged for" line).
+  var DAYS = {
+    {%- for day in days %}
+    "{{ day.iso }}": { dow: "{{ day.dow }}", label: "{{ day.label }}", isToday: {{ 'true' if day.is_today else 'false' }} }{{ ',' if not loop.last }}
+    {%- endfor %}
   };
-  document.getElementById('fModule').addEventListener('change', function() {
-    var subjSel = document.getElementById('fSubject');
-    subjSel.innerHTML = '';
-    (SUBJECTS_BY_MODULE[this.value] || SUBJECTS_BY_MODULE.general).forEach(function(s) {
-      var opt = document.createElement('option');
-      opt.value = s[0]; opt.textContent = s[1];
-      subjSel.appendChild(opt);
-    });
-  });
 
-  // ---- Image upload (client-side preview; real files post via the file input) ----
-  var uploadZone = document.getElementById('dmlUploadZone');
-  var fileInput = document.getElementById('fImages');
-  var thumbWrap = document.getElementById('dmlUploadThumbs');
-  function renderThumbs() {
-    thumbWrap.innerHTML = '';
-    Array.prototype.forEach.call(fileInput.files, function(f, idx) {
-      if (!f.type || f.type.indexOf('image/') !== 0) return;
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        var t = document.createElement('div'); t.className = 'dml-thumb';
-        var im = document.createElement('img'); im.src = ev.target.result; im.alt = 'Upload preview';
-        t.appendChild(im);
-        thumbWrap.appendChild(t);
-      };
-      reader.readAsDataURL(f);
+  var currentDate = null;
+  var currentContext = 'dashboard'; // 'dashboard' | 'day' | 'newEntry'
+
+  function hideAllDayDetails() {
+    document.querySelectorAll('[data-day-detail]').forEach(function(n) {
+      n.classList.add('hidden');
     });
   }
-  uploadZone.addEventListener('click', function() { fileInput.click(); });
-  uploadZone.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
-  });
-  fileInput.addEventListener('change', renderThumbs);
-  ['dragenter', 'dragover'].forEach(function(evt) {
-    uploadZone.addEventListener(evt, function(e) { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-  });
-  ['dragleave', 'drop'].forEach(function(evt) {
-    uploadZone.addEventListener(evt, function(e) { e.preventDefault(); uploadZone.classList.remove('drag-over'); });
-  });
-  uploadZone.addEventListener('drop', function(e) {
-    if (e.dataTransfer && e.dataTransfer.files) { fileInput.files = e.dataTransfer.files; renderThumbs(); }
-  });
 
-  // ---- Lightbox ----
-  var lightbox = document.getElementById('dmlLightbox');
-  var lightboxImg = document.getElementById('dmlLightboxImg');
-  function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add('is-open'); }
-  function closeLightbox() { lightbox.classList.remove('is-open'); lightboxImg.src = ''; }
-  window.openLightbox = openLightbox;
-  document.getElementById('dmlLightboxClose').addEventListener('click', closeLightbox);
-  lightbox.addEventListener('click', function(e) { if (e.target === lightbox) closeLightbox(); });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && lightbox.classList.contains('is-open')) closeLightbox();
-  });
+  function showDashboard() {
+    document.getElementById('dashboardView').classList.remove('hidden');
+    hideAllDayDetails();
+    document.getElementById('newEntryView').classList.add('hidden');
+    document.getElementById('fab').classList.remove('hidden');
+    currentContext = 'dashboard';
+    window.scrollTo({ top: 0 });
+  }
 
-  // ---- Date navigation (server round-trip on change) ----
-  var dateInput = document.getElementById('dmlDate');
-  var todayBtn = document.getElementById('dmlTodayBtn');
-  function gotoDate(iso) { window.location.search = '?date=' + encodeURIComponent(iso); }
-  dateInput.addEventListener('change', function() { if (this.value) gotoDate(this.value); });
-  todayBtn.disabled = (dateInput.value === TODAY_ISO);
-  todayBtn.addEventListener('click', function() { if (TODAY_ISO) gotoDate(TODAY_ISO); });
+  function openDay(dateStr) {
+    var pane = document.getElementById('dayDetailView-' + dateStr);
+    if (!pane) { showDashboard(); return; }
+    currentDate = dateStr;
+    document.getElementById('dashboardView').classList.add('hidden');
+    hideAllDayDetails();
+    pane.classList.remove('hidden');
+    document.getElementById('newEntryView').classList.add('hidden');
+    document.getElementById('fab').classList.remove('hidden');
+    currentContext = 'day';
+    window.scrollTo({ top: 0 });
+  }
+
+  function openNewEntry(dateStr) {
+    currentDate = dateStr;
+    var meta = DAYS[dateStr];
+
+    var dateField = document.getElementById('fEntryDate');
+    if (dateField) dateField.value = dateStr;
+
+    var logFor = dateStr;
+    var sub = 'Filing entry for <strong style="color: var(--ck-cream);">' + dateStr + '</strong>';
+    if (meta) {
+      if (meta.isToday) {
+        logFor = 'Today · ' + meta.dow + ', ' + meta.label;
+        sub = 'Filing entry for <strong style="color: var(--ck-cream);">today</strong>';
+      } else {
+        logFor = meta.dow + ', ' + meta.label;
+        sub = 'Filing entry for <strong style="color: var(--ck-cream);">' + meta.dow + ', ' + meta.label + '</strong>';
+      }
+    }
+    document.getElementById('loggedForDate').textContent = logFor;
+    document.getElementById('formSubtitle').innerHTML = sub;
+
+    document.getElementById('dashboardView').classList.add('hidden');
+    hideAllDayDetails();
+    document.getElementById('newEntryView').classList.remove('hidden');
+    document.getElementById('fab').classList.add('hidden');
+    currentContext = 'newEntry';
+    window.scrollTo({ top: 0 });
+    setTimeout(function() { document.getElementById('entryText').focus(); }, 100);
+  }
+
+  function backFromForm() {
+    if (currentDate) openDay(currentDate);
+    else showDashboard();
+  }
+
+  function fabClick() {
+    if (currentContext === 'day' && currentDate) {
+      openNewEntry(currentDate);
+    } else {
+      openNewEntry(TODAY_ISO || (Object.keys(DAYS)[0] || ''));
+    }
+  }
+
+  function showToast(text) {
+    var t = document.getElementById('toast');
+    document.getElementById('toastText').textContent = text;
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2400);
+  }
+
+  // expose handlers used by inline onclick attributes
+  window.showDashboard = showDashboard;
+  window.openDay = openDay;
+  window.openNewEntry = openNewEntry;
+  window.backFromForm = backFromForm;
+  window.fabClick = fabClick;
+
+  // ---- Entry text validation (enable submit at >= 5 chars) ----
+  var entryText = document.getElementById('entryText');
+  var submitBtn = document.getElementById('submitBtn');
+  if (entryText && submitBtn) {
+    entryText.addEventListener('input', function(e) {
+      submitBtn.disabled = e.target.value.trim().length < 5;
+    });
+  }
+
+  // ---- Form submit -> toast (real POST proceeds to the route) ----
+  var entryForm = document.getElementById('entryForm');
+  if (entryForm) {
+    entryForm.addEventListener('submit', function() {
+      showToast('Posting entry…');
+    });
+  }
+
+  // start on the dashboard
+  showDashboard();
 })();
 </script>
 {% endblock %}

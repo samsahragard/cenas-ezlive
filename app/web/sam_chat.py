@@ -494,6 +494,62 @@ def _read_start_files() -> list[dict]:
     return out
 
 
+# Cena dev-chat feed (ck build-order #4, Sam dev chat #6:28 + #7:01).
+# A Windows Task on aick's box appends each new Developer-Chat message
+# to data/cena/cena_devchat_inbox.jsonl every minute via
+# scripts/cena_devchat_relay.py. Each Cena turn reads the most-recent
+# entries here and threads them as a system note so Cena always has
+# fresh context without Sam relaying by hand.
+_DEVCHAT_INBOX = _PROJECT_ROOT / "data" / "cena" / "cena_devchat_inbox.jsonl"
+_DEVCHAT_FEED_N = 30
+
+
+def _read_devchat_feed(n: int = _DEVCHAT_FEED_N) -> str:
+    """Return the last `n` Developer-Chat messages as a formatted
+    system-note string, or empty string if the inbox is missing/empty.
+
+    Read-only + fast: tails the file, ignores parse errors per line.
+    """
+    try:
+        if not _DEVCHAT_INBOX.exists():
+            return ""
+        lines = _DEVCHAT_INBOX.read_text(
+            encoding="utf-8", errors="replace").splitlines()
+        if not lines:
+            return ""
+        tail = lines[-n:]
+        rendered: list[str] = []
+        for ln in tail:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                row = json.loads(ln)
+            except (ValueError, TypeError):
+                continue
+            mid = row.get("id")
+            author = (row.get("author") or "").strip() or "?"
+            body = (row.get("body") or "").strip()
+            created = (row.get("created_at") or "").strip()
+            head = f"#{mid} {author}" if mid is not None else author
+            if created:
+                head = f"[{created}] {head}"
+            rendered.append(f"{head}: {body}")
+        if not rendered:
+            return ""
+        return (
+            "DEV CHAT FEED — auto-loaded for context "
+            f"(latest {len(rendered)} of /partner/developer/chat). "
+            "These messages were posted by Sam, aick, ck, dck, samai, "
+            "and any other agents in the dev chat. Use as ambient "
+            "context for what the team is doing right now; surface to "
+            "Sam anything actionable.\n\n"
+            + "\n".join(rendered)
+        )
+    except OSError:
+        return ""
+
+
 # ============================================================
 # Routes
 # ============================================================
@@ -825,6 +881,12 @@ def sam_chat_send():
         cache_create_tok = cache_read_tok = 0
         gateway_url = _cena_gateway_url()
         try:
+            # Cena dev-chat feed — auto-loaded per turn so Cena always
+            # has fresh context without Sam relaying by hand. Empty
+            # string when the inbox file is missing (e.g. before the
+            # Windows Task wires up on aick) — falls through to no-op.
+            cena_devchat_feed = _read_devchat_feed()
+
             if model.startswith("gemini"):
                 # ---- Google Gemini: direct API call (no gateway) ----
                 gc = _gemini_client()
@@ -848,11 +910,15 @@ def sam_chat_send():
                     gemini_contents.append(
                         _gtypes.Content(role=_role,
                                         parts=[_gtypes.Part(text=_text)]))
+                _gemini_cfg_kwargs: dict = {
+                    "max_output_tokens": _MAX_OUTPUT_TOKENS,
+                }
+                if cena_devchat_feed:
+                    _gemini_cfg_kwargs["system_instruction"] = cena_devchat_feed
                 for _chunk in gc.models.generate_content_stream(
                     model=model,
                     contents=gemini_contents,
-                    config=_gtypes.GenerateContentConfig(
-                        max_output_tokens=_MAX_OUTPUT_TOKENS),
+                    config=_gtypes.GenerateContentConfig(**_gemini_cfg_kwargs),
                 ):
                     if _chunk.text:
                         full += _chunk.text
@@ -877,14 +943,20 @@ def sam_chat_send():
                 if _proxy:
                     _client_kwargs["proxy"] = _proxy
                 with httpx.Client(**_client_kwargs) as hx:
+                    _gw_body = {"messages": api_messages, "model": model,
+                                "max_tokens": _MAX_OUTPUT_TOKENS,
+                                "session_id": session_id,
+                                "message_id": user_message_id}
+                    if cena_devchat_feed:
+                        _gw_body["system"] = cena_devchat_feed
                     with hx.stream(
                         "POST", gateway_url + "/cena/stream",
                         # session_id + message_id let the gateway link
                         # each CenaActionLog row back to this chat turn.
-                        json={"messages": api_messages, "model": model,
-                              "max_tokens": _MAX_OUTPUT_TOKENS,
-                              "session_id": session_id,
-                              "message_id": user_message_id},
+                        # system carries the auto-loaded dev-chat feed
+                        # (gateway server can pass through to Anthropic
+                        # or ignore until it adds support).
+                        json=_gw_body,
                         headers={"X-Cena-Token": cena_token,
                                  "Content-Type": "application/json"},
                     ) as r:
@@ -911,11 +983,14 @@ def sam_chat_send():
                                     evt.get("error", "Cena gateway error"))
             else:
                 # ---- Direct Anthropic API (original path) ----
-                with client.messages.stream(
-                    model=model,
-                    max_tokens=_MAX_OUTPUT_TOKENS,
-                    messages=api_messages,
-                ) as stream:
+                _anthropic_kwargs: dict = {
+                    "model": model,
+                    "max_tokens": _MAX_OUTPUT_TOKENS,
+                    "messages": api_messages,
+                }
+                if cena_devchat_feed:
+                    _anthropic_kwargs["system"] = cena_devchat_feed
+                with client.messages.stream(**_anthropic_kwargs) as stream:
                     for chunk in stream.text_stream:
                         full += chunk
                         yield _sse({"type": "delta", "text": chunk})

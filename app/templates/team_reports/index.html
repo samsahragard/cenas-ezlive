@@ -16,6 +16,8 @@
 {% endblock %}
 
 {% block content %}
+<style>.tr-page{background:#1f1a12;border:1px solid rgba(212,175,55,0.15);border-radius:14px;padding:18px 20px;margin-bottom:40px;}</style>
+<div class="tr-page">
 
 {# Window toggle — the only request param this tab honors. Store scope
    is server-derived (a GM can't widen it by any param); 1G spec §4. #}
@@ -195,4 +197,5 @@
 </section>
 {% endif %}
 
+</div>
 {% endblock %}

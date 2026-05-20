@@ -310,6 +310,13 @@
       s.textContent = d.subject;
       foot.appendChild(s);
     }
+
+    // On phone the detail pane sits below the order list — scroll it
+    // into view so a tap visibly opens the order (Sam #10:33: the tap
+    // worked but the detail was off-screen below the list).
+    if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+      detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   document.querySelectorAll('.vro-order').forEach(function(card) {

@@ -3959,6 +3959,27 @@
 
 
 
+  // Date + time fields — clicking anywhere on the field pops the native
+  // picker (Sam #5:23: a tap should drop the calendar / time list, not
+  // just the tiny edge icon). showPicker() is the modern API for this;
+  // wrapped in try/catch so older browsers fall back to the edge icon.
+
+  ['incidentDate','incidentTime'].forEach(id => {
+
+    const el = document.getElementById(id);
+
+    if (!el) return;
+
+    const openPicker = () => { try { el.showPicker(); } catch (e) { /* unsupported — native icon still works */ } };
+
+    el.addEventListener('click', openPicker);
+
+    el.addEventListener('focus', openPicker);
+
+  });
+
+
+
   // Audio recorder
 
   let recording = false;
@@ -4081,7 +4102,11 @@
 
 
 
-  // Upload buttons (placeholder behaviour — adds a fake attachment)
+  // Upload tiles — every tile (photo / video / audio / document) opens
+  // a real file picker. The audio tile uploads an audio FILE; the
+  // separate in-app recorder (#audioRec, "tap to start") is unchanged.
+  // Sam #5:23: the audio tile previously only scrolled to the recorder
+  // and gave no way to upload an existing audio file.
 
   document.querySelectorAll('.upload-btn').forEach(b => {
 
@@ -4089,21 +4114,17 @@
 
       const type = b.dataset.evidence;
 
-      if (type === 'audio') {
+      {
 
-        document.getElementById('audioRec').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      } else {
-
-        // Live: real file picker. Each non-audio tile triggers a hidden
-        // file input; selected files become real <input> children of
+        // Live: real file picker. Each tile triggers a hidden file
+        // input; selected files become real <input> children of
         // #irForm so they post as multipart attachments on submit.
-        // Sam #5:08 removed the demo "phantom file" behavior that
-        // pre-checked Evidence in the checklist.
 
         const accept = type === 'photo' ? 'image/*'
 
                      : type === 'video' ? 'video/*'
+
+                     : type === 'audio' ? 'audio/*'
 
                      : '*/*';
 

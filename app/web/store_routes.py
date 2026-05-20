@@ -1592,7 +1592,15 @@ def _attn_hours(start, end):
 
 def _render_attendance_v3(db, label, active_key):
     """Attendance Tracking v3 — daily roster board. ?date=<iso> picks
-    the day (default today)."""
+    the day (default today).
+
+    Roster + live clock status come from Toast: every teammate on the
+    Toast employee roster is listed, and each one's clock-in/clock-out
+    punches for the day decide On the Clock vs Off. Manager-logged
+    events (late / no-show / callout / notes, stored as AttendanceShift
+    + AttendanceEvent rows) are overlaid and win the status badge. If
+    Toast is unreachable the board falls back to the manually-logged
+    shifts so it never goes blank."""
     from app.models import AttendanceShift
     raw = request.args.get("date") or ""
     try:
@@ -1608,9 +1616,13 @@ def _render_attendance_v3(db, label, active_key):
                             (AttendanceShift.store_scope.is_(None)))
         return q
 
+    # Manager-logged shifts for the day, keyed by employee name.
     shifts = _scoped(
         db.query(AttendanceShift).filter(AttendanceShift.entry_date == sel)
     ).order_by(AttendanceShift.employee_name.asc()).all()
+    shift_by_name = {}
+    for s in shifts:
+        shift_by_name.setdefault(s.employee_name, s)
 
     # 30-day attendance history, one query, grouped by employee name.
     win_lo = sel - timedelta(days=29)
@@ -1619,6 +1631,21 @@ def _render_attendance_v3(db, label, active_key):
             AttendanceShift.entry_date >= win_lo,
             AttendanceShift.entry_date <= sel)).all():
         hist.setdefault(h.employee_name, {})[h.entry_date] = h.status
+
+    # Live clock-in / clock-out status from Toast (the same Toast API
+    # behind the Labor reports). Falls back cleanly when Toast is down.
+    toast_by_name = {}
+    attendance_notice = None
+    try:
+        from app.services.toast_reports import attendance_clock_status
+        tloc = loc if loc in ("tomball", "copperfield") else None
+        for rec in attendance_clock_status(sel, location_filter=tloc):
+            toast_by_name.setdefault(rec["name"], rec)
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            "attendance: Toast clock status unavailable: %s", ex)
+        attendance_notice = ("Live Toast clock data is unavailable right now "
+                             "- showing manually logged attendance only.")
 
     def _pattern(name):
         by_date = hist.get(name, {})
@@ -1636,48 +1663,103 @@ def _render_attendance_v3(db, label, active_key):
                           "is_today": d == today})
         return cells, {"on_time": on_time, "late": late_n, "no_show": no_show_n}
 
-    def _view(s):
-        pattern, pcounts = _pattern(s.employee_name)
-        # Prior-day documented issues (strictly before the selected day) —
-        # drives the Issues view + the panel history (samai redesign).
+    def _row(rid, name, shift, tz):
+        """One roster row, merging the manager-logged shift (if any)
+        with the live Toast clock record (if any) for `name`."""
+        pattern, pcounts = _pattern(name)
+        # Prior-day documented issues (strictly before the selected day)
+        # drive the Issues view + the panel history.
         _ilabel = {"late": "Late", "no-show": "No-show", "callout": "Callout"}
         prior = []
-        for d, st in sorted(hist.get(s.employee_name, {}).items(), reverse=True):
+        for d, st in sorted(hist.get(name, {}).items(), reverse=True):
             if d < sel and st in _ilabel:
                 prior.append({"date": d.strftime("%b %d"), "kind": st,
                               "text": _ilabel[st]})
-        ss, se = _attn_fmt(s.scheduled_start), _attn_fmt(s.scheduled_end)
+
+        manual_status = shift.status if shift else None
+        toast_status = tz["status"] if tz else None
+
+        # A logged manager judgment (late / no-show / callout / break)
+        # wins; otherwise Toast's live clock truth; otherwise whatever
+        # the manual shift says; otherwise off.
+        if manual_status in ("late", "no-show", "callout", "break"):
+            status = manual_status
+        elif toast_status in ("clocked-in", "out"):
+            status = toast_status
+        elif manual_status:
+            status = manual_status
+        else:
+            status = "off"
+
+        # Clock punches: Toast is the source of truth; fall back to the
+        # manually-entered shift's punches.
+        if tz and (tz.get("clock_in") or tz.get("clock_out")):
+            ci, co = tz.get("clock_in"), tz.get("clock_out")
+        elif shift:
+            ci, co = shift.clock_in, shift.clock_out
+        else:
+            ci, co = None, None
+
+        ss = _attn_fmt(shift.scheduled_start) if shift else None
+        se = _attn_fmt(shift.scheduled_end) if shift else None
+        role = ((shift.role_title if shift else None)
+                or (tz.get("job_title") if tz else None) or "Team member")
+        section = (shift.section if shift else None) or "boh"
+        events = ([{"time": _attn_fmt(e.at), "kind": e.kind, "text": e.text or ""}
+                   for e in sorted(shift.events, key=lambda e: e.at, reverse=True)]
+                  if shift else [])
         return {
-            "id": s.id,
-            "name": s.employee_name,
-            "initials": _attn_initials(s.employee_name),
-            "role": s.role_title or "Team member",
-            "section": (s.section or "boh"),
-            "phone": s.phone,
-            "status": s.status,
+            "rid": rid,
+            "id": (shift.id if shift else None),
+            "name": name,
+            "initials": _attn_initials(name),
+            "role": role,
+            "section": section,
+            "phone": (shift.phone if shift else None),
+            "status": status,
             "sched": (f"{ss} - {se}" if (ss and se) else (ss or se or "")),
-            "clock_in": _attn_fmt(s.clock_in),
-            "clock_out": _attn_fmt(s.clock_out),
-            "late_minutes": s.late_minutes or 0,
-            "hours_worked": _attn_hours(s.clock_in, s.clock_out),
-            "note": s.note,
-            "on_clock": s.status in ("clocked-in", "late", "break"),
-            "is_off": s.status in ("scheduled", "no-show", "callout", "out"),
+            "clock_in": _attn_fmt(ci),
+            "clock_out": _attn_fmt(co),
+            "late_minutes": ((shift.late_minutes or 0) if shift else 0),
+            "hours_worked": _attn_hours(ci, co),
+            "note": (shift.note if shift else None),
+            "on_clock": status in ("clocked-in", "late", "break"),
+            "is_off": status in ("scheduled", "no-show", "callout",
+                                  "out", "off"),
             "has_prior_issue": len(prior) > 0,
             "history": prior,
-            "events": [{"time": _attn_fmt(e.at), "kind": e.kind,
-                        "text": e.text or ""}
-                       for e in sorted(s.events, key=lambda e: e.at, reverse=True)],
+            "events": events,
             "pattern": pattern,
             "pattern_counts": pcounts,
+            "source": ("toast" if tz else "manual"),
         }
 
-    rows = [_view(s) for s in shifts]
+    # Union the roster: every name Toast knows + every name with a
+    # shift logged for the day + everyone seen in the 30-day history.
+    names = set(toast_by_name) | set(shift_by_name) | set(hist)
+    if not names:
+        # Last-resort backstop (Toast down AND nothing logged): show the
+        # active User accounts so the board is never blank.
+        try:
+            from app.models import User
+            uq = db.query(User).filter(User.active.is_(True))
+            if loc in ("tomball", "copperfield"):
+                uq = uq.filter((User.store_scope == loc) |
+                               (User.store_scope == "both") |
+                               (User.store_scope.is_(None)))
+            names = {u.full_name for u in uq.all() if u.full_name}
+        except Exception:
+            names = set()
+
+    rows = []
+    for rid, name in enumerate(sorted(names, key=lambda n: n.lower())):
+        rows.append(_row(rid, name, shift_by_name.get(name),
+                         toast_by_name.get(name)))
 
     def _n(pred):
         return sum(1 for r in rows if pred(r))
     kpis = {
-        "scheduled": len(rows),
+        "scheduled": _n(lambda r: r["status"] != "off"),
         "clocked_in": _n(lambda r: r["status"] in ("clocked-in", "late", "break")),
         "late": _n(lambda r: r["status"] == "late"),
         "no_show": _n(lambda r: r["status"] == "no-show"),
@@ -1686,7 +1768,7 @@ def _render_attendance_v3(db, label, active_key):
     return render_template(
         "attendance_tracking.html",
         page_slug="attendance", page_label=label,
-        rows=rows, kpis=kpis,
+        rows=rows, kpis=kpis, attendance_notice=attendance_notice,
         selected_date=sel.isoformat(), today_iso=today.isoformat(),
         prev_date=(sel - timedelta(days=1)).isoformat(),
         next_date=(sel + timedelta(days=1)).isoformat(),
@@ -1770,14 +1852,34 @@ def _attendance_v3_post(db, store_scope, user):
         db.commit()
         return
 
-    # clock_in / clock_out / log_event all target an existing shift.
+    # clock_in / clock_out / log_event target a shift. The redesigned
+    # board posts against the selected teammate; when they have no
+    # shift row for the day yet (a Toast-roster teammate not logged
+    # before) we find-or-create one by name so the slide-over can log
+    # an event against anyone on the board.
     try:
         shift_id = int(request.form.get("shift_id") or 0)
     except (TypeError, ValueError):
         shift_id = 0
     shift = db.get(AttendanceShift, shift_id) if shift_id else None
     if shift is None:
-        return
+        name = (request.form.get("name") or "").strip()[:120]
+        if not name:
+            return
+        raw_date = request.form.get("entry_date") or ""
+        try:
+            d = date.fromisoformat(raw_date) if raw_date else date.today()
+        except ValueError:
+            d = date.today()
+        shift = (db.query(AttendanceShift)
+                 .filter(AttendanceShift.entry_date == d,
+                         AttendanceShift.employee_name == name).first())
+        if shift is None:
+            shift = AttendanceShift(
+                entry_date=d, employee_name=name, section="boh",
+                status="scheduled", store_scope=store_scope, author_id=uid)
+            db.add(shift)
+            db.flush()
     loc = g.current_location
     if loc in ("tomball", "copperfield") and shift.store_scope not in (loc, None):
         abort(403)

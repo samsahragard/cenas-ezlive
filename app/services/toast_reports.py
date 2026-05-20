@@ -761,3 +761,92 @@ def fmt_duration(seconds: float | None) -> str:
         h, m = divmod(m, 60)
         return f"{h}h{m:02d}m"
     return f"{m}m{s:02d}s"
+
+
+# ============== ATTENDANCE CLOCK STATUS ==============
+
+def attendance_clock_status(day, location_filter=None, refresh=False):
+    """Live clock-in / clock-out status from Toast for a single day.
+
+    Powers the manager Attendance Tracking board. `day` is a date.
+    Returns one dict per Toast employee at the resolved location(s):
+        name        -> "First Last"
+        first, last -> name parts
+        job_title   -> primary job title (or "")
+        location    -> 'tomball' | 'copperfield'
+        status      -> 'clocked-in' (an open punch, still on the clock)
+                       | 'out' (clocked in and back out) | 'off' (no punch)
+        clock_in    -> naive CDT datetime of the first punch-in, or None
+        clock_out   -> naive CDT datetime of the last punch-out, or None
+        on_clock    -> bool (status == 'clocked-in')
+
+    Raises ValueError when Toast credentials are not configured, so the
+    caller can catch it and fall back to manually-logged attendance.
+    """
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+    start = datetime(day.year, day.month, day.day)
+    end = start
+
+    def _local(dt):
+        # Toast inDate/outDate are tz-aware; normalize to naive CDT so
+        # the punch times line up with the manually-logged clock times.
+        return dt.astimezone(TZ).replace(tzinfo=None) if dt else None
+
+    out: list = []
+    for loc, rg in locations.items():
+        job_title = {}
+        for j in client.fetch_jobs(loc, rg, refresh=refresh):
+            job_title[j.get("guid")] = (j.get("title") or "").strip()
+
+        emps = {}
+        for e in client.fetch_employees(loc, rg, refresh=refresh):
+            if e.get("deleted"):
+                continue
+            first = (e.get("firstName") or "").strip()
+            last = (e.get("lastName") or "").strip()
+            full = " ".join(filter(None, [first, last])).strip() \
+                or e.get("email") or (e.get("guid") or "?")[:8]
+            title = ""
+            for jr in (e.get("jobReferences") or []):
+                t = job_title.get(jr.get("guid"))
+                if t:
+                    title = t
+                    break
+            emps[e.get("guid")] = {
+                "first": first, "last": last, "name": full,
+                "job_title": title, "location": loc,
+            }
+
+        # Collapse the day's time entries per employee. A punch with no
+        # clock-out means the teammate is still on the clock right now.
+        punches: dict = {}
+        for te in client.fetch_time_entries(loc, rg, start, end, refresh=refresh):
+            if te.get("deleted"):
+                continue
+            eg = (te.get("employeeReference") or {}).get("guid")
+            if not eg:
+                continue
+            in_dt = _local(_parse_iso(te.get("inDate")))
+            out_dt = _local(_parse_iso(te.get("outDate")))
+            p = punches.setdefault(eg, {"in": None, "out": None, "open": False})
+            if in_dt and (p["in"] is None or in_dt < p["in"]):
+                p["in"] = in_dt
+            if in_dt and out_dt is None:
+                p["open"] = True
+            if out_dt and (p["out"] is None or out_dt > p["out"]):
+                p["out"] = out_dt
+
+        for eg, meta in emps.items():
+            p = punches.get(eg)
+            if not p or p["in"] is None:
+                status, ci, co = "off", None, None
+            elif p["open"]:
+                status, ci, co = "clocked-in", p["in"], None
+            else:
+                status, ci, co = "out", p["in"], p["out"]
+            rec = dict(meta)
+            rec.update({"status": status, "clock_in": ci, "clock_out": co,
+                        "on_clock": status == "clocked-in"})
+            out.append(rec)
+    return out

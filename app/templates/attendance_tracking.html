@@ -1,30 +1,36 @@
 {# ============================================================
    attendance_tracking.html — Attendance Tracking (production)
-   samai redesign of the v3 board per Sam #4:44 / #5:03 ("looks
-   good, push it, must be functional, must look like the rendering"
-   — samai_attendance_tracking_render.html, Sam-approved).
+   samai redesign of the v3 board per Sam #4:44 / #5:03, then wired
+   to Toast per Sam #5:53 ("connect it to the toast api ... show if
+   employees are clocked in").
 
-   Manager-operated daily time-clock board. Roster is built BY the
-   manager (Add Entry creates rows / logs events). Functional with
-   zero external integration.
+   Daily roster + live time-clock board. The roster and clock-in /
+   clock-out status come from Toast (toast_reports.attendance_clock_
+   status — the same Toast labor API behind the Labor reports);
+   manager-logged events (late / no-show / callout / notes) overlay
+   on top. If Toast is down the route falls back to manually-logged
+   AttendanceShift rows + sets attendance_notice.
 
    ROUTE CONTRACT (store_routes.py _render_attendance_v3):
-     rows -> list[shift], one per AttendanceShift for the day:
-       id, name, initials, role, section ('boh'|'foh'), phone,
-       status ('scheduled'|'clocked-in'|'late'|'no-show'|
-               'callout'|'break'|'out'),
+     rows -> list[teammate], one merged entry per person:
+       rid (int, stable per-row key), id (AttendanceShift id or null),
+       name, initials, role, section, phone,
+       status ('clocked-in'|'out'|'off' from Toast, or 'scheduled'|
+               'late'|'no-show'|'callout'|'break' from a logged shift),
        sched, clock_in, clock_out (display strings or ''),
        late_minutes (int), hours_worked (str), note,
        on_clock (bool), is_off (bool), has_prior_issue (bool),
-       issue_note (str), events -> list[{time,kind,text}],
-       history -> list[{date,kind,text}]   (prior-day events).
-     kpis  -> {scheduled, clocked_in, late, no_show, callouts}.
+       history -> list[{date,kind,text}] (prior-day issues),
+       events -> list[{time,kind,text}], source ('toast'|'manual').
+     kpis -> {scheduled, clocked_in, late, no_show, callouts}.
+     attendance_notice -> str or None (Toast-unavailable banner).
      selected_date, today_iso, prev_date, next_date (iso),
      date_display, is_today, store_label.
-   Forms POST to store.manager_page_create (page='attendance'),
-   hidden form_action: clock_in | clock_out | log_event | add_entry.
-   Audience gate at the route: _manager_role_ok (manager-tier,
-   expo excluded per CENA.md L165).
+   Forms POST to self (action="") -> store.manager_page_create
+   (page='attendance'); hidden form_action: log_event | add_entry.
+   The slide-over log buttons post by name + entry_date so the route
+   can find-or-create a shift for a Toast teammate not logged before.
+   Audience gate at the route: _manager_role_ok.
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'manager_attendance' %}
@@ -161,6 +167,12 @@
   .atr-page .atr-hint {
     font-size: 12px; color: var(--cream-faint); font-style: italic;
     margin: 8px 0 12px;
+  }
+  .atr-page .atr-note {
+    font-size: 12px; color: var(--st-late);
+    background: rgba(232,163,60,0.10);
+    border: 0.5px solid rgba(232,163,60,0.22); border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 12px;
   }
 
   .atr-page .atr-roster { display: flex; flex-direction: column; gap: 8px; }
@@ -412,6 +424,8 @@
     <div class="atr-kpi k-call"><div class="lbl">Callouts</div><div class="val">{{ kpis.callouts }}</div></div>
   </div>
 
+  {% if attendance_notice %}<div class="atr-note">{{ attendance_notice }}</div>{% endif %}
+
   <div class="atr-toolbar">
     <div class="atr-tabs" id="atrTabs">
       <button type="button" class="atr-tab active" data-view="all">All <span class="ct" id="cAll">0</span></button>
@@ -498,6 +512,8 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
   <input type="hidden" name="form_action" value="log_event">
   <input type="hidden" name="shift_id" id="evShiftId">
+  <input type="hidden" name="name" id="evName">
+  <input type="hidden" name="entry_date" value="{{ selected_date }}">
   <input type="hidden" name="kind" id="evKind">
   <input type="hidden" name="reason" id="evReason">
   <input type="hidden" name="note" id="evNote">
@@ -518,17 +534,20 @@
 <script>
 (function () {
   "use strict";
-  // Real roster from the route — one entry per AttendanceShift for the day.
+  // Roster from the route — Toast employees merged with manager-logged
+  // shifts, one entry per teammate. p.rid is the stable per-row key;
+  // p.id is the AttendanceShift id (null until a shift row exists).
   var PEOPLE = {{ rows | tojson }};
 
   var ST = {
-    "clocked-in": {pill:"On Time",  rc:"r-ontime",   pc:"p-ontime"},
+    "clocked-in": {pill:"On the Clock", rc:"r-ontime", pc:"p-ontime"},
     "late":       {pill:"Late",     rc:"r-late",     pc:"p-late"},
     "no-show":    {pill:"No-Show",  rc:"r-noshow",   pc:"p-noshow"},
     "callout":    {pill:"Callout",  rc:"r-callout",  pc:"p-callout"},
     "break":      {pill:"On Break", rc:"r-break",    pc:"p-break"},
     "out":        {pill:"Clocked Out", rc:"r-out",   pc:"p-out"},
-    "scheduled":  {pill:"Scheduled",rc:"r-scheduled",pc:"p-scheduled"}
+    "scheduled":  {pill:"Scheduled",rc:"r-scheduled",pc:"p-scheduled"},
+    "off":        {pill:"Off",      rc:"r-out",      pc:"p-out"}
   };
   function meta(s){ return ST[s] || ST["scheduled"]; }
   function esc(t){ var d=document.createElement("div"); d.textContent=(t==null?"":t); return d.innerHTML; }
@@ -541,10 +560,10 @@
     return true;
   }
   var HINT = {
-    all:    "Everyone on today's schedule — whether they are working or off.",
-    clock:  "Everyone currently clocked in (on time, late, or on break).",
-    off:    "Teammates off the clock today — scheduled, no-show, callout, or clocked out.",
-    issues: "Scheduled today AND has a documented attendance issue on file."
+    all:    "The full team roster from Toast - everyone, working or off.",
+    clock:  "Teammates Toast shows currently clocked in (or late / on break).",
+    off:    "Teammates not on the clock right now - off, no-show, callout, or clocked out.",
+    issues: "Teammates with a documented attendance issue on file."
   };
   var page = document.getElementById("atrPage");
   var roster = document.getElementById("atrRoster");
@@ -564,7 +583,7 @@
       var m = meta(p.status);
       var t = p.sched || "";
       if (p.clock_in) t += (t?"  &middot; ":"") + "in " + esc(p.clock_in);
-      return '<div class="atr-row '+m.rc+'" data-id="'+p.id+'">'
+      return '<div class="atr-row '+m.rc+'" data-id="'+p.rid+'">'
         + '<div class="atr-av">'+esc(p.initials)+'</div>'
         + '<div class="atr-who"><div class="atr-nm">'+esc(p.name)
         +   (p.has_prior_issue?'<span class="atr-flag">ISSUE</span>':'')+'</div>'
@@ -587,7 +606,7 @@
   var panel = document.getElementById("atrPanel"), scrim = document.getElementById("atrScrim");
   roster.addEventListener("click", function(e){
     var r = e.target.closest(".atr-row"); if(!r) return;
-    openPanel(PEOPLE.filter(function(p){return p.id===+r.dataset.id;})[0]);
+    openPanel(PEOPLE.filter(function(p){return p.rid===+r.dataset.id;})[0]);
   });
   function openPanel(p){
     if(!p) return;
@@ -604,7 +623,7 @@
             +esc(h.date)+'</span><span class="tx">'+esc(h.text)+'</span></div>'; }).join("")
       : '<div class="atr-tlitem"><span class="tx">No prior attendance events on file.</span></div>';
     document.getElementById("pTl").innerHTML = hist;
-    panel.dataset.pid = p.id;
+    panel.dataset.pid = p.rid;
     scrim.classList.add("show"); panel.classList.add("show");
   }
   function closePanel(){ scrim.classList.remove("show"); panel.classList.remove("show"); }
@@ -613,9 +632,11 @@
 
   document.querySelectorAll(".atr-logact").forEach(function(a){
     a.addEventListener("click", function(){
-      var pid = +panel.dataset.pid;
-      if(!pid) return;
-      document.getElementById("evShiftId").value = pid;
+      var rid = +panel.dataset.pid;
+      var p = PEOPLE.filter(function(x){ return x.rid===rid; })[0];
+      if(!p) return;
+      document.getElementById("evShiftId").value = (p.id==null ? "" : p.id);
+      document.getElementById("evName").value = p.name;
       document.getElementById("evKind").value = a.dataset.kind || "note";
       document.getElementById("evReason").value = a.dataset.reason || "";
       document.getElementById("evNote").value = "";
@@ -653,7 +674,7 @@
     if(!q){ matches.classList.remove("show"); matches.innerHTML=""; return; }
     var hits = PEOPLE.filter(function(p){ return p.name.toLowerCase().indexOf(q)>=0; }).slice(0,6);
     var html = hits.map(function(p){
-      return '<div class="atr-match" data-id="'+p.id+'"><div class="atr-av">'+esc(p.initials)
+      return '<div class="atr-match" data-id="'+p.rid+'"><div class="atr-av">'+esc(p.initials)
         +'</div><div><div style="font-weight:600">'+esc(p.name)+'</div><div class="mr">'
         +esc(p.role)+'</div></div></div>'; }).join("");
     html += '<div class="atr-match free" data-free="1"><div class="fic">+</div>'
@@ -664,7 +685,7 @@
   matches.addEventListener("click", function(e){
     var m = e.target.closest(".atr-match"); if(!m) return;
     if(m.dataset.free){ chosen = {name: nameInp.value.trim(), role:"Entered manually"}; }
-    else { chosen = PEOPLE.filter(function(p){return p.id===+m.dataset.id;})[0]; }
+    else { chosen = PEOPLE.filter(function(p){return p.rid===+m.dataset.id;})[0]; }
     document.getElementById("mcAv").textContent = chosen.initials
       || chosen.name.split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
     document.getElementById("mcNm").textContent = chosen.name;

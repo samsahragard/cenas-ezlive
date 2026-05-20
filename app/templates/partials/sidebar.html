@@ -105,10 +105,11 @@
         <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
       </button>
       <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+        {# 'recipe-page' (old text-heavy v1 recipe log) removed per Sam
+           #9:44 — it duplicated the real Recipes page under Kitchen. #}
         {% for slug, label, icon in [
           ('daily-log', 'Daily manager log', 'ti-clipboard-text'),
           ('incident-reports', 'Incident reports', 'ti-alert-triangle'),
-          ('recipe-page', 'Recipe page', 'ti-book-2'),
           ('attendance', 'Attendance tracking', 'ti-calendar-time'),
           ('interview', 'Interview surface', 'ti-user-plus'),
           ('training', 'Training records', 'ti-school'),
@@ -278,17 +279,18 @@
             <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
           </button>
           <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/kitchen/fresh-food" class="ck-sb-subitem{% if active == 'kitchen_fresh_food' %} active{% endif %}">
+            {# Fresh Food + Recipes are LIVE — point at the real routes,
+               no 'soon' badge (Sam #9:44: the placeholder links did not
+               reach the shipped pages). Prep List stays a placeholder. #}
+            <a href="/{{ store_slug }}/fresh-food/place-order" class="ck-sb-subitem{% if active in ('fresh_food_place_order', 'fresh_food_recent_orders') %} active{% endif %}">
               <span class="ck-sb-subitem-label">Fresh Food</span>
-              <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
             </a>
             <a href="/{{ store_slug }}/kitchen/prep-list" class="ck-sb-subitem{% if active == 'kitchen_prep_list' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Prep List</span>
               <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
             </a>
-            <a href="/{{ store_slug }}/kitchen/recipes" class="ck-sb-subitem{% if active == 'kitchen_recipes' %} active{% endif %}">
+            <a href="/{{ store_slug }}/recipes" class="ck-sb-subitem{% if active == 'kitchen_recipes' %} active{% endif %}">
               <span class="ck-sb-subitem-label">Recipes</span>
-              <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
             </a>
           </div></div>
         </div>

@@ -8,7 +8,21 @@
 
 {% block content %}
 <style>
-  .ffro-page { margin-top: 12px; }
+  .ffro-page { margin-top: 12px; position: relative; }
+  /* Darkening layer over the base_dashboard restaurant photo: keeps the
+     brand photo (Sam #8:38) but darkens it so the trackers + tables stay
+     legible. Fixed + behind content; sidebar/nav stay clickable.
+     Mirrors the recipes overlay (8273551). Modals live outside .ffro-page
+     so they are unaffected. */
+  .ffro-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 12, 8, 0.72);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .ffro-page > * { position: relative; z-index: 1; }
 
   .ffro-toolbar {
     display: flex;

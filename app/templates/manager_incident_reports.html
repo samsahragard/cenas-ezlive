@@ -68,9 +68,10 @@
     z-index: 1;
   }
   /* v3 dark-red gradient backdrop that overrides the base_dashboard
-     restaurant-photo bleed for this page only. Fixed so it covers
-     the full viewport behind the .ir-page content + the sidebar
-     stays clickable (sidebar has its own higher z-index in base). */
+     restaurant-photo bleed for this page only. Semi-transparent so
+     the sidebar stays visible through it (Sam #10:54 — incident
+     reports needs the sidebar). Same transparent-overlay pattern
+     recipes uses at .rcp-page::before. */
   .ir-page::before {
     content: '';
     position: fixed;
@@ -78,7 +79,7 @@
     background:
       radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.18), transparent),
       radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
-      linear-gradient(180deg, var(--ir-bg-deep) 0%, #0d0604 100%);
+      linear-gradient(180deg, rgba(26, 13, 8, 0.78) 0%, rgba(13, 6, 4, 0.88) 100%);
     z-index: 0;
     pointer-events: none;
   }

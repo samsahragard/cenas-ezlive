@@ -1,0 +1,2703 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Daily Manager Log</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+
+  :root {
+
+    --ck-red: #C73B36;
+
+    --ck-red-deep: #9B2A26;
+
+    --ck-red-bright: #E85852;
+
+    --ck-gold: #E4B340;
+
+    --ck-gold-bright: #FFD970;
+
+    --ck-teal: #2EA39F;
+
+    --ck-teal-bright: #5BCAC5;
+
+    --ck-cream: #FAF6EC;
+
+    --ck-cream-dim: rgba(250, 246, 236, 0.82);
+
+    --ck-cream-faint: rgba(250, 246, 236, 0.55);
+
+    --ck-cream-meta: rgba(250, 246, 236, 0.4);
+
+    --ck-bg-deep: #1a0d08;
+
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+
+    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
+
+    --ck-bg-input: rgba(0, 0, 0, 0.3);
+
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+
+    --radius-sm: 8px;
+
+    --radius-md: 12px;
+
+  }
+
+
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+
+
+  html, body {
+
+    background: var(--ck-bg-deep);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', system-ui, sans-serif;
+
+    font-size: 14px;
+
+    line-height: 1.5;
+
+    min-height: 100vh;
+
+  }
+
+
+
+  body {
+
+    background:
+
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
+
+      linear-gradient(180deg, var(--ck-bg-deep) 0%, #0d0604 100%);
+
+    background-attachment: fixed;
+
+    padding-bottom: 100px;
+
+  }
+
+
+
+  body::before {
+
+    content: '';
+
+    position: fixed;
+
+    inset: 0;
+
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+
+    pointer-events: none;
+
+    z-index: 0;
+
+    opacity: 0.4;
+
+  }
+
+
+
+  .frame {
+
+    max-width: 440px;
+
+    margin: 0 auto;
+
+    padding: 16px 16px 0;
+
+    position: relative;
+
+    z-index: 1;
+
+  }
+
+
+
+  /* === HEADER === */
+
+  .top {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 14px;
+
+  }
+
+
+
+  .menu-btn, .back-btn {
+
+    height: 40px;
+
+    border-radius: var(--radius-sm);
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    color: var(--ck-gold);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    cursor: pointer;
+
+  }
+
+
+
+  .menu-btn {
+
+    width: 40px;
+
+    justify-content: center;
+
+  }
+
+
+
+  .back-btn {
+
+    padding: 0 14px;
+
+    gap: 6px;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+  }
+
+
+
+  .menu-btn svg, .back-btn svg {
+
+    width: 16px;
+
+    height: 16px;
+
+  }
+
+
+
+  .menu-btn svg {
+
+    stroke: currentColor;
+
+    fill: none;
+
+    stroke-width: 2;
+
+  }
+
+
+
+  .back-btn svg { fill: currentColor; }
+
+
+
+  .top-spacer { flex: 1; }
+
+
+
+  h1 {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-weight: 400;
+
+    font-size: 32px;
+
+    line-height: 1;
+
+    color: var(--ck-cream);
+
+    margin-bottom: 18px;
+
+  }
+
+
+
+  h1 .accent {
+
+    font-style: italic;
+
+    color: var(--ck-gold-bright);
+
+  }
+
+
+
+  h2 {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-weight: 400;
+
+    font-size: 26px;
+
+    line-height: 1;
+
+    color: var(--ck-cream);
+
+    margin-bottom: 4px;
+
+  }
+
+
+
+  h2 .accent {
+
+    font-style: italic;
+
+    color: var(--ck-gold-bright);
+
+  }
+
+
+
+  .subtitle {
+
+    color: var(--ck-cream-dim);
+
+    font-size: 12px;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  /* === TODAY CARD (DASHBOARD) === */
+
+  .today-wrap {
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  .today {
+
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.1), rgba(199, 59, 54, 0.04));
+
+    border: 1px solid var(--ck-gold);
+
+    border-radius: var(--radius-md);
+
+    padding: 16px;
+
+    cursor: pointer;
+
+    display: block;
+
+    margin-bottom: 8px;
+
+  }
+
+
+
+  .today-top {
+
+    display: flex;
+
+    align-items: baseline;
+
+    gap: 10px;
+
+    margin-bottom: 10px;
+
+  }
+
+
+
+  .today-day {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.2);
+
+    padding: 3px 9px;
+
+    border-radius: 4px;
+
+    letter-spacing: 0.12em;
+
+  }
+
+
+
+  .today-date {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 22px;
+
+    color: var(--ck-cream);
+
+    line-height: 1;
+
+    flex: 1;
+
+  }
+
+
+
+  .today-count {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 12px;
+
+    color: var(--ck-gold-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .today-latest {
+
+    font-size: 14px;
+
+    color: var(--ck-cream-dim);
+
+    line-height: 1.45;
+
+    margin-bottom: 8px;
+
+  }
+
+
+
+  .today-by {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.06em;
+
+  }
+
+
+
+  .today-by strong {
+
+    color: var(--ck-cream);
+
+    font-weight: 700;
+
+  }
+
+
+
+  /* === Big Add Entry button — under today === */
+
+  .add-today-btn {
+
+    width: 100%;
+
+    padding: 14px;
+
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+
+    border: 0.5px solid var(--ck-red-bright);
+
+    border-radius: var(--radius-md);
+
+    color: var(--ck-cream);
+
+    cursor: pointer;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 8px;
+
+    box-shadow: 0 4px 14px rgba(199, 59, 54, 0.3);
+
+    letter-spacing: 0.03em;
+
+  }
+
+
+
+  .add-today-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+
+
+  /* === DAYS LIST === */
+
+  .label {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.15em;
+
+    text-transform: uppercase;
+
+    margin: 12px 4px 10px;
+
+  }
+
+
+
+  .day {
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    padding: 14px 16px;
+
+    margin-bottom: 6px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 14px;
+
+    cursor: pointer;
+
+    transition: background 0.15s;
+
+  }
+
+
+
+  .day:hover { background: var(--ck-bg-card-hover); }
+
+
+
+  .day-info {
+
+    display: flex;
+
+    align-items: baseline;
+
+    gap: 8px;
+
+    flex: 1;
+
+  }
+
+
+
+  .day-name {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.12em;
+
+    width: 38px;
+
+  }
+
+
+
+  .day-date {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 17px;
+
+    color: var(--ck-cream);
+
+    line-height: 1;
+
+  }
+
+
+
+  .day-count {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    color: var(--ck-gold);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .day-arrow {
+
+    width: 16px;
+
+    height: 16px;
+
+    fill: var(--ck-cream-meta);
+
+  }
+
+
+
+  .day.empty {
+
+    background: transparent;
+
+    border-color: rgba(217, 164, 54, 0.08);
+
+    padding: 10px 16px;
+
+  }
+
+
+
+  .day.empty .day-name,
+
+  .day.empty .day-date { opacity: 0.45; }
+
+
+
+  .day.empty .day-count {
+
+    color: var(--ck-cream-faint);
+
+    font-weight: 500;
+
+  }
+
+
+
+  /* === DAY DETAIL VIEW === */
+
+  .day-detail-header {
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-active);
+
+    border-radius: var(--radius-md);
+
+    padding: 14px 16px;
+
+    margin-bottom: 16px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+  }
+
+
+
+  .day-detail-date {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 22px;
+
+    color: var(--ck-cream);
+
+    line-height: 1;
+
+    flex: 1;
+
+  }
+
+
+
+  .day-detail-date .day-prefix {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-style: normal;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.12em;
+
+    text-transform: uppercase;
+
+    margin-right: 6px;
+
+  }
+
+
+
+  .today-tag {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.2);
+
+    padding: 3px 8px;
+
+    border-radius: 4px;
+
+    letter-spacing: 0.1em;
+
+  }
+
+
+
+  .past-tag {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-dim);
+
+    background: rgba(0, 0, 0, 0.3);
+
+    padding: 3px 8px;
+
+    border-radius: 4px;
+
+    letter-spacing: 0.1em;
+
+  }
+
+
+
+  /* Backdate notice when adding to past day */
+
+  .backdate-notice {
+
+    background: rgba(46, 163, 159, 0.08);
+
+    border: 0.5px solid rgba(46, 163, 159, 0.3);
+
+    border-radius: var(--radius-sm);
+
+    padding: 11px 14px;
+
+    margin-bottom: 14px;
+
+    font-size: 12px;
+
+    color: var(--ck-cream);
+
+    line-height: 1.5;
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 8px;
+
+  }
+
+
+
+  .backdate-notice svg {
+
+    width: 14px;
+
+    height: 14px;
+
+    fill: var(--ck-teal-bright);
+
+    flex-shrink: 0;
+
+    margin-top: 2px;
+
+  }
+
+
+
+  .backdate-notice strong {
+
+    color: var(--ck-teal-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  /* === ENTRY CARD === */
+
+  .entry {
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    padding: 14px 16px;
+
+    margin-bottom: 8px;
+
+  }
+
+
+
+  .entry-top {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 10px;
+
+  }
+
+
+
+  .entry-author {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    flex: 1;
+
+  }
+
+
+
+  .author-avatar {
+
+    width: 28px;
+
+    height: 28px;
+
+    border-radius: 50%;
+
+    background: linear-gradient(135deg, #28160e, #1a0d08);
+
+    color: var(--ck-gold-bright);
+
+    display: grid;
+
+    place-items: center;
+
+    font-family: 'Instrument Serif', serif;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    border: 0.5px solid var(--ck-border-active);
+
+    flex-shrink: 0;
+
+  }
+
+
+
+  .author-info {
+
+    display: flex;
+
+    flex-direction: column;
+
+    line-height: 1.2;
+
+  }
+
+
+
+  .author-name {
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream);
+
+  }
+
+
+
+  .author-role {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 9px;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .entry-time {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.05em;
+
+    text-align: right;
+
+  }
+
+
+
+  .entry-time strong {
+
+    color: var(--ck-gold-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .entry-body {
+
+    font-size: 14px;
+
+    color: var(--ck-cream);
+
+    line-height: 1.5;
+
+    margin-bottom: 10px;
+
+  }
+
+
+
+  .entry-footer {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    padding-top: 10px;
+
+    border-top: 0.5px solid var(--ck-border-subtle);
+
+  }
+
+
+
+  /* Editable countdown badge */
+
+  .edit-badge {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    padding: 4px 9px;
+
+    background: rgba(228, 179, 64, 0.15);
+
+    border: 0.5px solid var(--ck-border-active);
+
+    border-radius: 999px;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .edit-badge svg {
+
+    width: 10px;
+
+    height: 10px;
+
+    fill: currentColor;
+
+  }
+
+
+
+  .locked-badge {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    padding: 4px 9px;
+
+    background: rgba(0, 0, 0, 0.3);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: 999px;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.08em;
+
+  }
+
+
+
+  .locked-badge svg {
+
+    width: 10px;
+
+    height: 10px;
+
+    fill: currentColor;
+
+  }
+
+
+
+  .entry-footer-spacer { flex: 1; }
+
+
+
+  .entry-action {
+
+    background: transparent;
+
+    border: none;
+
+    color: var(--ck-cream-faint);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 11px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+    padding: 4px 8px;
+
+    border-radius: 4px;
+
+  }
+
+
+
+  .entry-action:hover { color: var(--ck-cream); background: rgba(228, 179, 64, 0.06); }
+
+
+
+  .entry-action.danger { color: var(--ck-red-bright); }
+
+  .entry-action.danger:hover { background: rgba(232, 88, 82, 0.08); }
+
+
+
+  /* Empty state on day detail */
+
+  .empty-state {
+
+    background: var(--ck-bg-card);
+
+    border: 1px dashed var(--ck-border-subtle);
+
+    border-radius: var(--radius-md);
+
+    padding: 32px 20px;
+
+    text-align: center;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  .empty-state-icon {
+
+    width: 44px;
+
+    height: 44px;
+
+    border-radius: 50%;
+
+    background: rgba(228, 179, 64, 0.08);
+
+    color: var(--ck-cream-faint);
+
+    display: grid;
+
+    place-items: center;
+
+    margin: 0 auto 12px;
+
+  }
+
+
+
+  .empty-state-icon svg { width: 22px; height: 22px; fill: currentColor; }
+
+
+
+  .empty-state-text {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 18px;
+
+    color: var(--ck-cream-dim);
+
+    margin-bottom: 14px;
+
+  }
+
+
+
+  /* === NEW ENTRY FORM === */
+
+  .form-card {
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-active);
+
+    border-radius: var(--radius-md);
+
+    padding: 18px;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  /* Auto-tagged metadata at top of form */
+
+  .auto-meta {
+
+    background: rgba(228, 179, 64, 0.06);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    padding: 12px 14px;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  .auto-meta-row {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    padding: 4px 0;
+
+  }
+
+
+
+  .auto-meta-row + .auto-meta-row {
+
+    border-top: 0.5px solid var(--ck-border-subtle);
+
+    margin-top: 4px;
+
+    padding-top: 10px;
+
+  }
+
+
+
+  .auto-meta-label {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold);
+
+    letter-spacing: 0.1em;
+
+    text-transform: uppercase;
+
+    width: 80px;
+
+    flex-shrink: 0;
+
+  }
+
+
+
+  .auto-meta-value {
+
+    flex: 1;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+  }
+
+
+
+  .auto-meta-value .small-avatar {
+
+    width: 22px;
+
+    height: 22px;
+
+    border-radius: 50%;
+
+    background: linear-gradient(135deg, #28160e, #1a0d08);
+
+    color: var(--ck-gold-bright);
+
+    display: grid;
+
+    place-items: center;
+
+    font-family: 'Instrument Serif', serif;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    border: 0.5px solid var(--ck-border-active);
+
+  }
+
+
+
+  .auto-meta-value .sub {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 500;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .auto-lock-tag {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.18);
+
+    padding: 2px 6px;
+
+    border-radius: 3px;
+
+    letter-spacing: 0.08em;
+
+  }
+
+
+
+  /* Form fields */
+
+  .field-label {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-dim);
+
+    letter-spacing: 0.1em;
+
+    text-transform: uppercase;
+
+    margin-bottom: 8px;
+
+    display: block;
+
+  }
+
+
+
+  .field-label .req {
+
+    color: var(--ck-red-bright);
+
+    margin-left: 2px;
+
+  }
+
+
+
+  .entry-textarea {
+
+    width: 100%;
+
+    padding: 12px 14px;
+
+    background: var(--ck-bg-input);
+
+    border: 1px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 14px;
+
+    resize: vertical;
+
+    min-height: 120px;
+
+    line-height: 1.5;
+
+  }
+
+
+
+  .entry-textarea:focus {
+
+    outline: none;
+
+    border-color: var(--ck-gold);
+
+    background: rgba(0, 0, 0, 0.4);
+
+  }
+
+
+
+  .entry-textarea::placeholder { color: var(--ck-cream-faint); }
+
+
+
+  .form-actions {
+
+    display: flex;
+
+    gap: 8px;
+
+    margin-top: 14px;
+
+  }
+
+
+
+  .form-cancel {
+
+    flex: 1;
+
+    padding: 12px;
+
+    background: transparent;
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream-dim);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+  }
+
+
+
+  .form-submit {
+
+    flex: 2;
+
+    padding: 12px;
+
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+
+    border: 0.5px solid var(--ck-red-bright);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    box-shadow: 0 4px 12px rgba(199, 59, 54, 0.25);
+
+  }
+
+
+
+  .form-submit:disabled {
+
+    background: rgba(50, 30, 22, 0.5);
+
+    border-color: var(--ck-border-subtle);
+
+    color: var(--ck-cream-faint);
+
+    cursor: not-allowed;
+
+    box-shadow: none;
+
+  }
+
+
+
+  .form-submit svg { width: 14px; height: 14px; fill: currentColor; }
+
+
+
+  /* Add-entry FAB (also on day detail) */
+
+  .fab {
+
+    position: fixed;
+
+    bottom: 80px;
+
+    right: 16px;
+
+    height: 52px;
+
+    padding: 0 22px 0 18px;
+
+    border-radius: 999px;
+
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+
+    border: 0.5px solid var(--ck-red-bright);
+
+    color: var(--ck-cream);
+
+    cursor: pointer;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    box-shadow: 0 6px 18px rgba(199, 59, 54, 0.45);
+
+    z-index: 50;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.03em;
+
+  }
+
+
+
+  .fab svg { width: 20px; height: 20px; fill: currentColor; }
+
+
+
+  /* Toast */
+
+  .toast {
+
+    position: fixed;
+
+    top: 16px;
+
+    left: 50%;
+
+    transform: translateX(-50%) translateY(-100px);
+
+    background: rgba(20, 12, 8, 0.95);
+
+    border: 1px solid var(--ck-gold);
+
+    border-radius: var(--radius-md);
+
+    padding: 12px 18px;
+
+    color: var(--ck-cream);
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    z-index: 200;
+
+    transition: transform 0.3s;
+
+    backdrop-filter: blur(8px);
+
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+  }
+
+
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .toast svg { width: 16px; height: 16px; fill: var(--ck-gold-bright); }
+
+
+
+  /* === BOTTOM NAV — unchanged === */
+
+  .bottom-nav {
+
+    position: fixed;
+
+    bottom: 0;
+
+    left: 0;
+
+    right: 0;
+
+    background: rgba(15, 8, 5, 0.95);
+
+    backdrop-filter: blur(12px);
+
+    border-top: 0.5px solid var(--ck-border-subtle);
+
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+
+    display: grid;
+
+    grid-template-columns: repeat(5, 1fr);
+
+    z-index: 100;
+
+  }
+
+
+
+  .nav-item {
+
+    background: transparent;
+
+    border: none;
+
+    padding: 6px 4px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    gap: 3px;
+
+    color: var(--ck-cream-faint);
+
+    cursor: pointer;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+
+    text-transform: uppercase;
+
+    position: relative;
+
+  }
+
+
+
+  .nav-item svg { width: 22px; height: 22px; fill: currentColor; }
+
+  .nav-item.active { color: var(--ck-gold-bright); }
+
+
+
+  .nav-item.active::before {
+
+    content: '';
+
+    position: absolute;
+
+    top: -8px;
+
+    width: 24px;
+
+    height: 2px;
+
+    background: var(--ck-gold);
+
+    border-radius: 0 0 2px 2px;
+
+  }
+
+
+
+  .hidden { display: none !important; }
+
+</style>
+
+</head>
+
+<body>
+
+
+
+<!-- ===== DASHBOARD VIEW ===== -->
+
+<div class="frame" id="dashboardView">
+
+
+
+  <div class="top">
+
+    <button class="menu-btn" aria-label="Menu">
+
+      <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+
+    </button>
+
+  </div>
+
+
+
+  <h1>Manager <span class="accent">Log</span></h1>
+
+
+
+  <!-- Today card + Add entry button -->
+
+  <div class="today-wrap">
+
+    <div class="today" onclick="openDay('2026-05-20')">
+
+      <div class="today-top">
+
+        <span class="today-day">TODAY · WED</span>
+
+        <span class="today-date">May 20</span>
+
+        <span class="today-count">7 entries</span>
+
+      </div>
+
+      <div class="today-latest">Walk-in cooler temp climbing — moved seafood to backup, tech ETA 2 PM.</div>
+
+      <div class="today-by">18 min ago · <strong>Hector M.</strong></div>
+
+    </div>
+
+
+
+    <!-- BIG ADD ENTRY BUTTON, right under today -->
+
+    <button class="add-today-btn" onclick="openNewEntry('2026-05-20', 'today')">
+
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+
+      Add entry for today
+
+    </button>
+
+  </div>
+
+
+
+  <!-- Recent days -->
+
+  <div class="label">Recent — tap a day to view or add entries</div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-19')">
+
+    <div class="day-info">
+
+      <span class="day-name">TUE</span>
+
+      <span class="day-date">May 19</span>
+
+    </div>
+
+    <span class="day-count">4 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-18')">
+
+    <div class="day-info">
+
+      <span class="day-name">MON</span>
+
+      <span class="day-date">May 18</span>
+
+    </div>
+
+    <span class="day-count">4 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-17')">
+
+    <div class="day-info">
+
+      <span class="day-name">SUN</span>
+
+      <span class="day-date">May 17</span>
+
+    </div>
+
+    <span class="day-count">3 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-16')">
+
+    <div class="day-info">
+
+      <span class="day-name">SAT</span>
+
+      <span class="day-date">May 16</span>
+
+    </div>
+
+    <span class="day-count">4 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day empty" onclick="openDay('2026-05-15')">
+
+    <div class="day-info">
+
+      <span class="day-name">FRI</span>
+
+      <span class="day-date">May 15</span>
+
+    </div>
+
+    <span class="day-count">none</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-14')">
+
+    <div class="day-info">
+
+      <span class="day-name">THU</span>
+
+      <span class="day-date">May 14</span>
+
+    </div>
+
+    <span class="day-count">2 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-13')">
+
+    <div class="day-info">
+
+      <span class="day-name">WED</span>
+
+      <span class="day-date">May 13</span>
+
+    </div>
+
+    <span class="day-count">4 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day empty" onclick="openDay('2026-05-12')">
+
+    <div class="day-info">
+
+      <span class="day-name">TUE</span>
+
+      <span class="day-date">May 12</span>
+
+    </div>
+
+    <span class="day-count">none</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+  <div class="day" onclick="openDay('2026-05-11')">
+
+    <div class="day-info">
+
+      <span class="day-name">MON</span>
+
+      <span class="day-date">May 11</span>
+
+    </div>
+
+    <span class="day-count">2 entries</span>
+
+    <svg class="day-arrow" viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+
+  </div>
+
+
+
+</div>
+
+
+
+
+
+<!-- ===== DAY DETAIL VIEW (Mon May 18 — example past day) ===== -->
+
+<div class="frame hidden" id="dayDetailView">
+
+
+
+  <div class="top">
+
+    <button class="back-btn" onclick="showDashboard()">
+
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+
+      Back
+
+    </button>
+
+  </div>
+
+
+
+  <div class="day-detail-header">
+
+    <div class="day-detail-date">
+
+      <span class="day-prefix" id="dayDetailDayName">MON</span>
+
+      <span id="dayDetailDateLabel">May 18, 2026</span>
+
+    </div>
+
+    <span class="past-tag" id="dayDetailTag">2 DAYS AGO</span>
+
+  </div>
+
+
+
+  <!-- Backdate notice for past days -->
+
+  <div class="backdate-notice" id="backdateNotice">
+
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+
+    <div><strong>Adding to a past day.</strong> Your entry will be filed for <span id="backdateLabel">Mon, May 18</span>, but tagged with today's submission timestamp and your name.</div>
+
+  </div>
+
+
+
+  <!-- Entries on this day -->
+
+  <div id="entriesList">
+
+
+
+    <!-- Entry: editable (just posted, 4 min ago) -->
+
+    <div class="entry">
+
+      <div class="entry-top">
+
+        <div class="entry-author">
+
+          <div class="author-avatar">HM</div>
+
+          <div class="author-info">
+
+            <span class="author-name">Hector Martinez</span>
+
+            <span class="author-role">Kitchen Manager · UNO Copperfield</span>
+
+          </div>
+
+        </div>
+
+        <div class="entry-time">
+
+          <div>4 min ago</div>
+
+          <strong>10:48 AM</strong>
+
+        </div>
+
+      </div>
+
+      <div class="entry-body">Sysco delivery arrived short again — missing 2 cases of romaine and 1 case of tomatoes. Driver said they'll be on the Wednesday route. Called rep to log shortage.</div>
+
+      <div class="entry-footer">
+
+        <span class="edit-badge" id="editBadge1">
+
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
+
+          Editable for <span id="countdown1">25:48</span>
+
+        </span>
+
+        <span class="entry-footer-spacer"></span>
+
+        <button class="entry-action">Edit</button>
+
+        <button class="entry-action danger">Delete</button>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- Entry: locked (older than 30 min) -->
+
+    <div class="entry">
+
+      <div class="entry-top">
+
+        <div class="entry-author">
+
+          <div class="author-avatar">DL</div>
+
+          <div class="author-info">
+
+            <span class="author-name">Diana Lopez</span>
+
+            <span class="author-role">GM · DOS Tomball</span>
+
+          </div>
+
+        </div>
+
+        <div class="entry-time">
+
+          <div>Mon, May 18</div>
+
+          <strong>6:32 PM</strong>
+
+        </div>
+
+      </div>
+
+      <div class="entry-body">Customer complaint at booth 12 — wrong order delivered, comped their meal + $25 gift card. Server (Karla) acknowledged the mistake, ticket logged.</div>
+
+      <div class="entry-footer">
+
+        <span class="locked-badge">
+
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+          Locked
+
+        </span>
+
+        <span class="entry-footer-spacer"></span>
+
+        <button class="entry-action">Append update</button>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- Entry: locked -->
+
+    <div class="entry">
+
+      <div class="entry-top">
+
+        <div class="entry-author">
+
+          <div class="author-avatar">SB</div>
+
+          <div class="author-info">
+
+            <span class="author-name">Sandra Beltran</span>
+
+            <span class="author-role">Manager · DOS Tomball</span>
+
+          </div>
+
+        </div>
+
+        <div class="entry-time">
+
+          <div>Mon, May 18</div>
+
+          <strong>3:14 PM</strong>
+
+        </div>
+
+      </div>
+
+      <div class="entry-body">Briana K. called out for the dinner shift — covering with Karla picking up extras. Adjusted floor coverage for the rest of the week.</div>
+
+      <div class="entry-footer">
+
+        <span class="locked-badge">
+
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+          Locked
+
+        </span>
+
+        <span class="entry-footer-spacer"></span>
+
+        <button class="entry-action">Append update</button>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- Entry: locked -->
+
+    <div class="entry">
+
+      <div class="entry-top">
+
+        <div class="entry-author">
+
+          <div class="author-avatar">HM</div>
+
+          <div class="author-info">
+
+            <span class="author-name">Hector Martinez</span>
+
+            <span class="author-role">Kitchen Manager · UNO Copperfield</span>
+
+          </div>
+
+        </div>
+
+        <div class="entry-time">
+
+          <div>Mon, May 18</div>
+
+          <strong>9:05 AM</strong>
+
+        </div>
+
+      </div>
+
+      <div class="entry-body">Walk-in restock done. Black beans low — flagged Carlos to run extra batch before lunch rush.</div>
+
+      <div class="entry-footer">
+
+        <span class="locked-badge">
+
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+          Locked
+
+        </span>
+
+        <span class="entry-footer-spacer"></span>
+
+        <button class="entry-action">Append update</button>
+
+      </div>
+
+    </div>
+
+
+
+  </div>
+
+
+
+  <!-- Empty state placeholder (hidden by default, shown if 0 entries) -->
+
+  <div class="empty-state hidden" id="emptyState">
+
+    <div class="empty-state-icon">
+
+      <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+
+    </div>
+
+    <div class="empty-state-text">No entries on this day yet</div>
+
+  </div>
+
+
+
+</div>
+
+
+
+
+
+<!-- ===== NEW ENTRY FORM ===== -->
+
+<div class="frame hidden" id="newEntryView">
+
+
+
+  <div class="top">
+
+    <button class="back-btn" onclick="backFromForm()">
+
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+
+      Cancel
+
+    </button>
+
+  </div>
+
+
+
+  <h2>New <span class="accent">entry</span></h2>
+
+  <p class="subtitle" id="formSubtitle">Filing entry for <strong style="color: var(--ck-cream);">today</strong></p>
+
+
+
+  <div class="form-card">
+
+
+
+    <!-- Auto-tagged metadata -->
+
+    <div class="auto-meta">
+
+      <div class="auto-meta-row">
+
+        <span class="auto-meta-label">By</span>
+
+        <div class="auto-meta-value">
+
+          <div class="small-avatar">HM</div>
+
+          Hector Martinez
+
+        </div>
+
+        <span class="auto-lock-tag">AUTO</span>
+
+      </div>
+
+      <div class="auto-meta-row">
+
+        <span class="auto-meta-label">Posted</span>
+
+        <div class="auto-meta-value" id="postedTimestamp">
+
+          May 20, 2026 · 10:52 AM
+
+        </div>
+
+        <span class="auto-lock-tag">AUTO</span>
+
+      </div>
+
+      <div class="auto-meta-row">
+
+        <span class="auto-meta-label">Logged for</span>
+
+        <div class="auto-meta-value" id="loggedForDate">
+
+          Today · Wed, May 20
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+
+    <label class="field-label">What happened? <span class="req">*</span></label>
+
+    <textarea class="entry-textarea" id="entryText" placeholder="Walk through what happened in your own words. Be specific — names, times, what action you took."></textarea>
+
+
+
+    <div class="form-actions">
+
+      <button class="form-cancel" onclick="backFromForm()">Cancel</button>
+
+      <button class="form-submit" id="submitBtn" disabled onclick="submitEntry()">
+
+        <svg viewBox="0 0 24 24"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+
+        Post entry
+
+      </button>
+
+    </div>
+
+  </div>
+
+
+
+  <p style="font-size: 11px; color: var(--ck-cream-faint); line-height: 1.5; padding: 0 4px;">
+
+    Your name and the exact submission timestamp are tagged automatically. After posting, you can edit or delete the entry for <strong style="color: var(--ck-cream-dim);">30 minutes</strong> — after that it locks permanently and only append-only updates are allowed.
+
+  </p>
+
+
+
+</div>
+
+
+
+
+
+<!-- FAB visible on dashboard + day detail -->
+
+<button class="fab" id="fab" onclick="fabClick()">
+
+  <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+
+  New entry
+
+</button>
+
+
+
+
+
+<!-- Toast -->
+
+<div class="toast" id="toast">
+
+  <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+
+  <span id="toastText">Entry posted</span>
+
+</div>
+
+
+
+
+
+<!-- BOTTOM NAV -->
+
+<nav class="bottom-nav">
+
+  <button class="nav-item">
+
+    <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+
+    Today
+
+  </button>
+
+  <button class="nav-item active">
+
+    <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+
+    Manager
+
+  </button>
+
+  <button class="nav-item">
+
+    <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+
+    Catering
+
+  </button>
+
+  <button class="nav-item">
+
+    <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+
+    Operations
+
+  </button>
+
+  <button class="nav-item">
+
+    <svg viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66.95-2.3c.48.17.98.3 1.34.3C19 20 22 3 22 3c-1 2-8 2.25-13 3.25S2 11.5 2 13.5s1.75 3.75 1.75 3.75C7 8 17 8 17 8z"/></svg>
+
+    Vendors
+
+  </button>
+
+</nav>
+
+
+
+
+
+<script>
+
+  let currentDate = null;
+
+  let currentContext = 'dashboard'; // 'dashboard' | 'day' | 'newEntry'
+
+
+
+  function showDashboard() {
+
+    document.getElementById('dashboardView').classList.remove('hidden');
+
+    document.getElementById('dayDetailView').classList.add('hidden');
+
+    document.getElementById('newEntryView').classList.add('hidden');
+
+    document.getElementById('fab').classList.remove('hidden');
+
+    currentContext = 'dashboard';
+
+    window.scrollTo({ top: 0 });
+
+  }
+
+
+
+  function openDay(dateStr) {
+
+    currentDate = dateStr;
+
+
+
+    // Parse date
+
+    const d = new Date(dateStr + 'T00:00');
+
+    const today = new Date('2026-05-20T00:00');
+
+    const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+
+
+    document.getElementById('dayDetailDayName').textContent = dayNames[d.getDay()];
+
+    document.getElementById('dayDetailDateLabel').textContent =
+
+      `${monthNames[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+
+
+
+    // Tag: TODAY / N days ago
+
+    const tag = document.getElementById('dayDetailTag');
+
+    const backdateNotice = document.getElementById('backdateNotice');
+
+    const diffDays = Math.round((today - d) / (1000 * 60 * 60 * 24));
+
+
+
+    if (diffDays === 0) {
+
+      tag.textContent = 'TODAY';
+
+      tag.className = 'today-tag';
+
+      backdateNotice.classList.add('hidden');
+
+    } else if (diffDays === 1) {
+
+      tag.textContent = 'YESTERDAY';
+
+      tag.className = 'past-tag';
+
+      backdateNotice.classList.remove('hidden');
+
+      document.getElementById('backdateLabel').textContent =
+
+        `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+
+    } else {
+
+      tag.textContent = `${diffDays} DAYS AGO`;
+
+      tag.className = 'past-tag';
+
+      backdateNotice.classList.remove('hidden');
+
+      document.getElementById('backdateLabel').textContent =
+
+        `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+
+    }
+
+
+
+    document.getElementById('dashboardView').classList.add('hidden');
+
+    document.getElementById('dayDetailView').classList.remove('hidden');
+
+    document.getElementById('newEntryView').classList.add('hidden');
+
+    document.getElementById('fab').classList.remove('hidden');
+
+    currentContext = 'day';
+
+    window.scrollTo({ top: 0 });
+
+  }
+
+
+
+  function openNewEntry(dateStr, context) {
+
+    currentDate = dateStr;
+
+    const d = new Date(dateStr + 'T00:00');
+
+    const today = new Date('2026-05-20T00:00');
+
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+
+
+    const diffDays = Math.round((today - d) / (1000 * 60 * 60 * 24));
+
+    let logFor;
+
+    if (diffDays === 0) logFor = `Today · ${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+
+    else if (diffDays === 1) logFor = `Yesterday · ${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+
+    else logFor = `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()} · ${diffDays} days ago`;
+
+
+
+    document.getElementById('loggedForDate').textContent = logFor;
+
+
+
+    document.getElementById('formSubtitle').innerHTML =
+
+      diffDays === 0
+
+        ? 'Filing entry for <strong style="color: var(--ck-cream);">today</strong>'
+
+        : `Filing entry for <strong style="color: var(--ck-cream);">${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}</strong> (${diffDays} day${diffDays===1?'':'s'} ago)`;
+
+
+
+    document.getElementById('entryText').value = '';
+
+    document.getElementById('submitBtn').disabled = true;
+
+
+
+    document.getElementById('dashboardView').classList.add('hidden');
+
+    document.getElementById('dayDetailView').classList.add('hidden');
+
+    document.getElementById('newEntryView').classList.remove('hidden');
+
+    document.getElementById('fab').classList.add('hidden');
+
+    currentContext = 'newEntry';
+
+    window.scrollTo({ top: 0 });
+
+    setTimeout(() => document.getElementById('entryText').focus(), 100);
+
+  }
+
+
+
+  function backFromForm() {
+
+    if (currentDate) openDay(currentDate);
+
+    else showDashboard();
+
+  }
+
+
+
+  function fabClick() {
+
+    if (currentContext === 'day') {
+
+      openNewEntry(currentDate, 'day');
+
+    } else {
+
+      // dashboard — default to today
+
+      openNewEntry('2026-05-20', 'today');
+
+    }
+
+  }
+
+
+
+  function submitEntry() {
+
+    showToast('Entry posted · editable for 30 min');
+
+    setTimeout(() => {
+
+      if (currentDate) openDay(currentDate);
+
+      else showDashboard();
+
+    }, 600);
+
+  }
+
+
+
+  function showToast(text) {
+
+    const t = document.getElementById('toast');
+
+    document.getElementById('toastText').textContent = text;
+
+    t.classList.add('show');
+
+    setTimeout(() => t.classList.remove('show'), 2400);
+
+  }
+
+
+
+  // Entry text validation
+
+  document.getElementById('entryText').addEventListener('input', e => {
+
+    document.getElementById('submitBtn').disabled = e.target.value.trim().length < 5;
+
+  });
+
+
+
+  // Live countdown for editable badge — counts down from 25:48
+
+  let secondsLeft = 25 * 60 + 48;
+
+  setInterval(() => {
+
+    secondsLeft = Math.max(0, secondsLeft - 1);
+
+    const m = Math.floor(secondsLeft / 60);
+
+    const s = secondsLeft % 60;
+
+    const el = document.getElementById('countdown1');
+
+    if (el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+    if (secondsLeft === 0) {
+
+      const badge = document.getElementById('editBadge1');
+
+      if (badge) {
+
+        badge.className = 'locked-badge';
+
+        badge.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg> Locked';
+
+      }
+
+    }
+
+  }, 1000);
+
+</script>
+
+
+
+</body>
+
+</html>

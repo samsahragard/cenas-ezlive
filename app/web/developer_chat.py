@@ -95,6 +95,15 @@ def _enforce_partner():
 
 SAMPLES = [
     dict(
+        slug="dck-manager-log-redesign",
+        title="Manager Log — Redesign",
+        version=None,
+        date="2026-05-20",
+        description="dck's redesign of the Daily Manager Log page (Sam #5:10). Full-page standalone render.",
+        url="/static/mockups/dck_manager_log_redesign_render.html",
+        type="mockup",
+    ),
+    dict(
         slug="build-plan",
         title="Build Plan",
         version=None,

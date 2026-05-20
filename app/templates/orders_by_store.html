@@ -1,8 +1,11 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'ezcater_orders' %}
-{% block title %}{{ location_label }} Orders — Cenas Kitchen{% endblock %}
+{% block title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %} — Cenas Kitchen{% endblock %}
 
-{% block page_title %}{{ location_label }} Orders{% endblock %}
+{# page_title appends " Orders" only when location_label doesn't already
+   end with it — the partner combined view passes "All Orders", which was
+   rendering as "All Orders Orders" (ck #8:48). #}
+{% block page_title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %}{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries · today and upcoming</p>
 {% endblock %}
@@ -59,15 +62,42 @@
     .order-list-table .all-row td { justify-content: center; text-align: center; }
     .order-list-table .all-row td::before { display: none; }
   }
+
+  /* Dark photo overlay — keeps the base_dashboard brand photo but darkens
+     it so the order tables stay legible (Sam #8:38, ck #8:48; mirrors the
+     recipes 8273551 / fresh food 71677c2 overlay). */
+  .orders-page { position: relative; }
+  .orders-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 12, 8, 0.72);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .orders-page > * { position: relative; z-index: 1; }
+  /* Action buttons in the V2 dark style instead of the bright portal red
+     (ck #8:48 — match the mockup). Scoped class, so the per-row red
+     Unhook buttons are untouched. */
+  .ord-action-btn {
+    background: transparent;
+    border: 1px solid rgba(236,227,208,0.30);
+    color: #ece3d0;
+  }
+  .ord-action-btn:hover {
+    border-color: #d4af37;
+    color: #d4af37;
+  }
 </style>
+<div class="orders-page">
 <div style="margin: 0 0 16px; display: flex; gap: 10px; flex-wrap: wrap;">
-  <a class="btn-portal" href="/orders">Manually Processed PDF</a>
-  <a class="btn-portal" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
+  <a class="btn-portal ord-action-btn" href="/orders">Manually Processed PDF</a>
+  <a class="btn-portal ord-action-btn" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
 </div>
 {% if not groups %}
   <div class="empty-state">
     <p style="margin:0 0 12px;font-size:15px;color:#fff;">No processed orders for {{ location_label }} yet.</p>
-    <a class="btn-portal" href="/orders">Upload PDFs</a>
+    <a class="btn-portal ord-action-btn" href="/orders">Upload PDFs</a>
   </div>
 {% endif %}
 
@@ -137,6 +167,7 @@
     </div>
   </section>
 {% endfor %}
+</div>
 
 <script>
 // Per-row unhook-courier button per Sam #2842 item 5. Reuses the same

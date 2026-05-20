@@ -144,6 +144,67 @@
     .vro-store-pill { margin-left: 0; }
     .vro-list { max-height: none; }
   }
+
+  /* ===== Mobile collapsed-row + animated dropdown (Sam #1:37 — phone
+     orders show date/time/order#/location only, tap to expand) ===== */
+  .vro-mobile-row { display: none; }
+  .vro-mobile-detail { display: none; }
+
+  @media (max-width: 720px) {
+    .vro-order { padding: 0; cursor: pointer; }
+    .vro-order-top, .vro-order-meta { display: none; }
+    .vro-detail { display: none !important; }
+
+    .vro-mobile-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 0.5px solid var(--vro-border);
+    }
+    .vro-order:last-child .vro-mobile-row { border-bottom: 0; }
+    .vro-mr-left { flex: 1; min-width: 0; }
+    .vro-mr-num { font-weight: 600; font-size: 14px; color: var(--vro-cream); }
+    .vro-mr-sub { font-size: 11.5px; color: var(--vro-cream-dim); margin-top: 2px; }
+    .vro-mr-right {
+      display: flex; align-items: center; gap: 8px;
+      color: var(--vro-cream-dim); font-size: 11.5px;
+      flex-shrink: 0;
+    }
+    .vro-mr-loc { text-transform: capitalize; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vro-mr-chev {
+      width: 14px; height: 14px; flex-shrink: 0;
+      transition: transform 0.25s var(--vro-ease);
+      color: var(--vro-cream-faint);
+    }
+    .vro-order.expanded .vro-mr-chev { transform: rotate(180deg); }
+
+    .vro-mobile-detail {
+      display: block;
+      max-height: 0; overflow: hidden; opacity: 0;
+      transition: max-height 0.3s cubic-bezier(.4,0,.2,1), opacity 0.2s;
+    }
+    .vro-order.expanded .vro-mobile-detail {
+      max-height: 800px; opacity: 1;
+    }
+    .vro-md-inner { padding: 4px 16px 16px; font-size: 12.5px; }
+    .vro-md-status {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      background: var(--vro-gold-soft); color: var(--vro-gold);
+      border: 1px solid var(--vro-gold-line); margin-bottom: 8px;
+    }
+    .vro-md-status.shipped { background: rgba(79,147,196,0.16); color: #4f93c4; border-color: rgba(79,147,196,0.4); }
+    .vro-md-status.delivered { background: rgba(90,156,102,0.16); color: #5a9c66; border-color: rgba(90,156,102,0.4); }
+    .vro-md-subject { color: var(--vro-cream-dim); margin: 0 0 10px; font-size: 12px; }
+    .vro-md-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    .vro-md-items th, .vro-md-items td { padding: 6px 4px; font-size: 12px; text-align: left; border-bottom: 1px solid var(--vro-border); }
+    .vro-md-items th { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--vro-cream-faint); }
+    .vro-md-items .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .vro-md-total {
+      display: flex; justify-content: space-between; padding-top: 8px;
+      font-weight: 600; color: var(--vro-gold);
+    }
+    .vro-md-empty { color: var(--vro-cream-faint); font-style: italic; padding: 6px 0; }
+  }
 </style>
 
 <div class="vro-page">
@@ -196,6 +257,49 @@
               <span class="om-store">{{ o.store_scope or 'both stores' }}</span>
               {% if o.subject %}<span>{{ o.subject[:60] }}</span>{% endif %}
               <span class="om-total">{% if o.total_cents is not none %}${{ '%.2f'|format(o.total_cents / 100.0) }}{% else %}—{% endif %}</span>
+            </div>
+            {# ---- Mobile collapsed row (phone only) ---- #}
+            <div class="vro-mobile-row">
+              <div class="vro-mr-left">
+                <div class="vro-mr-num">{{ o.order_number or 'Order' }}</div>
+                <div class="vro-mr-sub">
+                  {%- if o.placed_at -%}
+                    {{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%-I:%M %p') if o.placed_at.strftime('%-I:%M %p')|length else o.placed_at.strftime('%I:%M %p') }}
+                  {%- else -%}—{%- endif -%}
+                </div>
+              </div>
+              <div class="vro-mr-right">
+                <div class="vro-mr-loc">{{ o.store_scope or 'both stores' }}</div>
+                <svg class="vro-mr-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+              </div>
+            </div>
+            {# ---- Mobile expanded detail (accordion, phone only) ---- #}
+            <div class="vro-mobile-detail">
+              <div class="vro-md-inner">
+                <span class="vro-md-status {{ (o.status or '')|lower }}">{{ o.status or 'order' }}</span>
+                {% if o.subject %}<p class="vro-md-subject">{{ o.subject[:160] }}</p>{% endif %}
+                {% set items = (o.items_json or []) %}
+                {% if items %}
+                  <table class="vro-md-items">
+                    <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Line</th></tr></thead>
+                    <tbody>
+                      {% for it in items %}
+                        <tr>
+                          <td>{{ it.name or '—' }}</td>
+                          <td class="num">{{ it.qty if it.qty is not none else '—' }}</td>
+                          <td class="num">{% if it.subtotal_cents is not none %}${{ '%.2f'|format(it.subtotal_cents / 100.0) }}{% else %}—{% endif %}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                {% else %}
+                  <div class="vro-md-empty">No line items parsed for this order.</div>
+                {% endif %}
+                <div class="vro-md-total">
+                  <span>Total</span>
+                  <span>{% if o.total_cents is not none %}${{ '%.2f'|format(o.total_cents / 100.0) }}{% else %}—{% endif %}</span>
+                </div>
+              </div>
             </div>
           </div>
         {% endfor %}
@@ -324,6 +428,23 @@
   document.querySelectorAll('.vro-order').forEach(function(card) {
     card.addEventListener('click', function() { selectOrder(card); });
   });
+
+  // Phone accordion (Sam #1:37) — tap a row to expand its inline detail,
+  // collapse siblings. Event delegation on the list so dynamically-added
+  // rows are covered. Only active at ≤720px; desktop keeps the side pane.
+  var list = document.querySelector('.vro-list');
+  if (list) {
+    list.addEventListener('click', function(e) {
+      if (!(window.matchMedia && window.matchMedia('(max-width: 720px)').matches)) return;
+      var row = e.target.closest('.vro-order');
+      if (!row) return;
+      var wasExpanded = row.classList.contains('expanded');
+      list.querySelectorAll('.vro-order.expanded').forEach(function(n) {
+        if (n !== row) n.classList.remove('expanded');
+      });
+      row.classList.toggle('expanded', !wasExpanded);
+    });
+  }
 })();
 </script>
 {% endblock %}

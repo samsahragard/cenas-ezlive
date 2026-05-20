@@ -919,25 +919,11 @@
     selCopyBtn.disabled = n === 0;
   }
 
-  // Long-press detection (both touch and mouse)
-  let pressTimer = null;
-  function startPress(e) {
-    const msg = e.target.closest('.msg');
-    if (!msg || e.target.closest('button, a, audio')) return;
-    pressTimer = setTimeout(() => {
-      pressTimer = null;
-      enterSelectionMode(msg);
-    }, 480);
-  }
-  function cancelPress() {
-    if (pressTimer !== null) { clearTimeout(pressTimer); pressTimer = null; }
-  }
-  list.addEventListener('mousedown', startPress);
-  list.addEventListener('mouseup', cancelPress);
-  list.addEventListener('mouseleave', cancelPress);
-  list.addEventListener('touchstart', startPress, { passive: true });
-  list.addEventListener('touchend', cancelPress, { passive: true });
-  list.addEventListener('touchcancel', cancelPress, { passive: true });
+  // Long-press → selection-mode disabled (Sam #11:41: clicking/pressing
+  // a message should NOT highlight the whole box; native text selection
+  // must work normally inside a message). The multi-select copy feature
+  // (8161f61) is gated off here — selBar/selCopyBtn/enterSelectionMode
+  // remain in the file as dead code but can never be triggered.
 
   // In selection mode, message-background clicks toggle selection
   list.addEventListener('click', (e) => {

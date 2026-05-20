@@ -1081,6 +1081,7 @@ def vendor_recent_orders(vendor: str):
             "vendor_recent_orders.html",
             vendor_slug=vendor,
             vendor_label=label,
+            vendor_chips=_VENDOR_LABELS,
             orders=rows,
             active=active_key,
         )

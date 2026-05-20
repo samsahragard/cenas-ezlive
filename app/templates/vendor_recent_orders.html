@@ -1,71 +1,320 @@
+{# ============================================================
+   vendor_recent_orders.html — per-vendor Recent Orders (v3 design)
+
+   Sam #9:52 — adapt of recent_orders_v3.html. Per-vendor route
+   (/<store>/vendors/<vendor>/recent-orders); vendor chips link
+   across the four vendors. Order list + detail pane (line items
+   from items_json). Empty until the inbox ingest parses orders.
+
+   Route contract (store_routes.py vendor_recent_orders):
+     vendor_slug, vendor_label  → current vendor
+     vendor_chips               → {slug: label} for all vendors
+     orders                     → list[VendorRecentOrder]
+   base_dashboard supplies store_slug / store_label.
+   ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% block title %}{{ vendor_label }} — Recent Orders — Cenas Kitchen{% endblock %}
-
-{% block page_title %}{{ vendor_label }} &mdash; Recent Orders{% endblock %}
-{% block page_subtitle %}
-  <p class="greeting-sub">
-    Orders parsed from {{ vendor_label }} emails received at
-    <code>orders@cenaskitchen.com</code>. Newest first, capped at 100.
-  </p>
-{% endblock %}
+{# Inline hero header inside the content block — no base stacked title. #}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block content %}
-{% if orders %}
-<div class="table-scroll">
-  <table class="log-table log-table-view">
-    <thead>
-      <tr class="group-header">
-        <th>Order #</th>
-        <th>Placed</th>
-        <th>Status</th>
-        <th>Total</th>
-        <th>Tracking</th>
-        <th>Subject</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for o in orders %}
-      <tr>
-        <td>{{ o.order_number or '—' }}</td>
-        <td>{{ o.placed_at.strftime('%b %d %H:%M') if o.placed_at else '—' }}</td>
-        <td>{{ o.status or '—' }}</td>
-        <td>{% if o.total_cents %}${{ '%.2f'|format(o.total_cents / 100.0) }}{% else %}—{% endif %}</td>
-        <td>
-          {% if o.tracking_links_json %}
-            {% for tl in o.tracking_links_json %}
-              <a href="{{ tl.url }}" target="_blank" rel="noopener" style="color:var(--accent-soft);">{{ tl.label or tl.carrier or 'Track' }}</a>{% if not loop.last %} · {% endif %}
-            {% endfor %}
-          {% else %}—{% endif %}
-        </td>
-        <td style="font-size:12px;opacity:0.8;">{{ (o.subject or '')[:80] }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<style>
+  .vro-page {
+    --vro-bg-pane: #2a2419;
+    --vro-gold: #d4af37;
+    --vro-gold-soft: rgba(212,175,55,0.18);
+    --vro-gold-line: rgba(212,175,55,0.4);
+    --vro-cream: #ece3d0;
+    --vro-cream-dim: rgba(236,227,208,0.7);
+    --vro-cream-faint: rgba(236,227,208,0.45);
+    --vro-glass: rgba(236,227,208,0.05);
+    --vro-glass-hover: rgba(236,227,208,0.08);
+    --vro-border: rgba(236,227,208,0.15);
+    --vro-radius: 14px;
+    --vro-radius-sm: 8px;
+    --vro-ease: cubic-bezier(.22,.61,.36,1);
+    color: var(--vro-cream);
+    position: relative;
+    padding-bottom: 60px;
+  }
+  /* Dark overlay over the base_dashboard photo so content stays legible
+     — same pattern as recipes 8273551 / fresh food 71677c2. */
+  .vro-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 12, 8, 0.72);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .vro-page > * { position: relative; z-index: 1; }
+  .vro-page *, .vro-page *::before, .vro-page *::after { box-sizing: border-box; }
+
+  .vro-header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+  .vro-header h1 { font-size: 24px; font-weight: 600; letter-spacing: 0.02em; margin: 0; }
+  .vro-vendor-badge {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px;
+    background: var(--vro-gold-soft); border: 1px solid var(--vro-gold-line); border-radius: 999px;
+    color: var(--vro-gold); font-size: 12px; font-weight: 600;
+  }
+  .vro-store-pill {
+    margin-left: auto; padding: 6px 14px; background: var(--vro-glass);
+    border: 1px solid var(--vro-border); border-radius: 8px; color: var(--vro-cream-dim);
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; white-space: nowrap;
+  }
+  .vro-sub { color: var(--vro-cream-dim); font-size: 13px; margin: 0 0 16px; }
+
+  .vro-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .vro-chip {
+    padding: 6px 14px; background: var(--vro-glass); border: 1px solid var(--vro-border);
+    border-radius: 999px; color: var(--vro-cream-dim); font-size: 12px; cursor: pointer;
+    text-decoration: none; transition: all .15s var(--vro-ease);
+  }
+  .vro-chip:hover { color: var(--vro-cream); border-color: var(--vro-gold-line); }
+  .vro-chip.active { background: var(--vro-gold); color: #1f1a12; border-color: var(--vro-gold); font-weight: 600; }
+
+  .vro-summary {
+    display: flex; flex-wrap: wrap; gap: 20px; padding: 12px 16px; margin: 0 0 18px;
+    background: var(--vro-bg-pane); border: 1px solid var(--vro-border); border-radius: var(--vro-radius);
+  }
+  .vro-stat .s-num { font-size: 20px; font-weight: 600; color: var(--vro-gold); font-variant-numeric: tabular-nums; }
+  .vro-stat .s-lbl { font-size: 11px; color: var(--vro-cream-dim); text-transform: uppercase; letter-spacing: .06em; }
+
+  .vro-body { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 18px; align-items: start; }
+  .vro-list { display: flex; flex-direction: column; gap: 10px; max-height: 74vh; overflow-y: auto; padding-right: 6px; }
+
+  .vro-order {
+    background: var(--vro-bg-pane); border: 1px solid var(--vro-border);
+    border-radius: var(--vro-radius); padding: 14px 16px; cursor: pointer;
+    transition: background .15s var(--vro-ease), border-color .15s var(--vro-ease);
+  }
+  .vro-order:hover { background: var(--vro-glass-hover); }
+  .vro-order.is-selected { border-color: var(--vro-gold-line); box-shadow: inset 3px 0 0 var(--vro-gold); }
+  .vro-order-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+  .vro-order-num { font-weight: 600; font-size: 14px; }
+  .vro-order-date { color: var(--vro-cream-dim); font-size: 12px; }
+  .vro-status {
+    margin-left: auto; padding: 3px 10px; border-radius: 999px; font-size: 10px; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--vro-gold-soft); color: var(--vro-gold); border: 1px solid var(--vro-gold-line);
+  }
+  .vro-status.shipped { background: rgba(79,147,196,0.16); color: #4f93c4; border-color: rgba(79,147,196,0.4); }
+  .vro-status.delivered { background: rgba(90,156,102,0.16); color: #5a9c66; border-color: rgba(90,156,102,0.4); }
+  .vro-order-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--vro-cream-faint); font-size: 12px; }
+  .vro-order-meta .om-store { color: var(--vro-cream-dim); text-transform: capitalize; }
+  .vro-order-meta .om-total { margin-left: auto; color: var(--vro-cream); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .vro-detail {
+    position: sticky; top: 24px; background: var(--vro-bg-pane);
+    border: 1px solid var(--vro-border); border-radius: var(--vro-radius); min-height: 320px; padding: 20px;
+  }
+  .vro-detail-empty { color: var(--vro-cream-faint); font-style: italic; text-align: center; padding: 70px 0; }
+  .vro-detail-body { display: none; }
+  .vro-detail.has-order .vro-detail-empty { display: none; }
+  .vro-detail.has-order .vro-detail-body { display: block; }
+  .vro-detail-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .vro-detail-head .d-num { font-size: 17px; font-weight: 600; }
+  .vro-detail-head .d-status { margin-left: auto; }
+  .vro-detail-metarow { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--vro-cream-dim); font-size: 12px; margin-bottom: 14px; }
+  .vro-items { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  .vro-items th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--vro-cream-faint); padding: 6px 8px; border-bottom: 1px solid var(--vro-border); }
+  .vro-items th.num, .vro-items td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .vro-items td { padding: 8px; font-size: 13px; border-bottom: 1px solid var(--vro-border); }
+  .vro-items tfoot td { font-weight: 600; border-bottom: 0; padding-top: 10px; }
+  .vro-items .it-total-label { color: var(--vro-cream-dim); }
+  .vro-items .it-total-val { color: var(--vro-gold); }
+  .vro-detail-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 12px; border-top: 1px solid var(--vro-border); color: var(--vro-cream-faint); font-size: 11px; }
+  .vro-track { color: var(--vro-gold); text-decoration: none; }
+  .vro-track:hover { text-decoration: underline; }
+
+  .vro-empty {
+    max-width: 640px; padding: 28px; background: var(--vro-bg-pane);
+    border: 1px solid var(--vro-border); border-radius: var(--vro-radius);
+  }
+  .vro-empty h2 { margin: 0 0 10px; font-size: 16px; }
+  .vro-empty p { margin: 0 0 8px; color: var(--vro-cream-dim); font-size: 13.5px; }
+
+  @media (max-width: 900px) {
+    .vro-body { grid-template-columns: 1fr; }
+    .vro-detail { position: static; min-height: 0; }
+    .vro-detail:not(.has-order) { display: none; }
+    .vro-store-pill { margin-left: 0; }
+    .vro-list { max-height: none; }
+  }
+</style>
+
+<div class="vro-page">
+  <div class="vro-header">
+    <h1>Recent Orders</h1>
+    <span class="vro-vendor-badge">{{ vendor_label }}</span>
+    <span class="vro-store-pill">{{ store_label }}</span>
+  </div>
+  <p class="vro-sub">Vendor order history pulled from the orders@cenaskitchen.com inbox. Switch vendors with the chips below.</p>
+
+  <div class="vro-chips">
+    {% for chip_slug, chip_label in vendor_chips.items() %}
+      <a class="vro-chip{% if chip_slug == vendor_slug %} active{% endif %}"
+         href="/{{ store_slug }}/vendors/{{ chip_slug }}/recent-orders">{{ chip_label }}</a>
+    {% endfor %}
+  </div>
+
+  {% if orders %}
+    {% set ns = namespace(total=0, intransit=0) %}
+    {% for o in orders %}
+      {% if o.total_cents %}{% set ns.total = ns.total + o.total_cents %}{% endif %}
+      {% if (o.status or '')|lower not in ('delivered', 'received', 'receipt') %}{% set ns.intransit = ns.intransit + 1 %}{% endif %}
+    {% endfor %}
+    <div class="vro-summary">
+      <div class="vro-stat"><div class="s-num">{{ orders|length }}</div><div class="s-lbl">orders shown</div></div>
+      <div class="vro-stat"><div class="s-num">${{ '%.2f'|format(ns.total / 100.0) }}</div><div class="s-lbl">total spend</div></div>
+      <div class="vro-stat"><div class="s-num">{{ ns.intransit }}</div><div class="s-lbl">in transit</div></div>
+    </div>
+
+    <div class="vro-body">
+      <div class="vro-list">
+        {% for o in orders %}
+          <div class="vro-order"
+               data-num="{{ o.order_number or '—' }}"
+               data-date="{{ o.placed_at.strftime('%b %d, %Y') if o.placed_at else '' }}"
+               data-status="{{ (o.status or '')|lower }}"
+               data-status-label="{{ o.status or 'order' }}"
+               data-store="{{ o.store_scope or 'both stores' }}"
+               data-caterer="{{ o.customer_or_caterer or '' }}"
+               data-total="{{ o.total_cents if o.total_cents is not none else '' }}"
+               data-subject="{{ (o.subject or '')|e }}"
+               data-items='{{ (o.items_json or [])|tojson }}'
+               data-tracking='{{ (o.tracking_links_json or [])|tojson }}'>
+            <div class="vro-order-top">
+              <span class="vro-order-num">{{ o.order_number or 'Order' }}</span>
+              <span class="vro-order-date">{{ o.placed_at.strftime('%b %d, %Y') if o.placed_at else '—' }}</span>
+              <span class="vro-status {{ (o.status or '')|lower }}">{{ o.status or 'order' }}</span>
+            </div>
+            <div class="vro-order-meta">
+              <span class="om-store">{{ o.store_scope or 'both stores' }}</span>
+              {% if o.subject %}<span>{{ o.subject[:60] }}</span>{% endif %}
+              <span class="om-total">{% if o.total_cents is not none %}${{ '%.2f'|format(o.total_cents / 100.0) }}{% else %}—{% endif %}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <aside class="vro-detail" id="vroDetail">
+        <div class="vro-detail-empty">Select an order to see its line items.</div>
+        <div class="vro-detail-body">
+          <div class="vro-detail-head">
+            <span class="d-num" id="dNum"></span>
+            <span class="d-status vro-status" id="dStatus"></span>
+          </div>
+          <div class="vro-detail-metarow" id="dMeta"></div>
+          <table class="vro-items">
+            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Line</th></tr></thead>
+            <tbody id="dItems"></tbody>
+            <tfoot>
+              <tr><td colspan="3" class="num it-total-label">Total</td><td class="num it-total-val" id="dTotal"></td></tr>
+            </tfoot>
+          </table>
+          <div class="vro-detail-foot" id="dFoot"></div>
+        </div>
+      </aside>
+    </div>
+  {% else %}
+    <div class="vro-empty">
+      <h2>No {{ vendor_label }} orders yet</h2>
+      <p>The page is live and ready. {{ vendor_label }} orders appear here automatically
+         once the orders@cenaskitchen.com inbox sync parses them — including emails you
+         forward in from the vendor.</p>
+      <p style="color:var(--vro-cream-faint);font-size:12px;">Newest first, capped at 100 per vendor.</p>
+    </div>
+  {% endif %}
 </div>
-{% else %}
-<div style="max-width: 720px; padding: 28px; margin: 20px 0;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.10);
-            border-radius: 12px;">
-  <h2 style="margin: 0 0 10px; font-size: 16px;">No orders yet</h2>
-  <p style="margin: 0 0 10px; color: var(--text-2); font-size: 13.5px;">
-    No {{ vendor_label }} emails have been parsed and stored yet. The page is live and the
-    row template is ready &mdash; orders appear here automatically once two things land:
-  </p>
-  <ol style="margin: 4px 0 10px 18px; color: var(--text-2); font-size: 13px;">
-    <li>{{ vendor_label }}'s sender domain is added to
-        <code>app/services/produce_ingest_config/approved_senders.json</code>
-        with <code>expected_format: "order_body"</code>.</li>
-    <li>The vendor-specific email-body parser ships in
-        <code>app/services/vendor_order_parsers/{{ vendor_slug.replace('-', '_') }}.py</code>
-        &mdash; Sam forwards 3-5 sample emails first so the parser
-        matches the real shape.</li>
-  </ol>
-  <p style="margin: 8px 0 0; color: var(--text-3); font-size: 12px;">
-    Both above are tracked items in the Sam #837 spec. The framework
-    (table, route, sidebar entry, store-scope filtering) is shipped.
-  </p>
-</div>
-{% endif %}
+
+<script>
+(function() {
+  'use strict';
+  function money(c) {
+    if (c === '' || c === null || c === undefined) return '—';
+    var n = Number(c) / 100.0;
+    return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function selectOrder(card) {
+    document.querySelectorAll('.vro-order').forEach(function(n) {
+      n.classList.toggle('is-selected', n === card);
+    });
+    var d = card.dataset;
+    var detail = document.getElementById('vroDetail');
+    detail.classList.add('has-order');
+    document.getElementById('dNum').textContent = d.num || 'Order';
+    var st = document.getElementById('dStatus');
+    st.className = 'd-status vro-status ' + (d.status || '');
+    st.textContent = d.statusLabel || 'order';
+
+    var meta = [];
+    if (d.date) meta.push('Placed ' + d.date);
+    if (d.store) meta.push('Store: ' + d.store);
+    if (d.caterer) meta.push(d.caterer);
+    document.getElementById('dMeta').innerHTML = meta.map(function(m) {
+      return '<span>' + m + '</span>';
+    }).join('');
+
+    var items = [];
+    try { items = JSON.parse(d.items || '[]') || []; } catch (e) { items = []; }
+    if (!Array.isArray(items)) items = [];
+    var tbody = document.getElementById('dItems');
+    tbody.innerHTML = '';
+    if (items.length) {
+      items.forEach(function(it) {
+        var qty = (it.qty != null) ? it.qty : '—';
+        var unit = (it.unit_price_cents != null) ? money(it.unit_price_cents) : '—';
+        var line = (it.subtotal_cents != null) ? money(it.subtotal_cents) : '—';
+        var tr = document.createElement('tr');
+        var nameTd = document.createElement('td');
+        nameTd.textContent = it.name || '—';
+        var qtyTd = document.createElement('td'); qtyTd.className = 'num'; qtyTd.textContent = qty;
+        var unitTd = document.createElement('td'); unitTd.className = 'num'; unitTd.textContent = unit;
+        var lineTd = document.createElement('td'); lineTd.className = 'num'; lineTd.textContent = line;
+        tr.appendChild(nameTd); tr.appendChild(qtyTd); tr.appendChild(unitTd); tr.appendChild(lineTd);
+        tbody.appendChild(tr);
+      });
+    } else {
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = 4;
+      td.style.color = 'var(--vro-cream-faint)';
+      td.style.fontStyle = 'italic';
+      td.textContent = 'No line items parsed for this order.';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    document.getElementById('dTotal').textContent = money(d.total);
+
+    var tracking = [];
+    try { tracking = JSON.parse(d.tracking || '[]') || []; } catch (e) { tracking = []; }
+    var foot = document.getElementById('dFoot');
+    foot.innerHTML = '';
+    if (Array.isArray(tracking) && tracking.length) {
+      tracking.forEach(function(t) {
+        if (!t || !t.url) return;
+        var a = document.createElement('a');
+        a.className = 'vro-track';
+        a.href = t.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = t.label || t.carrier || 'Track';
+        foot.appendChild(a);
+      });
+    }
+    if (!foot.children.length && d.subject) {
+      var s = document.createElement('span');
+      s.textContent = d.subject;
+      foot.appendChild(s);
+    }
+  }
+
+  document.querySelectorAll('.vro-order').forEach(function(card) {
+    card.addEventListener('click', function() { selectOrder(card); });
+  });
+})();
+</script>
 {% endblock %}

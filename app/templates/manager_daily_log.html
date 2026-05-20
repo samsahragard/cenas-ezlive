@@ -51,6 +51,20 @@
   }
   .dml-page *, .dml-page *::before, .dml-page *::after { box-sizing: border-box; }
 
+  /* ---- Top header band — dark contrast backdrop so the controls + tabs
+     stay legible against the base_dashboard photo bleed (ck #8:34 + dck
+     #8:37 spec, mirrors the recipes .rcp-topband fix at 00801a9). ---- */
+  .dml-topband {
+    background: rgba(15, 12, 8, 0.62);
+    border: 1px solid var(--dml-border);
+    border-radius: var(--dml-radius);
+    padding: 14px 16px 2px;
+    margin-bottom: 18px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .dml-topband .dml-controls { margin-bottom: 12px; }
+  .dml-topband .dml-tabs { margin-bottom: 0; }
   /* ---- Date strip + store pill ---- */
   .dml-controls {
     display: flex; align-items: center; gap: 14px;
@@ -237,19 +251,21 @@
 
 <div class="dml-page">
 
-  <div class="dml-controls">
-    <div class="dml-date-pill">
-      <span aria-hidden="true">&#128197;</span>
-      <input type="date" id="dmlDate" value="{{ selected_date or '' }}">
+  <div class="dml-topband">
+    <div class="dml-controls">
+      <div class="dml-date-pill">
+        <span aria-hidden="true">&#128197;</span>
+        <input type="date" id="dmlDate" value="{{ selected_date or '' }}">
+      </div>
+      <button class="dml-today-btn" id="dmlTodayBtn">Today</button>
+      <div class="dml-store-pill">{{ store_label }}</div>
     </div>
-    <button class="dml-today-btn" id="dmlTodayBtn">Today</button>
-    <div class="dml-store-pill">{{ store_label }}</div>
-  </div>
 
-  <div class="dml-tabs">
-    <button class="dml-tab" type="button">Daily Log</button>
-    <span class="dml-tab-spacer"></span>
-    <button class="dml-create-btn" id="dmlOpenModal" type="button"><span class="plus">+</span> Create Entry</button>
+    <div class="dml-tabs">
+      <button class="dml-tab" type="button">Daily Log</button>
+      <span class="dml-tab-spacer"></span>
+      <button class="dml-create-btn" id="dmlOpenModal" type="button"><span class="plus">+</span> Create Entry</button>
+    </div>
   </div>
 
   <div class="dml-body">

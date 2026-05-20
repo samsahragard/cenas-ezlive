@@ -36,6 +36,7 @@
     border-radius: 10px;
     padding: 10px 14px;
     max-width: 88%;
+    min-width: 0;
   }
   .msg-sam     { border-color: rgba( 64,128,232,0.45); align-self: flex-end; background: rgba( 64,128,232,0.08); }
   .msg-masood  { border-color: rgba(180,110,232,0.45); align-self: flex-end; background: rgba(180,110,232,0.08); }
@@ -83,7 +84,9 @@
     font-size: 14px;
     line-height: 1.45;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    /* break unbreakable tokens (long URLs, base64) so one message
+       can't force the flex layout wider than the viewport */
+    overflow-wrap: anywhere;
   }
 
   .chat-input {

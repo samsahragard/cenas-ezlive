@@ -1,1507 +1,1497 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>In-House Catering — Cenas Kitchen</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --ck-red: #C73B36;
-    --ck-red-deep: #9B2A26;
-    --ck-gold: #E4B340;
-    --ck-gold-bright: #FFD970;
-    --ck-gold-dim: #D9A436;
-    --ck-teal: #2EA39F;
-    --ck-cream: #FAF6EC;
-    --ck-cream-dim: rgba(250, 246, 236, 0.62);
-    --ck-cream-faint: rgba(250, 246, 236, 0.38);
-    --ck-bg-deep: #1a0d08;
-    --ck-bg-warm: #28160e;
-    --ck-bg-card: rgba(40, 22, 14, 0.65);
-    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
-    --ck-border-subtle: rgba(217, 164, 54, 0.18);
-    --ck-border-active: rgba(228, 179, 64, 0.5);
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-  }
-
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html, body {
-    background: var(--ck-bg-deep);
-    color: var(--ck-cream);
-    font-family: 'Manrope', system-ui, sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    overflow-x: hidden;
-    min-height: 100vh;
-  }
-
-  body {
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
-      linear-gradient(180deg, var(--ck-bg-deep) 0%, #0d0604 100%);
-    background-attachment: fixed;
-    padding-bottom: 80px;
-  }
-
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.5;
-  }
-
-  .layout {
-    position: relative;
-    z-index: 1;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 16px;
-  }
-
-  /* ===== HEADER ===== */
-  header {
-    padding: 24px 0 16px;
-    border-bottom: 0.5px solid var(--ck-border-subtle);
-    margin-bottom: 20px;
-  }
-
-  .header-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-
-  .menu-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-md);
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    color: var(--ck-gold);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .quote-pill {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ck-gold);
-    background: rgba(228, 179, 64, 0.1);
-    border: 0.5px solid var(--ck-border-subtle);
-    padding: 6px 12px;
-    border-radius: 999px;
-    letter-spacing: 0.05em;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .quote-pill .live-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ck-gold);
-    box-shadow: 0 0 6px var(--ck-gold);
-  }
-
-  .store-badge {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--ck-gold-bright);
-    background: rgba(228, 179, 64, 0.12);
-    padding: 6px 12px;
-    border-radius: 999px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .header-spacer { flex: 1; }
-
-  h1 {
-    font-family: 'Instrument Serif', serif;
-    font-weight: 400;
-    font-size: 42px;
-    line-height: 1;
-    letter-spacing: -0.015em;
-    color: var(--ck-cream);
-    margin-bottom: 6px;
-  }
-
-  h1 .accent {
-    font-style: italic;
-    color: var(--ck-gold-bright);
-    text-shadow: 0 0 24px rgba(255, 217, 112, 0.35);
-  }
-
-  .subtitle {
-    color: var(--ck-cream-dim);
-    font-size: 13px;
-    line-height: 1.5;
-    max-width: 600px;
-  }
-
-  /* ===== QUICK ACTIONS ROW ===== */
-  .quick-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-
-  .quick-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: 999px;
-    color: var(--ck-cream);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .quick-btn:hover, .quick-btn:active {
-    border-color: var(--ck-border-active);
-    color: var(--ck-gold-bright);
-  }
-
-  .quick-btn svg {
-    width: 14px;
-    height: 14px;
-    fill: currentColor;
-  }
-
-  /* ===== SEARCH ===== */
-  .search-wrap {
-    position: relative;
-    margin-bottom: 16px;
-  }
-
-  .search-wrap svg {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 18px;
-    fill: var(--ck-cream-faint);
-    pointer-events: none;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 14px 14px 14px 44px;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-md);
-    color: var(--ck-cream);
-    font-family: 'Manrope', sans-serif;
-    font-size: 15px;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--ck-gold);
-  }
-
-  .search-input::placeholder { color: var(--ck-cream-faint); }
-
-  /* ===== CATEGORY CHIPS ===== */
-  .cat-strip {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 24px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: 4px;
-  }
-
-  .cat-strip::-webkit-scrollbar { display: none; }
-
-  .cat-chip {
-    flex-shrink: 0;
-    padding: 10px 16px;
-    background: transparent;
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: 999px;
-    color: var(--ck-cream-dim);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .cat-chip .count {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 600;
-    background: rgba(228, 179, 64, 0.12);
-    color: var(--ck-gold);
-    padding: 1px 6px;
-    border-radius: 6px;
-  }
-
-  .cat-chip.active {
-    background: rgba(228, 179, 64, 0.15);
-    color: var(--ck-gold-bright);
-    border-color: var(--ck-border-active);
-  }
-
-  .cat-chip.active .count {
-    background: rgba(255, 217, 112, 0.25);
-    color: var(--ck-gold-bright);
-  }
-
-  /* ===== MAIN GRID ===== */
-  .main-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-
-  @media (min-width: 1024px) {
-    .main-grid {
-      grid-template-columns: 1fr 380px;
-      align-items: start;
-    }
-  }
-
-  /* ===== CATEGORY SECTION ===== */
-  .cat-section {
-    margin-bottom: 32px;
-  }
-
-  .cat-section-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 0.5px solid var(--ck-border-subtle);
-  }
-
-  .cat-section-title {
-    font-family: 'Instrument Serif', serif;
-    font-style: italic;
-    font-size: 24px;
-    color: var(--ck-gold);
-  }
-
-  .cat-section-meta {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--ck-cream-faint);
-    letter-spacing: 0.05em;
-  }
-
-  /* ===== ITEM CARD ===== */
-  .item-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  @media (min-width: 600px) {
-    .item-grid { grid-template-columns: 1fr 1fr; }
-  }
-
-  .item-card {
-    position: relative;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-md);
-    padding: 14px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .item-card:hover, .item-card:active {
-    background: var(--ck-bg-card-hover);
-    border-color: var(--ck-border-active);
-  }
-
-  .item-card.in-cart {
-    border-color: var(--ck-gold);
-    background: rgba(228, 179, 64, 0.08);
-  }
-
-  .item-card.in-cart::after {
-    content: attr(data-qty);
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: var(--ck-gold);
-    color: var(--ck-bg-deep);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 700;
-    min-width: 24px;
-    height: 24px;
-    border-radius: 12px;
-    display: grid;
-    place-items: center;
-    padding: 0 6px;
-  }
-
-  .item-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .item-name {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--ck-cream);
-    line-height: 1.3;
-    flex: 1;
-  }
-
-  .item-badge {
-    flex-shrink: 0;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: rgba(199, 59, 54, 0.18);
-    color: #FF8580;
-  }
-
-  .item-desc {
-    font-size: 12px;
-    color: var(--ck-cream-dim);
-    line-height: 1.4;
-    flex: 1;
-  }
-
-  .item-bottom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 6px;
-    padding-top: 8px;
-    border-top: 0.5px solid var(--ck-border-subtle);
-  }
-
-  .item-price {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ck-gold-bright);
-  }
-
-  .item-price .ref {
-    font-size: 10px;
-    color: var(--ck-cream-faint);
-    font-weight: 400;
-    margin-left: 6px;
-    text-decoration: line-through;
-  }
-
-  .add-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--ck-gold);
-    color: var(--ck-bg-deep);
-    border: none;
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    transition: transform 0.15s;
-  }
-
-  .add-btn:active { transform: scale(0.9); }
-
-  .add-btn svg { width: 16px; height: 16px; fill: currentColor; }
-
-  .qty-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .qty-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-active);
-    color: var(--ck-gold);
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    font-size: 16px;
-    font-weight: 700;
-  }
-
-  .qty-val {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--ck-gold-bright);
-    min-width: 20px;
-    text-align: center;
-  }
-
-  /* ===== CART (SIDEBAR ON DESKTOP, DRAWER ON MOBILE) ===== */
-  .cart {
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-active);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    position: sticky;
-    top: 16px;
-  }
-
-  @media (max-width: 1023px) {
-    .cart {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      border-radius: 16px 16px 0 0;
-      max-height: 60vh;
-      z-index: 50;
-      transform: translateY(calc(100% - 76px));
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .cart.open {
-      transform: translateY(0);
-    }
-  }
-
-  .cart-handle {
-    display: none;
-    width: 40px;
-    height: 4px;
-    background: var(--ck-border-active);
-    border-radius: 2px;
-    margin: 8px auto 0;
-  }
-
-  @media (max-width: 1023px) {
-    .cart-handle { display: block; }
-  }
-
-  .cart-header {
-    padding: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 0.5px solid var(--ck-border-subtle);
-    cursor: pointer;
-  }
-
-  .cart-header-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .cart-icon-wrap {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: rgba(228, 179, 64, 0.15);
-    display: grid;
-    place-items: center;
-    position: relative;
-  }
-
-  .cart-icon-wrap svg {
-    width: 18px;
-    height: 18px;
-    fill: var(--ck-gold);
-  }
-
-  .cart-badge {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    background: var(--ck-red);
-    color: var(--ck-cream);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 700;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 9px;
-    display: grid;
-    place-items: center;
-    padding: 0 4px;
-  }
-
-  .cart-title {
-    font-family: 'Instrument Serif', serif;
-    font-size: 20px;
-    font-style: italic;
-    color: var(--ck-cream);
-  }
-
-  .cart-total-preview {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--ck-gold-bright);
-  }
-
-  .cart-body {
-    max-height: 360px;
-    overflow-y: auto;
-  }
-
-  .cart-empty {
-    padding: 32px 16px;
-    text-align: center;
-    color: var(--ck-cream-faint);
-    font-size: 13px;
-  }
-
-  .cart-item {
-    padding: 12px 16px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 4px 12px;
-    border-bottom: 0.5px solid rgba(228, 179, 64, 0.08);
-  }
-
-  .cart-item-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ck-cream);
-    line-height: 1.3;
-  }
-
-  .cart-item-price {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ck-gold-bright);
-    text-align: right;
-  }
-
-  .cart-item-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--ck-cream-dim);
-    font-size: 11px;
-  }
-
-  .cart-item-controls .qty-btn {
-    width: 22px;
-    height: 22px;
-    font-size: 13px;
-  }
-
-  .cart-item-line {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 4px;
-  }
-
-  .cart-item .remove {
-    background: none;
-    border: none;
-    color: var(--ck-cream-faint);
-    font-size: 11px;
-    cursor: pointer;
-    padding: 2px 4px;
-  }
-
-  .cart-item .remove:hover { color: #FF6E68; }
-
-  .cart-item .edit-price {
-    background: none;
-    border: 0.5px solid var(--ck-border-subtle);
-    color: var(--ck-cream-dim);
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  .cart-totals {
-    padding: 16px;
-    border-top: 0.5px solid var(--ck-border-subtle);
-    background: rgba(0, 0, 0, 0.2);
-  }
-
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
-
-  .total-row.subtotal { color: var(--ck-cream-dim); }
-  .total-row.grand {
-    margin-top: 8px;
-    padding-top: 12px;
-    border-top: 0.5px solid var(--ck-border-subtle);
-    font-size: 18px;
-    font-weight: 700;
-  }
-
-  .total-row.grand .value {
-    color: var(--ck-gold-bright);
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  .total-row .value {
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--ck-cream);
-  }
-
-  /* ===== CUSTOMER INFO ===== */
-  .customer-section {
-    margin-top: 32px;
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-md);
-    padding: 20px;
-  }
-
-  .customer-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .customer-title {
-    font-family: 'Instrument Serif', serif;
-    font-style: italic;
-    font-size: 22px;
-    color: var(--ck-gold);
-  }
-
-  .customer-progress {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--ck-cream-faint);
-    letter-spacing: 0.05em;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  @media (min-width: 600px) {
-    .form-grid { grid-template-columns: 1fr 1fr; }
-    .form-full { grid-column: 1 / -1; }
-  }
-
-  .form-field label {
-    display: block;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-cream-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-bottom: 6px;
-  }
-
-  .form-field label .req {
-    color: var(--ck-red);
-    margin-left: 2px;
-  }
-
-  .form-field input,
-  .form-field textarea,
-  .form-field select {
-    width: 100%;
-    padding: 12px 14px;
-    background: rgba(0, 0, 0, 0.25);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--ck-cream);
-    font-family: 'Manrope', sans-serif;
-    font-size: 14px;
-  }
-
-  .form-field input:focus,
-  .form-field textarea:focus,
-  .form-field select:focus {
-    outline: none;
-    border-color: var(--ck-gold);
-  }
-
-  .form-field input::placeholder,
-  .form-field textarea::placeholder {
-    color: var(--ck-cream-faint);
-  }
-
-  .form-field textarea {
-    resize: vertical;
-    min-height: 60px;
-  }
-
-  /* Toggle group */
-  .toggle-group {
-    display: flex;
-    gap: 6px;
-    background: rgba(0, 0, 0, 0.25);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: var(--radius-sm);
-    padding: 4px;
-  }
-
-  .toggle-opt {
-    flex: 1;
-    padding: 8px 10px;
-    background: transparent;
-    border: none;
-    color: var(--ck-cream-dim);
-    font-family: 'Manrope', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 0.15s;
-  }
-
-  .toggle-opt.active {
-    background: var(--ck-gold);
-    color: var(--ck-bg-deep);
-  }
-
-  .checkboxes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .cbox {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 0.5px solid var(--ck-border-subtle);
-    border-radius: 999px;
-    font-size: 12px;
-    cursor: pointer;
-    color: var(--ck-cream-dim);
-    user-select: none;
-  }
-
-  .cbox input { display: none; }
-
-  .cbox.checked {
-    background: rgba(228, 179, 64, 0.15);
-    color: var(--ck-gold-bright);
-    border-color: var(--ck-border-active);
-  }
-
-  .cbox .box {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    border: 1px solid currentColor;
-    display: grid;
-    place-items: center;
-  }
-
-  .cbox.checked .box svg { display: block; }
-  .cbox .box svg { display: none; width: 10px; height: 10px; fill: currentColor; }
-
-  /* ===== ACTION BAR ===== */
-  .action-bar {
-    margin-top: 24px;
-    background: linear-gradient(135deg, rgba(199, 59, 54, 0.08), rgba(228, 179, 64, 0.05));
-    border: 0.5px solid var(--ck-border-active);
-    border-radius: var(--radius-md);
-    padding: 20px;
-  }
-
-  .action-summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .action-summary-left .label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-cream-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-  }
-
-  .action-summary-left .total {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--ck-gold-bright);
-  }
-
-  .action-summary-left .meta {
-    font-size: 12px;
-    color: var(--ck-cream-dim);
-    margin-top: 4px;
-  }
-
-  .action-btns {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px;
-  }
-
-  @media (max-width: 480px) {
-    .action-btns {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .action-btn {
-    padding: 14px 16px;
-    border-radius: var(--radius-md);
-    font-family: 'Manrope', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    border: 0.5px solid;
-    transition: transform 0.15s;
-    text-align: center;
-  }
-
-  .action-btn:active { transform: scale(0.98); }
-
-  .action-btn.primary {
-    background: var(--ck-gold);
-    color: var(--ck-bg-deep);
-    border-color: var(--ck-gold);
-  }
-
-  .action-btn.secondary {
-    background: transparent;
-    color: var(--ck-cream);
-    border-color: var(--ck-border-active);
-  }
-
-  .action-btn.tertiary {
-    background: transparent;
-    color: var(--ck-cream-dim);
-    border-color: var(--ck-border-subtle);
-  }
-
-  .action-btn .sub {
-    display: block;
-    font-size: 11px;
-    font-weight: 500;
-    opacity: 0.7;
-    margin-top: 2px;
-  }
-
-  .action-btn.primary .sub { opacity: 0.65; }
-
-  /* Headcount suggestion banner */
-  .suggest-banner {
-    margin-bottom: 16px;
-    padding: 12px 14px;
-    background: rgba(46, 163, 159, 0.1);
-    border: 0.5px solid rgba(46, 163, 159, 0.4);
-    border-radius: var(--radius-sm);
-    font-size: 12px;
-    color: var(--ck-cream);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .suggest-banner svg {
-    width: 16px;
-    height: 16px;
-    fill: var(--ck-teal);
-    flex-shrink: 0;
-  }
-
-  .suggest-banner .apply {
-    margin-left: auto;
-    background: var(--ck-teal);
-    color: var(--ck-bg-deep);
-    border: none;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-</style>
-</head>
-<body>
-<div class="layout">
-
-  <!-- HEADER -->
-  <header>
-    <div class="header-top">
-      <button class="menu-btn" aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <div class="store-badge">DOS · TOMBALL</div>
-      <div class="header-spacer"></div>
-      <div class="quote-pill">
-        <span class="live-dot"></span>
-        <span>QUOTE #Q-2026-0518-014 · DRAFT</span>
-      </div>
-    </div>
-    <h1>In-House <span class="accent">Catering</span></h1>
-    <p class="subtitle">Staff quote builder. Build the cart, capture the customer, send the quote or take payment now. Saved drafts auto-restore.</p>
-
-    <div class="quick-row" style="margin-top: 16px;">
-      <button class="quick-btn">
-        <svg viewBox="0 0 24 24"><path d="M12 20c4.41 0 8-3.59 8-8s-3.59-8-8-8-8 3.59-8 8 3.59 8 8 8m0-18C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m-1 6h2v5h-2zm0 6h2v2h-2z"/></svg>
-        Recently quoted
-      </button>
-      <button class="quick-btn">
-        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-4 12H8v-2h8v2zm0-3H8V9h8v2zm0-3H8V6h8v2z"/></svg>
-        Customer lookup
-      </button>
-      <button class="quick-btn">
-        <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-        Start from template
-      </button>
-      <button class="quick-btn">
-        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
-        Save draft
-      </button>
-    </div>
-  </header>
-
-  <!-- HEADCOUNT-DRIVEN SUGGESTION -->
-  <div class="suggest-banner">
-    <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
-    <span><strong>Tip:</strong> For 20 guests → 2 enchilada trays + 1 sides combo is typical. Plug a guest count below for tailored suggestions.</span>
-  </div>
-
-  <!-- SEARCH -->
-  <div class="search-wrap">
-    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
-    <input class="search-input" type="text" placeholder="Search items, packages, sides...">
-  </div>
-
-  <!-- CATEGORY CHIPS -->
-  <div class="cat-strip">
-    <button class="cat-chip active">All <span class="count">57</span></button>
-    <button class="cat-chip">Packages <span class="count">8</span></button>
-    <button class="cat-chip">Enchilada Trays <span class="count">9</span></button>
-    <button class="cat-chip">Individual Enchiladas <span class="count">9</span></button>
-    <button class="cat-chip">A La Carte Meats <span class="count">5</span></button>
-    <button class="cat-chip">Sides <span class="count">16</span></button>
-    <button class="cat-chip">Desserts <span class="count">3</span></button>
-    <button class="cat-chip">Beverages <span class="count">6</span></button>
-    <button class="cat-chip">Misc <span class="count">1</span></button>
-  </div>
-
-  <!-- MAIN GRID -->
-  <div class="main-grid">
-
-    <!-- ITEMS COLUMN -->
-    <div>
-
-      <!-- Premium Packages -->
-      <section class="cat-section">
-        <div class="cat-section-header">
-          <div class="cat-section-title">Premium Packages</div>
-          <div class="cat-section-meta">1 ITEM</div>
-        </div>
-        <div class="item-grid">
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Premium Fiesta Package</div>
-              <span class="item-badge" style="background: rgba(228, 179, 64, 0.18); color: var(--ck-gold-bright);">PREMIUM</span>
-            </div>
-            <div class="item-desc">Beef + chicken fajitas, rice, beans, all sides + sauces, chips & salsa, dessert. Serves 20.</div>
-            <div class="item-bottom">
-              <div class="item-price">$420.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Enchilada Trays (in-cart example state) -->
-      <section class="cat-section">
-        <div class="cat-section-header">
-          <div class="cat-section-title">Enchilada Trays</div>
-          <div class="cat-section-meta">9 ITEMS · DOES NOT INCLUDE CHIPS &amp; SALSA</div>
-        </div>
-        <div class="item-grid">
-
-          <div class="item-card in-cart" data-qty="2" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Cheese Enchiladas Tray (1 Dozen)</div>
-              <span class="item-badge">TOP SELLER</span>
-            </div>
-            <div class="item-desc">Corn tortillas filled with cheese, covered in sauce-of-choice & grated cheese.</div>
-            <div class="item-bottom">
-              <div class="item-price">$30.00 <span class="ref">$30.00 ref</span></div>
-              <div class="qty-controls">
-                <button class="qty-btn" onclick="event.stopPropagation()">−</button>
-                <span class="qty-val">2</span>
-                <button class="qty-btn" onclick="event.stopPropagation()">+</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="item-card in-cart" data-qty="1" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Shredded Chicken Enchiladas Tray</div>
-              <span class="item-badge">TOP SELLER</span>
-            </div>
-            <div class="item-desc">1 dozen. Choice of red, green, sour cream, or chili gravy sauce.</div>
-            <div class="item-bottom">
-              <div class="item-price">$34.00 <span class="ref">$34.00 ref</span></div>
-              <div class="qty-controls">
-                <button class="qty-btn" onclick="event.stopPropagation()">−</button>
-                <span class="qty-val">1</span>
-                <button class="qty-btn" onclick="event.stopPropagation()">+</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Ground Beef Enchiladas Tray</div>
-            </div>
-            <div class="item-desc">1 dozen. Choice of sauce.</div>
-            <div class="item-bottom">
-              <div class="item-price">$33.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Beef Fajita Enchiladas Tray</div>
-            </div>
-            <div class="item-desc">1 dozen. Corn tortillas filled with grilled beef fajitas.</div>
-            <div class="item-bottom">
-              <div class="item-price">$44.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Chicken Fajita Enchiladas Tray</div>
-            </div>
-            <div class="item-desc">1 dozen. Corn tortillas with grilled chicken fajitas.</div>
-            <div class="item-bottom">
-              <div class="item-price">$40.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Seafood Enchiladas Tray</div>
-              <span class="item-badge" style="background: rgba(46, 163, 159, 0.18); color: #5BCAC5;">SPECIALTY</span>
-            </div>
-            <div class="item-desc">1 dozen. Sauteed shrimp & crawfish, seafood sauce.</div>
-            <div class="item-bottom">
-              <div class="item-price">$43.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Veggie Enchiladas Tray</div>
-              <span class="item-badge" style="background: rgba(149, 199, 95, 0.18); color: #95C75F;">VEGGIE</span>
-            </div>
-            <div class="item-desc">1 dozen. Sauteed vegetables, choice of sauce.</div>
-            <div class="item-bottom">
-              <div class="item-price">$38.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Pork Enchiladas Tray</div>
-            </div>
-            <div class="item-desc">1 dozen. Shredded pork.</div>
-            <div class="item-bottom">
-              <div class="item-price">$33.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-
-          <div class="item-card in-cart" data-qty="1" onclick="addItem(this)">
-            <div class="item-top">
-              <div class="item-name">Tamales Tray (1 Dozen)</div>
-            </div>
-            <div class="item-desc">Steamed corn husk stuffed with cornmeal and chili con carne.</div>
-            <div class="item-bottom">
-              <div class="item-price">$41.00</div>
-              <div class="qty-controls">
-                <button class="qty-btn" onclick="event.stopPropagation()">−</button>
-                <span class="qty-val">1</span>
-                <button class="qty-btn" onclick="event.stopPropagation()">+</button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- Sides -->
-      <section class="cat-section">
-        <div class="cat-section-header">
-          <div class="cat-section-title">Sides</div>
-          <div class="cat-section-meta">16 ITEMS</div>
-        </div>
-        <div class="item-grid">
-          <div class="item-card in-cart" data-qty="1" onclick="addItem(this)">
-            <div class="item-top"><div class="item-name">Mexican Rice (Half Pan)</div></div>
-            <div class="item-desc">Serves 12–15.</div>
-            <div class="item-bottom">
-              <div class="item-price">$32.00</div>
-              <div class="qty-controls">
-                <button class="qty-btn" onclick="event.stopPropagation()">−</button>
-                <span class="qty-val">1</span>
-                <button class="qty-btn" onclick="event.stopPropagation()">+</button>
-              </div>
-            </div>
-          </div>
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top"><div class="item-name">Charro Beans (Half Pan)</div></div>
-            <div class="item-desc">Serves 12–15.</div>
-            <div class="item-bottom">
-              <div class="item-price">$36.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top"><div class="item-name">Refried Beans (Half Pan)</div></div>
-            <div class="item-desc">Serves 12–15.</div>
-            <div class="item-bottom">
-              <div class="item-price">$32.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-          <div class="item-card" onclick="addItem(this)">
-            <div class="item-top"><div class="item-name">Chips &amp; Salsa</div></div>
-            <div class="item-desc">Pan + 2 salsa pints.</div>
-            <div class="item-bottom">
-              <div class="item-price">$18.00</div>
-              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- CART COLUMN -->
-    <div class="cart" id="cart">
-      <div class="cart-handle"></div>
-      <div class="cart-header" onclick="toggleCart()">
-        <div class="cart-header-left">
-          <div class="cart-icon-wrap">
-            <svg viewBox="0 0 24 24"><path d="M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-            <span class="cart-badge">5</span>
-          </div>
-          <div>
-            <div class="cart-title">Quote cart</div>
-            <div style="font-size: 11px; color: var(--ck-cream-faint); font-family: 'JetBrains Mono', monospace;">5 ITEMS · 2 TRAYS</div>
-          </div>
-        </div>
-        <div class="cart-total-preview">$202.00</div>
-      </div>
-      <div class="cart-body">
-
-        <div class="cart-item">
-          <div class="cart-item-name">Cheese Enchiladas Tray</div>
-          <div class="cart-item-price">$60.00</div>
-          <div class="cart-item-line">
-            <div class="cart-item-controls">
-              <button class="qty-btn">−</button>
-              <span>2</span>
-              <button class="qty-btn">+</button>
-              <span>× $30.00</span>
-              <button class="edit-price">edit</button>
-            </div>
-            <button class="remove">Remove</button>
-          </div>
-        </div>
-
-        <div class="cart-item">
-          <div class="cart-item-name">Shredded Chicken Enchiladas</div>
-          <div class="cart-item-price">$34.00</div>
-          <div class="cart-item-line">
-            <div class="cart-item-controls">
-              <button class="qty-btn">−</button>
-              <span>1</span>
-              <button class="qty-btn">+</button>
-              <span>× $34.00</span>
-              <button class="edit-price">edit</button>
-            </div>
-            <button class="remove">Remove</button>
-          </div>
-        </div>
-
-        <div class="cart-item">
-          <div class="cart-item-name">Tamales Tray</div>
-          <div class="cart-item-price">$41.00</div>
-          <div class="cart-item-line">
-            <div class="cart-item-controls">
-              <button class="qty-btn">−</button>
-              <span>1</span>
-              <button class="qty-btn">+</button>
-              <span>× $41.00</span>
-              <button class="edit-price">edit</button>
-            </div>
-            <button class="remove">Remove</button>
-          </div>
-        </div>
-
-        <div class="cart-item">
-          <div class="cart-item-name">Mexican Rice (Half Pan)</div>
-          <div class="cart-item-price">$32.00</div>
-          <div class="cart-item-line">
-            <div class="cart-item-controls">
-              <button class="qty-btn">−</button>
-              <span>1</span>
-              <button class="qty-btn">+</button>
-              <span>× $32.00</span>
-              <button class="edit-price">edit</button>
-            </div>
-            <button class="remove">Remove</button>
-          </div>
-        </div>
-
-        <div class="cart-item">
-          <div class="cart-item-name">Chips & Salsa</div>
-          <div class="cart-item-price">$35.00</div>
-          <div class="cart-item-line">
-            <div class="cart-item-controls">
-              <button class="qty-btn">−</button>
-              <span>2</span>
-              <button class="qty-btn">+</button>
-              <span style="text-decoration: line-through; color: var(--ck-cream-faint);">$36</span>
-              <span>$35</span>
-              <button class="edit-price">edit</button>
-            </div>
-            <button class="remove">Remove</button>
-          </div>
-        </div>
-
-      </div>
-      <div class="cart-totals">
-        <div class="total-row subtotal">
-          <span>Subtotal</span>
-          <span class="value">$202.00</span>
-        </div>
-        <div class="total-row subtotal">
-          <span>Delivery fee</span>
-          <span class="value">$25.00</span>
-        </div>
-        <div class="total-row subtotal">
-          <span>Tax (8.25%)</span>
-          <span class="value">$16.67</span>
-        </div>
-        <div class="total-row grand">
-          <span>Total</span>
-          <span class="value">$243.67</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- CUSTOMER INFO -->
-  <div class="customer-section">
-    <div class="customer-header">
-      <div class="customer-title">Customer &amp; event</div>
-      <div class="customer-progress">3 / 7 FIELDS</div>
-    </div>
-
-    <div class="form-grid">
-      <div class="form-field">
-        <label>Customer name <span class="req">*</span></label>
-        <input type="text" placeholder="Soraya Spurgin" value="Soraya Spurgin">
-      </div>
-
-      <div class="form-field">
-        <label>Email <span class="req">*</span></label>
-        <input type="email" placeholder="customer@example.com" value="soraya@schneiderelectric.com">
-      </div>
-
-      <div class="form-field">
-        <label>Phone</label>
-        <input type="tel" placeholder="(832) 555-0100" value="(281) 433-9067">
-      </div>
-
-      <div class="form-field">
-        <label>Guest count</label>
-        <input type="number" placeholder="0" min="0">
-      </div>
-
-      <div class="form-field">
-        <label>Event date <span class="req">*</span></label>
-        <input type="date">
-      </div>
-
-      <div class="form-field">
-        <label>Delivery / pickup</label>
-        <div class="toggle-group">
-          <button class="toggle-opt active">Delivery</button>
-          <button class="toggle-opt">Pickup</button>
-        </div>
-      </div>
-
-      <div class="form-field form-full">
-        <label>Event address</label>
-        <input type="text" placeholder="Street, city, ZIP">
-      </div>
-
-      <div class="form-field form-full">
-        <label>Setup add-ons</label>
-        <div class="checkboxes">
-          <label class="cbox checked"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Plates &amp; utensils</label>
-          <label class="cbox"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Chafing dishes</label>
-          <label class="cbox"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Server on-site</label>
-          <label class="cbox checked"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Napkins</label>
-        </div>
-      </div>
-
-      <div class="form-field form-full">
-        <label>Notes (allergies, setup details, etc.)</label>
-        <textarea placeholder="Park in 2 hour parking, ask security to take you to the 10th floor..."></textarea>
-      </div>
-    </div>
-  </div>
-
-  <!-- ACTION BAR -->
-  <div class="action-bar">
-    <div class="action-summary">
-      <div class="action-summary-left">
-        <div class="label">Quote total</div>
-        <div class="total">$243.67</div>
-        <div class="meta">5 items · 2 trays · Schneider Electric · May 19, 10:30 AM</div>
-      </div>
-    </div>
-    <div class="action-btns">
-      <button class="action-btn primary">
-        Send quote
-        <span class="sub">Email + text customer</span>
-      </button>
-      <button class="action-btn secondary">
-        Pay now
-        <span class="sub">Charge card on file</span>
-      </button>
-      <button class="action-btn tertiary">
-        Pay later
-        <span class="sub">Confirm, invoice on delivery</span>
-      </button>
-    </div>
-  </div>
-
-</div>
-
-<script>
-  function addItem(card) {
-    // Demo only - in production, this hits a state store
-    if (card.classList.contains('in-cart')) {
-      // Already in cart, just open the cart (mobile) or just bounce
-      toggleCart(true);
-      return;
-    }
-    card.classList.add('in-cart');
-    card.setAttribute('data-qty', '1');
-    // Replace add button with qty controls visually
-    const bottom = card.querySelector('.item-bottom');
-    const addBtn = bottom.querySelector('.add-btn');
-    if (addBtn) {
-      const ctrls = document.createElement('div');
-      ctrls.className = 'qty-controls';
-      ctrls.innerHTML = '<button class="qty-btn" onclick="event.stopPropagation()">−</button><span class="qty-val">1</span><button class="qty-btn" onclick="event.stopPropagation()">+</button>';
-      addBtn.replaceWith(ctrls);
-    }
-  }
-
-  function toggleCart(forceOpen) {
-    const cart = document.getElementById('cart');
-    if (window.innerWidth >= 1024) return; // desktop sidebar always open
-    if (forceOpen) {
-      cart.classList.add('open');
-    } else {
-      cart.classList.toggle('open');
-    }
-  }
-
-  // Category chip selection
-  document.querySelectorAll('.cat-chip').forEach(c => {
-    c.addEventListener('click', () => {
-      document.querySelectorAll('.cat-chip').forEach(b => b.classList.remove('active'));
-      c.classList.add('active');
-    });
-  });
-
-  // Toggle group
-  document.querySelectorAll('.toggle-group').forEach(g => {
-    g.querySelectorAll('.toggle-opt').forEach(o => {
-      o.addEventListener('click', () => {
-        g.querySelectorAll('.toggle-opt').forEach(b => b.classList.remove('active'));
-        o.classList.add('active');
-      });
-    });
-  });
-
-  // Checkbox chips
-  document.querySelectorAll('.cbox').forEach(c => {
-    c.addEventListener('click', e => {
-      e.preventDefault();
-      c.classList.toggle('checked');
-    });
-  });
-</script>
-</body>
-</html>
+{# ============================================================
+   in_house_catering.html — In-House Catering quote builder (production)
+   dck conversion of the standalone in_house_catering mockup.
+
+   Previously this file was a STANDALONE full-HTML page (own
+   <!DOCTYPE>/<html>/<head>/<body>) — so it never picked up the
+   dashboard shell and had no side navigation. This rework shells
+   it into base_dashboard.html: chrome (sidebar, topbar, ribbon)
+   comes from the parent; the page only owns its content + style +
+   scripts. All CSS is scoped under .ihc-page and every custom
+   property renamed --ihc-* so the warm v3 palette never leaks into
+   the global sheet (same .atr-/--atr- discipline as
+   attendance_tracking.html).
+
+   ROUTE CONTRACT: the route still render_template's
+   "in_house_catering.html" with no extra context — the page is a
+   self-contained staff quote builder (catalog + cart are static
+   markup, quote state lives client-side). The InHouseCateringQuote
+   model + the route are unchanged by this rework.
+
+   Demo seeding stripped: every catalog item starts at qty 0 (add
+   state) and the cart starts empty. The +/- controls are wired by
+   event delegation off a stable ancestor so every row works,
+   including any rendered later.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'in_house_catering' %}
+
+{% block title %}In-House Catering — Cenas Kitchen{% endblock %}
+{% block page_title %}In-House Catering{% endblock %}
+{% block page_subtitle %}Staff quote builder{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* All custom properties + classes scoped to .ihc-page so the v3
+     warm palette never leaks into the global sheet (atr-/--atr- pattern). */
+  .ihc-page {
+    --ihc-red: #C73B36;
+    --ihc-red-deep: #9B2A26;
+    --ihc-gold: #E4B340;
+    --ihc-gold-bright: #FFD970;
+    --ihc-gold-dim: #D9A436;
+    --ihc-teal: #2EA39F;
+    --ihc-cream: #FAF6EC;
+    --ihc-cream-dim: rgba(250, 246, 236, 0.62);
+    --ihc-cream-faint: rgba(250, 246, 236, 0.38);
+    --ihc-bg-deep: #1a0d08;
+    --ihc-bg-warm: #28160e;
+    --ihc-bg-card: rgba(40, 22, 14, 0.65);
+    --ihc-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --ihc-border-subtle: rgba(217, 164, 54, 0.18);
+    --ihc-border-active: rgba(228, 179, 64, 0.5);
+    --ihc-radius-sm: 8px;
+    --ihc-radius-md: 12px;
+    --ihc-radius-lg: 16px;
+    position: relative;
+    isolation: isolate;
+    color: var(--ihc-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    /* SOLID opaque surface — a restaurant photo renders behind every
+       page, so the page background must not be transparent. */
+    background: linear-gradient(180deg, var(--ihc-bg-deep) 0%, #0d0604 100%);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: var(--ihc-radius-lg);
+    padding: 20px;
+    margin: 0 0 48px;
+    overflow: hidden;
+  }
+
+  /* Decorative glow + noise — position:absolute (NOT fixed) so it
+     stays contained inside .ihc-page. */
+  .ihc-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .ihc-page > * { position: relative; z-index: 1; }
+  .ihc-page *, .ihc-page *::before, .ihc-page *::after { box-sizing: border-box; }
+  .ihc-page button { font-family: inherit; }
+
+  /* ===== HEADER BAND ===== */
+  .ihc-page .ihc-header {
+    padding: 0 0 16px;
+    border-bottom: 0.5px solid var(--ihc-border-subtle);
+    margin-bottom: 20px;
+  }
+
+  .ihc-page .header-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .ihc-page .quote-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ihc-gold);
+    background: rgba(228, 179, 64, 0.1);
+    border: 0.5px solid var(--ihc-border-subtle);
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.05em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ihc-page .quote-pill .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ihc-gold);
+    box-shadow: 0 0 6px var(--ihc-gold);
+  }
+
+  .ihc-page .store-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ihc-gold-bright);
+    background: rgba(228, 179, 64, 0.12);
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .ihc-page .header-spacer { flex: 1; }
+
+  .ihc-page .ihc-headline {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 36px;
+    line-height: 1;
+    letter-spacing: -0.015em;
+    color: var(--ihc-cream);
+    margin-bottom: 6px;
+  }
+
+  .ihc-page .ihc-headline .accent {
+    font-style: italic;
+    color: var(--ihc-gold-bright);
+    text-shadow: 0 0 24px rgba(255, 217, 112, 0.35);
+  }
+
+  .ihc-page .subtitle {
+    color: var(--ihc-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 600px;
+  }
+
+  /* ===== QUICK ACTIONS ROW ===== */
+  .ihc-page .quick-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .ihc-page .quick-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--ihc-bg-card);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: 999px;
+    color: var(--ihc-cream);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .ihc-page .quick-btn:hover, .ihc-page .quick-btn:active {
+    border-color: var(--ihc-border-active);
+    color: var(--ihc-gold-bright);
+  }
+
+  .ihc-page .quick-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+  }
+
+  /* ===== SEARCH ===== */
+  .ihc-page .search-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+
+  .ihc-page .search-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    fill: var(--ihc-cream-faint);
+    pointer-events: none;
+  }
+
+  .ihc-page .search-input {
+    width: 100%;
+    padding: 14px 14px 14px 44px;
+    background: var(--ihc-bg-card);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: var(--ihc-radius-md);
+    color: var(--ihc-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px;
+  }
+
+  .ihc-page .search-input:focus {
+    outline: none;
+    border-color: var(--ihc-gold);
+  }
+
+  .ihc-page .search-input::placeholder { color: var(--ihc-cream-faint); }
+
+  /* ===== CATEGORY CHIPS ===== */
+  .ihc-page .cat-strip {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+
+  .ihc-page .cat-strip::-webkit-scrollbar { display: none; }
+
+  .ihc-page .cat-chip {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    background: transparent;
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: 999px;
+    color: var(--ihc-cream-dim);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ihc-page .cat-chip .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(228, 179, 64, 0.12);
+    color: var(--ihc-gold);
+    padding: 1px 6px;
+    border-radius: 6px;
+  }
+
+  .ihc-page .cat-chip.active {
+    background: rgba(228, 179, 64, 0.15);
+    color: var(--ihc-gold-bright);
+    border-color: var(--ihc-border-active);
+  }
+
+  .ihc-page .cat-chip.active .count {
+    background: rgba(255, 217, 112, 0.25);
+    color: var(--ihc-gold-bright);
+  }
+
+  /* ===== MAIN GRID ===== */
+  .ihc-page .main-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  @media (min-width: 1024px) {
+    .ihc-page .main-grid {
+      grid-template-columns: 1fr 380px;
+      align-items: start;
+    }
+  }
+
+  /* ===== CATEGORY SECTION ===== */
+  .ihc-page .cat-section {
+    margin-bottom: 32px;
+  }
+
+  .ihc-page .cat-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 0.5px solid var(--ihc-border-subtle);
+  }
+
+  .ihc-page .cat-section-title {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ihc-gold);
+  }
+
+  .ihc-page .cat-section-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ihc-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== ITEM CARD ===== */
+  .ihc-page .item-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  @media (min-width: 600px) {
+    .ihc-page .item-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  .ihc-page .item-card {
+    position: relative;
+    background: var(--ihc-bg-card);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: var(--ihc-radius-md);
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ihc-page .item-card:hover, .ihc-page .item-card:active {
+    background: var(--ihc-bg-card-hover);
+    border-color: var(--ihc-border-active);
+  }
+
+  .ihc-page .item-card.in-cart {
+    border-color: var(--ihc-gold);
+    background: rgba(228, 179, 64, 0.08);
+  }
+
+  .ihc-page .item-card.in-cart::after {
+    content: attr(data-qty);
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--ihc-gold);
+    color: var(--ihc-bg-deep);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    padding: 0 6px;
+  }
+
+  .ihc-page .item-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .ihc-page .item-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ihc-cream);
+    line-height: 1.3;
+    flex: 1;
+  }
+
+  .ihc-page .item-badge {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(199, 59, 54, 0.18);
+    color: #FF8580;
+  }
+
+  .ihc-page .item-desc {
+    font-size: 12px;
+    color: var(--ihc-cream-dim);
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  .ihc-page .item-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 0.5px solid var(--ihc-border-subtle);
+  }
+
+  .ihc-page .item-price {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ihc-gold-bright);
+  }
+
+  .ihc-page .item-price .ref {
+    font-size: 10px;
+    color: var(--ihc-cream-faint);
+    font-weight: 400;
+    margin-left: 6px;
+    text-decoration: line-through;
+  }
+
+  .ihc-page .add-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--ihc-gold);
+    color: var(--ihc-bg-deep);
+    border: none;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 0.15s;
+  }
+
+  .ihc-page .add-btn:active { transform: scale(0.9); }
+
+  .ihc-page .add-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+  .ihc-page .qty-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ihc-page .qty-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--ihc-bg-card);
+    border: 0.5px solid var(--ihc-border-active);
+    color: var(--ihc-gold);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .ihc-page .qty-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ihc-gold-bright);
+    min-width: 20px;
+    text-align: center;
+  }
+
+  /* ===== CART (SIDEBAR ON DESKTOP, IN-FLOW CARD ON MOBILE) ===== */
+  .ihc-page .cart {
+    background: var(--ihc-bg-card);
+    border: 0.5px solid var(--ihc-border-active);
+    border-radius: var(--ihc-radius-md);
+    overflow: hidden;
+    position: sticky;
+    top: 16px;
+  }
+
+  @media (max-width: 1023px) {
+    /* dck mobile fix: the cart is a clean in-flow card, not a fixed
+       drawer that overlaps the catalog. */
+    .ihc-page .cart {
+      position: static;
+      max-height: none;
+      transform: none;
+      z-index: auto;
+      border-radius: var(--ihc-radius-md);
+    }
+
+    .ihc-page .cart.open {
+      transform: translateY(0);
+    }
+  }
+
+  .ihc-page .cart-handle {
+    display: none;
+    width: 40px;
+    height: 4px;
+    background: var(--ihc-border-active);
+    border-radius: 2px;
+    margin: 8px auto 0;
+  }
+
+  @media (max-width: 1023px) {
+    .ihc-page .cart-handle { display: none; }
+  }
+
+  .ihc-page .cart-header {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.5px solid var(--ihc-border-subtle);
+    cursor: pointer;
+  }
+
+  .ihc-page .cart-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ihc-page .cart-icon-wrap {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(228, 179, 64, 0.15);
+    display: grid;
+    place-items: center;
+    position: relative;
+  }
+
+  .ihc-page .cart-icon-wrap svg {
+    width: 18px;
+    height: 18px;
+    fill: var(--ihc-gold);
+  }
+
+  .ihc-page .cart-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--ihc-red);
+    color: var(--ihc-cream);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    padding: 0 4px;
+  }
+
+  .ihc-page .cart-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    font-style: italic;
+    color: var(--ihc-cream);
+  }
+
+  .ihc-page .cart-total-preview {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ihc-gold-bright);
+  }
+
+  .ihc-page .cart-body {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+
+  .ihc-page .cart-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--ihc-cream-faint);
+    font-size: 13px;
+  }
+
+  .ihc-page .cart-item {
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    border-bottom: 0.5px solid rgba(228, 179, 64, 0.08);
+  }
+
+  .ihc-page .cart-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ihc-cream);
+    line-height: 1.3;
+  }
+
+  .ihc-page .cart-item-price {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ihc-gold-bright);
+    text-align: right;
+  }
+
+  .ihc-page .cart-item-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ihc-cream-dim);
+    font-size: 11px;
+  }
+
+  .ihc-page .cart-item-controls .qty-btn {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+
+  .ihc-page .cart-item-line {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 4px;
+  }
+
+  .ihc-page .cart-item .remove {
+    background: none;
+    border: none;
+    color: var(--ihc-cream-faint);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
+  .ihc-page .cart-item .remove:hover { color: #FF6E68; }
+
+  .ihc-page .cart-item .edit-price {
+    background: none;
+    border: 0.5px solid var(--ihc-border-subtle);
+    color: var(--ihc-cream-dim);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .ihc-page .cart-totals {
+    padding: 16px;
+    border-top: 0.5px solid var(--ihc-border-subtle);
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .ihc-page .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+
+  .ihc-page .total-row.subtotal { color: var(--ihc-cream-dim); }
+  .ihc-page .total-row.grand {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 0.5px solid var(--ihc-border-subtle);
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .ihc-page .total-row.grand .value {
+    color: var(--ihc-gold-bright);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .ihc-page .total-row .value {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ihc-cream);
+  }
+
+  /* ===== CUSTOMER INFO ===== */
+  .ihc-page .customer-section {
+    margin-top: 32px;
+    background: var(--ihc-bg-card);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: var(--ihc-radius-md);
+    padding: 20px;
+  }
+
+  .ihc-page .customer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .ihc-page .customer-title {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ihc-gold);
+  }
+
+  .ihc-page .customer-progress {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ihc-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  .ihc-page .form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  @media (min-width: 600px) {
+    .ihc-page .form-grid { grid-template-columns: 1fr 1fr; }
+    .ihc-page .form-full { grid-column: 1 / -1; }
+  }
+
+  .ihc-page .form-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ihc-cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+
+  .ihc-page .form-field label .req {
+    color: var(--ihc-red);
+    margin-left: 2px;
+  }
+
+  .ihc-page .form-field input,
+  .ihc-page .form-field textarea,
+  .ihc-page .form-field select {
+    width: 100%;
+    padding: 12px 14px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: var(--ihc-radius-sm);
+    color: var(--ihc-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+  }
+
+  .ihc-page .form-field input:focus,
+  .ihc-page .form-field textarea:focus,
+  .ihc-page .form-field select:focus {
+    outline: none;
+    border-color: var(--ihc-gold);
+  }
+
+  .ihc-page .form-field input::placeholder,
+  .ihc-page .form-field textarea::placeholder {
+    color: var(--ihc-cream-faint);
+  }
+
+  .ihc-page .form-field textarea {
+    resize: vertical;
+    min-height: 60px;
+  }
+
+  /* Toggle group */
+  .ihc-page .toggle-group {
+    display: flex;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: var(--ihc-radius-sm);
+    padding: 4px;
+  }
+
+  .ihc-page .toggle-opt {
+    flex: 1;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    color: var(--ihc-cream-dim);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+
+  .ihc-page .toggle-opt.active {
+    background: var(--ihc-gold);
+    color: var(--ihc-bg-deep);
+  }
+
+  .ihc-page .checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ihc-page .cbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 0.5px solid var(--ihc-border-subtle);
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--ihc-cream-dim);
+    user-select: none;
+  }
+
+  .ihc-page .cbox input { display: none; }
+
+  .ihc-page .cbox.checked {
+    background: rgba(228, 179, 64, 0.15);
+    color: var(--ihc-gold-bright);
+    border-color: var(--ihc-border-active);
+  }
+
+  .ihc-page .cbox .box {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+    display: grid;
+    place-items: center;
+  }
+
+  .ihc-page .cbox.checked .box svg { display: block; }
+  .ihc-page .cbox .box svg { display: none; width: 10px; height: 10px; fill: currentColor; }
+
+  /* ===== ACTION BAR ===== */
+  .ihc-page .action-bar {
+    margin-top: 24px;
+    background: linear-gradient(135deg, rgba(199, 59, 54, 0.08), rgba(228, 179, 64, 0.05));
+    border: 0.5px solid var(--ihc-border-active);
+    border-radius: var(--ihc-radius-md);
+    padding: 20px;
+  }
+
+  .ihc-page .action-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .ihc-page .action-summary-left .label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ihc-cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .ihc-page .action-summary-left .total {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--ihc-gold-bright);
+  }
+
+  .ihc-page .action-summary-left .meta {
+    font-size: 12px;
+    color: var(--ihc-cream-dim);
+    margin-top: 4px;
+  }
+
+  .ihc-page .action-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  @media (max-width: 480px) {
+    .ihc-page .action-btns {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .ihc-page .action-btn {
+    padding: 14px 16px;
+    border-radius: var(--ihc-radius-md);
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 0.5px solid;
+    transition: transform 0.15s;
+    text-align: center;
+  }
+
+  .ihc-page .action-btn:active { transform: scale(0.98); }
+
+  .ihc-page .action-btn.primary {
+    background: var(--ihc-gold);
+    color: var(--ihc-bg-deep);
+    border-color: var(--ihc-gold);
+  }
+
+  .ihc-page .action-btn.secondary {
+    background: transparent;
+    color: var(--ihc-cream);
+    border-color: var(--ihc-border-active);
+  }
+
+  .ihc-page .action-btn.tertiary {
+    background: transparent;
+    color: var(--ihc-cream-dim);
+    border-color: var(--ihc-border-subtle);
+  }
+
+  .ihc-page .action-btn .sub {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+
+  .ihc-page .action-btn.primary .sub { opacity: 0.65; }
+
+  /* Headcount suggestion banner */
+  .ihc-page .suggest-banner {
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: rgba(46, 163, 159, 0.1);
+    border: 0.5px solid rgba(46, 163, 159, 0.4);
+    border-radius: var(--ihc-radius-sm);
+    font-size: 12px;
+    color: var(--ihc-cream);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ihc-page .suggest-banner svg {
+    width: 16px;
+    height: 16px;
+    fill: var(--ihc-teal);
+    flex-shrink: 0;
+  }
+
+  .ihc-page .suggest-banner .apply {
+    margin-left: auto;
+    background: var(--ihc-teal);
+    color: var(--ihc-bg-deep);
+    border: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+</style>
+
+<div class="ihc-page">
+
+  <!-- HEADER BAND -->
+  <div class="ihc-header">
+    <div class="header-top">
+      <div class="store-badge">DOS · TOMBALL</div>
+      <div class="header-spacer"></div>
+      <div class="quote-pill">
+        <span class="live-dot"></span>
+        <span>QUOTE · DRAFT</span>
+      </div>
+    </div>
+    <div class="ihc-headline">In-House <span class="accent">Catering</span></div>
+    <p class="subtitle">Staff quote builder. Build the cart, capture the customer, send the quote or take payment now. Saved drafts auto-restore.</p>
+
+    <div class="quick-row" style="margin-top: 16px;">
+      <button class="quick-btn">
+        <svg viewBox="0 0 24 24"><path d="M12 20c4.41 0 8-3.59 8-8s-3.59-8-8-8-8 3.59-8 8 3.59 8 8 8m0-18C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m-1 6h2v5h-2zm0 6h2v2h-2z"/></svg>
+        Recently quoted
+      </button>
+      <button class="quick-btn">
+        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-4 12H8v-2h8v2zm0-3H8V9h8v2zm0-3H8V6h8v2z"/></svg>
+        Customer lookup
+      </button>
+      <button class="quick-btn">
+        <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+        Start from template
+      </button>
+      <button class="quick-btn">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+        Save draft
+      </button>
+    </div>
+  </div>
+
+  <!-- HEADCOUNT-DRIVEN SUGGESTION -->
+  <div class="suggest-banner">
+    <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+    <span><strong>Tip:</strong> For 20 guests &rarr; 2 enchilada trays + 1 sides combo is typical. Plug a guest count below for tailored suggestions.</span>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
+    <input class="search-input" type="text" placeholder="Search items, packages, sides...">
+  </div>
+
+  <!-- CATEGORY CHIPS -->
+  <div class="cat-strip">
+    <button class="cat-chip active">All <span class="count">57</span></button>
+    <button class="cat-chip">Packages <span class="count">8</span></button>
+    <button class="cat-chip">Enchilada Trays <span class="count">9</span></button>
+    <button class="cat-chip">Individual Enchiladas <span class="count">9</span></button>
+    <button class="cat-chip">A La Carte Meats <span class="count">5</span></button>
+    <button class="cat-chip">Sides <span class="count">16</span></button>
+    <button class="cat-chip">Desserts <span class="count">3</span></button>
+    <button class="cat-chip">Beverages <span class="count">6</span></button>
+    <button class="cat-chip">Misc <span class="count">1</span></button>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- ITEMS COLUMN -->
+    <div id="ihcCatalog">
+
+      <!-- Premium Packages -->
+      <section class="cat-section">
+        <div class="cat-section-header">
+          <div class="cat-section-title">Premium Packages</div>
+          <div class="cat-section-meta">1 ITEM</div>
+        </div>
+        <div class="item-grid">
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Premium Fiesta Package</div>
+              <span class="item-badge" style="background: rgba(228, 179, 64, 0.18); color: var(--ihc-gold-bright);">PREMIUM</span>
+            </div>
+            <div class="item-desc">Beef + chicken fajitas, rice, beans, all sides + sauces, chips &amp; salsa, dessert. Serves 20.</div>
+            <div class="item-bottom">
+              <div class="item-price">$420.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Enchilada Trays -->
+      <section class="cat-section">
+        <div class="cat-section-header">
+          <div class="cat-section-title">Enchilada Trays</div>
+          <div class="cat-section-meta">9 ITEMS · DOES NOT INCLUDE CHIPS &amp; SALSA</div>
+        </div>
+        <div class="item-grid">
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Cheese Enchiladas Tray (1 Dozen)</div>
+              <span class="item-badge">TOP SELLER</span>
+            </div>
+            <div class="item-desc">Corn tortillas filled with cheese, covered in sauce-of-choice &amp; grated cheese.</div>
+            <div class="item-bottom">
+              <div class="item-price">$30.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Shredded Chicken Enchiladas Tray</div>
+              <span class="item-badge">TOP SELLER</span>
+            </div>
+            <div class="item-desc">1 dozen. Choice of red, green, sour cream, or chili gravy sauce.</div>
+            <div class="item-bottom">
+              <div class="item-price">$34.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Ground Beef Enchiladas Tray</div>
+            </div>
+            <div class="item-desc">1 dozen. Choice of sauce.</div>
+            <div class="item-bottom">
+              <div class="item-price">$33.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Beef Fajita Enchiladas Tray</div>
+            </div>
+            <div class="item-desc">1 dozen. Corn tortillas filled with grilled beef fajitas.</div>
+            <div class="item-bottom">
+              <div class="item-price">$44.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Chicken Fajita Enchiladas Tray</div>
+            </div>
+            <div class="item-desc">1 dozen. Corn tortillas with grilled chicken fajitas.</div>
+            <div class="item-bottom">
+              <div class="item-price">$40.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Seafood Enchiladas Tray</div>
+              <span class="item-badge" style="background: rgba(46, 163, 159, 0.18); color: #5BCAC5;">SPECIALTY</span>
+            </div>
+            <div class="item-desc">1 dozen. Sauteed shrimp &amp; crawfish, seafood sauce.</div>
+            <div class="item-bottom">
+              <div class="item-price">$43.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Veggie Enchiladas Tray</div>
+              <span class="item-badge" style="background: rgba(149, 199, 95, 0.18); color: #95C75F;">VEGGIE</span>
+            </div>
+            <div class="item-desc">1 dozen. Sauteed vegetables, choice of sauce.</div>
+            <div class="item-bottom">
+              <div class="item-price">$38.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Pork Enchiladas Tray</div>
+            </div>
+            <div class="item-desc">1 dozen. Shredded pork.</div>
+            <div class="item-bottom">
+              <div class="item-price">$33.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top">
+              <div class="item-name">Tamales Tray (1 Dozen)</div>
+            </div>
+            <div class="item-desc">Steamed corn husk stuffed with cornmeal and chili con carne.</div>
+            <div class="item-bottom">
+              <div class="item-price">$41.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Sides -->
+      <section class="cat-section">
+        <div class="cat-section-header">
+          <div class="cat-section-title">Sides</div>
+          <div class="cat-section-meta">16 ITEMS</div>
+        </div>
+        <div class="item-grid">
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top"><div class="item-name">Mexican Rice (Half Pan)</div></div>
+            <div class="item-desc">Serves 12&ndash;15.</div>
+            <div class="item-bottom">
+              <div class="item-price">$32.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top"><div class="item-name">Charro Beans (Half Pan)</div></div>
+            <div class="item-desc">Serves 12&ndash;15.</div>
+            <div class="item-bottom">
+              <div class="item-price">$36.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top"><div class="item-name">Refried Beans (Half Pan)</div></div>
+            <div class="item-desc">Serves 12&ndash;15.</div>
+            <div class="item-bottom">
+              <div class="item-price">$32.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+          <div class="item-card" onclick="ihcAddItem(this)">
+            <div class="item-top"><div class="item-name">Chips &amp; Salsa</div></div>
+            <div class="item-desc">Pan + 2 salsa pints.</div>
+            <div class="item-bottom">
+              <div class="item-price">$18.00</div>
+              <button class="add-btn"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- CART COLUMN -->
+    <div class="cart" id="cart">
+      <div class="cart-handle"></div>
+      <div class="cart-header" onclick="ihcToggleCart()">
+        <div class="cart-header-left">
+          <div class="cart-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            <span class="cart-badge">0</span>
+          </div>
+          <div>
+            <div class="cart-title">Quote cart</div>
+            <div style="font-size: 11px; color: var(--ihc-cream-faint); font-family: 'JetBrains Mono', monospace;">0 ITEMS</div>
+          </div>
+        </div>
+        <div class="cart-total-preview">$0.00</div>
+      </div>
+      <div class="cart-body">
+        <div class="cart-empty">Cart is empty. Add items from the catalog to build a quote.</div>
+      </div>
+      <div class="cart-totals">
+        <div class="total-row subtotal">
+          <span>Subtotal</span>
+          <span class="value">$0.00</span>
+        </div>
+        <div class="total-row subtotal">
+          <span>Delivery fee</span>
+          <span class="value">$0.00</span>
+        </div>
+        <div class="total-row subtotal">
+          <span>Tax (8.25%)</span>
+          <span class="value">$0.00</span>
+        </div>
+        <div class="total-row grand">
+          <span>Total</span>
+          <span class="value">$0.00</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER INFO -->
+  <div class="customer-section">
+    <div class="customer-header">
+      <div class="customer-title">Customer &amp; event</div>
+      <div class="customer-progress">0 / 7 FIELDS</div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-field">
+        <label>Customer name <span class="req">*</span></label>
+        <input type="text" placeholder="Customer name">
+      </div>
+
+      <div class="form-field">
+        <label>Email <span class="req">*</span></label>
+        <input type="email" placeholder="customer@example.com">
+      </div>
+
+      <div class="form-field">
+        <label>Phone</label>
+        <input type="tel" placeholder="(832) 555-0100">
+      </div>
+
+      <div class="form-field">
+        <label>Guest count</label>
+        <input type="number" placeholder="0" min="0">
+      </div>
+
+      <div class="form-field">
+        <label>Event date <span class="req">*</span></label>
+        <input type="date">
+      </div>
+
+      <div class="form-field">
+        <label>Delivery / pickup</label>
+        <div class="toggle-group">
+          <button class="toggle-opt active">Delivery</button>
+          <button class="toggle-opt">Pickup</button>
+        </div>
+      </div>
+
+      <div class="form-field form-full">
+        <label>Event address</label>
+        <input type="text" placeholder="Street, city, ZIP">
+      </div>
+
+      <div class="form-field form-full">
+        <label>Setup add-ons</label>
+        <div class="checkboxes">
+          <label class="cbox"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Plates &amp; utensils</label>
+          <label class="cbox"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Chafing dishes</label>
+          <label class="cbox"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Server on-site</label>
+          <label class="cbox"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>Napkins</label>
+        </div>
+      </div>
+
+      <div class="form-field form-full">
+        <label>Notes (allergies, setup details, etc.)</label>
+        <textarea placeholder="Park in 2 hour parking, ask security to take you to the 10th floor..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div class="action-bar">
+    <div class="action-summary">
+      <div class="action-summary-left">
+        <div class="label">Quote total</div>
+        <div class="total">$0.00</div>
+        <div class="meta">0 items</div>
+      </div>
+    </div>
+    <div class="action-btns">
+      <button class="action-btn primary">
+        Send quote
+        <span class="sub">Email + text customer</span>
+      </button>
+      <button class="action-btn secondary">
+        Pay now
+        <span class="sub">Charge card on file</span>
+      </button>
+      <button class="action-btn tertiary">
+        Pay later
+        <span class="sub">Confirm, invoice on delivery</span>
+      </button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  // ---- Add an item to the cart (swaps the add-btn for qty controls) ----
+  window.ihcAddItem = function (card) {
+    // Demo only - in production, this hits a state store.
+    if (card.classList.contains('in-cart')) {
+      // Already in cart, just open the cart (mobile) or bounce.
+      ihcToggleCart(true);
+      return;
+    }
+    card.classList.add('in-cart');
+    card.setAttribute('data-qty', '1');
+    // Replace the add button with qty controls visually.
+    var bottom = card.querySelector('.item-bottom');
+    var addBtn = bottom ? bottom.querySelector('.add-btn') : null;
+    if (addBtn) {
+      var ctrls = document.createElement('div');
+      ctrls.className = 'qty-controls';
+      ctrls.innerHTML =
+        '<button class="qty-btn" data-qty-act="dec" type="button">−</button>' +
+        '<span class="qty-val">1</span>' +
+        '<button class="qty-btn" data-qty-act="inc" type="button">+</button>';
+      addBtn.replaceWith(ctrls);
+    }
+  };
+
+  window.ihcToggleCart = function (forceOpen) {
+    var cart = document.getElementById('cart');
+    if (!cart) return;
+    if (window.innerWidth >= 1024) return; // desktop sidebar always open
+    if (forceOpen) {
+      cart.classList.add('open');
+    } else {
+      cart.classList.toggle('open');
+    }
+  };
+
+  // ---- Catalog qty +/- via EVENT DELEGATION ----
+  // A single listener on the stable #ihcCatalog ancestor handles every
+  // .qty-btn click — including controls injected later by ihcAddItem.
+  // The previous build wired each .qty-btn once at load with
+  // querySelectorAll().forEach, so any control created after load (every
+  // freshly-added item) had no handler — that was the "some +/- do not
+  // work" bug.
+  var catalog = document.getElementById('ihcCatalog');
+  if (catalog) {
+    catalog.addEventListener('click', function (e) {
+      var btn = e.target.closest('.qty-btn');
+      if (!btn || !catalog.contains(btn)) return;
+      // Keep the card's onclick=ihcAddItem from also firing.
+      e.stopPropagation();
+
+      var card = btn.closest('.item-card');
+      if (!card) return;
+      var valEl = card.querySelector('.qty-val');
+      if (!valEl) return;
+
+      var act = btn.getAttribute('data-qty-act');
+      // Fallback for any static markup without data-qty-act: the '+'
+      // button is the qty-btn that is the last element child.
+      if (!act) {
+        act = (btn === btn.parentElement.lastElementChild) ? 'inc' : 'dec';
+      }
+
+      var qty = parseInt(valEl.textContent, 10) || 0;
+      qty = (act === 'inc') ? qty + 1 : qty - 1;
+      if (qty < 1) {
+        // Drop back to the empty / add state.
+        card.classList.remove('in-cart');
+        card.removeAttribute('data-qty');
+        var ctrls = card.querySelector('.qty-controls');
+        if (ctrls) {
+          var addBtn = document.createElement('button');
+          addBtn.className = 'add-btn';
+          addBtn.type = 'button';
+          addBtn.innerHTML =
+            '<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>';
+          ctrls.replaceWith(addBtn);
+        }
+        return;
+      }
+      valEl.textContent = String(qty);
+      card.setAttribute('data-qty', String(qty));
+    });
+  }
+
+  // ---- Cart qty +/- via EVENT DELEGATION (same robustness for the
+  // cart pane; cart rows are dynamic too) ----
+  var cartEl = document.getElementById('cart');
+  if (cartEl) {
+    cartEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('.qty-btn');
+      if (!btn || !cartEl.contains(btn)) return;
+      var row = btn.closest('.cart-item');
+      if (!row) return;
+      var valEl = row.querySelector('.cart-item-controls span');
+      if (!valEl) return;
+      var inc = (btn === btn.parentElement.lastElementChild) ||
+                btn.getAttribute('data-qty-act') === 'inc';
+      var qty = parseInt(valEl.textContent, 10) || 0;
+      qty = inc ? qty + 1 : Math.max(0, qty - 1);
+      valEl.textContent = String(qty);
+    });
+  }
+
+  // ---- Category chip selection ----
+  document.querySelectorAll('.ihc-page .cat-chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      document.querySelectorAll('.ihc-page .cat-chip').forEach(function (b) {
+        b.classList.remove('active');
+      });
+      c.classList.add('active');
+    });
+  });
+
+  // ---- Toggle group (delivery / pickup) ----
+  document.querySelectorAll('.ihc-page .toggle-group').forEach(function (g) {
+    g.querySelectorAll('.toggle-opt').forEach(function (o) {
+      o.addEventListener('click', function () {
+        g.querySelectorAll('.toggle-opt').forEach(function (b) {
+          b.classList.remove('active');
+        });
+        o.classList.add('active');
+      });
+    });
+  });
+
+  // ---- Checkbox chips ----
+  document.querySelectorAll('.ihc-page .cbox').forEach(function (c) {
+    c.addEventListener('click', function (e) {
+      e.preventDefault();
+      c.classList.toggle('checked');
+    });
+  });
+})();
+</script>
+{% endblock %}

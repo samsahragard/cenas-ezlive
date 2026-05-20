@@ -54,14 +54,15 @@
     color: var(--rcp-cream);
     padding-bottom: 60px;
     position: relative;
+    min-height: 100vh;
   }
-  /* Semi-transparent darkening layer on top of the base_dashboard
-     restaurant photo — KEEPS the brand photo (Sam #8:38 — 'keep ours'),
-     just darkens it so the recipe content is legible. Sits BEHIND
-     content (z-index:0) so the sidebar + nav stay clickable. */
+  /* Semi-transparent darkening layer over the base_dashboard photo,
+     scoped to the .rcp-page content column via position:absolute (NOT
+     fixed/viewport) so the sidebar is never painted over (dck #11:13
+     diagnostic — matches incident reports cfab327 + attendance .atr-page). */
   .rcp-page::before {
     content: '';
-    position: fixed;
+    position: absolute;
     inset: 0;
     background: rgba(15, 12, 8, 0.72);
     z-index: 0;

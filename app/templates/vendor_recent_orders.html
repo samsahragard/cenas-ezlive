@@ -37,12 +37,14 @@
     color: var(--vro-cream);
     position: relative;
     padding-bottom: 60px;
+    min-height: 100vh;
   }
-  /* Dark overlay over the base_dashboard photo so content stays legible
-     — same pattern as recipes 8273551 / fresh food 71677c2. */
+  /* Dark overlay over the base_dashboard photo, scoped to .vro-page via
+     position:absolute (NOT fixed) so the sidebar is never painted over
+     (dck #11:13 diagnostic — matches incident reports cfab327). */
   .vro-page::before {
     content: '';
-    position: fixed;
+    position: absolute;
     inset: 0;
     background: rgba(15, 12, 8, 0.72);
     z-index: 0;

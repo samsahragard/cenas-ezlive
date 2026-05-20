@@ -691,6 +691,63 @@ def create_app():
         logging.getLogger(__name__).exception(
             "manager_daily_log v3 backfill failed (non-fatal)")
 
+    # recipes code + english_instructions (migration 32,
+    # ck build-order #3 2026-05-19). Additive: 2 columns on the
+    # existing recipes table. Render runs no alembic — this
+    # idempotent backfill is the real schema apply.
+    try:
+        from sqlalchemy import inspect as _sa_insp_32, text as _sa_text_32
+        from app.db import engine as _eng_32r
+        if _eng_32r is not None:
+            insp_32 = _sa_insp_32(_eng_32r)
+            tables_32 = set(insp_32.get_table_names())
+            if "recipes" in tables_32:
+                existing_32 = {c["name"]
+                               for c in insp_32.get_columns("recipes")}
+                _cols_32 = [
+                    ("code",                 "VARCHAR(20) NULL"),
+                    ("english_instructions", "TEXT NULL"),
+                ]
+                with _eng_32r.begin() as _conn_32:
+                    for _name, _ddl in _cols_32:
+                        if _name not in existing_32:
+                            _conn_32.execute(_sa_text_32(
+                                f"ALTER TABLE recipes "
+                                f"ADD COLUMN {_name} {_ddl}"))
+                            logging.getLogger(__name__).info(
+                                "recipes: backfilled %s (migration 32)",
+                                _name)
+                    _idx_32 = {i["name"]
+                               for i in insp_32.get_indexes("recipes")}
+                    if "ix_recipes_code" not in _idx_32:
+                        try:
+                            _conn_32.execute(_sa_text_32(
+                                "CREATE INDEX ix_recipes_code "
+                                "ON recipes(code)"))
+                            logging.getLogger(__name__).info(
+                                "recipes: created ix_recipes_code (migration 32)")
+                        except Exception:
+                            pass  # index may race; non-fatal
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "recipes migration-32 backfill failed (non-fatal)")
+
+    # Idempotent recipes seed (ck build-order #3, 2026-05-19).
+    # Reads data/recipes/recipes_seed_data.json + inserts any rows
+    # whose code isn't already present. Safe on every boot.
+    try:
+        from app.services.recipes_seed import seed_recipes_from_json
+        _c, _s, _e = seed_recipes_from_json()
+        if _c:
+            logging.getLogger(__name__).info(
+                "recipes seed: inserted %d (skipped %d, errored %d)",
+                _c, _s, _e)
+    except FileNotFoundError:
+        pass  # fixture not on disk yet — non-fatal
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "recipes seed failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

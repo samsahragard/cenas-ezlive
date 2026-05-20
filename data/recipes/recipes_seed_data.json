@@ -1,0 +1,206 @@
+{
+  "_source": "TexMex_Kitchen_Recipes_Standard_Operating_Procedures.pdf (rev 9.30.2018) + HOT_1 AGUIRRE_S_RICE.pdf (rev 9.30.2018). Hand-transcribed 2026-05-19 from the SOP page set Sam attached at dev chat #6:53. 10 representative recipes spanning all 3 SOP categories + single-variant / multi-variant / multi-step shapes. Full 18+ recipe import is a follow-up via pdfplumber once SOP source-of-truth is locked.",
+  "_seed_idempotent_key": "code",
+  "recipes": [
+    {
+      "code": "Hot 1",
+      "category": "hot",
+      "name": "Aguirre's Rice",
+      "prep_time": "45 min",
+      "shelf_life": "1 day",
+      "batch_sizes": ["Single Recipe (4 1/2 Gal)", "Double Recipe"],
+      "ingredients": [
+        {"name": "Rice Long Grain (arroz)", "qty": "12 Cups (S) / 24 Cups (D)"},
+        {"name": "Oil (aceite)", "qty": "1 Cup (S) / 2 Cups (D)"},
+        {"name": "Frozen Corn (maiz)", "qty": "2 Cups (S) / 4 Cups (D)"},
+        {"name": "Frozen Carrot (zanahoria)", "qty": "2 Cups (S) / 4 Cups (D)"},
+        {"name": "Chopped Bell Pepper", "qty": "2 Cups (S) / 4 Cups (D)"},
+        {"name": "Chopped Onions (cebolla)", "qty": "4 Cups (S) / 8 Cups (D)"},
+        {"name": "Chopped Fresh Garlic (ajo)", "qty": "4 Tbsp (S) / 8 Tbsp (D)"},
+        {"name": "Chicken Stock (caldo)", "qty": "1 Qt (S) / 2 Qt (D)"},
+        {"name": "Hot Water (agua)", "qty": "5 Qt (S) / 10 Qt (D)"},
+        {"name": "Chicken Base", "qty": "4 Tbsp (S) / 8 Tbsp (D)"},
+        {"name": "Sazones", "qty": "1/2 Bag (S) / 1 Bag (D)"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. Mida la cantidad de rice y dorelo en la freidora con ayuda del colador.\n2. En una olla ponga el caldo, especias, vegetales y aceite.\n3. Cuando ya esté el arroz viértelo en la olla junto con los demás ingredientes.\n4. Revolver bien y dejar cocinar durante 35 minutos. Configurar un temporizador.\n5. Desconecte la cocina, revuelva y deje en reposo por 15 minutos más. Programar un temporizador de 15 minutos.\n6. Pongalo en los contenedores adecuados utilizando una bolsa.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+    },
+    {
+      "code": "Hot 9",
+      "category": "hot",
+      "name": "Spinach",
+      "prep_time": "10 min",
+      "shelf_life": "4 days",
+      "batch_sizes": ["Single Recipe (6 Lbs)"],
+      "ingredients": [
+        {"name": "Margarine", "qty": "3 Lbs"},
+        {"name": "Chopped Garlic", "qty": "12 Tbsp"},
+        {"name": "Frozen Spinach", "qty": "36 Lbs"},
+        {"name": "Cumin", "qty": "12 Tsp"},
+        {"name": "Black Pepper", "qty": "6 Tsp"},
+        {"name": "Salt", "qty": "12 Tsp"},
+        {"name": "Cayenne Pepper", "qty": "3 Tsp"},
+        {"name": "Heavy Cream", "qty": "3 Cups"},
+        {"name": "Mix Cheese", "qty": "6 Lbs"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. Descongele la espinaca completamente y exprimirla para sacarle todo el agua posible.\n2. En un sartén, derretir la mantequilla y agregue el ajo. Cocine hasta que esté ligeramente dorado.\n3. Agregue la espinaca, cayenne pepper, comino, pimienta y sal. Revuelva bien y cocine por aproximadamente 5 minutos a fuego medio.\n4. Seguidamente, agregue la heavy cream y, al pasar unos minutos, el queso mixto. Revuelva hasta que el queso esté completamente disuelto.\n5. Vacíe en un contenedor y deje enfriar para porcionar en bolsas de 4 oz y bolsas de 1 1/2 oz. Etiquétalo y refrigerarlo.",
+      "notes": "Revision: 9.30.2025 — Cenas Kitchen."
+    },
+    {
+      "code": "Hot 10",
+      "category": "hot",
+      "name": "Refritos Beans (Refried Beans)",
+      "prep_time": "2h 15min",
+      "shelf_life": "7 days",
+      "batch_sizes": ["Single Recipe (4 Torpan)"],
+      "ingredients": [
+        {"name": "[Step 1] Dry Pinto Beans", "qty": "50 Lb Bag"},
+        {"name": "[Step 1] Hot Water", "qty": "16 Gallons"},
+        {"name": "[Step 1] Salt", "qty": "2 Lbs"},
+        {"name": "[Step 1] Chili Powder", "qty": "1 Lb"},
+        {"name": "[Step 2] Lard Pork", "qty": "24 Lbs"},
+        {"name": "[Step 2] Sliced Onions", "qty": "6 Gallons"},
+        {"name": "[Step 2] Whole Garlic", "qty": "48 Oz"},
+        {"name": "[Step 2] Jalapeños (cut in half)", "qty": "32 Oz"},
+        {"name": "[Step 2] Cumin", "qty": "6 Oz"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "Step 1 — Pinto Beans:\n1. Ponga todos los ingredientes en la olla adecuada y cocine los beans por 2 horas a fuego medio. Después que están listos, etiquetarlos y refrigerarlos.\n\nStep 2 — Refritos:\n1. En una olla ponga la manteca junto con la cebolla. Cuando la cebolla esté media cocida, agregue el jalapeño y el ajo.\n2. Dórelos sin quemarlos y después agregue a los frijoles.\n3. Después tueste el comino en un sartén sin quemarlo y agrégueselo a los frijoles.\n4. Muela los frijoles con la máquina y deje cocinar hasta que estén color café.\n5. Cuando ya estén, póngalos en bolsas apropiadas, etiquétalo y refrigerarlo.",
+      "notes": "Revision: 9.30.2025 — Cenas Kitchen. Two-stage prep: cook pinto beans first, then refry."
+    },
+    {
+      "code": "Hot 11",
+      "category": "hot",
+      "name": "Taco Meat",
+      "prep_time": "45 min",
+      "shelf_life": "4 days",
+      "batch_sizes": ["Single Recipe (38 Lbs)"],
+      "ingredients": [
+        {"name": "Ground Beef", "qty": "120 Lbs"},
+        {"name": "Water", "qty": "2 Gallons"},
+        {"name": "Chopped Bell Pepper", "qty": "4 Gallons"},
+        {"name": "Chopped Onion", "qty": "4 Gallons"},
+        {"name": "Crushed Tomatoes Can", "qty": "7 Cans"},
+        {"name": "Sazones", "qty": "1 Bag (30 oz)"},
+        {"name": "Salt", "qty": "10 Oz"}
+      ],
+      "english_instructions": "1. Place ground beef and half of the water into the braising pan at high heat.\n2. As it cooks, smash the meat to break it into pieces, making sure there are no meatballs.\n3. When meat is browned, turn braising pan off. Remove the meat and place it in strainers to remove as much grease as possible.\n4. Put braising pan back on, place the meat back inside, and add 1 gallon of water and the vegetables. Cook for about 15 minutes.\n5. In separate containers, add the crushed tomatoes, seasoning, and salt. Mix correctly.\n6. When vegetables are cooked (onions are clear), add crushed tomato mix and let cook for about 15 minutes.\n7. Pour into empty bags. Label, date, and refrigerate.",
+      "spanish_instructions": "1. Coloca la carne molida y la mitad del agua en la olla de estofado a fuego alto.\n2. Mientras se cocina, tritura la carne para desmenuzarla, asegurándote de que no hayan bolas de carne.\n3. Cuando la carne esté dorada, apaga la olla de estofado. Retira la carne y coloca en coladores. Elimina la mayoría de la grasa posible.\n4. Coloca la olla de estofado nuevamente al fuego y vuelve a poner la carne dentro. Añade 1 galón de agua y las verduras. Cocina durante aproximadamente 15 minutos.\n5. En un recipiente aparte, añade los tomates triturados, los condimentos y la sal. Mezcla correctamente.\n6. Cuando las verduras estén cocidas (las cebollas están transparentes), añade la mezcla de tomate triturado y deja cocer durante aproximadamente 15 minutos.\n7. Vierte en bolsas vacías. Etiqueta, fecha y refrigera.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC. Bilingual prep canonical."
+    },
+    {
+      "code": "Sauce 2",
+      "category": "sauces",
+      "name": "Street Taco Sauce",
+      "prep_time": "45 min",
+      "shelf_life": "4 days",
+      "batch_sizes": ["Single Recipe (1 1/2 Gal)"],
+      "ingredients": [
+        {"name": "Fresh Jalapeños", "qty": "48 Lbs"},
+        {"name": "Fry Oil", "qty": "3 Gallons"},
+        {"name": "Chicken Base Knorr Suiza", "qty": "1 1/2 Lbs"},
+        {"name": "Chopped Onions", "qty": "2 Cups"},
+        {"name": "Blended Garlic", "qty": "2 Cups"},
+        {"name": "Hot Water", "qty": "1 1/2 Gallons"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. Ponga a calentar el aceite en una olla a fuego medio. Cuando esté caliente el aceite, ponga los chiles jalapeños dentro y cocinarlos sin quemarlos.\n2. Una vez cocinados de la manera correcta, tiene que retirarlos del fuego y agréguele el agua, garlic y la cebolla antes de que se enfríen los jalapeños.\n3. Luego muela completamente.\n4. Etiquétalos y refrigerarlos.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+    },
+    {
+      "code": "Sauce 8",
+      "category": "sauces",
+      "name": "Chili Con Queso",
+      "prep_time": "25 min",
+      "shelf_life": "5 days",
+      "batch_sizes": ["Batch A (1.5 Gal yield)", "Batch B/C"],
+      "ingredients": [
+        {"name": "Margarine", "qty": "4 Lbs (A) / 6 Lbs (B/C)"},
+        {"name": "Poblano Pepper Chopped", "qty": "1.5 Gal (A) / 2 Gal (B/C)"},
+        {"name": "Fresh Onions Chopped", "qty": "1.5 Gal (A) / 2 Gal (B/C)"},
+        {"name": "Bell Pepper Chopped", "qty": "1.5 Gal (A) / 2 Gal (B/C)"},
+        {"name": "Hot Water", "qty": "3 Gal (A) / 4.5 Gal (B/C)"},
+        {"name": "Whole Milk", "qty": "3 Gal (A) / 4.5 Gal (B/C)"},
+        {"name": "Golden Velvet Cheese", "qty": "2 CS (A) / 3 CS (B/C)"},
+        {"name": "Del Pasado Cheese (White Extra Melt)", "qty": "2 CS (A) / 3 CS (B/C)"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. En una olla alta ponga a derretir la mantequilla. Cuando ya esté derretida, agregue los vegetales y espere hasta que se cocinen.\n2. Cuando ya estén cocidos los vegetales, agregue el agua y la leche y espere hasta que esté bien caliente.\n3. Luego agregue el queso blanco Extra Melt (Del Pasado). Cuando ya esté bien derretido, agregue el Golden Velvet Cheese.\n4. Mueva seguidamente con regularidad y deje cocinar hasta que el queso esté completamente deshecho.\n5. Cuando ya no queden grumos, retire del fuego, etiquete y refrigere.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC. Two batch sizes used in production rotation."
+    },
+    {
+      "code": "Cold 4",
+      "category": "cold",
+      "name": "Guacamole",
+      "prep_time": "15 min",
+      "shelf_life": "1 day",
+      "batch_sizes": ["Line Only (batch)", "Catering Single", "Catering Double"],
+      "ingredients": [
+        {"name": "Fresh Avocado", "qty": "4 Lbs (Line) / 16 Lbs (CS) / 32 Lbs (CD)"},
+        {"name": "Avocado Pulp", "qty": "— / 16 Lbs (CS) / 20 Lbs (CD)"},
+        {"name": "Chopped Onions", "qty": "8 Oz (Line) / 4 Cups (CS) / 8 Cups (CD)"},
+        {"name": "Chopped Cilantro", "qty": "Half Bunch (Line) / 4 Bunches (CS) / 8 Bunches (CD)"},
+        {"name": "Salt", "qty": "1 Tbsp (Line) / 8 Tbsp (CS) / 16 Tbsp (CD)"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. Corte los aguacates por la mitad y saque la semilla con una cuchara grande. Saque todo el aguacate asegurándose de que no quede nada en la cáscara.\n2. Cuando ya estén los aguacates en el contenedor, agregue la sal y el lime juice y aplastarlos completamente.\n3. Una vez aplastados, agregue la cebolla, el cilantro y el tomate. Revuelva muy bien.\n4. Póngalo en un contenedor apropiado y cubra con plástico. Etiquétalo y refrigerarlo.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC. LINE NOTE: prepare always 1.8 kg in a separate container to preserve salt flavor. Do not pre-mix broadly."
+    },
+    {
+      "code": "Cold 7",
+      "category": "cold",
+      "name": "Pineapple Butter",
+      "prep_time": "15 min",
+      "shelf_life": "8 days",
+      "batch_sizes": ["Single Recipe (4 Gal)"],
+      "ingredients": [
+        {"name": "Butter Blend", "qty": "28 Lbs"},
+        {"name": "Pineapple Juice", "qty": "4 Cans (24 oz each)"},
+        {"name": "Fresh Garlic Chopped", "qty": "1 Cup"},
+        {"name": "White Wine", "qty": "1 Cup"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. Ponga la mantequilla en la batidora a velocidad media.\n2. Luego ponga el jugo de piña y el fresh garlic juntos y agréguelos a la mantequilla.\n3. Después de 5 minutos, añadir el vino blanco. Deje revolviendo hasta que la mezcla esté bien esponjosa.\n4. Separe el contenido en 3 contenedores.\n5. Etiquétalo y refrigerarlo.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+    },
+    {
+      "code": "Cold 9",
+      "category": "cold",
+      "name": "Salad Mix & Cabbage Mix",
+      "prep_time": "15 min",
+      "shelf_life": "1 day",
+      "batch_sizes": ["Salad Mix", "Cabbage Mix Only"],
+      "ingredients": [
+        {"name": "[Salad] Romaine Lettuce", "qty": "6 Bunches"},
+        {"name": "[Salad] Iceberg Lettuce", "qty": "6 Balls"},
+        {"name": "[Salad] Shredded Red Cabbage", "qty": "1.5 Cups"},
+        {"name": "[Salad] Shredded White Cabbage", "qty": "1.5 Cups"},
+        {"name": "[Salad] Shredded Carrots", "qty": "3 Cups"},
+        {"name": "[Cabbage Only] Shredded Red Cabbage", "qty": "1 Qt"},
+        {"name": "[Cabbage Only] Shredded White Cabbage", "qty": "3 Qt"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "Salad Mix:\n1. Corte la lechuga de la medida adecuada y póngala en un contenedor con agua y hielo.\n2. Cuando esté cortada, revuelva bien para que se mezcle completamente.\n3. Saque la lechuga del agua con un colador para que se empiece a escurrir por unos minutos.\n\nCabbage Mix:\n1. Corte el white y el red cabbage y póngalo en un contenedor con hielo.\n2. Lave por separado el red cabbage, luego mezclarlos correctamente. Etiquétalo y refrigerarlo.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+    },
+    {
+      "code": "Cold 10",
+      "category": "cold",
+      "name": "Shredded Lettuce",
+      "prep_time": "15 min",
+      "shelf_life": "1 day",
+      "batch_sizes": ["Single Recipe (4 Gal)"],
+      "ingredients": [
+        {"name": "Romaine Lettuce", "qty": "20 Bunches"},
+        {"name": "Iceberg Lettuce", "qty": "20 Balls"},
+        {"name": "Lettuce Leaf", "qty": "4 Bunches"},
+        {"name": "Shredded Red Cabbage", "qty": "4 Cups"}
+      ],
+      "english_instructions": null,
+      "spanish_instructions": "1. Corte la lechuga de la medida adecuada y ponga en el sink con agua y hielo.\n2. Cuando estén cortados, revuelva bien para que se mezcle completamente.\n3. Agregue el red cabbage y mezcle completamente.\n4. Ponga la lechuga en un contenedor adecuado, etiquétalo y refrigerarlo.",
+      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+    }
+  ]
+}

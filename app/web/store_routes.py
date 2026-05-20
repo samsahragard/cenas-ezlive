@@ -1488,9 +1488,11 @@ def recipes_index():
             except Exception:
                 bsizes = []
             recipes.append({
-                "id": r.id, "category": r.category, "name": r.name,
+                "id": r.id, "code": r.code,
+                "category": r.category, "name": r.name,
                 "prep_time": r.prep_time, "shelf_life": r.shelf_life,
                 "batch_sizes": bsizes, "ingredients": ings,
+                "english_instructions": r.english_instructions,
                 "spanish_instructions": r.spanish_instructions,
                 "notes": r.notes,
             })
@@ -1530,10 +1532,12 @@ def recipes_create():
             ing = []
         bsz = [s.strip() for s in bsz_raw.split(",") if s.strip()] if bsz_raw else []
         row = Recipe(
+            code=(request.form.get("code") or "").strip()[:20] or None,
             category=(request.form.get("category") or "").strip()[:40] or "hot",
             name=(request.form.get("name") or "").strip()[:200] or "Untitled",
             prep_time=(request.form.get("prep_time") or "").strip()[:80] or None,
             shelf_life=(request.form.get("shelf_life") or "").strip()[:80] or None,
+            english_instructions=(request.form.get("english_instructions") or "").strip() or None,
             spanish_instructions=(request.form.get("spanish_instructions") or "").strip() or None,
             ingredients_json=_json.dumps(ing) if ing else None,
             batch_sizes_json=_json.dumps(bsz) if bsz else None,
@@ -1566,9 +1570,11 @@ def recipes_detail(recipe_id: int):
         except Exception:
             bsizes = []
         recipe = {
-            "id": r.id, "category": r.category, "name": r.name,
+            "id": r.id, "code": r.code,
+            "category": r.category, "name": r.name,
             "prep_time": r.prep_time, "shelf_life": r.shelf_life,
             "batch_sizes": bsizes, "ingredients": ings,
+            "english_instructions": r.english_instructions,
             "spanish_instructions": r.spanish_instructions, "notes": r.notes,
         }
         return render_template(
@@ -1600,9 +1606,11 @@ def recipes_edit(recipe_id: int):
         except Exception:
             bsizes = []
         recipe = {
-            "id": r.id, "category": r.category, "name": r.name,
+            "id": r.id, "code": r.code,
+            "category": r.category, "name": r.name,
             "prep_time": r.prep_time, "shelf_life": r.shelf_life,
             "batch_sizes": bsizes, "ingredients": ings,
+            "english_instructions": r.english_instructions,
             "spanish_instructions": r.spanish_instructions, "notes": r.notes,
         }
         return render_template(
@@ -1632,10 +1640,12 @@ def recipes_update(recipe_id: int):
         except Exception:
             ing = []
         bsz = [s.strip() for s in bsz_raw.split(",") if s.strip()] if bsz_raw else []
+        r.code = (request.form.get("code") or "").strip()[:20] or r.code
         r.category = (request.form.get("category") or "").strip()[:40] or r.category
         r.name = (request.form.get("name") or "").strip()[:200] or r.name
         r.prep_time = (request.form.get("prep_time") or "").strip()[:80] or None
         r.shelf_life = (request.form.get("shelf_life") or "").strip()[:80] or None
+        r.english_instructions = (request.form.get("english_instructions") or "").strip() or None
         r.spanish_instructions = (request.form.get("spanish_instructions") or "").strip() or None
         r.ingredients_json = _json.dumps(ing) if ing else None
         r.batch_sizes_json = _json.dumps(bsz) if bsz else None

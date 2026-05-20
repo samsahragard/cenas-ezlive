@@ -2401,12 +2401,14 @@ class Recipe(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    code: Mapped[str | None] = mapped_column(String(20), index=True, nullable=True)
     category: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
     prep_time: Mapped[str | None] = mapped_column(String(80), nullable=True)
     shelf_life: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     spanish_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    english_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     ingredients_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     batch_sizes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

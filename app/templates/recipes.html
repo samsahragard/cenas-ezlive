@@ -1,700 +1,555 @@
+{# ============================================================
+   recipes.html — Recipes page (production, ck build-order #3)
+
+   Replaces the cena #1209 / Sam #3074 stub with the recipes_v3
+   design (Sam dev chat #3034). Single page = list (left) + detail
+   (right) with client-side selection — no per-recipe route.
+
+   ROUTE CONTRACT (store_routes.py — already wired):
+     recipes  → list[ {id, code, category, name, prep_time, shelf_life,
+                       batch_sizes:list, ingredients:list, notes,
+                       english_instructions, spanish_instructions} ]
+     recipe   → single recipe dict (same shape) when /recipes/<id> hit;
+                otherwise None and the first recipe is auto-selected.
+     categories → list of {slug, label}.
+
+   Audience gate stays at the route layer: _manager_role_ok() per
+   CENA.md L165 — manager-tier, expo excluded.
+
+   CSS scoped to .rcp-page so the Cenas V2 tokens never leak into
+   the global sheet (samai cd602db pattern).
+   ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'kitchen_recipes' %}
 {% block title %}Recipes — Cenas Kitchen{% endblock %}
 {% block page_title %}Recipes{% endblock %}
-{% block page_subtitle %}
-  <p class="greeting-sub">Kitchen recipe library. Spanish instructions preserved, ingredient names in English. Click a recipe for full details.</p>
-{% endblock %}
+{% block page_subtitle %}{{ store_label or '' }}{% endblock %}
 
 {% block content %}
 <style>
-  /* Recipes page — Sam #3074 / cena spec.
-     33 recipes across 5 categories (cold/hot/sauces/marinated/chop).
-     Audience: everyone except expo (per Sam #1109).
-     Layout matches manager_log.html shape (2-col list+detail). */
+  .rcp-page {
+    --rcp-bg-deep: #1f1a12;
+    --rcp-bg-pane: #2a2419;
+    --rcp-gold: #d4af37;
+    --rcp-gold-soft: rgba(212,175,55,0.18);
+    --rcp-gold-line: rgba(212,175,55,0.4);
+    --rcp-cream: #ece3d0;
+    --rcp-cream-dim: rgba(236,227,208,0.7);
+    --rcp-cream-faint: rgba(236,227,208,0.45);
+    --rcp-glass: rgba(236,227,208,0.05);
+    --rcp-glass-hover: rgba(236,227,208,0.08);
+    --rcp-border: rgba(236,227,208,0.15);
+    --rcp-radius: 14px;
+    --rcp-radius-sm: 8px;
+    --rcp-ease: cubic-bezier(.22,.61,.36,1);
+    --rcp-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    --rcp-cat-hot: #e08a3c;
+    --rcp-cat-cold: #6ec1e4;
+    --rcp-cat-sauces: #c25b4b;
+    --rcp-cat-marinated: #c8a14a;
+    --rcp-cat-chop: #5a9c66;
+    color: var(--rcp-cream);
+    padding-bottom: 60px;
+  }
+  .rcp-page *, .rcp-page *::before, .rcp-page *::after { box-sizing: border-box; }
 
-  .rec-page {
-    background: rgba(255,255,255,0.03);
-    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    border-radius: 12px;
-    overflow: hidden;
-    margin-top: 12px;
+  .rcp-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .rcp-search {
+    flex: 1; min-width: 240px; max-width: 380px;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: var(--rcp-glass);
+    border: 1px solid var(--rcp-border); border-radius: 8px;
   }
-
-  .rec-head {
-    padding: 14px 18px;
-    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+  .rcp-search input {
+    background: transparent; border: 0; color: var(--rcp-cream);
+    flex: 1; outline: 0; font: inherit; font-size: 13px;
   }
-  .rec-h1 {
-    font-size: 16px;
-    font-weight: 600;
-    color: #FFFFFF;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .rec-h1 i { color: #E4B340; font-size: 18px; }
-  .rec-count {
-    font-size: 11.5px;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    padding: 2px 8px;
-    background: rgba(228,179,64,0.06);
-    border: 0.5px solid rgba(217,164,54,0.20);
-    border-radius: 4px;
-  }
-  .rec-access-pill {
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    padding: 2px 7px;
-    border-radius: 3px;
-    background: rgba(156,203,118,0.14);
-    color: #9CCB76;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .rec-access-pill i { font-size: 11px; }
-  .rec-head-spacer { flex: 1; }
-  .rec-new-btn {
-    background: #FFD970;
-    color: #140A06;
-    border: 0;
-    padding: 7px 14px;
-    border-radius: 6px;
-    font-size: 12.5px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .rec-new-btn:hover { background: #FFE085; }
-
-  .rec-filters {
-    padding: 10px 18px;
-    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    background: rgba(0,0,0,0.20);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .rec-search {
-    flex: 1;
-    min-width: 200px;
-    background: rgba(0,0,0,0.35);
-    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    border-radius: 5px;
-    padding: 7px 12px;
-    color: #FFFFFF;
-    font-size: 12px;
-    font-family: inherit;
-  }
-  .rec-search::placeholder { color: rgba(255,255,255,0.40); }
-  .rec-cat-seg {
-    display: inline-flex;
-    background: rgba(0,0,0,0.30);
-    padding: 3px;
-    border-radius: 6px;
-    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    flex-wrap: wrap;
-  }
-  .rec-cat-seg button {
-    padding: 5px 10px;
-    border-radius: 4px;
-    background: transparent;
-    border: 0;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    font-family: inherit;
-    text-transform: capitalize;
-  }
-  .rec-cat-seg button.is-active {
-    background: rgba(228,179,64,0.16);
-    color: #E4B340;
-  }
-  .rec-filter-meta {
-    font-size: 11px;
-    color: var(--text-3, rgba(255,255,255,0.45));
-    margin-left: auto;
+  .rcp-search input::placeholder { color: var(--rcp-cream-faint); }
+  .rcp-search .icon { opacity: .55; }
+  .rcp-count {
+    margin-left: auto; padding: 5px 12px;
+    background: var(--rcp-glass); border: 1px solid var(--rcp-border);
+    border-radius: 8px; font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--rcp-cream-dim);
   }
 
-  .rec-body {
-    display: grid;
-    grid-template-columns: 360px 1fr;
-    min-height: 540px;
+  .rcp-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .rcp-chip {
+    padding: 6px 14px; background: var(--rcp-glass);
+    border: 1px solid var(--rcp-border); border-radius: 999px;
+    color: var(--rcp-cream-dim); font-size: 12px; letter-spacing: 0.04em;
+    text-transform: uppercase; cursor: pointer; font: inherit; font-weight: 500;
+    transition: all .15s var(--rcp-ease);
   }
-  .rec-list {
-    border-right: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    max-height: 70vh;
-    overflow-y: auto;
+  .rcp-chip:hover { background: var(--rcp-glass-hover); color: var(--rcp-cream); }
+  .rcp-chip.active {
+    background: var(--rcp-gold-soft);
+    border-color: var(--rcp-gold-line);
+    color: var(--rcp-gold);
   }
-  .rec-cat-header {
-    padding: 10px 18px;
-    background: rgba(228,179,64,0.06);
-    border-bottom: 0.5px solid rgba(217,164,54,0.10);
-    font-size: 10.5px;
-    font-weight: 700;
-    color: #E4B340;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    position: sticky;
-    top: 0;
-    z-index: 2;
+  .rcp-chip .count { margin-left: 4px; color: var(--rcp-cream-faint); font-weight: 400; }
+  .rcp-chip.active .count { color: var(--rcp-gold); opacity: .7; }
+  .rcp-cat-dot {
+    width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+    flex-shrink: 0; vertical-align: middle;
   }
-  .rec-list-empty {
-    padding: 32px 18px;
-    text-align: center;
-    font-size: 11.5px;
-    color: var(--text-3, rgba(255,255,255,0.45));
-    font-style: italic;
-  }
-  .rec-list-item {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 10px 18px;
-    border-bottom: 0.5px solid rgba(217,164,54,0.06);
-    cursor: pointer;
-    text-decoration: none;
-    color: inherit;
-  }
-  .rec-list-item:hover { background: rgba(228,179,64,0.04); }
-  .rec-list-item.is-active {
-    background: rgba(228,179,64,0.10);
-    border-left: 2px solid #E4B340;
-    padding-left: 16px;
-  }
-  .rec-list-title {
-    font-size: 13px;
-    color: #FFFFFF;
-    font-weight: 600;
-  }
-  .rec-list-meta {
-    font-size: 10.5px;
-    color: var(--text-3, rgba(255,255,255,0.55));
-    display: flex;
-    gap: 10px;
-  }
-  .rec-list-meta span { display: inline-flex; align-items: center; gap: 4px; }
-  .rec-list-meta i { font-size: 11px; }
+  .rcp-cat-dot.hot { background: var(--rcp-cat-hot); }
+  .rcp-cat-dot.cold { background: var(--rcp-cat-cold); }
+  .rcp-cat-dot.sauces { background: var(--rcp-cat-sauces); }
+  .rcp-cat-dot.marinated { background: var(--rcp-cat-marinated); }
+  .rcp-cat-dot.chop { background: var(--rcp-cat-chop); }
 
-  .rec-detail { padding: 22px 24px; overflow-y: auto; }
-  .rec-detail.is-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-3, rgba(255,255,255,0.40));
-    font-style: italic;
-    font-size: 12.5px;
-    padding: 60px 20px;
-    text-align: center;
-  }
-  .rec-detail-mode {
-    font-size: 10px;
-    color: #E4B340;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-bottom: 6px;
-  }
-  .rec-detail-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #FFFFFF;
-    margin: 0 0 6px;
-  }
-  .rec-detail-meta {
-    font-size: 11.5px;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    margin-bottom: 18px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-  .rec-detail-meta span { display: inline-flex; align-items: center; gap: 5px; }
-  .rec-detail-meta i { color: #E4B340; font-size: 12px; }
-  .rec-detail-cat-pill {
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    padding: 2px 8px;
-    border-radius: 3px;
-    background: rgba(228,179,64,0.18);
-    color: #E4B340;
-  }
+  .rcp-body { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 1000px) { .rcp-body { grid-template-columns: 1fr; } .rcp-detail { position: relative !important; top: auto !important; } }
 
-  .rec-section {
-    margin-top: 18px;
-    padding-top: 14px;
-    border-top: 0.5px solid var(--ck-border, rgba(217,164,54,0.08));
+  .rcp-list {
+    background: var(--rcp-bg-pane); border: 1px solid var(--rcp-border);
+    border-radius: var(--rcp-radius); overflow: hidden;
+    max-height: 78vh; display: flex; flex-direction: column;
   }
-  .rec-section-label {
-    font-size: 10.5px;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-bottom: 8px;
-    font-weight: 600;
+  .rcp-list-head {
+    padding: 12px 16px; border-bottom: 1px solid var(--rcp-border);
+    background: var(--rcp-glass); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--rcp-cream-dim);
+    display: flex; justify-content: space-between;
   }
-  .rec-batch-tabs {
-    display: inline-flex;
-    background: rgba(0,0,0,0.30);
-    padding: 3px;
-    border-radius: 6px;
-    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    margin-bottom: 10px;
+  .rcp-list-body { overflow-y: auto; flex: 1; }
+  .rcp-list-body::-webkit-scrollbar { width: 8px; }
+  .rcp-list-body::-webkit-scrollbar-thumb { background: var(--rcp-border); border-radius: 4px; }
+  .rcp-group { border-bottom: 1px solid var(--rcp-border); }
+  .rcp-group:last-child { border-bottom: 0; }
+  .rcp-group-head {
+    padding: 10px 16px 6px; font-size: 10px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--rcp-cream-faint);
+    background: rgba(0,0,0,0.18);
   }
-  .rec-batch-tabs button {
-    padding: 5px 12px;
-    border-radius: 4px;
-    background: transparent;
-    border: 0;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    text-transform: capitalize;
+  .rcp-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background .15s var(--rcp-ease), border-color .15s var(--rcp-ease);
   }
-  .rec-batch-tabs button.is-active {
-    background: rgba(228,179,64,0.18);
-    color: #E4B340;
+  .rcp-row:hover { background: var(--rcp-glass); }
+  .rcp-row.selected {
+    background: var(--rcp-glass-hover);
+    border-left-color: var(--rcp-gold);
   }
-  .rec-ingredient-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
+  .rcp-row-code {
+    flex-shrink: 0; width: 64px; font-size: 10px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--rcp-cream-faint); font-variant-numeric: tabular-nums;
   }
-  .rec-ingredient-table th {
-    text-align: left;
-    padding: 6px 10px;
-    border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    font-size: 10.5px;
-    color: var(--text-3, rgba(255,255,255,0.55));
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
+  .rcp-row-name { flex: 1; font-size: 13px; color: var(--rcp-cream); line-height: 1.3; }
+  .rcp-empty-list { padding: 40px 16px; text-align: center; color: var(--rcp-cream-faint); font-size: 12px; }
+
+  .rcp-detail {
+    background: var(--rcp-bg-pane); border: 1px solid var(--rcp-border);
+    border-radius: var(--rcp-radius); overflow: hidden;
+    position: sticky; top: 24px; box-shadow: var(--rcp-shadow);
   }
-  .rec-ingredient-table td {
-    padding: 7px 10px;
-    border-bottom: 0.5px solid rgba(255,255,255,0.05);
-    color: var(--text-2, rgba(255,255,255,0.85));
+  .rcp-detail-empty {
+    padding: 80px 24px; text-align: center;
+    color: var(--rcp-cream-faint); font-style: italic; font-size: 13px;
   }
-  .rec-ingredient-table tr.hidden { display: none; }
-  .rec-instructions {
-    background: rgba(0,0,0,0.25);
-    border-left: 2px solid rgba(217,164,54,0.30);
-    padding: 12px 16px;
-    border-radius: 0 6px 6px 0;
-    font-size: 13px;
-    color: #FFFFFF;
-    line-height: 1.6;
-    white-space: pre-wrap;
+  .rcp-detail-header { position: relative; padding: 22px 28px 18px; border-bottom: 1px solid var(--rcp-border); }
+  .rcp-detail-header::before {
+    content: ""; position: absolute; left: 0; top: 22px;
+    width: 4px; height: 32px; background: var(--rcp-gold);
+    border-radius: 0 2px 2px 0;
   }
-  .rec-instructions.empty {
-    color: var(--text-3, rgba(255,255,255,0.40));
-    font-style: italic;
+  .rcp-detail-code {
+    display: inline-block; margin-bottom: 6px; padding: 3px 10px;
+    background: var(--rcp-gold-soft); border: 1px solid var(--rcp-gold-line);
+    border-radius: 4px; color: var(--rcp-gold);
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 600;
   }
-  .rec-notes {
-    margin-top: 12px;
-    padding: 10px 12px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 6px;
-    font-size: 12px;
-    color: var(--text-2, rgba(255,255,255,0.70));
-    line-height: 1.5;
+  .rcp-detail-title {
+    font-size: 22px; font-weight: 600; letter-spacing: 0.01em;
+    color: var(--rcp-cream); margin: 0; line-height: 1.2;
+  }
+  .rcp-meta {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    background: var(--rcp-glass); border-bottom: 1px solid var(--rcp-border);
+  }
+  .rcp-meta-cell { padding: 14px 16px; border-right: 1px solid var(--rcp-border); }
+  .rcp-meta-cell:last-child { border-right: 0; }
+  .rcp-meta-label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--rcp-cream-faint); margin-bottom: 4px; display: block;
+  }
+  .rcp-meta-value {
+    font-size: 14px; color: var(--rcp-cream);
+    font-weight: 500; font-variant-numeric: tabular-nums;
   }
 
-  /* Form mode */
-  .rec-field { margin-bottom: 14px; }
-  .rec-field label {
-    display: block;
-    font-size: 10px;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 5px;
+  .rcp-section { padding: 22px 28px; border-bottom: 1px solid var(--rcp-border); }
+  .rcp-section:last-child { border-bottom: 0; }
+  .rcp-section-title {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--rcp-gold); margin: 0 0 14px; font-weight: 600;
   }
-  .rec-field label .req { color: #E2645C; }
-  .rec-field input,
-  .rec-field textarea,
-  .rec-field select {
-    width: 100%;
-    background: rgba(0,0,0,0.35);
-    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    color: #FFFFFF;
-    padding: 9px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-family: inherit;
-    box-sizing: border-box;
-  }
-  .rec-field textarea {
-    resize: vertical;
-    min-height: 120px;
-    line-height: 1.5;
-  }
-  .rec-field input:focus,
-  .rec-field textarea:focus,
-  .rec-field select:focus {
-    outline: none;
-    border-color: rgba(228,179,64,0.50);
-  }
-  .rec-form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .rec-form-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 18px;
-    padding-top: 14px;
-    border-top: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-  }
-  .rec-form-actions button,
-  .rec-form-actions a.rec-form-btn {
-    padding: 8px 14px;
-    border-radius: 6px;
-    border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    background: transparent;
-    color: var(--text-2, rgba(255,255,255,0.65));
-    font-size: 12.5px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .rec-form-actions button:hover,
-  .rec-form-actions a.rec-form-btn:hover { color: #FFFFFF; }
-  .rec-form-actions button.primary,
-  .rec-form-actions a.primary {
-    background: #FFD970;
-    color: #140A06;
-    border-color: #FFD970;
-  }
-  .rec-form-actions button.primary:hover,
-  .rec-form-actions a.primary:hover { background: #FFE085; }
 
-  @media (max-width: 760px) {
-    .rec-body { grid-template-columns: 1fr; }
-    .rec-list {
-      border-right: none;
-      border-bottom: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-      max-height: 320px;
-    }
-    .rec-form-row { grid-template-columns: 1fr; }
-    .rec-filters { flex-direction: column; align-items: stretch; }
-    .rec-filter-meta { margin-left: 0; }
+  .rcp-variants { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--rcp-border); flex-wrap: wrap; }
+  .rcp-variant-tab {
+    padding: 8px 14px; background: transparent; border: 0;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    color: var(--rcp-cream-dim); font: inherit; font-size: 11px;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: default; font-weight: 600;
+  }
+  .rcp-variant-tab.active { color: var(--rcp-gold); border-bottom-color: var(--rcp-gold); }
+
+  .rcp-ing-table {
+    width: 100%; border-collapse: collapse;
+    background: rgba(0,0,0,0.15); border-radius: var(--rcp-radius-sm);
+    overflow: hidden; border: 1px solid var(--rcp-border);
+  }
+  .rcp-ing-table thead th {
+    text-align: left; padding: 10px 14px;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--rcp-bg-deep); background: var(--rcp-gold); font-weight: 700;
+  }
+  .rcp-ing-table tbody td {
+    padding: 10px 14px; border-top: 1px solid var(--rcp-border);
+    font-size: 13px; color: var(--rcp-cream);
+  }
+  .rcp-ing-table tbody tr:first-child td { border-top: 0; }
+  .rcp-ing-table tbody td.qty {
+    text-align: right; color: var(--rcp-cream-dim);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  .rcp-lang-toggle {
+    display: inline-flex; background: var(--rcp-glass);
+    border: 1px solid var(--rcp-border); border-radius: 6px;
+    overflow: hidden; margin-bottom: 12px;
+  }
+  .rcp-lang-toggle button {
+    padding: 4px 12px; background: transparent; border: 0;
+    color: var(--rcp-cream-dim); font: inherit; font-size: 11px;
+    letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; font-weight: 500;
+  }
+  .rcp-lang-toggle button.active {
+    background: var(--rcp-gold); color: var(--rcp-bg-deep); font-weight: 600;
+  }
+  .rcp-lang-toggle button:disabled { opacity: .35; cursor: not-allowed; }
+
+  .rcp-steps {
+    list-style: none; counter-reset: step; padding: 0; margin: 0;
+  }
+  .rcp-steps li {
+    counter-increment: step; padding: 12px 0 12px 44px;
+    border-top: 1px solid var(--rcp-border); position: relative;
+    color: var(--rcp-cream); font-size: 13px; line-height: 1.55; white-space: pre-wrap;
+  }
+  .rcp-steps li:first-child { border-top: 0; }
+  .rcp-steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 12px;
+    width: 28px; height: 28px; background: var(--rcp-gold-soft);
+    border: 1px solid var(--rcp-gold-line); color: var(--rcp-gold);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .rcp-steps-empty {
+    color: var(--rcp-cream-faint); font-style: italic; padding: 8px 0; font-size: 12px;
+  }
+
+  .rcp-notes {
+    color: var(--rcp-cream-dim); font-size: 12px; line-height: 1.5;
+    background: var(--rcp-glass); border: 1px solid var(--rcp-border);
+    border-radius: var(--rcp-radius-sm); padding: 10px 14px; white-space: pre-wrap;
+  }
+
+  .rcp-footer {
+    padding: 14px 28px; background: var(--rcp-glass);
+    color: var(--rcp-cream-faint); font-size: 11px;
+    letter-spacing: 0.04em; font-style: italic; text-align: center;
+    border-top: 1px solid var(--rcp-border);
   }
 </style>
 
-<div class="rec-page">
+<div class="rcp-page">
 
-  <!-- Header -->
-  <div class="rec-head">
-    <h2 class="rec-h1"><i class="ti ti-book-2"></i>Recipes</h2>
-    <span class="rec-count">{{ recipes|length }} recipe{{ '' if recipes|length == 1 else 's' }}</span>
-    <span class="rec-access-pill"><i class="ti ti-users"></i>everyone except expo</span>
-    <span class="rec-head-spacer"></span>
-    {% if form_mode != 'new' and form_mode != 'edit' and can_create|default(true) %}
-      <a href="/{{ store_slug }}/recipes/new" class="rec-new-btn">
-        <i class="ti ti-plus"></i>New recipe
-      </a>
-    {% endif %}
+  {# ----- Controls + filter chips ----- #}
+  <div class="rcp-controls">
+    <div class="rcp-search">
+      <span class="icon">&#x2315;</span>
+      <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
+    </div>
+    <span class="rcp-count" id="rcpCount">{{ recipes|length }} {{ 'recipe' if recipes|length == 1 else 'recipes' }}</span>
   </div>
 
-  <!-- Filter row -->
-  <div class="rec-filters">
-    <input type="text" class="rec-search" id="rec-search" placeholder="Search by name...">
-    <div class="rec-cat-seg" id="rec-cat-seg">
-      <button data-cat="" class="is-active">All</button>
-      {% for cat in (categories|default([
-          {'slug': 'cold', 'label': 'Cold'},
-          {'slug': 'hot', 'label': 'Hot'},
-          {'slug': 'sauces', 'label': 'Sauces'},
-          {'slug': 'marinated', 'label': 'Marinated'},
-          {'slug': 'chop', 'label': 'Chop'},
-      ])) %}
-        <button data-cat="{{ cat.slug }}">{{ cat.label }}</button>
-      {% endfor %}
-    </div>
-    <span class="rec-filter-meta"><span id="rec-visible-count">{{ recipes|length }}</span> of {{ recipes|length }}</span>
+  <div class="rcp-filters" id="rcpFilters">
+    <button type="button" class="rcp-chip active" data-cat="all">All <span class="count">{{ recipes|length }}</span></button>
+    {% for c in categories %}
+      {% set count = recipes|selectattr('category', 'equalto', c.slug)|list|length %}
+      <button type="button" class="rcp-chip" data-cat="{{ c.slug }}">
+        <span class="rcp-cat-dot {{ c.slug }}"></span>{{ c.label }} <span class="count">{{ count }}</span>
+      </button>
+    {% endfor %}
   </div>
 
-  <!-- 2-col body -->
-  <div class="rec-body">
+  <div class="rcp-body">
 
-    <!-- LEFT: category-grouped list -->
-    <div class="rec-list" id="rec-list">
-      {% if recipes %}
-        {% set ordered_cats = categories|default([
-            {'slug': 'cold', 'label': 'Cold'},
-            {'slug': 'hot', 'label': 'Hot'},
-            {'slug': 'sauces', 'label': 'Sauces'},
-            {'slug': 'marinated', 'label': 'Marinated'},
-            {'slug': 'chop', 'label': 'Chop'},
-        ]) %}
-        {% set ns = namespace(any_in_cat=False) %}
-        {% for cat in ordered_cats %}
-          {% set cat_recipes = recipes|selectattr('category', 'equalto', cat.slug)|list %}
-          {% if cat_recipes %}
-            <div class="rec-cat-header" data-cat="{{ cat.slug }}">{{ cat.label }} — {{ cat_recipes|length }}</div>
-            {% for r in cat_recipes %}
-              <a href="/{{ store_slug }}/recipes/{{ r.id }}"
-                 class="rec-list-item{% if recipe and recipe.id == r.id %} is-active{% endif %}"
-                 data-cat="{{ r.category }}"
-                 data-name="{{ (r.name|default(''))|lower }}">
-                <div class="rec-list-title">{{ r.name|default('(untitled)') }}</div>
-                <div class="rec-list-meta">
-                  {% if r.prep_time %}<span><i class="ti ti-clock"></i>{{ r.prep_time }}</span>{% endif %}
-                  {% if r.shelf_life %}<span><i class="ti ti-hourglass"></i>{{ r.shelf_life }}</span>{% endif %}
-                </div>
-              </a>
-            {% endfor %}
-          {% endif %}
-        {% endfor %}
-      {% else %}
-        <div class="rec-list-empty">
-          No recipes yet. Click "New recipe" to add the first one.
-        </div>
-      {% endif %}
-    </div>
-
-    <!-- RIGHT: detail / form / empty -->
-    <div class="rec-detail{% if not recipe and not form_mode %} is-empty{% endif %}">
-
-      {% if form_mode == 'new' or form_mode == 'edit' %}
-        <!-- NEW or EDIT form -->
-        <div class="rec-detail-mode">{{ 'New recipe' if form_mode == 'new' else 'Editing recipe' }}</div>
-        <form method="POST" action="{% if form_mode == 'edit' and recipe %}/{{ store_slug }}/recipes/{{ recipe.id }}{% else %}/{{ store_slug }}/recipes{% endif %}">
-          <div class="rec-field">
-            <label for="rec-name">Recipe name <span class="req">*</span></label>
-            <input type="text" id="rec-name" name="name" maxlength="200" required autofocus
-                   value="{{ recipe.name|default('') if form_mode == 'edit' else '' }}">
-          </div>
-          <div class="rec-form-row">
-            <div class="rec-field">
-              <label for="rec-category">Category <span class="req">*</span></label>
-              <select id="rec-category" name="category" required>
-                {% for cat in (categories|default([
-                    {'slug': 'cold', 'label': 'Cold'},
-                    {'slug': 'hot', 'label': 'Hot'},
-                    {'slug': 'sauces', 'label': 'Sauces'},
-                    {'slug': 'marinated', 'label': 'Marinated'},
-                    {'slug': 'chop', 'label': 'Chop'},
-                ])) %}
-                  <option value="{{ cat.slug }}"{% if form_mode == 'edit' and recipe.category == cat.slug %} selected{% endif %}>{{ cat.label }}</option>
+    {# ----- Left: recipe list ----- #}
+    <aside class="rcp-list">
+      <div class="rcp-list-head">
+        <span id="rcpListCount">{{ recipes|length }} recipes</span>
+        <span>SOP rev. 9.30.2018</span>
+      </div>
+      <div class="rcp-list-body" id="rcpListBody">
+        {% if recipes %}
+          {% for c in categories %}
+            {% set cat_rows = recipes|selectattr('category', 'equalto', c.slug)|list %}
+            {% if cat_rows %}
+              <div class="rcp-group" data-cat-group="{{ c.slug }}">
+                <div class="rcp-group-head">{{ c.label }}</div>
+                {% for r in cat_rows %}
+                  <div class="rcp-row" data-recipe-id="{{ r.id }}" data-cat="{{ r.category }}" data-name="{{ r.name|lower }}" data-code="{{ (r.code or '')|lower }}">
+                    <span class="rcp-row-code">{{ r.code or '—' }}</span>
+                    <span class="rcp-cat-dot {{ r.category }}"></span>
+                    <span class="rcp-row-name">{{ r.name }}</span>
+                  </div>
                 {% endfor %}
-              </select>
-            </div>
-            <div class="rec-field">
-              <label for="rec-prep-time">Prep time (listo en)</label>
-              <input type="text" id="rec-prep-time" name="prep_time" maxlength="80"
-                     placeholder="e.g. 45 min"
-                     value="{{ recipe.prep_time|default('') if form_mode == 'edit' else '' }}">
-            </div>
-          </div>
-          <div class="rec-form-row">
-            <div class="rec-field">
-              <label for="rec-shelf-life">Shelf life (duración)</label>
-              <input type="text" id="rec-shelf-life" name="shelf_life" maxlength="80"
-                     placeholder="e.g. 4 days"
-                     value="{{ recipe.shelf_life|default('') if form_mode == 'edit' else '' }}">
-            </div>
-            <div class="rec-field">
-              <label for="rec-batch-sizes">Batch sizes (comma-separated)</label>
-              <input type="text" id="rec-batch-sizes" name="batch_sizes_csv"
-                     placeholder="single, double, triple"
-                     value="{{ (recipe.batch_sizes|join(', ')) if form_mode == 'edit' and recipe.batch_sizes else 'single' }}">
-            </div>
-          </div>
-          <div class="rec-field">
-            <label for="rec-ingredients-json">Ingredients (JSON: list of {name, qty, batch_size})</label>
-            <textarea id="rec-ingredients-json" name="ingredients_json"
-                      placeholder='[{"name": "rice", "qty": "5 lb", "batch_size": "single"}, ...]'>{{ recipe.ingredients_raw|default('') if form_mode == 'edit' else '' }}</textarea>
-            <div class="field-help" style="font-size:10.5px;color:rgba(255,255,255,0.40);margin-top:4px;font-style:italic;">JSON array. Each item: {"name": "...", "qty": "...", "batch_size": "single|double|triple"}. Backend parses + stores as JSON.</div>
-          </div>
-          <div class="rec-field">
-            <label for="rec-spanish-instructions">Instructions (Spanish, preserved as-written)</label>
-            <textarea id="rec-spanish-instructions" name="spanish_instructions"
-                      placeholder="Step-by-step prep instructions...">{{ recipe.spanish_instructions|default('') if form_mode == 'edit' else '' }}</textarea>
-          </div>
-          <div class="rec-field">
-            <label for="rec-notes">Notes</label>
-            <textarea id="rec-notes" name="notes" style="min-height:60px;"
-                      placeholder="Anything else worth noting.">{{ recipe.notes|default('') if form_mode == 'edit' else '' }}</textarea>
-          </div>
-          <div class="rec-form-actions">
-            <button type="submit" class="primary"><i class="ti ti-check"></i> Save</button>
-            <a class="rec-form-btn" href="{% if form_mode == 'edit' and recipe %}/{{ store_slug }}/recipes/{{ recipe.id }}{% else %}/{{ store_slug }}/recipes{% endif %}"><i class="ti ti-arrow-left"></i> Cancel</a>
-          </div>
-        </form>
-
-      {% elif recipe %}
-        <!-- DETAIL view -->
-        <div class="rec-detail-mode">Recipe</div>
-        <h3 class="rec-detail-title">{{ recipe.name|default('(untitled)') }}</h3>
-        <div class="rec-detail-meta">
-          <span class="rec-detail-cat-pill">{{ recipe.category|default('uncategorized')|capitalize }}</span>
-          {% if recipe.prep_time %}<span><i class="ti ti-clock"></i>{{ recipe.prep_time }}</span>{% endif %}
-          {% if recipe.shelf_life %}<span><i class="ti ti-hourglass"></i>{{ recipe.shelf_life }}</span>{% endif %}
-          {% if recipe.batch_sizes %}<span><i class="ti ti-scale"></i>{{ recipe.batch_sizes|join(' / ') }}</span>{% endif %}
-        </div>
-
-        {% if recipe.ingredients %}
-        <div class="rec-section">
-          <div class="rec-section-label">Ingredients</div>
-          {% if recipe.batch_sizes and recipe.batch_sizes|length > 1 %}
-          <div class="rec-batch-tabs" id="rec-batch-tabs">
-            {% for sz in recipe.batch_sizes %}
-              <button data-size="{{ sz }}"{% if loop.first %} class="is-active"{% endif %}>{{ sz|capitalize }}</button>
-            {% endfor %}
-          </div>
-          {% endif %}
-          <table class="rec-ingredient-table" id="rec-ingredient-table">
-            <thead><tr><th>Ingredient</th><th>Quantity</th></tr></thead>
-            <tbody>
-              {% for ing in recipe.ingredients %}
-                <tr data-batch-size="{{ ing.batch_size|default('single') }}">
-                  <td>{{ ing.name }}</td>
-                  <td>{{ ing.qty|default('—') }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% endif %}
-
-        {% if recipe.spanish_instructions %}
-        <div class="rec-section">
-          <div class="rec-section-label">Instructions (Spanish, as-written)</div>
-          <div class="rec-instructions">{{ recipe.spanish_instructions }}</div>
-        </div>
+              </div>
+            {% endif %}
+          {% endfor %}
         {% else %}
-        <div class="rec-section">
-          <div class="rec-section-label">Instructions</div>
-          <div class="rec-instructions empty">(no instructions recorded)</div>
-        </div>
+          <div class="rcp-empty-list">No recipes yet. Run the seed via /sam/cena/run-recipes-seed to import the SOP.</div>
         {% endif %}
+      </div>
+    </aside>
 
-        {% if recipe.notes %}
-        <div class="rec-section">
-          <div class="rec-section-label">Notes</div>
-          <div class="rec-notes">{{ recipe.notes }}</div>
-        </div>
-        {% endif %}
-
-        <div class="rec-form-actions">
-          {% if can_edit|default(true) %}
-            <a class="rec-form-btn primary" href="/{{ store_slug }}/recipes/{{ recipe.id }}/edit">
-              <i class="ti ti-edit"></i> Edit
-            </a>
-          {% endif %}
-          <a class="rec-form-btn" href="/{{ store_slug }}/recipes"><i class="ti ti-arrow-left"></i> Back to list</a>
-        </div>
-
+    {# ----- Right: detail pane ----- #}
+    <main class="rcp-detail" id="rcpDetail">
+      {% if not recipes %}
+        <div class="rcp-detail-empty">No recipe data loaded yet.</div>
       {% else %}
-        <!-- Empty state -->
-        <div>
-          {% if recipes %}
-            Pick a recipe from the list on the left to see ingredients, batch sizes, and instructions.
-          {% else %}
-            No recipes yet — click "New recipe" above to add the first.
-          {% endif %}
+        <div class="rcp-detail-empty" id="rcpDetailEmpty" style="display:none">Select a recipe from the list.</div>
+        <div id="rcpDetailBody">
+          <header class="rcp-detail-header">
+            <span class="rcp-detail-code" id="rcpDetailCode">—</span>
+            <h2 class="rcp-detail-title" id="rcpDetailTitle">—</h2>
+          </header>
+
+          <div class="rcp-meta">
+            <div class="rcp-meta-cell">
+              <span class="rcp-meta-label">Ready In</span>
+              <span class="rcp-meta-value" id="rcpMetaReady">—</span>
+            </div>
+            <div class="rcp-meta-cell">
+              <span class="rcp-meta-label">Yield</span>
+              <span class="rcp-meta-value" id="rcpMetaYield">—</span>
+            </div>
+            <div class="rcp-meta-cell">
+              <span class="rcp-meta-label">Shelf Life</span>
+              <span class="rcp-meta-value" id="rcpMetaShelf">—</span>
+            </div>
+          </div>
+
+          <section class="rcp-section">
+            <h3 class="rcp-section-title" id="rcpIngTitle">Ingredients</h3>
+            <div class="rcp-variants" id="rcpVariants" style="display:none"></div>
+            <table class="rcp-ing-table">
+              <thead><tr><th>Ingredient</th><th style="text-align:right">Quantity</th></tr></thead>
+              <tbody id="rcpIngBody"></tbody>
+            </table>
+          </section>
+
+          <section class="rcp-section">
+            <h3 class="rcp-section-title">Preparation</h3>
+            <div class="rcp-lang-toggle" id="rcpLangToggle">
+              <button type="button" data-lang="en" class="active">English</button>
+              <button type="button" data-lang="es">Español</button>
+            </div>
+            <ol class="rcp-steps" id="rcpStepsList"></ol>
+            <div class="rcp-steps-empty" id="rcpStepsEmpty" style="display:none">No preparation steps recorded for this language.</div>
+          </section>
+
+          <section class="rcp-section" id="rcpNotesSection" style="display:none">
+            <h3 class="rcp-section-title">Notes</h3>
+            <div class="rcp-notes" id="rcpNotes"></div>
+          </section>
+
+          <footer class="rcp-footer" id="rcpFooter">Cenas Kitchen recipes</footer>
         </div>
       {% endif %}
+    </main>
 
-    </div>
   </div>
 </div>
 
+<script id="rcp-data" type="application/json">{{ recipes|tojson }}</script>
 <script>
-(function () {
-  // Search + category filter — operates on rendered list, no round-trip.
-  var listEl    = document.getElementById('rec-list');
-  var searchEl  = document.getElementById('rec-search');
-  var catSeg    = document.getElementById('rec-cat-seg');
-  var countEl   = document.getElementById('rec-visible-count');
-  if (!listEl) return;
+(function() {
+  'use strict';
 
-  var activeCat = '';
-  var search    = '';
+  var DATA = [];
+  try { DATA = JSON.parse(document.getElementById('rcp-data').textContent || '[]'); }
+  catch (e) { DATA = []; }
+  if (!DATA.length) return;
 
-  function applyFilters() {
-    var items = listEl.querySelectorAll('.rec-list-item');
-    var q = search.trim().toLowerCase();
-    var visible = 0;
-    var catVisibleCount = {};
-    items.forEach(function (item) {
-      var cat = item.dataset.cat || '';
-      var name = item.dataset.name || '';
-      var passCat = !activeCat || cat === activeCat;
-      var passSearch = !q || name.indexOf(q) !== -1;
-      var show = passCat && passSearch;
-      item.style.display = show ? '' : 'none';
-      if (show) {
-        visible++;
-        catVisibleCount[cat] = (catVisibleCount[cat] || 0) + 1;
-      }
+  var initialId = {{ recipe.id if recipe else 'null' }};
+  var currentLang = 'en';
+  var activeCat = 'all';
+
+  function $(id) { return document.getElementById(id); }
+  function $$(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+
+  function selectRecipe(r) {
+    $$('.rcp-row').forEach(function (n) {
+      n.classList.toggle('selected',
+        String(n.dataset.recipeId) === String(r.id));
     });
-    // Hide category headers whose group is now empty
-    listEl.querySelectorAll('.rec-cat-header').forEach(function (h) {
-      var c = h.dataset.cat;
-      h.style.display = catVisibleCount[c] > 0 ? '' : 'none';
-    });
-    if (countEl) countEl.textContent = visible;
-  }
+    $('rcpDetailEmpty').style.display = 'none';
+    $('rcpDetailBody').style.display = '';
 
-  if (searchEl) {
-    searchEl.addEventListener('input', function () { search = searchEl.value; applyFilters(); });
-  }
-  if (catSeg) {
-    catSeg.addEventListener('click', function (e) {
-      var btn = e.target.closest('button[data-cat]');
-      if (!btn) return;
-      catSeg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
-      activeCat = btn.dataset.cat;
-      applyFilters();
-    });
-  }
+    $('rcpDetailCode').textContent = r.code || '—';
+    $('rcpDetailTitle').textContent = r.name || '—';
+    $('rcpMetaReady').textContent = r.prep_time || '—';
+    $('rcpMetaYield').textContent = (r.batch_sizes && r.batch_sizes[0]) || '—';
+    $('rcpMetaShelf').textContent = r.shelf_life || '—';
 
-  // Batch-size tabs in detail view — switch which rows are visible in the ingredient table
-  var batchTabs = document.getElementById('rec-batch-tabs');
-  var ingTable  = document.getElementById('rec-ingredient-table');
-  if (batchTabs && ingTable) {
-    function applyBatchFilter(size) {
-      ingTable.querySelectorAll('tbody tr').forEach(function (r) {
-        r.classList.toggle('hidden', r.dataset.batchSize !== size);
+    var variants = r.batch_sizes || [];
+    var vRow = $('rcpVariants');
+    if (variants.length > 1) {
+      vRow.innerHTML = '';
+      variants.forEach(function (v, i) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rcp-variant-tab' + (i === 0 ? ' active' : '');
+        b.textContent = v;
+        vRow.appendChild(b);
       });
+      vRow.style.display = '';
+    } else {
+      vRow.style.display = 'none';
     }
-    batchTabs.addEventListener('click', function (e) {
-      var btn = e.target.closest('button[data-size]');
-      if (!btn) return;
-      batchTabs.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
-      applyBatchFilter(btn.dataset.size);
+    $('rcpIngTitle').textContent = 'Ingredients · ' +
+      ((variants[0]) || 'Single Recipe');
+
+    var ingBody = $('rcpIngBody');
+    ingBody.innerHTML = '';
+    (r.ingredients || []).forEach(function (ing) {
+      var tr = document.createElement('tr');
+      var td1 = document.createElement('td');
+      var td2 = document.createElement('td');
+      td1.textContent = (ing && ing.name) || '—';
+      td2.className = 'qty';
+      td2.textContent = (ing && ing.qty) || '';
+      tr.appendChild(td1); tr.appendChild(td2);
+      ingBody.appendChild(tr);
     });
-    // Init: filter to first batch size
-    var first = batchTabs.querySelector('button.is-active');
-    if (first) applyBatchFilter(first.dataset.size);
+
+    var btns = $$('.rcp-lang-toggle button');
+    btns.forEach(function (b) {
+      var lang = b.dataset.lang;
+      var hasText = (lang === 'en' && r.english_instructions) ||
+                    (lang === 'es' && r.spanish_instructions);
+      b.disabled = !hasText;
+    });
+    var preferred = currentLang;
+    var hasPreferred = (preferred === 'en' && r.english_instructions) ||
+                       (preferred === 'es' && r.spanish_instructions);
+    if (!hasPreferred) {
+      preferred = r.english_instructions ? 'en' :
+                  (r.spanish_instructions ? 'es' : currentLang);
+    }
+    setLang(preferred, r);
+
+    if (r.notes) {
+      $('rcpNotes').textContent = r.notes;
+      $('rcpNotesSection').style.display = '';
+    } else {
+      $('rcpNotesSection').style.display = 'none';
+    }
+    $('rcpFooter').textContent = r.notes && r.notes.indexOf('Revision') === 0
+      ? r.notes
+      : (r.notes ? 'Cenas Kitchen recipes' : 'Cenas Kitchen recipes');
   }
 
-  applyFilters();
+  function setLang(lang, r) {
+    currentLang = lang;
+    $$('.rcp-lang-toggle button').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.lang === lang);
+    });
+    var text = lang === 'es' ? r.spanish_instructions : r.english_instructions;
+    var list = $('rcpStepsList');
+    var empty = $('rcpStepsEmpty');
+    list.innerHTML = '';
+    if (text && text.trim()) {
+      var steps = String(text).split(/\r?\n/).map(function (s) {
+        return s.replace(/^\s*(?:\d+\.\s*|[-*]\s*)/, '').trim();
+      }).filter(Boolean);
+      steps.forEach(function (s) {
+        var li = document.createElement('li'); li.textContent = s;
+        list.appendChild(li);
+      });
+      list.style.display = '';
+      empty.style.display = 'none';
+    } else {
+      list.style.display = 'none';
+      empty.style.display = '';
+    }
+  }
+
+  function filterByCat(cat) {
+    activeCat = cat;
+    $$('.rcp-chip').forEach(function (c) {
+      c.classList.toggle('active', c.dataset.cat === cat);
+    });
+    var q = ($('rcpSearch').value || '').trim().toLowerCase();
+    applyFilter(cat, q);
+  }
+  function applyFilter(cat, q) {
+    var visibleCount = 0;
+    $$('.rcp-row').forEach(function (row) {
+      var matchCat = cat === 'all' || row.dataset.cat === cat;
+      var matchQ = !q ||
+        row.dataset.name.indexOf(q) !== -1 ||
+        row.dataset.code.indexOf(q) !== -1;
+      var show = matchCat && matchQ;
+      row.style.display = show ? '' : 'none';
+      if (show) visibleCount++;
+    });
+    $$('.rcp-group').forEach(function (g) {
+      var anyVisible = $$('.rcp-row', g).some(function (r) {
+        return r.style.display !== 'none';
+      });
+      g.style.display = anyVisible ? '' : 'none';
+    });
+    $('rcpListCount').textContent = visibleCount + ' ' +
+      (visibleCount === 1 ? 'recipe' : 'recipes');
+  }
+
+  $$('.rcp-chip').forEach(function (c) {
+    c.addEventListener('click', function () { filterByCat(c.dataset.cat); });
+  });
+  $('rcpSearch').addEventListener('input', function () {
+    applyFilter(activeCat, this.value.trim().toLowerCase());
+  });
+  $$('.rcp-lang-toggle button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.disabled) return;
+      var sel = $$('.rcp-row.selected')[0];
+      if (!sel) return;
+      var r = DATA.filter(function (x) { return String(x.id) === sel.dataset.recipeId; })[0];
+      if (r) setLang(b.dataset.lang, r);
+    });
+  });
+  $$('.rcp-row').forEach(function (row) {
+    row.addEventListener('click', function () {
+      var r = DATA.filter(function (x) { return String(x.id) === row.dataset.recipeId; })[0];
+      if (r) selectRecipe(r);
+    });
+  });
+
+  var initial = null;
+  if (initialId !== null) {
+    initial = DATA.filter(function (r) { return r.id === initialId; })[0];
+  }
+  if (!initial && DATA.length) initial = DATA[0];
+  if (initial) selectRecipe(initial);
+  else { $('rcpDetailEmpty').style.display = ''; $('rcpDetailBody').style.display = 'none'; }
 })();
 </script>
 {% endblock %}

@@ -989,6 +989,11 @@ a.nav-group-toggle:hover {
 }
 @media (max-width: 720px) {
   .summary-cards { grid-template-columns: 1fr; }
+  /* Phone: the content box fills the full screen width — no left/right
+     gap (Sam #10:14). Top + bottom padding stay so it keeps its
+     floating look. Every page sits in main.main, so this one rule
+     covers all pages. */
+  main.main { padding-left: 0; padding-right: 0; }
 }
 .summary-card {
   background: var(--glass);

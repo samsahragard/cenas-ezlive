@@ -25,7 +25,10 @@
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
     border-top: 1px solid rgba(236, 227, 208, 0.15);
     background: #2a2419;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Lift the tappable row clear of the phone's system nav bar / home
+       indicator. The max() floor covers the Android app WebView, which
+       reports a 0 inset and left the bar under the keys (Sam #10:46). */
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
     /* Soft golden glow above the bar (Sam #1:46 / #9:47). */
     box-shadow: 0 -8px 24px -8px rgba(212, 175, 55, 0.35),
                 0 -2px 8px -2px rgba(212, 175, 55, 0.22);
@@ -37,30 +40,42 @@
     padding: 9px 2px 7px;
     background: transparent; border: 0;
     border-top: 2px solid transparent; margin-top: -1px;
-    color: rgba(236, 227, 208, 0.45);
+    /* Resting state: gold with a soft glow (Sam #10:47). */
+    color: #d4af37;
     text-decoration: none; cursor: pointer;
     font-family: inherit;
   }
-  .ck-bnav-tab .bn-ico { font-size: 19px; line-height: 1; }
+  .ck-bnav-tab .bn-ico {
+    font-size: 19px; line-height: 1;
+    filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
+  }
   .ck-bnav-tab .bn-lbl {
     font-size: 9px; font-weight: 600; letter-spacing: 0.03em;
-    text-transform: uppercase; color: rgba(236, 227, 208, 0.45);
+    text-transform: uppercase; color: #d4af37;
+    text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
   }
-  .ck-bnav-tab.active { border-top-color: #d4af37; }
-  .ck-bnav-tab.active .bn-lbl { color: #d4af37; }
-  .ck-bnav-tab.active .bn-ico {
-    color: #d4af37;
-    filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.5));
+  /* Tapped (popover open) or current section → white (Sam #10:47:
+     "when you click it it becomes white"). */
+  .ck-bnav-tab.active { border-top-color: #ffffff; }
+  .ck-bnav-tab.active .bn-lbl,
+  .ck-bnav-tab.is-popping .bn-lbl {
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  }
+  .ck-bnav-tab.active .bn-ico,
+  .ck-bnav-tab.is-popping .bn-ico {
+    color: #ffffff;
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
   }
   .ck-bnav-tab.is-popping {
-    background: rgba(212, 175, 55, 0.08);
+    background: rgba(255, 255, 255, 0.06);
   }
 
   /* Slide-up popover holding each tab's sub-options. */
   .bn-popover {
     position: fixed; left: 0; right: 0;
     bottom: 0;
-    padding: 14px 14px calc(78px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 14px calc(78px + max(env(safe-area-inset-bottom, 0px), 12px));
     background: linear-gradient(180deg, #2a2419 0%, #1a140e 100%);
     border-top: 1px solid rgba(212, 175, 55, 0.28);
     box-shadow: 0 -16px 40px -8px rgba(0, 0, 0, 0.55),
@@ -119,7 +134,7 @@
   @media (max-width: 1024px) {
     .ck-bnav { display: block; }
     /* keep page content clear of the fixed bar */
-    .layout > .main { padding-bottom: 78px; }
+    .layout > .main { padding-bottom: calc(78px + max(env(safe-area-inset-bottom, 0px), 12px)); }
   }
 </style>
 <nav class="ck-bnav" aria-label="Primary navigation (mobile)">

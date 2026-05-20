@@ -2467,6 +2467,63 @@ class AttendanceEvent(Base):
 
 
 # ============================================================
+# PREP LIST v3 — kitchen's daily prep board (Sam, dck build).
+# PrepItem = the stable master list (hot/cold/chop × item/sauce).
+# PrepEntry = one working row per item per day, so each day is its
+# own lockable productivity record. No external integration — the
+# manager drives every selection/assignment/status. recipe_id links
+# a PrepItem to the existing Recipe table so the detail panel can
+# auto-pull the ingredient breakdown.
+# ============================================================
+class PrepItem(Base):
+    """A master prep-list item. Shown every day; PrepEntry rows hang
+    off it per day. category = hot|cold|chop, kind = item|sauce."""
+    __tablename__ = "kitchen_prep_item"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(8), nullable=False, default="hot")   # hot | cold | chop
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="item")      # item | sauce
+    recipe_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+
+
+class PrepEntry(Base):
+    """One PrepItem's working state for one day — the v3 Prep List
+    board. status machine: selected -> assigned -> in-progress ->
+    done. locked freezes the row at end-of-day submission."""
+    __tablename__ = "kitchen_prep_entry"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    entry_date: Mapped[date] = mapped_column(
+        Date, nullable=False, default=date.today, index=True)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    prep_item_id: Mapped[int] = mapped_column(
+        ForeignKey("kitchen_prep_item.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+
+    selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    on_hand: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    assignee_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # selected | assigned | in-progress | done
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="selected")
+    batch_size: Mapped[str | None] = mapped_column(String(16), nullable=True)   # single | double
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    item: Mapped["PrepItem"] = relationship()
+
+
+# ============================================================
 # RECIPES — Sam /sam/chat #1130-#1133 attached 14 PDFs; spec at
 # cena #1209 / Sam dev #3074. Single table; batch sizes + ingredients
 # stored as JSON for flexibility.

@@ -1612,6 +1612,265 @@ def _attendance_v3_post(db, store_scope, user):
     db.commit()
 
 
+# ============================================================
+# Prep List v3 — kitchen's daily prep board (dck, Sam build).
+# Master PrepItem list left-joined to today's PrepEntry rows,
+# grouped hot/cold/chop × item/sauce. recipe_id powers the detail
+# panel's auto-pulled ingredient breakdown.
+# ============================================================
+_PREP_CATS = ("hot", "cold", "chop")
+_PREP_KINDS = ("item", "sauce")
+# (category, kind) -> (label, column). Left col = hot; right = cold + chop.
+_PREP_SECTIONS = [
+    ("hot",  "item",  "Hot Items",   "left"),
+    ("hot",  "sauce", "Hot Sauces",  "left"),
+    ("cold", "item",  "Cold Items",  "right"),
+    ("cold", "sauce", "Cold Sauces", "right"),
+    ("chop", "item",  "Chop",        "right"),
+]
+
+
+def _prep_initials(name):
+    parts = [p for p in (name or "").split() if p]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[-1][0]).upper()
+
+
+def _prep_recipe_view(db, recipe_id):
+    """(yield_label, prep_minutes, shelf_days, [ingredients]) for a
+    linked Recipe, or (None, None, None, []). aick: map this onto the
+    actual Recipe / recipe-ingredient columns the Recipes feature
+    stores — field names below are the template's expected shape."""
+    if not recipe_id:
+        return None, None, None, []
+    from app.models import Recipe
+    r = db.get(Recipe, recipe_id)
+    if r is None:
+        return None, None, None, []
+    ingredients = [
+        {"name": ing.name, "qty": ing.quantity, "unit": ing.unit}
+        for ing in getattr(r, "ingredients", []) or []
+    ]
+    return (getattr(r, "yield_label", None),
+            getattr(r, "prep_minutes", None),
+            getattr(r, "shelf_days", None),
+            ingredients)
+
+
+def _render_prep_list_v3(db, label, active_key):
+    """Prep List v3 board. ?date=<iso> picks the day (default today)."""
+    from app.models import PrepItem, PrepEntry
+    raw = request.args.get("date") or ""
+    try:
+        sel = date.fromisoformat(raw) if raw else date.today()
+    except ValueError:
+        sel = date.today()
+    today = date.today()
+    loc = g.current_location
+
+    def _scoped(q, model):
+        if loc in ("tomball", "copperfield"):
+            return q.filter((model.store_scope == loc) |
+                            (model.store_scope.is_(None)))
+        return q
+
+    items = _scoped(
+        db.query(PrepItem).filter(PrepItem.active.is_(True)), PrepItem
+    ).order_by(PrepItem.sort_order.asc(), PrepItem.name.asc()).all()
+
+    entries = _scoped(
+        db.query(PrepEntry).filter(PrepEntry.entry_date == sel), PrepEntry
+    ).all()
+    by_item = {e.prep_item_id: e for e in entries}
+    locked = any(e.locked for e in entries) if entries else False
+
+    def _item_view(pi):
+        e = by_item.get(pi.id)
+        y, mins, shelf, ings = _prep_recipe_view(db, pi.recipe_id)
+        status = (e.status if e else "selected")
+        return {
+            "id": pi.id,
+            "entry_id": e.id if e else None,
+            "name": pi.name,
+            "category": pi.category,
+            "kind": pi.kind,
+            "selected": bool(e and e.selected),
+            "on_hand": (e.on_hand if e else None),
+            "assignee": (e.assignee_name if e else None),
+            "assignee_initials": _prep_initials(e.assignee_name) if (e and e.assignee_name) else None,
+            "status": status,
+            "batch_size": (e.batch_size if e else None),
+            "notes": (e.notes if e else None),
+            "recipe_id": pi.recipe_id,
+            "recipe_name": None,
+            "yield_label": y, "prep_minutes": mins, "shelf_days": shelf,
+            "ingredients": ings,
+        }
+
+    views = [_item_view(pi) for pi in items]
+
+    sections = []
+    for cat, kind, sec_label, col in _PREP_SECTIONS:
+        block = [v for v in views if v["category"] == cat and v["kind"] == kind]
+        if not block:
+            continue
+        sections.append({
+            "key": cat, "kind": kind, "label": sec_label, "col": col,
+            "total": len(block),
+            "selected": sum(1 for v in block if v["selected"]),
+            "items": block,
+        })
+
+    sel_views = [v for v in views if v["selected"]]
+    kpis = {
+        "total": len(views),
+        "selected": len(sel_views),
+        "assigned": sum(1 for v in sel_views if v["assignee"]),
+        "unassigned": sum(1 for v in sel_views if not v["assignee"]),
+        "in_progress": sum(1 for v in sel_views if v["status"] == "in-progress"),
+        "done": sum(1 for v in sel_views if v["status"] == "done"),
+    }
+
+    # Prep team — aggregated from today's assignee names.
+    team_map = {}
+    for v in sel_views:
+        if not v["assignee"]:
+            continue
+        t = team_map.setdefault(v["assignee"], {
+            "name": v["assignee"], "initials": _prep_initials(v["assignee"]),
+            "done": 0, "in_progress": 0, "assigned": 0})
+        if v["status"] == "done":
+            t["done"] += 1
+        elif v["status"] == "in-progress":
+            t["in_progress"] += 1
+        else:
+            t["assigned"] += 1
+    team = sorted(team_map.values(), key=lambda t: t["name"])
+
+    return render_template(
+        "prep_list.html",
+        page_label=label, active=active_key,
+        sections=sections, kpis=kpis, team=team,
+        locked=locked, lock_author=None, lock_hours=None,
+        selected_date=sel.isoformat(), today_iso=today.isoformat(),
+        prev_date=(sel - timedelta(days=1)).isoformat(),
+        next_date=(sel + timedelta(days=1)).isoformat(),
+        date_display=f"{sel:%A, %B} {sel.day}, {sel.year}",
+        is_today=(sel == today),
+    )
+
+
+def _prep_list_v3_post(db, store_scope, user):
+    """Every POST on the Prep List page. Hidden form_action selects
+    the op: toggle_select | set_on_hand | assign | set_status |
+    save_detail | copy_yesterday | submit_lock."""
+    from app.models import PrepItem, PrepEntry
+    action = (request.form.get("form_action") or "").strip()
+    uid = user.id if user else None
+
+    raw_date = request.form.get("view_date") or ""
+    try:
+        d = date.fromisoformat(raw_date) if raw_date else date.today()
+    except ValueError:
+        d = date.today()
+    loc = g.current_location
+
+    def _entry_for(item_id, create=True):
+        """Get-or-create today's PrepEntry for a PrepItem."""
+        pi = db.get(PrepItem, item_id) if item_id else None
+        if pi is None:
+            return None
+        if loc in ("tomball", "copperfield") and pi.store_scope not in (loc, None):
+            abort(403)
+        e = (db.query(PrepEntry)
+             .filter(PrepEntry.entry_date == d,
+                     PrepEntry.prep_item_id == item_id)
+             .first())
+        if e is None and create:
+            e = PrepEntry(entry_date=d, prep_item_id=item_id,
+                          store_scope=store_scope, author_id=uid,
+                          status="selected", selected=False)
+            db.add(e)
+        return e
+
+    # submit_lock / copy_yesterday operate on the whole day, not one item.
+    if action == "submit_lock":
+        for e in db.query(PrepEntry).filter(PrepEntry.entry_date == d).all():
+            if loc in ("tomball", "copperfield") and e.store_scope not in (loc, None):
+                continue
+            e.locked = True
+        db.commit()
+        return
+
+    if action == "copy_yesterday":
+        prev = d - timedelta(days=1)
+        prev_rows = db.query(PrepEntry).filter(
+            PrepEntry.entry_date == prev, PrepEntry.selected.is_(True)).all()
+        for src in prev_rows:
+            if loc in ("tomball", "copperfield") and src.store_scope not in (loc, None):
+                continue
+            e = _entry_for(src.prep_item_id)
+            if e and not e.locked:
+                e.selected = True
+                if e.status == "selected":
+                    e.status = "selected"
+        db.commit()
+        return
+
+    # Per-item ops.
+    try:
+        item_id = int(request.form.get("item_id") or 0)
+    except (TypeError, ValueError):
+        item_id = 0
+    e = _entry_for(item_id)
+    if e is None or e.locked:
+        return
+
+    if action == "toggle_select":
+        e.selected = not e.selected
+        if not e.selected:
+            e.status = "selected"
+
+    elif action == "set_on_hand":
+        raw = (request.form.get("on_hand") or "").strip()
+        if raw == "":
+            e.on_hand = None
+        else:
+            try:
+                e.on_hand = max(0, min(int(raw), 999))
+            except (TypeError, ValueError):
+                pass
+
+    elif action == "assign":
+        name = (request.form.get("assignee_name") or "").strip()[:120]
+        e.assignee_name = name or None
+        e.selected = True
+        if name and e.status == "selected":
+            e.status = "assigned"
+        elif not name and e.status == "assigned":
+            e.status = "selected"
+
+    elif action == "set_status":
+        st = (request.form.get("status") or "selected").strip()
+        if st in ("selected", "assigned", "in-progress", "done"):
+            e.status = st
+            if st != "selected":
+                e.selected = True
+
+    elif action == "save_detail":
+        if "batch_size" in request.form:
+            bs = (request.form.get("batch_size") or "").strip().lower()
+            e.batch_size = bs if bs in ("single", "double") else None
+        if "notes" in request.form:
+            e.notes = (request.form.get("notes") or "").strip() or None
+        e.selected = True
+
+    db.commit()
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_page_list(page: str):
     """List view for a manager-section page. Renders the shared
@@ -2394,6 +2653,34 @@ _KITCHEN_PAGE_LABELS = {
     "prep-list":   "Prep List",
     "recipes":     "Recipes",
 }
+
+
+@store_bp.route("/kitchen/prep-list", methods=["GET"])
+def kitchen_prep_list():
+    """Prep List v3 — kitchen's daily prep board. Registered before
+    the /kitchen/<page> placeholder so Flask matches it first."""
+    db = next(get_db())
+    try:
+        return _render_prep_list_v3(db, "Prep List", "kitchen_prep_list")
+    finally:
+        db.close()
+
+
+@store_bp.route("/kitchen/prep-list", methods=["POST"])
+def kitchen_prep_list_post():
+    """All POSTs from the Prep List page (hidden form_action)."""
+    db = next(get_db())
+    try:
+        user = getattr(g, "current_user", None)
+        store_scope = (g.current_location
+                       if g.current_location in ("tomball", "copperfield")
+                       else None)
+        _prep_list_v3_post(db, store_scope, user)
+    finally:
+        db.close()
+    return redirect(url_for(
+        "store.kitchen_prep_list",
+        date=(request.form.get("view_date") or None)))
 
 
 @store_bp.route("/kitchen/<page>", methods=["GET"])

@@ -632,6 +632,62 @@ def create_app():
         logging.getLogger(__name__).exception(
             "attendance v3 table backfill failed (non-fatal)")
 
+    # Idempotent table create + master-list seed — prep list v3 (Sam,
+    # dck build). PrepItem = master prep list (44 items seeded from the
+    # rendering); PrepEntry = per-item-per-day working row. Additive.
+    try:
+        from sqlalchemy import inspect as _sa_insp_pl
+        from app.db import engine as _eng_pl, SessionLocal as _SL_pl
+        from app.models import (
+            Base as _Base_pl, PrepItem as _PI_pl, PrepEntry as _PE_pl,
+        )
+        if _eng_pl is not None:
+            insp_pl = _sa_insp_pl(_eng_pl)
+            existing = set(insp_pl.get_table_names())
+            to_create = [m.__table__ for m in (_PI_pl, _PE_pl)
+                         if m.__tablename__ not in existing]
+            if to_create:
+                _Base_pl.metadata.create_all(bind=_eng_pl, tables=to_create)
+                logging.getLogger(__name__).info(
+                    "prep list v3: created %d tables (%s)",
+                    len(to_create), [t.name for t in to_create])
+            _prep_seed = [
+                ("hot", "item", ["Masa Flour", "Charros", "Refried",
+                    "Black Bean", "Costillas", "Cochina", "Taco Meat",
+                    "Pollo Ranchero", "Chicken Stock", "Mexican Butter",
+                    "Vegetales", "Charro Mix", "Spinach Mix"]),
+                ("hot", "sauce", ["Seafood Sauce", "Tomatillo Mix",
+                    "Tomatillo Sauce", "Ranchera Sauce", "Poblano Sauce",
+                    "Street Taco Sauce", "BBQ Sauce", "Chile Con Queso",
+                    "Chile Gravy", "Chips"]),
+                ("cold", "item", ["Salad Mix", "Shredded Lettuce",
+                    "Cabbage Mix", "Pickled Onions"]),
+                ("cold", "sauce", ["Roja", "Verde", "Ranch",
+                    "Avocado Ranch", "Honey Mustard",
+                    "Beef Fajita Marination", "Chipotle Mayo",
+                    "Chipotle Cream", "Cilantro Ginger"]),
+                ("chop", "item", ["Cebolla de Parrilla", "Cebolla Pelado",
+                    "Onions Chop", "Bell Pepper", "Enchilada Cheese",
+                    "Queso Fresco", "Poblano", "Mango"]),
+            ]
+            _db_pl = _SL_pl()
+            try:
+                if _db_pl.query(_PI_pl).first() is None:
+                    _so = 0
+                    for _cat_pl, _kind_pl, _names_pl in _prep_seed:
+                        for _nm_pl in _names_pl:
+                            _db_pl.add(_PI_pl(name=_nm_pl, category=_cat_pl,
+                                              kind=_kind_pl, sort_order=_so))
+                            _so += 1
+                    _db_pl.commit()
+                    logging.getLogger(__name__).info(
+                        "prep list v3: seeded %d master items", _so)
+            finally:
+                _db_pl.close()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep list v3 table backfill/seed failed (non-fatal)")
+
     # Idempotent table create — cena_wake_decisions (migration 29,
     # Sam #2576 6-piece proposal Phase A piece #3 — telemetry-first).
     # One row per dev chat message considered by the watcher; captures

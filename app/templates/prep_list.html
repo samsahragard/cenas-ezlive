@@ -1,0 +1,966 @@
+{# ============================================================
+   prep_list.html — Prep List (production)
+   dck conversion of prep_list_v3 mockup (Sam: "make the live page
+   look EXACTLY like the rendering").
+
+   This is the kitchen's daily prep board. A master PrepItem list
+   (hot/cold/chop x item/sauce) is shown every day; the manager
+   checks which items need prep today, sets on-hand counts, assigns
+   a teammate, drives status, and submits + locks the record at end
+   of day. Selecting an item opens its detail panel on the right —
+   the recipe breakdown (ingredients auto-pulled from the linked
+   recipe), batch size, assignment, status, and notes.
+
+   ROUTE CONTRACT (store_routes.py — aick wires; see dck handoff doc):
+     sections -> ordered list of section dicts, one per
+                 category x kind block actually shown:
+       section -> key       ('hot'|'cold'|'chop'),
+                  kind      ('item'|'sauce'),
+                  label     (e.g. 'Hot Items', 'Cold Sauces', 'Chop'),
+                  col       ('left'|'right') — left col = hot;
+                            right col = cold + chop,
+                  total     (int — master items in this block),
+                  selected  (int — selected-today count),
+                  items     -> list[item]
+     item -> id            (PrepItem id),
+             entry_id      (PrepEntry id for today, or None),
+             name,
+             category      ('hot'|'cold'|'chop'),
+             kind          ('item'|'sauce'),
+             selected      (bool — flagged for prep today),
+             on_hand       (int or None),
+             assignee      (str or None),
+             status        ('selected'|'assigned'|'in-progress'|'done'),
+             batch_size    (str or None),
+             notes         (str or None),
+             recipe_id     (int or None),
+             recipe_name   (str or None),
+             yield_label   (str or None),
+             prep_minutes  (int or None),
+             shelf_days    (int or None),
+             ingredients   -> list[ {name, qty, unit} ]  (from recipe)
+     kpis  -> {total, selected, assigned, unassigned,
+               in_progress, done}
+     team  -> list[ {name, initials, done, in_progress, assigned} ]
+     locked        (bool — day submitted + locked),
+     lock_author   (str or None — who is running prep),
+     lock_hours    (str or None — e.g. '5h in'),
+     selected_date, today_iso, prev_date, next_date (iso strings),
+     date_display, is_today, store_label.
+   Forms POST to store.kitchen_prep_list_post (or the kitchen route
+   that replaces the placeholder — see handoff) with a hidden
+   form_action: toggle_select | set_on_hand | assign | set_status |
+   save_detail | submit_lock. Audience gate at the route.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'kitchen_prep_list' %}
+
+{% block title %}Prep List — Cenas Kitchen{% endblock %}
+{% block page_title %}Prep List{% endblock %}
+{% block page_subtitle %}{{ store_label }} — daily prep board &amp; recipe breakdown{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* All custom properties + classes scoped to .prep-page so the v3
+     warm palette never leaks into the global sheet (atr-/dml-/ir-
+     pattern). Every var is --prep-*, every class is .prep-*. */
+  .prep-page {
+    --prep-red: #C73B36;
+    --prep-red-deep: #9B2A26;
+    --prep-red-bright: #E85852;
+    --prep-gold: #E4B340;
+    --prep-gold-bright: #FFD970;
+    --prep-teal: #2EA39F;
+    --prep-teal-bright: #5BCAC5;
+    --prep-blue: #6B9DD8;
+    --prep-cream: #FAF6EC;
+    --prep-cream-dim: rgba(250,246,236,0.62);
+    --prep-cream-faint: rgba(250,246,236,0.38);
+    --prep-bg-deep: #1a0d08;
+    --prep-bg-warm: #28160e;
+    --prep-bg-card: rgba(40,22,14,0.65);
+    --prep-bg-card-hover: rgba(50,28,18,0.85);
+    --prep-bg-input: rgba(0,0,0,0.25);
+    --prep-border-subtle: rgba(217,164,54,0.18);
+    --prep-border-active: rgba(228,179,64,0.5);
+    --prep-radius-sm: 8px;
+    --prep-radius-md: 12px;
+    --prep-radius-lg: 16px;
+    --prep-hot: #E85852;
+    --prep-hot-dim: rgba(232,88,82,0.15);
+    --prep-cold: #5BCAC5;
+    --prep-cold-dim: rgba(91,202,197,0.15);
+    --prep-chop: #95C75F;
+    --prep-chop-dim: rgba(149,199,95,0.15);
+    position: relative;
+    isolation: isolate;
+    color: var(--prep-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    /* SOLID opaque background — the app paints a restaurant photo
+       behind every page; this surface must hide it completely. */
+    background: linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-lg);
+    padding: 20px;
+    margin: 0 0 48px;
+    overflow: hidden;
+  }
+  /* Decorative tint only — position:absolute (NOT fixed) so it stays
+     inside the card and never tracks the viewport. */
+  .prep-page::before {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199,59,54,0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228,179,64,0.08), transparent);
+  }
+  .prep-page > * { position: relative; z-index: 1; }
+  .prep-page *, .prep-page *::before, .prep-page *::after { box-sizing: border-box; }
+  .prep-page button { font-family: inherit; }
+
+  /* ---- Top strip ---- */
+  .prep-topstrip { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .prep-store-badge {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--prep-gold-bright);
+    background: rgba(228,179,64,0.12); padding: 6px 12px; border-radius: 999px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .prep-spacer { flex: 1; }
+  .prep-runner {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--prep-cream-dim);
+    padding: 6px 12px; background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: 999px; letter-spacing: 0.05em;
+  }
+  .prep-runner .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--prep-gold);
+    box-shadow: 0 0 6px var(--prep-gold); animation: prep-pulse 2s infinite;
+  }
+  @keyframes prep-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* ---- KPI strip ---- */
+  .prep-kpi-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 16px; }
+  .prep-kpi-box {
+    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-md); padding: 12px 14px; position: relative; overflow: hidden;
+  }
+  .prep-kpi-box::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--prep-kpi-color); }
+  .prep-kpi-box.total { --prep-kpi-color: var(--prep-gold); }
+  .prep-kpi-box.selected { --prep-kpi-color: var(--prep-hot); }
+  .prep-kpi-box.assigned { --prep-kpi-color: var(--prep-teal); }
+  .prep-kpi-box.progress { --prep-kpi-color: var(--prep-gold-bright); }
+  .prep-kpi-box.done { --prep-kpi-color: var(--prep-chop); }
+  .prep-kpi-label {
+    font-size: 9px; font-weight: 700; color: var(--prep-cream-faint);
+    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 2px;
+  }
+  .prep-kpi-value { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 28px; color: var(--prep-kpi-color); line-height: 1; }
+  .prep-kpi-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint); margin-top: 2px; }
+
+  /* ---- Control bar ---- */
+  .prep-control-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .prep-date-nav {
+    display: inline-flex; align-items: center; background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-md); overflow: hidden;
+  }
+  .prep-date-nav-btn {
+    width: 36px; height: 40px; background: transparent; border: none; color: var(--prep-gold);
+    cursor: pointer; display: grid; place-items: center; transition: background 0.15s; text-decoration: none;
+  }
+  .prep-date-nav-btn:hover { background: rgba(228,179,64,0.08); }
+  .prep-date-nav-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-date-display {
+    padding: 0 16px; color: var(--prep-cream); font-weight: 600; font-size: 13px;
+    border-left: 0.5px solid var(--prep-border-subtle); border-right: 0.5px solid var(--prep-border-subtle);
+    display: flex; align-items: center; gap: 6px; height: 40px;
+  }
+  .prep-today-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--prep-gold-bright); background: rgba(228,179,64,0.15);
+    padding: 2px 6px; border-radius: 4px; letter-spacing: 0.1em;
+  }
+  .prep-ctrl-btn {
+    height: 40px; padding: 0 14px; background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-md);
+    color: var(--prep-cream); font-size: 12px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; text-decoration: none;
+  }
+  .prep-ctrl-btn:hover { border-color: var(--prep-border-active); color: var(--prep-gold-bright); }
+  .prep-ctrl-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-ctrl-btn.primary {
+    background: linear-gradient(135deg, var(--prep-gold), var(--prep-gold-bright));
+    border-color: var(--prep-gold); color: var(--prep-bg-deep);
+    box-shadow: 0 4px 12px rgba(228,179,64,0.2);
+  }
+  .prep-ctrl-btn.primary:hover { color: var(--prep-bg-deep); filter: brightness(1.05); }
+  .prep-ctrl-btn.submit {
+    background: linear-gradient(135deg, var(--prep-red), var(--prep-red-deep));
+    border-color: var(--prep-red-bright); color: var(--prep-cream);
+    box-shadow: 0 4px 12px rgba(199,59,54,0.2);
+  }
+  .prep-ctrl-btn.submit:hover { color: var(--prep-cream); filter: brightness(1.08); }
+  .prep-ctrl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .prep-ctrl-form { display: inline-flex; }
+
+  /* ---- Lock notice ---- */
+  .prep-lock-notice {
+    margin-bottom: 16px; padding: 12px 14px;
+    background: linear-gradient(135deg, rgba(228,179,64,0.06), rgba(199,59,54,0.03));
+    border: 0.5px solid var(--prep-border-active); border-radius: var(--prep-radius-md);
+    display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--prep-cream);
+  }
+  .prep-lock-notice svg { width: 16px; height: 16px; fill: var(--prep-gold); flex-shrink: 0; }
+  .prep-lock-notice strong { color: var(--prep-gold-bright); font-weight: 700; }
+  .prep-lock-notice.is-locked { border-color: var(--prep-chop); }
+  .prep-lock-notice.is-locked svg { fill: var(--prep-chop); }
+  .prep-lock-notice.is-locked strong { color: var(--prep-chop); }
+
+  /* ---- Team today ---- */
+  .prep-team-section {
+    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-md); padding: 16px; margin-bottom: 16px;
+  }
+  .prep-team-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .prep-team-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-gold); }
+  .prep-team-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint); letter-spacing: 0.08em; }
+  .prep-team-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .prep-team-card {
+    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-sm); padding: 10px 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .prep-team-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--prep-bg-warm), var(--prep-bg-deep));
+    color: var(--prep-gold-bright); display: grid; place-items: center;
+    font-family: 'Instrument Serif', serif; font-size: 12px; font-weight: 700;
+    border: 1px solid var(--prep-border-subtle); flex-shrink: 0;
+  }
+  .prep-team-info { flex: 1; min-width: 0; }
+  .prep-team-name { font-size: 12px; font-weight: 700; color: var(--prep-cream); line-height: 1.2; }
+  .prep-team-stats { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-cream-faint); margin-top: 2px; letter-spacing: 0.05em; }
+  .prep-team-stats .done { color: var(--prep-chop); font-weight: 600; }
+  .prep-team-stats .pending { color: var(--prep-gold); font-weight: 600; }
+  .prep-team-add {
+    background: transparent; border: 1px dashed var(--prep-border-subtle);
+    border-radius: var(--prep-radius-sm); padding: 10px 12px; color: var(--prep-cream-faint);
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; text-decoration: none;
+  }
+  .prep-team-add:hover { border-color: var(--prep-gold); color: var(--prep-gold-bright); }
+  .prep-team-add svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-team-empty { font-size: 12px; color: var(--prep-cream-faint); font-style: italic; }
+
+  /* ---- Main grid ---- */
+  .prep-main-grid { display: grid; grid-template-columns: 1fr 420px; gap: 16px; align-items: start; }
+
+  /* ---- List panel ---- */
+  .prep-list-panel {
+    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-md); overflow: hidden;
+  }
+  .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .prep-col-divider { border-right: 0.5px solid var(--prep-border-subtle); }
+
+  .prep-section-header {
+    padding: 14px 16px; background: var(--prep-section-bg, rgba(228,179,64,0.08));
+    border-bottom: 0.5px solid var(--prep-border-subtle);
+    display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 1;
+  }
+  .prep-section-header.hot { --prep-section-bg: rgba(232,88,82,0.12); }
+  .prep-section-header.cold { --prep-section-bg: rgba(91,202,197,0.12); }
+  .prep-section-header.chop { --prep-section-bg: rgba(149,199,95,0.12); }
+  .prep-section-title {
+    font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px;
+    color: var(--prep-section-color, var(--prep-gold)); line-height: 1; flex: 1;
+  }
+  .prep-section-header.hot .prep-section-title { color: var(--prep-hot); }
+  .prep-section-header.cold .prep-section-title { color: var(--prep-cold); }
+  .prep-section-header.chop .prep-section-title { color: var(--prep-chop); }
+  .prep-section-meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  .prep-col-header-row {
+    display: grid; grid-template-columns: 60px 1fr 36px; padding: 6px 16px;
+    background: rgba(0,0,0,0.3); border-bottom: 0.5px solid var(--prep-border-subtle);
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--prep-cream-faint); letter-spacing: 0.1em; text-transform: uppercase; gap: 8px;
+  }
+  .prep-col-header-row .oh { text-align: center; }
+  .prep-col-header-row .check { text-align: center; }
+
+  .prep-item-row {
+    display: grid; grid-template-columns: 60px 1fr 36px; padding: 10px 16px;
+    border-bottom: 0.5px solid rgba(228,179,64,0.05); align-items: center; gap: 8px;
+    cursor: pointer; transition: background 0.15s; width: 100%; text-align: left;
+    background: transparent; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit;
+  }
+  .prep-item-row:hover { background: rgba(228,179,64,0.04); }
+  .prep-item-row.selected { background: rgba(228,179,64,0.1); }
+  .prep-item-row.active { background: rgba(228,179,64,0.18); box-shadow: inset 3px 0 0 var(--prep-gold); }
+  .prep-item-row:last-child { border-bottom: none; }
+  .prep-item-oh { display: flex; align-items: center; gap: 4px; }
+  .prep-oh-form { display: flex; }
+  .prep-oh-input {
+    width: 44px; padding: 4px 6px; background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: 4px; color: var(--prep-cream);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; text-align: center;
+  }
+  .prep-oh-input:focus { outline: none; border-color: var(--prep-gold); }
+  .prep-oh-input.empty { color: var(--prep-cream-faint); }
+  .prep-oh-input.has-value { color: var(--prep-gold-bright); border-color: var(--prep-border-active); }
+  .prep-item-body { min-width: 0; }
+  .prep-item-name { font-size: 13px; font-weight: 600; color: var(--prep-cream); line-height: 1.2; }
+  .prep-item-row.selected .prep-item-name { color: var(--prep-gold-bright); }
+  .prep-item-row.active .prep-item-name { color: var(--prep-gold-bright); font-weight: 700; }
+  .prep-item-meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-cream-faint);
+    margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .prep-item-meta .assignee { color: var(--prep-teal-bright); font-weight: 600; }
+  .prep-item-meta .done { color: var(--prep-chop); font-weight: 600; }
+  .prep-item-meta .in-progress { color: var(--prep-gold-bright); font-weight: 600; }
+  .prep-item-meta .unassigned { color: var(--prep-red-bright); font-weight: 600; }
+  .prep-check-form { display: flex; justify-self: center; }
+  .prep-check-box {
+    width: 24px; height: 24px; border-radius: 6px;
+    border: 1.5px solid var(--prep-border-subtle); background: var(--prep-bg-input);
+    cursor: pointer; display: grid; place-items: center; transition: all 0.15s; padding: 0;
+  }
+  .prep-check-box svg { width: 14px; height: 14px; fill: var(--prep-bg-deep); opacity: 0; transition: opacity 0.15s; }
+  .prep-item-row.selected .prep-check-box,
+  .prep-item-row.active .prep-check-box { background: var(--prep-gold); border-color: var(--prep-gold); }
+  .prep-item-row.selected .prep-check-box svg,
+  .prep-item-row.active .prep-check-box svg { opacity: 1; }
+  .prep-list-empty { padding: 44px 24px; text-align: center; color: var(--prep-cream-faint); grid-column: 1 / -1; }
+  .prep-list-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-cream-dim); margin-bottom: 6px; }
+  .prep-section-empty { padding: 18px 16px; font-size: 11px; color: var(--prep-cream-faint); font-style: italic; }
+
+  /* ---- Detail panel ---- */
+  .prep-detail-panel {
+    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-active);
+    border-radius: var(--prep-radius-md); overflow: hidden; position: sticky; top: 16px;
+  }
+  .prep-detail-empty { padding: 60px 24px; text-align: center; color: var(--prep-cream-faint); }
+  .prep-detail-empty svg { width: 48px; height: 48px; fill: var(--prep-cream-faint); opacity: 0.5; margin-bottom: 12px; }
+  .prep-detail-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-cream-dim); margin-bottom: 6px; }
+  .prep-detail-card { display: none; }
+  .prep-detail-card.open { display: block; }
+
+  .prep-detail-header {
+    padding: 16px 18px; position: relative;
+    background: linear-gradient(135deg, rgba(228,179,64,0.1), rgba(199,59,54,0.04));
+    border-bottom: 0.5px solid var(--prep-border-subtle);
+  }
+  .prep-detail-close {
+    position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(0,0,0,0.3); border: 0.5px solid var(--prep-border-subtle);
+    color: var(--prep-cream-dim); cursor: pointer; display: grid; place-items: center; transition: all 0.15s;
+  }
+  .prep-detail-close:hover { color: var(--prep-red-bright); border-color: var(--prep-red-bright); }
+  .prep-detail-close svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-detail-cat {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    color: var(--prep-detail-color, var(--prep-gold)); letter-spacing: 0.12em;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .prep-detail-header.hot .prep-detail-cat { color: var(--prep-hot); }
+  .prep-detail-header.cold .prep-detail-cat { color: var(--prep-cold); }
+  .prep-detail-header.chop .prep-detail-cat { color: var(--prep-chop); }
+  .prep-detail-title { font-family: 'Instrument Serif', serif; font-size: 26px; color: var(--prep-cream); line-height: 1; margin-bottom: 8px; }
+  .prep-detail-meta-row {
+    display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--prep-cream-dim); flex-wrap: wrap;
+  }
+  .prep-detail-meta-row .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--prep-cream-faint); }
+  .prep-detail-meta-row .yield { color: var(--prep-gold-bright); font-weight: 600; }
+
+  .prep-detail-body { padding: 16px 18px; max-height: calc(100vh - 230px); overflow-y: auto; }
+  .prep-detail-section { margin-bottom: 18px; }
+  .prep-detail-section-title {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--prep-gold);
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .prep-detail-section-title svg { width: 12px; height: 12px; fill: currentColor; }
+  .prep-detail-section-title .from-recipe { margin-left: auto; color: var(--prep-cream-faint); font-size: 9px; font-weight: 500; }
+
+  /* Batch size selector */
+  .prep-batch-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+  .prep-batch-opt {
+    padding: 10px; background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-sm); color: var(--prep-cream-dim);
+    font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: all 0.15s;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .prep-batch-opt.active { background: rgba(228,179,64,0.15); border-color: var(--prep-gold); color: var(--prep-gold-bright); }
+  .prep-batch-opt .sub { display: block; font-size: 9px; font-weight: 500; margin-top: 2px; opacity: 0.7; text-transform: none; letter-spacing: 0; }
+
+  /* Ingredient list */
+  .prep-ingredient-list { background: var(--prep-bg-input); border-radius: var(--prep-radius-sm); overflow: hidden; }
+  .prep-ingredient-row {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 9px 12px;
+    border-bottom: 0.5px solid rgba(228,179,64,0.06); align-items: center;
+  }
+  .prep-ingredient-row:last-child { border-bottom: none; }
+  .prep-ingredient-name { font-size: 12px; color: var(--prep-cream); }
+  .prep-ingredient-qty { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--prep-gold-bright); text-align: right; }
+  .prep-ingredient-unit {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint);
+    text-transform: uppercase; letter-spacing: 0.05em; width: 40px; text-align: left;
+  }
+  .prep-ingredient-empty { padding: 12px; font-size: 11px; color: var(--prep-cream-faint); font-style: italic; }
+
+  /* Assignment */
+  .prep-assign-input {
+    width: 100%; padding: 10px 12px; background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
+    color: var(--prep-cream); font-family: inherit; font-size: 13px;
+  }
+  .prep-assign-input:focus { outline: none; border-color: var(--prep-gold); }
+  .prep-assign-input::placeholder { color: var(--prep-cream-faint); }
+  .prep-assign-form { display: flex; gap: 8px; align-items: center; }
+  .prep-assign-save {
+    height: 40px; padding: 0 14px; background: var(--prep-gold); border: 0; border-radius: var(--prep-radius-sm);
+    color: var(--prep-bg-deep); font-weight: 700; font-size: 12px; cursor: pointer;
+    letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
+  }
+  .prep-assign-save:hover { filter: brightness(1.08); }
+  .prep-assigned-pill {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: rgba(46,163,159,0.12); border: 0.5px solid rgba(46,163,159,0.4);
+    border-radius: var(--prep-radius-sm); font-size: 12px; color: var(--prep-teal-bright); font-weight: 600;
+  }
+  .prep-assigned-pill .avatar {
+    width: 22px; height: 22px; border-radius: 50%; background: rgba(46,163,159,0.3);
+    color: var(--prep-teal-bright); display: grid; place-items: center;
+    font-family: 'Instrument Serif', serif; font-size: 11px; font-weight: 700; flex-shrink: 0;
+  }
+  .prep-assigned-pill .meta { flex: 1; min-width: 0; }
+  .prep-assigned-pill .name { color: var(--prep-cream); font-weight: 700; }
+  .prep-assigned-pill .schedule {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-teal-bright);
+    font-weight: 600; letter-spacing: 0.05em; margin-top: 1px; display: block;
+  }
+  .prep-reassign-btn {
+    background: transparent; border: none; color: var(--prep-cream-faint); font-size: 10px;
+    cursor: pointer; padding: 4px; font-weight: 600; text-decoration: underline;
+  }
+  .prep-reassign-btn:hover { color: var(--prep-gold-bright); }
+
+  /* Status buttons */
+  .prep-status-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .prep-status-form { display: flex; }
+  .prep-status-btn {
+    width: 100%; padding: 10px 8px; background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
+    color: var(--prep-cream-dim); font-size: 11px; font-weight: 700; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.06em; transition: all 0.15s;
+    display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .prep-status-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-status-btn:hover { border-color: var(--prep-border-active); color: var(--prep-cream); }
+  .prep-status-btn.todo.active { background: var(--prep-bg-input); border-color: var(--prep-cream-dim); color: var(--prep-cream); }
+  .prep-status-btn.progress.active { background: rgba(228,179,64,0.15); border-color: var(--prep-gold); color: var(--prep-gold-bright); }
+  .prep-status-btn.done.active { background: rgba(149,199,95,0.15); border-color: var(--prep-chop); color: var(--prep-chop); }
+
+  /* Notes field */
+  .prep-notes-field {
+    width: 100%; padding: 10px 12px; background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
+    color: var(--prep-cream); font-family: inherit; font-size: 12px;
+    resize: vertical; min-height: 50px; line-height: 1.5;
+  }
+  .prep-notes-field:focus { outline: none; border-color: var(--prep-gold); }
+  .prep-notes-field::placeholder { color: var(--prep-cream-faint); }
+  .prep-notes-save {
+    margin-top: 8px; padding: 8px 14px; background: var(--prep-gold); border: 0;
+    border-radius: 6px; color: var(--prep-bg-deep); font-weight: 700; font-size: 11px;
+    cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .prep-notes-save:hover { filter: brightness(1.08); }
+
+  .prep-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 99; }
+
+  /* ---- Mobile (folds in the v3 single-column phone design) ---- */
+  @media (max-width: 1100px) {
+    .prep-main-grid { grid-template-columns: 1fr; }
+    .prep-detail-panel {
+      position: fixed; inset: 0; border-radius: 0; z-index: 100;
+      transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .prep-detail-panel.mobile-open { transform: translateX(0); }
+    .prep-detail-body { max-height: calc(100vh - 120px); }
+    .prep-backdrop.show { display: block; }
+  }
+  @media (max-width: 900px) { .prep-kpi-strip { grid-template-columns: repeat(3,1fr); } }
+  @media (max-width: 760px) {
+    .prep-columns-grid { grid-template-columns: 1fr; }
+    .prep-col-divider { border-right: none; border-bottom: 0.5px solid var(--prep-border-subtle); }
+  }
+  @media (max-width: 540px) {
+    .prep-kpi-strip { grid-template-columns: 1fr 1fr; }
+    .prep-page { padding: 14px; }
+  }
+</style>
+
+{% macro prep_icon(name) %}
+  {%- if name == 'chev' -%}<svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+  {%- elif name == 'chev-l' -%}<svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+  {%- elif name == 'close' -%}<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+  {%- elif name == 'check' -%}<svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+  {%- elif name == 'clock' -%}<svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
+  {%- elif name == 'cal' -%}<svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+  {%- elif name == 'copy' -%}<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+  {%- elif name == 'bulb' -%}<svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+  {%- elif name == 'download' -%}<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+  {%- elif name == 'lock' -%}<svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+  {%- elif name == 'plus' -%}<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+  {%- elif name == 'pot' -%}<svg viewBox="0 0 24 24"><path d="M21 6h-3.17L16 4h-6v2h5.12l1.83 2H21v12H5v-9H3v9c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8 14c0 2.76 2.24 5 5 5s5-2.24 5-5-2.24-5-5-5-5 2.24-5 5zm5-3c1.65 0 3 1.35 3 3s-1.35 3-3 3-3-1.35-3-3 1.35-3 3-3zM5 6h3V4H5V1H3v3H0v2h3v3h2z"/></svg>
+  {%- elif name == 'fork' -%}<svg viewBox="0 0 24 24"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
+  {%- elif name == 'user' -%}<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+  {%- elif name == 'pencil' -%}<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+  {%- elif name == 'circle' -%}<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+  {%- elif name == 'list' -%}<svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+  {%- endif -%}
+{% endmacro %}
+
+{# Repeated prep item-row — server-rendered for every PrepItem in a
+   section block. POSTs (on-hand, prep toggle) target the kitchen
+   prep-list route. Clicking the row body opens the detail panel. #}
+{% macro item_row(it) %}
+  {% set post_url = url_for('store.kitchen_prep_list_post', store_slug=store_slug) %}
+  <div class="prep-item-row{{ ' selected' if it.selected else '' }}" id="prep-row-{{ it.id }}"
+       data-item="{{ it.id }}"
+       onclick="prepSelect('{{ it.id }}', this)">
+    <div class="prep-item-oh" onclick="event.stopPropagation();">
+      <form class="prep-oh-form" method="POST" action="{{ post_url }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+        <input type="hidden" name="form_action" value="set_on_hand">
+        <input type="hidden" name="item_id" value="{{ it.id }}">
+        <input type="hidden" name="view_date" value="{{ selected_date }}">
+        <input type="number" min="0" max="999" name="on_hand"
+               class="prep-oh-input {{ 'has-value' if it.on_hand is not none else 'empty' }}"
+               value="{{ it.on_hand if it.on_hand is not none else '' }}"
+               placeholder="?" {{ 'disabled' if locked else '' }}
+               onchange="this.form.submit()">
+      </form>
+    </div>
+    <div class="prep-item-body">
+      <div class="prep-item-name">{{ it.name }}</div>
+      {% if it.selected %}
+      <div class="prep-item-meta">
+        {% if it.status == 'done' %}
+          <span class="done">&#10003; Done</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
+        {% elif it.status == 'in-progress' %}
+          <span class="in-progress">&#9203; In progress</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
+        {% elif it.assignee %}
+          <span class="assignee">&rarr; {{ it.assignee }}</span>
+        {% else %}
+          <span class="unassigned">Unassigned</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <form class="prep-check-form" method="POST" action="{{ post_url }}" onclick="event.stopPropagation();">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="form_action" value="toggle_select">
+      <input type="hidden" name="item_id" value="{{ it.id }}">
+      <input type="hidden" name="view_date" value="{{ selected_date }}">
+      <button class="prep-check-box" type="submit" {{ 'disabled' if locked else '' }}
+              aria-label="{{ 'Unselect' if it.selected else 'Select' }} {{ it.name }} for prep">
+        {{ prep_icon('check') }}
+      </button>
+    </form>
+  </div>
+{% endmacro %}
+
+{# A category x kind section (header + column labels + its rows). #}
+{% macro item_section(sec) %}
+  <div class="prep-section-header {{ sec.key }}">
+    <div class="prep-section-title">{{ sec.label }}</div>
+    <div class="prep-section-meta">{{ sec.total }} &middot; {{ sec.selected }} selected</div>
+  </div>
+  <div class="prep-col-header-row">
+    <div class="oh">On Hand</div>
+    <div>Item</div>
+    <div class="check">Prep?</div>
+  </div>
+  {% if sec.items %}
+    {% for it in sec.items %}{{ item_row(it) }}{% endfor %}
+  {% else %}
+    <div class="prep-section-empty">No items in this section yet.</div>
+  {% endif %}
+{% endmacro %}
+
+{# Detail panel card — one per item; JS reveals the selected one. #}
+{% macro detail_card(it) %}
+  {% set post_url = url_for('store.kitchen_prep_list_post', store_slug=store_slug) %}
+  {% set cat_label = {'hot':'Hot','cold':'Cold','chop':'Chop'} %}
+  {% set kind_label = {'item':'Item','sauce':'Sauce'} %}
+  <div class="prep-detail-card" id="prep-d-{{ it.id }}" data-item="{{ it.id }}">
+    <div class="prep-detail-header {{ it.category }}">
+      <button class="prep-detail-close" type="button" onclick="prepCloseDetail()" aria-label="Close">{{ prep_icon('close') }}</button>
+      <div class="prep-detail-cat">
+        {{ cat_label.get(it.category, it.category) }} {{ kind_label.get(it.kind, '') }}
+        {%- if it.status == 'done' %} &middot; done
+        {%- elif it.status == 'in-progress' %} &middot; in progress
+        {%- elif it.status == 'assigned' %} &middot; assigned{% endif %}
+      </div>
+      <div class="prep-detail-title">{{ it.name }}</div>
+      <div class="prep-detail-meta-row">
+        {% if it.yield_label %}<span class="yield">Yield: {{ it.yield_label }}</span>{% endif %}
+        {% if it.yield_label and (it.prep_minutes or it.shelf_days) %}<span class="sep"></span>{% endif %}
+        {% if it.prep_minutes %}<span>{{ it.prep_minutes }} min prep</span>{% endif %}
+        {% if it.prep_minutes and it.shelf_days %}<span class="sep"></span>{% endif %}
+        {% if it.shelf_days %}<span>{{ it.shelf_days }} day shelf</span>{% endif %}
+        {% if not it.yield_label and not it.prep_minutes and not it.shelf_days %}<span>Recipe details unavailable</span>{% endif %}
+      </div>
+    </div>
+    <div class="prep-detail-body">
+
+      {# ---- Batch size ---- #}
+      <div class="prep-detail-section">
+        <div class="prep-detail-section-title">{{ prep_icon('pot') }} Batch size</div>
+        <form method="POST" action="{{ post_url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+          <input type="hidden" name="form_action" value="save_detail">
+          <input type="hidden" name="item_id" value="{{ it.id }}">
+          <input type="hidden" name="view_date" value="{{ selected_date }}">
+          <div class="prep-batch-row">
+            <button class="prep-batch-opt{{ ' active' if it.batch_size != 'double' else '' }}" type="submit"
+                    name="batch_size" value="single" {{ 'disabled' if locked else '' }}>
+              Single{% if it.yield_label %}<span class="sub">{{ it.yield_label }}</span>{% endif %}
+            </button>
+            <button class="prep-batch-opt{{ ' active' if it.batch_size == 'double' else '' }}" type="submit"
+                    name="batch_size" value="double" {{ 'disabled' if locked else '' }}>
+              Double<span class="sub">2&times; recipe</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {# ---- Ingredients (auto-pulled from the linked recipe) ---- #}
+      <div class="prep-detail-section">
+        <div class="prep-detail-section-title">
+          {{ prep_icon('fork') }} Ingredients needed
+          {% if it.recipe_id %}<span class="from-recipe">FROM RECIPE</span>{% endif %}
+        </div>
+        <div class="prep-ingredient-list">
+          {% if it.ingredients %}
+            {% for ing in it.ingredients %}
+            <div class="prep-ingredient-row">
+              <div class="prep-ingredient-name">{{ ing.name }}</div>
+              <div class="prep-ingredient-qty">{{ ing.qty }}</div>
+              <div class="prep-ingredient-unit">{{ ing.unit }}</div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="prep-ingredient-empty">
+              {% if it.recipe_id %}No ingredients listed on the linked recipe.
+              {% else %}No recipe linked &mdash; link one in Recipes to auto-pull ingredients.{% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ---- Assignment ---- #}
+      <div class="prep-detail-section">
+        <div class="prep-detail-section-title">{{ prep_icon('user') }} Assigned to</div>
+        {% if it.assignee %}
+        <div class="prep-assigned-pill">
+          <div class="avatar">{{ it.assignee_initials or (it.assignee[:2]|upper) }}</div>
+          <div class="meta">
+            <span class="name">{{ it.assignee }}</span>
+            <span class="schedule">On the prep team today</span>
+          </div>
+          <form method="POST" action="{{ post_url }}" style="display:flex;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+            <input type="hidden" name="form_action" value="assign">
+            <input type="hidden" name="item_id" value="{{ it.id }}">
+            <input type="hidden" name="view_date" value="{{ selected_date }}">
+            <input type="hidden" name="assignee_name" value="">
+            <button class="prep-reassign-btn" type="submit" {{ 'disabled' if locked else '' }}>Reassign</button>
+          </form>
+        </div>
+        {% else %}
+        <form class="prep-assign-form" method="POST" action="{{ post_url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+          <input type="hidden" name="form_action" value="assign">
+          <input type="hidden" name="item_id" value="{{ it.id }}">
+          <input type="hidden" name="view_date" value="{{ selected_date }}">
+          <input class="prep-assign-input" type="text" name="assignee_name" maxlength="120"
+                 placeholder="Assign a teammate&hellip;" {{ 'disabled' if locked else '' }}>
+          <button class="prep-assign-save" type="submit" {{ 'disabled' if locked else '' }}>Assign</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {# ---- Status ---- #}
+      <div class="prep-detail-section">
+        <div class="prep-detail-section-title">{{ prep_icon('clock') }} Status</div>
+        <div class="prep-status-row">
+          {% for st, cls, lbl, icn in [
+              ('selected','todo','To do','circle'),
+              ('in-progress','progress','In progress','clock'),
+              ('done','done','Done','check')] %}
+          <form class="prep-status-form" method="POST" action="{{ post_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+            <input type="hidden" name="form_action" value="set_status">
+            <input type="hidden" name="item_id" value="{{ it.id }}">
+            <input type="hidden" name="view_date" value="{{ selected_date }}">
+            <input type="hidden" name="status" value="{{ st }}">
+            <button class="prep-status-btn {{ cls }}{{ ' active' if it.status == st or (st == 'selected' and it.status in ('selected','assigned')) else '' }}"
+                    type="submit" {{ 'disabled' if locked else '' }}>
+              {{ prep_icon(icn) }} {{ lbl }}
+            </button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# ---- Notes ---- #}
+      <div class="prep-detail-section">
+        <div class="prep-detail-section-title">{{ prep_icon('pencil') }} Notes</div>
+        <form method="POST" action="{{ post_url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+          <input type="hidden" name="form_action" value="save_detail">
+          <input type="hidden" name="item_id" value="{{ it.id }}">
+          <input type="hidden" name="view_date" value="{{ selected_date }}">
+          <textarea class="prep-notes-field" name="notes"
+                    placeholder="Batch notes, substitutions, hold-backs&hellip;"
+                    {{ 'disabled' if locked else '' }}>{{ it.notes or '' }}</textarea>
+          {% if not locked %}<button class="prep-notes-save" type="submit">Save notes</button>{% endif %}
+        </form>
+      </div>
+
+    </div>
+  </div>
+{% endmacro %}
+
+<div class="prep-page">
+
+  <div class="prep-topstrip">
+    <span class="prep-store-badge">{{ store_slug|upper }} &middot; {{ store_label|upper }}</span>
+    <span class="prep-spacer"></span>
+    {% if lock_author %}
+    <span class="prep-runner"><span class="dot"></span>{{ lock_author }} running prep{% if lock_hours %} &middot; {{ lock_hours }}{% endif %}</span>
+    {% else %}
+    <span class="prep-runner"><span class="dot"></span>Prep board open</span>
+    {% endif %}
+  </div>
+
+  {# ---- KPI strip ---- #}
+  <div class="prep-kpi-strip">
+    <div class="prep-kpi-box total">
+      <div class="prep-kpi-label">Total items</div>
+      <div class="prep-kpi-value">{{ kpis.total }}</div>
+      <div class="prep-kpi-sub">in master list</div>
+    </div>
+    <div class="prep-kpi-box selected">
+      <div class="prep-kpi-label">Selected today</div>
+      <div class="prep-kpi-value">{{ kpis.selected }}</div>
+      <div class="prep-kpi-sub">need prep</div>
+    </div>
+    <div class="prep-kpi-box assigned">
+      <div class="prep-kpi-label">Assigned</div>
+      <div class="prep-kpi-value">{{ kpis.assigned }}</div>
+      <div class="prep-kpi-sub">{{ kpis.unassigned }} unassigned</div>
+    </div>
+    <div class="prep-kpi-box progress">
+      <div class="prep-kpi-label">In progress</div>
+      <div class="prep-kpi-value">{{ kpis.in_progress }}</div>
+      <div class="prep-kpi-sub">on the line</div>
+    </div>
+    <div class="prep-kpi-box done">
+      <div class="prep-kpi-label">Completed</div>
+      <div class="prep-kpi-value">{{ kpis.done }}</div>
+      <div class="prep-kpi-sub">of {{ kpis.selected }}</div>
+    </div>
+  </div>
+
+  {# ---- Control bar ---- #}
+  <div class="prep-control-bar">
+    <div class="prep-date-nav">
+      <a class="prep-date-nav-btn" href="?date={{ prev_date }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
+      <div class="prep-date-display">
+        {{ date_display }}
+        {% if is_today %}<span class="prep-today-tag">TODAY</span>{% endif %}
+      </div>
+      <a class="prep-date-nav-btn" href="?date={{ next_date }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
+    </div>
+    <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="form_action" value="copy_yesterday">
+      <input type="hidden" name="view_date" value="{{ selected_date }}">
+      <button class="prep-ctrl-btn" type="submit" {{ 'disabled' if locked else '' }}>
+        {{ prep_icon('copy') }} Copy yesterday's prep
+      </button>
+    </form>
+    <a class="prep-ctrl-btn" href="?date={{ prev_date }}">{{ prep_icon('cal') }} View past days</a>
+    <span class="prep-spacer"></span>
+    <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} Export today</button>
+    <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}"
+          onsubmit="return confirm('Submit and lock today\'s prep record? This cannot be edited after.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="form_action" value="submit_lock">
+      <input type="hidden" name="view_date" value="{{ selected_date }}">
+      <button class="prep-ctrl-btn submit" type="submit" {{ 'disabled' if locked else '' }}>
+        {{ prep_icon('lock') }} {{ 'Day locked' if locked else 'Submit &amp; lock end of day' }}
+      </button>
+    </form>
+  </div>
+
+  {# ---- Lock notice ---- #}
+  <div class="prep-lock-notice{{ ' is-locked' if locked else '' }}">
+    {{ prep_icon('lock') }}
+    {% if locked %}
+    <div><strong>This prep record is locked</strong> &mdash; who prepped what, when, linked to clock-in. Used for productivity tracking. No further edits today.</div>
+    {% else %}
+    <div><strong>End of day submission locks the record</strong> &mdash; who prepped what, when, linked to clock-in. Used for productivity tracking. Edit until then, lock after.</div>
+    {% endif %}
+  </div>
+
+  {# ---- Prep team today ---- #}
+  <div class="prep-team-section">
+    <div class="prep-team-header">
+      <div class="prep-team-title">Prep team today</div>
+      <div class="prep-team-sub">{{ team|length }} ON SHIFT &middot; MATCHED TO SCHEDULE</div>
+    </div>
+    <div class="prep-team-list">
+      {% for member in team %}
+      <div class="prep-team-card">
+        <div class="prep-team-avatar">{{ member.initials }}</div>
+        <div class="prep-team-info">
+          <div class="prep-team-name">{{ member.name }}</div>
+          <div class="prep-team-stats">
+            {% if member.done or member.in_progress %}
+              <span class="done">{{ member.done }} done</span> &middot; <span class="pending">{{ member.in_progress }} in progress</span>
+            {% else %}
+              <span class="pending">{{ member.assigned }} assigned</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="prep-team-empty">No teammates on the prep roster yet.</div>
+      {% endfor %}
+      <a class="prep-team-add" href="{{ url_for('store.kitchen_placeholder', store_slug=store_slug, page='prep-list') if false else '#' }}"
+         onclick="return false;">
+        {{ prep_icon('plus') }} Add teammate
+      </a>
+    </div>
+  </div>
+
+  {# ---- Main grid: two-column item board + detail panel ---- #}
+  <div class="prep-main-grid">
+
+    <div class="prep-list-panel">
+      {% set left_sections = sections|selectattr('col', 'equalto', 'left')|list %}
+      {% set right_sections = sections|selectattr('col', 'equalto', 'right')|list %}
+      {% if not sections %}
+      <div class="prep-list-empty">
+        <div class="big">No prep items in the master list yet</div>
+        <div>Seed the master list (hot / cold / chop) so the kitchen can build the day's board.</div>
+      </div>
+      {% else %}
+      <div class="prep-columns-grid">
+        <div class="prep-col-divider">
+          {% for sec in left_sections %}{{ item_section(sec) }}{% endfor %}
+        </div>
+        <div>
+          {% for sec in right_sections %}{{ item_section(sec) }}{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="prep-detail-panel" id="prepDetailPane">
+      <div class="prep-detail-empty" id="prepDetailEmpty">
+        {{ prep_icon('list') }}
+        <div class="big">No item selected</div>
+        <div>Tap any item on the board to pull its recipe breakdown, assign the work, and track progress.</div>
+      </div>
+      {% for sec in sections %}
+        {% for it in sec.items %}{{ detail_card(it) }}{% endfor %}
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+<div class="prep-backdrop" id="prepBackdrop" onclick="prepCloseDetail()"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  // ---- Item selection + detail panel ----
+  function prepSelect(id, row) {
+    document.querySelectorAll('.prep-item-row').forEach(function (r) {
+      r.classList.toggle('active', r === row);
+    });
+    document.querySelectorAll('.prep-detail-card').forEach(function (c) {
+      c.classList.toggle('open', c.id === 'prep-d-' + id);
+    });
+    var empty = document.getElementById('prepDetailEmpty');
+    if (empty) empty.style.display = 'none';
+    if (window.matchMedia('(max-width: 1100px)').matches) {
+      document.getElementById('prepDetailPane').classList.add('mobile-open');
+      document.getElementById('prepBackdrop').classList.add('show');
+    }
+  }
+  function prepCloseDetail() {
+    document.getElementById('prepDetailPane').classList.remove('mobile-open');
+    document.getElementById('prepBackdrop').classList.remove('show');
+  }
+  window.prepSelect = prepSelect;
+  window.prepCloseDetail = prepCloseDetail;
+
+  // ---- On-hand input visual state ----
+  document.querySelectorAll('.prep-oh-input').forEach(function (i) {
+    i.addEventListener('input', function () {
+      var has = i.value !== '' && i.value != null;
+      i.classList.toggle('has-value', has);
+      i.classList.toggle('empty', !has);
+    });
+  });
+
+  // ---- Export today (client-side CSV of the prep board) ----
+  var exportBtn = document.getElementById('prepExport');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', function () {
+      var rows = [['Item', 'On hand', 'Selected', 'Status', 'Assignee']];
+      document.querySelectorAll('.prep-item-row').forEach(function (row) {
+        var name = (row.querySelector('.prep-item-name') || {}).textContent || '';
+        var ohEl = row.querySelector('.prep-oh-input');
+        var oh = ohEl ? ohEl.value : '';
+        var selected = row.classList.contains('selected') ? 'yes' : 'no';
+        var metaEl = row.querySelector('.prep-item-meta');
+        var meta = metaEl ? metaEl.textContent.replace(/\s+/g, ' ').trim() : '';
+        rows.push([name.trim(), oh, selected, meta, '']);
+      });
+      var csv = rows.map(function (r) {
+        return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
+      }).join('\r\n');
+      var blob = new Blob([csv], { type: 'text/csv' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'prep-list-' + ('{{ selected_date }}' || 'day') + '.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -83,6 +83,7 @@
   }
   /* ---- pinned cena start files panel (Sam 2026-05-19 4:12pm) ---- */
   .sc-pin {
+    min-width: 0;
     margin-bottom: 8px;
     background: rgba(15, 8, 5, 0.55);
     border: 1px solid rgba(217, 164, 54, 0.18);
@@ -103,6 +104,7 @@
   .sc-pin > summary::before { content: "▸ "; font-size: 10px; }
   .sc-pin[open] > summary::before { content: "▾ "; }
   .sc-pin-file {
+    min-width: 0;
     margin: 6px 0 6px 14px;
     border-left: 2px solid rgba(217, 164, 54, 0.15);
     padding-left: 10px;
@@ -137,7 +139,9 @@
     max-height: 380px;
     overflow: auto;
     white-space: pre-wrap;
-    word-break: break-word;
+    /* break unbreakable tokens so a pinned start-file (CENA.md etc.)
+       can't force the page wider than the viewport (ck #11:45 inspect) */
+    overflow-wrap: anywhere;
   }
   .sc-session .sc-arch {
     margin-left: auto; opacity: 0; font-size: 13px;
@@ -191,7 +195,9 @@
     font-size: 13.5px;
     line-height: 1.55;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    /* break unbreakable tokens (long URLs, base64) so one message
+       can't force the layout wider than the viewport */
+    overflow-wrap: anywhere;
   }
   .role-user .sc-bubble {
     background: rgba(232, 122, 62, 0.16);

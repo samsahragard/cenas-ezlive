@@ -1,0 +1,1024 @@
+{# ============================================================
+   attendance_tracking.html — Attendance Tracking (production)
+   dck conversion of attendance_tracker_v3 mockup (Sam #6:53 +
+   Sam #10:14 "make it just like that with everything functioning").
+
+   This is the manager-operated daily time-clock board. The render's
+   "pulled from the schedule" is aspirational — the app has no staff
+   schedule (Sling not wired). So the roster is built BY the manager:
+   "Add unscheduled shift" creates rows; clock in/out + event tiles
+   drive every status. Fully functional with zero external integration.
+
+   ROUTE CONTRACT (store_routes.py — aick wires; see dck handoff doc):
+     boh / foh / closed  -> list[shift]; closed = clocked-out shifts.
+     shift -> id, name, initials, role, section ('boh'|'foh'), phone,
+              status ('scheduled'|'clocked-in'|'late'|'no-show'|
+                      'callout'|'break'|'out'),
+              sched_start, sched_end, sched_hours,
+              clock_in, clock_out (display strings or None),
+              late_minutes (int), hours_worked (str or None), note,
+              events  -> list[ {time, kind, text} ]   (kind: in/late/break/out/note)
+              pattern -> list[30]{ letter, state, is_today }  (state: ''/on-time/late/no-show)
+              pattern_counts -> {on_time, late, no_show}
+     kpis   -> {scheduled, clocked_in, late, no_show, callouts}
+     counts -> {all, onclock, off, issues}
+     selected_date, today_iso, prev_date, next_date (iso strings),
+     date_display, is_today, store_label.
+   Forms POST to store.manager_page_create (page='attendance') with a
+   hidden form_action: add_shift | clock_in | clock_out | log_event.
+   Audience gate at the route: _manager_role_ok (manager-tier, expo
+   excluded per CENA.md L165).
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_attendance' %}
+
+{% block title %}Attendance Tracking — Cenas Kitchen{% endblock %}
+{% block page_title %}Attendance Tracking{% endblock %}
+{% block page_subtitle %}{{ store_label }} — daily roster &amp; time clock{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* All custom properties + classes scoped to .atr-page so the v3
+     warm palette never leaks into the global sheet (dml-/ir- pattern). */
+  .atr-page {
+    --atr-red: #C73B36;
+    --atr-red-deep: #9B2A26;
+    --atr-red-bright: #E85852;
+    --atr-gold: #E4B340;
+    --atr-gold-bright: #FFD970;
+    --atr-teal: #2EA39F;
+    --atr-teal-bright: #5BCAC5;
+    --atr-cream: #FAF6EC;
+    --atr-cream-dim: rgba(250,246,236,0.62);
+    --atr-cream-faint: rgba(250,246,236,0.38);
+    --atr-bg-deep: #1a0d08;
+    --atr-bg-warm: #28160e;
+    --atr-bg-card: rgba(40,22,14,0.65);
+    --atr-bg-input: rgba(0,0,0,0.25);
+    --atr-border-subtle: rgba(217,164,54,0.18);
+    --atr-border-active: rgba(228,179,64,0.5);
+    --atr-radius-sm: 8px;
+    --atr-radius-md: 12px;
+    --atr-radius-lg: 16px;
+    --atr-st-clocked: #5BCAC5;
+    --atr-st-late: #E89B40;
+    --atr-st-noshow: #E85852;
+    --atr-st-out: rgba(250,246,236,0.4);
+    --atr-st-scheduled: #E4B340;
+    --atr-st-break: #9A8FE0;
+    position: relative;
+    isolation: isolate;
+    color: var(--atr-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    background: linear-gradient(180deg, var(--atr-bg-deep) 0%, #0d0604 100%);
+    border: 0.5px solid var(--atr-border-subtle);
+    border-radius: var(--atr-radius-lg);
+    padding: 20px;
+    margin: 0 0 48px;
+    overflow: hidden;
+  }
+  .atr-page::before {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199,59,54,0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228,179,64,0.08), transparent);
+  }
+  .atr-page > * { position: relative; z-index: 1; }
+  .atr-page *, .atr-page *::before, .atr-page *::after { box-sizing: border-box; }
+  .atr-page button { font-family: inherit; }
+
+  /* ---- Top strip ---- */
+  .atr-topstrip { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .atr-store-badge {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--atr-gold-bright);
+    background: rgba(228,179,64,0.12); padding: 6px 12px; border-radius: 999px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .atr-spacer { flex: 1; }
+  .atr-live-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+    color: var(--atr-st-clocked); background: rgba(91,202,197,0.12);
+    border: 0.5px solid rgba(91,202,197,0.3); padding: 6px 12px; border-radius: 999px;
+    letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .atr-live-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--atr-st-clocked);
+    box-shadow: 0 0 6px var(--atr-st-clocked); animation: atr-pulse 2s infinite;
+  }
+  @keyframes atr-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* ---- Control bar ---- */
+  .atr-control-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .atr-date-nav {
+    display: inline-flex; align-items: center; background: var(--atr-bg-card);
+    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-md); overflow: hidden;
+  }
+  .atr-date-nav-btn {
+    width: 36px; height: 40px; background: transparent; border: none; color: var(--atr-gold);
+    cursor: pointer; display: grid; place-items: center; transition: background 0.15s; text-decoration: none;
+  }
+  .atr-date-nav-btn:hover { background: rgba(228,179,64,0.08); }
+  .atr-date-nav-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .atr-date-display {
+    padding: 0 16px; color: var(--atr-cream); font-weight: 600; font-size: 13px;
+    border-left: 0.5px solid var(--atr-border-subtle); border-right: 0.5px solid var(--atr-border-subtle);
+    display: flex; align-items: center; gap: 6px; height: 40px;
+  }
+  .atr-today-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--atr-gold-bright); background: rgba(228,179,64,0.15);
+    padding: 2px 6px; border-radius: 4px; letter-spacing: 0.1em;
+  }
+  .atr-control-action {
+    height: 40px; padding: 0 14px; background: var(--atr-bg-card);
+    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-md);
+    color: var(--atr-cream); font-size: 12px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; text-decoration: none;
+  }
+  .atr-control-action:hover { border-color: var(--atr-border-active); color: var(--atr-gold-bright); }
+  .atr-control-action svg { width: 14px; height: 14px; fill: currentColor; }
+  .atr-control-action.primary {
+    background: linear-gradient(135deg, var(--atr-red), var(--atr-red-deep));
+    border-color: var(--atr-red-bright); color: var(--atr-cream);
+    box-shadow: 0 4px 12px rgba(199,59,54,0.2);
+  }
+  .atr-control-action.primary:hover { color: var(--atr-cream); filter: brightness(1.08); }
+
+  /* ---- KPI strip ---- */
+  .atr-kpi-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 20px; }
+  .atr-kpi-box {
+    background: var(--atr-bg-card); border: 0.5px solid var(--atr-border-subtle);
+    border-radius: var(--atr-radius-md); padding: 12px 14px; position: relative; overflow: hidden;
+  }
+  .atr-kpi-box::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--atr-kpi-color); }
+  .atr-kpi-box.scheduled { --atr-kpi-color: var(--atr-gold); }
+  .atr-kpi-box.clocked { --atr-kpi-color: var(--atr-st-clocked); }
+  .atr-kpi-box.late { --atr-kpi-color: var(--atr-st-late); }
+  .atr-kpi-box.noshow { --atr-kpi-color: var(--atr-st-noshow); }
+  .atr-kpi-box.callout { --atr-kpi-color: var(--atr-st-break); }
+  .atr-kpi-label {
+    font-size: 9px; font-weight: 700; color: var(--atr-cream-faint);
+    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 2px;
+  }
+  .atr-kpi-value { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 28px; color: var(--atr-kpi-color); line-height: 1; }
+  .atr-kpi-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-faint); margin-top: 2px; }
+
+  /* ---- Two-pane layout ---- */
+  .atr-panes { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
+  .atr-list-pane { background: var(--atr-bg-card); border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-md); overflow: hidden; }
+  .atr-list-tabs { display: flex; gap: 4px; padding: 12px 12px 0; background: rgba(0,0,0,0.2); border-bottom: 0.5px solid var(--atr-border-subtle); }
+  .atr-list-tab {
+    flex: 1; padding: 10px 12px; background: transparent; border: none; color: var(--atr-cream-dim);
+    font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .atr-list-tab.active { color: var(--atr-gold-bright); border-bottom-color: var(--atr-gold); }
+  .atr-list-tab .count {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    background: rgba(228,179,64,0.12); color: var(--atr-gold); padding: 1px 5px; border-radius: 4px;
+  }
+  .atr-list-tab.active .count { background: rgba(255,217,112,0.2); color: var(--atr-gold-bright); }
+  .atr-list-search { padding: 12px; border-bottom: 0.5px solid var(--atr-border-subtle); }
+  .atr-search-wrap { position: relative; }
+  .atr-search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; fill: var(--atr-cream-faint); }
+  .atr-search-input {
+    width: 100%; padding: 10px 12px 10px 36px; background: var(--atr-bg-input);
+    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-sm);
+    color: var(--atr-cream); font-family: inherit; font-size: 13px;
+  }
+  .atr-search-input:focus { outline: none; border-color: var(--atr-gold); }
+  .atr-search-input::placeholder { color: var(--atr-cream-faint); }
+
+  .atr-role-section { border-bottom: 0.5px solid var(--atr-border-subtle); }
+  .atr-role-section:last-child { border-bottom: none; }
+  .atr-role-header { display: flex; align-items: center; padding: 10px 16px; background: rgba(0,0,0,0.3); }
+  .atr-role-name {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--atr-gold);
+    letter-spacing: 0.15em; text-transform: uppercase; flex: 1;
+  }
+  .atr-role-summary { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-faint); letter-spacing: 0.05em; }
+
+  .atr-emp-row {
+    display: flex; align-items: center; padding: 10px 16px;
+    border-top: 0.5px solid rgba(228,179,64,0.06); cursor: pointer;
+    transition: background 0.15s; gap: 12px; width: 100%; text-align: left; background: transparent; border-left: 0; border-right: 0; border-bottom: 0;
+  }
+  .atr-emp-row:hover { background: rgba(228,179,64,0.04); }
+  .atr-emp-row.selected { background: rgba(228,179,64,0.08); box-shadow: inset 3px 0 0 var(--atr-gold); }
+  .atr-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--atr-bg-warm), var(--atr-bg-deep));
+    color: var(--atr-gold-bright); display: grid; place-items: center;
+    font-family: 'Instrument Serif', serif; font-size: 14px; font-weight: 700;
+    flex-shrink: 0; border: 1px solid var(--atr-border-subtle); position: relative;
+  }
+  .atr-status-dot { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--atr-bg-deep); }
+  .atr-emp-info { flex: 1; min-width: 0; }
+  .atr-emp-name { font-size: 13px; font-weight: 700; color: var(--atr-cream); line-height: 1.2; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .atr-emp-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-faint); flex-wrap: wrap; }
+  .atr-emp-meta .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--atr-cream-faint); }
+  .atr-emp-meta .late-flag { color: var(--atr-st-late); font-weight: 600; }
+  .atr-emp-meta .actual { color: var(--atr-st-clocked); font-weight: 600; }
+  .atr-emp-meta .noshow-flag { color: var(--atr-st-noshow); font-weight: 600; }
+  .atr-emp-meta .callout-flag { color: var(--atr-st-break); font-weight: 600; }
+  .atr-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    padding: 3px 8px; border-radius: 4px; letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0;
+  }
+  .atr-pill.clocked-in { background: rgba(91,202,197,0.15); color: var(--atr-st-clocked); }
+  .atr-pill.late { background: rgba(232,155,64,0.15); color: var(--atr-st-late); }
+  .atr-pill.no-show { background: rgba(232,88,82,0.15); color: var(--atr-st-noshow); }
+  .atr-pill.out { background: rgba(250,246,236,0.06); color: var(--atr-st-out); }
+  .atr-pill.scheduled { background: rgba(228,179,64,0.12); color: var(--atr-gold); }
+  .atr-pill.callout { background: rgba(154,143,224,0.15); color: var(--atr-st-break); }
+  .atr-pill.break { background: rgba(154,143,224,0.15); color: var(--atr-st-break); }
+  .atr-emp-row .chev { color: var(--atr-cream-faint); flex-shrink: 0; display: grid; }
+  .atr-emp-row .chev svg { width: 14px; height: 14px; fill: currentColor; }
+  .atr-list-empty { padding: 44px 24px; text-align: center; color: var(--atr-cream-faint); }
+  .atr-list-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--atr-cream-dim); margin-bottom: 6px; }
+
+  /* ---- Detail pane ---- */
+  .atr-detail-pane {
+    background: var(--atr-bg-card); border: 0.5px solid var(--atr-border-active);
+    border-radius: var(--atr-radius-md); overflow: hidden; position: sticky; top: 16px;
+  }
+  .atr-detail-empty { padding: 60px 24px; text-align: center; color: var(--atr-cream-faint); }
+  .atr-detail-empty svg { width: 44px; height: 44px; fill: var(--atr-cream-faint); opacity: 0.5; margin-bottom: 12px; }
+  .atr-detail-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--atr-cream-dim); margin-bottom: 6px; }
+  .atr-detail-card { display: none; }
+  .atr-detail-card.open { display: block; }
+
+  .atr-detail-header {
+    padding: 18px 18px 14px;
+    background: linear-gradient(135deg, rgba(228,179,64,0.08), rgba(199,59,54,0.04));
+    border-bottom: 0.5px solid var(--atr-border-subtle); position: relative;
+  }
+  .atr-detail-close {
+    position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(0,0,0,0.3); border: 0.5px solid var(--atr-border-subtle);
+    color: var(--atr-cream-dim); cursor: pointer; display: grid; place-items: center; transition: all 0.15s;
+  }
+  .atr-detail-close:hover { color: var(--atr-red-bright); border-color: var(--atr-red-bright); }
+  .atr-detail-close svg { width: 14px; height: 14px; fill: currentColor; }
+  .atr-detail-emp-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .atr-detail-avatar {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--atr-bg-warm), var(--atr-bg-deep));
+    color: var(--atr-gold-bright); display: grid; place-items: center;
+    font-family: 'Instrument Serif', serif; font-size: 22px; font-weight: 700;
+    flex-shrink: 0; border: 2px solid var(--atr-border-active); position: relative;
+  }
+  .atr-detail-avatar .atr-status-dot { width: 16px; height: 16px; }
+  .atr-detail-emp-name { font-family: 'Instrument Serif', serif; font-size: 22px; color: var(--atr-cream); line-height: 1.1; margin-bottom: 4px; }
+  .atr-detail-emp-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-dim); letter-spacing: 0.05em; flex-wrap: wrap; }
+  .atr-detail-emp-meta .role { color: var(--atr-gold); font-weight: 600; }
+  .atr-detail-emp-meta .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--atr-cream-faint); }
+
+  .atr-status-row {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-radius: var(--atr-radius-sm); border: 0.5px solid; --atr-srow: var(--atr-st-clocked);
+    background: color-mix(in srgb, var(--atr-srow) 8%, transparent);
+    border-color: color-mix(in srgb, var(--atr-srow) 30%, transparent);
+  }
+  .atr-status-row.st-late, .atr-status-row.st-callout, .atr-status-row.st-break { --atr-srow: var(--atr-st-late); }
+  .atr-status-row.st-callout, .atr-status-row.st-break { --atr-srow: var(--atr-st-break); }
+  .atr-status-row.st-no-show { --atr-srow: var(--atr-st-noshow); }
+  .atr-status-row.st-scheduled { --atr-srow: var(--atr-gold); }
+  .atr-status-row.st-out { --atr-srow: var(--atr-st-out); }
+  .atr-status-icon {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--atr-srow) 20%, transparent); color: var(--atr-srow);
+  }
+  .atr-status-icon svg { width: 16px; height: 16px; fill: currentColor; }
+  .atr-status-info { flex: 1; min-width: 0; }
+  .atr-status-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: var(--atr-srow); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
+  .atr-status-value { font-size: 13px; font-weight: 700; color: var(--atr-cream); }
+  .atr-status-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--atr-cream-dim); margin-top: 2px; }
+
+  .atr-detail-body { padding: 16px; max-height: calc(100vh - 230px); overflow-y: auto; }
+  .atr-section-block {
+    background: rgba(0,0,0,0.2); border: 0.5px solid var(--atr-border-subtle);
+    border-radius: var(--atr-radius-sm); padding: 14px; margin-bottom: 12px;
+  }
+  .atr-section-title {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--atr-gold);
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .atr-section-title svg { width: 12px; height: 12px; fill: currentColor; }
+
+  .atr-shift-times { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .atr-shift-block { background: var(--atr-bg-input); border-radius: var(--atr-radius-sm); padding: 10px; text-align: center; }
+  .atr-shift-label { font-size: 9px; font-weight: 700; color: var(--atr-cream-faint); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+  .atr-shift-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--atr-cream); line-height: 1; margin-bottom: 2px; }
+  .atr-shift-value.sm { font-size: 13px; padding-top: 4px; }
+  .atr-shift-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--atr-cream-faint); }
+  .atr-shift-sub.late { color: var(--atr-st-late); font-weight: 600; }
+  .atr-shift-sub.on-time { color: var(--atr-st-clocked); font-weight: 600; }
+
+  .atr-clock-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .atr-clock-form { display: flex; }
+  .atr-clock-btn {
+    width: 100%; padding: 14px; background: var(--atr-bg-input);
+    border: 0.5px solid var(--atr-border-subtle); border-radius: var(--atr-radius-sm);
+    color: var(--atr-cream); font-size: 12px; font-weight: 700; cursor: pointer;
+    display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all 0.15s; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .atr-clock-btn.clock-in { background: linear-gradient(135deg, rgba(91,202,197,0.2), rgba(46,163,159,0.1)); border-color: var(--atr-st-clocked); color: var(--atr-st-clocked); }
+  .atr-clock-btn.clock-out { background: linear-gradient(135deg, rgba(232,88,82,0.18), rgba(199,59,54,0.08)); border-color: var(--atr-st-noshow); color: var(--atr-st-noshow); }
+  .atr-clock-btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .atr-clock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .atr-clock-btn svg { width: 18px; height: 18px; fill: currentColor; }
+  .atr-clock-btn .sub { font-size: 9px; font-weight: 500; opacity: 0.7; text-transform: none; letter-spacing: 0; }
+
+  .atr-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .atr-action-tile {
+    background: var(--atr-bg-input); border: 0.5px solid var(--atr-border-subtle);
+    border-radius: var(--atr-radius-sm); padding: 12px 10px; cursor: pointer; transition: all 0.15s;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  }
+  .atr-action-tile:hover { background: rgba(228,179,64,0.08); border-color: var(--atr-border-active); }
+  .atr-action-icon {
+    width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+    color: var(--atr-action-color, var(--atr-gold));
+    background: color-mix(in srgb, var(--atr-action-color, var(--atr-gold)) 12%, transparent);
+  }
+  .atr-action-icon svg { width: 16px; height: 16px; fill: currentColor; }
+  .atr-action-tile.late { --atr-action-color: var(--atr-st-late); }
+  .atr-action-tile.no-show { --atr-action-color: var(--atr-st-noshow); }
+  .atr-action-tile.early-out { --atr-action-color: var(--atr-st-out); }
+  .atr-action-tile.callout { --atr-action-color: var(--atr-st-break); }
+  .atr-action-tile.break { --atr-action-color: var(--atr-st-break); }
+  .atr-action-tile.note { --atr-action-color: var(--atr-gold); }
+  .atr-action-label { font-size: 11px; font-weight: 700; color: var(--atr-cream); line-height: 1.2; }
+
+  /* ---- Inline event form ---- */
+  .atr-event-form {
+    display: none; margin-top: 10px;
+    background: linear-gradient(135deg, rgba(232,155,64,0.08), rgba(199,59,54,0.04));
+    border: 0.5px solid var(--atr-st-late); border-radius: var(--atr-radius-md); padding: 14px;
+  }
+  .atr-event-form.open { display: block; }
+  .atr-event-form-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 16px; color: var(--atr-st-late); margin-bottom: 10px; }
+  .atr-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .atr-field { margin-bottom: 10px; }
+  .atr-field.full { grid-column: 1 / -1; }
+  .atr-field label { display: block; font-size: 9px; font-weight: 700; color: var(--atr-cream-faint); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+  .atr-field input, .atr-field select, .atr-field textarea {
+    width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.3);
+    border: 0.5px solid var(--atr-border-subtle); border-radius: 6px;
+    color: var(--atr-cream); font-family: inherit; font-size: 12px; color-scheme: dark;
+  }
+  .atr-field input:focus, .atr-field select:focus, .atr-field textarea:focus { outline: none; border-color: var(--atr-gold); }
+  .atr-field textarea { resize: vertical; min-height: 50px; line-height: 1.4; }
+  .atr-reason-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .atr-reason-chip {
+    padding: 5px 10px; background: rgba(0,0,0,0.25); border: 0.5px solid var(--atr-border-subtle);
+    border-radius: 999px; color: var(--atr-cream-dim); font-size: 10px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .atr-reason-chip:hover { color: var(--atr-cream); }
+  .atr-reason-chip.selected { background: rgba(232,155,64,0.15); border-color: var(--atr-st-late); color: var(--atr-st-late); }
+  .atr-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .atr-btn-cancel, .atr-btn-save {
+    padding: 8px 14px; border-radius: 6px; font-family: inherit; font-size: 11px; font-weight: 700;
+    cursor: pointer; border: 0.5px solid; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .atr-btn-cancel { background: transparent; border-color: var(--atr-border-subtle); color: var(--atr-cream-dim); }
+  .atr-btn-save { background: var(--atr-st-late); border-color: var(--atr-st-late); color: var(--atr-bg-deep); }
+
+  /* ---- Timeline ---- */
+  .atr-timeline { position: relative; padding-left: 20px; }
+  .atr-timeline::before { content: ''; position: absolute; left: 5px; top: 4px; bottom: 4px; width: 2px; background: var(--atr-border-subtle); border-radius: 1px; }
+  .atr-timeline-entry { position: relative; padding-bottom: 12px; --atr-ev: var(--atr-gold); }
+  .atr-timeline-entry:last-child { padding-bottom: 0; }
+  .atr-timeline-entry::before {
+    content: ''; position: absolute; left: -19px; top: 4px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--atr-ev); border: 2px solid var(--atr-bg-deep); box-shadow: 0 0 0 1px var(--atr-ev);
+  }
+  .atr-timeline-entry.in { --atr-ev: var(--atr-st-clocked); }
+  .atr-timeline-entry.late { --atr-ev: var(--atr-st-late); }
+  .atr-timeline-entry.break { --atr-ev: var(--atr-st-break); }
+  .atr-timeline-entry.callout { --atr-ev: var(--atr-st-break); }
+  .atr-timeline-entry.no-show { --atr-ev: var(--atr-st-noshow); }
+  .atr-timeline-entry.out { --atr-ev: var(--atr-cream-faint); }
+  .atr-timeline-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--atr-cream); margin-bottom: 2px; }
+  .atr-timeline-event { font-size: 12px; color: var(--atr-cream-dim); line-height: 1.4; }
+  .atr-timeline-event strong { color: var(--atr-ev); font-weight: 700; }
+  .atr-timeline-empty { font-size: 12px; color: var(--atr-cream-faint); font-style: italic; }
+
+  /* ---- 30-day pattern ---- */
+  .atr-pattern-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 8px; }
+  .atr-pattern-day {
+    aspect-ratio: 1; border-radius: 4px; background: var(--atr-bg-input);
+    display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    color: var(--atr-cream-faint); border: 0.5px solid transparent;
+  }
+  .atr-pattern-day.on-time { background: rgba(91,202,197,0.15); color: var(--atr-st-clocked); border-color: rgba(91,202,197,0.3); }
+  .atr-pattern-day.late { background: rgba(232,155,64,0.15); color: var(--atr-st-late); border-color: rgba(232,155,64,0.3); }
+  .atr-pattern-day.no-show { background: rgba(232,88,82,0.2); color: var(--atr-st-noshow); border-color: rgba(232,88,82,0.4); }
+  .atr-pattern-day.today { box-shadow: 0 0 0 2px var(--atr-gold); }
+  .atr-pattern-legend { display: flex; gap: 10px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--atr-cream-faint); margin-top: 8px; }
+  .atr-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+  .atr-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+  /* ---- Add-shift modal ---- */
+  .atr-modal-overlay {
+    position: fixed; inset: 0; background: rgba(15,8,5,0.8);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center; z-index: 1200; padding: 24px;
+  }
+  .atr-modal-overlay.open { display: flex; }
+  .atr-modal {
+    width: min(460px,100%); max-height: calc(100vh - 48px); overflow-y: auto;
+    background: var(--atr-bg-warm); border: 1px solid var(--atr-border-active);
+    border-radius: var(--atr-radius-md); box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+  }
+  .atr-modal-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 0.5px solid var(--atr-border-subtle); }
+  .atr-modal-head h2 { margin: 0; font-family: 'Instrument Serif', serif; font-size: 20px; font-weight: 400; color: var(--atr-cream); }
+  .atr-modal-head h2 .accent { font-style: italic; color: var(--atr-gold-bright); }
+  .atr-modal-close { margin-left: auto; background: transparent; border: 0; color: var(--atr-cream-dim); font-size: 24px; line-height: 1; cursor: pointer; }
+  .atr-modal-close:hover { color: var(--atr-cream); }
+  .atr-modal-body { padding: 18px 20px; }
+  .atr-modal-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 6px; }
+  .atr-modal-save { padding: 9px 18px; background: var(--atr-gold); border: 0; border-radius: 8px; color: var(--atr-bg-deep); font-weight: 700; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; }
+  .atr-modal-save:hover { filter: brightness(1.08); }
+
+  .atr-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 99; }
+
+  /* ---- Mobile (folds in the v3_mobile single-column design) ---- */
+  @media (max-width: 900px) {
+    .atr-panes { grid-template-columns: 1fr; }
+    .atr-detail-pane {
+      position: fixed; inset: 0; border-radius: 0; z-index: 100;
+      transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .atr-detail-pane.mobile-open { transform: translateX(0); }
+    .atr-detail-body { max-height: calc(100vh - 200px); }
+    .atr-backdrop.show { display: block; }
+  }
+  @media (max-width: 800px) { .atr-kpi-strip { grid-template-columns: repeat(3,1fr); } }
+  @media (max-width: 540px) {
+    .atr-kpi-strip { grid-template-columns: 1fr 1fr; }
+    .atr-page { padding: 14px; }
+    .atr-shift-times { grid-template-columns: 1fr; }
+  }
+</style>
+
+{% macro emp_row(s) %}
+  {# Jinja macros don't see template-level {% set %} vars — keep these local. #}
+  {% set ATR_DOT = {'clocked-in':'clocked','late':'late','no-show':'noshow','out':'out','scheduled':'scheduled','callout':'break','break':'break'} %}
+  {% set ATR_LABEL = {'clocked-in':'In','late':'Late','no-show':'No-show','out':'Out','scheduled':'Scheduled','callout':'Callout','break':'Break'} %}
+  {% set cats = ['all'] %}
+  {% if s.status in ('clocked-in','late','break') %}{% set _ = cats.append('onclock') %}{% endif %}
+  {% if s.status in ('scheduled','no-show','callout','out') %}{% set _ = cats.append('off') %}{% endif %}
+  {% if s.status in ('late','no-show','callout') %}{% set _ = cats.append('issues') %}{% endif %}
+  <button type="button" class="atr-emp-row" data-shift="{{ s.id }}"
+          data-cats="{{ cats|join(' ') }}"
+          data-search="{{ (s.name ~ ' ' ~ s.role ~ ' ' ~ (s.phone or ''))|lower }}"
+          onclick="atrSelect('{{ s.id }}', this)">
+    <span class="atr-avatar">{{ s.initials }}<span class="atr-status-dot" style="background: var(--atr-st-{{ ATR_DOT[s.status] }});"></span></span>
+    <span class="atr-emp-info">
+      <span class="atr-emp-name">{{ s.name }}</span>
+      <span class="atr-emp-meta">
+        <span>{{ s.role }}</span>
+        {% if s.sched_start %}<span class="sep"></span><span>{{ s.sched_start }}{% if s.status == 'out' and s.sched_end %} - {{ s.sched_end }}{% endif %}</span>{% endif %}
+        {% if s.clock_in and s.status != 'out' %}<span class="sep"></span><span class="actual">In {{ s.clock_in }}</span>{% endif %}
+        {% if s.status == 'late' and s.late_minutes %}<span class="sep"></span><span class="late-flag">{{ s.late_minutes }}m late</span>{% endif %}
+        {% if s.status == 'no-show' %}<span class="sep"></span><span class="noshow-flag">No contact</span>{% endif %}
+        {% if s.status == 'callout' %}<span class="sep"></span><span class="callout-flag">Called out</span>{% endif %}
+        {% if s.status == 'out' and s.hours_worked %}<span class="sep"></span><span>{{ s.hours_worked }}</span>{% endif %}
+      </span>
+    </span>
+    <span class="atr-pill {{ s.status }}">{{ ATR_LABEL[s.status] }}</span>
+    <span class="chev">{{ atr_icon('chev') }}</span>
+  </button>
+{% endmacro %}
+
+{% macro atr_icon(name) %}
+  {%- if name == 'chev' -%}<svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+  {%- elif name == 'chev-l' -%}<svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+  {%- elif name == 'close' -%}<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+  {%- elif name == 'clock' -%}<svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
+  {%- elif name == 'cal' -%}<svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+  {%- elif name == 'download' -%}<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+  {%- elif name == 'plus' -%}<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+  {%- elif name == 'search' -%}<svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
+  {%- elif name == 'in' -%}<svg viewBox="0 0 24 24"><path d="M10.59 16.59 12 18l6-6-6-6-1.41 1.41L14.17 11H4v2h10.17z"/></svg>
+  {%- elif name == 'out' -%}<svg viewBox="0 0 24 24"><path d="m17 8-1.41 1.41L17.17 11H9v2h8.17l-1.58 1.59L17 16l4-4zM5 5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7v-2H5z"/></svg>
+  {%- elif name == 'xcircle' -%}<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12z"/></svg>
+  {%- elif name == 'phone' -%}<svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+  {%- elif name == 'coffee' -%}<svg viewBox="0 0 24 24"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"/></svg>
+  {%- elif name == 'pencil' -%}<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+  {%- elif name == 'people' -%}<svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro detail_card(s) %}
+  {% set ATR_DOT = {'clocked-in':'clocked','late':'late','no-show':'noshow','out':'out','scheduled':'scheduled','callout':'break','break':'break'} %}
+  {% set ATR_LABEL = {'clocked-in':'In','late':'Late','no-show':'No-show','out':'Out','scheduled':'Scheduled','callout':'Callout','break':'Break'} %}
+  {% set post_url = url_for('store.manager_page_create', page='attendance') %}
+  <div class="atr-detail-card" id="atr-d-{{ s.id }}" data-shift="{{ s.id }}">
+    <div class="atr-detail-header">
+      <button class="atr-detail-close" type="button" onclick="atrCloseDetail()" aria-label="Close">{{ atr_icon('close') }}</button>
+      <div class="atr-detail-emp-top">
+        <div class="atr-detail-avatar">{{ s.initials }}<span class="atr-status-dot" style="background: var(--atr-st-{{ ATR_DOT[s.status] }});"></span></div>
+        <div>
+          <div class="atr-detail-emp-name">{{ s.name }}</div>
+          <div class="atr-detail-emp-meta">
+            <span class="role">{{ s.role }} &middot; {{ s.section|upper }}</span>
+            {% if s.phone %}<span class="sep"></span><span>{{ s.phone }}</span>{% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="atr-status-row st-{{ s.status }}">
+        <div class="atr-status-icon">{{ atr_icon('clock') }}</div>
+        <div class="atr-status-info">
+          {% if s.status == 'late' %}
+            <div class="atr-status-label">Late arrival</div>
+            <div class="atr-status-value">{{ s.late_minutes }} minutes past scheduled start</div>
+            <div class="atr-status-sub">Clocked in {{ s.clock_in }} &middot; scheduled {{ s.sched_start }}</div>
+          {% elif s.status == 'clocked-in' %}
+            <div class="atr-status-label">On the clock</div>
+            <div class="atr-status-value">Working since {{ s.clock_in or '—' }}</div>
+            <div class="atr-status-sub">Scheduled {{ s.sched_start }} - {{ s.sched_end }}</div>
+          {% elif s.status == 'no-show' %}
+            <div class="atr-status-label">No-show</div>
+            <div class="atr-status-value">Did not report for scheduled shift</div>
+            <div class="atr-status-sub">Scheduled start {{ s.sched_start }}</div>
+          {% elif s.status == 'callout' %}
+            <div class="atr-status-label">Callout</div>
+            <div class="atr-status-value">Called out of scheduled shift</div>
+            <div class="atr-status-sub">Scheduled {{ s.sched_start }} - {{ s.sched_end }}</div>
+          {% elif s.status == 'break' %}
+            <div class="atr-status-label">On break</div>
+            <div class="atr-status-value">Away from the floor</div>
+            <div class="atr-status-sub">Clocked in {{ s.clock_in or '—' }}</div>
+          {% elif s.status == 'out' %}
+            <div class="atr-status-label">Shift complete</div>
+            <div class="atr-status-value">{{ s.hours_worked or '—' }} worked</div>
+            <div class="atr-status-sub">{{ s.clock_in or '—' }} - {{ s.clock_out or '—' }}</div>
+          {% else %}
+            <div class="atr-status-label">Scheduled</div>
+            <div class="atr-status-value">Not yet clocked in</div>
+            <div class="atr-status-sub">Scheduled start {{ s.sched_start }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="atr-detail-body">
+      <!-- Today's shift -->
+      <div class="atr-section-block">
+        <div class="atr-section-title">{{ atr_icon('clock') }} Today's shift</div>
+        <div class="atr-shift-times">
+          <div class="atr-shift-block">
+            <div class="atr-shift-label">Scheduled start</div>
+            <div class="atr-shift-value">{{ s.sched_start or '—' }}</div>
+            <div class="atr-shift-sub">{{ date_display.split(',')[0] if date_display else '' }}</div>
+          </div>
+          <div class="atr-shift-block">
+            <div class="atr-shift-label">Actual in</div>
+            <div class="atr-shift-value">{{ s.clock_in or '—' }}</div>
+            {% if s.status == 'late' and s.late_minutes %}<div class="atr-shift-sub late">{{ s.late_minutes }}m late</div>
+            {% elif s.clock_in %}<div class="atr-shift-sub on-time">On time</div>
+            {% else %}<div class="atr-shift-sub">Not clocked in</div>{% endif %}
+          </div>
+          <div class="atr-shift-block">
+            <div class="atr-shift-label">Scheduled end</div>
+            <div class="atr-shift-value">{{ s.sched_end or '—' }}</div>
+            <div class="atr-shift-sub">{{ s.sched_hours or '' }}</div>
+          </div>
+          <div class="atr-shift-block">
+            <div class="atr-shift-label">Status</div>
+            <div class="atr-shift-value sm" style="color: var(--atr-st-{{ ATR_DOT[s.status] }});">{{ ATR_LABEL[s.status] }}</div>
+            <div class="atr-shift-sub">{% if s.clock_out %}out {{ s.clock_out }}{% elif s.clock_in %}since {{ s.clock_in }}{% endif %}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Clock controls -->
+      <div class="atr-section-block">
+        <div class="atr-section-title">{{ atr_icon('clock') }} Clock controls</div>
+        <div class="atr-clock-actions">
+          <form class="atr-clock-form" method="POST" action="{{ post_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+            <input type="hidden" name="form_action" value="clock_in">
+            <input type="hidden" name="shift_id" value="{{ s.id }}">
+            <input type="hidden" name="view_date" value="{{ selected_date }}">
+            <button class="atr-clock-btn clock-in" type="submit" {{ 'disabled' if s.clock_in else '' }}>
+              {{ atr_icon('in') }} Clock in
+              <span class="sub">{{ 'already in' if s.clock_in else 'start shift' }}</span>
+            </button>
+          </form>
+          <form class="atr-clock-form" method="POST" action="{{ post_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+            <input type="hidden" name="form_action" value="clock_out">
+            <input type="hidden" name="shift_id" value="{{ s.id }}">
+            <input type="hidden" name="view_date" value="{{ selected_date }}">
+            <button class="atr-clock-btn clock-out" type="submit" {{ 'disabled' if (not s.clock_in or s.clock_out) else '' }}>
+              {{ atr_icon('out') }} Clock out
+              <span class="sub">{{ 'shift ended' if s.clock_out else 'end shift' }}</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Log an event -->
+      <div class="atr-section-block">
+        <div class="atr-section-title">{{ atr_icon('plus') }} Log an event</div>
+        <div class="atr-action-grid">
+          <div class="atr-action-tile late" onclick="atrOpenEvent('{{ s.id }}','late')">
+            <div class="atr-action-icon">{{ atr_icon('clock') }}</div><div class="atr-action-label">Log late arrival</div>
+          </div>
+          <div class="atr-action-tile no-show" onclick="atrOpenEvent('{{ s.id }}','no-show')">
+            <div class="atr-action-icon">{{ atr_icon('xcircle') }}</div><div class="atr-action-label">Mark no-show</div>
+          </div>
+          <div class="atr-action-tile early-out" onclick="atrOpenEvent('{{ s.id }}','early-out')">
+            <div class="atr-action-icon">{{ atr_icon('out') }}</div><div class="atr-action-label">Log early out</div>
+          </div>
+          <div class="atr-action-tile callout" onclick="atrOpenEvent('{{ s.id }}','callout')">
+            <div class="atr-action-icon">{{ atr_icon('phone') }}</div><div class="atr-action-label">Record callout</div>
+          </div>
+          <div class="atr-action-tile break" onclick="atrOpenEvent('{{ s.id }}','break')">
+            <div class="atr-action-icon">{{ atr_icon('coffee') }}</div><div class="atr-action-label">Start break</div>
+          </div>
+          <div class="atr-action-tile note" onclick="atrOpenEvent('{{ s.id }}','note')">
+            <div class="atr-action-icon">{{ atr_icon('pencil') }}</div><div class="atr-action-label">Add note</div>
+          </div>
+        </div>
+
+        <form class="atr-event-form" id="atr-ev-{{ s.id }}" method="POST" action="{{ post_url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+          <input type="hidden" name="form_action" value="log_event">
+          <input type="hidden" name="shift_id" value="{{ s.id }}">
+          <input type="hidden" name="view_date" value="{{ selected_date }}">
+          <input type="hidden" name="kind" value="" data-ev-kind>
+          <input type="hidden" name="reason" value="" data-ev-reason>
+          <div class="atr-event-form-title" data-ev-title>Log event</div>
+          <div class="atr-form-grid" data-ev-late-only>
+            <div class="atr-field" style="margin:0;">
+              <label>Minutes late</label>
+              <input type="number" name="minutes" value="0" min="0" max="600">
+            </div>
+            <div class="atr-field" style="margin:0;">
+              <label>Counts as occurrence</label>
+              <select name="occurrence">
+                <option value="yes">Yes — record occurrence</option>
+                <option value="no">No — excused</option>
+              </select>
+            </div>
+          </div>
+          <div class="atr-field" data-ev-late-only>
+            <label>Reason</label>
+            <div class="atr-reason-chips">
+              <span class="atr-reason-chip" onclick="atrPickReason(this,'Traffic')">Traffic</span>
+              <span class="atr-reason-chip" onclick="atrPickReason(this,'Transportation')">Transportation</span>
+              <span class="atr-reason-chip" onclick="atrPickReason(this,'Family / personal')">Family / personal</span>
+              <span class="atr-reason-chip" onclick="atrPickReason(this,'Medical')">Medical</span>
+              <span class="atr-reason-chip" onclick="atrPickReason(this,'No call')">No call</span>
+              <span class="atr-reason-chip" onclick="atrPickReason(this,'Other')">Other</span>
+            </div>
+          </div>
+          <div class="atr-field full">
+            <label>Note</label>
+            <textarea name="note" placeholder="Context for whoever reviews this later..."></textarea>
+          </div>
+          <div class="atr-form-actions">
+            <button type="button" class="atr-btn-cancel" onclick="atrCloseEvent('{{ s.id }}')">Cancel</button>
+            <button type="submit" class="atr-btn-save">Save entry</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Today's timeline -->
+      <div class="atr-section-block">
+        <div class="atr-section-title">{{ atr_icon('clock') }} Today's timeline</div>
+        {% if s.events %}
+          <div class="atr-timeline">
+            {% for ev in s.events %}
+            <div class="atr-timeline-entry {{ ev.kind }}">
+              <div class="atr-timeline-time">{{ ev.time }}</div>
+              <div class="atr-timeline-event">{{ ev.text }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="atr-timeline-empty">No events logged yet today.</div>
+        {% endif %}
+      </div>
+
+      <!-- 30-day pattern -->
+      <div class="atr-section-block">
+        <div class="atr-section-title">{{ atr_icon('cal') }} Attendance pattern &middot; last 30 days</div>
+        <div class="atr-pattern-grid">
+          {% for p in s.pattern %}
+          <div class="atr-pattern-day {{ p.state }}{{ ' today' if p.is_today else '' }}">{{ p.letter }}</div>
+          {% endfor %}
+        </div>
+        <div class="atr-pattern-legend">
+          <span class="atr-legend-item"><span class="atr-legend-dot" style="background: rgba(91,202,197,0.4);"></span>On time ({{ s.pattern_counts.on_time }})</span>
+          <span class="atr-legend-item"><span class="atr-legend-dot" style="background: rgba(232,155,64,0.4);"></span>Late ({{ s.pattern_counts.late }})</span>
+          <span class="atr-legend-item"><span class="atr-legend-dot" style="background: rgba(232,88,82,0.4);"></span>No-show ({{ s.pattern_counts.no_show }})</span>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+<div class="atr-page">
+
+  <div class="atr-topstrip">
+    <span class="atr-store-badge">DOS &middot; {{ store_label|upper }}</span>
+    <span class="atr-spacer"></span>
+    <span class="atr-live-pill"><span class="dot"></span>{{ kpis.clocked_in }} ON THE CLOCK &middot; LIVE</span>
+  </div>
+
+  <div class="atr-control-bar">
+    <div class="atr-date-nav">
+      <a class="atr-date-nav-btn" href="?date={{ prev_date }}" aria-label="Previous day">{{ atr_icon('chev-l') }}</a>
+      <div class="atr-date-display">
+        {{ date_display }}
+        {% if is_today %}<span class="atr-today-tag">TODAY</span>{% endif %}
+      </div>
+      <a class="atr-date-nav-btn" href="?date={{ next_date }}" aria-label="Next day">{{ atr_icon('chev') }}</a>
+    </div>
+    <a class="atr-control-action" href="{{ url_for('store.schedule') }}">{{ atr_icon('cal') }} View schedule</a>
+    <button class="atr-control-action" type="button" id="atrExport">{{ atr_icon('download') }} Export day</button>
+    <span class="atr-spacer"></span>
+    <button class="atr-control-action primary" type="button" id="atrAddShift">{{ atr_icon('plus') }} Add unscheduled shift</button>
+  </div>
+
+  <div class="atr-kpi-strip">
+    <div class="atr-kpi-box scheduled">
+      <div class="atr-kpi-label">Scheduled</div>
+      <div class="atr-kpi-value">{{ kpis.scheduled }}</div>
+      <div class="atr-kpi-sub">on the roster</div>
+    </div>
+    <div class="atr-kpi-box clocked">
+      <div class="atr-kpi-label">Clocked in</div>
+      <div class="atr-kpi-value">{{ kpis.clocked_in }}</div>
+      <div class="atr-kpi-sub">on the floor</div>
+    </div>
+    <div class="atr-kpi-box late">
+      <div class="atr-kpi-label">Late</div>
+      <div class="atr-kpi-value">{{ kpis.late }}</div>
+      <div class="atr-kpi-sub">arrivals flagged</div>
+    </div>
+    <div class="atr-kpi-box noshow">
+      <div class="atr-kpi-label">No-show</div>
+      <div class="atr-kpi-value">{{ kpis.no_show }}</div>
+      <div class="atr-kpi-sub">unfilled</div>
+    </div>
+    <div class="atr-kpi-box callout">
+      <div class="atr-kpi-label">Callouts</div>
+      <div class="atr-kpi-value">{{ kpis.callouts }}</div>
+      <div class="atr-kpi-sub">called out</div>
+    </div>
+  </div>
+
+  <div class="atr-panes">
+    <div class="atr-list-pane">
+      <div class="atr-list-tabs">
+        <button class="atr-list-tab active" type="button" data-tab="all">All <span class="count">{{ counts.all }}</span></button>
+        <button class="atr-list-tab" type="button" data-tab="onclock">On the clock <span class="count">{{ counts.onclock }}</span></button>
+        <button class="atr-list-tab" type="button" data-tab="off">Off / scheduled <span class="count">{{ counts.off }}</span></button>
+        <button class="atr-list-tab" type="button" data-tab="issues">Issues <span class="count">{{ counts.issues }}</span></button>
+      </div>
+      <div class="atr-list-search">
+        <div class="atr-search-wrap">
+          {{ atr_icon('search') }}
+          <input class="atr-search-input" id="atrSearch" placeholder="Search by name, role, or phone">
+        </div>
+      </div>
+
+      {% if not boh and not foh and not closed %}
+      <div class="atr-list-empty">
+        <div class="big">No shifts on the roster yet</div>
+        <div>Use <strong>Add unscheduled shift</strong> to build today's roster, then clock teammates in.</div>
+      </div>
+      {% else %}
+      {% if boh %}
+      <div class="atr-role-section" data-role-section>
+        <div class="atr-role-header">
+          <div class="atr-role-name">BOH &middot; Kitchen</div>
+          <div class="atr-role-summary">{{ boh|length }} on roster</div>
+        </div>
+        {% for s in boh %}{{ emp_row(s) }}{% endfor %}
+      </div>
+      {% endif %}
+      {% if foh %}
+      <div class="atr-role-section" data-role-section>
+        <div class="atr-role-header">
+          <div class="atr-role-name">FOH &middot; Front of House</div>
+          <div class="atr-role-summary">{{ foh|length }} on roster</div>
+        </div>
+        {% for s in foh %}{{ emp_row(s) }}{% endfor %}
+      </div>
+      {% endif %}
+      {% if closed %}
+      <div class="atr-role-section" data-role-section>
+        <div class="atr-role-header">
+          <div class="atr-role-name">Closed shifts (clocked out)</div>
+          <div class="atr-role-summary">{{ closed|length }} finished</div>
+        </div>
+        {% for s in closed %}{{ emp_row(s) }}{% endfor %}
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="atr-detail-pane" id="atrDetailPane">
+      <div class="atr-detail-empty" id="atrDetailEmpty">
+        {{ atr_icon('people') }}
+        <div class="big">No teammate selected</div>
+        <div>Tap any teammate on the roster to clock them in, log an event, or review their shift.</div>
+      </div>
+      {% for s in boh %}{{ detail_card(s) }}{% endfor %}
+      {% for s in foh %}{{ detail_card(s) }}{% endfor %}
+      {% for s in closed %}{{ detail_card(s) }}{% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="atr-backdrop" id="atrBackdrop" onclick="atrCloseDetail()"></div>
+
+{# ---- Add unscheduled shift modal ---- #}
+<div class="atr-modal-overlay" id="atrModal" role="dialog" aria-modal="true" aria-labelledby="atrModalTitle">
+  <div class="atr-modal">
+    <div class="atr-modal-head">
+      <h2 id="atrModalTitle">Add <span class="accent">shift</span></h2>
+      <button class="atr-modal-close" type="button" id="atrModalClose" aria-label="Close">&times;</button>
+    </div>
+    <form class="atr-modal-body" method="POST" action="{{ url_for('store.manager_page_create', page='attendance') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="form_action" value="add_shift">
+      <input type="hidden" name="entry_date" value="{{ selected_date }}">
+      <div class="atr-field">
+        <label for="atrfName">Teammate name</label>
+        <input type="text" id="atrfName" name="name" required maxlength="120" placeholder="e.g. Marcus Reyes">
+      </div>
+      <div class="atr-form-grid">
+        <div class="atr-field" style="margin:0;">
+          <label for="atrfRole">Role / title</label>
+          <input type="text" id="atrfRole" name="role" maxlength="60" placeholder="e.g. Line cook">
+        </div>
+        <div class="atr-field" style="margin:0;">
+          <label for="atrfSection">Section</label>
+          <select id="atrfSection" name="section">
+            <option value="boh">BOH &middot; Kitchen</option>
+            <option value="foh">FOH &middot; Front of House</option>
+          </select>
+        </div>
+      </div>
+      <div class="atr-field">
+        <label for="atrfPhone">Phone (optional)</label>
+        <input type="text" id="atrfPhone" name="phone" maxlength="40" placeholder="(281) 555-0142">
+      </div>
+      <div class="atr-form-grid">
+        <div class="atr-field" style="margin:0;">
+          <label for="atrfStart">Scheduled start</label>
+          <input type="time" id="atrfStart" name="sched_start">
+        </div>
+        <div class="atr-field" style="margin:0;">
+          <label for="atrfEnd">Scheduled end</label>
+          <input type="time" id="atrfEnd" name="sched_end">
+        </div>
+      </div>
+      <div class="atr-modal-actions">
+        <button type="button" class="atr-btn-cancel" id="atrModalCancel">Cancel</button>
+        <button type="submit" class="atr-modal-save">Add to roster</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  // ---- Roster selection + detail pane ----
+  function atrSelect(id, row) {
+    document.querySelectorAll('.atr-emp-row').forEach(function (r) {
+      r.classList.toggle('selected', r === row);
+    });
+    document.querySelectorAll('.atr-detail-card').forEach(function (c) {
+      c.classList.toggle('open', c.id === 'atr-d-' + id);
+    });
+    var empty = document.getElementById('atrDetailEmpty');
+    if (empty) empty.style.display = 'none';
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      document.getElementById('atrDetailPane').classList.add('mobile-open');
+      document.getElementById('atrBackdrop').classList.add('show');
+    }
+  }
+  function atrCloseDetail() {
+    document.getElementById('atrDetailPane').classList.remove('mobile-open');
+    document.getElementById('atrBackdrop').classList.remove('show');
+  }
+  window.atrSelect = atrSelect;
+  window.atrCloseDetail = atrCloseDetail;
+
+  // ---- Inline event form ----
+  var EV_TITLES = {
+    'late': 'Log late arrival', 'no-show': 'Mark no-show', 'early-out': 'Log early out',
+    'callout': 'Record callout', 'break': 'Start break', 'note': 'Add note'
+  };
+  function atrOpenEvent(id, kind) {
+    var form = document.getElementById('atr-ev-' + id);
+    if (!form) return;
+    form.classList.add('open');
+    form.querySelector('[data-ev-kind]').value = kind;
+    form.querySelector('[data-ev-title]').textContent = EV_TITLES[kind] || 'Log event';
+    var lateOnly = (kind === 'late' || kind === 'callout');
+    form.querySelectorAll('[data-ev-late-only]').forEach(function (el) {
+      el.style.display = lateOnly ? '' : 'none';
+    });
+    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function atrCloseEvent(id) {
+    var form = document.getElementById('atr-ev-' + id);
+    if (form) form.classList.remove('open');
+  }
+  function atrPickReason(chip, value) {
+    var wrap = chip.closest('.atr-reason-chips');
+    wrap.querySelectorAll('.atr-reason-chip').forEach(function (c) { c.classList.remove('selected'); });
+    chip.classList.add('selected');
+    chip.closest('form').querySelector('[data-ev-reason]').value = value;
+  }
+  window.atrOpenEvent = atrOpenEvent;
+  window.atrCloseEvent = atrCloseEvent;
+  window.atrPickReason = atrPickReason;
+
+  // ---- List tabs ----
+  var activeTab = 'all';
+  function applyFilter() {
+    var q = (document.getElementById('atrSearch').value || '').toLowerCase().trim();
+    document.querySelectorAll('.atr-emp-row').forEach(function (row) {
+      var cats = (row.dataset.cats || '').split(' ');
+      var inTab = (activeTab === 'all') || cats.indexOf(activeTab) !== -1;
+      var inSearch = !q || (row.dataset.search || '').indexOf(q) !== -1;
+      row.style.display = (inTab && inSearch) ? '' : 'none';
+    });
+    document.querySelectorAll('[data-role-section]').forEach(function (sec) {
+      var anyVisible = Array.prototype.some.call(
+        sec.querySelectorAll('.atr-emp-row'),
+        function (r) { return r.style.display !== 'none'; });
+      sec.style.display = anyVisible ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.atr-list-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      document.querySelectorAll('.atr-list-tab').forEach(function (t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      activeTab = tab.dataset.tab;
+      applyFilter();
+    });
+  });
+  document.getElementById('atrSearch').addEventListener('input', applyFilter);
+
+  // ---- Add-shift modal ----
+  var modal = document.getElementById('atrModal');
+  function openModal() { modal.classList.add('open'); setTimeout(function () { document.getElementById('atrfName').focus(); }, 40); }
+  function closeModal() { modal.classList.remove('open'); }
+  document.getElementById('atrAddShift').addEventListener('click', openModal);
+  document.getElementById('atrModalClose').addEventListener('click', closeModal);
+  document.getElementById('atrModalCancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+
+  // ---- Export day (client-side CSV of the visible roster) ----
+  document.getElementById('atrExport').addEventListener('click', function () {
+    var rows = [['Name', 'Role', 'Section', 'Status', 'Scheduled', 'Clock in', 'Clock out']];
+    document.querySelectorAll('.atr-detail-card').forEach(function (card) {
+      var name = card.querySelector('.atr-detail-emp-name').textContent.trim();
+      var roleMeta = card.querySelector('.atr-detail-emp-meta .role').textContent.trim();
+      var status = card.querySelector('.atr-shift-value.sm').textContent.trim();
+      var blocks = card.querySelectorAll('.atr-shift-value');
+      rows.push([name, roleMeta, '', status, blocks[0] ? blocks[0].textContent.trim() : '',
+                 blocks[1] ? blocks[1].textContent.trim() : '', blocks[2] ? blocks[2].textContent.trim() : '']);
+    });
+    var csv = rows.map(function (r) {
+      return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
+    }).join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'attendance-' + ('{{ selected_date }}' || 'day') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  });
+})();
+</script>
+{% endblock %}

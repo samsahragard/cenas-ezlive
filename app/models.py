@@ -2403,6 +2403,70 @@ class EmployeeCounseling(ManagerLogMixin, Base):
 
 
 # ============================================================
+# ATTENDANCE TRACKING v3 — manager-operated daily time clock.
+# Sam #10:14 (dck build). The shared AttendanceTracking log table
+# (ManagerLogMixin) is the wrong shape for a per-employee-per-day
+# clock board, so v3 gets its own schema: one AttendanceShift row
+# per teammate per day + an AttendanceEvent timeline. No external
+# integration — the manager builds the roster + drives every punch.
+# ============================================================
+class AttendanceShift(Base):
+    """One teammate's shift for one day — the v3 Attendance Tracking
+    board. Status machine: scheduled -> clocked-in/late -> break ->
+    out; no-show / callout are off-states."""
+    __tablename__ = "manager_attendance_shift"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    entry_date: Mapped[date] = mapped_column(
+        Date, nullable=False, default=date.today, index=True)
+
+    employee_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    role_title: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    section: Mapped[str] = mapped_column(String(8), nullable=False, default="boh")  # boh | foh
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    scheduled_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scheduled_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    clock_in: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    clock_out: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # scheduled | clocked-in | late | no-show | callout | break | out
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
+    late_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    events: Mapped[list["AttendanceEvent"]] = relationship(
+        back_populates="shift", cascade="all, delete-orphan",
+        order_by="AttendanceEvent.at")
+
+
+class AttendanceEvent(Base):
+    """A timeline entry on an AttendanceShift — clock punch, late log,
+    callout, break, early-out, or free note."""
+    __tablename__ = "manager_attendance_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    shift_id: Mapped[int] = mapped_column(
+        ForeignKey("manager_attendance_shift.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # in | out | late | callout | break | no-show | early-out | note
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="note")
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    counts_as_occurrence: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    shift: Mapped["AttendanceShift"] = relationship(back_populates="events")
+
+
+# ============================================================
 # RECIPES — Sam /sam/chat #1130-#1133 attached 14 PDFs; spec at
 # cena #1209 / Sam dev #3074. Single table; batch sizes + ingredients
 # stored as JSON for flexibility.

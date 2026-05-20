@@ -1350,6 +1350,268 @@ def _create_incident_v3_entry(db, store_scope, user):
     db.commit()
 
 
+# ============================================================
+# Attendance Tracking v3 — manager-operated daily time clock
+# (dck, Sam #10:14). A per-employee-per-day roster board, not a
+# log-entry list — diverged from the shared manager_log shape.
+# ============================================================
+_ATTN_TZ = "America/Chicago"      # both Cenas stores are in the Houston, TX area
+_ATTN_LATE_GRACE_MIN = 5          # minutes past scheduled start before "late"
+
+
+def _attn_now():
+    """Store-local 'now' — clock punches + late-math must use the same
+    clock the manager enters scheduled times in, regardless of the
+    server tz. aick: if the app has a canonical local-time helper,
+    swap it in here."""
+    from datetime import datetime as _dt
+    try:
+        from zoneinfo import ZoneInfo
+        return _dt.now(ZoneInfo(_ATTN_TZ)).replace(tzinfo=None)
+    except Exception:
+        return _dt.now()
+
+
+def _attn_fmt(dt):
+    """'10:14 AM' from a datetime, or None."""
+    return dt.strftime("%I:%M %p").lstrip("0") if dt else None
+
+
+def _attn_parse_time(raw, on_date):
+    """'HH:MM' (from an <input type=time>) + a date -> naive datetime."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        hh, mm = raw.split(":")[:2]
+        return datetime(on_date.year, on_date.month, on_date.day, int(hh), int(mm))
+    except (ValueError, TypeError):
+        return None
+
+
+def _attn_initials(name):
+    parts = [p for p in (name or "").split() if p]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[-1][0]).upper()
+
+
+def _attn_hours(start, end):
+    """'8h 2m' / '9h' between two datetimes, or None."""
+    if not start or not end or end <= start:
+        return None
+    mins = int((end - start).total_seconds() // 60)
+    h, m = mins // 60, mins % 60
+    return f"{h}h" if m == 0 else f"{h}h {m}m"
+
+
+def _render_attendance_v3(db, label, active_key):
+    """Attendance Tracking v3 — daily roster board. ?date=<iso> picks
+    the day (default today)."""
+    from app.models import AttendanceShift
+    raw = request.args.get("date") or ""
+    try:
+        sel = date.fromisoformat(raw) if raw else date.today()
+    except ValueError:
+        sel = date.today()
+    today = date.today()
+    loc = g.current_location
+
+    def _scoped(q):
+        if loc in ("tomball", "copperfield"):
+            return q.filter((AttendanceShift.store_scope == loc) |
+                            (AttendanceShift.store_scope.is_(None)))
+        return q
+
+    shifts = _scoped(
+        db.query(AttendanceShift).filter(AttendanceShift.entry_date == sel)
+    ).order_by(AttendanceShift.employee_name.asc()).all()
+
+    # 30-day attendance history, one query, grouped by employee name.
+    win_lo = sel - timedelta(days=29)
+    hist = {}
+    for h in _scoped(db.query(AttendanceShift).filter(
+            AttendanceShift.entry_date >= win_lo,
+            AttendanceShift.entry_date <= sel)).all():
+        hist.setdefault(h.employee_name, {})[h.entry_date] = h.status
+
+    def _pattern(name):
+        by_date = hist.get(name, {})
+        cells, on_time, late_n, no_show_n = [], 0, 0, 0
+        for i in range(30):
+            d = win_lo + timedelta(days=i)
+            st, state = by_date.get(d), ""
+            if st in ("clocked-in", "break", "out"):
+                state, on_time = "on-time", on_time + 1
+            elif st == "late":
+                state, late_n = "late", late_n + 1
+            elif st == "no-show":
+                state, no_show_n = "no-show", no_show_n + 1
+            cells.append({"letter": d.strftime("%a")[0], "state": state,
+                          "is_today": d == today})
+        return cells, {"on_time": on_time, "late": late_n, "no_show": no_show_n}
+
+    def _view(s):
+        pattern, pcounts = _pattern(s.employee_name)
+        sched_h = _attn_hours(s.scheduled_start, s.scheduled_end)
+        return {
+            "id": s.id,
+            "name": s.employee_name,
+            "initials": _attn_initials(s.employee_name),
+            "role": s.role_title or "Team member",
+            "section": (s.section or "boh"),
+            "phone": s.phone,
+            "status": s.status,
+            "sched_start": _attn_fmt(s.scheduled_start),
+            "sched_end": _attn_fmt(s.scheduled_end),
+            "sched_hours": (f"{sched_h} scheduled" if sched_h else ""),
+            "clock_in": _attn_fmt(s.clock_in),
+            "clock_out": _attn_fmt(s.clock_out),
+            "late_minutes": s.late_minutes or 0,
+            "hours_worked": _attn_hours(s.clock_in, s.clock_out),
+            "note": s.note,
+            "events": [{"time": _attn_fmt(e.at), "kind": e.kind,
+                        "text": e.text or ""}
+                       for e in sorted(s.events, key=lambda e: e.at, reverse=True)],
+            "pattern": pattern,
+            "pattern_counts": pcounts,
+        }
+
+    rows = [_view(s) for s in shifts]
+    boh = [r for r in rows if r["section"] == "boh" and r["status"] != "out"]
+    foh = [r for r in rows if r["section"] == "foh" and r["status"] != "out"]
+    closed = [r for r in rows if r["status"] == "out"]
+
+    def _n(pred):
+        return sum(1 for r in rows if pred(r))
+    kpis = {
+        "scheduled": len(rows),
+        "clocked_in": _n(lambda r: r["status"] in ("clocked-in", "late", "break")),
+        "late": _n(lambda r: r["status"] == "late"),
+        "no_show": _n(lambda r: r["status"] == "no-show"),
+        "callouts": _n(lambda r: r["status"] == "callout"),
+    }
+    counts = {
+        "all": len(rows),
+        "onclock": kpis["clocked_in"],
+        "off": _n(lambda r: r["status"] in ("scheduled", "no-show", "callout", "out")),
+        "issues": _n(lambda r: r["status"] in ("late", "no-show", "callout")),
+    }
+    return render_template(
+        "attendance_tracking.html",
+        page_slug="attendance", page_label=label,
+        boh=boh, foh=foh, closed=closed, kpis=kpis, counts=counts,
+        selected_date=sel.isoformat(), today_iso=today.isoformat(),
+        prev_date=(sel - timedelta(days=1)).isoformat(),
+        next_date=(sel + timedelta(days=1)).isoformat(),
+        date_display=f"{sel:%A, %B} {sel.day}, {sel.year}",
+        is_today=(sel == today), active=active_key,
+    )
+
+
+def _attendance_v3_post(db, store_scope, user):
+    """Every POST on the Attendance v3 page. Hidden form_action selects
+    the op: add_shift | clock_in | clock_out | log_event."""
+    from app.models import AttendanceShift, AttendanceEvent
+    action = (request.form.get("form_action") or "").strip()
+    uid = user.id if user else None
+
+    if action == "add_shift":
+        raw_date = request.form.get("entry_date") or ""
+        try:
+            d = date.fromisoformat(raw_date) if raw_date else date.today()
+        except ValueError:
+            d = date.today()
+        name = (request.form.get("name") or "").strip()[:120]
+        if not name:
+            return
+        section = (request.form.get("section") or "boh").strip().lower()
+        if section not in ("boh", "foh"):
+            section = "boh"
+        db.add(AttendanceShift(
+            entry_date=d, employee_name=name,
+            role_title=((request.form.get("role") or "").strip()[:60] or None),
+            section=section,
+            phone=((request.form.get("phone") or "").strip()[:40] or None),
+            scheduled_start=_attn_parse_time(request.form.get("sched_start"), d),
+            scheduled_end=_attn_parse_time(request.form.get("sched_end"), d),
+            status="scheduled", store_scope=store_scope, author_id=uid))
+        db.commit()
+        return
+
+    # clock_in / clock_out / log_event all target an existing shift.
+    try:
+        shift_id = int(request.form.get("shift_id") or 0)
+    except (TypeError, ValueError):
+        shift_id = 0
+    shift = db.get(AttendanceShift, shift_id) if shift_id else None
+    if shift is None:
+        return
+    loc = g.current_location
+    if loc in ("tomball", "copperfield") and shift.store_scope not in (loc, None):
+        abort(403)
+    now = _attn_now()
+
+    if action == "clock_in":
+        if shift.clock_in is None:
+            shift.clock_in = now
+            late = 0
+            if shift.scheduled_start and now > shift.scheduled_start:
+                late = int((now - shift.scheduled_start).total_seconds() // 60)
+            if late > _ATTN_LATE_GRACE_MIN:
+                shift.status, shift.late_minutes = "late", late
+                db.add(AttendanceEvent(shift_id=shift.id, at=now, kind="late",
+                                       text=f"Clocked in {late}m late"))
+            else:
+                shift.status, shift.late_minutes = "clocked-in", 0
+                db.add(AttendanceEvent(shift_id=shift.id, at=now, kind="in",
+                                       text="Clocked in"))
+
+    elif action == "clock_out":
+        if shift.clock_in is not None and shift.clock_out is None:
+            shift.clock_out, shift.status = now, "out"
+            db.add(AttendanceEvent(shift_id=shift.id, at=now, kind="out",
+                                   text="Clocked out"))
+
+    elif action == "log_event":
+        kind = (request.form.get("kind") or "note").strip()
+        note = (request.form.get("note") or "").strip() or None
+        reason = (request.form.get("reason") or "").strip()[:60] or None
+        occ = (request.form.get("occurrence") or "").strip().lower() == "yes"
+        try:
+            minutes = max(int(request.form.get("minutes") or 0), 0)
+        except (TypeError, ValueError):
+            minutes = 0
+        if kind == "late":
+            shift.status, shift.late_minutes = "late", minutes
+            text = f"Late arrival logged — {minutes}m" + (f" · {reason}" if reason else "")
+        elif kind == "no-show":
+            shift.status = "no-show"
+            text = "Marked no-show" + (f" · {reason}" if reason else "")
+        elif kind == "callout":
+            shift.status = "callout"
+            text = "Callout recorded" + (f" · {reason}" if reason else "")
+        elif kind == "break":
+            shift.status = "break"
+            text = "Started break"
+        elif kind == "early-out":
+            if shift.clock_in and shift.clock_out is None:
+                shift.clock_out = now
+            shift.status = "out"
+            text = "Early out logged"
+        else:
+            kind, text = "note", (note or "Note added")
+        db.add(AttendanceEvent(shift_id=shift.id, at=now, kind=kind, text=text,
+                               reason=reason, counts_as_occurrence=occ))
+        if note and kind != "note":
+            shift.note = note
+
+    shift.updated_at = now
+    db.commit()
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_page_list(page: str):
     """List view for a manager-section page. Renders the shared
@@ -1369,6 +1631,8 @@ def manager_page_list(page: str):
             return _render_daily_log_v3(db, label, active_key)
         if page == "incident-reports":
             return _render_incident_reports_v3(db, label, active_key)
+        if page == "attendance":
+            return _render_attendance_v3(db, label, active_key)
         q = db.query(Model)
         if g.current_location in ("tomball", "copperfield"):
             q = q.filter(
@@ -1436,6 +1700,12 @@ def manager_page_create(page: str):
         if page == "incident-reports":
             _create_incident_v3_entry(db, store_scope, user)
             return redirect(url_for("store.manager_page_list", page=page))
+        if page == "attendance":
+            _attendance_v3_post(db, store_scope, user)
+            return redirect(url_for(
+                "store.manager_page_list", page=page,
+                date=(request.form.get("view_date")
+                      or request.form.get("entry_date") or None)))
         row = Model(
             title=(request.form.get("title") or "").strip()[:300] or None,
             body=(request.form.get("body") or "").strip() or None,

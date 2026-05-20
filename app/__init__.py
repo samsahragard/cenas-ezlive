@@ -609,6 +609,29 @@ def create_app():
         logging.getLogger(__name__).exception(
             "recipes + fresh_food table backfill failed (non-fatal)")
 
+    # Idempotent table create — attendance tracking v3 (Sam #10:14,
+    # dck build). AttendanceShift = per-employee-per-day clock board;
+    # AttendanceEvent = its timeline. New tables, additive.
+    try:
+        from sqlalchemy import inspect as _sa_insp_36
+        from app.db import engine as _eng_36
+        from app.models import (
+            Base as _Base_36, AttendanceShift as _AS_36, AttendanceEvent as _AE_36,
+        )
+        if _eng_36 is not None:
+            insp_36 = _sa_insp_36(_eng_36)
+            existing = set(insp_36.get_table_names())
+            to_create = [m.__table__ for m in (_AS_36, _AE_36)
+                         if m.__tablename__ not in existing]
+            if to_create:
+                _Base_36.metadata.create_all(bind=_eng_36, tables=to_create)
+                logging.getLogger(__name__).info(
+                    "attendance v3: created %d tables (%s)",
+                    len(to_create), [t.name for t in to_create])
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "attendance v3 table backfill failed (non-fatal)")
+
     # Idempotent table create — cena_wake_decisions (migration 29,
     # Sam #2576 6-piece proposal Phase A piece #3 — telemetry-first).
     # One row per dev chat message considered by the watcher; captures

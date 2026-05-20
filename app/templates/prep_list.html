@@ -361,12 +361,12 @@
     border-bottom: 0.5px solid var(--prep-border-subtle);
   }
   .prep-detail-close {
-    position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%;
-    background: rgba(0,0,0,0.3); border: 0.5px solid var(--prep-border-subtle);
-    color: var(--prep-cream-dim); cursor: pointer; display: grid; place-items: center; transition: all 0.15s;
+    position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%;
+    background: var(--prep-gold); border: none;
+    color: var(--prep-bg-deep); cursor: pointer; display: grid; place-items: center; transition: all 0.15s;
   }
-  .prep-detail-close:hover { color: var(--prep-red-bright); border-color: var(--prep-red-bright); }
-  .prep-detail-close svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-detail-close:hover { background: var(--prep-gold-bright); }
+  .prep-detail-close svg { width: 18px; height: 18px; fill: currentColor; }
   .prep-detail-cat {
     font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
     color: var(--prep-detail-color, var(--prep-gold)); letter-spacing: 0.12em;
@@ -808,25 +808,6 @@
     <a class="prep-ctrl-btn" href="?date={{ prev_date }}">{{ prep_icon('cal') }} View past days</a>
     <span class="prep-spacer"></span>
     <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} Export today</button>
-    <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}"
-          onsubmit="return confirm('Submit and lock today\'s prep record? This cannot be edited after.');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-      <input type="hidden" name="form_action" value="submit_lock">
-      <input type="hidden" name="view_date" value="{{ selected_date }}">
-      <button class="prep-ctrl-btn submit" type="submit" {{ 'disabled' if locked else '' }}>
-        {{ prep_icon('lock') }} {{ 'Day locked' if locked else 'Submit &amp; lock end of day' }}
-      </button>
-    </form>
-  </div>
-
-  {# ---- Lock notice ---- #}
-  <div class="prep-lock-notice{{ ' is-locked' if locked else '' }}">
-    {{ prep_icon('lock') }}
-    {% if locked %}
-    <div><strong>This prep record is locked</strong> &mdash; who prepped what, when, linked to clock-in. Used for productivity tracking. No further edits today.</div>
-    {% else %}
-    <div><strong>End of day submission locks the record</strong> &mdash; who prepped what, when, linked to clock-in. Used for productivity tracking. Edit until then, lock after.</div>
-    {% endif %}
   </div>
 
   {# ---- Prep team today ---- #}
@@ -853,10 +834,6 @@
       {% else %}
       <div class="prep-team-empty">No teammates on the prep roster yet.</div>
       {% endfor %}
-      <a class="prep-team-add" href="{{ url_for('store.kitchen_placeholder', store_slug=store_slug, page='prep-list') if false else '#' }}"
-         onclick="return false;">
-        {{ prep_icon('plus') }} Add teammate
-      </a>
     </div>
   </div>
 

@@ -5,13 +5,15 @@
    to a drawer); hidden on desktop. Built to the phone_nav_permissions_v3
    rendering (Sam, 2026-05-19) — gold-accent active tab, Cenas V2 palette.
 
-   Per-role (mirrors sidebar.html exactly):
+   Per-role (tab set mirrors sidebar.html's section set):
      - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
      - expo    → 4 tabs, Manager dropped
      - others  → 5 tabs (Today / Manager / Catering / Operations / Vendors)
-   Manager tab is gated is_sam_chat_user() to match the sidebar's Manager
-   section gate. Legal + Developer stay in the sidebar drawer (☰), not the
-   bottom bar, per Sam #5:36.
+   Manager tab shows for every role except expo + driver — Sam 2026-05-19:
+   "the manager tab is for everyone besides expo and driver". NOTE: this is
+   wider than sidebar.html's Manager section, which is still gated
+   is_sam_chat_user() (Sam #837 item 8). Legal + Developer stay in the
+   sidebar drawer (☰), not the bottom bar, per Sam #5:36.
 
    Context (from base_dashboard.html): user_role, store_slug, active.
    ============================================================ #}
@@ -72,8 +74,10 @@
       <i class="ti ti-layout-dashboard bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Today</span>
     </a>
-    {# Manager — gated is_sam_chat_user(), excluded for expo (mirrors sidebar.html Manager section) #}
-    {% if is_sam_chat_user() and user_role != 'expo' %}
+    {# Manager — every role except expo. Driver is handled by the driver
+       branch above, so this branch is already non-driver. Sam 2026-05-19:
+       "the manager tab is for everyone besides expo and driver." #}
+    {% if user_role != 'expo' %}
     <a href="/{{ store_slug }}/manager/daily-log"
        class="ck-bnav-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
       <i class="ti ti-clipboard-text bn-ico" aria-hidden="true"></i>

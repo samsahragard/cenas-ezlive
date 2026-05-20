@@ -1394,10 +1394,27 @@ def _create_incident_v3_entry(db, store_scope, user):
     ).count()
     report_id = f"IR-{today.strftime('%Y-%m%d')}-{today_count + 1:03d}"
 
-    sev = (request.form.get("severity") or "moderate").strip()[:20]
-    if sev not in ("critical", "serious", "moderate", "minor"):
-        sev = "moderate"
-    inc_type = (request.form.get("incident_type") or "").strip()[:40] or None
+    # Severity: single-select but now allowed to be empty (Sam #5:08 made
+    # the severity grid click-to-deselect-able). Persist NULL when blank
+    # rather than silently substituting "moderate".
+    sev_raw = (request.form.get("severity") or "").strip()[:20]
+    sev = sev_raw if sev_raw in ("critical", "serious", "moderate", "minor") else "moderate"
+
+    # Incident type: comma-separated since Sam #5:08 made the grid
+    # multi-select ("should allow you to pick all 8 if they wanted").
+    # Parse, validate each token against the known set, drop duplicates
+    # while preserving click order, then rejoin.
+    _VALID_TYPES = {"injury", "equipment", "food-safety", "customer",
+                    "staff", "security", "vendor", "property"}
+    raw_types = (request.form.get("incident_type") or "")
+    seen = set()
+    valid_types = []
+    for t in raw_types.split(","):
+        t = t.strip().lower()
+        if t in _VALID_TYPES and t not in seen:
+            seen.add(t)
+            valid_types.append(t)
+    inc_type = (",".join(valid_types))[:200] or None
 
     # v4 fields. Description -> body (kept on ManagerLogMixin); explicit
     # immediate_action is its own column. Date / time arrive as the HTML5

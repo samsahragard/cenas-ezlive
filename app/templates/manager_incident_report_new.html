@@ -2908,7 +2908,7 @@
 
             <label>Date of incident <span class="req">*</span></label>
 
-            <input type="date" id="incidentDate" name="date_of_incident" value="{{ today_iso }}">
+            <input type="date" id="incidentDate" name="date_of_incident">
 
             <div class="field-error">
 
@@ -3130,27 +3130,12 @@
 
         <div class="attached-items" id="attachedList">
 
-          <!-- Example attachments shown for visual reference -->
-
-          <div class="attached-item">
-
-            <div class="attached-icon photo">
-
-              <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
-
-            </div>
-
-            <div class="attached-info">
-
-              <div class="attached-name">IMG_4521.jpg</div>
-
-              <div class="attached-meta">2.1 MB · taken just now · 1024 × 768</div>
-
-            </div>
-
-            <button class="attached-remove" aria-label="Remove">×</button>
-
-          </div>
+          <!-- Live: starts empty. Real attachments will be uploaded via
+               the upload tiles (photo/video/document file pickers) and
+               the audio recorder. The placeholder visual reference was
+               removed 2026-05-20 #5:08 (Sam: "two options that is
+               selected and it wont let you unselect") so Evidence
+               doesn't pre-check the checklist with a phantom file. -->
 
         </div>
 
@@ -3488,7 +3473,7 @@
 
   const requiredFields = {
 
-    type:        { complete: () => !!document.querySelector('#typeGrid .type-btn.selected'), section: 'type', label: 'Incident type' },
+    type:        { complete: () => document.querySelectorAll('#typeGrid .type-btn.selected').length > 0, section: 'type', label: 'Incident type' },
 
     severity:    { complete: () => !!document.querySelector('#severityRow .sev-btn.selected'), section: 'severity', label: 'Severity level' },
 
@@ -3552,7 +3537,15 @@
 
         // Set sub text based on field
 
-        if (key === 'type') subEl.textContent = document.querySelector('#typeGrid .type-btn.selected').textContent.trim();
+        if (key === 'type') {
+
+          const sel = document.querySelectorAll('#typeGrid .type-btn.selected');
+
+          if (sel.length === 1) subEl.textContent = sel[0].textContent.trim();
+
+          else subEl.textContent = `${sel.length} types selected`;
+
+        }
 
         else if (key === 'severity') subEl.textContent = document.querySelector('#severityRow .sev-btn.selected').firstChild.textContent.trim();
 
@@ -3868,7 +3861,7 @@
 
     // All good — sync hidden inputs and submit the form for real.
     document.getElementById('hiddenIncidentType').value =
-      document.querySelector('#typeGrid .type-btn.selected')?.dataset.value || '';
+      Array.from(document.querySelectorAll('#typeGrid .type-btn.selected')).map(x => x.dataset.value).join(',');
     document.getElementById('hiddenSeverity').value =
       document.querySelector('#severityRow .sev-btn.selected')?.dataset.value || '';
     document.getElementById('hiddenFormAction').value = 'submit';
@@ -3892,13 +3885,14 @@
 
   // Type & severity selectors
 
+  // Incident type — MULTI-SELECT with toggle (Sam #5:08: "should allow
+  // you to pick all 8 if they wanted"). Clicking a button toggles its
+  // selection independently of the other buttons.
   document.querySelectorAll('#typeGrid .type-btn').forEach(b => {
 
     b.addEventListener('click', () => {
 
-      document.querySelectorAll('#typeGrid .type-btn').forEach(x => x.classList.remove('selected'));
-
-      b.classList.add('selected');
+      b.classList.toggle('selected');
 
       const sec = document.querySelector('.form-section[data-section="type"]');
 
@@ -3914,13 +3908,16 @@
 
 
 
+  // Severity — single-select but click-again to DESELECT (Sam #5:08).
   document.querySelectorAll('#severityRow .sev-btn').forEach(b => {
 
     b.addEventListener('click', () => {
 
+      const wasSelected = b.classList.contains('selected');
+
       document.querySelectorAll('#severityRow .sev-btn').forEach(x => x.classList.remove('selected'));
 
-      b.classList.add('selected');
+      if (!wasSelected) b.classList.add('selected');
 
       const sec = document.querySelector('.form-section[data-section="severity"]');
 
@@ -4098,49 +4095,79 @@
 
       } else {
 
-        // Demo: add a placeholder attachment
+        // Live: real file picker. Each non-audio tile triggers a hidden
+        // file input; selected files become real <input> children of
+        // #irForm so they post as multipart attachments on submit.
+        // Sam #5:08 removed the demo "phantom file" behavior that
+        // pre-checked Evidence in the checklist.
 
-        const map = {
+        const accept = type === 'photo' ? 'image/*'
 
-          photo: { icon: 'photo', svg: '<path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>', name: 'photo_evidence.jpg', meta: '1.4 MB · just added' },
+                     : type === 'video' ? 'video/*'
 
-          video: { icon: 'video', svg: '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>', name: 'video_clip.mp4', meta: '0:23 · 5.2 MB · just added' },
+                     : '*/*';
 
-          document: { icon: '', svg: '<path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/>', name: 'document.pdf', meta: '1 page · 124 KB · just added' },
+        const picker = document.createElement('input');
 
-        };
+        picker.type = 'file';
 
-        const cfg = map[type];
+        picker.name = 'evidence_' + type;
 
-        if (!cfg) return;
+        picker.accept = accept;
 
-        const list = document.getElementById('attachedList');
+        picker.style.display = 'none';
 
-        const item = document.createElement('div');
+        picker.multiple = true;
 
-        item.className = 'attached-item';
+        picker.addEventListener('change', () => {
 
-        item.innerHTML = `
+          if (!picker.files || !picker.files.length) return;
 
-          <div class="attached-icon ${cfg.icon}"><svg viewBox="0 0 24 24">${cfg.svg}</svg></div>
+          // Move the picker into the form so its files submit with the form.
 
-          <div class="attached-info">
+          document.getElementById('irForm').appendChild(picker);
 
-            <div class="attached-name">${cfg.name}</div>
+          const list = document.getElementById('attachedList');
 
-            <div class="attached-meta">${cfg.meta}</div>
+          for (const f of picker.files) {
 
-          </div>
+            const item = document.createElement('div');
 
-          <button class="attached-remove" aria-label="Remove">×</button>
+            item.className = 'attached-item';
 
-        `;
+            const sizeKb = (f.size / 1024).toFixed(0);
 
-        list.appendChild(item);
+            item.innerHTML = `
 
-        wireRemoveButtons();
+              <div class="attached-icon ${type}"><svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg></div>
 
-        updateChecklist();
+              <div class="attached-info">
+
+                <div class="attached-name"></div>
+
+                <div class="attached-meta">${sizeKb} KB · selected just now</div>
+
+              </div>
+
+              <button class="attached-remove" aria-label="Remove">×</button>
+
+            `;
+
+            item.querySelector('.attached-name').textContent = f.name;
+
+            list.appendChild(item);
+
+          }
+
+          wireRemoveButtons();
+
+          updateChecklist();
+
+        });
+
+        document.body.appendChild(picker);
+
+        picker.click();
 
       }
 
@@ -4165,7 +4192,7 @@
       e.preventDefault();
       // Sync grid selections even if incomplete (drafts are partial by design).
       document.getElementById('hiddenIncidentType').value =
-        document.querySelector('#typeGrid .type-btn.selected')?.dataset.value || '';
+        Array.from(document.querySelectorAll('#typeGrid .type-btn.selected')).map(x => x.dataset.value).join(',');
       document.getElementById('hiddenSeverity').value =
         document.querySelector('#severityRow .sev-btn.selected')?.dataset.value || '';
       document.getElementById('hiddenFormAction').value = 'draft';

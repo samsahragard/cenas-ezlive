@@ -872,6 +872,35 @@ def create_app():
         logging.getLogger(__name__).exception(
             "manager_incident_report v3 backfill failed (non-fatal)")
 
+    # manager_incident_report incident_type widen (migration 35,
+    # 2026-05-20 Sam #5:08 — incident-type grid is now multi-select so
+    # the column stores a CSV like "injury,equipment,food-safety"; the
+    # v3 VARCHAR(40) is too narrow for all 8 types combined). Idempotent:
+    # check the current column length before issuing ALTER COLUMN. Only
+    # runs on Postgres (Render); SQLite is lenient about string lengths
+    # so the local dev DB doesn't need the alter.
+    try:
+        from sqlalchemy import inspect as _sa_insp_35, text as _sa_text_35
+        from app.db import engine as _eng_35
+        if _eng_35 is not None and _eng_35.dialect.name == "postgresql":
+            insp_35 = _sa_insp_35(_eng_35)
+            if "manager_incident_report" in set(insp_35.get_table_names()):
+                for _c in insp_35.get_columns("manager_incident_report"):
+                    if _c["name"] == "incident_type":
+                        _len = getattr(_c["type"], "length", None) or 0
+                        if _len and _len < 200:
+                            with _eng_35.begin() as _conn_35:
+                                _conn_35.execute(_sa_text_35(
+                                    "ALTER TABLE manager_incident_report "
+                                    "ALTER COLUMN incident_type TYPE VARCHAR(200)"))
+                            logging.getLogger(__name__).info(
+                                "manager_incident_report.incident_type widened "
+                                "VARCHAR(%d -> 200) (migration 35)", _len)
+                        break
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "manager_incident_report.incident_type widen failed (non-fatal)")
+
     # manager_incident_report v4 fields (migration 34, ck build-order
     # Sam dev chat #4:22 + #4:23 spec 2026-05-20 — rich "File new incident"
     # form with discrete what/when/where/who fields + lock-on-submit.

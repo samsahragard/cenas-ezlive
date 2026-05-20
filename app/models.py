@@ -2326,7 +2326,10 @@ class IncidentReport(ManagerLogMixin, Base):
     # the searchable archive view.
     severity: Mapped[str] = mapped_column(String(20), nullable=False, default="moderate")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
-    incident_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Was VARCHAR(40); bumped to (200) on 2026-05-20 to fit the
+    # multi-select CSV that the v4 incident-type grid now produces
+    # (Sam #5:08). Backfill ALTER COLUMN lives in app/__init__.py.
+    incident_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
     report_id: Mapped[str | None] = mapped_column(String(40), index=True, nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

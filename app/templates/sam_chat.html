@@ -329,6 +329,15 @@
     .sc-input { flex: 1 1 100%; order: -1; min-height: 72px; }
   }
 
+  /* Phone: the chat history rail is a fixed 232px column that squeezed
+     the conversation panel down to a sliver (Sam #11:40). Stack it —
+     rail on top as a bounded scrollable list, conversation full-width
+     below. (dck spec.) */
+  @media (max-width: 720px) {
+    .sc-wrap { flex-direction: column; height: auto; }
+    .sc-rail { flex: 0 0 auto; max-height: 200px; }
+  }
+
   /* ---- thinking animation ---- */
   @keyframes sc-dot-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }

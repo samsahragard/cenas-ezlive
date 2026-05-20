@@ -369,9 +369,6 @@
                     data-reply-time="{{ m.created_at_display }}"
                     data-reply-snippet="{{ m.body[:120] }}"
                     title="Reply (quotes this message)">Reply</button>
-            <button type="button" class="msg-action-btn msg-copy-btn"
-                    data-body="{{ m.body }}"
-                    title="Copy message body to clipboard">Copy</button>
           {% endif %}
         </span>
       </div>
@@ -485,14 +482,6 @@
       reply.title = 'Reply (quotes this message)';
       reply.textContent = 'Reply';
       actions.appendChild(reply);
-
-      const copy = document.createElement('button');
-      copy.type = 'button';
-      copy.className = 'msg-action-btn msg-copy-btn';
-      copy.dataset.body = m.body;
-      copy.title = 'Copy message body to clipboard';
-      copy.textContent = 'Copy';
-      actions.appendChild(copy);
     }
     meta.appendChild(actions);
     div.appendChild(meta);
@@ -784,33 +773,6 @@
       bodyTextarea.value = quote + cur;
       bodyTextarea.focus();
       bodyTextarea.setSelectionRange(bodyTextarea.value.length, bodyTextarea.value.length);
-      return;
-    }
-    const copy = e.target.closest('.msg-copy-btn');
-    if (copy) {
-      const text = copy.dataset.body || '';
-      if (!text) return;
-      const flash = (msg) => {
-        const orig = copy.textContent;
-        copy.textContent = msg;
-        copy.disabled = true;
-        setTimeout(() => { copy.textContent = orig; copy.disabled = false; }, 1200);
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text)
-          .then(() => flash('✓'))
-          .catch(() => flash('×'));
-      } else {
-        // Legacy fallback for older WebViews — invisible textarea + execCommand
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try { document.execCommand('copy'); flash('✓'); }
-        catch { flash('×'); }
-        document.body.removeChild(ta);
-      }
       return;
     }
   });

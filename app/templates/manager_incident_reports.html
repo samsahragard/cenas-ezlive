@@ -63,10 +63,15 @@
     font-family: 'Manrope', system-ui, sans-serif;
     font-size: 15px;
     line-height: 1.5;
-    padding-bottom: 60px;
     position: relative;
     z-index: 1;
     min-height: 100vh;
+    /* Contained card surface — same shape as attendance's .atr-page so
+       content reads organized (Sam #1:40 + dck spec #1:53). */
+    border: 0.5px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-lg);
+    padding: 24px 20px 40px;
+    overflow: hidden;
   }
   /* v3 dark-red gradient backdrop, scoped to the content column only
      (position:absolute on .ir-page, not fixed/viewport) so the
@@ -207,6 +212,7 @@
     text-decoration: none;
     transition: border-color .15s, background .15s;
   }
+  .ir-secondary-action svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
   .ir-secondary-action:hover {
     border-color: var(--ir-border-active);
     background: var(--ir-bg-input);

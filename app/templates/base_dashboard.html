@@ -237,6 +237,10 @@
   </main>
 </div>
 
+{# Phone bottom navigation — mobile-only (<=1024px), hidden on desktop.
+   Per-role tab bar built to the phone_nav_permissions_v3 rendering. #}
+{% include 'partials/_bottom_nav.html' %}
+
 <img class="wordmark" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen">
 
 <script>

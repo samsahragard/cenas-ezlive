@@ -1,0 +1,103 @@
+{# ============================================================
+   _bottom_nav.html — Cenas Kitchen phone bottom navigation bar.
+
+   Mobile-only: shown below 1024px (where the left sidebar collapses
+   to a drawer); hidden on desktop. Built to the phone_nav_permissions_v3
+   rendering (Sam, 2026-05-19) — gold-accent active tab, Cenas V2 palette.
+
+   Per-role (mirrors sidebar.html exactly):
+     - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
+     - expo    → 4 tabs, Manager dropped
+     - others  → 5 tabs (Today / Manager / Catering / Operations / Vendors)
+   Manager tab is gated is_sam_chat_user() to match the sidebar's Manager
+   section gate. Legal + Developer stay in the sidebar drawer (☰), not the
+   bottom bar, per Sam #5:36.
+
+   Context (from base_dashboard.html): user_role, store_slug, active.
+   ============================================================ #}
+{% set _bn_active = active|default('') or '' %}
+<style>
+  .ck-bnav {
+    display: none;                 /* shown <=1024px by the media query */
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    border-top: 1px solid rgba(236, 227, 208, 0.15);
+    background: #2a2419;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .ck-bnav-inner { display: flex; }
+  .ck-bnav-tab {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 9px 2px 7px;
+    background: transparent; border: 0;
+    border-top: 2px solid transparent; margin-top: -1px;
+    color: rgba(236, 227, 208, 0.45);
+    text-decoration: none; cursor: pointer;
+  }
+  .ck-bnav-tab .bn-ico { font-size: 19px; line-height: 1; }
+  .ck-bnav-tab .bn-lbl {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.03em;
+    text-transform: uppercase; color: rgba(236, 227, 208, 0.45);
+  }
+  .ck-bnav-tab.active { border-top-color: #d4af37; }
+  .ck-bnav-tab.active .bn-lbl { color: #d4af37; }
+  .ck-bnav-tab.active .bn-ico {
+    color: #d4af37;
+    filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.5));
+  }
+  @media (max-width: 1024px) {
+    .ck-bnav { display: block; }
+    /* keep page content clear of the fixed bar */
+    .layout > .main { padding-bottom: 78px; }
+  }
+</style>
+<nav class="ck-bnav" aria-label="Primary navigation (mobile)">
+  <div class="ck-bnav-inner">
+  {% if user_role == 'driver' %}
+    {% for href, key, icon, label in [
+      ('/ez-market',   'ez_market',   'ti-flame',     'Ez Market'),
+      ('/my-profile',  'my_profile',  'ti-user-star', 'Profile'),
+      ('/pay-history', 'pay_history', 'ti-receipt',   'Pay'),
+      ('/driver/logs', 'driver_logs', 'ti-map-pin',   'Tracking'),
+    ] %}
+    <a href="{{ href }}" class="ck-bnav-tab{% if _bn_active == key %} active{% endif %}">
+      <i class="ti {{ icon }} bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">{{ label }}</span>
+    </a>
+    {% endfor %}
+  {% else %}
+    {# Today #}
+    <a href="/{{ store_slug }}/"
+       class="ck-bnav-tab{% if _bn_active in ['dashboard', 'notifications', 'team_reports', 'sam_chat'] %} active{% endif %}">
+      <i class="ti ti-layout-dashboard bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">Today</span>
+    </a>
+    {# Manager — gated is_sam_chat_user(), excluded for expo (mirrors sidebar.html Manager section) #}
+    {% if is_sam_chat_user() and user_role != 'expo' %}
+    <a href="/{{ store_slug }}/manager/daily-log"
+       class="ck-bnav-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
+      <i class="ti ti-clipboard-text bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">Manager</span>
+    </a>
+    {% endif %}
+    {# Catering #}
+    <a href="/{{ store_slug }}/orders"
+       class="ck-bnav-tab{% if _bn_active in ['ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering'] %} active{% endif %}">
+      <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">Catering</span>
+    </a>
+    {# Operations #}
+    <a href="/{{ store_slug }}/reports/sales/total"
+       class="ck-bnav-tab{% if _bn_active in ['partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
+      <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">Operations</span>
+    </a>
+    {# Vendors #}
+    <a href="/{{ store_slug }}/produce/"
+       class="ck-bnav-tab{% if _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
+      <i class="ti ti-leaf bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">Vendors</span>
+    </a>
+  {% endif %}
+  </div>
+</nav>

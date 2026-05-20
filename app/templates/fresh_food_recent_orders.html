@@ -421,6 +421,71 @@
     text-align: right;
     font-family: inherit;
   }
+
+  /* ===== Mobile collapsed-row + animated dropdown (Sam #1:37, dck spec
+     #1:53). Active orders + history rows on phone: date · time + order
+     # + location + chevron; tap expands inline detail. Tracker table
+     stays untouched (per-item, not per-order). ===== */
+  .ffro-m-row, .ffro-m-detail, .ffro-hist-mobile { display: none; }
+
+  @media (max-width: 720px) {
+    /* Active order cards: switch to collapsed-row layout */
+    .ffro-active-grid { grid-template-columns: 1fr; padding: 0; gap: 0; }
+    .ffro-active-card { padding: 0; cursor: pointer; border: 0; border-bottom: 0.5px solid rgba(228,179,64,0.18); border-radius: 0; background: transparent; gap: 0; }
+    .ffro-active-card:last-child { border-bottom: 0; }
+    .ffro-active-card > .ac-top,
+    .ffro-active-card > .ac-title,
+    .ffro-active-card > .ac-sub,
+    .ffro-active-card > .ac-meta,
+    .ffro-active-card > .ac-fill { display: none; }
+
+    /* History table: hide on phone; show .ffro-hist-mobile cards instead */
+    table.ffro-hist { display: none; }
+    .ffro-hist-mobile { display: block; }
+
+    /* Shared collapsed-row + accordion */
+    .ffro-m-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px;
+    }
+    .ffro-m-left { flex: 1; min-width: 0; }
+    .ffro-m-num { font-weight: 600; font-size: 14px; color: #FAF6EC; }
+    .ffro-m-sub { font-size: 11.5px; color: rgba(250,246,236,0.62); margin-top: 2px; }
+    .ffro-m-right {
+      display: flex; align-items: center; gap: 8px;
+      color: rgba(250,246,236,0.62); font-size: 11.5px;
+      flex-shrink: 0;
+    }
+    .ffro-m-loc { text-transform: capitalize; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ffro-m-chev {
+      width: 14px; height: 14px; flex-shrink: 0;
+      transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+      color: rgba(250,246,236,0.38);
+    }
+    .ffro-m-card.expanded .ffro-m-chev,
+    .ffro-active-card.expanded .ffro-m-chev { transform: rotate(180deg); }
+
+    .ffro-m-detail {
+      display: block;
+      max-height: 0; overflow: hidden; opacity: 0;
+      transition: max-height 0.3s cubic-bezier(.4,0,.2,1), opacity 0.2s;
+    }
+    .ffro-m-card.expanded .ffro-m-detail,
+    .ffro-active-card.expanded .ffro-m-detail {
+      max-height: 800px; opacity: 1;
+    }
+    .ffro-m-d-inner { padding: 4px 16px 16px; font-size: 12.5px; color: rgba(250,246,236,0.88); }
+    .ffro-m-d-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 0.5px solid rgba(255,255,255,0.04); }
+    .ffro-m-d-row:last-child { border-bottom: 0; }
+    .ffro-m-d-label { color: rgba(250,246,236,0.5); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .ffro-m-d-value { color: #FAF6EC; }
+    .ffro-m-d-actions { padding-top: 10px; }
+    .ffro-m-d-actions .ffro-btn { width: 100%; justify-content: center; }
+
+    /* Hist mobile-card wrap */
+    .ffro-hist-mobile .ffro-m-card { border-bottom: 0.5px solid rgba(228,179,64,0.18); cursor: pointer; }
+    .ffro-hist-mobile .ffro-m-card:last-child { border-bottom: 0; }
+  }
 </style>
 
 <div class="ffro-page">
@@ -528,6 +593,32 @@
             <button class="ffro-btn primary ac-fill" type="button" data-order-id="{{ o.id }}">
               <i class="ti ti-truck-delivery"></i>Fill SENT
             </button>
+            {# ---- Mobile collapsed row + dropdown (phone only) ---- #}
+            <div class="ffro-m-row">
+              <div class="ffro-m-left">
+                <div class="ffro-m-num">Order #{{ o.id }}</div>
+                <div class="ffro-m-sub">
+                  {%- if o.placed_at -%}{{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%I:%M %p').lstrip('0') }}{%- else -%}—{%- endif -%}
+                </div>
+              </div>
+              <div class="ffro-m-right">
+                <div class="ffro-m-loc">{{ (o.store_scope or 'both')|title }}</div>
+                <svg class="ffro-m-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+              </div>
+            </div>
+            <div class="ffro-m-detail">
+              <div class="ffro-m-d-inner">
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Status</span><span class="ffro-m-d-value"><span class="status-pill active">Active</span></span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">For</span><span class="ffro-m-d-value">{{ o.order_date.strftime('%a, %b %d') if o.order_date else '—' }}</span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Placed by</span><span class="ffro-m-d-value">{{ o.placed_by_name or '—' }}</span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Items</span><span class="ffro-m-d-value">{{ olines|length }} · {{ '%.1f'|format(ns.units) }} units</span></div>
+                <div class="ffro-m-d-actions">
+                  <button class="ffro-btn primary ac-fill" type="button" data-order-id="{{ o.id }}">
+                    <i class="ti ti-truck-delivery"></i>Fill SENT
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         {% endfor %}
       </div>
@@ -574,6 +665,34 @@
           {% endfor %}
         </tbody>
       </table>
+      {# ---- Mobile cards mirror of history table (phone only) ---- #}
+      <div class="ffro-hist-mobile">
+        {% for o in orders %}
+          <div class="ffro-m-card" data-order-id="{{ o.id }}" data-status="{{ o.status }}">
+            <div class="ffro-m-row">
+              <div class="ffro-m-left">
+                <div class="ffro-m-num">Order #{{ o.id }}</div>
+                <div class="ffro-m-sub">
+                  {%- if o.placed_at -%}{{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%I:%M %p').lstrip('0') }}{%- else -%}—{%- endif -%}
+                </div>
+              </div>
+              <div class="ffro-m-right">
+                <div class="ffro-m-loc">{{ (o.store_scope or 'both')|title }}</div>
+                <svg class="ffro-m-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+              </div>
+            </div>
+            <div class="ffro-m-detail">
+              <div class="ffro-m-d-inner">
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Status</span><span class="ffro-m-d-value"><span class="status-pill {{ o.status }}">{{ o.status }}</span></span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Order date</span><span class="ffro-m-d-value">{{ o.order_date.isoformat() if o.order_date else '—' }}</span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Placed by</span><span class="ffro-m-d-value">{{ o.placed_by_name or '—' }}</span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Sent date</span><span class="ffro-m-d-value">{{ o.sent_date.isoformat() if o.sent_date else '—' }}</span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Fulfilled by</span><span class="ffro-m-d-value">{{ o.fulfilled_by_name or '—' }}</span></div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
     {% else %}
       <div class="ffro-empty">
         No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>.
@@ -726,10 +845,30 @@
 
   // Active-order cards (Section 1.5) open the same modal
   document.querySelectorAll('.ac-fill').forEach(function(b){
-    b.addEventListener('click', function(){
+    b.addEventListener('click', function(e){
+      e.stopPropagation();  // don't trigger accordion toggle on phone
       openFulfill(parseInt(b.getAttribute('data-order-id'), 10));
     });
   });
+
+  // Phone accordion (Sam #1:37) — tap toggles .expanded; accordion
+  // (one open at a time). Gated to ≤720px so desktop is untouched.
+  function bindAccordion(container, cardSelector) {
+    if (!container) return;
+    container.addEventListener('click', function(e){
+      if (!(window.matchMedia && window.matchMedia('(max-width: 720px)').matches)) return;
+      if (e.target.closest('button, a, input')) return;
+      var card = e.target.closest(cardSelector);
+      if (!card) return;
+      var wasExpanded = card.classList.contains('expanded');
+      container.querySelectorAll(cardSelector + '.expanded').forEach(function(n){
+        if (n !== card) n.classList.remove('expanded');
+      });
+      card.classList.toggle('expanded', !wasExpanded);
+    });
+  }
+  bindAccordion(document.querySelector('.ffro-active-grid'), '.ffro-active-card');
+  bindAccordion(document.querySelector('.ffro-hist-mobile'), '.ffro-m-card');
 
   ffSubmit.addEventListener('click', function(){
     if(!currentOrderId) return;

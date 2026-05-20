@@ -5,15 +5,16 @@
    to a drawer); hidden on desktop. Built to the phone_nav_permissions_v3
    rendering (Sam, 2026-05-19) — gold-accent active tab, Cenas V2 palette.
 
+   2026-05-20 rebuild (Sam #1:46 / #9:47): tabs no longer navigate on
+   tap — each opens an animated slide-up popover with that section's
+   sub-options. Soft golden glow above the bar. The popover items are
+   real <a href> links (so taps inside still navigate); only the tabs
+   are buttons. driver branch unchanged (single-screen My Work bar).
+
    Per-role (tab set mirrors sidebar.html's section set):
      - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
      - expo    → 4 tabs, Manager dropped
      - others  → 5 tabs (Today / Manager / Catering / Operations / Vendors)
-   Manager tab shows for every role except expo + driver — Sam 2026-05-19:
-   "the manager tab is for everyone besides expo and driver". NOTE: this is
-   wider than sidebar.html's Manager section, which is still gated
-   is_sam_chat_user() (Sam #837 item 8). Legal + Developer stay in the
-   sidebar drawer (☰), not the bottom bar, per Sam #5:36.
 
    Context (from base_dashboard.html): user_role, store_slug, active.
    ============================================================ #}
@@ -25,6 +26,9 @@
     border-top: 1px solid rgba(236, 227, 208, 0.15);
     background: #2a2419;
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Soft golden glow above the bar (Sam #1:46 / #9:47). */
+    box-shadow: 0 -8px 24px -8px rgba(212, 175, 55, 0.35),
+                0 -2px 8px -2px rgba(212, 175, 55, 0.22);
   }
   .ck-bnav-inner { display: flex; }
   .ck-bnav-tab {
@@ -35,6 +39,7 @@
     border-top: 2px solid transparent; margin-top: -1px;
     color: rgba(236, 227, 208, 0.45);
     text-decoration: none; cursor: pointer;
+    font-family: inherit;
   }
   .ck-bnav-tab .bn-ico { font-size: 19px; line-height: 1; }
   .ck-bnav-tab .bn-lbl {
@@ -47,6 +52,70 @@
     color: #d4af37;
     filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.5));
   }
+  .ck-bnav-tab.is-popping {
+    background: rgba(212, 175, 55, 0.08);
+  }
+
+  /* Slide-up popover holding each tab's sub-options. */
+  .bn-popover {
+    position: fixed; left: 0; right: 0;
+    bottom: 0;
+    padding: 14px 14px calc(78px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, #2a2419 0%, #1a140e 100%);
+    border-top: 1px solid rgba(212, 175, 55, 0.28);
+    box-shadow: 0 -16px 40px -8px rgba(0, 0, 0, 0.55),
+                0 -2px 12px -2px rgba(212, 175, 55, 0.25);
+    z-index: 199;
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(.22,.61,.36,1);
+    display: none;
+  }
+  .bn-popover.open {
+    display: block;
+    transform: translateY(0);
+  }
+  .bn-popover-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .bn-pop-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: rgba(236, 227, 208, 0.04);
+    border: 0.5px solid rgba(212, 175, 55, 0.18);
+    border-radius: 10px;
+    color: #ece3d0;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .bn-pop-item i { font-size: 16px; color: #d4af37; flex-shrink: 0; }
+  .bn-pop-item:active { background: rgba(212, 175, 55, 0.12); }
+  .bn-pop-item.active {
+    border-color: rgba(212, 175, 55, 0.55);
+    background: rgba(212, 175, 55, 0.10);
+  }
+  .bn-pop-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(236, 227, 208, 0.55);
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+  .bn-pop-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 198;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .bn-pop-backdrop.open {
+    display: block;
+    opacity: 1;
+  }
+
   @media (max-width: 1024px) {
     .ck-bnav { display: block; }
     /* keep page content clear of the fixed bar */
@@ -54,6 +123,72 @@
   }
 </style>
 <nav class="ck-bnav" aria-label="Primary navigation (mobile)">
+  {% if user_role != 'driver' %}
+  {# ---- Sub-option popovers — one per non-driver tab ---- #}
+  <div class="bn-pop-backdrop" id="bn-pop-backdrop"></div>
+
+  <div class="bn-popover" id="bn-pop-today" data-pop="today">
+    <div class="bn-pop-title">Today</div>
+    <div class="bn-popover-grid">
+      <a class="bn-pop-item{% if _bn_active == 'dashboard' %} active{% endif %}" href="/{{ store_slug }}/"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
+      <a class="bn-pop-item{% if _bn_active == 'notifications' %} active{% endif %}" href="/partner/notifications"><i class="ti ti-bell"></i>Notifications</a>
+      <a class="bn-pop-item{% if _bn_active == 'team_reports' %} active{% endif %}" href="/partner/team-reports/"><i class="ti ti-chart-bar"></i>Task Reports</a>
+      <a class="bn-pop-item{% if _bn_active == 'sam_chat' %} active{% endif %}" href="/sam/chat"><i class="ti ti-sparkles"></i>Cena</a>
+    </div>
+  </div>
+
+  {% if user_role != 'expo' %}
+  <div class="bn-popover" id="bn-pop-manager" data-pop="manager">
+    <div class="bn-pop-title">Manager</div>
+    <div class="bn-popover-grid">
+      <a class="bn-pop-item{% if _bn_active == 'manager_daily_log' %} active{% endif %}" href="/{{ store_slug }}/manager/daily-log"><i class="ti ti-clipboard-text"></i>Daily log</a>
+      <a class="bn-pop-item{% if _bn_active == 'manager_incident_reports' %} active{% endif %}" href="/{{ store_slug }}/manager/incident-reports"><i class="ti ti-alert-triangle"></i>Incident reports</a>
+      <a class="bn-pop-item{% if _bn_active == 'manager_attendance' %} active{% endif %}" href="/{{ store_slug }}/manager/attendance"><i class="ti ti-calendar-time"></i>Attendance</a>
+      <a class="bn-pop-item{% if _bn_active == 'manager_interview' %} active{% endif %}" href="/{{ store_slug }}/manager/interview"><i class="ti ti-user-plus"></i>Interview</a>
+      <a class="bn-pop-item{% if _bn_active == 'manager_training' %} active{% endif %}" href="/{{ store_slug }}/manager/training"><i class="ti ti-school"></i>Training</a>
+      <a class="bn-pop-item{% if _bn_active == 'manager_maintenance' %} active{% endif %}" href="/{{ store_slug }}/manager/maintenance"><i class="ti ti-tools"></i>Maintenance</a>
+      <a class="bn-pop-item{% if _bn_active == 'manager_counseling' %} active{% endif %}" href="/{{ store_slug }}/manager/counseling"><i class="ti ti-user-exclamation"></i>Counseling</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="bn-popover" id="bn-pop-catering" data-pop="catering">
+    <div class="bn-pop-title">Catering</div>
+    <div class="bn-popover-grid">
+      <a class="bn-pop-item{% if _bn_active == 'ezcater_orders' %} active{% endif %}" href="/{{ store_slug }}/orders"><i class="ti ti-clipboard-list"></i>Ez Orders</a>
+      <a class="bn-pop-item{% if _bn_active == 'ez_market' %} active{% endif %}" href="/ez-market"><i class="ti ti-shopping-bag"></i>Ez Market</a>
+      <a class="bn-pop-item{% if _bn_active == 'ez_manage' %} active{% endif %}" href="/ez-manage"><i class="ti ti-settings"></i>Ez Manage</a>
+      <a class="bn-pop-item{% if _bn_active in ['drivers_admin','driver_tracking'] %} active{% endif %}" href="/{{ store_slug }}/drivers"><i class="ti ti-steering-wheel"></i>Drivers</a>
+      <a class="bn-pop-item{% if _bn_active == 'in_house_catering' %} active{% endif %}" href="/{{ store_slug }}/in-house-catering"><i class="ti ti-shopping-cart"></i>In-House</a>
+    </div>
+  </div>
+
+  <div class="bn-popover" id="bn-pop-operations" data-pop="operations">
+    <div class="bn-pop-title">Operations</div>
+    <div class="bn-popover-grid">
+      <a class="bn-pop-item{% if _bn_active == 'partner_team' %} active{% endif %}" href="/partner/team"><i class="ti ti-users-group"></i>Team</a>
+      <a class="bn-pop-item{% if _bn_active.startswith('sales_') %} active{% endif %}" href="/{{ store_slug }}/reports/sales/total"><i class="ti ti-cash"></i>Sales</a>
+      <a class="bn-pop-item{% if _bn_active.endswith('_labor') %} active{% endif %}" href="/{{ store_slug }}/reports/labor/boh"><i class="ti ti-users"></i>Labor</a>
+      <a class="bn-pop-item{% if _bn_active.startswith('perf_') %} active{% endif %}" href="/{{ store_slug }}/reports/performance/all"><i class="ti ti-medal"></i>Performance</a>
+      <a class="bn-pop-item{% if _bn_active == 'weekly_schedule' %} active{% endif %}" href="/{{ store_slug }}/schedule"><i class="ti ti-calendar"></i>Schedule</a>
+      <a class="bn-pop-item{% if _bn_active == 'kitchen_fresh_food' %} active{% endif %}" href="/{{ store_slug }}/fresh-food/place-order"><i class="ti ti-leaf"></i>Fresh Food</a>
+      <a class="bn-pop-item{% if _bn_active == 'kitchen_prep_list' %} active{% endif %}" href="/{{ store_slug }}/kitchen/prep-list"><i class="ti ti-tools-kitchen-2"></i>Prep List</a>
+      <a class="bn-pop-item{% if _bn_active == 'kitchen_recipes' %} active{% endif %}" href="/{{ store_slug }}/recipes"><i class="ti ti-book"></i>Recipes</a>
+    </div>
+  </div>
+
+  <div class="bn-popover" id="bn-pop-vendors" data-pop="vendors">
+    <div class="bn-pop-title">Vendors</div>
+    <div class="bn-popover-grid">
+      <a class="bn-pop-item{% if _bn_active == 'produce' %} active{% endif %}" href="/{{ store_slug }}/produce/"><i class="ti ti-leaf"></i>Produce</a>
+      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_webstaurant' %} active{% endif %}" href="/{{ store_slug }}/vendors/webstaurant/recent-orders"><i class="ti ti-truck"></i>Webstaurant</a>
+      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_performance-food' %} active{% endif %}" href="/{{ store_slug }}/vendors/performance-food/recent-orders"><i class="ti ti-truck"></i>Performance Food</a>
+      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_restaurant-depot' %} active{% endif %}" href="/{{ store_slug }}/vendors/restaurant-depot/recent-orders"><i class="ti ti-truck"></i>Restaurant Depot</a>
+      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_specs' %} active{% endif %}" href="/{{ store_slug }}/vendors/specs/recent-orders"><i class="ti ti-truck"></i>Specs</a>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="ck-bnav-inner">
   {% if user_role == 'driver' %}
     {% for href, key, icon, label in [
@@ -69,39 +204,80 @@
     {% endfor %}
   {% else %}
     {# Today #}
-    <a href="/{{ store_slug }}/"
+    <button type="button" data-pop="today"
        class="ck-bnav-tab{% if _bn_active in ['dashboard', 'notifications', 'team_reports', 'sam_chat'] %} active{% endif %}">
       <i class="ti ti-layout-dashboard bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Today</span>
-    </a>
-    {# Manager — every role except expo. Driver is handled by the driver
-       branch above, so this branch is already non-driver. Sam 2026-05-19:
-       "the manager tab is for everyone besides expo and driver." #}
+    </button>
+    {# Manager — every role except expo. #}
     {% if user_role != 'expo' %}
-    <a href="/{{ store_slug }}/manager/daily-log"
+    <button type="button" data-pop="manager"
        class="ck-bnav-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
       <i class="ti ti-clipboard-text bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Manager</span>
-    </a>
+    </button>
     {% endif %}
     {# Catering #}
-    <a href="/{{ store_slug }}/orders"
+    <button type="button" data-pop="catering"
        class="ck-bnav-tab{% if _bn_active in ['ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering'] %} active{% endif %}">
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
-    </a>
+    </button>
     {# Operations #}
-    <a href="/{{ store_slug }}/reports/sales/total"
+    <button type="button" data-pop="operations"
        class="ck-bnav-tab{% if _bn_active in ['partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
       <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Operations</span>
-    </a>
+    </button>
     {# Vendors #}
-    <a href="/{{ store_slug }}/produce/"
+    <button type="button" data-pop="vendors"
        class="ck-bnav-tab{% if _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
       <i class="ti ti-leaf bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Vendors</span>
-    </a>
+    </button>
   {% endif %}
   </div>
 </nav>
+
+{% if user_role != 'driver' %}
+<script>
+(function() {
+  'use strict';
+  var nav = document.querySelector('.ck-bnav');
+  var backdrop = document.getElementById('bn-pop-backdrop');
+  if (!nav || !backdrop) return;
+  var openId = null;
+  function closeAll() {
+    if (!openId) return;
+    var pop = document.getElementById('bn-pop-' + openId);
+    if (pop) pop.classList.remove('open');
+    backdrop.classList.remove('open');
+    nav.querySelectorAll('.ck-bnav-tab.is-popping').forEach(function(t) {
+      t.classList.remove('is-popping');
+    });
+    openId = null;
+  }
+  function open(id) {
+    if (openId === id) { closeAll(); return; }
+    closeAll();
+    var pop = document.getElementById('bn-pop-' + id);
+    if (!pop) return;
+    pop.classList.add('open');
+    backdrop.classList.add('open');
+    var tab = nav.querySelector('.ck-bnav-tab[data-pop="' + id + '"]');
+    if (tab) tab.classList.add('is-popping');
+    openId = id;
+  }
+  nav.addEventListener('click', function(e) {
+    var btn = e.target.closest('.ck-bnav-tab[data-pop]');
+    if (!btn) return;
+    e.preventDefault();
+    open(btn.getAttribute('data-pop'));
+  });
+  backdrop.addEventListener('click', closeAll);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeAll();
+  });
+})();
+</script>
+{% endif %}

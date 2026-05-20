@@ -119,6 +119,16 @@
     font-weight: 600;
   }
   .chat-input button:hover { filter: brightness(1.08); }
+  /* Phone: let the row wrap so the textarea isn't squeezed (Sam #9:45 —
+     "the text box is so small"). Select goes on its own row, textarea
+     takes full width, and mic/attach/send share a row underneath. */
+  @media (max-width: 720px) {
+    .chat-input-row { flex-wrap: wrap; }
+    .chat-input select { flex: 1 1 100%; }
+    .chat-input textarea { flex: 1 1 100%; min-height: 80px; }
+    .chat-input button[type=submit] { flex: 1 1 auto; }
+    .chat-input button[type=button] { flex: 0 0 auto; }
+  }
   .chat-input button[type=button] {
     background: rgba(255,255,255,0.08);
     border: 1px solid var(--glass-border);

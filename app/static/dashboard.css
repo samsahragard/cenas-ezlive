@@ -131,7 +131,8 @@ aside.sidebar {
 .avatar-role { font-size: 11px; color: var(--text-3); }
 
 /* ============ Main ============ */
-main.main { padding: 28px 32px 60px; }
+/* min-width:0 lets the 1fr grid track shrink — without it a wide child (table, chip strip) overflows the viewport */
+main.main { padding: 28px 32px 60px; min-width: 0; }
 
 .topbar {
   display: flex; justify-content: space-between; align-items: center;

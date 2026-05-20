@@ -271,30 +271,6 @@
           </div></div>
         </div>
 
-        {# Kitchen — Sam #837 item 17. Placeholder routes. #}
-        <div class="ck-sb-branch" data-id="ops.kitchen">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-chef-hat ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Kitchen</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            {# Fresh Food + Recipes are LIVE — point at the real routes,
-               no 'soon' badge (Sam #9:44: the placeholder links did not
-               reach the shipped pages). Prep List stays a placeholder. #}
-            <a href="/{{ store_slug }}/fresh-food/place-order" class="ck-sb-subitem{% if active in ('fresh_food_place_order', 'fresh_food_recent_orders') %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Fresh Food</span>
-            </a>
-            <a href="/{{ store_slug }}/kitchen/prep-list" class="ck-sb-subitem{% if active == 'kitchen_prep_list' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Prep List</span>
-              <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
-            </a>
-            <a href="/{{ store_slug }}/recipes" class="ck-sb-subitem{% if active == 'kitchen_recipes' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Recipes</span>
-            </a>
-          </div></div>
-        </div>
-
         <div class="ck-sb-branch" data-id="ops.corporate_order">
           <button class="ck-sb-branch-head">
             <i class="ti ti-shopping-cart ck-sb-branch-icon" aria-hidden="true"></i>
@@ -310,6 +286,32 @@
             </a>
           </div></div>
         </div>
+
+      </div></div>
+    </div>
+
+    {# ==== KITCHEN ==== promoted from an Operations branch to its own
+       section below Operations (Sam 2026-05-20 #1:35). Fresh Food /
+       Prep List / Recipes are all live shipped pages. #}
+    <div class="ck-sb-section collapsed" data-id="kitchen">
+      <button class="ck-sb-section-head" aria-expanded="false">
+        <span class="ck-sb-section-label">Kitchen</span>
+        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
+      </button>
+      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
+
+        <a href="/{{ store_slug }}/fresh-food/place-order" class="ck-sb-item{% if active in ('fresh_food_place_order', 'fresh_food_recent_orders') %} active{% endif %}">
+          <i class="ti ti-leaf ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Fresh Food</span>
+        </a>
+        <a href="/{{ store_slug }}/kitchen/prep-list" class="ck-sb-item{% if active == 'kitchen_prep_list' %} active{% endif %}">
+          <i class="ti ti-clipboard-text ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Prep List</span>
+        </a>
+        <a href="/{{ store_slug }}/recipes" class="ck-sb-item{% if active == 'kitchen_recipes' %} active{% endif %}">
+          <i class="ti ti-chef-hat ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Recipes</span>
+        </a>
 
       </div></div>
     </div>

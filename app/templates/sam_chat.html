@@ -320,6 +320,15 @@
     background: rgba(220, 70, 60, 0.8);
     border-color: rgba(220, 70, 60, 0.8); color: #fff;
   }
+
+  /* Phone: the compose row squished the textarea between the 3 action
+     buttons. Give it its own full-width row above them, with room to
+     type (Sam #9:51 — same fix as the dev chat compose box). */
+  @media (max-width: 640px) {
+    .sc-inputrow { flex-wrap: wrap; }
+    .sc-input { flex: 1 1 100%; order: -1; min-height: 72px; }
+  }
+
   /* ---- thinking animation ---- */
   @keyframes sc-dot-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }

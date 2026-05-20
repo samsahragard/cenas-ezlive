@@ -136,13 +136,16 @@
 
     // Android hardware back button (Capacitor App plugin)
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-      window.Capacitor.Plugins.App.addListener('backButton', function (state) {
+      window.Capacitor.Plugins.App.addListener('backButton', function () {
         if (isOpen()) {
           close();
-        } else if (state && state.canGoBack === false) {
-          window.Capacitor.Plugins.App.exitApp();
-        } else {
+        } else if (window.history.length > 1) {
+          // canGoBack from the Capacitor event is unreliable for a
+          // remote-loaded shell (it reports false mid-navigation and
+          // the app exits). Trust the webview history length instead.
           window.history.back();
+        } else {
+          window.Capacitor.Plugins.App.exitApp();
         }
       });
     }

@@ -2330,15 +2330,23 @@ def _jsonable(v):
 
 @cena_bp.route("/sam/cena/run-ingest-vendor-emails", methods=["POST"])
 def cena_run_ingest_vendor_emails():
-    """Full ingest pass — scan orders@ and ezcater@ inboxes, parse
-    each matched vendor email via LLM, upsert into vendor_recent_orders.
-    Idempotent on (vendor, source_email_mid)."""
+    """Kick a full vendor-email ingest pass — scan orders@ + ezcater@
+    inboxes, LLM-parse each matched vendor email, upsert into
+    vendor_recent_orders. Idempotent on (vendor, source_email_mid).
+
+    Runs in a BACKGROUND THREAD: the IMAP scan + per-email LLM parse of
+    the whole inbox exceeds the synchronous web-request window (the
+    request was timing out at the worker → bare 500). The endpoint now
+    returns immediately and the ingest finishes server-side; the result
+    is logged and the vendor Recent Orders pages reflect the rows once
+    the pass completes."""
     gate = _require_gateway_token()
     if gate is not None:
         return gate
 
     import io
     import contextlib
+    import threading
     import sys as _sys
     import pathlib as _pl
 
@@ -2351,17 +2359,22 @@ def cena_run_ingest_vendor_emails():
     except ImportError as e:
         return jsonify({"ok": False, "error": f"import failed: {e}"}), 500
 
-    buf = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(buf):
-            rc = _ing.main()
-    except Exception as e:  # noqa: BLE001
-        logger.exception("cena: ingest_vendor_emails crashed")
-        return jsonify({"ok": False,
-                        "error": f"{type(e).__name__}: {e}",
-                        "stdout": buf.getvalue()}), 500
+    def _run_ingest():
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = _ing.main()
+            logger.info("cena: vendor ingest finished rc=%s — %s",
+                        rc, buf.getvalue()[:3000])
+        except Exception:  # noqa: BLE001
+            logger.exception("cena: vendor ingest (background) crashed — %s",
+                             buf.getvalue()[:1000])
 
-    return jsonify({"ok": rc == 0, "return_code": rc, "stdout": buf.getvalue()})
+    threading.Thread(target=_run_ingest, name="vendor-ingest",
+                     daemon=True).start()
+    return jsonify({"ok": True, "started": True,
+                    "note": "vendor email ingest running in the background; "
+                            "rows upsert into vendor_recent_orders as it parses"})
 
 
 @cena_bp.route("/sam/cena/run-scan-vendor-inbox", methods=["POST"])

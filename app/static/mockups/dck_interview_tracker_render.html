@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interview Tracker — Cenas Kitchen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ck-red: #C73B36;
+    --ck-red-deep: #9B2A26;
+    --ck-red-bright: #E85852;
+    --ck-gold: #E4B340;
+    --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F;
+    --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250, 246, 236, 0.82);
+    --ck-cream-faint: rgba(250, 246, 236, 0.55);
+    --ck-cream-meta: rgba(250, 246, 236, 0.4);
+    --ck-bg-deep: #1a0d08;
+    --ck-bg-warm: #28160e;
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --ck-bg-input: rgba(0, 0, 0, 0.3);
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+
+    /* Four stage colors */
+    --st-applied: #9A8FE0;
+    --st-first: #5BCAC5;
+    --st-second: #E4B340;
+    --st-hired: #95C75F;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    background: var(--ck-bg-deep);
+    color: var(--ck-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
+      linear-gradient(180deg, var(--ck-bg-deep) 0%, #0d0604 100%);
+    background-attachment: fixed;
+    padding-bottom: 60px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .layout {
+    position: relative;
+    z-index: 1;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    padding: 24px 0 16px;
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    margin-bottom: 20px;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .menu-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-gold);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .menu-btn:hover { border-color: var(--ck-border-active); color: var(--ck-gold-bright); }
+  .menu-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .store-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.12);
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .header-spacer { flex: 1; }
+
+  h1 {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: -0.015em;
+    color: var(--ck-cream);
+    margin-bottom: 6px;
+  }
+
+  h1 .accent {
+    font-style: italic;
+    color: var(--ck-gold-bright);
+    text-shadow: 0 0 24px rgba(255, 217, 112, 0.35);
+  }
+
+  .subtitle {
+    color: var(--ck-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 700px;
+  }
+
+  /* ===== CONTROLS ===== */
+  .control-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .search-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    fill: var(--ck-cream-faint);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    height: 40px;
+  }
+
+  .search-input:focus { outline: none; border-color: var(--ck-gold); }
+  .search-input::placeholder { color: var(--ck-cream-faint); }
+
+  .ctrl-btn {
+    height: 40px;
+    padding: 0 14px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ctrl-btn:hover { border-color: var(--ck-border-active); color: var(--ck-gold-bright); }
+  .ctrl-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .ctrl-btn.primary {
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+    border-color: var(--ck-red-bright);
+    color: var(--ck-cream);
+    box-shadow: 0 4px 12px rgba(199, 59, 54, 0.2);
+  }
+
+  .ctrl-btn.primary:hover { color: var(--ck-cream); }
+
+  /* ===== PIPELINE — 4 stages ===== */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 1000px) {
+    .pipeline {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      gap: 12px;
+    }
+    .stage-col { min-width: 280px; scroll-snap-align: start; }
+  }
+
+  .stage-col {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 700px;
+  }
+
+  .stage-header {
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stage-header::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--stage-color);
+    flex-shrink: 0;
+  }
+
+  .stage-col.applied { --stage-color: var(--st-applied); }
+  .stage-col.first { --stage-color: var(--st-first); }
+  .stage-col.second { --stage-color: var(--st-second); }
+  .stage-col.hired { --stage-color: var(--st-hired); }
+
+  .stage-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--stage-color);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    flex: 1;
+  }
+
+  .stage-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ck-cream);
+    background: rgba(0, 0, 0, 0.4);
+    padding: 3px 9px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .stage-body {
+    padding: 10px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Candidate card */
+  .candidate-card {
+    background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .candidate-card:hover {
+    background: rgba(228, 179, 64, 0.06);
+    border-color: var(--ck-border-active);
+  }
+
+  .candidate-card.urgent {
+    border-color: rgba(232, 88, 82, 0.5);
+  }
+
+  .cand-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .cand-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ck-bg-warm), var(--ck-bg-deep));
+    color: var(--ck-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border: 1px solid var(--ck-border-subtle);
+  }
+
+  .cand-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ck-cream);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .cand-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-dim);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-left: 40px;
+  }
+
+  .cand-meta {
+    margin-left: 40px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .cand-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .cand-tag.today {
+    background: rgba(232, 88, 82, 0.18);
+    color: var(--ck-red-bright);
+    font-weight: 700;
+  }
+
+  .cand-tag.scheduled {
+    background: rgba(228, 179, 64, 0.15);
+    color: var(--ck-gold);
+  }
+
+  .cand-tag.hired {
+    background: rgba(149, 199, 95, 0.18);
+    color: var(--st-hired);
+    font-weight: 700;
+  }
+
+  .cand-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-faint);
+  }
+
+  /* ===== DETAIL VIEW ===== */
+  .detail-section {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-active);
+    border-radius: var(--radius-md);
+    margin-top: 24px;
+    overflow: hidden;
+  }
+
+  .detail-header {
+    padding: 22px;
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.1), rgba(199, 59, 54, 0.04));
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .detail-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ck-bg-warm), var(--ck-bg-deep));
+    color: var(--ck-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    font-weight: 700;
+    border: 2px solid var(--ck-border-active);
+    flex-shrink: 0;
+  }
+
+  .detail-info { flex: 1; min-width: 0; }
+
+  .detail-name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    color: var(--ck-cream);
+    line-height: 1.1;
+    margin-bottom: 6px;
+  }
+
+  .detail-name .accent {
+    font-style: italic;
+    color: var(--ck-gold-bright);
+  }
+
+  .detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ck-cream-dim);
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .detail-meta .sep {
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: var(--ck-cream-faint);
+  }
+
+  .detail-meta .role {
+    color: var(--ck-gold);
+    font-weight: 600;
+  }
+
+  .detail-stage-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(228, 179, 64, 0.12);
+    border: 0.5px solid var(--ck-gold);
+    color: var(--ck-gold-bright);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .detail-stage-row .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ck-gold);
+  }
+
+  .detail-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .detail-action-btn {
+    padding: 9px 14px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .detail-action-btn:hover { border-color: var(--ck-border-active); color: var(--ck-gold-bright); }
+  .detail-action-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .detail-action-btn.advance {
+    background: linear-gradient(135deg, var(--st-hired), #7eb840);
+    border-color: var(--st-hired);
+    color: var(--ck-bg-deep);
+    font-weight: 700;
+  }
+
+  .detail-action-btn.reject {
+    border-color: rgba(232, 88, 82, 0.4);
+    color: var(--ck-red-bright);
+  }
+
+  .detail-action-btn.reject:hover {
+    background: rgba(232, 88, 82, 0.1);
+    border-color: var(--ck-red-bright);
+  }
+
+  /* Body */
+  .detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 0;
+  }
+
+  @media (max-width: 900px) {
+    .detail-body { grid-template-columns: 1fr; }
+  }
+
+  .detail-col {
+    padding: 22px;
+    border-right: 0.5px solid var(--ck-border-subtle);
+  }
+
+  .detail-col:last-child { border-right: none; }
+
+  @media (max-width: 900px) {
+    .detail-col { border-right: none; border-bottom: 0.5px solid var(--ck-border-subtle); }
+    .detail-col:last-child { border-bottom: none; }
+  }
+
+  .detail-col-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-gold);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .detail-col-title svg { width: 12px; height: 12px; fill: currentColor; }
+
+  /* Info grid */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 18px;
+    margin-bottom: 20px;
+  }
+
+  .info-row.full { grid-column: 1 / -1; }
+
+  .info-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 4px;
+  }
+
+  .info-value {
+    font-size: 14px;
+    color: var(--ck-cream);
+    line-height: 1.4;
+  }
+
+  .info-value.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  /* Document chips */
+  .doc-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .doc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 6px;
+    color: var(--ck-cream);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .doc-chip:hover { border-color: var(--ck-gold); color: var(--ck-gold-bright); }
+  .doc-chip svg { width: 12px; height: 12px; fill: currentColor; }
+
+  /* ===== TIMELINE — 4 stages only ===== */
+  .timeline {
+    position: relative;
+    padding-left: 26px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--ck-border-subtle);
+    border-radius: 1px;
+  }
+
+  .tl-entry {
+    position: relative;
+    padding-bottom: 16px;
+  }
+
+  .tl-entry:last-child { padding-bottom: 0; }
+
+  .tl-entry::before {
+    content: '';
+    position: absolute;
+    left: -23px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--tl-color, var(--ck-gold));
+    border: 2px solid var(--ck-bg-deep);
+    box-shadow: 0 0 0 1px var(--tl-color, var(--ck-gold));
+  }
+
+  .tl-entry.applied { --tl-color: var(--st-applied); }
+  .tl-entry.first { --tl-color: var(--st-first); }
+  .tl-entry.second { --tl-color: var(--st-second); }
+  .tl-entry.hired { --tl-color: var(--st-hired); }
+
+  .tl-card {
+    background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+
+  .tl-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tl-stage {
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--tl-color, var(--ck-gold));
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    background: color-mix(in srgb, var(--tl-color, var(--ck-gold)) 14%, transparent);
+    border-radius: 4px;
+  }
+
+  .tl-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.05em;
+    margin-left: auto;
+  }
+
+  .tl-author {
+    font-size: 11px;
+    color: var(--ck-cream-dim);
+    font-weight: 600;
+  }
+
+  .tl-body {
+    font-size: 13px;
+    color: var(--ck-cream);
+    line-height: 1.5;
+  }
+
+  .tl-empty {
+    background: var(--ck-bg-input);
+    border: 1px dashed var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    color: var(--ck-cream-faint);
+    font-size: 12px;
+    font-style: italic;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-top">
+      <button class="menu-btn">
+        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="store-badge">BOTH STORES</div>
+      <div class="header-spacer"></div>
+    </div>
+    <h1>Interview <span class="accent">Tracker</span></h1>
+    <p class="subtitle">Drag candidates between stages, log interviews, attach resumes and notes. Locked history of who interviewed who and what was decided.</p>
+  </header>
+
+  <!-- CONTROL BAR -->
+  <div class="control-bar">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
+      <input class="search-input" type="text" placeholder="Search by name, phone, or position...">
+    </div>
+    <button class="ctrl-btn primary">
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+      Add candidate
+    </button>
+  </div>
+
+  <!-- ===== PIPELINE — 4 stages ===== -->
+  <div class="pipeline">
+
+    <!-- APPLIED -->
+    <div class="stage-col applied">
+      <div class="stage-header">
+        <div class="stage-title">Applied</div>
+        <div class="stage-count">5</div>
+      </div>
+      <div class="stage-body">
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">JO</div>
+            <div class="cand-name">Jaime Ortiz</div>
+          </div>
+          <div class="cand-role">Prep · UNO</div>
+          <div class="cand-meta">
+            <span class="cand-time">Applied 1d ago · Indeed</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">ER</div>
+            <div class="cand-name">Elena Reyes</div>
+          </div>
+          <div class="cand-role">Server · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-time">Applied 2d ago · Walk-in</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">RM</div>
+            <div class="cand-name">Roberto Mejia</div>
+          </div>
+          <div class="cand-role">Dishwasher · UNO</div>
+          <div class="cand-meta">
+            <span class="cand-time">Applied 3d ago · Referral</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">KL</div>
+            <div class="cand-name">Kayla Lopez</div>
+          </div>
+          <div class="cand-role">Host · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-time">Applied 4d ago · Indeed</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">DT</div>
+            <div class="cand-name">Diego Torres</div>
+          </div>
+          <div class="cand-role">Line cook · UNO</div>
+          <div class="cand-meta">
+            <span class="cand-time">Applied 5d ago · Facebook</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1ST INTERVIEW -->
+    <div class="stage-col first">
+      <div class="stage-header">
+        <div class="stage-title">1st Interview</div>
+        <div class="stage-count">4</div>
+      </div>
+      <div class="stage-body">
+        <div class="candidate-card urgent">
+          <div class="cand-top">
+            <div class="cand-avatar">AS</div>
+            <div class="cand-name">Andrea Solis</div>
+          </div>
+          <div class="cand-role">Server · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-tag today">Today 2 PM</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">CR</div>
+            <div class="cand-name">Carlos Ramos</div>
+          </div>
+          <div class="cand-role">Line cook · UNO</div>
+          <div class="cand-meta">
+            <span class="cand-tag scheduled">Wed 11 AM</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">NV</div>
+            <div class="cand-name">Natalia Velasquez</div>
+          </div>
+          <div class="cand-role">Server · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-time">Need to schedule</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">FH</div>
+            <div class="cand-name">Fernanda Herrera</div>
+          </div>
+          <div class="cand-role">Host · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-tag scheduled">Thu 4 PM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2ND INTERVIEW -->
+    <div class="stage-col second">
+      <div class="stage-header">
+        <div class="stage-title">2nd Interview</div>
+        <div class="stage-count">3</div>
+      </div>
+      <div class="stage-body">
+        <div class="candidate-card urgent">
+          <div class="cand-top">
+            <div class="cand-avatar">HL</div>
+            <div class="cand-name">Hugo Lima</div>
+          </div>
+          <div class="cand-role">Line cook · UNO</div>
+          <div class="cand-meta">
+            <span class="cand-tag today">Today 4:30 PM</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">EL</div>
+            <div class="cand-name">Eduardo Lugo</div>
+          </div>
+          <div class="cand-role">Server · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-tag scheduled">Tomorrow 5 PM</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">MC</div>
+            <div class="cand-name">Mariana Cruz</div>
+          </div>
+          <div class="cand-role">Bartender · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-tag scheduled">Sat 6 PM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HIRED -->
+    <div class="stage-col hired">
+      <div class="stage-header">
+        <div class="stage-title">Hired</div>
+        <div class="stage-count">2</div>
+      </div>
+      <div class="stage-body">
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">AB</div>
+            <div class="cand-name">Antonio Bermudez</div>
+          </div>
+          <div class="cand-role">Line cook · UNO</div>
+          <div class="cand-meta">
+            <span class="cand-tag hired">Starts May 22</span>
+          </div>
+        </div>
+
+        <div class="candidate-card">
+          <div class="cand-top">
+            <div class="cand-avatar">LP</div>
+            <div class="cand-name">Lucia Prado</div>
+          </div>
+          <div class="cand-role">Server · DOS</div>
+          <div class="cand-meta">
+            <span class="cand-tag hired">Started May 18</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== DETAIL VIEW (Hugo Lima) ===== -->
+  <div class="detail-section">
+
+    <div class="detail-header">
+      <div class="detail-avatar">HL</div>
+      <div class="detail-info">
+        <div class="detail-name">Hugo <span class="accent">Lima</span></div>
+        <div class="detail-meta">
+          <span class="role">Line cook</span>
+          <span class="sep"></span>
+          <span>UNO Copperfield</span>
+          <span class="sep"></span>
+          <span>(832) 555-0143</span>
+          <span class="sep"></span>
+          <span>hugo.lima@example.com</span>
+        </div>
+        <div class="detail-stage-row">
+          <span class="dot"></span>
+          2nd Interview · Today 4:30 PM
+        </div>
+      </div>
+      <div class="detail-actions">
+        <button class="detail-action-btn">
+          <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+          Reschedule
+        </button>
+        <button class="detail-action-btn">
+          <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+          Call
+        </button>
+        <button class="detail-action-btn advance">
+          <svg viewBox="0 0 24 24"><path d="M10.59 16.59 12 18l6-6-6-6-1.41 1.41L14.17 11H4v2h10.17z"/></svg>
+          Move to Hired
+        </button>
+        <button class="detail-action-btn reject">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          Reject
+        </button>
+      </div>
+    </div>
+
+    <div class="detail-body">
+
+      <!-- LEFT: Candidate details -->
+      <div class="detail-col">
+        <div class="detail-col-title">
+          <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          Candidate details
+        </div>
+
+        <div class="info-grid">
+          <div>
+            <div class="info-label">Source</div>
+            <div class="info-value">Indeed</div>
+          </div>
+          <div>
+            <div class="info-label">Applied</div>
+            <div class="info-value">May 11, 2026</div>
+          </div>
+          <div>
+            <div class="info-label">Position</div>
+            <div class="info-value">Line cook</div>
+          </div>
+          <div>
+            <div class="info-label">Desired wage</div>
+            <div class="info-value mono">$17/hr</div>
+          </div>
+          <div class="info-row full">
+            <div class="info-label">Availability</div>
+            <div class="info-value">Full-time · open evenings &amp; weekends</div>
+          </div>
+          <div class="info-row full">
+            <div class="info-label">Previous experience</div>
+            <div class="info-value">2 years line cook at Pappasito's (Katy). 1 year prep at Salata. Reliable references on file.</div>
+          </div>
+          <div class="info-row full">
+            <div class="info-label">Referred by</div>
+            <div class="info-value">Marcus R. (former teammate)</div>
+          </div>
+        </div>
+
+        <div class="detail-col-title">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+          Documents
+        </div>
+        <div class="doc-row">
+          <a class="doc-chip" href="#">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+            Resume.pdf
+          </a>
+          <a class="doc-chip" href="#">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+            Application.pdf
+          </a>
+          <a class="doc-chip" href="#">
+            <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+            ID.pdf
+          </a>
+        </div>
+      </div>
+
+      <!-- RIGHT: Interview history — 4 stages -->
+      <div class="detail-col">
+        <div class="detail-col-title">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
+          Interview history
+        </div>
+
+        <div class="timeline">
+
+          <!-- APPLIED -->
+          <div class="tl-entry applied">
+            <div class="tl-card">
+              <div class="tl-top">
+                <span class="tl-stage">Applied</span>
+                <span class="tl-time">May 11 · 8 days ago</span>
+              </div>
+              <div class="tl-body">Application received from Indeed. Resume + ID uploaded.</div>
+            </div>
+          </div>
+
+          <!-- 1ST INTERVIEW -->
+          <div class="tl-entry first">
+            <div class="tl-card">
+              <div class="tl-top">
+                <span class="tl-stage">1st Interview</span>
+                <span class="tl-author">Sam S.</span>
+                <span class="tl-time">May 16 · 45 min</span>
+              </div>
+              <div class="tl-body">In-person at Copperfield. Showed up 10 min early. Walked the kitchen — knew his stations cold, asked smart questions about volume and prep flow. Wants stability, has 2 kids. References checked out — Pappasito KM was complimentary, said he'd be a great fit. Moving to 2nd.</div>
+            </div>
+          </div>
+
+          <!-- 2ND INTERVIEW — today, scheduled -->
+          <div class="tl-entry second">
+            <div class="tl-card">
+              <div class="tl-top">
+                <span class="tl-stage">2nd Interview</span>
+                <span class="tl-author">Hector M.</span>
+                <span class="tl-time">Today · 4:30 PM · scheduled</span>
+              </div>
+              <div class="tl-body">2nd interview scheduled with Hector (KM) for final fit check on the line. Notes to follow after.</div>
+            </div>
+          </div>
+
+          <!-- HIRED — pending -->
+          <div class="tl-entry hired" style="opacity: 0.45;">
+            <div class="tl-card" style="border-style: dashed;">
+              <div class="tl-top">
+                <span class="tl-stage">Hired</span>
+                <span class="tl-time">pending</span>
+              </div>
+              <div class="tl-body" style="font-style: italic; color: var(--ck-cream-faint);">Decision after today's 2nd interview.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

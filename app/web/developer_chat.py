@@ -95,6 +95,15 @@ def _enforce_partner():
 
 SAMPLES = [
     dict(
+        slug="dck-interview-tracker",
+        title="Interview Tracker",
+        version=None,
+        date="2026-05-20",
+        description="dck's Interview Tracker — 4-stage candidate pipeline (Applied / 1st / 2nd / Hired) with a candidate detail view and interview-history timeline (Sam #5:48). Full-page standalone render.",
+        url="/static/mockups/dck_interview_tracker_render.html",
+        type="mockup",
+    ),
+    dict(
         slug="dck-manager-log-redesign",
         title="Manager Log — Redesign",
         version=None,

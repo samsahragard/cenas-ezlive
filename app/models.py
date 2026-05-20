@@ -2317,6 +2317,20 @@ class IncidentReport(ManagerLogMixin, Base):
     author_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # v3 design fields (ck build-order Sam #10:11/#10:15 2026-05-19 —
+    # convert v1 text-heavy shell to the samai #6:27 + dck #6:39 v3
+    # design). Severity / status / type surface in the dashboard cards
+    # + filter chips. report_id = IR-YYYY-MMDD-NNN human label.
+    # archived_at moves a row out of the rolling 30-day window into
+    # the searchable archive view.
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="moderate")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    incident_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    report_id: Mapped[str | None] = mapped_column(String(40), index=True, nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    author: Mapped["User | None"] = relationship("User")
+
 
 class SupplyRequest(ManagerLogMixin, Base):
     __tablename__ = "manager_supply_request"

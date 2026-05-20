@@ -748,6 +748,51 @@ def create_app():
         logging.getLogger(__name__).exception(
             "recipes seed failed (non-fatal)")
 
+    # manager_incident_report v3 fields (migration 33, ck build-order
+    # Sam #10:11/#10:15 2026-05-19 — convert Incident Reports v1 text-
+    # heavy shell to the samai+dck v3 design). Additive: 5 columns + 1
+    # index on the existing manager_incident_report table.
+    try:
+        from sqlalchemy import inspect as _sa_insp_33, text as _sa_text_33
+        from app.db import engine as _eng_33ir
+        if _eng_33ir is not None:
+            insp_33 = _sa_insp_33(_eng_33ir)
+            tables_33 = set(insp_33.get_table_names())
+            if "manager_incident_report" in tables_33:
+                existing_33 = {c["name"]
+                               for c in insp_33.get_columns("manager_incident_report")}
+                _cols_33 = [
+                    ("severity",      "VARCHAR(20) NOT NULL DEFAULT 'moderate'"),
+                    ("status",        "VARCHAR(20) NOT NULL DEFAULT 'open'"),
+                    ("incident_type", "VARCHAR(40) NULL"),
+                    ("report_id",     "VARCHAR(40) NULL"),
+                    ("archived_at",   "DATETIME NULL"),
+                ]
+                with _eng_33ir.begin() as _conn_33:
+                    for _name, _ddl in _cols_33:
+                        if _name not in existing_33:
+                            _conn_33.execute(_sa_text_33(
+                                f"ALTER TABLE manager_incident_report "
+                                f"ADD COLUMN {_name} {_ddl}"))
+                            logging.getLogger(__name__).info(
+                                "manager_incident_report: backfilled %s (migration 33)",
+                                _name)
+                    _idx_33 = {i["name"]
+                               for i in insp_33.get_indexes("manager_incident_report")}
+                    if "ix_manager_incident_report_report_id" not in _idx_33:
+                        try:
+                            _conn_33.execute(_sa_text_33(
+                                "CREATE INDEX ix_manager_incident_report_report_id "
+                                "ON manager_incident_report(report_id)"))
+                            logging.getLogger(__name__).info(
+                                "manager_incident_report: created ix_report_id "
+                                "(migration 33)")
+                        except Exception:
+                            pass  # index race; non-fatal
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "manager_incident_report v3 backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

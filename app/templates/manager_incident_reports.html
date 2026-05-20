@@ -1,0 +1,695 @@
+{# ============================================================
+   manager_incident_reports.html — Incident Reports (production, v3)
+
+   Replaces the v1 shared manager_log.html shell for this page with
+   the samai #6:27 + dck #6:39 v3 design (Sam dev chat #10:11 +
+   #10:15 directive — 'make it just like the rendering, with
+   everything functioning'). ck build, aick pushes.
+
+   ROUTE CONTRACT (store_routes.py manager_page_list special-case
+   for page='incident-reports'):
+     entries     → list[IncidentReport]  (newest first, store-scoped,
+                   archived_at=NULL only; default last 30 days)
+     stats       → {open, review, resolved, last_30}
+     active_filter → 'all' | severity | status | incident_type
+     query       → current search string (or '')
+
+   Audience gate stays at the route layer: _manager_role_ok per
+   CENA.md L165 — manager-tier, expo excluded.
+
+   CSS scoped to .ir-page so the v3 design tokens (red/gold/teal
+   + severity tiers) don't leak into the global sheet.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_incident_reports' %}
+{% block title %}Incident Reports — Cenas Kitchen{% endblock %}
+{# Page chrome lives inside content so the inline v3 header renders
+   without the base_dashboard stacked title+subtitle rows. #}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  .ir-page {
+    --ir-red: #C73B36;
+    --ir-red-deep: #9B2A26;
+    --ir-red-bright: #E85852;
+    --ir-gold: #E4B340;
+    --ir-gold-bright: #FFD970;
+    --ir-teal: #2EA39F;
+    --ir-teal-bright: #5BCAC5;
+    --ir-cream: #FAF6EC;
+    --ir-cream-dim: rgba(250, 246, 236, 0.62);
+    --ir-cream-faint: rgba(250, 246, 236, 0.38);
+    --ir-bg-deep: #1a0d08;
+    --ir-bg-warm: #28160e;
+    --ir-bg-card: rgba(40, 22, 14, 0.65);
+    --ir-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --ir-bg-input: rgba(0, 0, 0, 0.25);
+    --ir-border-subtle: rgba(217, 164, 54, 0.18);
+    --ir-border-active: rgba(228, 179, 64, 0.5);
+    --ir-radius-sm: 8px;
+    --ir-radius-md: 12px;
+    --ir-radius-lg: 16px;
+    --sev-critical: #E85852;
+    --sev-serious: #E89B40;
+    --sev-moderate: #E4B340;
+    --sev-minor: #5BCAC5;
+    color: var(--ir-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    padding-bottom: 60px;
+    position: relative;
+    z-index: 1;
+  }
+  /* v3 dark-red gradient backdrop that overrides the base_dashboard
+     restaurant-photo bleed for this page only. Fixed so it covers
+     the full viewport behind the .ir-page content + the sidebar
+     stays clickable (sidebar has its own higher z-index in base). */
+  .ir-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.18), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
+      linear-gradient(180deg, var(--ir-bg-deep) 0%, #0d0604 100%);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .ir-page > * { position: relative; z-index: 1; }
+  .ir-page *, .ir-page *::before, .ir-page *::after { box-sizing: border-box; }
+  .ir-page h1, .ir-page h2, .ir-page h3, .ir-page p { margin: 0; }
+
+  /* ===== HEADER ===== */
+  .ir-header {
+    padding: 14px 0 16px;
+    border-bottom: 0.5px solid var(--ir-border-subtle);
+    margin-bottom: 22px;
+  }
+  .ir-header .ir-store-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--ir-bg-input);
+    border: 1px solid var(--ir-border-subtle);
+    border-radius: 999px;
+    color: var(--ir-cream-dim);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 14px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ir-header h1 {
+    font-size: 38px;
+    font-weight: 600;
+    color: var(--ir-cream);
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+  }
+  .ir-header h1 .accent {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    color: var(--ir-gold);
+    font-weight: 400;
+  }
+  .ir-header .ir-subtitle {
+    color: var(--ir-cream-dim);
+    font-size: 13px;
+    max-width: 760px;
+    line-height: 1.55;
+  }
+
+  /* ===== STATUS STRIP (4 stat boxes) ===== */
+  .ir-status-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .ir-stat-box {
+    --stat-color: var(--ir-cream-dim);
+    padding: 14px 16px;
+    background: var(--ir-bg-card);
+    border: 0.5px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-md);
+    border-left: 3px solid var(--stat-color);
+  }
+  .ir-stat-box.open { --stat-color: var(--sev-critical); }
+  .ir-stat-box.review { --stat-color: var(--sev-serious); }
+  .ir-stat-box.month { --stat-color: var(--ir-gold); }
+  .ir-stat-box.resolved { --stat-color: var(--sev-minor); }
+  .ir-stat-box .ir-stat-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ir-cream-faint);
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ir-stat-box .ir-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--stat-color);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .ir-stat-box .ir-stat-sub {
+    font-size: 11px;
+    color: var(--ir-cream-faint);
+  }
+
+  /* ===== ACTION ROW ===== */
+  .ir-action-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .ir-primary-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--ir-red);
+    color: var(--ir-cream);
+    border: 0;
+    border-radius: var(--ir-radius-sm);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background .15s;
+  }
+  .ir-primary-action:hover { background: var(--ir-red-bright); }
+  .ir-primary-action svg { width: 18px; height: 18px; fill: currentColor; }
+  .ir-secondary-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: transparent;
+    color: var(--ir-cream);
+    border: 1px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-sm);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color .15s, background .15s;
+  }
+  .ir-secondary-action:hover {
+    border-color: var(--ir-border-active);
+    background: var(--ir-bg-input);
+  }
+
+  /* ===== SCOPE NOTICE ===== */
+  .ir-scope-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    background: var(--ir-bg-input);
+    border: 1px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-sm);
+    font-size: 12px;
+    color: var(--ir-cream-dim);
+    margin-bottom: 14px;
+  }
+  .ir-scope-notice svg { width: 18px; height: 18px; flex-shrink: 0; fill: var(--ir-gold); }
+  .ir-scope-notice strong { color: var(--ir-cream); font-weight: 600; }
+  .ir-scope-notice div { flex: 1; }
+
+  /* ===== SEARCH ===== */
+  .ir-search-wrap {
+    position: relative;
+    margin-bottom: 12px;
+  }
+  .ir-search-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    fill: var(--ir-cream-faint);
+    pointer-events: none;
+  }
+  .ir-search-input {
+    width: 100%;
+    padding: 11px 14px 11px 40px;
+    background: var(--ir-bg-input);
+    border: 1px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-sm);
+    color: var(--ir-cream);
+    font: inherit;
+    font-size: 14px;
+    outline: 0;
+    transition: border-color .15s;
+  }
+  .ir-search-input:focus { border-color: var(--ir-border-active); }
+  .ir-search-input::placeholder { color: var(--ir-cream-faint); }
+
+  /* ===== FILTER STRIP ===== */
+  .ir-filter-strip {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .ir-filter-strip::-webkit-scrollbar { display: none; }
+  .ir-filter-chip {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    background: transparent;
+    border: 1px solid var(--ir-border-subtle);
+    border-radius: 999px;
+    color: var(--ir-cream-dim);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .ir-filter-chip:hover {
+    color: var(--ir-cream);
+    border-color: var(--ir-border-active);
+  }
+  .ir-filter-chip.active {
+    background: rgba(228, 179, 64, 0.15);
+    color: var(--ir-gold-bright);
+    border-color: var(--ir-border-active);
+  }
+
+  /* ===== INCIDENT CARDS ===== */
+  .ir-incident-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ir-incident-card {
+    --sev-color: var(--ir-cream-dim);
+    position: relative;
+    padding: 14px 16px 14px 22px;
+    background: var(--ir-bg-card);
+    border: 0.5px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-md);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+  .ir-incident-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--sev-color);
+    border-radius: var(--ir-radius-md) 0 0 var(--ir-radius-md);
+  }
+  .ir-incident-card:hover {
+    background: var(--ir-bg-card-hover);
+    border-color: var(--ir-border-active);
+  }
+  .ir-incident-card.critical { --sev-color: var(--sev-critical); }
+  .ir-incident-card.serious { --sev-color: var(--sev-serious); }
+  .ir-incident-card.moderate { --sev-color: var(--sev-moderate); }
+  .ir-incident-card.minor { --sev-color: var(--sev-minor); }
+
+  .ir-incident-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .ir-severity-tag {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--sev-color);
+    background: color-mix(in srgb, var(--sev-color) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sev-color) 40%, transparent);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ir-type-tag {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--ir-cream-dim);
+    background: var(--ir-bg-input);
+    font-weight: 500;
+  }
+  .ir-status-tag {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ir-status-tag.open { background: rgba(232, 88, 82, 0.15); color: var(--sev-critical); }
+  .ir-status-tag.review { background: rgba(232, 155, 64, 0.15); color: var(--sev-serious); }
+  .ir-status-tag.locked { background: var(--ir-bg-input); color: var(--ir-cream-dim); }
+  .ir-status-tag.resolved { background: rgba(91, 202, 197, 0.15); color: var(--sev-minor); }
+
+  .ir-incident-title {
+    font-size: 15px;
+    color: var(--ir-cream);
+    font-weight: 500;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+  .ir-incident-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: var(--ir-cream-faint);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ir-incident-meta .ir-sep {
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--ir-cream-faint);
+    display: inline-block;
+  }
+
+  .ir-empty {
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--ir-cream-faint);
+    font-size: 13px;
+    font-style: italic;
+  }
+
+  /* ===== INLINE FORM (when ?form=1 query param OR no entries) ===== */
+  .ir-form-panel {
+    margin-bottom: 22px;
+    padding: 22px;
+    background: var(--ir-bg-card);
+    border: 0.5px solid var(--ir-border-active);
+    border-radius: var(--ir-radius-md);
+  }
+  .ir-form-panel h2 {
+    font-size: 18px;
+    color: var(--ir-cream);
+    margin: 0 0 16px;
+  }
+  .ir-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .ir-form-row.single { grid-template-columns: 1fr; }
+  .ir-form-field { display: flex; flex-direction: column; gap: 6px; }
+  .ir-form-field label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ir-cream-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+  }
+  .ir-form-field input, .ir-form-field select, .ir-form-field textarea {
+    padding: 10px 12px;
+    background: var(--ir-bg-input);
+    border: 1px solid var(--ir-border-subtle);
+    border-radius: var(--ir-radius-sm);
+    color: var(--ir-cream);
+    font: inherit;
+    font-size: 14px;
+    outline: 0;
+    transition: border-color .15s;
+  }
+  .ir-form-field input:focus, .ir-form-field select:focus, .ir-form-field textarea:focus {
+    border-color: var(--ir-border-active);
+  }
+  .ir-form-field textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
+  .ir-form-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+  /* ===== MOBILE BREAKPOINT ===== */
+  @media (max-width: 720px) {
+    .ir-page .ir-header h1 { font-size: 28px; }
+    .ir-page .ir-status-strip { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ir-page .ir-stat-box { padding: 12px 14px; }
+    .ir-page .ir-stat-box .ir-stat-value { font-size: 24px; }
+    .ir-page .ir-action-row { flex-direction: column; }
+    .ir-page .ir-primary-action, .ir-page .ir-secondary-action {
+      width: 100%; justify-content: center;
+    }
+    .ir-page .ir-form-row { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="ir-page">
+
+  <header class="ir-header">
+    <span class="ir-store-pill">{{ store_label or 'Cenas Kitchen' }}{% if store_slug %} · {{ store_slug|upper }}{% endif %}</span>
+    <h1>Incident <span class="accent">Reports</span></h1>
+    <p class="ir-subtitle">Document any incident involving employees, guests, or the property. Once submitted, reports lock and become append-only — original information is preserved forever; updates are added as new entries with their own timestamp.</p>
+  </header>
+
+  <div class="ir-status-strip">
+    <div class="ir-stat-box open">
+      <div class="ir-stat-label">Open</div>
+      <div class="ir-stat-value">{{ stats.open if stats else 0 }}</div>
+      <div class="ir-stat-sub">awaiting action</div>
+    </div>
+    <div class="ir-stat-box review">
+      <div class="ir-stat-label">In review</div>
+      <div class="ir-stat-value">{{ stats.review if stats else 0 }}</div>
+      <div class="ir-stat-sub">manager check</div>
+    </div>
+    <div class="ir-stat-box month">
+      <div class="ir-stat-label">Last 30 days</div>
+      <div class="ir-stat-value">{{ stats.last_30 if stats else 0 }}</div>
+      <div class="ir-stat-sub">total reported</div>
+    </div>
+    <div class="ir-stat-box resolved">
+      <div class="ir-stat-label">Resolved</div>
+      <div class="ir-stat-value">{{ stats.resolved if stats else 0 }}</div>
+      <div class="ir-stat-sub">last 30 days</div>
+    </div>
+  </div>
+
+  {% if form_mode == 'new' %}
+  <div class="ir-form-panel">
+    <h2>New Incident Report</h2>
+    <form method="post" action="{{ url_for('store.manager_page_create', page='incident-reports') }}">
+      <div class="ir-form-row">
+        <div class="ir-form-field">
+          <label for="ir-severity">Severity</label>
+          <select id="ir-severity" name="severity" required>
+            <option value="critical">Critical</option>
+            <option value="serious">Serious</option>
+            <option value="moderate" selected>Moderate</option>
+            <option value="minor">Minor</option>
+          </select>
+        </div>
+        <div class="ir-form-field">
+          <label for="ir-incident-type">Type</label>
+          <select id="ir-incident-type" name="incident_type">
+            <option value="">— select —</option>
+            <option value="guest_injury">Guest injury</option>
+            <option value="employee_injury">Employee injury</option>
+            <option value="employee_termination">Employee termination</option>
+            <option value="food_safety">Food safety</option>
+            <option value="theft">Theft / Loss prevention</option>
+            <option value="guest_complaint">Guest complaint</option>
+            <option value="property_damage">Property damage</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="ir-form-row single">
+        <div class="ir-form-field">
+          <label for="ir-title">Title</label>
+          <input type="text" id="ir-title" name="title" required maxlength="300"
+                 placeholder="e.g. Guest slip and fall — main dining area near bar">
+        </div>
+      </div>
+      <div class="ir-form-row single">
+        <div class="ir-form-field">
+          <label for="ir-body">Details (what / when / where / who / what was done)</label>
+          <textarea id="ir-body" name="body" required
+                    placeholder="Time, location, who was involved, what happened, who was notified, what immediate action was taken. Remember: once submitted this locks. Updates are added as new entries."></textarea>
+        </div>
+      </div>
+      <div class="ir-form-actions">
+        <button type="submit" class="ir-primary-action">Submit report</button>
+        <a href="{{ url_for('store.manager_page_list', page='incident-reports') }}"
+           class="ir-secondary-action">Cancel</a>
+      </div>
+    </form>
+  </div>
+  {% else %}
+
+  <div class="ir-action-row">
+    <a href="{{ url_for('store.manager_page_new', page='incident-reports') }}"
+       class="ir-primary-action">
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+      Report new incident
+    </a>
+    <a href="?archive=1" class="ir-secondary-action">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.82-1h12l.93 1H5.12z"/></svg>
+      Search archive
+    </a>
+  </div>
+
+  <div class="ir-scope-notice">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+    <div><strong>Showing last 30 days.</strong> Older reports are preserved in the archive — search by date range, name, type, or report ID.</div>
+  </div>
+
+  <form method="get" class="ir-search-wrap">
+    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
+    <input class="ir-search-input" type="text" name="q" value="{{ query or '' }}"
+           placeholder="Search last 30 days by name, type, or report ID...">
+  </form>
+
+  <div class="ir-filter-strip" id="irFilters">
+    {% set active_filter = active_filter or 'all' %}
+    <a class="ir-filter-chip {% if active_filter == 'all' %}active{% endif %}" href="?f=all">All</a>
+    <a class="ir-filter-chip {% if active_filter == 'open' %}active{% endif %}" href="?f=open">Open</a>
+    <a class="ir-filter-chip {% if active_filter == 'review' %}active{% endif %}" href="?f=review">In review</a>
+    <a class="ir-filter-chip {% if active_filter == 'resolved' %}active{% endif %}" href="?f=resolved">Resolved</a>
+    <a class="ir-filter-chip {% if active_filter == 'guest_injury' %}active{% endif %}" href="?f=guest_injury">Guest</a>
+    <a class="ir-filter-chip {% if active_filter == 'employee_injury' %}active{% endif %}" href="?f=employee_injury">Employee</a>
+    <a class="ir-filter-chip {% if active_filter == 'employee_termination' %}active{% endif %}" href="?f=employee_termination">Termination</a>
+    <a class="ir-filter-chip {% if active_filter == 'theft' %}active{% endif %}" href="?f=theft">Theft</a>
+    <a class="ir-filter-chip {% if active_filter == 'critical' %}active{% endif %}" href="?f=critical">Critical</a>
+  </div>
+
+  <div class="ir-incident-list">
+    {% if entries %}
+      {% for e in entries %}
+        {% set sev = e.severity or 'moderate' %}
+        {% set st = e.status or 'open' %}
+        {% set type_label_map = {
+          'guest_injury': 'Guest injury',
+          'employee_injury': 'Employee injury',
+          'employee_termination': 'Employee termination',
+          'food_safety': 'Food safety',
+          'theft': 'Theft / Loss prevention',
+          'guest_complaint': 'Guest complaint',
+          'property_damage': 'Property damage',
+          'other': 'Other'
+        } %}
+        <a class="ir-incident-card {{ sev }}"
+           href="{{ url_for('store.manager_page_detail', page='incident-reports', entry_id=e.id) }}">
+          <div class="ir-incident-top">
+            <span class="ir-severity-tag">{{ sev|capitalize }}</span>
+            {% if e.incident_type %}
+              <span class="ir-type-tag">{{ type_label_map.get(e.incident_type, e.incident_type|replace('_', ' ')|capitalize) }}</span>
+            {% endif %}
+            {% if st == 'open' %}<span class="ir-status-tag open">Open</span>
+            {% elif st == 'review' %}<span class="ir-status-tag review">In review</span>
+            {% elif st == 'locked' %}<span class="ir-status-tag locked">Locked · Submitted</span>
+            {% elif st == 'resolved' %}<span class="ir-status-tag resolved">Resolved</span>
+            {% endif %}
+          </div>
+          <div class="ir-incident-title">{{ e.title or '(no title)' }}</div>
+          <div class="ir-incident-meta">
+            <span>{{ e.report_id or 'IR-' + ('%04d' % (e.id or 0)) }}</span>
+            <span class="ir-sep"></span>
+            <span>{{ e.created_at.strftime('%b %-d · %-I:%M %p') if e.created_at else '—' }}</span>
+            {% if e.store_scope %}
+              <span class="ir-sep"></span>
+              <span>{{ e.store_scope|upper }}</span>
+            {% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    {% else %}
+      <div class="ir-empty">
+        {% if query %}No incident reports match "{{ query }}" in the last 30 days.
+        {% else %}No incident reports in the last 30 days. Click "Report new incident" above to add the first one.{% endif %}
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+  // Wire client-side filter chips (server-side filter via ?f= also works
+  // for hard-refresh, but client-side avoids round-trips when entries
+  // are already loaded).
+  var chips = document.querySelectorAll('.ir-filter-chip');
+  var cards = document.querySelectorAll('.ir-incident-card');
+  var searchInput = document.querySelector('.ir-search-input');
+
+  function applyFilter(filter) {
+    chips.forEach(function (c) {
+      c.classList.toggle('active', (c.getAttribute('href') || '').indexOf('f=' + filter) !== -1);
+    });
+    var q = (searchInput && searchInput.value || '').trim().toLowerCase();
+    cards.forEach(function (card) {
+      var sev = ['critical','serious','moderate','minor'].find(function(s){return card.classList.contains(s)}) || '';
+      var statusTag = card.querySelector('.ir-status-tag');
+      var st = '';
+      if (statusTag) {
+        if (statusTag.classList.contains('open')) st = 'open';
+        else if (statusTag.classList.contains('review')) st = 'review';
+        else if (statusTag.classList.contains('resolved')) st = 'resolved';
+      }
+      var typeTag = card.querySelector('.ir-type-tag');
+      var typeText = typeTag ? typeTag.textContent.trim().toLowerCase() : '';
+      var titleText = (card.querySelector('.ir-incident-title') || {textContent: ''}).textContent.toLowerCase();
+      var metaText = (card.querySelector('.ir-incident-meta') || {textContent: ''}).textContent.toLowerCase();
+
+      var matchFilter = filter === 'all' ||
+        sev === filter ||
+        st === filter ||
+        typeText.indexOf(filter.replace('_', ' ')) !== -1 ||
+        (filter === 'critical' && sev === 'critical');
+      var matchQuery = !q ||
+        titleText.indexOf(q) !== -1 ||
+        metaText.indexOf(q) !== -1;
+      card.style.display = (matchFilter && matchQuery) ? '' : 'none';
+    });
+  }
+
+  chips.forEach(function (c) {
+    c.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var href = c.getAttribute('href') || '';
+      var m = href.match(/f=([^&]+)/);
+      applyFilter(m ? m[1] : 'all');
+    });
+  });
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      var active = document.querySelector('.ir-filter-chip.active');
+      var href = active ? (active.getAttribute('href') || '') : '';
+      var m = href.match(/f=([^&]+)/);
+      applyFilter(m ? m[1] : 'all');
+    });
+  }
+})();
+</script>
+{% endblock %}

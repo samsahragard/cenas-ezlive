@@ -1267,6 +1267,89 @@ def daily_log_image(image_id: int):
         db.close()
 
 
+# ============================================================
+# INCIDENT REPORTS v3 — ck build-order Sam #10:11 + #10:15
+# (2026-05-19). Replaces the v1 shared text-heavy shell for
+# /dos/manager/incident-reports with the samai #6:27 + dck
+# #6:39 v3 design (dashboard + filter strip + severity-coded
+# cards). Schema additions per migration 33.
+# ============================================================
+def _render_incident_reports_v3(db, label, active_key, form_mode=None):
+    from app.models import IncidentReport
+    from datetime import timedelta
+    now = datetime.utcnow()
+    cutoff_30 = now - timedelta(days=30)
+
+    q = db.query(IncidentReport).filter(IncidentReport.archived_at.is_(None))
+    if g.current_location in ("tomball", "copperfield"):
+        q = q.filter(
+            (IncidentReport.store_scope == g.current_location) |
+            (IncidentReport.store_scope.is_(None))
+        )
+    # Default scope: last 30 days only (older = in archive view).
+    q_30 = q.filter(IncidentReport.created_at >= cutoff_30)
+
+    active_filter = (request.args.get("f") or "all").strip()
+    query_text = (request.args.get("q") or "").strip()
+
+    rows = q_30.order_by(IncidentReport.created_at.desc()).limit(200).all()
+
+    # Stats are computed across the full 30-day window (unfiltered).
+    stats = {
+        "open":     sum(1 for r in rows if (r.status or "open") == "open"),
+        "review":   sum(1 for r in rows if (r.status or "") == "review"),
+        "resolved": sum(1 for r in rows if (r.status or "") == "resolved"),
+        "last_30":  len(rows),
+    }
+
+    return render_template(
+        "manager_incident_reports.html",
+        page_slug="incident-reports",
+        page_label=label,
+        entries=rows,
+        entry=None,
+        form_mode=form_mode,
+        stats=stats,
+        active_filter=active_filter,
+        query=query_text,
+        active=active_key,
+    )
+
+
+def _create_incident_v3_entry(db, store_scope, user):
+    """Create an IncidentReport with the v3 fields populated. Generates
+    a human-readable report_id of the shape IR-YYYY-MMDD-NNN where NNN
+    is a per-day sequence (zero-padded). store_scope keys off the route
+    so cross-store visibility is preserved per the manager-page audience
+    rule."""
+    from app.models import IncidentReport
+    from datetime import date as _date
+
+    today = _date.today()
+    today_count = db.query(IncidentReport).filter(
+        IncidentReport.created_at >= datetime.combine(today, datetime.min.time())
+    ).count()
+    report_id = f"IR-{today.strftime('%Y-%m%d')}-{today_count + 1:03d}"
+
+    sev = (request.form.get("severity") or "moderate").strip()[:20]
+    if sev not in ("critical", "serious", "moderate", "minor"):
+        sev = "moderate"
+    inc_type = (request.form.get("incident_type") or "").strip()[:40] or None
+
+    row = IncidentReport(
+        title=(request.form.get("title") or "").strip()[:300] or None,
+        body=(request.form.get("body") or "").strip() or None,
+        severity=sev,
+        status="open",
+        incident_type=inc_type,
+        report_id=report_id,
+        store_scope=store_scope,
+        author_id=(user.id if user else None),
+    )
+    db.add(row)
+    db.commit()
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_page_list(page: str):
     """List view for a manager-section page. Renders the shared
@@ -1284,6 +1367,8 @@ def manager_page_list(page: str):
     try:
         if page == "daily-log":
             return _render_daily_log_v3(db, label, active_key)
+        if page == "incident-reports":
+            return _render_incident_reports_v3(db, label, active_key)
         q = db.query(Model)
         if g.current_location in ("tomball", "copperfield"):
             q = q.filter(
@@ -1314,6 +1399,12 @@ def manager_page_new(page: str):
     if not _manager_role_ok():
         abort(403)
     active_key = "manager_" + page.replace("-", "_")
+    if page == "incident-reports":
+        db = next(get_db())
+        try:
+            return _render_incident_reports_v3(db, label, active_key, form_mode="new")
+        finally:
+            db.close()
     return render_template(
         "manager_log.html",
         page_slug=page,
@@ -1341,6 +1432,9 @@ def manager_page_create(page: str):
                        else None)
         if page == "daily-log":
             _create_daily_log_v3_entry(db, store_scope, user)
+            return redirect(url_for("store.manager_page_list", page=page))
+        if page == "incident-reports":
+            _create_incident_v3_entry(db, store_scope, user)
             return redirect(url_for("store.manager_page_list", page=page))
         row = Model(
             title=(request.form.get("title") or "").strip()[:300] or None,

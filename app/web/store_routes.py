@@ -1276,7 +1276,60 @@ def daily_log_image(image_id: int):
 # ============================================================
 def _render_incident_reports_v3(db, label, active_key, form_mode=None):
     from app.models import IncidentReport
-    from datetime import timedelta
+    from datetime import timedelta, date as _date
+
+    # New-entry form: render the v4 standalone "File new incident" page
+    # (Sam dev chat #4:22 + #4:23 spec; ck build #4:32). Standalone — does
+    # not extend base_dashboard. Form posts back to manager_page_create.
+    if form_mode == "new":
+        user = getattr(g, "current_user", None)
+        today = _date.today()
+        # Preview report-id: counts today's rows so the draft pill mirrors
+        # what the server will assign on actual submit. May skew by 1 if a
+        # peer files between preview and submit — harmless, the persisted
+        # row carries the actual id.
+        today_count = db.query(IncidentReport).filter(
+            IncidentReport.created_at >= datetime.combine(today, datetime.min.time())
+        ).count()
+        preview_report_id = f"IR-{today.strftime('%Y-%m%d')}-{today_count + 1:03d}"
+        try:
+            from zoneinfo import ZoneInfo
+            now_local = datetime.now(ZoneInfo("America/Chicago"))
+        except Exception:  # pragma: no cover — zoneinfo missing on older runtimes
+            now_local = datetime.utcnow()
+        store_label_map = {"tomball": "UNO Tomball",
+                           "copperfield": "UNO Copperfield"}
+        store_label = store_label_map.get(g.current_location, "Cenas Kitchen")
+        full_name = (getattr(user, "full_name", None)
+                     or getattr(user, "name", None)
+                     or "Unknown user")
+        initials = "".join(p[:1].upper()
+                           for p in (full_name.split() or ["?"]))[:2] or "?"
+        role_label = (getattr(user, "role", None) or "Manager").replace("_", " ").title()
+        # Cross-platform date/time formatting (Windows strftime doesn't
+        # support %-d / %-I leading-zero strip).
+        _h12 = ((now_local.hour - 1) % 12) + 1
+        _ampm = "AM" if now_local.hour < 12 else "PM"
+        _tz = getattr(now_local, "tzname", lambda: None)() or "CDT"
+        date_label = now_local.strftime("%a, %b ") + f"{now_local.day}, {now_local.year}"
+        time_label = f"{_h12}:{now_local.minute:02d} {_ampm} {_tz}"
+        return render_template(
+            "manager_incident_report_new.html",
+            page_slug="incident-reports",
+            page_label=label,
+            active=active_key,
+            user_full_name=full_name,
+            user_initials=initials,
+            user_role_label=role_label,
+            store_label=store_label,
+            now_date_label=date_label,
+            now_time_label=time_label,
+            today_iso=today.strftime("%Y-%m-%d"),
+            report_id=preview_report_id,
+            submit_url=url_for("store.manager_page_create", page="incident-reports"),
+            list_url=url_for("store.manager_page_list", page="incident-reports"),
+        )
+
     now = datetime.utcnow()
     cutoff_30 = now - timedelta(days=30)
 
@@ -1291,6 +1344,7 @@ def _render_incident_reports_v3(db, label, active_key, form_mode=None):
 
     active_filter = (request.args.get("f") or "all").strip()
     query_text = (request.args.get("q") or "").strip()
+    just_filed = (request.args.get("just_filed") or "").strip()[:40] or None
 
     rows = q_30.order_by(IncidentReport.created_at.desc()).limit(200).all()
 
@@ -1312,18 +1366,27 @@ def _render_incident_reports_v3(db, label, active_key, form_mode=None):
         stats=stats,
         active_filter=active_filter,
         query=query_text,
+        just_filed=just_filed,
         active=active_key,
     )
 
 
 def _create_incident_v3_entry(db, store_scope, user):
-    """Create an IncidentReport with the v3 fields populated. Generates
-    a human-readable report_id of the shape IR-YYYY-MMDD-NNN where NNN
-    is a per-day sequence (zero-padded). store_scope keys off the route
-    so cross-store visibility is preserved per the manager-page audience
-    rule."""
+    """Create an IncidentReport with the v3 + v4 fields populated.
+
+    v3 (2026-05-19): severity / status / incident_type / report_id.
+    v4 (2026-05-20, Sam #4:22 + #4:23 spec; ck build #4:32): the rich
+    new-incident form — date_of_incident / time_of_incident /
+    location_in_store / people_involved / witnesses / description (body) /
+    immediate_action, plus lock-on-submit (locked + locked_at). form_action
+    distinguishes a full submit (locks the row) from a Save-draft (status
+    stays 'open' but no lock).
+
+    Returns the created row so the caller can redirect with the
+    just_filed query param.
+    """
     from app.models import IncidentReport
-    from datetime import date as _date
+    from datetime import date as _date, datetime as _dt
 
     today = _date.today()
     today_count = db.query(IncidentReport).filter(
@@ -1336,18 +1399,72 @@ def _create_incident_v3_entry(db, store_scope, user):
         sev = "moderate"
     inc_type = (request.form.get("incident_type") or "").strip()[:40] or None
 
+    # v4 fields. Description -> body (kept on ManagerLogMixin); explicit
+    # immediate_action is its own column. Date / time arrive as the HTML5
+    # input strings "YYYY-MM-DD" and "HH:MM"; we parse defensively so a
+    # blank or malformed value just stores NULL instead of 500-ing.
+    def _parse_date(s: str):
+        s = (s or "").strip()
+        if not s:
+            return None
+        try:
+            return _dt.strptime(s, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    def _parse_time(s: str):
+        s = (s or "").strip()
+        if not s:
+            return None
+        try:
+            return _dt.strptime(s, "%H:%M").time()
+        except ValueError:
+            try:
+                return _dt.strptime(s, "%H:%M:%S").time()
+            except ValueError:
+                return None
+
+    description = (request.form.get("description") or "").strip()
+    immediate_action = (request.form.get("immediate_action") or "").strip()
+    location_in_store = (request.form.get("location_in_store") or "").strip()[:200]
+    people_involved = (request.form.get("people_involved") or "").strip()[:500]
+    witnesses = (request.form.get("witnesses") or "").strip()[:500]
+    form_action = (request.form.get("form_action") or "submit").strip().lower()
+
+    # Title surfaces in the list view: synthesize from incident_type +
+    # severity + location when the form (v4) doesn't include a 'title'
+    # input. Falls back to "Incident report" if everything is blank.
+    title_parts = []
+    if inc_type:
+        title_parts.append(inc_type.replace("_", " ").title())
+    if location_in_store:
+        title_parts.append(location_in_store[:60])
+    title = " — ".join(title_parts) if title_parts else "Incident report"
+
+    is_locked = (form_action == "submit")
+    locked_at = _dt.utcnow() if is_locked else None
+
     row = IncidentReport(
-        title=(request.form.get("title") or "").strip()[:300] or None,
-        body=(request.form.get("body") or "").strip() or None,
+        title=title[:300],
+        body=description or None,
         severity=sev,
-        status="open",
+        status="locked" if is_locked else "open",
         incident_type=inc_type,
         report_id=report_id,
         store_scope=store_scope,
         author_id=(user.id if user else None),
+        date_of_incident=_parse_date(request.form.get("date_of_incident")),
+        time_of_incident=_parse_time(request.form.get("time_of_incident")),
+        location_in_store=location_in_store or None,
+        people_involved=people_involved or None,
+        witnesses=witnesses or None,
+        immediate_action=immediate_action or None,
+        locked=is_locked,
+        locked_at=locked_at,
     )
     db.add(row)
     db.commit()
+    return row
 
 
 # ============================================================
@@ -1957,8 +2074,16 @@ def manager_page_create(page: str):
             _create_daily_log_v3_entry(db, store_scope, user)
             return redirect(url_for("store.manager_page_list", page=page))
         if page == "incident-reports":
-            _create_incident_v3_entry(db, store_scope, user)
-            return redirect(url_for("store.manager_page_list", page=page))
+            row = _create_incident_v3_entry(db, store_scope, user)
+            # Drafts go back to the form; submitted rows go to the list
+            # with ?just_filed so the dashboard can pulse the new entry
+            # (Sam #4:23 spec item 8 — post-submit confirmation).
+            form_action = (request.form.get("form_action") or "submit").strip().lower()
+            if form_action == "draft":
+                return redirect(url_for("store.manager_page_list", page=page))
+            return redirect(url_for(
+                "store.manager_page_list", page=page,
+                just_filed=getattr(row, "report_id", None)))
         if page == "attendance":
             _attendance_v3_post(db, store_scope, user)
             return redirect(url_for(

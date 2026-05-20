@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from sqlalchemy import (
     String,
     Integer,
@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
     Numeric,
     Date,
+    Time,
     Text,
     ForeignKey,
     UniqueConstraint,
@@ -2328,6 +2329,21 @@ class IncidentReport(ManagerLogMixin, Base):
     incident_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     report_id: Mapped[str | None] = mapped_column(String(40), index=True, nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # v4 form fields (Sam dev chat #4:22 + #4:23 spec 2026-05-20; ck
+    # build #4:32). The rich "File new incident" form collects discrete
+    # what/when/where/who fields plus a lock-on-submit flag that freezes
+    # the row into an immutable Original Record. body (from
+    # ManagerLogMixin) holds the longform description; immediate_action
+    # is its own column so the audit trail keeps them separate.
+    date_of_incident: Mapped[date | None] = mapped_column(Date, nullable=True)
+    time_of_incident: Mapped[time | None] = mapped_column(Time, nullable=True)
+    location_in_store: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    people_involved: Mapped[str | None] = mapped_column(Text, nullable=True)
+    witnesses: Mapped[str | None] = mapped_column(Text, nullable=True)
+    immediate_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     author: Mapped["User | None"] = relationship("User")
 

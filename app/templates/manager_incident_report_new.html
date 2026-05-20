@@ -1,0 +1,4180 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>{{ page_label or "Incident Report" }} — File New — Cenas Kitchen</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+
+  :root {
+
+    --ck-red: #C73B36;
+
+    --ck-red-deep: #9B2A26;
+
+    --ck-red-bright: #E85852;
+
+    --ck-gold: #E4B340;
+
+    --ck-gold-bright: #FFD970;
+
+    --ck-teal: #2EA39F;
+
+    --ck-teal-bright: #5BCAC5;
+
+    --ck-cream: #FAF6EC;
+
+
+
+    /* BRIGHTER contrast text — bumped up from v2 */
+
+    --ck-cream-dim: rgba(250, 246, 236, 0.82);    /* was 0.62 */
+
+    --ck-cream-faint: rgba(250, 246, 236, 0.62);  /* was 0.38 */
+
+    --ck-cream-meta: rgba(250, 246, 236, 0.5);    /* new — for truly secondary stuff */
+
+
+
+    --ck-bg-deep: #1a0d08;
+
+    --ck-bg-warm: #28160e;
+
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+
+    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
+
+    --ck-bg-input: rgba(0, 0, 0, 0.3);
+
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+
+    --radius-sm: 8px;
+
+    --radius-md: 12px;
+
+    --radius-lg: 16px;
+
+
+
+    --sev-critical: #E85852;
+
+    --sev-serious: #E89B40;
+
+    --sev-moderate: #E4B340;
+
+    --sev-minor: #5BCAC5;
+
+  }
+
+
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+
+
+  html, body {
+
+    background: var(--ck-bg-deep);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', system-ui, sans-serif;
+
+    font-size: 14px;
+
+    line-height: 1.5;
+
+    overflow-x: hidden;
+
+    min-height: 100vh;
+
+  }
+
+
+
+  body {
+
+    background:
+
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.15), transparent),
+
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
+
+      linear-gradient(180deg, var(--ck-bg-deep) 0%, #0d0604 100%);
+
+    background-attachment: fixed;
+
+    padding-bottom: 120px;
+
+  }
+
+
+
+  body::before {
+
+    content: '';
+
+    position: fixed;
+
+    inset: 0;
+
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+
+    pointer-events: none;
+
+    z-index: 0;
+
+    opacity: 0.5;
+
+  }
+
+
+
+  .layout {
+
+    position: relative;
+
+    z-index: 1;
+
+    max-width: 1200px;
+
+    margin: 0 auto;
+
+    padding: 0 16px;
+
+  }
+
+
+
+  /* ===== HEADER ===== */
+
+  header {
+
+    padding: 24px 0 16px;
+
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+
+    margin-bottom: 20px;
+
+  }
+
+
+
+  .header-top {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    margin-bottom: 16px;
+
+    flex-wrap: wrap;
+
+  }
+
+
+
+  .back-btn {
+
+    padding: 0 14px;
+
+    height: 44px;
+
+    border-radius: var(--radius-md);
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    color: var(--ck-gold);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    cursor: pointer;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+  }
+
+
+
+  .back-btn:hover { border-color: var(--ck-border-active); color: var(--ck-gold-bright); }
+
+  .back-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+
+
+  .header-spacer { flex: 1; }
+
+
+
+  .draft-pill {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-red-bright);
+
+    background: rgba(232, 88, 82, 0.15);
+
+    padding: 7px 14px;
+
+    border-radius: 999px;
+
+    letter-spacing: 0.08em;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+  }
+
+
+
+  .draft-pill .dot {
+
+    width: 7px;
+
+    height: 7px;
+
+    border-radius: 50%;
+
+    background: var(--ck-red-bright);
+
+    animation: pulse 2s infinite;
+
+  }
+
+
+
+  @keyframes pulse {
+
+    0%, 100% { opacity: 1; }
+
+    50% { opacity: 0.4; }
+
+  }
+
+
+
+  h1 {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-weight: 400;
+
+    font-size: 42px;
+
+    line-height: 1;
+
+    letter-spacing: -0.015em;
+
+    color: var(--ck-cream);
+
+    margin-bottom: 8px;
+
+  }
+
+
+
+  h1 .accent {
+
+    font-style: italic;
+
+    color: var(--ck-gold-bright);
+
+    text-shadow: 0 0 24px rgba(255, 217, 112, 0.35);
+
+  }
+
+
+
+  .subtitle {
+
+    color: var(--ck-cream-dim);
+
+    font-size: 14px;
+
+    line-height: 1.5;
+
+    max-width: 680px;
+
+  }
+
+
+
+  /* ===== SUBMISSION METADATA BAR (LOCKED) ===== */
+
+  .submission-meta {
+
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.08), rgba(46, 163, 159, 0.05));
+
+    border: 0.5px solid var(--ck-border-active);
+
+    border-radius: var(--radius-md);
+
+    padding: 16px 18px;
+
+    margin-bottom: 20px;
+
+    display: grid;
+
+    grid-template-columns: 1fr 1fr 1fr;
+
+    gap: 16px;
+
+  }
+
+
+
+  @media (max-width: 700px) {
+
+    .submission-meta { grid-template-columns: 1fr; gap: 12px; }
+
+  }
+
+
+
+  .submission-field {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 4px;
+
+  }
+
+
+
+  .submission-field-label {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold);
+
+    letter-spacing: 0.12em;
+
+    text-transform: uppercase;
+
+  }
+
+
+
+  .submission-field-label svg { width: 11px; height: 11px; fill: currentColor; }
+
+
+
+  .submission-field-value {
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream);
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+  }
+
+
+
+  .submission-field-value .avatar {
+
+    width: 26px;
+
+    height: 26px;
+
+    border-radius: 50%;
+
+    background: linear-gradient(135deg, var(--ck-bg-warm), var(--ck-bg-deep));
+
+    color: var(--ck-gold-bright);
+
+    display: grid;
+
+    place-items: center;
+
+    font-family: 'Instrument Serif', serif;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    border: 0.5px solid var(--ck-border-active);
+
+  }
+
+
+
+  .submission-field-sub {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    color: var(--ck-cream-faint);
+
+  }
+
+
+
+  .locked-badge {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.15);
+
+    padding: 2px 6px;
+
+    border-radius: 4px;
+
+    letter-spacing: 0.08em;
+
+  }
+
+
+
+  .locked-badge svg { width: 9px; height: 9px; fill: currentColor; }
+
+
+
+  /* ===== LAYOUT — form + sticky checklist ===== */
+
+  .form-layout {
+
+    display: grid;
+
+    grid-template-columns: 1fr 320px;
+
+    gap: 20px;
+
+    align-items: start;
+
+  }
+
+
+
+  @media (max-width: 960px) {
+
+    .form-layout { grid-template-columns: 1fr; }
+
+  }
+
+
+
+  /* ===== CHECKLIST SIDEBAR ===== */
+
+  .checklist-panel {
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-md);
+
+    overflow: hidden;
+
+    position: sticky;
+
+    top: 16px;
+
+  }
+
+
+
+  @media (max-width: 960px) {
+
+    .checklist-panel {
+
+      position: relative;
+
+      order: -1;
+
+      margin-bottom: 16px;
+
+    }
+
+  }
+
+
+
+  .checklist-header {
+
+    padding: 14px 16px;
+
+    background: rgba(0, 0, 0, 0.3);
+
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+
+  }
+
+
+
+  .checklist-title {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 20px;
+
+    color: var(--ck-cream);
+
+    margin-bottom: 4px;
+
+  }
+
+
+
+  .checklist-progress {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+  }
+
+
+
+  .checklist-progress-text {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    color: var(--ck-cream-dim);
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .checklist-progress-text strong {
+
+    color: var(--ck-gold-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .checklist-progress-bar {
+
+    flex: 1;
+
+    height: 6px;
+
+    background: rgba(0, 0, 0, 0.3);
+
+    border-radius: 3px;
+
+    overflow: hidden;
+
+    margin-top: 6px;
+
+  }
+
+
+
+  .checklist-progress-fill {
+
+    height: 100%;
+
+    background: linear-gradient(90deg, var(--ck-gold), var(--ck-gold-bright));
+
+    border-radius: 3px;
+
+    transition: width 0.3s ease;
+
+  }
+
+
+
+  .checklist-progress-fill.complete {
+
+    background: linear-gradient(90deg, #95C75F, #b8d97c);
+
+  }
+
+
+
+  .checklist-items {
+
+    padding: 12px;
+
+    max-height: 480px;
+
+    overflow-y: auto;
+
+  }
+
+
+
+  .checklist-item {
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 10px;
+
+    padding: 10px 8px;
+
+    border-radius: var(--radius-sm);
+
+    cursor: pointer;
+
+    transition: background 0.15s;
+
+  }
+
+
+
+  .checklist-item:hover { background: rgba(228, 179, 64, 0.04); }
+
+
+
+  .checklist-check {
+
+    width: 20px;
+
+    height: 20px;
+
+    border-radius: 50%;
+
+    border: 1.5px solid var(--ck-cream-faint);
+
+    display: grid;
+
+    place-items: center;
+
+    flex-shrink: 0;
+
+    margin-top: 1px;
+
+    transition: all 0.2s;
+
+    background: transparent;
+
+  }
+
+
+
+  .checklist-check svg {
+
+    width: 11px;
+
+    height: 11px;
+
+    fill: var(--ck-bg-deep);
+
+    opacity: 0;
+
+    transition: opacity 0.2s;
+
+  }
+
+
+
+  .checklist-item.done .checklist-check {
+
+    background: #95C75F;
+
+    border-color: #95C75F;
+
+  }
+
+
+
+  .checklist-item.done .checklist-check svg { opacity: 1; }
+
+
+
+  .checklist-item.missing .checklist-check {
+
+    border-color: var(--ck-red-bright);
+
+    background: rgba(232, 88, 82, 0.1);
+
+  }
+
+
+
+  .checklist-item-body { flex: 1; min-width: 0; }
+
+
+
+  .checklist-item-label {
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    color: var(--ck-cream);
+
+    line-height: 1.3;
+
+  }
+
+
+
+  .checklist-item.done .checklist-item-label {
+
+    color: var(--ck-cream-dim);
+
+    text-decoration: line-through;
+
+    text-decoration-color: rgba(149, 199, 95, 0.5);
+
+  }
+
+
+
+  .checklist-item-sub {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    color: var(--ck-cream-faint);
+
+    margin-top: 2px;
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .checklist-item.missing .checklist-item-sub {
+
+    color: var(--ck-red-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .checklist-item .optional-tag {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 9px;
+
+    color: var(--ck-cream-meta);
+
+    background: rgba(0, 0, 0, 0.3);
+
+    padding: 1px 5px;
+
+    border-radius: 3px;
+
+    margin-left: 6px;
+
+    letter-spacing: 0.05em;
+
+    font-weight: 600;
+
+    text-transform: uppercase;
+
+  }
+
+
+
+  .checklist-summary {
+
+    padding: 14px 16px;
+
+    border-top: 0.5px solid var(--ck-border-subtle);
+
+    background: rgba(0, 0, 0, 0.2);
+
+  }
+
+
+
+  .checklist-summary.not-ready {
+
+    background: rgba(232, 88, 82, 0.08);
+
+    border-color: rgba(232, 88, 82, 0.25);
+
+  }
+
+
+
+  .checklist-summary.ready {
+
+    background: rgba(149, 199, 95, 0.08);
+
+    border-color: rgba(149, 199, 95, 0.25);
+
+  }
+
+
+
+  .checklist-summary-text {
+
+    font-size: 12px;
+
+    color: var(--ck-cream);
+
+    line-height: 1.5;
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 8px;
+
+  }
+
+
+
+  .checklist-summary-text svg {
+
+    width: 16px;
+
+    height: 16px;
+
+    fill: var(--ck-red-bright);
+
+    flex-shrink: 0;
+
+    margin-top: 1px;
+
+  }
+
+
+
+  .checklist-summary.ready .checklist-summary-text svg { fill: #95C75F; }
+
+
+
+  .checklist-summary-text strong {
+
+    color: var(--ck-red-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .checklist-summary.ready .checklist-summary-text strong { color: #95C75F; }
+
+
+
+  /* ===== ERROR BANNER ===== */
+
+  .error-banner {
+
+    background: linear-gradient(135deg, rgba(232, 88, 82, 0.18), rgba(232, 88, 82, 0.08));
+
+    border: 1px solid var(--ck-red-bright);
+
+    border-radius: var(--radius-md);
+
+    padding: 14px 18px;
+
+    margin-bottom: 20px;
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 12px;
+
+  }
+
+
+
+  .error-banner.hidden { display: none; }
+
+
+
+  .error-banner svg {
+
+    width: 20px;
+
+    height: 20px;
+
+    fill: var(--ck-red-bright);
+
+    flex-shrink: 0;
+
+    margin-top: 2px;
+
+  }
+
+
+
+  .error-banner-text {
+
+    flex: 1;
+
+    color: var(--ck-cream);
+
+    font-size: 13px;
+
+    line-height: 1.5;
+
+  }
+
+
+
+  .error-banner-text strong {
+
+    color: var(--ck-red-bright);
+
+    font-weight: 700;
+
+    display: block;
+
+    margin-bottom: 4px;
+
+    font-size: 14px;
+
+  }
+
+
+
+  .error-banner-text ul {
+
+    list-style: none;
+
+    padding: 0;
+
+    margin-top: 6px;
+
+  }
+
+
+
+  .error-banner-text li {
+
+    padding-left: 16px;
+
+    position: relative;
+
+    color: var(--ck-cream-dim);
+
+    margin-top: 2px;
+
+  }
+
+
+
+  .error-banner-text li::before {
+
+    content: '→';
+
+    position: absolute;
+
+    left: 0;
+
+    color: var(--ck-red-bright);
+
+  }
+
+
+
+  /* ===== FORM SECTIONS ===== */
+
+  .form-section {
+
+    background: var(--ck-bg-card);
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-md);
+
+    padding: 22px;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  .form-section-header {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 18px;
+
+    padding-bottom: 14px;
+
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+
+  }
+
+
+
+  .form-section-number {
+
+    width: 30px;
+
+    height: 30px;
+
+    border-radius: 50%;
+
+    background: rgba(228, 179, 64, 0.15);
+
+    color: var(--ck-gold-bright);
+
+    display: grid;
+
+    place-items: center;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    flex-shrink: 0;
+
+  }
+
+
+
+  .form-section-number.done {
+
+    background: rgba(149, 199, 95, 0.18);
+
+    color: #95C75F;
+
+  }
+
+
+
+  .form-section-title {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 22px;
+
+    color: var(--ck-cream);
+
+    flex: 1;
+
+  }
+
+
+
+  .form-section-required {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    padding: 4px 8px;
+
+    border-radius: 4px;
+
+    letter-spacing: 0.1em;
+
+    text-transform: uppercase;
+
+  }
+
+
+
+  .form-section-required.required {
+
+    color: var(--ck-red-bright);
+
+    background: rgba(232, 88, 82, 0.12);
+
+  }
+
+
+
+  .form-section-required.optional {
+
+    color: var(--ck-cream-faint);
+
+    background: rgba(250, 246, 236, 0.06);
+
+  }
+
+
+
+  .form-section-required.done {
+
+    color: #95C75F;
+
+    background: rgba(149, 199, 95, 0.12);
+
+  }
+
+
+
+  /* ===== FORM FIELDS ===== */
+
+  .form-grid {
+
+    display: grid;
+
+    grid-template-columns: 1fr;
+
+    gap: 16px;
+
+  }
+
+
+
+  @media (min-width: 600px) {
+
+    .form-grid { grid-template-columns: 1fr 1fr; }
+
+    .form-full { grid-column: 1 / -1; }
+
+  }
+
+
+
+  .form-field { position: relative; }
+
+
+
+  .form-field label {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream-dim);  /* BRIGHTER than v2 */
+
+    text-transform: uppercase;
+
+    letter-spacing: 0.1em;
+
+    margin-bottom: 8px;
+
+  }
+
+
+
+  .form-field label .req {
+
+    color: var(--ck-red-bright);
+
+    margin-left: 2px;
+
+    font-size: 13px;
+
+  }
+
+
+
+  .form-field label .opt {
+
+    margin-left: 6px;
+
+    font-size: 9px;
+
+    color: var(--ck-cream-meta);
+
+    background: rgba(0, 0, 0, 0.3);
+
+    padding: 1px 5px;
+
+    border-radius: 3px;
+
+    letter-spacing: 0.05em;
+
+    font-weight: 600;
+
+  }
+
+
+
+  .form-field input,
+
+  .form-field textarea,
+
+  .form-field select {
+
+    width: 100%;
+
+    padding: 12px 14px;
+
+    background: var(--ck-bg-input);
+
+    border: 1px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 14px;
+
+    transition: border-color 0.15s, background-color 0.15s;
+
+  }
+
+
+
+  .form-field input:focus,
+
+  .form-field textarea:focus,
+
+  .form-field select:focus {
+
+    outline: none;
+
+    border-color: var(--ck-gold);
+
+    background: rgba(0, 0, 0, 0.4);
+
+  }
+
+
+
+  .form-field input::placeholder,
+
+  .form-field textarea::placeholder {
+
+    color: var(--ck-cream-faint);  /* BRIGHTER than v2 */
+
+  }
+
+
+
+  .form-field textarea {
+
+    resize: vertical;
+
+    min-height: 100px;
+
+    line-height: 1.5;
+
+  }
+
+
+
+  /* ERROR STATE */
+
+  .form-field.error input,
+
+  .form-field.error textarea,
+
+  .form-field.error select {
+
+    border-color: var(--ck-red-bright);
+
+    background: rgba(232, 88, 82, 0.06);
+
+  }
+
+
+
+  .form-field.error label {
+
+    color: var(--ck-red-bright);
+
+  }
+
+
+
+  .field-error {
+
+    display: none;
+
+    margin-top: 6px;
+
+    font-size: 11px;
+
+    color: var(--ck-red-bright);
+
+    font-weight: 600;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+  }
+
+
+
+  .field-error svg {
+
+    width: 12px;
+
+    height: 12px;
+
+    fill: currentColor;
+
+  }
+
+
+
+  .form-field.error .field-error { display: flex; }
+
+
+
+  /* DONE STATE */
+
+  .form-field.done input,
+
+  .form-field.done textarea {
+
+    border-color: rgba(149, 199, 95, 0.3);
+
+  }
+
+
+
+  /* ===== TYPE GRID ===== */
+
+  .type-grid {
+
+    display: grid;
+
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+
+    gap: 8px;
+
+  }
+
+
+
+  .type-btn {
+
+    padding: 14px 12px;
+
+    background: var(--ck-bg-input);
+
+    border: 1px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream-dim);
+
+    cursor: pointer;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    gap: 8px;
+
+    text-align: center;
+
+    transition: all 0.15s;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.05em;
+
+    text-transform: uppercase;
+
+  }
+
+
+
+  .type-btn:hover {
+
+    border-color: var(--ck-border-active);
+
+    color: var(--ck-cream);
+
+  }
+
+
+
+  .type-btn.selected {
+
+    background: rgba(228, 179, 64, 0.15);
+
+    border-color: var(--ck-gold);
+
+    color: var(--ck-gold-bright);
+
+  }
+
+
+
+  .type-btn svg {
+
+    width: 22px;
+
+    height: 22px;
+
+    fill: currentColor;
+
+  }
+
+
+
+  /* ===== SEVERITY ROW ===== */
+
+  .severity-row {
+
+    display: grid;
+
+    grid-template-columns: repeat(4, 1fr);
+
+    gap: 6px;
+
+  }
+
+
+
+  @media (max-width: 600px) {
+
+    .severity-row { grid-template-columns: 1fr 1fr; }
+
+  }
+
+
+
+  .sev-btn {
+
+    padding: 12px 10px;
+
+    background: var(--ck-bg-input);
+
+    border: 1px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream-dim);
+
+    cursor: pointer;
+
+    text-align: center;
+
+    transition: all 0.15s;
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.05em;
+
+    text-transform: uppercase;
+
+  }
+
+
+
+  .sev-btn .sub {
+
+    display: block;
+
+    font-size: 10px;
+
+    font-weight: 500;
+
+    margin-top: 3px;
+
+    opacity: 0.8;
+
+    text-transform: none;
+
+    letter-spacing: 0;
+
+  }
+
+
+
+  .sev-btn.critical.selected {
+
+    background: rgba(232, 88, 82, 0.2);
+
+    border-color: var(--sev-critical);
+
+    color: var(--sev-critical);
+
+  }
+
+  .sev-btn.serious.selected {
+
+    background: rgba(232, 155, 64, 0.2);
+
+    border-color: var(--sev-serious);
+
+    color: var(--sev-serious);
+
+  }
+
+  .sev-btn.moderate.selected {
+
+    background: rgba(228, 179, 64, 0.18);
+
+    border-color: var(--sev-moderate);
+
+    color: var(--sev-moderate);
+
+  }
+
+  .sev-btn.minor.selected {
+
+    background: rgba(91, 202, 197, 0.18);
+
+    border-color: var(--sev-minor);
+
+    color: var(--sev-minor);
+
+  }
+
+
+
+  /* ===== EVIDENCE ===== */
+
+  .evidence-intro {
+
+    color: var(--ck-cream-dim);
+
+    font-size: 13px;
+
+    margin-bottom: 14px;
+
+    line-height: 1.5;
+
+  }
+
+
+
+  .upload-grid {
+
+    display: grid;
+
+    grid-template-columns: repeat(2, 1fr);
+
+    gap: 8px;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  @media (min-width: 600px) {
+
+    .upload-grid { grid-template-columns: repeat(4, 1fr); }
+
+  }
+
+
+
+  .upload-btn {
+
+    background: var(--ck-bg-input);
+
+    border: 1.5px dashed var(--ck-border-subtle);
+
+    border-radius: var(--radius-md);
+
+    padding: 22px 14px;
+
+    color: var(--ck-cream);
+
+    cursor: pointer;
+
+    text-align: center;
+
+    transition: all 0.15s;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    gap: 8px;
+
+  }
+
+
+
+  .upload-btn:hover {
+
+    border-color: var(--ck-gold);
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.04);
+
+  }
+
+
+
+  .upload-btn svg {
+
+    width: 28px;
+
+    height: 28px;
+
+    fill: currentColor;
+
+  }
+
+
+
+  .upload-btn .label {
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    text-transform: uppercase;
+
+    letter-spacing: 0.08em;
+
+  }
+
+
+
+  .upload-btn .sub {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    color: var(--ck-cream-faint);
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .upload-btn .count {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.18);
+
+    padding: 2px 7px;
+
+    border-radius: 4px;
+
+    margin-top: 2px;
+
+  }
+
+
+
+  .attached-items {
+
+    display: grid;
+
+    grid-template-columns: 1fr;
+
+    gap: 8px;
+
+    margin-bottom: 16px;
+
+  }
+
+
+
+  .attached-item {
+
+    background: var(--ck-bg-input);
+
+    border: 0.5px solid var(--ck-border-active);
+
+    border-radius: var(--radius-sm);
+
+    padding: 10px 12px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+  }
+
+
+
+  .attached-icon {
+
+    width: 36px;
+
+    height: 36px;
+
+    border-radius: 6px;
+
+    background: rgba(228, 179, 64, 0.15);
+
+    color: var(--ck-gold);
+
+    display: grid;
+
+    place-items: center;
+
+    flex-shrink: 0;
+
+  }
+
+
+
+  .attached-icon.audio { background: rgba(232, 88, 82, 0.15); color: var(--ck-red-bright); }
+
+  .attached-icon.video { background: rgba(91, 202, 197, 0.15); color: var(--ck-teal-bright); }
+
+  .attached-icon.photo { background: rgba(149, 199, 95, 0.15); color: #95C75F; }
+
+
+
+  .attached-icon svg { width: 18px; height: 18px; fill: currentColor; }
+
+
+
+  .attached-info { flex: 1; min-width: 0; }
+
+
+
+  .attached-name {
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    color: var(--ck-cream);
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+  }
+
+
+
+  .attached-meta {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    color: var(--ck-cream-faint);
+
+    margin-top: 2px;
+
+    letter-spacing: 0.05em;
+
+  }
+
+
+
+  .attached-remove {
+
+    background: none;
+
+    border: none;
+
+    color: var(--ck-cream-faint);
+
+    cursor: pointer;
+
+    padding: 6px;
+
+    font-size: 20px;
+
+    line-height: 1;
+
+  }
+
+
+
+  .attached-remove:hover { color: var(--ck-red-bright); }
+
+
+
+  /* Audio recorder */
+
+  .audio-recorder {
+
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.04), rgba(199, 59, 54, 0.03));
+
+    border: 0.5px solid var(--ck-border-subtle);
+
+    border-radius: var(--radius-md);
+
+    padding: 18px;
+
+  }
+
+
+
+  .audio-recorder.recording {
+
+    border-color: var(--ck-red-bright);
+
+    background: linear-gradient(135deg, rgba(232, 88, 82, 0.12), rgba(199, 59, 54, 0.08));
+
+  }
+
+
+
+  .audio-recorder-top {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 14px;
+
+  }
+
+
+
+  .record-btn {
+
+    width: 56px;
+
+    height: 56px;
+
+    border-radius: 50%;
+
+    background: var(--ck-red-bright);
+
+    color: var(--ck-cream);
+
+    border: none;
+
+    cursor: pointer;
+
+    display: grid;
+
+    place-items: center;
+
+    flex-shrink: 0;
+
+    transition: all 0.2s;
+
+    box-shadow: 0 4px 12px rgba(232, 88, 82, 0.3);
+
+  }
+
+
+
+  .record-btn:hover { transform: scale(1.05); }
+
+  .record-btn svg { width: 22px; height: 22px; fill: currentColor; }
+
+
+
+  .audio-recorder.recording .record-btn {
+
+    background: var(--ck-cream);
+
+    color: var(--ck-red-bright);
+
+    animation: recordPulse 1.5s infinite;
+
+  }
+
+
+
+  @keyframes recordPulse {
+
+    0%, 100% { box-shadow: 0 4px 12px rgba(232, 88, 82, 0.3); }
+
+    50% { box-shadow: 0 4px 24px rgba(232, 88, 82, 0.7), 0 0 0 8px rgba(232, 88, 82, 0.1); }
+
+  }
+
+
+
+  .audio-recorder-info { flex: 1; }
+
+
+
+  .audio-recorder-label {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold);
+
+    letter-spacing: 0.1em;
+
+    text-transform: uppercase;
+
+    margin-bottom: 4px;
+
+  }
+
+
+
+  .audio-recorder.recording .audio-recorder-label { color: var(--ck-red-bright); }
+
+
+
+  .audio-recorder-state {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-style: italic;
+
+    font-size: 18px;
+
+    color: var(--ck-cream);
+
+  }
+
+
+
+  .audio-timer {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 22px;
+
+    font-weight: 700;
+
+    color: var(--ck-gold-bright);
+
+  }
+
+
+
+  .audio-recorder.recording .audio-timer { color: var(--ck-red-bright); }
+
+
+
+  .consent-note {
+
+    margin-top: 14px;
+
+    padding: 12px 14px;
+
+    background: rgba(46, 163, 159, 0.08);
+
+    border: 0.5px solid rgba(46, 163, 159, 0.3);
+
+    border-radius: var(--radius-sm);
+
+    color: var(--ck-cream);
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 8px;
+
+  }
+
+
+
+  .consent-note svg {
+
+    width: 14px;
+
+    height: 14px;
+
+    fill: var(--ck-teal);
+
+    flex-shrink: 0;
+
+    margin-top: 2px;
+
+  }
+
+
+
+  .consent-note strong { color: var(--ck-teal-bright); font-weight: 700; }
+
+
+
+  /* ===== STICKY SUBMIT BAR ===== */
+
+  .submit-bar {
+
+    position: fixed;
+
+    bottom: 0;
+
+    left: 0;
+
+    right: 0;
+
+    background: linear-gradient(180deg, transparent, rgba(15, 8, 5, 0.96) 30%);
+
+    padding: 24px 16px 16px;
+
+    z-index: 50;
+
+    backdrop-filter: blur(8px);
+
+  }
+
+
+
+  .submit-bar-inner {
+
+    max-width: 1200px;
+
+    margin: 0 auto;
+
+    background: var(--ck-bg-card);
+
+    border: 1px solid var(--ck-border-active);
+
+    border-radius: var(--radius-md);
+
+    padding: 16px 18px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 14px;
+
+    flex-wrap: wrap;
+
+  }
+
+
+
+  .submit-progress {
+
+    flex: 1;
+
+    min-width: 200px;
+
+  }
+
+
+
+  .submit-progress-label {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 10px;
+
+    color: var(--ck-cream-dim);
+
+    letter-spacing: 0.08em;
+
+    text-transform: uppercase;
+
+    margin-bottom: 6px;
+
+  }
+
+
+
+  .submit-progress-label .ok {
+
+    color: #95C75F;
+
+    font-weight: 700;
+
+  }
+
+
+
+  .submit-progress-label .missing {
+
+    color: var(--ck-red-bright);
+
+    font-weight: 700;
+
+  }
+
+
+
+  .submit-progress-bar {
+
+    height: 6px;
+
+    background: rgba(0, 0, 0, 0.4);
+
+    border-radius: 3px;
+
+    overflow: hidden;
+
+  }
+
+
+
+  .submit-progress-fill {
+
+    height: 100%;
+
+    background: linear-gradient(90deg, var(--ck-gold), var(--ck-gold-bright));
+
+    border-radius: 3px;
+
+    transition: width 0.3s ease;
+
+  }
+
+
+
+  .submit-progress-fill.complete {
+
+    background: linear-gradient(90deg, #95C75F, #b8d97c);
+
+  }
+
+
+
+  .draft-btn {
+
+    padding: 12px 18px;
+
+    background: transparent;
+
+    border: 0.5px solid var(--ck-border-active);
+
+    border-radius: var(--radius-md);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+  }
+
+
+
+  .draft-btn:hover { background: rgba(228, 179, 64, 0.06); }
+
+
+
+  .submit-btn {
+
+    padding: 14px 28px;
+
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+
+    border: 0.5px solid var(--ck-red-bright);
+
+    border-radius: var(--radius-md);
+
+    color: var(--ck-cream);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    transition: all 0.2s;
+
+    box-shadow: 0 4px 16px rgba(199, 59, 54, 0.25);
+
+    letter-spacing: 0.02em;
+
+  }
+
+
+
+  .submit-btn:hover {
+
+    transform: translateY(-1px);
+
+    box-shadow: 0 6px 20px rgba(199, 59, 54, 0.35);
+
+  }
+
+
+
+  .submit-btn:disabled {
+
+    background: rgba(50, 50, 50, 0.5);
+
+    border-color: var(--ck-border-subtle);
+
+    color: var(--ck-cream-faint);
+
+    cursor: not-allowed;
+
+    box-shadow: none;
+
+    transform: none;
+
+  }
+
+
+
+  .submit-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+
+
+  /* ===== CONFIRMATION MODAL ===== */
+
+  .modal-backdrop {
+
+    position: fixed;
+
+    inset: 0;
+
+    background: rgba(10, 5, 3, 0.85);
+
+    backdrop-filter: blur(6px);
+
+    z-index: 100;
+
+    display: grid;
+
+    place-items: center;
+
+    padding: 20px;
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    transition: opacity 0.3s;
+
+  }
+
+
+
+  .modal-backdrop.visible {
+
+    opacity: 1;
+
+    pointer-events: auto;
+
+  }
+
+
+
+  .modal {
+
+    background: var(--ck-bg-card);
+
+    border: 1px solid var(--ck-gold);
+
+    border-radius: var(--radius-md);
+
+    padding: 32px;
+
+    max-width: 440px;
+
+    width: 100%;
+
+    text-align: center;
+
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+    transform: translateY(20px);
+
+    transition: transform 0.3s;
+
+  }
+
+
+
+  .modal-backdrop.visible .modal {
+
+    transform: translateY(0);
+
+  }
+
+
+
+  .modal-icon {
+
+    width: 64px;
+
+    height: 64px;
+
+    border-radius: 50%;
+
+    background: rgba(149, 199, 95, 0.18);
+
+    color: #95C75F;
+
+    display: grid;
+
+    place-items: center;
+
+    margin: 0 auto 18px;
+
+  }
+
+
+
+  .modal-icon svg { width: 32px; height: 32px; fill: currentColor; }
+
+
+
+  .modal-title {
+
+    font-family: 'Instrument Serif', serif;
+
+    font-size: 28px;
+
+    color: var(--ck-cream);
+
+    margin-bottom: 8px;
+
+  }
+
+
+
+  .modal-title .accent { font-style: italic; color: var(--ck-gold-bright); }
+
+
+
+  .modal-body {
+
+    color: var(--ck-cream-dim);
+
+    font-size: 14px;
+
+    line-height: 1.5;
+
+    margin-bottom: 20px;
+
+  }
+
+
+
+  .modal-body code {
+
+    font-family: 'JetBrains Mono', monospace;
+
+    font-size: 13px;
+
+    color: var(--ck-gold-bright);
+
+    background: rgba(228, 179, 64, 0.1);
+
+    padding: 2px 6px;
+
+    border-radius: 4px;
+
+  }
+
+
+
+  .modal-actions {
+
+    display: flex;
+
+    gap: 8px;
+
+    justify-content: center;
+
+    flex-wrap: wrap;
+
+  }
+
+
+
+  .modal-btn {
+
+    padding: 12px 22px;
+
+    border-radius: var(--radius-md);
+
+    font-family: 'Manrope', sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    border: 0.5px solid;
+
+  }
+
+
+
+  .modal-btn.primary {
+
+    background: var(--ck-gold);
+
+    border-color: var(--ck-gold);
+
+    color: var(--ck-bg-deep);
+
+  }
+
+
+
+  .modal-btn.secondary {
+
+    background: transparent;
+
+    border-color: var(--ck-border-active);
+
+    color: var(--ck-cream);
+
+  }
+
+
+
+  .hidden { display: none !important; }
+
+
+
+  /* Highlight on missing field scroll target */
+
+  .form-field.flash {
+
+    animation: flashError 1.2s ease;
+
+  }
+
+
+
+  @keyframes flashError {
+
+    0%, 100% { background-color: transparent; }
+
+    50% { background-color: rgba(232, 88, 82, 0.08); }
+
+  }
+
+
+
+  /* Help text under fields */
+
+  .form-field-help {
+
+    margin-top: 6px;
+
+    font-size: 11px;
+
+    color: var(--ck-cream-faint);
+
+    line-height: 1.4;
+
+  }
+
+</style>
+
+</head>
+
+<body>
+
+<div class="layout">
+
+
+
+  <!-- HEADER -->
+
+  <header>
+
+    <div class="header-top">
+
+      <a class="back-btn" href="{{ list_url }}" style="text-decoration:none;">
+
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+
+        All reports
+
+      </a>
+
+      <div class="header-spacer"></div>
+
+      <div class="draft-pill">
+
+        <span class="dot"></span>
+
+        DRAFT · {{ report_id }}
+
+      </div>
+
+    </div>
+
+    <h1>File new <span class="accent">incident</span></h1>
+
+    <p class="subtitle">Document what happened with as much detail and evidence as you can. Once submitted, the record locks — original info preserved forever, updates can only be appended, never overwritten.</p>
+
+  </header>
+
+
+
+  <!-- ===== SUBMISSION METADATA (LOCKED) ===== -->
+
+  <div class="submission-meta">
+
+    <div class="submission-field">
+
+      <div class="submission-field-label">
+
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+
+        Submitted by
+
+        <span class="locked-badge">
+
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+          Auto
+
+        </span>
+
+      </div>
+
+      <div class="submission-field-value">
+
+        <div class="avatar">{{ user_initials }}</div>
+
+        {{ user_full_name }}
+
+      </div>
+
+      <div class="submission-field-sub">{{ user_role_label }} · {{ store_label }}</div>
+
+    </div>
+
+
+
+    <div class="submission-field">
+
+      <div class="submission-field-label">
+
+        <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z"/></svg>
+
+        Submitted at
+
+        <span class="locked-badge">
+
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+          Auto
+
+        </span>
+
+      </div>
+
+      <div class="submission-field-value" id="submitDate">{{ now_date_label }}</div>
+
+      <div class="submission-field-sub" id="submitTime">{{ now_time_label }}</div>
+
+    </div>
+
+
+
+    <div class="submission-field">
+
+      <div class="submission-field-label">
+
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M11 7h2v6h-2zM11 15h2v2h-2z"/></svg>
+
+        Report ID
+
+        <span class="locked-badge">
+
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+          Auto
+
+        </span>
+
+      </div>
+
+      <div class="submission-field-value" style="font-family: 'JetBrains Mono', monospace; font-size: 15px; color: var(--ck-gold-bright);">{{ report_id }}</div>
+
+      <div class="submission-field-sub">Will lock on submission</div>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ===== ERROR BANNER (shows on submit if fields missing) ===== -->
+
+  <div class="error-banner hidden" id="errorBanner">
+
+    <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+
+    <div class="error-banner-text">
+
+      <strong id="errorBannerTitle">3 required fields need to be filled in before you can submit</strong>
+
+      <span>Scroll to the highlighted fields below, or use the checklist on the right.</span>
+
+      <ul id="errorBannerList"></ul>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ===== FORM LAYOUT ===== -->
+
+  <form id="irForm" method="post" enctype="multipart/form-data" action="{{ submit_url }}" novalidate>
+  <input type="hidden" name="incident_type" id="hiddenIncidentType" value="">
+  <input type="hidden" name="severity"      id="hiddenSeverity"     value="">
+  <input type="hidden" name="form_action"   id="hiddenFormAction"   value="submit">
+  <div class="form-layout">
+
+
+
+    <!-- LEFT: FORM -->
+
+    <div>
+
+
+
+      <!-- 1. TYPE -->
+
+      <div class="form-section" data-section="type">
+
+        <div class="form-section-header">
+
+          <span class="form-section-number">1</span>
+
+          <span class="form-section-title">Incident type</span>
+
+          <span class="form-section-required required">Required</span>
+
+        </div>
+
+        <div class="type-grid" id="typeGrid">
+
+          <button type="button" class="type-btn" data-value="injury">
+
+            <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4 14H9v-2h6v2zm0-4H9v-2h6v2zm-3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>
+
+            Injury
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="equipment">
+
+            <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.484.484 0 0 0-.59.22L2.74 8.87a.485.485 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94 0 .31.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.39.3.61.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.49 0 .61-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+
+            Equipment
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="food-safety">
+
+            <svg viewBox="0 0 24 24"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
+
+            Food Safety
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="customer">
+
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+
+            Customer
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="staff">
+
+            <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3z"/></svg>
+
+            Staff
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="security">
+
+            <svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+
+            Security
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="vendor">
+
+            <svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+
+            Vendor
+
+          </button>
+
+          <button type="button" class="type-btn" data-value="property">
+
+            <svg viewBox="0 0 24 24"><path d="M12 3 4 9v12h5v-7h6v7h5V9z"/></svg>
+
+            Property
+
+          </button>
+
+        </div>
+
+        <div class="field-error">
+
+          <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+          Pick an incident type to continue
+
+        </div>
+
+      </div>
+
+
+
+      <!-- 2. SEVERITY -->
+
+      <div class="form-section" data-section="severity">
+
+        <div class="form-section-header">
+
+          <span class="form-section-number">2</span>
+
+          <span class="form-section-title">Severity</span>
+
+          <span class="form-section-required required">Required</span>
+
+        </div>
+
+        <div class="severity-row" id="severityRow">
+
+          <button type="button" class="sev-btn critical" data-value="critical">
+
+            Critical
+
+            <span class="sub">Hospital, lawsuit, closure risk</span>
+
+          </button>
+
+          <button type="button" class="sev-btn serious" data-value="serious">
+
+            Serious
+
+            <span class="sub">Lost shift, refund, complaint</span>
+
+          </button>
+
+          <button type="button" class="sev-btn moderate" data-value="moderate">
+
+            Moderate
+
+            <span class="sub">Disruption, write-up worthy</span>
+
+          </button>
+
+          <button type="button" class="sev-btn minor" data-value="minor">
+
+            Minor
+
+            <span class="sub">Document for record</span>
+
+          </button>
+
+        </div>
+
+        <div class="field-error">
+
+          <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+          Pick a severity level
+
+        </div>
+
+      </div>
+
+
+
+      <!-- 3. WHEN & WHERE -->
+
+      <div class="form-section" data-section="when-where">
+
+        <div class="form-section-header">
+
+          <span class="form-section-number">3</span>
+
+          <span class="form-section-title">When &amp; where</span>
+
+          <span class="form-section-required required">Required</span>
+
+        </div>
+
+        <div class="form-grid">
+
+          <div class="form-field" data-required="true" data-field="date">
+
+            <label>Date of incident <span class="req">*</span></label>
+
+            <input type="date" id="incidentDate" name="date_of_incident" value="{{ today_iso }}">
+
+            <div class="field-error">
+
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+              Date is required
+
+            </div>
+
+          </div>
+
+          <div class="form-field" data-required="true" data-field="time">
+
+            <label>Time of incident <span class="req">*</span></label>
+
+            <input type="time" id="incidentTime" name="time_of_incident" value="">
+
+            <div class="field-error">
+
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+              Time is required
+
+            </div>
+
+          </div>
+
+          <div class="form-field form-full" data-required="true" data-field="location">
+
+            <label>Location in store <span class="req">*</span></label>
+
+            <input type="text" id="incidentLocation" name="location_in_store" maxlength="200" placeholder="e.g. kitchen line, dining room booth 8, walk-in, parking lot">
+
+            <div class="field-error">
+
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+              Where in the store did this happen?
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      <!-- 4. PEOPLE -->
+
+      <div class="form-section" data-section="people">
+
+        <div class="form-section-header">
+
+          <span class="form-section-number">4</span>
+
+          <span class="form-section-title">People involved</span>
+
+          <span class="form-section-required required">Required</span>
+
+        </div>
+
+        <div class="form-grid">
+
+          <div class="form-field form-full" data-required="true" data-field="involved">
+
+            <label>Who was involved? <span class="req">*</span></label>
+
+            <input type="text" id="peopleInvolved" name="people_involved" maxlength="500" placeholder="Name(s) of employees, customers, vendors involved">
+
+            <div class="form-field-help">If a customer, get their name + contact info if they're willing to share.</div>
+
+            <div class="field-error">
+
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+              At least one person needs to be named
+
+            </div>
+
+          </div>
+
+          <div class="form-field form-full" data-field="witnesses">
+
+            <label>Witnesses <span class="opt">OPTIONAL</span></label>
+
+            <input type="text" id="witnesses" name="witnesses" maxlength="500" placeholder="Other employees or guests who saw what happened">
+
+            <div class="form-field-help">If anyone else saw it, list them — strengthens the record.</div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      <!-- 5. WHAT HAPPENED -->
+
+      <div class="form-section" data-section="happened">
+
+        <div class="form-section-header">
+
+          <span class="form-section-number">5</span>
+
+          <span class="form-section-title">What happened</span>
+
+          <span class="form-section-required required">Required</span>
+
+        </div>
+
+        <div class="form-grid">
+
+          <div class="form-field form-full" data-required="true" data-field="description">
+
+            <label>Describe the incident <span class="req">*</span></label>
+
+            <textarea id="description" name="description" maxlength="4000" placeholder="Walk through it: what led up to it, what happened, who said what, in your own words. Be specific. The detail you write today is the detail the record holds forever."></textarea>
+
+            <div class="form-field-help">Minimum 30 characters. The more specific, the stronger the record.</div>
+
+            <div class="field-error">
+
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+              Describe what happened (at least 30 characters)
+
+            </div>
+
+          </div>
+
+          <div class="form-field form-full" data-required="true" data-field="action">
+
+            <label>Immediate action taken <span class="req">*</span></label>
+
+            <textarea id="action" name="immediate_action" maxlength="2000" placeholder="What did you do right after? Called 911? Cleaned up? Refunded? Sent the employee home? Notified the partner?"></textarea>
+
+            <div class="field-error">
+
+              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21z"/></svg>
+
+              What did you do about it?
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      <!-- 6. EVIDENCE -->
+
+      <div class="form-section" data-section="evidence">
+
+        <div class="form-section-header">
+
+          <span class="form-section-number">6</span>
+
+          <span class="form-section-title">Evidence</span>
+
+          <span class="form-section-required optional">Optional</span>
+
+        </div>
+
+        <p class="evidence-intro">Attach photos, video, audio recordings, or documents. If it's a serious or critical incident, evidence dramatically strengthens the record. Audio can be recorded in-app.</p>
+
+
+
+        <div class="upload-grid">
+
+          <button type="button" class="upload-btn" data-evidence="photo">
+
+            <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+
+            <span class="label">Photo</span>
+
+            <span class="sub">JPG · PNG · HEIC</span>
+
+          </button>
+
+          <button type="button" class="upload-btn" data-evidence="video">
+
+            <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+
+            <span class="label">Video</span>
+
+            <span class="sub">MP4 · MOV</span>
+
+          </button>
+
+          <button type="button" class="upload-btn" data-evidence="audio">
+
+            <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.42 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+
+            <span class="label">Audio</span>
+
+            <span class="sub">Record or upload</span>
+
+          </button>
+
+          <button type="button" class="upload-btn" data-evidence="document">
+
+            <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+
+            <span class="label">Document</span>
+
+            <span class="sub">PDF · DOCX</span>
+
+          </button>
+
+        </div>
+
+
+
+        <div class="attached-items" id="attachedList">
+
+          <!-- Example attachments shown for visual reference -->
+
+          <div class="attached-item">
+
+            <div class="attached-icon photo">
+
+              <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+
+            </div>
+
+            <div class="attached-info">
+
+              <div class="attached-name">IMG_4521.jpg</div>
+
+              <div class="attached-meta">2.1 MB · taken just now · 1024 × 768</div>
+
+            </div>
+
+            <button class="attached-remove" aria-label="Remove">×</button>
+
+          </div>
+
+        </div>
+
+
+
+        <!-- Audio recorder -->
+
+        <div class="audio-recorder" id="audioRec">
+
+          <div class="audio-recorder-top">
+
+            <button type="button" class="record-btn" onclick="toggleRecord()" aria-label="Record audio">
+
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+
+            </button>
+
+            <div class="audio-recorder-info">
+
+              <div class="audio-recorder-label">Audio recorder</div>
+
+              <div class="audio-recorder-state">Tap to start recording</div>
+
+            </div>
+
+            <div class="audio-timer">00:00</div>
+
+          </div>
+
+        </div>
+
+
+
+        <div class="consent-note">
+
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+
+          <div><strong>Recording notice:</strong> Texas is a one-party consent state. You may record any conversation you're a party to. If recording someone else without their knowledge, only do it if you have a legitimate business reason and you're physically present. Records lock with the incident at submission.</div>
+
+        </div>
+
+      </div>
+
+
+
+    </div>
+
+
+
+    <!-- RIGHT: CHECKLIST -->
+
+    <aside class="checklist-panel" id="checklistPanel">
+
+      <div class="checklist-header">
+
+        <div class="checklist-title">Before you submit</div>
+
+        <div class="checklist-progress">
+
+          <div style="flex: 1;">
+
+            <div class="checklist-progress-text">
+
+              <strong id="progressDone">0</strong> of <strong id="progressTotal">7</strong> required complete
+
+            </div>
+
+            <div class="checklist-progress-bar">
+
+              <div class="checklist-progress-fill" id="progressFill" style="width: 0%;"></div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      <div class="checklist-items">
+
+        <div class="checklist-item missing" data-check="type" onclick="scrollToSection('type')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Incident type</div>
+
+            <div class="checklist-item-sub">Not selected</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item missing" data-check="severity" onclick="scrollToSection('severity')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Severity level</div>
+
+            <div class="checklist-item-sub">Not selected</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item done" data-check="date" onclick="scrollToSection('when-where')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Date of incident</div>
+
+            <div class="checklist-item-sub">May 20, 2026</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item missing" data-check="time" onclick="scrollToSection('when-where')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Time of incident</div>
+
+            <div class="checklist-item-sub">Not set</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item missing" data-check="location" onclick="scrollToSection('when-where')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Location in store</div>
+
+            <div class="checklist-item-sub">Empty</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item missing" data-check="involved" onclick="scrollToSection('people')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">People involved</div>
+
+            <div class="checklist-item-sub">Empty</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item missing" data-check="description" onclick="scrollToSection('happened')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Description of what happened</div>
+
+            <div class="checklist-item-sub">Empty</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item missing" data-check="action" onclick="scrollToSection('happened')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Immediate action taken</div>
+
+            <div class="checklist-item-sub">Empty</div>
+
+          </div>
+
+        </div>
+
+
+
+        <!-- Optional items -->
+
+        <div class="checklist-item" data-check="witnesses" onclick="scrollToSection('people')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Witnesses<span class="optional-tag">Optional</span></div>
+
+            <div class="checklist-item-sub">Not added</div>
+
+          </div>
+
+        </div>
+
+        <div class="checklist-item" data-check="evidence" onclick="scrollToSection('evidence')">
+
+          <div class="checklist-check"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+
+          <div class="checklist-item-body">
+
+            <div class="checklist-item-label">Evidence attached<span class="optional-tag">Optional</span></div>
+
+            <div class="checklist-item-sub">1 photo</div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      <div class="checklist-summary not-ready" id="checklistSummary">
+
+        <div class="checklist-summary-text">
+
+          <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+
+          <div><strong>7 required fields</strong> still need attention. Tap any item above to jump to it.</div>
+
+        </div>
+
+      </div>
+
+    </aside>
+
+
+
+  </div>
+
+
+
+</div>
+
+
+
+<!-- ===== STICKY SUBMIT BAR ===== -->
+
+<div class="submit-bar">
+
+  <div class="submit-bar-inner">
+
+    <div class="submit-progress">
+
+      <div class="submit-progress-label">
+
+        Required progress · <span class="missing" id="progressMissingLabel">7 missing</span>
+
+      </div>
+
+      <div class="submit-progress-bar">
+
+        <div class="submit-progress-fill" id="submitProgressFill" style="width: 0%;"></div>
+
+      </div>
+
+    </div>
+
+    <button class="draft-btn">Save draft</button>
+
+    <button class="submit-btn" id="submitBtn" disabled onclick="attemptSubmit()">
+
+      <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+
+      Submit &amp; lock
+
+    </button>
+
+  </div>
+
+</div>
+
+
+
+<!-- ===== CONFIRMATION MODAL ===== -->
+
+</form>
+
+<div class="modal-backdrop" id="modal">
+
+  <div class="modal">
+
+    <div class="modal-icon">
+
+      <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+
+    </div>
+
+    <div class="modal-title">Incident <span class="accent">filed &amp; locked</span></div>
+
+    <div class="modal-body">
+
+      Report <code>{{ report_id }}</code> filed at <strong style="color: var(--ck-cream);">{{ now_time_label }}</strong> by <strong style="color: var(--ck-cream);">{{ user_full_name }}</strong>. The original record is now sealed — updates can only be appended to the timeline.
+
+    </div>
+
+    <div class="modal-actions">
+
+      <a class="modal-btn secondary" href="{{ list_url }}?just_filed={{ report_id }}">View report</a>
+
+      <a class="modal-btn primary" href="{{ list_url }}">Back to dashboard</a>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<script>
+
+  // ===== State for tracked fields =====
+
+  // Required field map: check-key -> { isComplete fn, section, label }
+
+  const requiredFields = {
+
+    type:        { complete: () => !!document.querySelector('#typeGrid .type-btn.selected'), section: 'type', label: 'Incident type' },
+
+    severity:    { complete: () => !!document.querySelector('#severityRow .sev-btn.selected'), section: 'severity', label: 'Severity level' },
+
+    date:        { complete: () => !!document.getElementById('incidentDate').value, section: 'when-where', label: 'Date of incident' },
+
+    time:        { complete: () => !!document.getElementById('incidentTime').value, section: 'when-where', label: 'Time of incident' },
+
+    location:    { complete: () => document.getElementById('incidentLocation').value.trim().length > 0, section: 'when-where', label: 'Location' },
+
+    involved:    { complete: () => document.getElementById('peopleInvolved').value.trim().length > 0, section: 'people', label: 'People involved' },
+
+    description: { complete: () => document.getElementById('description').value.trim().length >= 30, section: 'happened', label: 'Description (min 30 chars)' },
+
+    action:      { complete: () => document.getElementById('action').value.trim().length > 0, section: 'happened', label: 'Immediate action taken' },
+
+  };
+
+
+
+  // Optional, just tracked for display
+
+  const optionalFields = {
+
+    witnesses: { complete: () => document.getElementById('witnesses').value.trim().length > 0, label: 'Witnesses' },
+
+    evidence:  { complete: () => document.querySelectorAll('.attached-item').length > 0, label: 'Evidence' },
+
+  };
+
+
+
+  function updateChecklist() {
+
+    let doneCount = 0;
+
+    const totalRequired = Object.keys(requiredFields).length;
+
+    const missingLabels = [];
+
+
+
+    // Required items
+
+    for (const [key, info] of Object.entries(requiredFields)) {
+
+      const item = document.querySelector(`.checklist-item[data-check="${key}"]`);
+
+      if (!item) continue;
+
+      const subEl = item.querySelector('.checklist-item-sub');
+
+
+
+      if (info.complete()) {
+
+        item.classList.add('done');
+
+        item.classList.remove('missing');
+
+        doneCount++;
+
+        // Set sub text based on field
+
+        if (key === 'type') subEl.textContent = document.querySelector('#typeGrid .type-btn.selected').textContent.trim();
+
+        else if (key === 'severity') subEl.textContent = document.querySelector('#severityRow .sev-btn.selected').firstChild.textContent.trim();
+
+        else if (key === 'date') subEl.textContent = formatDate(document.getElementById('incidentDate').value);
+
+        else if (key === 'time') subEl.textContent = formatTime(document.getElementById('incidentTime').value);
+
+        else if (key === 'location') subEl.textContent = truncate(document.getElementById('incidentLocation').value, 28);
+
+        else if (key === 'involved') subEl.textContent = truncate(document.getElementById('peopleInvolved').value, 28);
+
+        else if (key === 'description') {
+
+          const len = document.getElementById('description').value.trim().length;
+
+          subEl.textContent = `${len} characters`;
+
+        }
+
+        else if (key === 'action') subEl.textContent = truncate(document.getElementById('action').value, 28);
+
+      } else {
+
+        item.classList.remove('done');
+
+        item.classList.add('missing');
+
+        // Reset sub
+
+        if (key === 'description') {
+
+          const len = document.getElementById('description').value.trim().length;
+
+          if (len === 0) subEl.textContent = 'Empty';
+
+          else subEl.textContent = `${len} of 30 characters min`;
+
+        } else {
+
+          subEl.textContent = ['type','severity'].includes(key) ? 'Not selected' : (key === 'date' || key === 'time' ? 'Not set' : 'Empty');
+
+        }
+
+        missingLabels.push(info.label);
+
+      }
+
+    }
+
+
+
+    // Optional items
+
+    for (const [key, info] of Object.entries(optionalFields)) {
+
+      const item = document.querySelector(`.checklist-item[data-check="${key}"]`);
+
+      if (!item) continue;
+
+      const subEl = item.querySelector('.checklist-item-sub');
+
+      if (info.complete()) {
+
+        item.classList.add('done');
+
+        if (key === 'witnesses') subEl.textContent = truncate(document.getElementById('witnesses').value, 24);
+
+        if (key === 'evidence') subEl.textContent = `${document.querySelectorAll('.attached-item').length} file(s)`;
+
+      } else {
+
+        item.classList.remove('done');
+
+        subEl.textContent = 'Not added';
+
+      }
+
+    }
+
+
+
+    // Update progress
+
+    const pct = (doneCount / totalRequired) * 100;
+
+    document.getElementById('progressDone').textContent = doneCount;
+
+    document.getElementById('progressTotal').textContent = totalRequired;
+
+    document.getElementById('progressFill').style.width = pct + '%';
+
+    document.getElementById('submitProgressFill').style.width = pct + '%';
+
+
+
+    const missingCount = totalRequired - doneCount;
+
+    const progressLabel = document.getElementById('progressMissingLabel');
+
+
+
+    if (missingCount === 0) {
+
+      progressLabel.textContent = 'all required complete';
+
+      progressLabel.className = 'ok';
+
+      document.getElementById('progressFill').classList.add('complete');
+
+      document.getElementById('submitProgressFill').classList.add('complete');
+
+      document.getElementById('submitBtn').disabled = false;
+
+
+
+      const summary = document.getElementById('checklistSummary');
+
+      summary.classList.remove('not-ready');
+
+      summary.classList.add('ready');
+
+      summary.querySelector('.checklist-summary-text').innerHTML = `
+
+        <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+
+        <div><strong>Ready to submit.</strong> Everything required is filled in. Submitting locks the record.</div>
+
+      `;
+
+    } else {
+
+      progressLabel.textContent = `${missingCount} missing`;
+
+      progressLabel.className = 'missing';
+
+      document.getElementById('progressFill').classList.remove('complete');
+
+      document.getElementById('submitProgressFill').classList.remove('complete');
+
+      document.getElementById('submitBtn').disabled = true;
+
+
+
+      const summary = document.getElementById('checklistSummary');
+
+      summary.classList.add('not-ready');
+
+      summary.classList.remove('ready');
+
+      summary.querySelector('.checklist-summary-text').innerHTML = `
+
+        <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+
+        <div><strong>${missingCount} required field${missingCount === 1 ? '' : 's'}</strong> still need${missingCount === 1 ? 's' : ''} attention. Tap any item above to jump to it.</div>
+
+      `;
+
+    }
+
+  }
+
+
+
+  function truncate(s, n) {
+
+    s = s.trim();
+
+    return s.length > n ? s.slice(0, n) + '…' : s;
+
+  }
+
+
+
+  function formatDate(s) {
+
+    if (!s) return 'Not set';
+
+    const d = new Date(s + 'T00:00');
+
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  }
+
+
+
+  function formatTime(s) {
+
+    if (!s) return 'Not set';
+
+    const [h, m] = s.split(':').map(Number);
+
+    const period = h >= 12 ? 'PM' : 'AM';
+
+    const hh = h % 12 || 12;
+
+    return `${hh}:${String(m).padStart(2, '0')} ${period}`;
+
+  }
+
+
+
+  function scrollToSection(sectionName) {
+
+    const sec = document.querySelector(`.form-section[data-section="${sectionName}"]`);
+
+    if (sec) {
+
+      sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      sec.classList.add('flash');
+
+      setTimeout(() => sec.classList.remove('flash'), 1300);
+
+    }
+
+  }
+
+
+
+  function attemptSubmit() {
+
+    // Check all required
+
+    const missing = [];
+
+    for (const [key, info] of Object.entries(requiredFields)) {
+
+      if (!info.complete()) missing.push({ key, info });
+
+    }
+
+
+
+    if (missing.length > 0) {
+
+      // Show error banner
+
+      const banner = document.getElementById('errorBanner');
+
+      banner.classList.remove('hidden');
+
+      document.getElementById('errorBannerTitle').textContent =
+
+        `${missing.length} required field${missing.length === 1 ? '' : 's'} need${missing.length === 1 ? 's' : ''} to be filled in before you can submit`;
+
+      const list = document.getElementById('errorBannerList');
+
+      list.innerHTML = missing.map(m => `<li>${m.info.label}</li>`).join('');
+
+
+
+      // Highlight fields
+
+      document.querySelectorAll('.form-field').forEach(f => f.classList.remove('error'));
+
+      document.querySelectorAll('.form-section').forEach(s => s.style.borderColor = '');
+
+
+
+      missing.forEach(m => {
+
+        const fieldEl = document.querySelector(`.form-field[data-field="${m.key}"]`);
+
+        if (fieldEl) fieldEl.classList.add('error');
+
+        // For type/severity sections, highlight the section itself
+
+        if (m.key === 'type' || m.key === 'severity') {
+
+          const sec = document.querySelector(`.form-section[data-section="${m.key}"]`);
+
+          if (sec) {
+
+            sec.style.borderColor = 'var(--ck-red-bright)';
+
+            sec.querySelector('.field-error').style.display = 'flex';
+
+          }
+
+        }
+
+      });
+
+
+
+      // Scroll to first missing
+
+      const firstMissing = missing[0];
+
+      const sec = document.querySelector(`.form-section[data-section="${firstMissing.info.section}"]`);
+
+      if (sec) {
+
+        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        sec.classList.add('flash');
+
+        setTimeout(() => sec.classList.remove('flash'), 1300);
+
+      }
+
+
+
+      // Scroll up to banner first
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      return;
+
+    }
+
+
+
+    // All good — sync hidden inputs and submit the form for real.
+    document.getElementById('hiddenIncidentType').value =
+      document.querySelector('#typeGrid .type-btn.selected')?.dataset.value || '';
+    document.getElementById('hiddenSeverity').value =
+      document.querySelector('#severityRow .sev-btn.selected')?.dataset.value || '';
+    document.getElementById('hiddenFormAction').value = 'submit';
+    document.getElementById('irForm').submit();
+
+  }
+
+
+
+  function closeModal() {
+
+    document.getElementById('modal').classList.remove('visible');
+
+  }
+
+
+
+  // ===== Wire up form inputs =====
+
+
+
+  // Type & severity selectors
+
+  document.querySelectorAll('#typeGrid .type-btn').forEach(b => {
+
+    b.addEventListener('click', () => {
+
+      document.querySelectorAll('#typeGrid .type-btn').forEach(x => x.classList.remove('selected'));
+
+      b.classList.add('selected');
+
+      const sec = document.querySelector('.form-section[data-section="type"]');
+
+      sec.style.borderColor = '';
+
+      sec.querySelector('.field-error').style.display = 'none';
+
+      updateChecklist();
+
+    });
+
+  });
+
+
+
+  document.querySelectorAll('#severityRow .sev-btn').forEach(b => {
+
+    b.addEventListener('click', () => {
+
+      document.querySelectorAll('#severityRow .sev-btn').forEach(x => x.classList.remove('selected'));
+
+      b.classList.add('selected');
+
+      const sec = document.querySelector('.form-section[data-section="severity"]');
+
+      sec.style.borderColor = '';
+
+      sec.querySelector('.field-error').style.display = 'none';
+
+      updateChecklist();
+
+    });
+
+  });
+
+
+
+  // Text inputs
+
+  ['incidentDate','incidentTime','incidentLocation','peopleInvolved','witnesses','description','action'].forEach(id => {
+
+    const el = document.getElementById(id);
+
+    if (!el) return;
+
+    el.addEventListener('input', () => {
+
+      const fieldEl = el.closest('.form-field');
+
+      if (fieldEl && fieldEl.classList.contains('error') && el.value.trim()) {
+
+        fieldEl.classList.remove('error');
+
+      }
+
+      updateChecklist();
+
+    });
+
+  });
+
+
+
+  // Audio recorder
+
+  let recording = false;
+
+  let recordingStartTime = 0;
+
+  let recordTimerId = null;
+
+
+
+  function toggleRecord() {
+
+    const el = document.getElementById('audioRec');
+
+    const state = el.querySelector('.audio-recorder-state');
+
+    const timer = el.querySelector('.audio-timer');
+
+
+
+    if (!recording) {
+
+      recording = true;
+
+      el.classList.add('recording');
+
+      state.textContent = 'Recording…';
+
+      recordingStartTime = Date.now();
+
+      recordTimerId = setInterval(() => {
+
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+
+        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+
+        const s = String(elapsed % 60).padStart(2, '0');
+
+        timer.textContent = `${m}:${s}`;
+
+      }, 250);
+
+    } else {
+
+      recording = false;
+
+      el.classList.remove('recording');
+
+      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+
+      const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+
+      const s = String(elapsed % 60).padStart(2, '0');
+
+      const duration = `${m}:${s}`;
+
+      state.textContent = 'Tap to start recording';
+
+      timer.textContent = '00:00';
+
+      clearInterval(recordTimerId);
+
+
+
+      // Add the recorded clip as an attached item
+
+      const list = document.getElementById('attachedList');
+
+      const item = document.createElement('div');
+
+      item.className = 'attached-item';
+
+      item.innerHTML = `
+
+        <div class="attached-icon audio">
+
+          <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>
+
+        </div>
+
+        <div class="attached-info">
+
+          <div class="attached-name">incident_recording_${new Date().toISOString().slice(11, 16).replace(':','')}.m4a</div>
+
+          <div class="attached-meta">${duration} duration · just recorded in-app</div>
+
+        </div>
+
+        <button class="attached-remove" aria-label="Remove">×</button>
+
+      `;
+
+      list.appendChild(item);
+
+      wireRemoveButtons();
+
+      updateChecklist();
+
+    }
+
+  }
+
+
+
+  function wireRemoveButtons() {
+
+    document.querySelectorAll('.attached-remove').forEach(btn => {
+
+      btn.onclick = () => {
+
+        btn.closest('.attached-item').remove();
+
+        updateChecklist();
+
+      };
+
+    });
+
+  }
+
+
+
+  // Upload buttons (placeholder behaviour — adds a fake attachment)
+
+  document.querySelectorAll('.upload-btn').forEach(b => {
+
+    b.addEventListener('click', () => {
+
+      const type = b.dataset.evidence;
+
+      if (type === 'audio') {
+
+        document.getElementById('audioRec').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      } else {
+
+        // Demo: add a placeholder attachment
+
+        const map = {
+
+          photo: { icon: 'photo', svg: '<path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>', name: 'photo_evidence.jpg', meta: '1.4 MB · just added' },
+
+          video: { icon: 'video', svg: '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>', name: 'video_clip.mp4', meta: '0:23 · 5.2 MB · just added' },
+
+          document: { icon: '', svg: '<path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/>', name: 'document.pdf', meta: '1 page · 124 KB · just added' },
+
+        };
+
+        const cfg = map[type];
+
+        if (!cfg) return;
+
+        const list = document.getElementById('attachedList');
+
+        const item = document.createElement('div');
+
+        item.className = 'attached-item';
+
+        item.innerHTML = `
+
+          <div class="attached-icon ${cfg.icon}"><svg viewBox="0 0 24 24">${cfg.svg}</svg></div>
+
+          <div class="attached-info">
+
+            <div class="attached-name">${cfg.name}</div>
+
+            <div class="attached-meta">${cfg.meta}</div>
+
+          </div>
+
+          <button class="attached-remove" aria-label="Remove">×</button>
+
+        `;
+
+        list.appendChild(item);
+
+        wireRemoveButtons();
+
+        updateChecklist();
+
+      }
+
+    });
+
+  });
+
+
+
+  wireRemoveButtons();
+
+
+
+  // Initial state
+
+  updateChecklist();
+
+
+  // Save draft buttons - submit with form_action=draft (no required-field gate).
+  document.querySelectorAll('.save-draft, .draft-btn, [data-action="save-draft"]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Sync grid selections even if incomplete (drafts are partial by design).
+      document.getElementById('hiddenIncidentType').value =
+        document.querySelector('#typeGrid .type-btn.selected')?.dataset.value || '';
+      document.getElementById('hiddenSeverity').value =
+        document.querySelector('#severityRow .sev-btn.selected')?.dataset.value || '';
+      document.getElementById('hiddenFormAction').value = 'draft';
+      document.getElementById('irForm').submit();
+    });
+  });
+
+</script>
+
+</body>
+
+</html>

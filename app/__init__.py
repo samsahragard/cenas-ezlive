@@ -872,6 +872,42 @@ def create_app():
         logging.getLogger(__name__).exception(
             "manager_incident_report v3 backfill failed (non-fatal)")
 
+    # manager_incident_report v4 fields (migration 34, ck build-order
+    # Sam dev chat #4:22 + #4:23 spec 2026-05-20 — rich "File new incident"
+    # form with discrete what/when/where/who fields + lock-on-submit.
+    # All columns nullable (date/time/text fields may be missing on
+    # drafts) except 'locked' which defaults False.
+    try:
+        from sqlalchemy import inspect as _sa_insp_34, text as _sa_text_34
+        from app.db import engine as _eng_34ir
+        if _eng_34ir is not None:
+            insp_34 = _sa_insp_34(_eng_34ir)
+            if "manager_incident_report" in set(insp_34.get_table_names()):
+                existing_34 = {c["name"]
+                               for c in insp_34.get_columns("manager_incident_report")}
+                _cols_34 = [
+                    ("date_of_incident",  "DATE NULL"),
+                    ("time_of_incident",  "TIME NULL"),
+                    ("location_in_store", "VARCHAR(200) NULL"),
+                    ("people_involved",   "TEXT NULL"),
+                    ("witnesses",         "TEXT NULL"),
+                    ("immediate_action",  "TEXT NULL"),
+                    ("locked",            "BOOLEAN NOT NULL DEFAULT FALSE"),
+                    ("locked_at",         "DATETIME NULL"),
+                ]
+                with _eng_34ir.begin() as _conn_34:
+                    for _name, _ddl in _cols_34:
+                        if _name not in existing_34:
+                            _conn_34.execute(_sa_text_34(
+                                f"ALTER TABLE manager_incident_report "
+                                f"ADD COLUMN {_name} {_ddl}"))
+                            logging.getLogger(__name__).info(
+                                "manager_incident_report: backfilled %s (migration 34)",
+                                _name)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "manager_incident_report v4 backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

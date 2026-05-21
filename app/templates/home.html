@@ -9,7 +9,37 @@
 {% block title %}Cenas Kitchen — Manager Dashboard{% endblock %}
 
 {% block page_module %}HOME{% endblock %}
-{% block page_title %}<span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span>{% endblock %}
+
+{# Desktop dashboard marquee banner (Sam 2026-05-20). On desktop the role
+   banner replaces the "Welcome back" text header; on phones the original
+   text header is kept exactly as it was. dashboard_banner is the static
+   filename stem passed by the home route (ezcater_routes.home) — one of
+   the 8 banners under static/brand/banners/, 'general' as the fallback. #}
+{% block head_extra %}
+{{ super() }}
+<style>
+  /* Role marquee banner — desktop only. The phone header (max-width 900px)
+     keeps the plain "Welcome back" text untouched. 901px is the same
+     breakpoint base_dashboard's .ck-topbar uses to flip to its column
+     layout, so the banner and the topbar agree on what "desktop" means. */
+  .dash-role-banner { display: none; }
+  .dash-welcome-text { display: inline; }
+  @media (min-width: 901px) {
+    .dash-role-banner {
+      display: block;
+      width: 100%;
+      max-width: 760px;
+      height: auto;
+      border-radius: 12px;
+      margin: 2px 0 4px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42);
+    }
+    .dash-welcome-text { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block page_title %}<span class="dash-welcome-text"><span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span></span><img class="dash-role-banner" src="{{ url_for('static', filename='brand/banners/' ~ (dashboard_banner|default('general')) ~ '.jpg') }}" alt="{{ (dashboard_banner|default('general'))|replace('_', ' ')|title }} Dashboard">{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     {{ today_long }} · {{ today_orders|length }} deliveries today

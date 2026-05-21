@@ -26,6 +26,42 @@ _JOB_TTL_SECONDS = 3600
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+# Desktop dashboard marquee banner — one illuminated-marquee graphic per
+# role, shown in place of the "Welcome back" text header (Sam 2026-05-20).
+# Keys cover BOTH the legacy User.permission_level values (partner /
+# corporate / gm / manager / expo / corporate-driver — see app/models.py
+# User docstring) AND the newer canonical taxonomy from
+# app/services/permissions.py ROLE_PERMISSIONS + app/services/role_hierarchy.py
+# (km / assistant_km / corporate_chef / prep_manager / foh_manager / driver
+# / cook / server / busser / host / bartender). Files live at
+# app/static/brand/banners/<value>.jpg. Any role with no specific banner —
+# and any unknown / None role — falls back to 'general'.
+_ROLE_BANNERS: dict[str, str] = {
+    "partner":         "partner",
+    "corporate_chef":  "chef",
+    "gm":              "manager",
+    "manager":         "manager",      # legacy permission_level value
+    "foh_manager":     "manager",
+    "km":              "kitchen_manager",
+    "assistant_km":    "kitchen_manager",
+    "prep_manager":    "prep",
+    "expo":            "expo",
+    "driver":          "driver",
+    "corporate-driver": "driver",      # legacy permission_level value
+}
+_DEFAULT_BANNER = "general"
+
+
+def _dashboard_banner_for(user) -> str:
+    """Static filename stem of the marquee banner for ``user``'s role.
+
+    Reads only ``user.permission_level``; unknown roles, and 'corporate'
+    (an admin tier with no role-specific marquee), fall through to the
+    'general' banner. Never raises."""
+    role = (getattr(user, "permission_level", None) or "").strip()
+    return _ROLE_BANNERS.get(role, _DEFAULT_BANNER)
+
+
 def _run_job(app, job_id: str, pdf_paths: list[str], collapse_empty_rows: bool):
     with app.app_context():
         job_db_id = None
@@ -279,6 +315,7 @@ def home():
         produce_winners=produce_winners,
         produce_last_refresh=last_parsed_short,
         dashboard_location=location,   # 'tomball' / 'copperfield' / 'both' for the JS fetcher
+        dashboard_banner=_dashboard_banner_for(getattr(g, "current_user", None)),
     )
 
 

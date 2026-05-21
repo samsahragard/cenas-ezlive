@@ -27,7 +27,7 @@ from app.infra.export_xlsx import export_view_grids_to_xlsx
 # decorator can resolve store-scope against the user's assignment set
 # via store_arg= — same shape as @requires_permission('drivers.admin',
 # store_arg='store_slug') in store_routes.py.
-from app.services.permissions import requires_permission
+from app.services.permissions import requires_store_access
 
 logger = logging.getLogger(__name__)
 browse = Blueprint("orders_browse", __name__)
@@ -460,7 +460,7 @@ def _open_for_bidding(order: Order) -> bool:
 
 @browse.route("/<store_scope>/orders/view/<external_order_id>/unassign-courier",
               methods=["POST"])
-@requires_permission("orders.unassign_driver", store_arg="store_scope")
+@requires_store_access(store_arg="store_scope")
 def unassign_courier(store_scope: str, external_order_id: str):
     """Free up the ezCater portal driver field so a manager can manually
     assign a real driver. Calls courierUnassign on the in-house courier
@@ -472,7 +472,7 @@ def unassign_courier(store_scope: str, external_order_id: str):
 
     URL shape (Phase 0 Block 4 follow-up 2026-05-13): the leading
     <store_scope> segment ("tomball" / "copperfield") is the user's
-    assignment token, validated by @requires_permission(store_arg=...).
+    assignment token, validated by @requires_store_access(store_arg=...).
     After the decorator passes, the handler also verifies that the
     URL's store_scope MATCHES the order's actual origin_store_id-derived
     scope — defense against a Tomball GM crafting a Copperfield order's

@@ -375,7 +375,11 @@ def _user_has(user, tag: str, store_id: str | None = None) -> bool:
     perms = ROLE_PERMISSIONS.get(role, set())
     if "*" in perms:
         return True
-    if tag not in perms:
+    # tag=None means no permission tag is required — the action is open
+    # to every role; the store-scope check below still applies. Used by
+    # requires_store_access (Sam 2026-05-20: unhook / free-up driver have
+    # no role restriction, only store scope).
+    if tag is not None and tag not in perms:
         return False
     # Store-scope check — only enforced when the caller explicitly
     # passes store_id AND the user has a store_scope restriction.
@@ -442,7 +446,7 @@ def _log_denial(user, tag: str, store_id: str | None, route: str) -> None:
 # ============================================================
 # Public API — decorator + Jinja helper
 # ============================================================
-def requires_permission(tag: str, *, store_arg: str | None = None,
+def requires_permission(tag: str | None, *, store_arg: str | None = None,
                         scope: str | None = None) -> Callable:
     """Route decorator. See module docstring.
 
@@ -459,11 +463,12 @@ def requires_permission(tag: str, *, store_arg: str | None = None,
             store_id = kwargs.get(store_arg) if store_arg else None
             ok = _user_has(user, tag, store_id)
             if not ok:
-                _log_denial(user, tag, store_id, request.path)
+                _deny_tag = tag or "store-access"
+                _log_denial(user, _deny_tag, store_id, request.path)
                 if _enforcing():
                     # Cleanly redirect to the access-denied page.
                     return redirect(url_for(
-                        "auth.access_denied", need=tag,
+                        "auth.access_denied", need=_deny_tag,
                         next=request.path))
                 # Dark-launch — log and pass through. The decorator
                 # still sets g.permission_scope below so handlers
@@ -472,6 +477,19 @@ def requires_permission(tag: str, *, store_arg: str | None = None,
             return fn(*args, **kwargs)
         return wrapped
     return deco
+
+
+def requires_store_access(store_arg: str) -> Callable:
+    """Route decorator for actions open to ANY logged-in user, limited
+    only by store assignment — no permission tag.
+
+    Per Sam 2026-05-20: 'unhook driver' / 'free up ezCater driver' have
+    no role restriction. Anyone may run them, confined to their assigned
+    store(s); multi-store roles (partner / corporate / driver / ...)
+    reach every store, exactly as with the tagged decorator. Implemented
+    as requires_permission with a None tag so the user / impersonation /
+    store-scope handling stays shared in one place."""
+    return requires_permission(None, store_arg=store_arg)
 
 
 def has_permission(tag: str, store_id: str | None = None) -> bool:

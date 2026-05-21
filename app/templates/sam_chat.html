@@ -560,8 +560,16 @@
   D.models.forEach((m) => {
     const o = document.createElement("option");
     o.value = m.id; o.textContent = m.label;
-    if (m.id === D.defaultModel) o.selected = true;
     modelEl.appendChild(o);
+  });
+  // Restore the model Sam last picked; it sticks until he changes it.
+  const SAVED_MODEL_KEY = "sam_chat_model";
+  let savedModel = null;
+  try { savedModel = localStorage.getItem(SAVED_MODEL_KEY); } catch (e) {}
+  modelEl.value = D.models.some((m) => m.id === savedModel)
+    ? savedModel : D.defaultModel;
+  modelEl.addEventListener("change", () => {
+    try { localStorage.setItem(SAVED_MODEL_KEY, modelEl.value); } catch (e) {}
   });
 
   // ---- helpers ----

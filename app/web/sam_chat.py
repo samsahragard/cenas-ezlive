@@ -628,17 +628,13 @@ def sam_chat_page():
             token_estimate = _session_token_estimate(db, current.id)
             session_cost = _session_cost(db, current.id)
 
-        # When the Cena gateway is wired, /sam/chat routes through it
-        # and Anthropic receives a tool-use schema. Non-Claude models
-        # don't implement that protocol — they pattern-match bracketed
-        # tool-format text from prior Claude turns and emit it as plain
-        # text, fabricating a tool trail without any real tool firing.
-        # Hide non-Claude options at the picker when tools are wired.
-        if _cena_gateway_url():
-            _picker_models = ("claude-sonnet-4-6", "claude-opus-4-7")
-        else:
-            _picker_models = ("claude-sonnet-4-6", "claude-opus-4-7",
-                              "gemini-2.5-flash")
+        # All three models are offered. Gemini routes directly to the
+        # Google API in generate() (model.startswith("gemini")), bypassing
+        # the Cena gateway, so it never receives the Anthropic tool-use
+        # schema — no fabricated tool trail. Sonnet/Opus still route
+        # through the gateway when it is wired.
+        _picker_models = ("claude-sonnet-4-6", "claude-opus-4-7",
+                          "gemini-2.5-flash")
 
         return render_template(
             "sam_chat.html",

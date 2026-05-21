@@ -18,28 +18,36 @@
 {% block head_extra %}
 {{ super() }}
 <style>
-  /* Role marquee banner — desktop only. The phone header (max-width 900px)
-     keeps the plain "Welcome back" text untouched. 901px is the same
-     breakpoint base_dashboard's .ck-topbar uses to flip to its column
-     layout, so the banner and the topbar agree on what "desktop" means. */
-  .dash-role-banner { display: none; }
-  .dash-welcome-text { display: inline; }
-  @media (min-width: 901px) {
-    .dash-role-banner {
-      display: block;
-      width: 100%;
-      max-width: 760px;
-      height: auto;
-      border-radius: 12px;
-      margin: 2px 0 4px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42);
+  /* Role marquee banner (Sam 2026-05-20 / 05-21). A small role-matched
+     marquee sits in the topbar's right slot on every viewport; the
+     "Welcome back" text header stays on the left. The source image is
+     2:1, so height-capping keeps it compact and it never crowds the row
+     it shares with the search box and bell. */
+  .dash-role-banner {
+    display: block;
+    height: 56px;
+    width: auto;
+    max-width: 260px;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
+    flex-shrink: 0;
+  }
+  @media (max-width: 900px) {
+    .dash-role-banner { height: 40px; max-width: 42vw; }
+    /* dashboard.css forces .search to width 100% on phone; with the
+       banner sharing the topbar_right flex row, let the search flex to
+       the leftover space so banner + search + bell stay on one row. */
+    .ck-topbar .topbar-right .search {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
     }
-    .dash-welcome-text { display: none; }
   }
 </style>
 {% endblock %}
 
-{% block page_title %}<span class="dash-welcome-text"><span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span></span><img class="dash-role-banner" src="{{ url_for('static', filename='brand/banners/' ~ (dashboard_banner|default('general')) ~ '.jpg') }}" alt="{{ (dashboard_banner|default('general'))|replace('_', ' ')|title }} Dashboard">{% endblock %}
+{% block page_title %}<span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     {{ today_long }} · {{ today_orders|length }} deliveries today
@@ -47,6 +55,11 @@
   </p>
 {% endblock %}
 {% block topbar_right %}
+  {# Role marquee banner — small, role-matched, shown in the topbar's
+     right slot on every viewport (Sam #12:01: keep the Welcome-back text,
+     banner small in the top-right corner). dashboard_banner is the role's
+     banner stem passed by ezcater_routes.home(). #}
+  <img class="dash-role-banner" src="{{ url_for('static', filename='brand/banners/' ~ (dashboard_banner|default('general')) ~ '.jpg') }}" alt="{{ (dashboard_banner|default('general'))|replace('_', ' ')|title }} Dashboard">
   <input class="search" placeholder="Search orders, customers, items…" />
   <button class="icon-btn">🔔{% if attention %}<span class="dot"></span>{% endif %}</button>
 {% endblock %}

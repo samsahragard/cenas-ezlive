@@ -40,9 +40,13 @@
 {% block content %}
 <style>
   /* All custom properties + classes scoped to .mdl-page so the mockup's
-     warm --ck-* palette never leaks into the global sheet (atr-/dml-
-     pattern). The render set globals on html/body/*/body::before — those
-     are re-rooted onto .mdl-page here. */
+     warm --ck- palette never leaks into the global sheet (atr-/dml-
+     pattern). The render set globals on html, body and body::before;
+     those are re-rooted onto .mdl-page here.
+     NOTE: keep the slash-star sequence out of this comment — an earlier
+     version wrote "html/body/[star]/body::before" and the star-slash
+     inside it closed the comment early, which discarded the entire
+     .mdl-page rule and let the base photo bleed through (Sam #7:07). */
   .mdl-page {
     --ck-red: #C73B36;
     --ck-red-deep: #9B2A26;

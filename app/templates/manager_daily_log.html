@@ -357,7 +357,12 @@
     font-weight: 500;
   }
 
-  /* === DAY DETAIL VIEW === */
+  /* === INLINE DAY SECTIONS === */
+  .mdl-page .day-section {
+    margin-top: 22px;
+    scroll-margin-top: 16px;
+  }
+
   .mdl-page .day-detail-header {
     background: var(--ck-bg-card);
     border: 0.5px solid var(--ck-border-active);
@@ -1028,90 +1033,83 @@
     </div>
     {% endif %}
 
-  </div>
+    {# ===== INLINE DAY SECTIONS =====
+       One section per day, rendered inline below the Recent list and
+       scrolled to via openDay(iso). No hide/show — always visible. #}
+    {% for day in days %}
+    <div class="day-section" id="day-{{ day.iso }}" data-iso="{{ day.iso }}">
 
-
-  {# ===== DAY DETAIL VIEW =====
-     One frame per day; JS reveals the matching one via openDay(iso). #}
-  {% for day in days %}
-  <div class="frame hidden" id="dayDetailView-{{ day.iso }}" data-day-detail data-iso="{{ day.iso }}">
-
-    <div class="top">
-      <button class="back-btn" onclick="showDashboard()">
-        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-        Back
-      </button>
-    </div>
-
-    <div class="day-detail-header">
-      <div class="day-detail-date">
-        <span class="day-prefix">{{ day.dow|upper }}</span>
-        <span>{{ day.label }}</span>
+      <div class="day-detail-header">
+        <div class="day-detail-date">
+          <span class="day-prefix">{{ day.dow|upper }}</span>
+          <span>{{ day.label }}</span>
+        </div>
+        {% if day.is_today %}
+        <span class="today-tag">TODAY</span>
+        {% else %}
+        <span class="past-tag">PAST DAY</span>
+        {% endif %}
       </div>
-      {% if day.is_today %}
-      <span class="today-tag">TODAY</span>
-      {% else %}
-      <span class="past-tag">PAST DAY</span>
+
+      {# Backdate notice for past days #}
+      {% if not day.is_today %}
+      <div class="backdate-notice">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <div><strong>Adding to a past day.</strong> Your entry will be filed for <span>{{ day.dow }}, {{ day.label }}</span>, but tagged with today's submission timestamp and your name.</div>
+      </div>
       {% endif %}
-    </div>
 
-    {# Backdate notice for past days #}
-    {% if not day.is_today %}
-    <div class="backdate-notice">
-      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-      <div><strong>Adding to a past day.</strong> Your entry will be filed for <span>{{ day.dow }}, {{ day.label }}</span>, but tagged with today's submission timestamp and your name.</div>
-    </div>
-    {% endif %}
-
-    {# Entries on this day #}
-    {% if day.entries %}
-    <div>
-      {% for e in day.entries %}
-      <div class="entry">
-        <div class="entry-top">
-          <div class="entry-author">
-            {% set _name = e.author.full_name if (e.author and e.author.full_name) else 'Unknown' %}
-            <div class="author-avatar">
-              {%- set _parts = _name.split() -%}
-              {%- if _parts|length > 1 -%}{{ _parts[0][0]|upper }}{{ _parts[-1][0]|upper }}
-              {%- elif _parts -%}{{ _parts[0][:2]|upper }}
-              {%- else -%}?{%- endif -%}
+      {# Entries on this day #}
+      {% if day.entries %}
+      <div>
+        {% for e in day.entries %}
+        <div class="entry">
+          <div class="entry-top">
+            <div class="entry-author">
+              {% set _name = e.author.full_name if (e.author and e.author.full_name) else 'Unknown' %}
+              <div class="author-avatar">
+                {%- set _parts = _name.split() -%}
+                {%- if _parts|length > 1 -%}{{ _parts[0][0]|upper }}{{ _parts[-1][0]|upper }}
+                {%- elif _parts -%}{{ _parts[0][:2]|upper }}
+                {%- else -%}?{%- endif -%}
+              </div>
+              <div class="author-info">
+                <span class="author-name">{{ _name }}</span>
+                <span class="author-role">{{ store_label }}</span>
+              </div>
             </div>
-            <div class="author-info">
-              <span class="author-name">{{ _name }}</span>
-              <span class="author-role">{{ store_label }}</span>
+            <div class="entry-time">
+              {% if e.created_at %}
+              <div>{{ e.created_at.strftime('%b %d') }}</div>
+              <strong>{{ e.created_at.strftime('%I:%M %p') }}</strong>
+              {% endif %}
             </div>
           </div>
-          <div class="entry-time">
-            {% if e.created_at %}
-            <div>{{ e.created_at.strftime('%b %d') }}</div>
-            <strong>{{ e.created_at.strftime('%I:%M %p') }}</strong>
-            {% endif %}
+          <div class="entry-body">{{ e.body|default('') }}</div>
+          <div class="entry-footer">
+            <span class="locked-badge">
+              <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+              Logged
+            </span>
+            <span class="entry-footer-spacer"></span>
           </div>
         </div>
-        <div class="entry-body">{{ e.body|default('') }}</div>
-        <div class="entry-footer">
-          <span class="locked-badge">
-            <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
-            Logged
-          </span>
-          <span class="entry-footer-spacer"></span>
+        {% endfor %}
+      </div>
+      {% else %}
+      {# Empty state — shown when the day has 0 entries #}
+      <div class="empty-state">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
         </div>
+        <div class="empty-state-text">No entries on this day yet</div>
       </div>
-      {% endfor %}
+      {% endif %}
+
     </div>
-    {% else %}
-    {# Empty state — shown when the day has 0 entries #}
-    <div class="empty-state">
-      <div class="empty-state-icon">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
-      </div>
-      <div class="empty-state-text">No entries on this day yet</div>
-    </div>
-    {% endif %}
+    {% endfor %}
 
   </div>
-  {% endfor %}
 
 
   {# ===== NEW ENTRY FORM =====
@@ -1221,34 +1219,22 @@
   };
 
   var currentDate = null;
-  var currentContext = 'dashboard'; // 'dashboard' | 'day' | 'newEntry'
-
-  function hideAllDayDetails() {
-    document.querySelectorAll('[data-day-detail]').forEach(function(n) {
-      n.classList.add('hidden');
-    });
-  }
+  var currentContext = 'dashboard'; // 'dashboard' | 'newEntry'
 
   function showDashboard() {
     document.getElementById('dashboardView').classList.remove('hidden');
-    hideAllDayDetails();
     document.getElementById('newEntryView').classList.add('hidden');
     document.getElementById('fab').classList.remove('hidden');
     currentContext = 'dashboard';
     window.scrollTo({ top: 0 });
   }
 
+  // Smooth-scroll to the inline day section (no view switch).
   function openDay(dateStr) {
-    var pane = document.getElementById('dayDetailView-' + dateStr);
-    if (!pane) { showDashboard(); return; }
     currentDate = dateStr;
-    document.getElementById('dashboardView').classList.add('hidden');
-    hideAllDayDetails();
-    pane.classList.remove('hidden');
-    document.getElementById('newEntryView').classList.add('hidden');
-    document.getElementById('fab').classList.remove('hidden');
-    currentContext = 'day';
-    window.scrollTo({ top: 0 });
+    if (currentContext !== 'dashboard') showDashboard();
+    var el = document.getElementById('day-' + dateStr);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function openNewEntry(dateStr) {
@@ -1273,7 +1259,6 @@
     document.getElementById('formSubtitle').innerHTML = sub;
 
     document.getElementById('dashboardView').classList.add('hidden');
-    hideAllDayDetails();
     document.getElementById('newEntryView').classList.remove('hidden');
     document.getElementById('fab').classList.add('hidden');
     currentContext = 'newEntry';
@@ -1282,16 +1267,12 @@
   }
 
   function backFromForm() {
+    showDashboard();
     if (currentDate) openDay(currentDate);
-    else showDashboard();
   }
 
   function fabClick() {
-    if (currentContext === 'day' && currentDate) {
-      openNewEntry(currentDate);
-    } else {
-      openNewEntry(TODAY_ISO || (Object.keys(DAYS)[0] || ''));
-    }
+    openNewEntry(TODAY_ISO || (Object.keys(DAYS)[0] || ''));
   }
 
   function showToast(text) {

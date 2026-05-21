@@ -1590,6 +1590,222 @@ def _attn_hours(start, end):
     return f"{h}h" if m == 0 else f"{h}h {m}m"
 
 
+# Employee Counseling v3 — per-employee counseling board
+# (Sam #counseling render). Mirrors the Attendance board: lists
+# every employee on the Toast roster; clicking one logs a
+# counseling entry against them; each row surfaces whether the
+# employee has prior counseling on file + the count.
+#
+# Storage: the shared EmployeeCounseling table (ManagerLogMixin)
+# — no migration. One row per counseling entry, mapped onto the
+# existing columns:
+#   title    -> employee name
+#   type_tag -> counseling level (verbal|coaching|written|final|positive)
+#   body     -> structured detail block: "Category: ...\n\n<what
+#               happened>\n\nExpected: ...\nResponse: ...\nFollow-up: ..."
+#   store_scope / author_id / created_at -> as on every manager log.
+# ============================================================
+# Counseling levels the form offers, in escalation order. The first
+# token is the canonical type_tag value persisted on the row.
+_COUNSEL_LEVELS = ("verbal", "coaching", "written", "final", "positive")
+_COUNSEL_LEVEL_LABELS = {
+    "verbal": "Verbal", "coaching": "Coaching", "written": "Written",
+    "final": "Final notice", "positive": "Recognition",
+}
+# Disciplinary levels (everything but recognition) count as an "issue"
+# when deciding whether an employee has prior issues on file.
+_COUNSEL_ISSUE_LEVELS = {"verbal", "coaching", "written", "final"}
+
+
+def _counsel_level_norm(raw):
+    """Map a stored type_tag to a canonical counseling level. Tolerates
+    legacy / free-text tags so old rows still render under a level."""
+    t = (raw or "").strip().lower()
+    if t in _COUNSEL_LEVELS:
+        return t
+    if t in ("coach", "coaching conversation"):
+        return "coaching"
+    if t in ("final-notice", "final notice", "final written"):
+        return "final"
+    if t in ("recognition", "positive note", "praise"):
+        return "positive"
+    if t in ("written warning", "write-up"):
+        return "written"
+    if t in ("verbal warning", "spoken"):
+        return "verbal"
+    return "verbal"
+
+
+def _counsel_body(category, what, expected, response, followup):
+    """Compose the structured body block stored on the EmployeeCounseling
+    row. Kept human-readable so the detail view (which reads `body`
+    straight back) shows a clean record."""
+    chunks = []
+    if category:
+        chunks.append(f"Category: {category}")
+    if what:
+        chunks.append(what)
+    tail = []
+    if expected:
+        tail.append(f"Expected improvement: {expected}")
+    if response:
+        tail.append(f"Employee response: {response}")
+    if followup:
+        tail.append(f"Follow-up plan: {followup}")
+    if tail:
+        chunks.append("\n".join(tail))
+    return "\n\n".join(chunks).strip()
+
+
+def _render_employee_counseling_v3(db, label, active_key):
+    """Employee Counseling v3 — per-employee board.
+
+    Lists every employee (the Toast roster, same source the Attendance
+    board uses) so a manager can click a person and log a counseling
+    entry against them. Each roster row carries that employee's prior
+    counseling history (matched by name on EmployeeCounseling.title) so
+    the page shows who has had issues before, and the count.
+
+    If Toast is unreachable the roster falls back to the distinct
+    employee names already present in EmployeeCounseling — the same
+    defensive pattern the Attendance board uses."""
+    from app.models import EmployeeCounseling
+
+    def _scoped(q):
+        if g.current_location in ("tomball", "copperfield"):
+            return q.filter(
+                (EmployeeCounseling.store_scope == g.current_location) |
+                (EmployeeCounseling.store_scope.is_(None)))
+        return q
+
+    # Every counseling row in scope, newest first — drives the per-
+    # employee history and the dashboard KPIs.
+    entries = _scoped(
+        db.query(EmployeeCounseling)
+    ).order_by(EmployeeCounseling.created_at.desc()).limit(500).all()
+
+    # Group counseling history by employee name (the row's title).
+    hist = {}
+    for e in entries:
+        nm = (e.title or "").strip()
+        if not nm:
+            continue
+        hist.setdefault(nm, []).append(e)
+
+    # Employee roster — every teammate Toast knows, name + role only
+    # (clock status is irrelevant here). Falls back to the names already
+    # carrying counseling history when Toast is down.
+    roster = {}  # name -> role
+    counseling_notice = None
+    try:
+        from app.services.toast_reports import attendance_clock_status
+        tloc = (g.current_location
+                if g.current_location in ("tomball", "copperfield") else None)
+        for rec in attendance_clock_status(date.today(), location_filter=tloc):
+            nm = (rec.get("name") or "").strip()
+            if nm:
+                roster.setdefault(nm, (rec.get("job_title") or "").strip())
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            "counseling: Toast roster unavailable: %s", ex)
+        counseling_notice = ("Live employee roster from Toast is unavailable "
+                             "right now — showing employees with counseling "
+                             "history on file.")
+    # Union in everyone who already has counseling history so they are
+    # always clickable even if they have left the Toast roster.
+    for nm in hist:
+        roster.setdefault(nm, "")
+
+    def _people_row(rid, name, role):
+        ents = hist.get(name, [])
+        levels = [_counsel_level_norm(e.type_tag) for e in ents]
+        issue_count = sum(1 for lv in levels if lv in _COUNSEL_ISSUE_LEVELS)
+        # Per-employee timeline, newest first — the slide-over history.
+        records = []
+        for e, lv in zip(ents, levels):
+            records.append({
+                "id": e.id,
+                "level": lv,
+                "level_label": _COUNSEL_LEVEL_LABELS.get(lv, "Verbal"),
+                "date": (e.created_at.strftime("%b %d, %Y")
+                         if e.created_at else ""),
+                "reason": (e.body or "").strip().splitlines()[0]
+                          if (e.body or "").strip() else "",
+            })
+        latest = records[0]["level"] if records else ""
+        return {
+            "rid": rid,
+            "name": name,
+            "initials": _attn_initials(name),
+            "role": role or "Team member",
+            "entry_count": len(ents),
+            "issue_count": issue_count,
+            "has_prior_issue": issue_count > 0,
+            "has_recognition": any(lv == "positive" for lv in levels),
+            "latest_level": latest,
+            "records": records,
+        }
+
+    rows = []
+    for rid, name in enumerate(sorted(roster, key=lambda n: n.lower())):
+        rows.append(_people_row(rid, name, roster[name]))
+
+    # Dashboard KPIs — counts by level across the in-scope history.
+    def _lc(level):
+        return sum(1 for e in entries
+                   if _counsel_level_norm(e.type_tag) == level)
+    kpis = {
+        "total": len(entries),
+        "verbal": _lc("verbal") + _lc("coaching"),
+        "written": _lc("written"),
+        "final": _lc("final"),
+        "positive": _lc("positive"),
+        "flagged": sum(1 for r in rows if r["has_prior_issue"]),
+    }
+    today = date.today()
+    return render_template(
+        "employee_counseling.html",
+        page_slug="counseling", page_label=label,
+        rows=rows, kpis=kpis, counseling_notice=counseling_notice,
+        today_iso=today.isoformat(), active=active_key,
+    )
+
+
+def _employee_counseling_v3_post(db, store_scope, user):
+    """POST on the Employee Counseling page. Hidden form_action selects
+    the op: add_entry logs a new counseling record for an employee.
+
+    The record is written onto the shared EmployeeCounseling table
+    (ManagerLogMixin) — title = employee name, type_tag = level,
+    body = the structured detail block. No migration."""
+    from app.models import EmployeeCounseling
+    action = (request.form.get("form_action") or "add_entry").strip()
+    uid = user.id if user else None
+
+    if action == "add_entry":
+        name = (request.form.get("name") or "").strip()[:300]
+        if not name:
+            return
+        level = (request.form.get("level") or "").strip().lower()
+        if level not in _COUNSEL_LEVELS:
+            level = "verbal"
+        category = (request.form.get("category") or "").strip()[:120]
+        what = (request.form.get("what_happened") or "").strip()
+        expected = (request.form.get("expected") or "").strip()
+        response = (request.form.get("response") or "").strip()
+        followup = (request.form.get("followup") or "").strip()
+        body = _counsel_body(category, what, expected, response, followup)
+        db.add(EmployeeCounseling(
+            title=name,
+            type_tag=level,
+            body=(body or None),
+            store_scope=store_scope,
+            author_id=uid,
+        ))
+        db.commit()
+        return
+
+
 def _render_attendance_v3(db, label, active_key):
     """Attendance Tracking v3 — daily roster board. ?date=<iso> picks
     the day (default today).
@@ -2221,6 +2437,8 @@ def manager_page_list(page: str):
             return _render_daily_log_v3(db, label, active_key)
         if page == "incident-reports":
             return _render_incident_reports_v3(db, label, active_key)
+        if page == "counseling":
+            return _render_employee_counseling_v3(db, label, active_key)
         if page == "attendance":
             return _render_attendance_v3(db, label, active_key)
         q = db.query(Model)
@@ -2298,6 +2516,9 @@ def manager_page_create(page: str):
             return redirect(url_for(
                 "store.manager_page_list", page=page,
                 just_filed=getattr(row, "report_id", None)))
+        if page == "counseling":
+            _employee_counseling_v3_post(db, store_scope, user)
+            return redirect(url_for("store.manager_page_list", page=page))
         if page == "attendance":
             _attendance_v3_post(db, store_scope, user)
             return redirect(url_for(

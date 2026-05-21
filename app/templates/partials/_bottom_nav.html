@@ -17,6 +17,14 @@
    data-pop, so the popover JS skips it and the browser navigates
    normally. Its Manager popover block was removed.
 
+   2026-05-21 (Sam, dck): the Catering tab is exempt from the popover
+   model too — it links straight to the tabbed Catering dashboard
+   (/<store>/catering, default tab = Ez Orders), from where the five
+   catering surfaces are reachable as tabs. Same shape as the Manager
+   tab change: it is an <a> with no data-pop, so the popover JS skips
+   it and the browser navigates normally. Its Catering popover block
+   was removed.
+
    Per-role (tab set mirrors sidebar.html's section set):
      - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
      - expo    → 4 tabs, Manager dropped
@@ -145,7 +153,7 @@
 </style>
 <nav class="ck-bnav" aria-label="Primary navigation (mobile)">
   {% if user_role != 'driver' %}
-  {# ---- Sub-option popovers — one per non-driver tab ---- #}
+  {# ---- Sub-option popovers — one per non-driver popover tab ---- #}
   <div class="bn-pop-backdrop" id="bn-pop-backdrop"></div>
 
   <div class="bn-popover" id="bn-pop-today" data-pop="today">
@@ -160,18 +168,12 @@
 
   {# The Manager popover was removed 2026-05-21 (Sam): the Manager tab
      now links straight to the tabbed Manager dashboard instead of
-     opening a sub-option popover. The other tabs keep their popovers. #}
+     opening a sub-option popover. #}
 
-  <div class="bn-popover" id="bn-pop-catering" data-pop="catering">
-    <div class="bn-pop-title">Catering</div>
-    <div class="bn-popover-grid">
-      <a class="bn-pop-item{% if _bn_active == 'ezcater_orders' %} active{% endif %}" href="/{{ store_slug }}/orders"><i class="ti ti-clipboard-list"></i>Ez Orders</a>
-      <a class="bn-pop-item{% if _bn_active == 'ez_market' %} active{% endif %}" href="/ez-market"><i class="ti ti-shopping-bag"></i>Ez Market</a>
-      <a class="bn-pop-item{% if _bn_active == 'ez_manage' %} active{% endif %}" href="/ez-manage"><i class="ti ti-settings"></i>Ez Manage</a>
-      <a class="bn-pop-item{% if _bn_active in ['drivers_admin','driver_tracking'] %} active{% endif %}" href="/{{ store_slug }}/drivers"><i class="ti ti-steering-wheel"></i>Drivers</a>
-      <a class="bn-pop-item{% if _bn_active == 'in_house_catering' %} active{% endif %}" href="/{{ store_slug }}/in-house-catering"><i class="ti ti-shopping-cart"></i>In-House</a>
-    </div>
-  </div>
+  {# The Catering popover was removed 2026-05-21 (Sam, dck): the
+     Catering tab now links straight to the tabbed Catering dashboard
+     instead of opening a sub-option popover — same change as the
+     Manager tab above. The other tabs keep their popovers. #}
 
   <div class="bn-popover" id="bn-pop-operations" data-pop="operations">
     <div class="bn-pop-title">Operations</div>
@@ -230,12 +232,17 @@
       <span class="bn-lbl">Manager</span>
     </a>
     {% endif %}
-    {# Catering #}
-    <button type="button" data-pop="catering"
-       class="ck-bnav-tab{% if _bn_active in ['ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering'] %} active{% endif %}">
+    {# Catering — per Sam 2026-05-21 (dck) this tab no longer opens a
+       popover: it links straight to the tabbed Catering dashboard
+       (default tab = Ez Orders), from where the five catering surfaces
+       (Ez Orders / Ez Market / Ez Manage / Ez Drivers / In-House) are
+       reachable as tabs. Same change as the Manager tab above — an <a>
+       with no data-pop, so the popover JS skips it. #}
+    <a href="/{{ store_slug }}/catering"
+       class="ck-bnav-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering'] %} active{% endif %}">
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
-    </button>
+    </a>
     {# Operations #}
     <button type="button" data-pop="operations"
        class="ck-bnav-tab{% if _bn_active in ['partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">

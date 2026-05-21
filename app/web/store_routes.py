@@ -3878,3 +3878,306 @@ def sales(channel: str = "all"):
     g.location_override = g.current_location if g.current_location != "both" else None
     g.sales_channel = channel
     return view()
+
+
+# ---- Catering dashboard (tabbed entry layer, Sam 2026-05-21, dck) ----
+# Structural twin of the Manager dashboard above. The bottom-nav
+# Catering tab no longer opens a sub-option popover — it links straight
+# here. This route renders catering_dashboard.html: a tab strip across
+# the five catering surfaces, defaulting to the Ez Orders tab. Each tab
+# shows a short read-only PREVIEW of that surface; "Open full page"
+# links to the real, unchanged page. This is a new entry surface — it
+# does not alter the existing catering pages or routes.
+
+# Map an Order.origin_store_id to a store_scope token. store_1 + store_3
+# = Copperfield kitchen; store_2 + store_4 = Tomball. Mirrors
+# orders_browse._ORIGIN_STORE_ID_TO_SCOPE.
+_CATERING_ORIGIN_TO_LOCATION = {
+    "store_1": "copperfield", "store_3": "copperfield",
+    "store_2": "tomball",     "store_4": "tomball",
+}
+_CATERING_LOCATION_TO_ORIGINS = {
+    "tomball":     ("store_2", "store_4"),
+    "copperfield": ("store_1", "store_3"),
+}
+
+# Ordered tab spec: (tab key, caption, endpoint-or-path resolver name).
+# The key matches the active_tab values catering_dashboard.html expects.
+# First entry is the default tab. full_url is built per-request in the
+# route since two tabs point at store-scoped routes and three are flat.
+_CATERING_DASH_TABS = [
+    ("ez-orders",  "Ez Orders"),
+    ("ez-market",  "Ez Market"),
+    ("ez-manage",  "Ez Manage"),
+    ("ez-drivers", "Ez Drivers"),
+    ("in-house",   "In-House"),
+]
+
+
+def _catering_dash_full_url(tab_key):
+    """Absolute href to the real catering page a tab previews.
+      ez-orders  -> /<store>/orders        (store.orders_list)
+      ez-market  -> /ez-market             (flat, not store-scoped)
+      ez-manage  -> /ez-manage             (flat, not store-scoped)
+      ez-drivers -> /<store>/drivers       (store.drivers_admin)
+      in-house   -> /<store>/in-house-catering (store.in_house_catering_page)
+    The flat ez-market / ez-manage paths are written as literals because
+    they live outside the /<store> blueprint; url_for on a store endpoint
+    would prepend the slug. Falls back to the orders page on an unknown
+    key so a link is never empty."""
+    if tab_key == "ez-orders":
+        return url_for("store.orders_list")
+    if tab_key == "ez-market":
+        return "/ez-market"
+    if tab_key == "ez-manage":
+        return "/ez-manage"
+    if tab_key == "ez-drivers":
+        return url_for("store.drivers_admin")
+    if tab_key == "in-house":
+        return url_for("store.in_house_catering_page")
+    return url_for("store.orders_list")
+
+
+def _catering_dash_preview(db, tab_key, limit=3):
+    """Latest few preview rows for one catering tab, store-scoped, shaped
+    into {title, sub, meta} for the dashboard. Pure read; never writes,
+    never calls Toast or the ezCater API. Returns (rows, meta_line).
+    Any model/query problem degrades to an empty preview so one bad tab
+    can never break the dashboard (the _manager_dash_preview contract).
+
+    Data sources, all already used elsewhere in this file:
+      ez-orders  -> Order (today + upcoming, status != cancelled)
+      ez-market  -> Order (status == 'available' — the Ez Market bid pool)
+      ez-manage  -> Order counts, summarised into account-status rows
+      ez-drivers -> Driver (active, this store) + latest DriverShift state
+      in-house   -> InHouseCateringQuote (this store, newest first)
+    """
+    log = logging.getLogger(__name__)
+    loc = getattr(g, "current_location", "both")
+    origins = _CATERING_LOCATION_TO_ORIGINS.get(loc)  # None for both/corporate
+
+    # ---- Ez Orders / Ez Market / Ez Manage all read the Order table ----
+    if tab_key in ("ez-orders", "ez-market", "ez-manage"):
+        try:
+            from app.models import Order
+            from datetime import datetime, timezone
+            now_ct = datetime.now(timezone(timedelta(hours=-5)))
+            today_iso = now_ct.strftime("%Y-%m-%d")
+        except Exception as ex:
+            log.warning("catering dashboard: order preview setup failed: %s", ex)
+            return [], ""
+
+        if tab_key == "ez-orders":
+            try:
+                q = (db.query(Order)
+                     .filter(Order.delivery_date >= today_iso)
+                     .filter(Order.status != "cancelled"))
+                if origins:
+                    q = q.filter(Order.origin_store_id.in_(origins))
+                total = q.count()
+                recent = (q.order_by(Order.delivery_date.asc(),
+                                     Order.deliver_at.asc())
+                           .limit(limit).all())
+            except Exception as ex:
+                log.warning("catering dashboard: ez-orders preview unavailable: %s", ex)
+                return [], ""
+            rows = []
+            for o in recent:
+                origin = o.origin_store_id or ""
+                store = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
+                title = (o.external_order_id or "").strip() or "Catering order"
+                client = (o.client or "").strip()
+                sub = " · ".join(p for p in (
+                    client or f"{store} delivery",
+                    (o.deliver_at or "").strip()) if p)
+                driver = (o.assigned_driver or "").strip()
+                meta = " · ".join(p for p in (
+                    store, driver or "Needs driver") if p)
+                rows.append({"title": title, "sub": sub, "meta": meta})
+            meta_line = f"{total} today + upcoming" if total else "No upcoming orders"
+            return rows, meta_line
+
+        if tab_key == "ez-market":
+            try:
+                q = (db.query(Order)
+                     .filter(Order.status == "available"))
+                if origins:
+                    q = q.filter(Order.origin_store_id.in_(origins))
+                total = q.count()
+                recent = (q.order_by(Order.delivery_date.asc().nullslast(),
+                                     Order.deliver_at.asc())
+                           .limit(limit).all())
+            except Exception as ex:
+                log.warning("catering dashboard: ez-market preview unavailable: %s", ex)
+                return [], ""
+            rows = []
+            for o in recent:
+                origin = o.origin_store_id or ""
+                store = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
+                title = (o.external_order_id or "").strip() or "Open delivery"
+                client = (o.client or "").strip()
+                sub = " · ".join(p for p in (
+                    client or f"{store} delivery",
+                    (o.deliver_at or "").strip()) if p)
+                heads = getattr(o, "headcount", None)
+                meta = " · ".join(p for p in (
+                    store,
+                    (f"{heads} heads" if heads else ""),
+                    "Open for bid") if p)
+                rows.append({"title": title, "sub": sub, "meta": meta})
+            meta_line = (f"{total} order{'s' if total != 1 else ''} open for bid"
+                         if total else "No orders open for bid")
+            return rows, meta_line
+
+        # ez-manage — no dedicated per-store table; summarise the Order
+        # table into a few account-status rows (mirrors the reference's
+        # menu sync / pricing / coverage lines).
+        try:
+            base = db.query(Order).filter(Order.status != "cancelled")
+            if origins:
+                base = base.filter(Order.origin_store_id.in_(origins))
+            total_all = base.count()
+            upcoming = base.filter(Order.delivery_date >= today_iso).count()
+            unassigned = (base.filter(Order.delivery_date >= today_iso)
+                          .filter((Order.assigned_driver.is_(None)) |
+                                  (Order.assigned_driver == ""))
+                          .count())
+        except Exception as ex:
+            log.warning("catering dashboard: ez-manage preview unavailable: %s", ex)
+            return [], ""
+        rows = [
+            {"title": "ezCater orders on file",
+             "sub": "Imported catering orders for this store",
+             "meta": f"{total_all} total"},
+            {"title": "Upcoming coverage",
+             "sub": "Orders dated today or later",
+             "meta": f"{upcoming} upcoming"},
+            {"title": "Driver assignment",
+             "sub": "Upcoming orders still needing a driver",
+             "meta": (f"{unassigned} unassigned" if unassigned
+                      else "All assigned")},
+        ]
+        meta_line = "ezCater account management"
+        return rows, meta_line
+
+    # ---- Ez Drivers — Driver table, this store, active, + shift state ----
+    if tab_key == "ez-drivers":
+        try:
+            from sqlalchemy import func
+            q = db.query(Driver).filter(Driver.active == True)  # noqa: E712
+            if loc in ("tomball", "copperfield"):
+                q = q.filter(Driver.location == loc)
+            total = q.count()
+            recent = q.order_by(Driver.location, Driver.name).limit(limit).all()
+            latest_shift = {}
+            if recent:
+                ids = [d.id for d in recent]
+                pairs = (db.query(DriverShift.driver_id, func.max(DriverShift.id))
+                         .filter(DriverShift.driver_id.in_(ids))
+                         .group_by(DriverShift.driver_id)
+                         .all())
+                shift_ids = [sid for _, sid in pairs]
+                shift_by_id = {}
+                if shift_ids:
+                    for s in (db.query(DriverShift)
+                              .filter(DriverShift.id.in_(shift_ids)).all()):
+                        shift_by_id[s.id] = s
+                for did, sid in pairs:
+                    latest_shift[did] = shift_by_id.get(sid)
+        except Exception as ex:
+            logging.getLogger(__name__).warning(
+                "catering dashboard: ez-drivers preview unavailable: %s", ex)
+            return [], ""
+        rows = []
+        for d in recent:
+            name = (d.name or "").strip() or "Driver"
+            store = (d.location or "").strip().title() or "—"
+            shift = latest_shift.get(d.id)
+            if shift is not None and getattr(shift, "ended_at", None) is None \
+                    and getattr(shift, "started_at", None) is not None:
+                state = "On shift"
+            else:
+                state = "Off shift"
+            rows.append({
+                "title": name,
+                "sub": f"{store} catering driver",
+                "meta": state,
+            })
+        meta_line = (f"{total} active driver{'s' if total != 1 else ''}"
+                     if total else "No active drivers")
+        return rows, meta_line
+
+    # ---- In-House — InHouseCateringQuote, this store, newest first ----
+    if tab_key == "in-house":
+        try:
+            from app.models import InHouseCateringQuote as IHQ
+            q = db.query(IHQ)
+            if loc in ("tomball", "copperfield"):
+                q = q.filter((IHQ.store_scope == loc) |
+                             (IHQ.store_scope.is_(None)))
+            total = q.count()
+            recent = q.order_by(IHQ.created_at.desc()).limit(limit).all()
+        except Exception as ex:
+            logging.getLogger(__name__).warning(
+                "catering dashboard: in-house preview unavailable: %s", ex)
+            return [], ""
+        rows = []
+        for r in recent:
+            cust = (getattr(r, "customer_name", None) or "").strip()
+            title = cust or f"Quote #{getattr(r, 'id', '')}".strip()
+            ev = _central_dt(getattr(r, "event_date", None))
+            guests = getattr(r, "guest_count", None)
+            sub = " · ".join(p for p in (
+                "In-house catering quote",
+                (f"{guests} guests" if guests else ""),
+                (ev.strftime("%b %d") if ev else "")) if p)
+            subtotal = getattr(r, "subtotal", None)
+            status = (getattr(r, "status", None) or "").strip().title()
+            meta = " · ".join(p for p in (
+                (f"${subtotal:,.0f}" if isinstance(subtotal, (int, float)) else ""),
+                status) if p)
+            rows.append({"title": title, "sub": sub, "meta": meta})
+        meta_line = (f"{total} quote{'s' if total != 1 else ''} on file"
+                     if total else "No quotes yet")
+        return rows, meta_line
+
+    return [], ""
+
+
+@store_bp.route("/catering", methods=["GET"])
+def catering_dashboard():
+    """Tabbed Catering dashboard — the entry layer the bottom-nav
+    Catering tab links to. Defaults to the Ez Orders tab; ?tab=<key>
+    deep-links another tab (an invalid tab falls back to Ez Orders).
+    Read-only previews; each tab's "Open full page" link points at the
+    unchanged real catering page. Structural twin of manager_dashboard."""
+    valid = {key for key, _ in _CATERING_DASH_TABS}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = _CATERING_DASH_TABS[0][0]   # 'ez-orders'
+    db = next(get_db())
+    try:
+        tabs = []
+        for key, caption in _CATERING_DASH_TABS:
+            rows, meta_line = _catering_dash_preview(db, key)
+            tabs.append({
+                "key": key,
+                "label": caption,
+                "full_url": _catering_dash_full_url(key),
+                "meta": meta_line,
+                "rows": rows,
+            })
+        label = g.store_label or "Cenas Kitchen"
+        # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+        _t = date.today()
+        today_label = f"{_t:%a, %b} {_t.day}"
+        return render_template(
+            "catering_dashboard.html",
+            active="catering_dashboard",
+            store_label=label,
+            today_label=today_label,
+            active_tab=active_tab,
+            tabs=tabs,
+        )
+    finally:
+        db.close()

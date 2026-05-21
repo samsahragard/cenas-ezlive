@@ -1,0 +1,529 @@
+{# ============================================================
+   catering_dashboard.html — Catering dashboard (tabbed entry layer).
+   dck build, structural twin of manager_dashboard.html (samai's
+   just-shipped Manager dashboard). Per Sam: the bottom-nav Catering
+   tab no longer opens a popover — it links straight here, and this
+   page is a tab strip across the five catering surfaces, defaulting
+   to Ez Orders.
+
+   This page is a NEW entry layer, NOT a rewrite. Each tab shows a
+   short preview of that catering surface; the "Open full page" link
+   in every tab goes to the real, unchanged page (Ez Orders ->
+   /<store>/orders, Ez Market -> /ez-market, Ez Manage -> /ez-manage,
+   Ez Drivers -> /<store>/drivers, In-House -> /<store>/in-house-
+   catering). All existing catering functionality is left as-is.
+
+   Extends base_dashboard.html — so the role-matched dashboard badge
+   top-right (dashboard_banner context processor) ships for free. The
+   shared topbar is suppressed; this page draws its own ribbon header
+   inside content (the manager_dashboard.html pattern). OPAQUE surface
+   — the restaurant-photo body backdrop never bleeds through page
+   content.
+
+   ROUTE CONTRACT (store_routes.py catering_dashboard):
+     active        -> 'catering_dashboard'
+     store_label   -> str (store display name)
+     today_label   -> str, e.g. "Wed, May 21"
+     active_tab    -> one of: ez-orders | ez-market | ez-manage |
+                      ez-drivers | in-house
+                      (default 'ez-orders'; from ?tab=, validated)
+     tabs          -> ordered list[dict], one per tab:
+       key       (str)  — tab id, matches active_tab values
+       label     (str)  — tab strip caption
+       full_url  (str)  — absolute href to that page (Open full page)
+       meta      (str)  — one-line summary under the (hidden) heading
+       rows      -> list[dict] preview rows, each:
+         title (str), sub (str), meta (str)
+   Every tab is independently safe: a tab with no rows shows an empty
+   state and still links out. The dashboard route never touches Toast
+   or any write path — it is a read-only preview surface.
+   Audience gate at the route: same site gate as the catering pages.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'catering_dashboard' %}
+
+{% block title %}Catering — Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar — this page draws its own ribbon header
+   inside content (manager_dashboard.html pattern). The role badge is
+   rendered OUTSIDE the topbar block in base_dashboard.html, so it is
+   kept regardless. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .catdash so the warm
+     Cenas palette never leaks into the global sheet (the mgrdash-
+     scoping pattern). Comments here never contain a slash-star pair. */
+  .catdash {
+    --catd-red: #C73B36;
+    --catd-red-deep: #9B2A26;
+    --catd-red-bright: #E85852;
+    --catd-gold: #E4B340;
+    --catd-gold-bright: #FFD970;
+    --catd-teal: #2EA39F;
+    --catd-teal-bright: #5BCAC5;
+    --catd-cream: #FAF6EC;
+    --catd-cream-dim: rgba(250, 246, 236, 0.78);
+    --catd-cream-faint: rgba(250, 246, 236, 0.5);
+    --catd-cream-meta: rgba(250, 246, 236, 0.4);
+    --catd-bg-deep: #1a0d08;
+    --catd-bg-warm: #28160e;
+    --catd-surface: #241409;
+    --catd-surface-2: #2e1a0d;
+    --catd-surface-hover: #34200f;
+    --catd-input: rgba(0, 0, 0, 0.3);
+    --catd-border: rgba(217, 164, 54, 0.18);
+    --catd-border-active: rgba(228, 179, 64, 0.5);
+    --catd-accent: var(--catd-gold-bright);
+    --catd-glow: rgba(255, 217, 112, 0.18);
+    --catd-glow-strong: rgba(255, 217, 112, 0.4);
+    --catd-radius: 14px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--catd-cream);
+    margin-bottom: 40px;
+  }
+  .catdash * { box-sizing: border-box; }
+
+  /* SECTION LABEL above the card. */
+  .catdash .catd-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--catd-cream-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0 4px 12px;
+  }
+
+  /* THE PAGE CARD — ribbon header plus the tab strip in one opaque
+     surface. OPAQUE base colour so the photo backdrop never washes
+     the header text out (the base_dashboard .ck-topbar landmine). */
+  .catdash .catd-card {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--catd-border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .catdash .catd-card::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle, var(--catd-glow), transparent 70%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* RIBBON HEADER. */
+  .catdash .catd-ribbon {
+    padding: 24px 26px 22px;
+    position: relative;
+    z-index: 1;
+  }
+  .catdash .catd-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .catdash .catd-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--catd-red-bright);
+    box-shadow: 0 0 8px var(--catd-red-bright), 0 0 0 3px rgba(232, 88, 82, 0.18);
+  }
+  .catdash .catd-brand-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--catd-gold);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+  .catdash .catd-brand-text .catd-div {
+    color: var(--catd-cream-faint);
+    margin: 0 4px;
+    font-weight: 400;
+  }
+  .catdash .catd-brand-text .catd-module { color: var(--catd-accent); }
+
+  .catdash .catd-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    font-size: clamp(36px, 5.5vw, 52px);
+    line-height: 1;
+    color: var(--catd-cream);
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .catdash .catd-rule {
+    height: 1px;
+    width: 56px;
+    background: linear-gradient(90deg, var(--catd-accent), transparent);
+    margin-bottom: 12px;
+  }
+  .catdash .catd-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--catd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+  .catdash .catd-meta .catd-sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--catd-cream-faint);
+  }
+  .catdash .catd-meta .catd-meta-val {
+    color: var(--catd-accent);
+    font-weight: 700;
+  }
+
+  /* TAB STRIP — horizontally scrollable on a phone. The tabs are real
+     anchors (href to ?tab=KEY) so the page works with JS off; JS
+     upgrades them to in-page panel swaps. */
+  .catdash .catd-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 0.5px solid var(--catd-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 1;
+  }
+  .catdash .catd-tabs::-webkit-scrollbar { display: none; }
+  .catdash .catd-tab {
+    flex-shrink: 0;
+    padding: 13px 16px 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--catd-cream-faint);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .catdash .catd-tab:hover { color: var(--catd-cream); }
+  .catdash .catd-tab.active {
+    color: var(--catd-cream);
+    border-bottom-color: var(--catd-accent);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .catdash .catd-tab-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .catdash .catd-tab.active .catd-tab-icon { opacity: 1; }
+
+  /* TAB CONTENT — one panel per tab; the inactive ones are hidden. */
+  .catdash .catd-content-wrap { margin-top: 18px; }
+  .catdash .catd-panel {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--catd-border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  .catdash .catd-panel.hidden { display: none; }
+
+  .catdash .catd-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 0.5px solid var(--catd-border);
+    flex-wrap: wrap;
+  }
+  .catdash .catd-panel-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--catd-cream);
+    letter-spacing: -0.01em;
+  }
+  .catdash .catd-panel-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--catd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  .catdash .catd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .catdash .catd-row {
+    background: var(--catd-input);
+    border: 0.5px solid var(--catd-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .catdash .catd-row:hover {
+    background: var(--catd-surface-hover);
+    border-color: var(--catd-border-active);
+  }
+  .catdash .catd-row-main { flex: 1; min-width: 0; }
+  .catdash .catd-row-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--catd-cream);
+    margin-bottom: 3px;
+  }
+  .catdash .catd-row-sub {
+    font-size: 12px;
+    color: var(--catd-cream-dim);
+    line-height: 1.4;
+  }
+  .catdash .catd-row-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--catd-cream-faint);
+    letter-spacing: 0.05em;
+    text-align: right;
+    flex-shrink: 0;
+    max-width: 46%;
+  }
+
+  /* Empty state — a tab whose surface has no entries yet. */
+  .catdash .catd-empty {
+    text-align: center;
+    padding: 34px 18px;
+    color: var(--catd-cream-faint);
+    font-size: 13px;
+    background: var(--catd-input);
+    border: 0.5px dashed var(--catd-border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  .catdash .catd-footer {
+    text-align: right;
+    padding-top: 14px;
+    border-top: 0.5px solid var(--catd-border);
+  }
+  .catdash .catd-open-link {
+    color: var(--catd-gold);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+  }
+  .catdash .catd-open-link:hover { color: var(--catd-gold-bright); }
+
+  /* MOBILE — mirror the reference design's phone treatment. */
+  @media (max-width: 760px) {
+    .catdash .catd-ribbon { padding: 16px 14px; }
+    .catdash .catd-brand { margin-bottom: 8px; }
+    .catdash .catd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
+    .catdash .catd-title { font-size: 30px; margin-bottom: 6px; }
+    .catdash .catd-rule { width: 40px; margin-bottom: 8px; }
+    .catdash .catd-meta { font-size: 10px; gap: 6px; }
+    .catdash .catd-tabs { padding: 0 8px; }
+    .catdash .catd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
+    .catdash .catd-tab-icon { width: 12px; height: 12px; }
+    .catdash .catd-content-wrap { margin-top: 14px; }
+    .catdash .catd-panel { padding: 16px 14px; border-radius: 12px; }
+    .catdash .catd-panel-head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+    }
+    .catdash .catd-panel-title { font-size: 15px; }
+    .catdash .catd-panel-meta { font-size: 10px; }
+    .catdash .catd-row {
+      padding: 10px 12px;
+      gap: 10px;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .catdash .catd-row-title { font-size: 13px; }
+    .catdash .catd-row-sub { font-size: 11px; }
+    .catdash .catd-row-meta {
+      text-align: left;
+      max-width: 100%;
+      font-size: 9px;
+      padding-top: 4px;
+      border-top: 0.5px dashed rgba(217, 164, 54, 0.12);
+    }
+    .catdash .catd-footer { text-align: center; padding-top: 12px; }
+    .catdash .catd-open-link { font-size: 12px; }
+    .catdash .catd-section-label { font-size: 9px; margin-bottom: 8px; }
+  }
+  @media (max-width: 380px) {
+    .catdash .catd-title { font-size: 26px; }
+    .catdash .catd-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .catdash .catd-ribbon { padding: 14px 14px 12px; }
+  }
+</style>
+
+{# Per-tab SVG glyphs — keyed by tab.key so the route stays glyph-free.
+   Plain Jinja dict; the icon falls back to the Ez Orders glyph if a
+   key is missing. Glyphs lifted from Sam's catering reference. #}
+{% set _catd_icons = {
+  'ez-orders':  '<path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM7 7h10v2H7V7zm3 4h7v2h-7v-2zm0 4h7v2h-7v-2zm-3-4h2v2H7v-2zm0 4h2v2H7v-2z"/>',
+  'ez-market':  '<path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49A.996.996 0 0 0 20.01 4H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>',
+  'ez-manage':  '<path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>',
+  'ez-drivers': '<path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>',
+  'in-house':   '<path d="M12 3 4 9v12h5v-7h6v7h5V9z"/>'
+} %}
+
+<div class="catdash" id="catdash">
+
+  <div class="catd-section-label">Catering Dashboard</div>
+
+  {# PAGE CARD — ribbon header plus tab strip. #}
+  <div class="catd-card">
+
+    {# RIBBON HEADER — the page's own header (the shared topbar is
+       suppressed). The role badge sits above this, rendered by
+       base_dashboard.html outside the topbar block. #}
+    <div class="catd-ribbon">
+      <div class="catd-brand">
+        <span class="catd-brand-dot"></span>
+        <span class="catd-brand-text">CENAS <span class="catd-div">&middot;</span> OPS <span class="catd-div">&middot;</span> <span class="catd-module">CATERING</span></span>
+      </div>
+      <h1 class="catd-title">Catering</h1>
+      <div class="catd-rule"></div>
+      <div class="catd-meta">
+        <span>{{ today_label }}</span>
+        <span class="catd-sep"></span>
+        <span class="catd-meta-val">{{ store_label }}</span>
+        <span class="catd-sep"></span>
+        <span>{{ tabs|length }} sections</span>
+      </div>
+    </div>
+
+    {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
+       JS upgrades them to in-page panel swaps. #}
+    <div class="catd-tabs" id="catdTabs" role="tablist">
+      {% for t in tabs %}
+      <a class="catd-tab{% if t.key == active_tab %} active{% endif %}"
+         href="?tab={{ t.key }}"
+         role="tab"
+         data-tab="{{ t.key }}"
+         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
+        <svg class="catd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _catd_icons.get(t.key, _catd_icons['ez-orders'])|safe }}</svg>
+        <span class="catd-tab-label">{{ t.label }}</span>
+      </a>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {# TAB CONTENT — one preview panel per tab. Inactive panels carry
+     .hidden; JS toggles them. Each panel ends with an "Open full page"
+     link to the real, unchanged page. #}
+  <div class="catd-content-wrap">
+    {% for t in tabs %}
+    <div class="catd-panel{% if t.key != active_tab %} hidden{% endif %}"
+         id="catd-panel-{{ t.key }}"
+         data-tab-panel="{{ t.key }}"
+         role="tabpanel">
+      <div class="catd-panel-head">
+        <div class="catd-panel-title">{{ t.label }}</div>
+        <div class="catd-panel-meta">{{ t.meta }}</div>
+      </div>
+      {% if t.rows %}
+      <div class="catd-list">
+        {% for r in t.rows %}
+        <div class="catd-row">
+          <div class="catd-row-main">
+            <div class="catd-row-title">{{ r.title }}</div>
+            <div class="catd-row-sub">{{ r.sub }}</div>
+          </div>
+          <div class="catd-row-meta">{{ r.meta }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="catd-empty">No recent {{ t.label|lower }} activity — open the full page for the complete view.</div>
+      {% endif %}
+      <div class="catd-footer">
+        <a class="catd-open-link" href="{{ t.full_url }}">Open full page &rarr;</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  // Tab switching — clicking a tab swaps the visible preview panel in
+  // place (no navigation). The tabs are real <a href="?tab=KEY"> links,
+  // so with JS off the route serves the right tab server-side; this
+  // just makes the switch instant. The "Open full page" links inside
+  // each panel are untouched — they navigate to the real catering page.
+  var root = document.getElementById("catdash");
+  if (!root) return;
+  var tabs = root.querySelectorAll(".catd-tab");
+  var panels = root.querySelectorAll(".catd-panel");
+
+  function activate(key) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
+    });
+  }
+
+  root.querySelector("#catdTabs").addEventListener("click", function (e) {
+    var tab = e.target.closest(".catd-tab");
+    if (!tab) return;
+    e.preventDefault();
+    var key = tab.getAttribute("data-tab");
+    activate(key);
+    // Keep the URL in sync so a refresh / share lands on the same tab,
+    // without adding a history entry per tap.
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable — panel swap still works */ }
+  });
+})();
+</script>
+{% endblock %}

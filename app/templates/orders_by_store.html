@@ -29,7 +29,11 @@
 {% block title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %} — Cenas Kitchen{% endblock %}
 
 {# Inline hero header inside the content block — the route renders
-   this page without the base page-title chrome (Sam #10:04). #}
+   this page without the base page-title chrome (Sam #10:04). The
+   inline .ezo-h1 already matches the Page Title Library (module
+   CATERING, two-word title "All Orders"); suppress the shared topbar
+   so the restyled brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
@@ -178,6 +182,7 @@
     border: 0.5px solid var(--border); border-radius: var(--radius);
     border-left: 3px solid var(--cc, var(--gold));
     padding: 13px 14px 12px; transition: border-color .14s, background .14s;
+    cursor: pointer;
   }
   .ezo-page .ezo-card:hover {
     background: var(--surface-hover); border-color: var(--border-active);
@@ -365,7 +370,12 @@
              Assigned vs Needs driver (no fabricated En route/Delivered). #}
           {% set _dispatch = (display_drivers or {}).get(o.id) or o.assigned_driver %}
           {% set _has = _dispatch is not none and _dispatch != '' %}
-          <div class="ezo-card {{ 'c-assigned' if _has else 'c-needs' }}">
+          {# Whole card clicks through to the order breakdown page —
+             restores the click-to-detail the prior table had (Sam #8:52).
+             Interactive children (the Unhook button) stopPropagation so
+             they don't also trigger this navigation. #}
+          <div class="ezo-card {{ 'c-assigned' if _has else 'c-needs' }}"
+               onclick="window.location='/orders/view/{{ o.external_order_id }}'">
             <div class="ezo-cardtop">
               <div>
                 <div class="ezo-time">{{ o.deliver_at or '—' }}</div>
@@ -399,7 +409,7 @@
                       data-order="{{ o.external_order_id }}"
                       data-store-scope="{{ _row_scope }}"
                       data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
-                      onclick="unhookCourier(this);"
+                      onclick="event.stopPropagation(); unhookCourier(this);"
                       title="Free up the ezCater driver on this order">
                 Unhook driver
               </button>

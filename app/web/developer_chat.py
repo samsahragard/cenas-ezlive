@@ -478,6 +478,7 @@ DOC_PAGES = [
     ("session-closeout",         "Session Closeout",  "doc_session_closeout"),
     ("operations-reference",     "Operations Reference", "doc_operations_reference"),
     ("site-map",                 "Site Map",          "doc_site_map"),
+    ("page-guide",               "Page Guide",        "doc_page_guide"),
     ("site-code",                "Site Code",         "doc_site_code"),
     ("architecture-diagrams",    "Architecture Diagrams", "doc_architecture_diagrams"),
     ("arc-code",                 "Arc Code",          "doc_arc_code"),

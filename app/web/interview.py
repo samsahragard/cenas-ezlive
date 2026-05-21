@@ -17,6 +17,7 @@ Routes:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, g
 
@@ -180,13 +181,61 @@ def interview_tracker():
     )
 
 
-@interview.route("/partner/interview-tracker/new", methods=["GET"])
+@interview.route("/partner/interview-tracker/new", methods=["GET", "POST"])
 def candidate_new():
-    """Add-candidate placeholder for v1. The real new-candidate form is
-    a separate task; this endpoint only needs to exist so the template's
-    url_for('interview.candidate_new') resolves. Redirect back to the
-    tracker for now."""
+    """New Candidate form (Sam #5:48 — the add-candidate piece).
+    GET renders dck's form template; POST reads the form fields,
+    creates a Candidate row, and redirects back to the Interview
+    Tracker."""
     gate = _enforce_partner()
     if gate is not None:
         return gate
-    return redirect(url_for("interview.interview_tracker"))
+
+    if request.method == "POST":
+        f = request.form
+        name = (f.get("name") or "").strip()
+        role = (f.get("role") or "").strip()
+        # name + role are the form's required fields. On a malformed
+        # POST that lacks either, bounce back without saving a
+        # half-row rather than erroring.
+        if name and role:
+            stage = (f.get("stage") or "").strip().lower()
+            if stage not in ("applied", "first", "second", "hired"):
+                stage = "applied"
+
+            def _opt(field):
+                return (f.get(field) or "").strip() or None
+
+            db = SessionLocal()
+            try:
+                db.add(Candidate(
+                    name=name,
+                    role=role,
+                    store=_opt("store"),
+                    stage=stage,
+                    source=_opt("source"),
+                    phone=_opt("phone"),
+                    email=_opt("email"),
+                    position=_opt("position"),
+                    desired_wage=_opt("desired_wage"),
+                    availability=_opt("availability"),
+                    experience=_opt("experience"),
+                    referred_by=_opt("referred_by"),
+                    applied_at=datetime.utcnow(),
+                ))
+                db.commit()
+            finally:
+                db.close()
+        return redirect(url_for("interview.interview_tracker"))
+
+    # GET — render dck's form template. This page lives under /partner/
+    # (not store_bp), so set the store context manually for
+    # base_dashboard + the sidebar, same as interview_tracker().
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    return render_template(
+        "interview_candidate_new.html",
+        active="interview_tracker",
+        store_label=g.store_label,
+    )

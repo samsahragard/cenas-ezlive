@@ -1,0 +1,554 @@
+{# ============================================================
+   interview_candidate_new.html — New Candidate form (production)
+   dck. Companion to interview_tracker_production.html — the form
+   that adds a Candidate row to the Interview Tracker hiring
+   pipeline. Warm --ck-* palette, Instrument Serif / Manrope /
+   JetBrains Mono, noise texture, scoped .ivc-page wrapper.
+
+   ROUTE CONTRACT (aick wires the model + route):
+     This page is a single multipart POST form. The form field
+     name= attributes below ARE the contract aick wires the POST
+     handler to. aick wires POST interview.candidate_new to read
+     these fields, create a Candidate row, and redirect back to
+     the Interview Tracker.
+
+     Posted form fields (name -> type, requiredness):
+       csrf_token    -> hidden    (Flask-WTF token)
+       name          -> text      REQUIRED  candidate full name
+       role          -> text      REQUIRED  e.g. Line cook, Server
+       store         -> select    REQUIRED  Copperfield | Tomball
+       stage         -> select    optional  applied | first |
+                                   second | hired (default applied)
+       source        -> select    optional  Indeed | Walk-in |
+                                   Referral | Facebook | Other
+       phone         -> tel       optional
+       email         -> email     optional
+       position      -> text      optional
+       desired_wage  -> text      optional
+       availability  -> textarea  optional
+       experience    -> textarea  optional
+       referred_by   -> text      optional
+
+     The route layer must provide TWO url_for endpoint names:
+       interview.candidate_new       -> this form's POST target
+       interview.interview_tracker   -> Cancel link + post-create
+                                        redirect target
+     FLAG for aick: confirm the exact tracker endpoint name. The
+     Interview Tracker page itself only registers a placeholder
+     'interview.candidate_new' endpoint; the tracker's own view
+     function name is assumed here to be 'interview_tracker' on
+     the same 'interview' blueprint. If the real endpoint differs,
+     update both the Cancel href and any redirect to match.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'interview_tracker' %}
+{% block title %}New Candidate — Cenas Kitchen{% endblock %}
+{% block page_title %}New Candidate{% endblock %}
+{% block page_subtitle %}{{ store_label }} — add to the hiring pipeline{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* All custom properties + classes scoped to .ivc-page so the warm
+     --ck-* palette never leaks into the global sheet (ivt-/mdl-/atr-
+     pattern).
+
+     HARD REQUIREMENT: .ivc-page has a SOLID FULLY-OPAQUE flat
+     background-color (#1a0d08) so base_dashboard's photo backdrop
+     cannot bleed through. The opaque color is the base layer; the
+     two warm radial glows sit ON TOP as accents and each fades to
+     transparent, which is safe because the opaque color is
+     underneath. The form cards keep their translucent rgba()
+     backgrounds — safe ONLY because .ivc-page behind them is fully
+     opaque. */
+  .ivc-page {
+    --ck-red: #C73B36;
+    --ck-red-deep: #9B2A26;
+    --ck-red-bright: #E85852;
+    --ck-gold: #E4B340;
+    --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F;
+    --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250, 246, 236, 0.82);
+    --ck-cream-faint: rgba(250, 246, 236, 0.55);
+    --ck-cream-meta: rgba(250, 246, 236, 0.4);
+    --ck-bg-deep: #1a0d08;
+    --ck-bg-warm: #28160e;
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --ck-bg-input: rgba(0, 0, 0, 0.3);
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+
+    /* Four stage colors — kept in sync with the Interview Tracker. */
+    --st-applied: #9A8FE0;
+    --st-first: #5BCAC5;
+    --st-second: #E4B340;
+    --st-hired: #95C75F;
+
+    position: relative;
+    isolation: isolate;
+    color: var(--ck-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    /* SOLID opaque base color first; warm radial glows layered on top
+       as accents (each fades to transparent against the opaque base). */
+    background-color: #1a0d08;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 16px;
+    margin: 0 0 48px;
+    padding: 4px 16px 40px;
+    overflow: hidden;
+  }
+
+  .ivc-page *, .ivc-page *::before, .ivc-page *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ivc-page button,
+  .ivc-page input,
+  .ivc-page select,
+  .ivc-page textarea { font-family: inherit; }
+
+  /* Noise texture — re-rooted from body::before onto the page wrapper. */
+  .ivc-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+  .ivc-page > * { position: relative; z-index: 1; }
+
+  .ivc-page .layout {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  /* ===== HEADER ===== base_dashboard's topbar carries the page title +
+     subtitle; this slim in-page header carries only the store badge. */
+  .ivc-page .ivc-header {
+    padding: 16px 0;
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .ivc-page .store-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.12);
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .ivc-page .ivc-header-note {
+    color: var(--ck-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ===== FORM CARD ===== */
+  .ivc-page .form-card {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-active);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .ivc-page .form-card-head {
+    padding: 20px 22px;
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.1), rgba(199, 59, 54, 0.04));
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+  }
+
+  .ivc-page .form-card-head h2 {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 28px;
+    line-height: 1.1;
+    color: var(--ck-cream);
+    margin-bottom: 4px;
+  }
+
+  .ivc-page .form-card-head h2 .accent {
+    font-style: italic;
+    color: var(--ck-gold-bright);
+  }
+
+  .ivc-page .form-card-head p {
+    color: var(--ck-cream-dim);
+    font-size: 12px;
+  }
+
+  .ivc-page .form-body { padding: 22px; }
+
+  /* Section grouping inside the form */
+  .ivc-page .form-section + .form-section {
+    margin-top: 8px;
+    padding-top: 20px;
+    border-top: 0.5px solid var(--ck-border-subtle);
+  }
+
+  .ivc-page .section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-gold);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ivc-page .section-title svg { width: 12px; height: 12px; fill: currentColor; }
+
+  /* Field grid — two columns, collapses to one on narrow screens */
+  .ivc-page .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 18px;
+  }
+
+  @media (max-width: 600px) {
+    .ivc-page .field-grid { grid-template-columns: 1fr; }
+  }
+
+  .ivc-page .field { margin-bottom: 14px; }
+  .ivc-page .field.full { grid-column: 1 / -1; }
+
+  .ivc-page .field-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ck-cream-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .ivc-page .field-label .req {
+    color: var(--ck-red-bright);
+    margin-left: 2px;
+  }
+
+  .ivc-page .field-input,
+  .ivc-page .field-select,
+  .ivc-page .field-textarea {
+    width: 100%;
+    padding: 11px 14px;
+    background: var(--ck-bg-input);
+    border: 1px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+  }
+
+  .ivc-page .field-select { color-scheme: dark; }
+
+  .ivc-page .field-textarea {
+    resize: vertical;
+    min-height: 88px;
+    line-height: 1.5;
+  }
+
+  .ivc-page .field-input:focus,
+  .ivc-page .field-select:focus,
+  .ivc-page .field-textarea:focus {
+    outline: none;
+    border-color: var(--ck-gold);
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .ivc-page .field-input::placeholder,
+  .ivc-page .field-textarea::placeholder { color: var(--ck-cream-faint); }
+
+  .ivc-page .field-hint {
+    font-size: 11px;
+    color: var(--ck-cream-faint);
+    margin-top: 5px;
+    line-height: 1.4;
+  }
+
+  /* ===== FORM ACTIONS ===== */
+  .ivc-page .form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 0.5px solid var(--ck-border-subtle);
+  }
+
+  .ivc-page .btn-cancel {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream-dim);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .ivc-page .btn-cancel:hover {
+    border-color: var(--ck-border-active);
+    color: var(--ck-cream);
+  }
+
+  .ivc-page .btn-cancel svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .ivc-page .btn-submit {
+    flex: 2;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+    border: 0.5px solid var(--ck-red-bright);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(199, 59, 54, 0.25);
+  }
+
+  .ivc-page .btn-submit:hover { color: var(--ck-cream); }
+
+  .ivc-page .btn-submit:disabled {
+    background: rgba(50, 30, 22, 0.5);
+    border-color: var(--ck-border-subtle);
+    color: var(--ck-cream-faint);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .ivc-page .btn-submit svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .ivc-page .form-foot-note {
+    font-size: 11px;
+    color: var(--ck-cream-faint);
+    line-height: 1.5;
+    margin-top: 12px;
+    padding: 0 2px;
+  }
+</style>
+
+<div class="ivc-page">
+  <div class="layout">
+
+    {# ===== HEADER ===== #}
+    <div class="ivc-header">
+      <div class="store-badge">{{ store_label }}</div>
+      <span class="ivc-header-note">Add a new candidate to the hiring pipeline. They land in the chosen stage and a locked interview history starts from there.</span>
+    </div>
+
+    {# ===== NEW CANDIDATE FORM =====
+       Single multipart POST. The name= attributes are the contract
+       aick wires the POST handler to (see route-contract comment). #}
+    <form class="form-card" id="candidateForm" method="POST" enctype="multipart/form-data"
+          action="{{ url_for('interview.candidate_new') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+
+      <div class="form-card-head">
+        <h2>New <span class="accent">candidate</span></h2>
+        <p>Name and role are required — everything else can be filled in later.</p>
+      </div>
+
+      <div class="form-body">
+
+        {# --- Candidate basics --- #}
+        <div class="form-section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            Candidate
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="fName">Full name <span class="req">*</span></label>
+              <input class="field-input" type="text" name="name" id="fName" required
+                     autocomplete="off" placeholder="e.g. Maria Lopez">
+            </div>
+            <div class="field">
+              <label class="field-label" for="fRole">Role <span class="req">*</span></label>
+              <input class="field-input" type="text" name="role" id="fRole" required
+                     autocomplete="off" placeholder="e.g. Line cook, Server">
+            </div>
+            <div class="field">
+              <label class="field-label" for="fStore">Store <span class="req">*</span></label>
+              <select class="field-select" name="store" id="fStore" required>
+                <option value="Copperfield">Copperfield</option>
+                <option value="Tomball">Tomball</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="fStage">Pipeline stage</label>
+              <select class="field-select" name="stage" id="fStage">
+                <option value="applied" selected>Applied</option>
+                <option value="first">1st Interview</option>
+                <option value="second">2nd Interview</option>
+                <option value="hired">Hired</option>
+              </select>
+              <div class="field-hint">New candidates usually start at Applied.</div>
+            </div>
+          </div>
+        </div>
+
+        {# --- Contact --- #}
+        <div class="form-section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+            Contact
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="fPhone">Phone</label>
+              <input class="field-input" type="tel" name="phone" id="fPhone"
+                     autocomplete="off" placeholder="(281) 555-0142">
+            </div>
+            <div class="field">
+              <label class="field-label" for="fEmail">Email</label>
+              <input class="field-input" type="email" name="email" id="fEmail"
+                     autocomplete="off" placeholder="name@example.com">
+            </div>
+            <div class="field">
+              <label class="field-label" for="fSource">Source</label>
+              <select class="field-select" name="source" id="fSource">
+                <option value="Indeed">Indeed</option>
+                <option value="Walk-in">Walk-in</option>
+                <option value="Referral">Referral</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="fReferredBy">Referred by</label>
+              <input class="field-input" type="text" name="referred_by" id="fReferredBy"
+                     autocomplete="off" placeholder="Who sent them in?">
+            </div>
+          </div>
+        </div>
+
+        {# --- Hiring details --- #}
+        <div class="form-section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>
+            Hiring details
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="fPosition">Position</label>
+              <input class="field-input" type="text" name="position" id="fPosition"
+                     autocomplete="off" placeholder="Specific position applied for">
+            </div>
+            <div class="field">
+              <label class="field-label" for="fWage">Desired wage</label>
+              <input class="field-input" type="text" name="desired_wage" id="fWage"
+                     autocomplete="off" placeholder="e.g. $15/hr">
+            </div>
+            <div class="field full">
+              <label class="field-label" for="fAvailability">Availability</label>
+              <textarea class="field-textarea" name="availability" id="fAvailability"
+                        placeholder="Days and shifts they can work — weekends, mornings, etc."></textarea>
+            </div>
+            <div class="field full">
+              <label class="field-label" for="fExperience">Previous experience</label>
+              <textarea class="field-textarea" name="experience" id="fExperience"
+                        placeholder="Past kitchen or service jobs, years of experience, notable skills."></textarea>
+            </div>
+          </div>
+        </div>
+
+        {# --- Actions --- #}
+        <div class="form-actions">
+          <a class="btn-cancel" href="{{ url_for('interview.interview_tracker') }}">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            Cancel
+          </a>
+          <button class="btn-submit" id="submitBtn" type="submit" disabled>
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+            Add candidate
+          </button>
+        </div>
+
+        <p class="form-foot-note">
+          Once added, the candidate appears in the Interview Tracker pipeline. Open their card to log interviews, attach resumes, and advance them through the stages.
+        </p>
+
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  'use strict';
+
+  // ---- Submit gate ----
+  // Disable the "Add candidate" button until BOTH the name and role
+  // fields are non-empty (the two required fields). Mirrors the
+  // Daily Manager Log's body-length gate pattern.
+  var form = document.getElementById('candidateForm');
+  if (!form) { return; }
+
+  var nameInput = document.getElementById('fName');
+  var roleInput = document.getElementById('fRole');
+  var submitBtn = document.getElementById('submitBtn');
+
+  if (nameInput && roleInput && submitBtn) {
+    function refresh() {
+      var ok = nameInput.value.trim().length > 0 &&
+               roleInput.value.trim().length > 0;
+      submitBtn.disabled = !ok;
+    }
+    nameInput.addEventListener('input', refresh);
+    roleInput.addEventListener('input', refresh);
+    refresh();
+  }
+})();
+</script>
+{% endblock %}

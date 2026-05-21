@@ -2,7 +2,10 @@
 {% set active = active|default('schedule') %}
 {% block title %}Schedule — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Schedule{% endblock %}
+{# Page Title Library: module SCHEDULES, two-word title "Schedule Report". #}
+{% block page_module %}SCHEDULES{% endblock %}
+{% block page_module_class %}mod-schedules{% endblock %}
+{% block page_title %}<span class="word-primary">Schedule</span> <span class="ck-accent">Report</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Published + planning shifts from Sling, both locations. Default range: today + next 7 days.</p>
 {% endblock %}

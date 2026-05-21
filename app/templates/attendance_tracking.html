@@ -36,7 +36,10 @@
 {% set active = 'manager_attendance' %}
 
 {% block title %}Attendance Tracking — Cenas Kitchen{% endblock %}
-{% block page_title %}Attendance Tracking{% endblock %}
+{# Page Title Library: module ATTENDANCE, two-word title "Attendance Tracker". #}
+{% block page_module %}ATTENDANCE{% endblock %}
+{% block page_module_class %}mod-attendance{% endblock %}
+{% block page_title %}<span class="word-primary">Attendance</span> <span class="ck-accent">Tracker</span>{% endblock %}
 {% block page_subtitle %}{{ store_label }} — daily roster &amp; time clock{% endblock %}
 
 {% block head_extra %}

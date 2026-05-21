@@ -2,7 +2,10 @@
 {% set active = 'ezcater_import' %}
 {% block title %}ezCater Import — Cenas Kitchen{% endblock %}
 
-{% block page_title %}ezCater Import{% endblock %}
+{# Page Title Library: module CATERING, two-word title "ezCater Import". #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">ezCater</span> <span class="ck-accent">Import</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Two XLSX uploaders — the Order Data export backfills financials, the Delivery Performance Report backfills tracking + driver per delivery.</p>
 {% endblock %}

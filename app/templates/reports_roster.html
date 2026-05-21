@@ -2,7 +2,10 @@
 {% set active = active|default('roster') %}
 {% block title %}Roster — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Roster{% endblock %}
+{# Page Title Library: module TEAM, two-word title "Team Roster". #}
+{% block page_module %}TEAM{% endblock %}
+{% block page_module_class %}mod-team{% endblock %}
+{% block page_title %}<span class="word-primary">Team</span> <span class="ck-accent">Roster</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Active employees by location, with positions they can fill. Source: Sling.</p>
 {% endblock %}

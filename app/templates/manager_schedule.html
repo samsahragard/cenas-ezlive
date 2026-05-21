@@ -35,6 +35,10 @@
 {% set active = 'weekly_schedule' %}
 
 {% block title %}Weekly Schedule — Cenas Kitchen{% endblock %}
+{# This page draws its own .sk-header (Page Title Library: module SCHEDULES,
+   two-word title "Weekly Schedule"). Suppress base_dashboard's shared
+   topbar so the restyled brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}Weekly Schedule{% endblock %}
 {% block page_subtitle %}{{ store_label }} — shifts for the week{% endblock %}
 
@@ -761,7 +765,7 @@
       <span class="sk-store-badge">{{ store_label }}</span>
       <span class="sk-spacer"></span>
     </div>
-    <h1>Weekly <span class="accent">schedule</span></h1>
+    <h1>Weekly <span class="accent">Schedule</span></h1>
     <p class="sk-subtitle">Every teammate's shifts for the week, grouped by side of house and role. Use the arrows to step between weeks.</p>
   </div>
 

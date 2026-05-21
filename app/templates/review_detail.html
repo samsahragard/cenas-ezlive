@@ -2,7 +2,10 @@
 {% set active = 'review' %}
 {% block title %}Review {{ order.external_order_id }} — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Order #{{ order.external_order_id }}{% endblock %}
+{# Page Title Library: module CATERING. Detail view — title is the order id. #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Order</span> <span class="ck-accent">#{{ order.external_order_id }}</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub"><a href="/review" style="color:var(--accent-soft);">← Back to Review Queue</a></p>
 {% endblock %}

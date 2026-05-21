@@ -27,6 +27,10 @@
 {% set active = 'in_house_catering' %}
 
 {% block title %}In-House Catering — Cenas Kitchen{% endblock %}
+{# This page draws its own .ihc-header (Page Title Library: module CATERING,
+   two-word title "In-House Catering"). Suppress base_dashboard's shared
+   topbar so the restyled brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}In-House Catering{% endblock %}
 {% block page_subtitle %}Staff quote builder{% endblock %}
 

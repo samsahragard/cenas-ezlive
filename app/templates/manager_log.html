@@ -1,6 +1,10 @@
 {% extends "base_dashboard.html" %}
 {% set active = active|default('manager_' + page_slug.replace('-', '_')) %}
 {% block title %}{{ page_label }} — Cenas Kitchen{% endblock %}
+{# Generic manager-log shell reused by ~14 log pages — page_label / page_slug
+   are route-supplied, so the module word is derived from page_slug rather
+   than hardcoded; the title stays the route's dynamic label. #}
+{% block page_module %}{{ (page_slug or 'log')|upper|replace('_', ' ') }}{% endblock %}
 {% block page_title %}{{ page_label }}{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ page_subtitle|default('Store-scoped log. Text-heavy v1 — title + body + author + date per entry.') }}</p>

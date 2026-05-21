@@ -14,7 +14,11 @@
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% block title %}{{ vendor_label }} — Recent Orders — Cenas Kitchen{% endblock %}
-{# Inline hero header inside the content block — no base stacked title. #}
+{# Inline hero header inside the content block — no base stacked title.
+   Inline title aligned to the Page Title Library (module VENDORS,
+   two-word title "Order History"); suppress the shared topbar so the
+   restyled brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
@@ -55,6 +59,8 @@
 
   .vro-header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
   .vro-header h1 { font-size: 24px; font-weight: 600; letter-spacing: 0.02em; margin: 0; }
+  /* Page Title Library: second word carries the VENDORS module accent. */
+  .vro-header h1 .accent { color: #C99368; }
   .vro-vendor-badge {
     display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px;
     background: var(--vro-gold-soft); border: 1px solid var(--vro-gold-line); border-radius: 999px;
@@ -209,7 +215,7 @@
 
 <div class="vro-page">
   <div class="vro-header">
-    <h1>Recent Orders</h1>
+    <h1>Order <span class="accent">History</span></h1>
     <span class="vro-vendor-badge">{{ vendor_label }}</span>
     <span class="vro-store-pill">{{ store_label }}</span>
   </div>

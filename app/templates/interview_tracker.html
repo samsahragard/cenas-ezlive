@@ -51,7 +51,12 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'interview_tracker' %}
 {% block title %}Interview Tracker — Cenas Kitchen{% endblock %}
-{% block page_title %}Interview Tracker{% endblock %}
+{# Page Title Library: module HIRING, two-word title "Interview Tracker".
+   The in-page .ivt-header is just a store badge — base topbar carries the
+   title, so it is kept (not suppressed). #}
+{% block page_module %}HIRING{% endblock %}
+{% block page_module_class %}mod-hiring{% endblock %}
+{% block page_title %}<span class="word-primary">Interview</span> <span class="ck-accent">Tracker</span>{% endblock %}
 {% block page_subtitle %}{{ store_label }} — candidate hiring pipeline{% endblock %}
 
 {% block head_extra %}

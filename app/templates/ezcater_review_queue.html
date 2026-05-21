@@ -2,7 +2,11 @@
 {% set active = active|default('dev_ezcater_review') %}
 {% block title %}Ezcater Review Queue — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Ezcater Review Queue{% endblock %}
+{# Page Title Library: module CATERING, two-word title "Review Queue"
+   ("ezCater" lives in the brand-mark module slot). #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Review</span> <span class="ck-accent">Queue</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Orders the auto-resolver couldn't clear automatically. After two pulls and a Claude API check, anything still flagged lands here for a human.</p>
 {% endblock %}

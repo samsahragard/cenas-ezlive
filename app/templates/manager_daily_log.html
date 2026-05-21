@@ -28,6 +28,10 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'manager_daily_log' %}
 {% block title %}Daily Manager Log — Cenas Kitchen{% endblock %}
+{# This page draws its own .mdl-page header (Page Title Library: module
+   DAILY LOG, two-word title "Manager Log"). Suppress base_dashboard's
+   shared topbar so the restyled brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}Daily Manager Log{% endblock %}
 {% block page_subtitle %}{{ store_label }} — store logs{% endblock %}
 

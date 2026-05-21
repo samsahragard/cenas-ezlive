@@ -1,6 +1,8 @@
 {% extends "base_dashboard.html" %}
 {% block title %}My Profile — Cenas Kitchen{% endblock %}
-{% block page_title %}My Profile{% endblock %}
+{# Page Title Library: module PROFILE, two-word title "My Profile". #}
+{% block page_module %}PROFILE{% endblock %}
+{% block page_title %}<span class="word-primary">My</span> <span class="ck-accent">Profile</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ driver.name }} · {{ (current_tier or 'new').replace('_', ' ').title() }}
     · {{ driver.lifetime_delivery_count }} lifetime delivery{{ 's' if driver.lifetime_delivery_count != 1 else '' }}

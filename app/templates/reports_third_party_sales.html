@@ -2,7 +2,11 @@
 {% set active = active|default('third_party_sales') %}
 {% block title %}Third-Party Sales — Cenas Kitchen{% endblock %}
 
-{% block page_title %}{{ page_title|default('Sales') }}{% endblock %}
+{# Page Title Library: module SALES, two-word title "Sales Report". The
+   route may pass a `page_title` var; when it does not, the library default
+   "Sales Report" renders with the second word accented. #}
+{% block page_module %}SALES{% endblock %}
+{% block page_title %}{% if page_title %}{{ page_title }}{% else %}<span class="word-primary">Sales</span> <span class="ck-accent">Report</span>{% endif %}{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Pick a time period and one or more revenue centers. All channels = total combined; click a channel to add or remove it from the view.</p>
 {% endblock %}

@@ -1,6 +1,9 @@
 {% extends "base_dashboard.html" %}
 {% block title %}Ez Market — Cenas Kitchen{% endblock %}
-{% block page_title %}Hi {{ viewer_name }}{% endblock %}
+{# Page Title Library: module CATERING. Greeting-style title (like HOME). #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Hi,</span> <span class="ck-accent">{{ viewer_name or 'there' }}</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ available|length }} upcoming orders · last refreshed just now</p>
 {% endblock %}

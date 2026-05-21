@@ -2,6 +2,9 @@
 {% set active = 'driver_tracking' %}
 {% block title %}{{ driver.name }} — Paycheck History — Cenas Kitchen{% endblock %}
 
+{# Page Title Library: module DRIVER. Detail view — the title is the
+   driver's name (library renders person-detail views as the name). #}
+{% block page_module %}DRIVER{% endblock %}
 {% block page_title %}{{ driver.name }}{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">

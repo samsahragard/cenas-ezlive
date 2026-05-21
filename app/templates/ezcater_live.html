@@ -2,7 +2,11 @@
 {% set active = 'dev_ezcater_live' %}
 {% block title %}Ezcater Live Tracking — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Ezcater · Live Tracking{% endblock %}
+{# Page Title Library: module CATERING, two-word title "Live Tracking"
+   ("ezCater" lives in the brand-mark module slot). #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Live</span> <span class="ck-accent">Tracking</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     Today + upcoming orders. Paste the ezCater customer-tracker URL

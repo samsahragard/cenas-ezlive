@@ -24,7 +24,11 @@
 {% set active = 'manager_incident_reports' %}
 {% block title %}Incident Reports — Cenas Kitchen{% endblock %}
 {# Page chrome lives inside content so the inline v3 header renders
-   without the base_dashboard stacked title+subtitle rows. #}
+   without the base_dashboard stacked title+subtitle rows. The inline
+   .ir-header already matches the Page Title Library (module INCIDENTS,
+   two-word title "Incident Reports"); suppress the shared topbar so the
+   restyled brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 

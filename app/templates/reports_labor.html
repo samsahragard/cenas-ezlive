@@ -3,7 +3,9 @@
 {% set active = active|default('labor') %}
 {% block title %}Labor Report — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Labor Report{{ role_subtitle|default('') }}{% endblock %}
+{# Page Title Library: module OPERATIONS, two-word title "Labor Report". #}
+{% block page_module %}OPERATIONS{% endblock %}
+{% block page_title %}<span class="word-primary">Labor</span> <span class="ck-accent">Report</span>{{ role_subtitle|default('') }}{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Labor cost by position with % of net sales (industry-standard labor cost ratio).</p>
 {% endblock %}

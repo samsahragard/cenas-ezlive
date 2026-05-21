@@ -56,7 +56,12 @@
 {% set active = 'kitchen_prep_list' %}
 
 {% block title %}Prep List — Cenas Kitchen{% endblock %}
-{% block page_title %}Prep List{% endblock %}
+{# Page Title Library: module PREP, two-word title "Prep List". The in-page
+   .prep-topstrip is only a store badge + runner status — base topbar carries
+   the title, so it is kept (not suppressed). #}
+{% block page_module %}PREP{% endblock %}
+{% block page_module_class %}mod-prep{% endblock %}
+{% block page_title %}<span class="word-primary">Prep</span> <span class="ck-accent">List</span>{% endblock %}
 {% block page_subtitle %}{{ store_label }} — daily prep board &amp; recipe breakdown{% endblock %}
 
 {% block head_extra %}

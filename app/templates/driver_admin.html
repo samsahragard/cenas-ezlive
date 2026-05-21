@@ -2,7 +2,10 @@
 {% set active = 'drivers_admin' %}
 {% block title %}Drivers — {{ store_label }} — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Drivers{% endblock %}
+{# Page Title Library: module DRIVER. No exact library page-view for the
+   admin list — a two-word "Driver Admin" title keeps the library shape. #}
+{% block page_module %}DRIVER{% endblock %}
+{% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Admin</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     {% if current_location == 'both' %}

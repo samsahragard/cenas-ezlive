@@ -2,7 +2,10 @@
 {% set active = 'drivers_live' %}
 {% block title %}Drivers Live — {{ store_label }} — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Drivers Live{% endblock %}
+{# Page Title Library: module CATERING, two-word title "Drivers Live". #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Drivers</span> <span class="ck-accent">Live</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     {% if current_location == 'both' %}All locations · live GPS{% else %}<span class="location-badge">{{ store_label }}</span> · live GPS{% endif %}

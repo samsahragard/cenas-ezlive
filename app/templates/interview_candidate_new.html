@@ -43,7 +43,11 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'interview_tracker' %}
 {% block title %}New Candidate — Cenas Kitchen{% endblock %}
-{% block page_title %}New Candidate{% endblock %}
+{# Page Title Library: module HIRING, two-word title "Add Candidate". The
+   in-page .ivc-header is just a store badge — base topbar carries the title. #}
+{% block page_module %}HIRING{% endblock %}
+{% block page_module_class %}mod-hiring{% endblock %}
+{% block page_title %}<span class="word-primary">Add</span> <span class="ck-accent">Candidate</span>{% endblock %}
 {% block page_subtitle %}{{ store_label }} — add to the hiring pipeline{% endblock %}
 
 {% block head_extra %}

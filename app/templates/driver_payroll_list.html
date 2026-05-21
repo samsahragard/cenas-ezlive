@@ -2,7 +2,10 @@
 {% set active = 'driver_tracking' %}
 {% block title %}Driver Payroll — {{ g.store_label }} — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Driver Payroll{% endblock %}
+{# Page Title Library: module CATERING, two-word title "Driver Payroll". #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Payroll</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     Current pay period:

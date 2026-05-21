@@ -8,7 +8,8 @@
 {% block body_class %}page-dashboard{% endblock %}
 {% block title %}Cenas Kitchen — Manager Dashboard{% endblock %}
 
-{% block page_title %}Welcome back <span class="wave">👋</span>{% endblock %}
+{% block page_module %}HOME{% endblock %}
+{% block page_title %}<span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     {{ today_long }} · {{ today_orders|length }} deliveries today

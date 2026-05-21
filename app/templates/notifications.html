@@ -1,7 +1,9 @@
 {% extends "base_dashboard.html" %}
 {% set active = active|default('notifications') %}
 {% block title %}Notifications — Cenas Kitchen{% endblock %}
-{% block page_title %}Notifications{% endblock %}
+{# Page Title Library: module NOTIFICATIONS, two-word title "Alerts Inbox". #}
+{% block page_module %}NOTIFICATIONS{% endblock %}
+{% block page_title %}<span class="word-primary">Alerts</span> <span class="ck-accent">Inbox</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">All operational signals in one place. Tap a category tab to filter; dismiss with the X. (Ribbon stays live during behavior-parity validation per cena #2628.)</p>
 {% endblock %}

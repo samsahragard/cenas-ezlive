@@ -2,7 +2,10 @@
 {% set active = 'review' %}
 {% block title %}Review Queue — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Order Review Queue{% endblock %}
+{# Page Title Library: module CATERING, two-word title "Review Queue". #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Review</span> <span class="ck-accent">Queue</span>{% endblock %}
 {% block page_subtitle %}
   {% if orders %}
     {% set flagged = orders | selectattr("needs_review") | list %}

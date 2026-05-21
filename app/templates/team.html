@@ -73,7 +73,10 @@
 </script>
 {% endblock %}
 
-{% block page_title %}Partner · Team{% endblock %}
+{# Page Title Library: module TEAM, two-word title "Team Roster". #}
+{% block page_module %}TEAM{% endblock %}
+{% block page_module_class %}mod-team{% endblock %}
+{% block page_title %}<span class="word-primary">Team</span> <span class="ck-accent">Roster</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     Add, edit, deactivate, and reset passcodes for everyone with login access.

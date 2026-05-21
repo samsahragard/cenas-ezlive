@@ -2,7 +2,9 @@
 {% set active = active|default('server_perf') %}
 {% block title %}Server Performance — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Server Performance{% endblock %}
+{# Page Title Library: module OPERATIONS, two-word title "Server Performance". #}
+{% block page_module %}OPERATIONS{% endblock %}
+{% block page_title %}<span class="word-primary">Server</span> <span class="ck-accent">Performance</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Per-waiter tip % + service timing (drink → entree gap, ticket duration). FOH staff only (Server / Trainee / Bartender / Host).</p>
 {% endblock %}

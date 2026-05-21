@@ -24,7 +24,10 @@
 {% block title %}Recipes — Cenas Kitchen{% endblock %}
 {# Page chrome lives inside the content block so the inline header
    (title + search + store pill on one row, mockup-style) renders
-   without the base_dashboard stacked page_title/page_subtitle rows. #}
+   without the base_dashboard stacked page_title/page_subtitle rows.
+   Inline title aligned to the Page Title Library ("Recipe Library");
+   suppress the shared topbar so the brand-mark band does not double up. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
@@ -87,6 +90,8 @@
     color: var(--rcp-cream);
     flex-shrink: 0;
   }
+  /* Page Title Library: second word carries the module accent. */
+  .rcp-hero-title .accent { color: var(--rcp-green, #95C75F); }
   .rcp-hero .rcp-search {
     /* Override default search width — hero search is wider, pill on right */
     max-width: 480px;
@@ -369,7 +374,7 @@
 
   {# ----- Inline hero header (mockup style — title + search + DOS pill in one row) ----- #}
   <div class="rcp-hero">
-    <h1 class="rcp-hero-title">Recipes</h1>
+    <h1 class="rcp-hero-title">Recipe <span class="accent">Library</span></h1>
     <div class="rcp-search">
       <span class="icon">&#x2315;</span>
       <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">

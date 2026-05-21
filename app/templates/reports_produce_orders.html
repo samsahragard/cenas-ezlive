@@ -2,7 +2,11 @@
 {% set active = active|default('produce_orders') %}
 {% block title %}Produce Orders — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Produce Orders &amp; Price History{% endblock %}
+{# Page Title Library: module VENDORS, two-word title "Produce Orders"
+   (the "& price history" detail is carried by the metadata line below). #}
+{% block page_module %}VENDORS{% endblock %}
+{% block page_module_class %}mod-vendors{% endblock %}
+{% block page_title %}<span class="word-primary">Produce</span> <span class="ck-accent">Orders</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Track per-item price movement Alvarado vs J. Luna over time. Catches vendors quietly bumping prices.</p>
 {% endblock %}

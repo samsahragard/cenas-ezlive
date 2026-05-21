@@ -34,7 +34,10 @@
 {% set active = 'manager_counseling' %}
 
 {% block title %}Employee Counseling — Cenas Kitchen{% endblock %}
-{% block page_title %}Employee Counseling{% endblock %}
+{# Page Title Library: module COUNSELING, two-word title "Employee Counseling". #}
+{% block page_module %}COUNSELING{% endblock %}
+{% block page_module_class %}mod-counseling{% endblock %}
+{% block page_title %}<span class="word-primary">Employee</span> <span class="ck-accent">Counseling</span>{% endblock %}
 {% block page_subtitle %}{{ page_label }} — staff counseling &amp; recognition{% endblock %}
 
 {% block head_extra %}

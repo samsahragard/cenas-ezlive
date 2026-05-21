@@ -2,9 +2,13 @@
 {% set active = 'drivers_admin' %}
 {% block title %}Shifts — {{ driver.name }} — Cenas Kitchen{% endblock %}
 
-{% block page_title %}{{ driver.name }} — Shift History{% endblock %}
+{# Page Title Library: module DRIVER, two-word title "Shift History". The
+   driver name moves to the metadata line below the title. #}
+{% block page_module %}DRIVER{% endblock %}
+{% block page_title %}<span class="word-primary">Shift</span> <span class="ck-accent">History</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
+    {{ driver.name }} ·
     <span class="location-badge">{{ location_labels.get(driver.location, driver.location) }}</span> ·
     {{ rows|length }} shift{{ '' if rows|length == 1 else 's' }}
     · <a href="{{ url_for('store.drivers_admin') }}" style="color:var(--accent-soft);">← back to Drivers</a>

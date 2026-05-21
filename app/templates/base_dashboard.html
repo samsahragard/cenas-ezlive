@@ -15,6 +15,13 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
+  {# Page Title Library fonts — Manrope (titles) + JetBrains Mono (brand mark
+     / metadata). Several rebuilt pages already self-import these; loading
+     them in base means the shared topbar renders in the library typeface
+     app-wide without each page repeating the link. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   {# ribbon.css retired 2026-05-18 (commit 2 of two-commit retire per
      cena #2628 + #2641 + #2710 — Sam batch-approval #2677 cleared the
      parity gate). Operational signals moved to /partner/notifications
@@ -141,6 +148,189 @@
       margin-left: 2px;
     }
   </style>
+  <style>
+    /* ===== Page Title Library — shared topbar header =====================
+       Restyles base_dashboard's .topbar to the dck "page title library"
+       treatment: a small CENAS / OPS / MODULE brand mark, a large bold
+       two-word title, an accent rule, then the metadata line. Every page
+       that extends base_dashboard picks this up at once; a page only needs
+       to set the page_module block (the module word) and a two-word
+       page_title block. Scoped to .ck-topbar so the legacy .topbar /
+       .page-title rules in dashboard.css are not disturbed. */
+
+    /* --module-accent / --module-glow default to gold; a per-module class
+       on .ck-topbar (set via the page_module_class block) overrides them.
+       LANDMINE #2: the header sits on a card surface with an OPAQUE base
+       colour (#241610, fully opaque) layered under a translucent warm
+       gradient — so the restaurant-photo body::before backdrop can never
+       wash the header text out. Do not lower the base layer's opacity. */
+    .ck-topbar {
+      --module-accent: #FFD970;
+      --module-glow: rgba(255, 217, 112, 0.34);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 22px;
+      padding: 20px 22px 18px;
+      border-radius: 16px;
+      border: 0.5px solid rgba(217, 164, 54, 0.18);
+      background-color: #241610;
+      background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.36);
+      position: relative;
+      overflow: hidden;
+    }
+    /* Soft module-tinted corner glow — mirrors the library .page-card::before.
+       Sits behind the content; the opaque card base is still under it. */
+    .ck-topbar::before {
+      content: '';
+      position: absolute;
+      top: -46px;
+      left: -46px;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, var(--module-glow), transparent 70%);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    .ck-topbar > * { position: relative; z-index: 1; }
+    .ck-topbar .ck-topbar-left {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    /* Header text column — brand mark, title, rule, metadata stacked. */
+    .ck-topbar .ck-header {
+      min-width: 0;
+      flex: 1;
+    }
+
+    /* Brand mark — CENAS / OPS / MODULE */
+    .ck-topbar .ck-brand-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 9px;
+    }
+    .ck-topbar .ck-brand-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #E85852;
+      box-shadow: 0 0 8px #E85852, 0 0 0 3px rgba(232, 88, 82, 0.18);
+      flex-shrink: 0;
+    }
+    .ck-topbar .ck-brand-text {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: #E4B340;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .ck-topbar .ck-brand-text .ck-div {
+      color: rgba(250, 246, 236, 0.5);
+      margin: 0 3px;
+      font-weight: 400;
+    }
+    .ck-topbar .ck-brand-text .ck-module {
+      color: var(--module-accent);
+    }
+    /* When the page sets no module (page_module block renders empty) hide
+       the " (dot) MODULE" tail so the mark reads just "CENAS (dot) OPS". */
+    .ck-topbar .ck-brand-text .ck-mod-wrap:has(.ck-module:empty) {
+      display: none;
+    }
+
+    /* Title — large, bold, two words. h1.ck-page-title is deliberately a
+       different selector from dashboard.css's h1.page-title. */
+    h1.ck-page-title {
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 800;
+      font-size: clamp(26px, 3.4vw, 40px);
+      line-height: 1.04;
+      letter-spacing: -0.02em;
+      color: #FAF6EC;
+      margin: 0 0 9px;
+    }
+    h1.ck-page-title .ck-accent {
+      color: var(--module-accent);
+      text-shadow: 0 0 26px var(--module-glow);
+    }
+    /* Empty-title safety: if a page sets no page_title, collapse the h1 so
+       it leaves no blank gap between the brand mark and the metadata. */
+    h1.ck-page-title:empty {
+      display: none;
+    }
+
+    /* Accent rule under the title — hidden when the page renders no title
+       (it draws its own header inside content) so no orphan rule is left. */
+    .ck-topbar .ck-page-rule {
+      height: 1px;
+      width: 52px;
+      background: linear-gradient(90deg, var(--module-accent), transparent);
+      margin-bottom: 10px;
+    }
+    .ck-topbar .ck-header:has(h1.ck-page-title:empty) .ck-page-rule {
+      display: none;
+    }
+
+    /* Metadata line — wraps the page_subtitle block. The old subtitle
+       markup (p.greeting-sub etc.) keeps its own color; this just sets the
+       monospace family + faint tone for bare-text subtitles. */
+    .ck-topbar .ck-page-meta {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      color: rgba(250, 246, 236, 0.5);
+    }
+    .ck-topbar .ck-page-meta:empty {
+      display: none;
+    }
+    .ck-topbar .ck-page-meta p {
+      margin: 0;
+    }
+
+    .ck-topbar .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    /* Hamburger keeps dashboard.css's .menu-toggle styling; nudge it to the
+       title baseline so it does not float against the small brand mark. */
+    .ck-topbar .menu-toggle {
+      margin-top: 2px;
+    }
+
+    /* Per-module accent palette — mirrors the dck library module colors.
+       A page sets one of these via the page_module_class block. */
+    .ck-topbar.mod-incidents,
+    .ck-topbar.mod-incident   { --module-accent: #E85852; --module-glow: rgba(232, 88, 82, 0.34); }
+    .ck-topbar.mod-schedules,
+    .ck-topbar.mod-attendance,
+    .ck-topbar.mod-team       { --module-accent: #5BCAC5; --module-glow: rgba(91, 202, 197, 0.34); }
+    .ck-topbar.mod-catering   { --module-accent: #E89B40; --module-glow: rgba(232, 155, 64, 0.34); }
+    .ck-topbar.mod-hiring     { --module-accent: #9A8FE0; --module-glow: rgba(154, 143, 224, 0.36); }
+    .ck-topbar.mod-counseling { --module-accent: #E4B340; --module-glow: rgba(228, 179, 64, 0.34); }
+    .ck-topbar.mod-prep,
+    .ck-topbar.mod-recipes    { --module-accent: #95C75F; --module-glow: rgba(149, 199, 95, 0.34); }
+    .ck-topbar.mod-vendors    { --module-accent: #C99368; --module-glow: rgba(201, 147, 104, 0.36); }
+    .ck-topbar.mod-settings   { --module-accent: #FAF6EC; --module-glow: rgba(250, 246, 236, 0.26); }
+    /* mod-home, mod-today, mod-operations, mod-sales, mod-food-cost,
+       mod-inventory, mod-notifications, mod-profile, mod-driver, mod-gm
+       all use the gold default set on .ck-topbar above. */
+
+    @media (max-width: 900px) {
+      .ck-topbar { flex-direction: column; align-items: stretch; }
+      .ck-topbar .topbar-right { width: 100%; }
+    }
+  </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {# ribbon.js retired 2026-05-18 (commit 2). X/Check dismiss behavior
      moved to /partner/notifications inline JS (notifications.html).
@@ -182,16 +372,42 @@
   <div class="sidebar-overlay" onclick="window.toggleSidebar && window.toggleSidebar();"></div>
 
   <main class="main">
+    {# Shared topbar — Page Title Library treatment. Renders for every page
+       that extends base_dashboard: a CENAS / OPS / MODULE brand mark, a
+       large bold two-word page title, an accent rule, then the metadata
+       line (the existing page_subtitle). Each page sets:
+         {% block page_module %}       — the module word, e.g. INCIDENTS
+         {% block page_title %}        — two-word title; wrap the second
+                                          word in <span class="ck-accent">
+         {% block page_module_class %} — optional: mod-<module> for the
+                                          module accent colour (see the
+                                          .ck-topbar.mod-* rules above)
+       A page that renders its own header inside {% block content %} can
+       override {% block topbar %} entirely (or leave page_module empty —
+       the brand mark then just reads CENAS / OPS). #}
     {% block topbar %}
-    <div class="topbar">
-      <div class="topbar-left">
+    <div class="topbar ck-topbar {% block page_module_class %}{% endblock %}">
+      <div class="topbar-left ck-topbar-left">
         <button class="menu-toggle" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation">
           <span class="menu-toggle-bars">
             <span></span><span></span><span></span>
           </span>
         </button>
-        <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
-        {% block page_subtitle %}{% endblock %}
+        <div class="ck-header">
+          <div class="ck-brand-mark">
+            <span class="ck-brand-dot"></span>
+            {# The ck-mod-wrap span (" · MODULE") is hidden by CSS when the
+               page_module block renders empty, so a page with no module set
+               just shows "CENAS · OPS". #}
+            <span class="ck-brand-text">CENAS <span class="ck-div">·</span> OPS<span class="ck-mod-wrap"> <span class="ck-div">·</span> <span class="ck-module">{% block page_module %}{% endblock %}</span></span></span>
+          </div>
+          {# h1.ck-page-title and .ck-page-rule collapse via CSS (:empty /
+             :has) when page_title renders empty — pages that draw their own
+             header inside content then leave no blank gap here. #}
+          <h1 class="page-title ck-page-title">{% block page_title %}{% endblock %}</h1>
+          <div class="ck-page-rule"></div>
+          <div class="ck-page-meta">{% block page_subtitle %}{% endblock %}</div>
+        </div>
       </div>
       <div class="topbar-right">
         {% block topbar_right %}{% endblock %}

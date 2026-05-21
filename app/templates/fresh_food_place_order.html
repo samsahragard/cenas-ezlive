@@ -2,7 +2,11 @@
 {% set active = 'fresh_food_place_order' %}
 {% block title %}Fresh Food — Place Order — Cenas Kitchen{% endblock %}
 {# Page header is an inline hero inside the content block (ck #8:44) —
-   base page_title/page_subtitle emptied so there's no stacked title row. #}
+   base page_title/page_subtitle emptied so there's no stacked title row.
+   The inline .ffh-title is already a Page-Title-Library two-word treatment
+   ("Fresh Food" / "Ordering"); suppress the shared topbar so the restyled
+   brand-mark band does not duplicate it. #}
+{% block topbar %}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 

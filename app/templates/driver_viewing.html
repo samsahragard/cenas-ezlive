@@ -2,7 +2,9 @@
 {% set active = 'driver' %}
 {% block title %}Driver Portal — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Driver Portal{% endblock %}
+{# Page Title Library: module DRIVER, two-word title "Driver Portal". #}
+{% block page_module %}DRIVER{% endblock %}
+{% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Portal</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ driver.name }} · <span class="location-badge">{{ location_label }}</span></p>
 {% endblock %}

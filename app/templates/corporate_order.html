@@ -2,7 +2,10 @@
 {% set active = active|default('corporate_order') %}
 {% block title %}Corporate Order — Cenas Kitchen{% endblock %}
 
-{% block page_title %}Corporate Order{% endblock %}
+{# Page Title Library: module CATERING, two-word title "Corporate Order". #}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}<span class="word-primary">Corporate</span> <span class="ck-accent">Order</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
     {% if is_admin %}

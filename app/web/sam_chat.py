@@ -923,8 +923,14 @@ def sam_chat_send():
             # Windows Task wires up on aick) — falls through to no-op.
             cena_devchat_feed = _read_devchat_feed()
 
-            if model.startswith("gemini"):
-                # ---- Google Gemini: direct API call (no gateway) ----
+            if model.startswith("gemini") and not gateway_url:
+                # ---- Google Gemini: direct API (gateway-down fallback) ----
+                # When the Cena gateway is wired (normal prod), Gemini
+                # routes through it just like Claude — the gateway runs
+                # the FULL Cena (system prompt, context, tools) on
+                # Gemini. This bare direct-API path is only the fallback
+                # for when the gateway is unwired (e.g. local dev): no
+                # tools, no Cena identity.
                 gc = _gemini_client()
                 if gc is None:
                     yield _sse({"type": "error",

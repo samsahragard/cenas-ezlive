@@ -111,7 +111,6 @@
           ('daily-log', 'Daily manager log', 'ti-clipboard-text'),
           ('incident-reports', 'Incident reports', 'ti-alert-triangle'),
           ('attendance', 'Attendance tracking', 'ti-calendar-time'),
-          ('interview', 'Interview surface', 'ti-user-plus'),
           ('training', 'Training records', 'ti-school'),
           ('maintenance', 'Maintenance requests', 'ti-tools'),
           ('counseling', 'Employee counseling', 'ti-user-exclamation'),
@@ -122,6 +121,15 @@
           <span class="ck-sb-item-label">{{ label }}</span>
         </a>
         {% endfor %}
+        {# Interview Tracker — dck's candidate hiring pipeline (Sam
+           #5:48). A standalone /partner/ page, not a /manager/<slug>
+           route, so it's a custom link outside the loop above. The old
+           text-shell 'Interview surface' was removed from this menu. #}
+        <a href="/partner/interview-tracker"
+           class="ck-sb-item{% if active == 'interview_tracker' %} active{% endif %}">
+          <i class="ti ti-user-search ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Interview Tracker</span>
+        </a>
       </div></div>
     </div>
     {% endif %}
@@ -428,10 +436,6 @@
         <a href="/partner/developer/cena-stats" class="ck-sb-item{% if active == 'dev_cena_stats' %} active{% endif %}">
           <i class="ti ti-chart-bar ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Cena stats</span>
-        </a>
-        <a href="/partner/interview-tracker" class="ck-sb-item{% if active == 'interview_tracker' %} active{% endif %}">
-          <i class="ti ti-user-search ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Interview Tracker</span>
         </a>
         {# Anomalies Rules — moved here from former Anomalies section per Sam #990. #}
         {% if has_permission('anomaly.admin') %}

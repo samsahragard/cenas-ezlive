@@ -1157,6 +1157,21 @@ _DAILY_LOG_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _DAILY_LOG_MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 
+def _central_dt(dt):
+    """A UTC-naive datetime -> America/Chicago naive, for display. The
+    manager logs stamp created_at with datetime.utcnow(); rendering that
+    raw read 5h ahead of Houston time (an 8:46 PM entry showed 1:46 AM)."""
+    if dt is None:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        return (dt.replace(tzinfo=ZoneInfo("UTC"))
+                  .astimezone(ZoneInfo("America/Chicago"))
+                  .replace(tzinfo=None))
+    except Exception:
+        return dt - timedelta(hours=5)
+
+
 def _render_daily_log_v3(db, label, active_key):
     """Daily Manager Log v3 — a 12-day windowed, day-grouped view.
     ?date=<iso> sets the window end (default today)."""
@@ -1181,6 +1196,7 @@ def _render_daily_log_v3(db, label, active_key):
     rows = q.order_by(DailyManagerLog.created_at.desc()).all()
     by_date: dict = {}
     for r in rows:
+        r.local_created = _central_dt(r.created_at)
         by_date.setdefault(r.entry_date, []).append(r)
     days = []
     for d in window:
@@ -1727,7 +1743,7 @@ def _render_employee_counseling_v3(db, label, active_key):
                 "id": e.id,
                 "level": lv,
                 "level_label": _COUNSEL_LEVEL_LABELS.get(lv, "Verbal"),
-                "date": (e.created_at.strftime("%b %d, %Y")
+                "date": (_central_dt(e.created_at).strftime("%b %d, %Y")
                          if e.created_at else ""),
                 "reason": (e.body or "").strip().splitlines()[0]
                           if (e.body or "").strip() else "",

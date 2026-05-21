@@ -111,6 +111,13 @@
     position: relative;
     z-index: 1;
   }
+  /* Desktop: the phone-width 440px frame left the content as a narrow
+     sliver on a wide screen (Sam #4:52). Widen the centered content
+     column on desktop so the page uses the space; phone view (the
+     base rule above) is unchanged. */
+  @media (min-width: 768px) {
+    .mdl-page .frame { max-width: 960px; padding: 24px 28px 40px; }
+  }
 
   /* === HEADER === */
   .mdl-page .top {
@@ -999,7 +1006,7 @@
         {% set latest = today.entries[0] %}
         <div class="today-latest">{{ latest.body|default('')|truncate(120) }}</div>
         <div class="today-by">
-          {% if latest.created_at %}{{ latest.created_at.strftime('%I:%M %p') }} · {% endif %}
+          {% if latest.local_created %}{{ latest.local_created.strftime('%I:%M %p') }} · {% endif %}
           <strong>{% if latest.author and latest.author.full_name %}{{ latest.author.full_name }}{% else %}Unknown{% endif %}</strong>
         </div>
         {% else %}
@@ -1087,9 +1094,9 @@
               </div>
             </div>
             <div class="entry-time">
-              {% if e.created_at %}
-              <div>{{ e.created_at.strftime('%b %d') }}</div>
-              <strong>{{ e.created_at.strftime('%I:%M %p') }}</strong>
+              {% if e.local_created %}
+              <div>{{ e.local_created.strftime('%b %d') }}</div>
+              <strong>{{ e.local_created.strftime('%I:%M %p') }}</strong>
               {% endif %}
             </div>
           </div>

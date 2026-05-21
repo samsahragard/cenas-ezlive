@@ -11,6 +11,12 @@
    real <a href> links (so taps inside still navigate); only the tabs
    are buttons. driver branch unchanged (single-screen My Work bar).
 
+   2026-05-21 (Sam): the Manager tab is exempt from the popover model
+   — it links straight to the tabbed Manager dashboard
+   (/<store>/manager, default tab = Daily Log). It is an <a> with no
+   data-pop, so the popover JS skips it and the browser navigates
+   normally. Its Manager popover block was removed.
+
    Per-role (tab set mirrors sidebar.html's section set):
      - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
      - expo    → 4 tabs, Manager dropped
@@ -152,20 +158,9 @@
     </div>
   </div>
 
-  {% if user_role != 'expo' %}
-  <div class="bn-popover" id="bn-pop-manager" data-pop="manager">
-    <div class="bn-pop-title">Manager</div>
-    <div class="bn-popover-grid">
-      <a class="bn-pop-item{% if _bn_active == 'manager_daily_log' %} active{% endif %}" href="/{{ store_slug }}/manager/daily-log"><i class="ti ti-clipboard-text"></i>Daily log</a>
-      <a class="bn-pop-item{% if _bn_active == 'manager_incident_reports' %} active{% endif %}" href="/{{ store_slug }}/manager/incident-reports"><i class="ti ti-alert-triangle"></i>Incident reports</a>
-      <a class="bn-pop-item{% if _bn_active == 'manager_attendance' %} active{% endif %}" href="/{{ store_slug }}/manager/attendance"><i class="ti ti-calendar-time"></i>Attendance</a>
-      <a class="bn-pop-item{% if _bn_active == 'manager_interview' %} active{% endif %}" href="/{{ store_slug }}/manager/interview"><i class="ti ti-user-plus"></i>Interview</a>
-      <a class="bn-pop-item{% if _bn_active == 'manager_training' %} active{% endif %}" href="/{{ store_slug }}/manager/training"><i class="ti ti-school"></i>Training</a>
-      <a class="bn-pop-item{% if _bn_active == 'manager_maintenance' %} active{% endif %}" href="/{{ store_slug }}/manager/maintenance"><i class="ti ti-tools"></i>Maintenance</a>
-      <a class="bn-pop-item{% if _bn_active == 'manager_counseling' %} active{% endif %}" href="/{{ store_slug }}/manager/counseling"><i class="ti ti-user-exclamation"></i>Counseling</a>
-    </div>
-  </div>
-  {% endif %}
+  {# The Manager popover was removed 2026-05-21 (Sam): the Manager tab
+     now links straight to the tabbed Manager dashboard instead of
+     opening a sub-option popover. The other tabs keep their popovers. #}
 
   <div class="bn-popover" id="bn-pop-catering" data-pop="catering">
     <div class="bn-pop-title">Catering</div>
@@ -224,13 +219,16 @@
       <i class="ti ti-layout-dashboard bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Today</span>
     </button>
-    {# Manager — every role except expo. #}
+    {# Manager — every role except expo. Per Sam 2026-05-21 this tab no
+       longer opens a popover: it links straight to the tabbed Manager
+       dashboard (default tab = Daily Log), from where the other
+       manager pages are reachable as tabs. #}
     {% if user_role != 'expo' %}
-    <button type="button" data-pop="manager"
+    <a href="/{{ store_slug }}/manager"
        class="ck-bnav-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
       <i class="ti ti-clipboard-text bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Manager</span>
-    </button>
+    </a>
     {% endif %}
     {# Catering #}
     <button type="button" data-pop="catering"

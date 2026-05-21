@@ -2434,6 +2434,122 @@ def _prep_list_v3_post(db, store_scope, user):
     db.commit()
 
 
+# ---- Manager dashboard (tabbed entry layer, Sam 2026-05-21) ---------
+# The bottom-nav Manager tab no longer opens a sub-option popover — it
+# links straight here. This route renders manager_dashboard.html: a tab
+# strip across the six manager pages, defaulting to the Daily Log tab.
+# Each tab shows a short read-only PREVIEW of that page; "Open full
+# page" links to the real, unchanged page (manager_page_list). This is
+# a new entry surface — it does not alter the existing manager pages.
+
+# Ordered tab spec: (tab key, caption, /manager/<slug> page it previews).
+# The key matches the active_tab values the template understands.
+_MANAGER_DASH_TABS = [
+    ("log",         "Log",         "daily-log"),
+    ("incidents",   "Incidents",   "incident-reports"),
+    ("attendance",  "Attendance",  "attendance"),
+    ("training",    "Training",    "training"),
+    ("maintenance", "Maintenance", "maintenance"),
+    ("counseling",  "Counseling",  "counseling"),
+]
+
+
+def _manager_dash_preview(db, page_slug, limit=3):
+    """Latest few rows for a manager page, store-scoped, newest first —
+    shaped into preview rows {title, sub, meta} for the dashboard. Pure
+    read; never writes, never calls Toast. Returns (rows, meta_line).
+    Any model/query problem degrades to an empty preview so one bad tab
+    can never break the dashboard."""
+    Model = _manager_model_for_slug(page_slug)
+    if Model is None:
+        return [], ""
+    try:
+        q = db.query(Model)
+        if g.current_location in ("tomball", "copperfield"):
+            q = q.filter(
+                (Model.store_scope == g.current_location) |
+                (Model.store_scope.is_(None))
+            )
+        total = q.count()
+        recent = q.order_by(Model.created_at.desc()).limit(limit).all()
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            "manager dashboard: preview for %s unavailable: %s", page_slug, ex)
+        return [], ""
+
+    rows = []
+    for r in recent:
+        when = _central_dt(getattr(r, "created_at", None))
+        # Incident reports carry a human report_id + severity + type;
+        # the rest share the ManagerLogMixin title/body shape. Every
+        # incident-only field is read via getattr so the preview is
+        # safe even against an older IncidentReport schema.
+        if page_slug == "incident-reports":
+            title = ((getattr(r, "report_id", None) or "").strip()
+                     or (r.title or "").strip() or "Incident report")
+            sub = ((getattr(r, "incident_type", None) or r.title or "").strip()
+                   or "Incident on file")
+            sev = (getattr(r, "severity", None) or "").strip().title()
+            meta = " · ".join(p for p in (
+                sev, when.strftime("%b %d") if when else "") if p)
+        else:
+            title = (r.title or "").strip() or "Entry"
+            body = (r.body or "").strip()
+            sub = body.splitlines()[0] if body else ""
+            tag = (getattr(r, "type_tag", None) or "").strip()
+            meta = " · ".join(p for p in (
+                tag, when.strftime("%b %d") if when else "") if p)
+        rows.append({"title": title, "sub": sub, "meta": meta})
+
+    noun = {"daily-log": "log entries", "incident-reports": "filed",
+            "attendance": "entries", "training": "records",
+            "maintenance": "requests", "counseling": "records"}.get(
+                page_slug, "entries")
+    meta_line = f"{total} {noun}" if total else f"No {noun} yet"
+    return rows, meta_line
+
+
+@store_bp.route("/manager", methods=["GET"])
+def manager_dashboard():
+    """Tabbed Manager dashboard — the entry layer the bottom-nav
+    Manager tab links to. Defaults to the Log tab; ?tab=<key> deep-links
+    another tab. Read-only previews; each tab's "Open full page" link
+    points at the unchanged /<store>/manager/<page> route."""
+    if not _manager_role_ok():
+        abort(403)
+    valid = {key for key, _, _ in _MANAGER_DASH_TABS}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = "log"
+    db = next(get_db())
+    try:
+        tabs = []
+        for key, caption, page_slug in _MANAGER_DASH_TABS:
+            rows, meta_line = _manager_dash_preview(db, page_slug)
+            tabs.append({
+                "key": key,
+                "label": caption,
+                "page_slug": page_slug,
+                "full_url": url_for("store.manager_page_list", page=page_slug),
+                "meta": meta_line,
+                "rows": rows,
+            })
+        label = g.store_label or "Cenas Kitchen"
+        # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+        _t = date.today()
+        today_label = f"{_t:%a, %b} {_t.day}"
+        return render_template(
+            "manager_dashboard.html",
+            active="manager_dashboard",
+            store_label=label,
+            today_label=today_label,
+            active_tab=active_tab,
+            tabs=tabs,
+        )
+    finally:
+        db.close()
+
+
 @store_bp.route("/manager/<page>", methods=["GET"])
 def manager_page_list(page: str):
     """List view for a manager-section page. Renders the shared

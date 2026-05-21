@@ -1,0 +1,531 @@
+{# ============================================================
+   manager_dashboard.html — Manager dashboard (tabbed entry layer).
+   samai build per Sam 2026-05-21: "delete the manager tab ability to
+   have the drop down ... the actual manager tab immediately opens the
+   1st page which is daily log. then from there they can get into other
+   tabs." The bottom-nav Manager tab no longer opens a popover — it
+   links straight here, and this page is a tab strip across the six
+   manager pages, defaulting to Log.
+
+   This page is a NEW entry layer, NOT a rewrite. Each tab shows a
+   short preview of that manager page; the "Open full page" link in
+   every tab goes to the real, unchanged page at
+   /<store>/manager/<page> (store.manager_page_list). All existing
+   manager-page functionality is left exactly as-is.
+
+   Extends base_dashboard.html — so the role-matched "MANAGER
+   DASHBOARD" badge top-right (dashboard_banner context processor)
+   ships for free. The shared topbar is suppressed; this page draws
+   its own ribbon header inside content (the manager_daily_log.html
+   pattern). OPAQUE surface — the restaurant-photo body backdrop never
+   bleeds through page content.
+
+   ROUTE CONTRACT (store_routes.py manager_dashboard):
+     active        -> 'manager_dashboard'
+     store_label   -> str (store display name)
+     today_label   -> str, e.g. "Wed, May 21"
+     active_tab    -> one of: log | incidents | attendance |
+                      training | maintenance | counseling
+                      (default 'log'; from ?tab=, validated)
+     tabs          -> ordered list[dict], one per tab:
+       key       (str)  — tab id, matches active_tab values
+       label     (str)  — tab strip caption
+       page_slug (str)  — the /<store>/manager/<slug> page it previews
+       full_url  (str)  — absolute href to that page (Open full page)
+       meta      (str)  — one-line summary under the (hidden) heading
+       rows      -> list[dict] preview rows, each:
+         title (str), sub (str), meta (str)
+   Every tab is independently safe: a tab with no rows shows an empty
+   state and still links out. The dashboard route never touches Toast
+   or any write path — it is a read-only preview surface.
+   Audience gate at the route: _manager_role_ok (same as the pages).
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_dashboard' %}
+
+{% block title %}Manager — Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar — this page draws its own ribbon header
+   inside content (manager_daily_log.html pattern). The role badge is
+   rendered OUTSIDE the topbar block in base_dashboard.html, so it is
+   kept regardless. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .mgrdash so the warm
+     Cenas palette never leaks into the global sheet (the atr-/dml-
+     scoping pattern). Comments here never contain a slash-star pair. */
+  .mgrdash {
+    --mgd-red: #C73B36;
+    --mgd-red-deep: #9B2A26;
+    --mgd-red-bright: #E85852;
+    --mgd-gold: #E4B340;
+    --mgd-gold-bright: #FFD970;
+    --mgd-teal: #2EA39F;
+    --mgd-teal-bright: #5BCAC5;
+    --mgd-cream: #FAF6EC;
+    --mgd-cream-dim: rgba(250, 246, 236, 0.78);
+    --mgd-cream-faint: rgba(250, 246, 236, 0.5);
+    --mgd-cream-meta: rgba(250, 246, 236, 0.4);
+    --mgd-bg-deep: #1a0d08;
+    --mgd-bg-warm: #28160e;
+    --mgd-surface: #241409;
+    --mgd-surface-2: #2e1a0d;
+    --mgd-surface-hover: #34200f;
+    --mgd-input: rgba(0, 0, 0, 0.3);
+    --mgd-border: rgba(217, 164, 54, 0.18);
+    --mgd-border-active: rgba(228, 179, 64, 0.5);
+    --mgd-accent: var(--mgd-gold-bright);
+    --mgd-glow: rgba(255, 217, 112, 0.18);
+    --mgd-glow-strong: rgba(255, 217, 112, 0.4);
+    --mgd-radius: 14px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--mgd-cream);
+    margin-bottom: 40px;
+  }
+  .mgrdash * { box-sizing: border-box; }
+
+  /* SECTION LABEL above the card. */
+  .mgrdash .mgd-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--mgd-cream-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0 4px 12px;
+  }
+
+  /* THE PAGE CARD — ribbon header plus the tab strip in one opaque
+     surface. OPAQUE base colour so the photo backdrop never washes
+     the header text out (the base_dashboard .ck-topbar landmine). */
+  .mgrdash .mgd-card {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--mgd-border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mgrdash .mgd-card::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle, var(--mgd-glow), transparent 70%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* RIBBON HEADER. */
+  .mgrdash .mgd-ribbon {
+    padding: 24px 26px 22px;
+    position: relative;
+    z-index: 1;
+  }
+  .mgrdash .mgd-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .mgrdash .mgd-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mgd-red-bright);
+    box-shadow: 0 0 8px var(--mgd-red-bright), 0 0 0 3px rgba(232, 88, 82, 0.18);
+  }
+  .mgrdash .mgd-brand-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--mgd-gold);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+  .mgrdash .mgd-brand-text .mgd-div {
+    color: var(--mgd-cream-faint);
+    margin: 0 4px;
+    font-weight: 400;
+  }
+  .mgrdash .mgd-brand-text .mgd-module { color: var(--mgd-accent); }
+
+  .mgrdash .mgd-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    font-size: clamp(36px, 5.5vw, 52px);
+    line-height: 1;
+    color: var(--mgd-cream);
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .mgrdash .mgd-rule {
+    height: 1px;
+    width: 56px;
+    background: linear-gradient(90deg, var(--mgd-accent), transparent);
+    margin-bottom: 12px;
+  }
+  .mgrdash .mgd-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--mgd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+  .mgrdash .mgd-meta .mgd-sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--mgd-cream-faint);
+  }
+  .mgrdash .mgd-meta .mgd-meta-val {
+    color: var(--mgd-accent);
+    font-weight: 700;
+  }
+
+  /* TAB STRIP — horizontally scrollable on a phone. The tabs are real
+     anchors (href to ?tab=KEY) so the page works with JS off; JS
+     upgrades them to in-page panel swaps. */
+  .mgrdash .mgd-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 0.5px solid var(--mgd-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 1;
+  }
+  .mgrdash .mgd-tabs::-webkit-scrollbar { display: none; }
+  .mgrdash .mgd-tab {
+    flex-shrink: 0;
+    padding: 13px 16px 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--mgd-cream-faint);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .mgrdash .mgd-tab:hover { color: var(--mgd-cream); }
+  .mgrdash .mgd-tab.active {
+    color: var(--mgd-cream);
+    border-bottom-color: var(--mgd-accent);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .mgrdash .mgd-tab-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .mgrdash .mgd-tab.active .mgd-tab-icon { opacity: 1; }
+
+  /* TAB CONTENT — one panel per tab; the inactive ones are hidden. */
+  .mgrdash .mgd-content-wrap { margin-top: 18px; }
+  .mgrdash .mgd-panel {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--mgd-border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  .mgrdash .mgd-panel.hidden { display: none; }
+
+  .mgrdash .mgd-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 0.5px solid var(--mgd-border);
+    flex-wrap: wrap;
+  }
+  .mgrdash .mgd-panel-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--mgd-cream);
+    letter-spacing: -0.01em;
+  }
+  .mgrdash .mgd-panel-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--mgd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  .mgrdash .mgd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .mgrdash .mgd-row {
+    background: var(--mgd-input);
+    border: 0.5px solid var(--mgd-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .mgrdash .mgd-row:hover {
+    background: var(--mgd-surface-hover);
+    border-color: var(--mgd-border-active);
+  }
+  .mgrdash .mgd-row-main { flex: 1; min-width: 0; }
+  .mgrdash .mgd-row-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--mgd-cream);
+    margin-bottom: 3px;
+  }
+  .mgrdash .mgd-row-sub {
+    font-size: 12px;
+    color: var(--mgd-cream-dim);
+    line-height: 1.4;
+  }
+  .mgrdash .mgd-row-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--mgd-cream-faint);
+    letter-spacing: 0.05em;
+    text-align: right;
+    flex-shrink: 0;
+    max-width: 46%;
+  }
+
+  /* Empty state — a tab whose page has no entries yet. */
+  .mgrdash .mgd-empty {
+    text-align: center;
+    padding: 34px 18px;
+    color: var(--mgd-cream-faint);
+    font-size: 13px;
+    background: var(--mgd-input);
+    border: 0.5px dashed var(--mgd-border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  .mgrdash .mgd-footer {
+    text-align: right;
+    padding-top: 14px;
+    border-top: 0.5px solid var(--mgd-border);
+  }
+  .mgrdash .mgd-open-link {
+    color: var(--mgd-gold);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+  }
+  .mgrdash .mgd-open-link:hover { color: var(--mgd-gold-bright); }
+
+  /* MOBILE — mirror the reference design's phone treatment. */
+  @media (max-width: 760px) {
+    .mgrdash .mgd-ribbon { padding: 16px 14px; }
+    .mgrdash .mgd-brand { margin-bottom: 8px; }
+    .mgrdash .mgd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
+    .mgrdash .mgd-title { font-size: 30px; margin-bottom: 6px; }
+    .mgrdash .mgd-rule { width: 40px; margin-bottom: 8px; }
+    .mgrdash .mgd-meta { font-size: 10px; gap: 6px; }
+    .mgrdash .mgd-tabs { padding: 0 8px; }
+    .mgrdash .mgd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
+    .mgrdash .mgd-tab-icon { width: 12px; height: 12px; }
+    .mgrdash .mgd-content-wrap { margin-top: 14px; }
+    .mgrdash .mgd-panel { padding: 16px 14px; border-radius: 12px; }
+    .mgrdash .mgd-panel-head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+    }
+    .mgrdash .mgd-panel-title { font-size: 15px; }
+    .mgrdash .mgd-panel-meta { font-size: 10px; }
+    .mgrdash .mgd-row {
+      padding: 10px 12px;
+      gap: 10px;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .mgrdash .mgd-row-title { font-size: 13px; }
+    .mgrdash .mgd-row-sub { font-size: 11px; }
+    .mgrdash .mgd-row-meta {
+      text-align: left;
+      max-width: 100%;
+      font-size: 9px;
+      padding-top: 4px;
+      border-top: 0.5px dashed rgba(217, 164, 54, 0.12);
+    }
+    .mgrdash .mgd-footer { text-align: center; padding-top: 12px; }
+    .mgrdash .mgd-open-link { font-size: 12px; }
+    .mgrdash .mgd-section-label { font-size: 9px; margin-bottom: 8px; }
+  }
+  @media (max-width: 380px) {
+    .mgrdash .mgd-title { font-size: 26px; }
+    .mgrdash .mgd-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .mgrdash .mgd-ribbon { padding: 14px 14px 12px; }
+  }
+</style>
+
+{# Per-tab SVG glyphs — keyed by tab.key so the route stays glyph-free.
+   Plain Jinja dict; the icon falls back to the Log glyph if a key is
+   missing. #}
+{% set _mgd_icons = {
+  'log':         '<path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM7 11h2v2H7v-2zm0 4h2v2H7v-2zm4 0h2v2h-2v-2zm0-4h2v2h-2v-2zm4 0h2v2h-2v-2zm0 4h2v2h-2v-2z"/>',
+  'incidents':   '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>',
+  'attendance':  '<path d="M9 11.75c-.69 0-1.25.56-1.25 1.25s.56 1.25 1.25 1.25 1.25-.56 1.25-1.25-.56-1.25-1.25-1.25zm6 0c-.69 0-1.25.56-1.25 1.25s.56 1.25 1.25 1.25 1.25-.56 1.25-1.25-.56-1.25-1.25-1.25zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-.29.02-.58.05-.86 2.36-1.05 4.23-2.98 5.21-5.37C11.07 8.33 14.05 10 17.42 10c.78 0 1.53-.09 2.25-.26.21.71.33 1.47.33 2.26 0 4.41-3.59 8-8 8z"/>',
+  'training':    '<path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3 1 9l11 6 9-4.91V17h2V9L12 3z"/>',
+  'maintenance': '<path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>',
+  'counseling':  '<path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>'
+} %}
+
+<div class="mgrdash" id="mgrdash">
+
+  <div class="mgd-section-label">Manager Dashboard</div>
+
+  {# PAGE CARD — ribbon header plus tab strip. #}
+  <div class="mgd-card">
+
+    {# RIBBON HEADER — the page's own header (the shared topbar is
+       suppressed). The role badge sits above this, rendered by
+       base_dashboard.html outside the topbar block. #}
+    <div class="mgd-ribbon">
+      <div class="mgd-brand">
+        <span class="mgd-brand-dot"></span>
+        <span class="mgd-brand-text">CENAS <span class="mgd-div">&middot;</span> OPS <span class="mgd-div">&middot;</span> <span class="mgd-module">MANAGER</span></span>
+      </div>
+      <h1 class="mgd-title">Manager</h1>
+      <div class="mgd-rule"></div>
+      <div class="mgd-meta">
+        <span>{{ today_label }}</span>
+        <span class="mgd-sep"></span>
+        <span class="mgd-meta-val">{{ store_label }}</span>
+        <span class="mgd-sep"></span>
+        <span>{{ tabs|length }} sections</span>
+      </div>
+    </div>
+
+    {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
+       JS upgrades them to in-page panel swaps. #}
+    <div class="mgd-tabs" id="mgdTabs" role="tablist">
+      {% for t in tabs %}
+      <a class="mgd-tab{% if t.key == active_tab %} active{% endif %}"
+         href="?tab={{ t.key }}"
+         role="tab"
+         data-tab="{{ t.key }}"
+         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
+        <svg class="mgd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _mgd_icons.get(t.key, _mgd_icons['log'])|safe }}</svg>
+        <span class="mgd-tab-label">{{ t.label }}</span>
+      </a>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {# TAB CONTENT — one preview panel per tab. Inactive panels carry
+     .hidden; JS toggles them. Each panel ends with an "Open full page"
+     link to the real, unchanged page. #}
+  <div class="mgd-content-wrap">
+    {% for t in tabs %}
+    <div class="mgd-panel{% if t.key != active_tab %} hidden{% endif %}"
+         id="mgd-panel-{{ t.key }}"
+         data-tab-panel="{{ t.key }}"
+         role="tabpanel">
+      <div class="mgd-panel-head">
+        <div class="mgd-panel-title">{{ t.label }}</div>
+        <div class="mgd-panel-meta">{{ t.meta }}</div>
+      </div>
+      {% if t.rows %}
+      <div class="mgd-list">
+        {% for r in t.rows %}
+        <div class="mgd-row">
+          <div class="mgd-row-main">
+            <div class="mgd-row-title">{{ r.title }}</div>
+            <div class="mgd-row-sub">{{ r.sub }}</div>
+          </div>
+          <div class="mgd-row-meta">{{ r.meta }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mgd-empty">No recent {{ t.label|lower }} entries — open the full page to add one.</div>
+      {% endif %}
+      <div class="mgd-footer">
+        <a class="mgd-open-link" href="{{ t.full_url }}">Open full page &rarr;</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  // Tab switching — clicking a tab swaps the visible preview panel in
+  // place (no navigation). The tabs are real <a href="?tab=KEY"> links,
+  // so with JS off the route serves the right tab server-side; this
+  // just makes the switch instant. The "Open full page" links inside
+  // each panel are untouched — they navigate to the real manager page.
+  var root = document.getElementById("mgrdash");
+  if (!root) return;
+  var tabs = root.querySelectorAll(".mgd-tab");
+  var panels = root.querySelectorAll(".mgd-panel");
+
+  function activate(key) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
+    });
+  }
+
+  root.querySelector("#mgdTabs").addEventListener("click", function (e) {
+    var tab = e.target.closest(".mgd-tab");
+    if (!tab) return;
+    e.preventDefault();
+    var key = tab.getAttribute("data-tab");
+    activate(key);
+    // Keep the URL in sync so a refresh / share lands on the same tab,
+    // without adding a history entry per tap.
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable — panel swap still works */ }
+  });
+})();
+</script>
+{% endblock %}

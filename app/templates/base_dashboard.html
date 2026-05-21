@@ -479,6 +479,34 @@
     if (window.ckSidebar) window.ckSidebar.close();
   };
 </script>
+<script>
+  /* Back-button guard (Sam #11:11) — website-side mitigation.
+     When a page is the WebView's entry page (nothing in in-app history
+     behind it), the Android hardware back button would close the whole
+     app. Seed one guard entry so the first back press navigates to the
+     store dashboard instead of exiting. Bounded to the entry page only
+     (history.length <= 1); normal multi-page back navigation is left
+     untouched. Uses its own ckHomeGuard state marker so it does not
+     interfere with the bnavMenu popstate handler in _bottom_nav.html
+     (commit 857a778). The complete fix is wrapper-side (the native
+     Android wrapper). */
+  (function () {
+    var HOME = {{ ('/' ~ store_slug ~ '/') | tojson }};
+    try {
+      if (window.history.length <= 1 && window.location.pathname !== HOME) {
+        history.replaceState({ ckHomeGuard: 1 }, '');
+        history.pushState({ ckHomeReal: 1 }, '');
+      }
+      window.addEventListener('popstate', function (ev) {
+        // React only to our own guard entry; the bottom-nav menu's
+        // bnavMenu pops are handled by _bottom_nav.html's listener.
+        if (ev.state && ev.state.ckHomeGuard) {
+          window.location.replace(HOME);
+        }
+      });
+    } catch (e) { /* history API unavailable — keep default behavior */ }
+  })();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -14,6 +14,7 @@ from app.web.produce_order import produce_order as produce
 from app.web.reports import reports as reports_bp
 from app.web.store_routes import store_bp
 from app.web.developer_chat import dev_chat as dev_chat_bp
+from app.web.interview import interview as interview_bp
 from app.web.corporate_order import corp_order as corp_order_bp
 from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
 from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
@@ -114,6 +115,12 @@ def create_app():
     app.register_blueprint(reports_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(dev_chat_bp)
+    # Interview Tracker (Sam #5:48) — partner-only candidate hiring
+    # pipeline. Routes registered at /partner/interview-tracker
+    # directly (not under store_bp), so not auto-partner-gated; each
+    # route re-checks the session flag via _enforce_partner(). See
+    # app/web/interview.py.
+    app.register_blueprint(interview_bp)
     app.register_blueprint(ezc_import_bp)
     app.register_blueprint(ezc_live_bp)
     app.register_blueprint(team_bp)
@@ -631,6 +638,25 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception(
             "attendance v3 table backfill failed (non-fatal)")
+
+    # Idempotent table create — interview_candidates (Interview Tracker,
+    # Sam #5:48, aick build). The unconditional Base.metadata.create_all
+    # above already covers this new table; this scoped block mirrors the
+    # per-feature backfill pattern and logs the create explicitly.
+    try:
+        from sqlalchemy import inspect as _sa_insp_ivt
+        from app.db import engine as _eng_ivt
+        from app.models import Base as _Base_ivt, Candidate as _Cand_ivt
+        if _eng_ivt is not None:
+            insp_ivt = _sa_insp_ivt(_eng_ivt)
+            if "interview_candidates" not in set(insp_ivt.get_table_names()):
+                _Base_ivt.metadata.create_all(
+                    bind=_eng_ivt, tables=[_Cand_ivt.__table__])
+                logging.getLogger(__name__).info(
+                    "interview_candidates: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "interview_candidates table backfill failed (non-fatal)")
 
     # Idempotent table create + master-list seed — prep list v3 (Sam,
     # dck build). PrepItem = master prep list (44 items seeded from the

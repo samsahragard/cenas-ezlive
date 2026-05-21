@@ -1,0 +1,1033 @@
+{# ============================================================
+   interview_tracker_production.html — Interview Tracker (production)
+   dck conversion of the owner-approved dck_interview_tracker_render
+   mockup (warm --ck-* palette, Instrument Serif / Manrope / JetBrains
+   Mono, noise texture). NEW feature — candidate hiring pipeline.
+
+   ROUTE CONTRACT (aick wires the model + route to supply this):
+     stages -> ordered list of EXACTLY 4 stage objects, in pipeline
+               order Applied -> 1st -> 2nd -> Hired:
+                 { key, label, candidates }
+               key in {'applied','first','second','hired'} — drives the
+               stage dot color + the timeline node color. label is the
+               display string ('Applied', '1st Interview', ...).
+               candidates = list of candidate objs (may be empty []).
+     candidate (an item of stage.candidates) ->
+                 { id, name, initials, role, store, meta_label,
+                   tag_label, tag_kind, urgent }
+               tag_kind in {'today','scheduled','hired','none'} — picks
+                 the card's tag pill style. When tag_kind == 'none' the
+                 plain meta_label text is shown instead of a pill (the
+                 render's "Applied 1d ago · Indeed" / "Need to schedule"
+                 grey line). When tag_kind != 'none', tag_label fills the
+                 pill and meta_label is unused.
+               urgent (bool) -> red card border.
+               role/store render as the "<role> · <store>" mono line.
+     selected_candidate -> OPTIONAL. Drives the detail section. If
+               falsy/absent the whole detail section renders nothing.
+               When present:
+                 { id, name, role, store, phone, email, stage_label,
+                   source, applied_label, position, desired_wage,
+                   availability, experience, referred_by,
+                   documents, timeline }
+               documents = list of { label, url } (may be []).
+               timeline  = list of stage entries, one per pipeline
+                 stage the candidate has reached/will reach:
+                   { stage_key, stage_label, author, time_label,
+                     body, pending }
+                 stage_key in {'applied','first','second','hired'} ->
+                   node color. pending (bool) -> dashed/dimmed future
+                   entry (the render's greyed "Hired · pending"). author
+                   may be empty (the Applied row has no interviewer).
+     store_label -> from base_dashboard context ("BOTH STORES" badge).
+
+   Selection: each candidate card links to ?candidate=<id>; the route
+   reads request.args['candidate'] and sets selected_candidate.
+   "Add candidate" button -> url_for('interview.candidate_new') — aick
+   must register an 'interview' blueprint with a 'candidate_new'
+   endpoint (placeholder; new-candidate form is a separate task).
+   Search is client-side only (filters .candidate-card by name/role).
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'interview_tracker' %}
+{% block title %}Interview Tracker — Cenas Kitchen{% endblock %}
+{% block page_title %}Interview Tracker{% endblock %}
+{% block page_subtitle %}{{ store_label }} — candidate hiring pipeline{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* All custom properties + classes scoped to .ivt-page so the mockup's
+     warm --ck-* palette never leaks into the global sheet (mdl-/atr-
+     pattern). The render set globals on html/body + body::before — those
+     are re-rooted onto .ivt-page / .ivt-page::before here.
+
+     HARD REQUIREMENT: .ivt-page has a SOLID FULLY-OPAQUE flat background
+     (#1a0d08) so base_dashboard's photo backdrop cannot bleed through.
+     The render's html/body used a multi-layer gradient INCLUDING a
+     transparent linear-gradient stop — re-rooting that verbatim would
+     leak the backdrop. Instead the opaque #1a0d08 is the base layer and
+     the two warm radial glows sit ON TOP as accents (both fade to
+     `transparent`, which is fine because the opaque color is underneath).
+     The candidate cards keep their translucent rgba() backgrounds — safe
+     ONLY because .ivt-page behind them is fully opaque. */
+  .ivt-page {
+    --ck-red: #C73B36;
+    --ck-red-deep: #9B2A26;
+    --ck-red-bright: #E85852;
+    --ck-gold: #E4B340;
+    --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F;
+    --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250, 246, 236, 0.82);
+    --ck-cream-faint: rgba(250, 246, 236, 0.55);
+    --ck-cream-meta: rgba(250, 246, 236, 0.4);
+    --ck-bg-deep: #1a0d08;
+    --ck-bg-warm: #28160e;
+    --ck-bg-card: rgba(40, 22, 14, 0.65);
+    --ck-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --ck-bg-input: rgba(0, 0, 0, 0.3);
+    --ck-border-subtle: rgba(217, 164, 54, 0.18);
+    --ck-border-active: rgba(228, 179, 64, 0.5);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+
+    /* Four stage colors */
+    --st-applied: #9A8FE0;
+    --st-first: #5BCAC5;
+    --st-second: #E4B340;
+    --st-hired: #95C75F;
+
+    position: relative;
+    isolation: isolate;
+    color: var(--ck-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    /* SOLID opaque base color first; warm radial glows layered on top as
+       accents (each fades to transparent against the opaque base). */
+    background-color: #1a0d08;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 16px;
+    margin: 0 0 48px;
+    padding: 4px 16px 40px;
+    overflow: hidden;
+  }
+
+  .ivt-page *, .ivt-page *::before, .ivt-page *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ivt-page button, .ivt-page input { font-family: inherit; }
+
+  /* Noise texture — re-rooted from body::before onto the page wrapper. */
+  .ivt-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.68 0 0 0 0 0.35 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+  .ivt-page > * { position: relative; z-index: 1; }
+
+  .ivt-page .layout {
+    position: relative;
+    z-index: 1;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* ===== HEADER ===== */
+  .ivt-page .ivt-header {
+    padding: 16px 0;
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .store-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ck-gold-bright);
+    background: rgba(228, 179, 64, 0.12);
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .ivt-page .ivt-header-note {
+    color: var(--ck-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ===== CONTROLS ===== */
+  .ivt-page .control-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .ivt-page .search-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    fill: var(--ck-cream-faint);
+    pointer-events: none;
+  }
+
+  .ivt-page .search-input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    height: 40px;
+  }
+
+  .ivt-page .search-input:focus { outline: none; border-color: var(--ck-gold); }
+  .ivt-page .search-input::placeholder { color: var(--ck-cream-faint); }
+
+  .ivt-page .ctrl-btn {
+    height: 40px;
+    padding: 0 14px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
+
+  .ivt-page .ctrl-btn:hover { border-color: var(--ck-border-active); color: var(--ck-gold-bright); }
+  .ivt-page .ctrl-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .ivt-page .ctrl-btn.primary {
+    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
+    border-color: var(--ck-red-bright);
+    color: var(--ck-cream);
+    box-shadow: 0 4px 12px rgba(199, 59, 54, 0.2);
+  }
+
+  .ivt-page .ctrl-btn.primary:hover { color: var(--ck-cream); }
+
+  /* ===== PIPELINE — 4 stages ===== */
+  .ivt-page .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 1000px) {
+    .ivt-page .pipeline {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      gap: 12px;
+    }
+    .ivt-page .stage-col { min-width: 280px; scroll-snap-align: start; }
+  }
+
+  .ivt-page .stage-col {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 700px;
+  }
+
+  .ivt-page .stage-header {
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ivt-page .stage-header::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--stage-color);
+    flex-shrink: 0;
+  }
+
+  .ivt-page .stage-col.applied { --stage-color: var(--st-applied); }
+  .ivt-page .stage-col.first { --stage-color: var(--st-first); }
+  .ivt-page .stage-col.second { --stage-color: var(--st-second); }
+  .ivt-page .stage-col.hired { --stage-color: var(--st-hired); }
+
+  .ivt-page .stage-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--stage-color);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    flex: 1;
+  }
+
+  .ivt-page .stage-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ck-cream);
+    background: rgba(0, 0, 0, 0.4);
+    padding: 3px 9px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .ivt-page .stage-body {
+    padding: 10px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Empty stage column */
+  .ivt-page .stage-empty {
+    border: 1px dashed var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 18px 12px;
+    color: var(--ck-cream-faint);
+    font-size: 12px;
+    font-style: italic;
+    text-align: center;
+  }
+
+  /* Candidate card */
+  .ivt-page .candidate-card {
+    display: block;
+    text-decoration: none;
+    background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .ivt-page .candidate-card:hover {
+    background: rgba(228, 179, 64, 0.06);
+    border-color: var(--ck-border-active);
+  }
+
+  .ivt-page .candidate-card.urgent {
+    border-color: rgba(232, 88, 82, 0.5);
+  }
+
+  .ivt-page .candidate-card.is-selected {
+    border-color: var(--ck-gold);
+    background: rgba(228, 179, 64, 0.08);
+  }
+
+  .ivt-page .cand-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .ivt-page .cand-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ck-bg-warm), var(--ck-bg-deep));
+    color: var(--ck-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border: 1px solid var(--ck-border-subtle);
+  }
+
+  .ivt-page .cand-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ck-cream);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .ivt-page .cand-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-dim);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-left: 40px;
+  }
+
+  .ivt-page .cand-meta {
+    margin-left: 40px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .cand-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .ivt-page .cand-tag.today {
+    background: rgba(232, 88, 82, 0.18);
+    color: var(--ck-red-bright);
+    font-weight: 700;
+  }
+
+  .ivt-page .cand-tag.scheduled {
+    background: rgba(228, 179, 64, 0.15);
+    color: var(--ck-gold);
+  }
+
+  .ivt-page .cand-tag.hired {
+    background: rgba(149, 199, 95, 0.18);
+    color: var(--st-hired);
+    font-weight: 700;
+  }
+
+  .ivt-page .cand-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-faint);
+  }
+
+  /* ===== DETAIL VIEW ===== */
+  .ivt-page .detail-section {
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-active);
+    border-radius: var(--radius-md);
+    margin-top: 24px;
+    overflow: hidden;
+  }
+
+  .ivt-page .detail-header {
+    padding: 22px;
+    background: linear-gradient(135deg, rgba(228, 179, 64, 0.1), rgba(199, 59, 54, 0.04));
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .detail-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ck-bg-warm), var(--ck-bg-deep));
+    color: var(--ck-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    font-weight: 700;
+    border: 2px solid var(--ck-border-active);
+    flex-shrink: 0;
+  }
+
+  .ivt-page .detail-info { flex: 1; min-width: 0; }
+
+  .ivt-page .detail-name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    color: var(--ck-cream);
+    line-height: 1.1;
+    margin-bottom: 6px;
+  }
+
+  .ivt-page .detail-name .accent {
+    font-style: italic;
+    color: var(--ck-gold-bright);
+  }
+
+  .ivt-page .detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ck-cream-dim);
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .ivt-page .detail-meta .sep {
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: var(--ck-cream-faint);
+  }
+
+  .ivt-page .detail-meta .role {
+    color: var(--ck-gold);
+    font-weight: 600;
+  }
+
+  .ivt-page .detail-stage-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(228, 179, 64, 0.12);
+    border: 0.5px solid var(--ck-gold);
+    color: var(--ck-gold-bright);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .ivt-page .detail-stage-row .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ck-gold);
+  }
+
+  .ivt-page .detail-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .detail-action-btn {
+    padding: 9px 14px;
+    background: var(--ck-bg-card);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ivt-page .detail-action-btn:hover { border-color: var(--ck-border-active); color: var(--ck-gold-bright); }
+  .ivt-page .detail-action-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .ivt-page .detail-action-btn.advance {
+    background: linear-gradient(135deg, var(--st-hired), #7eb840);
+    border-color: var(--st-hired);
+    color: var(--ck-bg-deep);
+    font-weight: 700;
+  }
+
+  .ivt-page .detail-action-btn.reject {
+    border-color: rgba(232, 88, 82, 0.4);
+    color: var(--ck-red-bright);
+  }
+
+  .ivt-page .detail-action-btn.reject:hover {
+    background: rgba(232, 88, 82, 0.1);
+    border-color: var(--ck-red-bright);
+  }
+
+  /* Body */
+  .ivt-page .detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 0;
+  }
+
+  @media (max-width: 900px) {
+    .ivt-page .detail-body { grid-template-columns: 1fr; }
+  }
+
+  .ivt-page .detail-col {
+    padding: 22px;
+    border-right: 0.5px solid var(--ck-border-subtle);
+  }
+
+  .ivt-page .detail-col:last-child { border-right: none; }
+
+  @media (max-width: 900px) {
+    .ivt-page .detail-col { border-right: none; border-bottom: 0.5px solid var(--ck-border-subtle); }
+    .ivt-page .detail-col:last-child { border-bottom: none; }
+  }
+
+  .ivt-page .detail-col-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-gold);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ivt-page .detail-col-title svg { width: 12px; height: 12px; fill: currentColor; }
+
+  /* Info grid */
+  .ivt-page .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 18px;
+    margin-bottom: 20px;
+  }
+
+  .ivt-page .info-row.full { grid-column: 1 / -1; }
+
+  .ivt-page .info-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ck-cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 4px;
+  }
+
+  .ivt-page .info-value {
+    font-size: 14px;
+    color: var(--ck-cream);
+    line-height: 1.4;
+  }
+
+  .ivt-page .info-value.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  /* Document chips */
+  .ivt-page .doc-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .doc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 6px;
+    color: var(--ck-cream);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .ivt-page .doc-chip:hover { border-color: var(--ck-gold); color: var(--ck-gold-bright); }
+  .ivt-page .doc-chip svg { width: 12px; height: 12px; fill: currentColor; }
+
+  .ivt-page .doc-empty {
+    color: var(--ck-cream-faint);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  /* ===== TIMELINE — 4 stages only ===== */
+  .ivt-page .timeline {
+    position: relative;
+    padding-left: 26px;
+  }
+
+  .ivt-page .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--ck-border-subtle);
+    border-radius: 1px;
+  }
+
+  .ivt-page .tl-entry {
+    position: relative;
+    padding-bottom: 16px;
+  }
+
+  .ivt-page .tl-entry:last-child { padding-bottom: 0; }
+
+  .ivt-page .tl-entry::before {
+    content: '';
+    position: absolute;
+    left: -23px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--tl-color, var(--ck-gold));
+    border: 2px solid var(--ck-bg-deep);
+    box-shadow: 0 0 0 1px var(--tl-color, var(--ck-gold));
+  }
+
+  .ivt-page .tl-entry.applied { --tl-color: var(--st-applied); }
+  .ivt-page .tl-entry.first { --tl-color: var(--st-first); }
+  .ivt-page .tl-entry.second { --tl-color: var(--st-second); }
+  .ivt-page .tl-entry.hired { --tl-color: var(--st-hired); }
+
+  .ivt-page .tl-entry.pending { opacity: 0.45; }
+
+  .ivt-page .tl-card {
+    background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+
+  .ivt-page .tl-entry.pending .tl-card { border-style: dashed; }
+
+  .ivt-page .tl-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .ivt-page .tl-stage {
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--tl-color, var(--ck-gold));
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    background: color-mix(in srgb, var(--tl-color, var(--ck-gold)) 14%, transparent);
+    border-radius: 4px;
+  }
+
+  .ivt-page .tl-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ck-cream-faint);
+    letter-spacing: 0.05em;
+    margin-left: auto;
+  }
+
+  .ivt-page .tl-author {
+    font-size: 11px;
+    color: var(--ck-cream-dim);
+    font-weight: 600;
+  }
+
+  .ivt-page .tl-body {
+    font-size: 13px;
+    color: var(--ck-cream);
+    line-height: 1.5;
+  }
+
+  .ivt-page .tl-entry.pending .tl-body {
+    font-style: italic;
+    color: var(--ck-cream-faint);
+  }
+
+  .ivt-page .tl-empty {
+    background: var(--ck-bg-input);
+    border: 1px dashed var(--ck-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    color: var(--ck-cream-faint);
+    font-size: 12px;
+    font-style: italic;
+    text-align: center;
+  }
+
+  /* Empty state — no candidates at all */
+  .ivt-page .ivt-empty {
+    background: var(--ck-bg-card);
+    border: 1px dashed var(--ck-border-subtle);
+    border-radius: var(--radius-md);
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--ck-cream-dim);
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 18px;
+  }
+</style>
+
+<div class="ivt-page">
+  <div class="layout">
+
+    {# ===== HEADER ===== base_dashboard's topbar carries the page title +
+       subtitle; this slim in-page header carries only the store badge. #}
+    <div class="ivt-header">
+      <div class="store-badge">{{ store_label }}</div>
+      <span class="ivt-header-note">Move candidates between stages, log interviews, attach resumes and notes. Locked history of who interviewed who and what was decided.</span>
+    </div>
+
+    {# ===== CONTROL BAR ===== #}
+    <div class="control-bar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"/></svg>
+        <input class="search-input" type="text" id="ivtSearch" placeholder="Search by name or position..." autocomplete="off">
+      </div>
+      <a class="ctrl-btn primary" href="{{ url_for('interview.candidate_new') }}">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+        Add candidate
+      </a>
+    </div>
+
+    {# ===== PIPELINE — 4 stages, looped over `stages` ===== #}
+    {% if stages %}
+    <div class="pipeline">
+      {% for stage in stages %}
+      <div class="stage-col {{ stage.key }}">
+        <div class="stage-header">
+          <div class="stage-title">{{ stage.label }}</div>
+          <div class="stage-count">{{ stage.candidates|length }}</div>
+        </div>
+        <div class="stage-body">
+          {% for candidate in stage.candidates %}
+          <a class="candidate-card{% if candidate.urgent %} urgent{% endif %}{% if selected_candidate and selected_candidate.id == candidate.id %} is-selected{% endif %}"
+             href="?candidate={{ candidate.id }}"
+             data-search="{{ (candidate.name ~ ' ' ~ candidate.role)|lower }}">
+            <div class="cand-top">
+              <div class="cand-avatar">{{ candidate.initials }}</div>
+              <div class="cand-name">{{ candidate.name }}</div>
+            </div>
+            <div class="cand-role">{{ candidate.role }} &middot; {{ candidate.store }}</div>
+            <div class="cand-meta">
+              {% if candidate.tag_kind and candidate.tag_kind != 'none' %}
+              <span class="cand-tag {{ candidate.tag_kind }}">{{ candidate.tag_label }}</span>
+              {% else %}
+              <span class="cand-time">{{ candidate.meta_label }}</span>
+              {% endif %}
+            </div>
+          </a>
+          {% else %}
+          <div class="stage-empty">No candidates in this stage.</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ivt-empty">No candidates in the pipeline yet — add the first.</div>
+    {% endif %}
+
+    {# ===== DETAIL VIEW — only when a candidate is selected ===== #}
+    {% if selected_candidate %}
+    {% set c = selected_candidate %}
+    <div class="detail-section" id="candidateDetail">
+
+      <div class="detail-header">
+        <div class="detail-avatar">{{ c.initials }}</div>
+        <div class="detail-info">
+          <div class="detail-name">{{ c.name }}</div>
+          <div class="detail-meta">
+            <span class="role">{{ c.role }}</span>
+            <span class="sep"></span>
+            <span>{{ c.store }}</span>
+            {% if c.phone %}
+            <span class="sep"></span>
+            <span>{{ c.phone }}</span>
+            {% endif %}
+            {% if c.email %}
+            <span class="sep"></span>
+            <span>{{ c.email }}</span>
+            {% endif %}
+          </div>
+          <div class="detail-stage-row">
+            <span class="dot"></span>
+            {{ c.stage_label }}
+          </div>
+        </div>
+        <div class="detail-actions">
+          <button class="detail-action-btn" type="button">
+            <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+            Reschedule
+          </button>
+          <button class="detail-action-btn" type="button">
+            <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+            Call
+          </button>
+          <button class="detail-action-btn advance" type="button">
+            <svg viewBox="0 0 24 24"><path d="M10.59 16.59 12 18l6-6-6-6-1.41 1.41L14.17 11H4v2h10.17z"/></svg>
+            Advance stage
+          </button>
+          <button class="detail-action-btn reject" type="button">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            Reject
+          </button>
+        </div>
+      </div>
+
+      <div class="detail-body">
+
+        {# LEFT: Candidate details #}
+        <div class="detail-col">
+          <div class="detail-col-title">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            Candidate details
+          </div>
+
+          <div class="info-grid">
+            <div>
+              <div class="info-label">Source</div>
+              <div class="info-value">{{ c.source|default('—') }}</div>
+            </div>
+            <div>
+              <div class="info-label">Applied</div>
+              <div class="info-value">{{ c.applied_label|default('—') }}</div>
+            </div>
+            <div>
+              <div class="info-label">Position</div>
+              <div class="info-value">{{ c.position|default('—') }}</div>
+            </div>
+            <div>
+              <div class="info-label">Desired wage</div>
+              <div class="info-value mono">{{ c.desired_wage|default('—') }}</div>
+            </div>
+            <div class="info-row full">
+              <div class="info-label">Availability</div>
+              <div class="info-value">{{ c.availability|default('—') }}</div>
+            </div>
+            <div class="info-row full">
+              <div class="info-label">Previous experience</div>
+              <div class="info-value">{{ c.experience|default('—') }}</div>
+            </div>
+            <div class="info-row full">
+              <div class="info-label">Referred by</div>
+              <div class="info-value">{{ c.referred_by|default('—') }}</div>
+            </div>
+          </div>
+
+          <div class="detail-col-title">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+            Documents
+          </div>
+          <div class="doc-row">
+            {% for doc in c.documents %}
+            <a class="doc-chip" href="{{ doc.url }}">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+              {{ doc.label }}
+            </a>
+            {% else %}
+            <span class="doc-empty">No documents on file.</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# RIGHT: Interview history — looped over `selected_candidate.timeline` #}
+        <div class="detail-col">
+          <div class="detail-col-title">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
+            Interview history
+          </div>
+
+          {% if c.timeline %}
+          <div class="timeline">
+            {% for tl in c.timeline %}
+            <div class="tl-entry {{ tl.stage_key }}{% if tl.pending %} pending{% endif %}">
+              <div class="tl-card">
+                <div class="tl-top">
+                  <span class="tl-stage">{{ tl.stage_label }}</span>
+                  {% if tl.author %}
+                  <span class="tl-author">{{ tl.author }}</span>
+                  {% endif %}
+                  <span class="tl-time">{{ tl.time_label }}</span>
+                </div>
+                <div class="tl-body">{{ tl.body }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="tl-empty">No interview history logged yet.</div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  'use strict';
+
+  // ---- Client-side search filter ----
+  // Shows/hides .candidate-card elements by matching the typed text
+  // against each card's data-search attribute (name + role, lowercased).
+  var search = document.getElementById('ivtSearch');
+  if (search) {
+    var cards = document.querySelectorAll('.ivt-page .candidate-card');
+    search.addEventListener('input', function(e) {
+      var q = e.target.value.trim().toLowerCase();
+      cards.forEach(function(card) {
+        var hay = card.getAttribute('data-search') || '';
+        card.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

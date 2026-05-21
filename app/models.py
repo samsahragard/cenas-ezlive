@@ -2543,6 +2543,42 @@ class PrepEntry(Base):
 
 
 # ============================================================
+# INTERVIEW TRACKER — candidate hiring pipeline (Sam #5:48, dck
+# render + aick build). NEW feature, not the older text-shell
+# InterviewSurface manager page. One Candidate row per applicant;
+# `stage` walks the 4-stage pipeline applied -> first -> second ->
+# hired. Source fields only — the route derives all display fields
+# (initials, meta/tag labels, timeline) so the model stays a clean
+# record of the candidate, not the rendering.
+# ============================================================
+class Candidate(Base):
+    """An applicant in the Interview Tracker pipeline. stage is the
+    pipeline position: applied | first | second | hired."""
+    __tablename__ = "interview_candidates"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    role: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    store: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # applied | first | second | hired
+    stage: Mapped[str] = mapped_column(String(16), nullable=False, default="applied")
+    source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    desired_wage: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    availability: Mapped[str | None] = mapped_column(Text, nullable=True)
+    experience: Mapped[str | None] = mapped_column(Text, nullable=True)
+    referred_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    urgent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+# ============================================================
 # RECIPES — Sam /sam/chat #1130-#1133 attached 14 PDFs; spec at
 # cena #1209 / Sam dev #3074. Single table; batch sizes + ingredients
 # stored as JSON for flexibility.

@@ -3443,6 +3443,16 @@ def _sched_role_group(role_title):
     return "floor"
 
 
+# Front-of-house vs back-of-house, derived from the colour group — used
+# to section the grid when the source (Toast) gives only a job title,
+# not an explicit FOH/BOH flag.
+_SCHED_FOH_GROUPS = {"mgmt", "floor", "bar", "special"}
+
+
+def _sched_section_for_group(group):
+    return "foh" if group in _SCHED_FOH_GROUPS else "boh"
+
+
 def _sched_week_start(d):
     """Monday of the week containing date `d`."""
     return d - timedelta(days=d.weekday())
@@ -3474,13 +3484,15 @@ def _sched_minutes(start, end):
 
 @store_bp.route("/schedule/weekly")
 def weekly_schedule():
-    """Weekly Schedule — a 7-day (Mon..Sun) grid of AttendanceShift rows
-    grouped by teammate. ?date=<iso> picks any day in the target week
+    """Weekly Schedule — a 7-day (Mon..Sun) grid of who worked which
+    days, sourced live from Toast (the same Toast labor API behind the
+    Attendance board). ?date=<iso> picks any day in the target week
     (default: the current week). Manager-tier audience gate, expo +
-    drivers excluded — same gate as the other manager pages."""
+    drivers excluded — same gate as the other manager pages. If Toast
+    is unreachable the grid falls back to manually-logged
+    AttendanceShift rows + a notice, so it is never blank."""
     if not _manager_role_ok():
         abort(403)
-    from app.models import AttendanceShift
 
     raw = request.args.get("date") or ""
     try:
@@ -3491,19 +3503,6 @@ def weekly_schedule():
     week_end = week_start + timedelta(days=6)
     today = date.today()
     loc = g.current_location
-
-    db = next(get_db())
-    try:
-        q = db.query(AttendanceShift).filter(
-            AttendanceShift.entry_date >= week_start,
-            AttendanceShift.entry_date <= week_end,
-        )
-        if loc in ("tomball", "copperfield"):
-            q = q.filter((AttendanceShift.store_scope == loc) |
-                         (AttendanceShift.store_scope.is_(None)))
-        shifts = q.all()
-    finally:
-        db.close()
 
     # The 7 day columns.
     days = []
@@ -3517,51 +3516,121 @@ def weekly_schedule():
             "is_today": d == today,
             "index": i,
         })
+    days_by_iso = {d["iso"]: d for d in days}
 
-    # Group shifts by teammate. Each teammate row carries a 7-slot
-    # `cells` list aligned to `days` (None = day off / not scheduled).
+    # Each teammate row carries a 7-slot `cells` list aligned to `days`
+    # (None = day off / not worked).
     emp = {}
-    for s in shifts:
-        name = (s.employee_name or "").strip()
-        if not name:
-            continue
-        rec = emp.get(name)
-        if rec is None:
-            rec = emp[name] = {
-                "name": name,
-                "section": (s.section or "boh").lower(),
-                "role_title": s.role_title or "Team member",
-                "group": _sched_role_group(s.role_title),
-                "cells": [None] * 7,
-                "total_minutes": 0,
-                "shift_count": 0,
+    schedule_notice = None
+
+    # Primary source: live Toast clock data for the week.
+    try:
+        from app.services.toast_reports import weekly_schedule_status
+        tloc = loc if loc in ("tomball", "copperfield") else None
+        for t in weekly_schedule_status(week_start, location_filter=tloc):
+            name = (t.get("name") or "").strip()
+            if not name:
+                continue
+            group = _sched_role_group(t.get("job_title"))
+            rec = emp.get(name)
+            if rec is None:
+                rec = emp[name] = {
+                    "name": name,
+                    "section": _sched_section_for_group(group),
+                    "role_title": t.get("job_title") or "Team member",
+                    "group": group,
+                    "cells": [None] * 7,
+                    "total_minutes": 0,
+                    "shift_count": 0,
+                }
+            for diso, dd in (t.get("days") or {}).items():
+                col = days_by_iso.get(diso)
+                if col is None:
+                    continue
+                idx = col["index"]
+                if rec["cells"][idx] is not None:
+                    continue  # same teammate at 2 locations — keep first
+                start_s = _sched_fmt_time(dd.get("clock_in"))
+                end_s = _sched_fmt_time(dd.get("clock_out"))
+                mins = dd.get("minutes") or 0
+                hh, mm = mins // 60, mins % 60
+                rec["cells"][idx] = {
+                    "start": start_s,
+                    "end": end_s,
+                    "range": (f"{start_s} — {end_s}" if (start_s and end_s)
+                              else (start_s or end_s
+                                    or ("On the clock"
+                                        if dd.get("status") == "open"
+                                        else "Worked"))),
+                    "hours": ((f"{hh}h" if mm == 0 else f"{hh}h {mm}m")
+                              if mins else None),
+                    "role": rec["role_title"],
+                    "group": rec["group"],
+                    "status": dd.get("status") or "worked",
+                    "note": None,
+                }
+                rec["total_minutes"] += mins
+                rec["shift_count"] += 1
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            "weekly_schedule: Toast unavailable, falling back to "
+            "manually-logged shifts: %s", ex)
+        schedule_notice = ("Live Toast clock data is unavailable right now "
+                           "— showing manually logged shifts only.")
+        emp = {}
+        from app.models import AttendanceShift
+        db = next(get_db())
+        try:
+            q = db.query(AttendanceShift).filter(
+                AttendanceShift.entry_date >= week_start,
+                AttendanceShift.entry_date <= week_end,
+            )
+            if loc in ("tomball", "copperfield"):
+                q = q.filter((AttendanceShift.store_scope == loc) |
+                             (AttendanceShift.store_scope.is_(None)))
+            shifts = q.all()
+        finally:
+            db.close()
+        for s in shifts:
+            name = (s.employee_name or "").strip()
+            if not name:
+                continue
+            rec = emp.get(name)
+            if rec is None:
+                rec = emp[name] = {
+                    "name": name,
+                    "section": (s.section or "boh").lower(),
+                    "role_title": s.role_title or "Team member",
+                    "group": _sched_role_group(s.role_title),
+                    "cells": [None] * 7,
+                    "total_minutes": 0,
+                    "shift_count": 0,
+                }
+            idx = (s.entry_date - week_start).days
+            if not (0 <= idx <= 6):
+                continue
+            start_s = _sched_fmt_time(s.scheduled_start)
+            end_s = _sched_fmt_time(s.scheduled_end)
+            mins = _sched_minutes(s.scheduled_start, s.scheduled_end)
+            rec["cells"][idx] = {
+                "start": start_s,
+                "end": end_s,
+                "range": (f"{start_s} — {end_s}" if (start_s and end_s)
+                          else (start_s or end_s or "Shift")),
+                "hours": _sched_shift_hours(s.scheduled_start,
+                                            s.scheduled_end),
+                "role": s.role_title or rec["role_title"],
+                "group": _sched_role_group(s.role_title) or rec["group"],
+                "status": s.status,
+                "note": s.note,
             }
-        idx = (s.entry_date - week_start).days
-        if not (0 <= idx <= 6):
-            continue
-        start_s = _sched_fmt_time(s.scheduled_start)
-        end_s = _sched_fmt_time(s.scheduled_end)
-        mins = _sched_minutes(s.scheduled_start, s.scheduled_end)
-        rec["cells"][idx] = {
-            "start": start_s,
-            "end": end_s,
-            "range": (f"{start_s} — {end_s}" if (start_s and end_s)
-                      else (start_s or end_s or "Shift")),
-            "hours": _sched_shift_hours(s.scheduled_start,
-                                        s.scheduled_end),
-            "role": s.role_title or rec["role_title"],
-            "group": _sched_role_group(s.role_title) or rec["group"],
-            "status": s.status,
-            "note": s.note,
-        }
-        rec["total_minutes"] += mins
-        rec["shift_count"] += 1
-        # A later row's non-default role/section refines the row label.
-        if s.role_title:
-            rec["role_title"] = s.role_title
-            rec["group"] = _sched_role_group(s.role_title)
-        if s.section:
-            rec["section"] = s.section.lower()
+            rec["total_minutes"] += mins
+            rec["shift_count"] += 1
+            if s.role_title:
+                rec["role_title"] = s.role_title
+                rec["group"] = _sched_role_group(s.role_title)
+            if s.section:
+                rec["section"] = s.section.lower()
 
     # Per-teammate hour totals + sort: section (FOH first), then role
     # group, then name — so the grid reads grouped like the rendering.
@@ -3607,6 +3676,7 @@ def weekly_schedule():
         days=days,
         employees=employees,
         kpis=kpis,
+        schedule_notice=schedule_notice,
         week_start=week_start.isoformat(),
         week_end=week_end.isoformat(),
         week_label=f"{week_start:%b} {week_start.day} — {week_end:%b} {week_end.day}, {week_end.year}",

@@ -765,6 +765,14 @@
     <p class="sk-subtitle">Every teammate's shifts for the week, grouped by side of house and role. Use the arrows to step between weeks.</p>
   </div>
 
+  {# Toast-unavailable notice — shown only when the live Toast clock
+     feed failed and the grid fell back to manually-logged shifts. #}
+  {% if schedule_notice %}
+  <div style="margin:0 0 14px;padding:11px 14px;border-radius:10px;background:rgba(232,155,64,0.12);border:0.5px solid rgba(232,155,64,0.4);color:#FAF6EC;font-size:13px;line-height:1.5;">
+    {{ schedule_notice }}
+  </div>
+  {% endif %}
+
   {# ===== CONTROL BAR — week navigation ===== #}
   <div class="sk-control-bar">
     <div class="sk-week-nav">
@@ -886,7 +894,7 @@
         <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
       </div>
       <div class="sk-empty-title">No shifts scheduled this week</div>
-      <div class="sk-empty-text">Shifts logged on the Attendance Tracking board for {{ week_short }} will appear here, grouped by teammate.</div>
+      <div class="sk-empty-text">Worked shifts for {{ week_short }} appear here, grouped by teammate — pulled live from Toast clock-ins.</div>
     </div>
     {% endif %}
   </div>

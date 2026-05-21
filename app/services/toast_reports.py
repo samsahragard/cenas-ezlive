@@ -850,3 +850,102 @@ def attendance_clock_status(day, location_filter=None, refresh=False):
                         "on_clock": status == "clocked-in"})
             out.append(rec)
     return out
+
+
+def weekly_schedule_status(week_start, location_filter=None, refresh=False):
+    """Per-employee Toast clock data across the Mon..Sun week starting
+    `week_start` (a date). Powers the Weekly Schedule grid.
+
+    Built on the same Toast labor API as attendance_clock_status, but
+    ranged over a whole week in one fetch_time_entries call per
+    location (fetch_time_entries already accepts an inclusive range).
+
+    Returns one dict per Toast employee at the resolved location(s):
+        name        -> "First Last"
+        first, last -> name parts
+        job_title   -> primary job title (or "")
+        location    -> 'tomball' | 'copperfield'
+        days        -> { 'YYYY-MM-DD': {clock_in, clock_out, minutes,
+                                        status} }
+                       status: 'open' (still on the clock) | 'worked'.
+                       Days with no punch are simply absent from the map.
+
+    Raises ValueError when Toast credentials are not configured, so the
+    caller can catch it and fall back to manually-logged shifts.
+    """
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+    week_end = week_start + timedelta(days=6)
+    start = datetime(week_start.year, week_start.month, week_start.day)
+    end = datetime(week_end.year, week_end.month, week_end.day)
+
+    def _local(dt):
+        # Toast inDate/outDate are tz-aware; normalize to naive CDT.
+        return dt.astimezone(TZ).replace(tzinfo=None) if dt else None
+
+    out: list = []
+    for loc, rg in locations.items():
+        job_title = {}
+        for j in client.fetch_jobs(loc, rg, refresh=refresh):
+            job_title[j.get("guid")] = (j.get("title") or "").strip()
+
+        emps = {}
+        for e in client.fetch_employees(loc, rg, refresh=refresh):
+            if e.get("deleted"):
+                continue
+            first = (e.get("firstName") or "").strip()
+            last = (e.get("lastName") or "").strip()
+            full = " ".join(filter(None, [first, last])).strip() \
+                or e.get("email") or (e.get("guid") or "?")[:8]
+            title = ""
+            for jr in (e.get("jobReferences") or []):
+                t = job_title.get(jr.get("guid"))
+                if t:
+                    title = t
+                    break
+            emps[e.get("guid")] = {
+                "first": first, "last": last, "name": full,
+                "job_title": title, "location": loc,
+            }
+
+        # Collapse the week's time entries per employee per calendar day.
+        # day_punch: employee_guid -> { iso_date -> {in, out, open} }
+        day_punch: dict = {}
+        for te in client.fetch_time_entries(loc, rg, start, end, refresh=refresh):
+            if te.get("deleted"):
+                continue
+            eg = (te.get("employeeReference") or {}).get("guid")
+            if not eg:
+                continue
+            in_dt = _local(_parse_iso(te.get("inDate")))
+            out_dt = _local(_parse_iso(te.get("outDate")))
+            anchor = in_dt or out_dt
+            if not anchor:
+                continue
+            diso = anchor.date().isoformat()
+            d = day_punch.setdefault(eg, {}).setdefault(
+                diso, {"in": None, "out": None, "open": False})
+            if in_dt and (d["in"] is None or in_dt < d["in"]):
+                d["in"] = in_dt
+            if in_dt and out_dt is None:
+                d["open"] = True
+            if out_dt and (d["out"] is None or out_dt > d["out"]):
+                d["out"] = out_dt
+
+        for eg, meta in emps.items():
+            days = {}
+            for diso, p in (day_punch.get(eg) or {}).items():
+                if p["in"] is None and p["out"] is None:
+                    continue
+                mins = 0
+                if p["in"] and p["out"] and p["out"] > p["in"]:
+                    mins = int((p["out"] - p["in"]).total_seconds() // 60)
+                days[diso] = {
+                    "clock_in": p["in"], "clock_out": p["out"],
+                    "minutes": mins,
+                    "status": "open" if p["open"] else "worked",
+                }
+            rec = dict(meta)
+            rec["days"] = days
+            out.append(rec)
+    return out

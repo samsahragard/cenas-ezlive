@@ -1,230 +1,445 @@
+{# ============================================================
+   orders_by_store.html — Ez Cater "All Orders" (production)
+   samai v3 redesign per Sam's owner-approved screenshot
+   (sam_ezcater_ref.png): phone-width card board replacing the
+   old od-page table. TEMPLATE-ONLY change — the route contract
+   is untouched.
+
+   ROUTE CONTRACT (orders_browse.location_orders /
+   store_routes.orders_list):
+     location        -> "both" or a store-location slug
+     location_label  -> e.g. "All Orders"
+     groups          -> list of day groups; each grp has
+                        grp.display ("Wed, May 20"),
+                        grp.date (iso str), grp.orders (list[Order])
+     display_drivers -> dict {order.id: dispatch-letter}
+   Each o in grp.orders is an Order model row (app/models.py):
+     o.external_order_id, o.deliver_at, o.client,
+     o.delivery_address, o.origin_store_id, o.ezcater_driver_name,
+     o.id, o.assigned_driver.
+
+   The "Unhook driver" button keeps the exact endpoint + data
+   attributes of the prior template — POSTs to
+   /<scope>/orders/view/<order>/unassign-courier. Same auth gate,
+   same effect. The per-day "combined view" link still points at
+   /orders/<location>/<grp.date>.
+   ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'ezcater_orders' %}
 {% block title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %} — Cenas Kitchen{% endblock %}
 
-{# Inline hero header inside the content block — matches the orders_dashboard_v1
-   rendering (Sam #10:04). #}
+{# Inline hero header inside the content block — the route renders
+   this page without the base page-title chrome (Sam #10:04). #}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
 {% block content %}
 <style>
-  /* Orders dashboard v2 — converted from samples/orders_dashboard_v1.html
-     (Sam #10:04: "needs to look exactly like this"). Scoped under .od-page
-     so the page palette + table chrome don't leak into base_dashboard. */
-  .od-page {
-    --od-bg-deep: #1f1a12;
-    --od-bg-pane: #2a2419;
-    --od-gold: #d4af37;
-    --od-cream: #ece3d0;
-    --od-cream-dim: rgba(236,227,208,0.72);
-    --od-cream-faint: rgba(236,227,208,0.45);
-    --od-border: rgba(236,227,208,0.15);
-    --od-glass: rgba(236,227,208,0.05);
-    --od-radius: 12px;
-    color: var(--od-cream);
+  /* Every custom property + class scoped under .ezo-page so the v3
+     warm palette never leaks into the global sheet (atr-/dml- pattern).
+     Tokens are identical to attendance_tracking.html's .atr-page. */
+  .ezo-page {
+    --gold: #E4B340; --gold-bright: #FFD970;
+    --cream: #FAF6EC;
+    --cream-dim: rgba(250,246,236,0.82);
+    --cream-faint: rgba(250,246,236,0.52);
+    --cream-meta: rgba(250,246,236,0.40);
+    --red: #C73B36; --red-bright: #E85852;
+    --bg-deep: #1a0d08; --bg-warm: #28160e;
+    --surface: #241409; --surface-2: #2e1a0d; --surface-hover: #34200f;
+    --border: rgba(217,164,54,0.18); --border-active: rgba(228,179,64,0.5);
+    --teal-bright: #5BCAC5;
+    --radius: 12px;
     font-family: 'Manrope', system-ui, sans-serif;
-    font-size: 14px;
-    line-height: 1.45;
-    padding-bottom: 60px;
-    position: relative;
-    z-index: 1;
-    min-height: 100vh;
+    color: var(--cream);
+    /* opaque surface — the base_dashboard restaurant photo never
+       bleeds through page content (same pattern attendance uses) */
+    background: #1f1308;
+    border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px 18px 30px; margin-bottom: 40px;
   }
-  /* Scoped solid background — same contained-card pattern attendance uses
-     (dck spec). overflow:hidden so the ::before bg respects the rounded
-     corners. */
-  .od-page::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--od-bg-deep);
-    z-index: 0;
-    pointer-events: none;
+  .ezo-page * { box-sizing: border-box; }
+
+  /* ---- top strip: location pill + LIVE badge ---- */
+  .ezo-page .ezo-topstrip {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
   }
-  .od-page > * { position: relative; z-index: 1; }
-
-  .od-h1 { font-size: 26px; font-weight: 600; margin: 0 0 4px; letter-spacing: .01em; }
-  .od-sub { color: var(--od-cream-faint); font-size: 13px; margin: 0 0 22px; }
-
-  .od-actions { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
-  .od-btn {
-    background: var(--od-glass); border: 1px solid var(--od-border);
-    color: var(--od-cream); padding: 8px 14px; border-radius: 8px;
-    font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block;
-    font-family: inherit;
+  .ezo-page .ezo-loc {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--gold-bright); background: rgba(228,179,64,0.12);
+    padding: 6px 12px; border-radius: 999px; letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
-  .od-btn:hover { border-color: var(--od-gold); }
-
-  .od-day {
-    font-size: 13px; font-weight: 600; color: var(--od-gold);
-    letter-spacing: .06em; text-transform: uppercase; margin: 26px 0 8px;
+  .ezo-page .ezo-spacer { flex: 1; }
+  .ezo-page .ezo-live {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-weight: 700; color: #95C75F;
+    background: rgba(149,199,95,0.12);
+    border: 0.5px solid rgba(149,199,95,0.32);
+    padding: 5px 10px; border-radius: 999px; letter-spacing: 0.1em;
   }
-  .od-day .od-count { color: var(--od-cream-faint); font-weight: 400; margin-left: 6px; }
-
-  table.od-table {
-    width: 100%; border-collapse: collapse; background: var(--od-bg-pane);
-    border: 1px solid var(--od-border); border-radius: var(--od-radius); overflow: hidden;
+  .ezo-page .ezo-live .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #95C75F; box-shadow: 0 0 6px 1px rgba(149,199,95,0.7);
   }
-  .od-table th {
-    text-align: left; padding: 11px 12px; font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .05em; color: var(--od-cream-faint);
-    border-bottom: 1px solid var(--od-border); background: rgba(0,0,0,.22);
+
+  /* ---- title + subtitle ---- */
+  .ezo-page .ezo-h1 {
+    font-family: 'Instrument Serif', serif; font-size: 38px;
+    line-height: 1.05; font-weight: 400; margin: 0 0 6px;
   }
-  .od-table td { padding: 12px; border-bottom: 1px solid rgba(236,227,208,0.07); }
-  .od-table tbody tr:last-child td { border-bottom: 0; }
-  .od-num { font-weight: 600; color: var(--od-gold); font-variant-numeric: tabular-nums; }
-
-  /* Order rows show hand cursor + hover highlight, so they read as clickable. */
-  .od-row { cursor: pointer; transition: background .12s ease; }
-  .od-row:hover { background: var(--od-glass); }
-
-  /* "Unhook driver" — live, connected red button. */
-  .od-unhook {
-    cursor: pointer; background: rgba(220,38,38,0.30);
-    border: 1px solid rgba(239,68,68,0.55); color: #fecaca;
-    padding: 5px 12px; font-size: 12px; font-weight: 600;
-    border-radius: 6px; white-space: nowrap; transition: all .12s ease;
-    font-family: inherit;
+  .ezo-page .ezo-h1 .a { color: var(--cream); font-style: normal; }
+  .ezo-page .ezo-h1 .b { color: var(--gold); font-style: italic; }
+  .ezo-page .ezo-sub {
+    color: var(--cream-faint); font-size: 13px; margin: 0 0 18px;
   }
-  .od-unhook:hover { background: rgba(220,38,38,0.5); color: #fff; border-color: #ef4444; }
-  .od-muted { color: var(--od-cream-faint); }
 
-  /* Glowing "combined view" row. */
-  .od-combined { cursor: pointer; }
-  .od-combined td {
+  /* ---- tab row ---- */
+  .ezo-page .ezo-tabs {
+    display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .ezo-page .ezo-tab {
+    padding: 9px 16px; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: 999px;
+    color: var(--cream-dim); font-family: 'Manrope', sans-serif;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    text-decoration: none; letter-spacing: 0.03em;
+    transition: all .15s; white-space: nowrap;
+  }
+  .ezo-page .ezo-tab:hover { border-color: var(--border-active); color: var(--cream); }
+  .ezo-page .ezo-tab.active {
+    background: var(--gold); border-color: var(--gold); color: #2a1607;
+  }
+
+  /* ---- action buttons (outlined gold pills) ---- */
+  .ezo-page .ezo-actions {
+    display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .ezo-page .ezo-act {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 15px; background: rgba(228,179,64,0.06);
+    border: 1px solid var(--border-active); border-radius: 999px;
+    color: var(--gold-bright); font-family: 'Manrope', sans-serif;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    text-decoration: none; transition: all .15s; white-space: nowrap;
+  }
+  .ezo-page .ezo-act:hover { background: rgba(228,179,64,0.14); }
+  .ezo-page .ezo-act .ic { font-size: 13px; }
+
+  /* ---- week day-strip ---- */
+  .ezo-page .ezo-week {
+    display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px;
+    margin-bottom: 20px; -webkit-overflow-scrolling: touch;
+  }
+  .ezo-page .ezo-day {
+    flex: 1 0 auto; min-width: 46px; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: 10px;
+    padding: 8px 6px 9px; text-align: center; cursor: pointer;
+    transition: all .14s; color: var(--cream-dim);
+  }
+  .ezo-page .ezo-day:hover { border-color: var(--border-active); }
+  .ezo-page .ezo-day .dw {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--cream-meta);
+  }
+  .ezo-page .ezo-day .dn {
+    font-family: 'Instrument Serif', serif; font-size: 22px;
+    line-height: 1.1; margin-top: 2px; color: var(--cream);
+  }
+  .ezo-page .ezo-day.active {
+    background: var(--gold); border-color: var(--gold);
+  }
+  .ezo-page .ezo-day.active .dw { color: rgba(42,22,7,0.7); }
+  .ezo-page .ezo-day.active .dn { color: #2a1607; }
+
+  /* ---- day section header ---- */
+  .ezo-page .ezo-dayhead {
+    font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 800;
+    color: var(--gold); letter-spacing: 0.02em;
+    margin: 26px 0 11px; scroll-margin-top: 14px;
+  }
+  .ezo-page .ezo-dayhead:first-of-type { margin-top: 4px; }
+  .ezo-page .ezo-dayhead .ct {
+    color: var(--cream-faint); font-weight: 500; margin-left: 4px;
+  }
+
+  /* ---- order cards ---- */
+  .ezo-page .ezo-list { display: flex; flex-direction: column; gap: 9px; }
+  .ezo-page .ezo-card {
+    position: relative; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: var(--radius);
+    border-left: 3px solid var(--cc, var(--gold));
+    padding: 13px 14px 12px; transition: border-color .14s, background .14s;
+  }
+  .ezo-page .ezo-card:hover {
+    background: var(--surface-hover); border-color: var(--border-active);
+  }
+  .ezo-page .ezo-card.c-assigned { --cc: var(--teal-bright); }
+  .ezo-page .ezo-card.c-needs    { --cc: var(--red-bright); }
+
+  .ezo-page .ezo-cardtop {
+    display: flex; justify-content: space-between;
+    align-items: flex-start; gap: 10px;
+  }
+  .ezo-page .ezo-time {
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 26px; line-height: 1; color: var(--tc, var(--gold-bright));
+  }
+  .ezo-page .ezo-card.c-assigned .ezo-time { --tc: var(--teal-bright); }
+  .ezo-page .ezo-card.c-needs    .ezo-time { --tc: var(--gold-bright); }
+  .ezo-page .ezo-badge {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    font-weight: 700; padding: 4px 9px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .ezo-page .b-assigned {
+    background: rgba(91,202,197,0.16); color: var(--teal-bright);
+  }
+  .ezo-page .b-needs {
+    background: rgba(232,88,82,0.18); color: var(--red-bright);
+  }
+  .ezo-page .ezo-code {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--cream-meta); letter-spacing: 0.04em; margin-top: 5px;
+  }
+  .ezo-page .ezo-client {
+    font-size: 15px; font-weight: 700; color: var(--cream);
+    margin-top: 3px;
+  }
+  .ezo-page .ezo-addr {
+    font-size: 12px; color: var(--cream-faint); margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  .ezo-page .ezo-cardbot {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 11px; padding-top: 10px;
+    border-top: 0.5px solid rgba(250,246,236,0.07); flex-wrap: wrap;
+  }
+  .ezo-page .ezo-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-weight: 600; padding: 4px 9px; border-radius: 7px;
+    background: rgba(0,0,0,0.32); color: var(--cream-dim);
+    white-space: nowrap;
+  }
+  .ezo-page .ezo-chip.driver { color: var(--gold-bright); }
+  .ezo-page .ezo-chip.nodriver { color: var(--red-bright); }
+  .ezo-page .ezo-botspacer { flex: 1; }
+  /* "Unhook driver" — live red action, restyled to fit the card */
+  .ezo-page .ezo-unhook {
+    cursor: pointer; background: rgba(199,59,54,0.16);
+    border: 0.5px solid rgba(232,88,82,0.45); color: var(--red-bright);
+    padding: 5px 11px; font-family: 'Manrope', sans-serif;
+    font-size: 11px; font-weight: 700; border-radius: 8px;
+    white-space: nowrap; transition: all .14s;
+  }
+  .ezo-page .ezo-unhook:hover {
+    background: rgba(199,59,54,0.32); color: #fff; border-color: var(--red-bright);
+  }
+  .ezo-page .ezo-unhook:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ---- combined-view link per day ---- */
+  .ezo-page .ezo-combined {
+    display: block; margin-top: 10px; padding: 11px 12px;
+    text-align: center; text-decoration: none; border-radius: 10px;
+    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 800;
+    letter-spacing: 0.05em; text-transform: uppercase;
     background: linear-gradient(180deg, #f6cb45 0%, #e3a008 100%);
-    color: #ffffff; font-weight: 700; text-align: center;
-    letter-spacing: .05em; text-transform: uppercase; font-size: 13px;
-    padding: 13px 12px; border-bottom: 0;
-    text-shadow: 0 1px 2px rgba(0,0,0,.4);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.25),
-                0 0 16px 2px rgba(246,203,69,.55);
-    animation: od-glow 2.4s ease-in-out infinite;
+    color: #2a1607; box-shadow: 0 0 14px 1px rgba(246,203,69,0.4);
+    transition: filter .14s;
   }
-  @keyframes od-glow {
-    0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 0 14px 1px rgba(246,203,69,.45); }
-    50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 0 26px 5px rgba(246,203,69,.85); }
-  }
-  .od-combined:hover td { filter: brightness(1.06); }
+  .ezo-page .ezo-combined:hover { filter: brightness(1.06); }
 
-  /* Phone (≤720px): restack the 9-column table into labelled cards so it
-     stops being a desktop table squeezed onto a phone. dck #8:05 phone
-     pattern, preserved from the prior orders template. */
-  @media (max-width: 720px) {
-    .od-h1 { font-size: 22px; }
-    .od-table thead { display: none; }
-    .od-table,
-    .od-table tbody,
-    .od-table tr,
-    .od-table td { display: block; width: 100%; }
-    .od-table tbody tr.od-row {
-      background: var(--od-bg-pane);
-      border: 1px solid var(--od-border);
-      border-radius: var(--od-radius);
-      margin-bottom: 10px;
-      padding: 6px 12px;
-    }
-    .od-table tbody tr.od-row td {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      border: 0;
-      padding: 7px 0;
-      text-align: right;
-    }
-    .od-table tbody tr.od-row td::before {
-      content: attr(data-label);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: var(--od-cream-faint);
-      text-align: left;
-    }
-    .od-table tr.od-combined td { justify-content: center; text-align: center; }
-    .od-table tr.od-combined td::before { display: none; }
-    .od-table tr.od-combined { margin-bottom: 14px; }
+  /* ---- empty state ---- */
+  .ezo-page .ezo-empty {
+    text-align: center; padding: 44px 22px; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: var(--radius);
+  }
+  .ezo-page .ezo-empty p {
+    font-size: 14px; color: var(--cream-dim); margin: 0 0 14px;
+  }
+
+  @media (max-width: 460px) {
+    .ezo-page { padding: 14px 12px 24px; }
+    .ezo-page .ezo-h1 { font-size: 32px; }
+    .ezo-page .ezo-tab,
+    .ezo-page .ezo-act { flex: 1 0 auto; justify-content: center; }
   }
 </style>
 
-<div class="od-page">
-  <h1 class="od-h1">{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %}</h1>
-  <p class="od-sub">{{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries · today and upcoming</p>
+<div class="ezo-page">
 
-  <div class="od-actions">
-    <a class="od-btn" href="/orders">Manually Processed PDF</a>
-    <a class="od-btn" href="/{{ g.current_store or 'partner' }}/drivers-live">Drivers Live</a>
+  {# ---- top strip ---- #}
+  <div class="ezo-topstrip">
+    <span class="ezo-loc">{{ location_label or 'All Orders' }}</span>
+    <span class="ezo-spacer"></span>
+    <span class="ezo-live"><span class="dot"></span>LIVE</span>
+  </div>
+
+  {# ---- title + subtitle ---- #}
+  <h1 class="ezo-h1"><span class="a">All</span> <span class="b">Orders</span></h1>
+  <p class="ezo-sub">
+    {{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries
+    · today and upcoming
+  </p>
+
+  {# ---- tab row: 3 tabs as <a> links. "Orders" is the current page;
+     the other two are store-scoped routes. g.current_store gives the
+     store slug (the route passes location, which can be "both"). #}
+  {% set _store = g.current_store or 'partner' %}
+  <div class="ezo-tabs">
+    <a class="ezo-tab active" href="/{{ _store }}/orders">Orders</a>
+    <a class="ezo-tab" href="/{{ _store }}/orders/processor">Order Processing</a>
+    <a class="ezo-tab" href="/{{ _store }}/driver-tracking">Driver Payroll</a>
+  </div>
+
+  {# ---- action buttons. "Manually Processed PDF" -> /orders (kept).
+     No "export today" route exists in the codebase, so the 2nd button
+     stays the current "Drivers Live" link rather than a dead link. #}
+  <div class="ezo-actions">
+    <a class="ezo-act" href="/orders"><span class="ic">&#128196;</span>Manually Processed PDF</a>
+    <a class="ezo-act" href="/{{ _store }}/drivers-live"><span class="ic">&#128205;</span>Drivers Live</a>
   </div>
 
   {% if not groups %}
-    <div class="od-notes">
-      <p style="margin:0 0 12px;font-size:15px;color:var(--od-cream);">No processed orders for {{ location_label }} yet.</p>
-      <a class="od-btn" href="/orders">Upload PDFs</a>
+    {# ---- empty state ---- #}
+    <div class="ezo-empty">
+      <p>No processed orders for {{ location_label or 'this location' }} yet.</p>
+      <a class="ezo-act" href="/orders" style="display:inline-flex;">
+        <span class="ic">&#128228;</span>Upload PDFs
+      </a>
     </div>
+  {% else %}
+
+    {# ---- week day-strip: one cell per grp. Clicking a cell smooth-
+       scrolls to that day's section client-side (no navigation).
+       First cell active. #}
+    <div class="ezo-week">
+      {% for grp in groups %}
+        {# grp.display is like "Wed, May 20" — split into weekday + the
+           rest so the cell can show a small abbrev over a big number. #}
+        {% set _parts = (grp.display or '').replace(',', '').split() %}
+        {% set _dw = _parts[0] if _parts else '' %}
+        {% set _dn = _parts[2] if _parts|length > 2 else (grp.display or '') %}
+        <div class="ezo-day{% if loop.first %} active{% endif %}"
+             data-target="ezo-sec-{{ loop.index0 }}">
+          <div class="dw">{{ _dw }}</div>
+          <div class="dn">{{ _dn }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {# ---- per-day sections ---- #}
+    {% for grp in groups %}
+      <div class="ezo-dayhead" id="ezo-sec-{{ loop.index0 }}">
+        {{ grp.display }}
+        <span class="ct">· {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }}</span>
+      </div>
+
+      <div class="ezo-list">
+        {% for o in grp.orders %}
+          {# Per-row store derived from origin_store_id, not the route's
+             location_label (which is "All Orders" on the partner view
+             and would mis-stamp every card). store_1/store_3 =
+             Copperfield kitchen, store_2/store_4 = Tomball. #}
+          {% set _row_loc = 'Tomball' if o.origin_store_id in ('store_2', 'store_4')
+                            else ('Copperfield' if o.origin_store_id in ('store_1', 'store_3')
+                            else (location_label or '—')) %}
+          {% set _row_scope = 'tomball' if o.origin_store_id in ('store_2', 'store_4')
+                              else ('copperfield' if o.origin_store_id in ('store_1', 'store_3')
+                              else location) %}
+          {# Dispatch driver from the route's display_drivers map, else
+             the persisted assigned_driver string. Status is derived
+             from that — the data has no trustworthy per-order
+             delivery-state field for this list view, so we only assert
+             Assigned vs Needs driver (no fabricated En route/Delivered). #}
+          {% set _dispatch = (display_drivers or {}).get(o.id) or o.assigned_driver %}
+          {% set _has = _dispatch is not none and _dispatch != '' %}
+          <div class="ezo-card {{ 'c-assigned' if _has else 'c-needs' }}">
+            <div class="ezo-cardtop">
+              <div>
+                <div class="ezo-time">{{ o.deliver_at or '—' }}</div>
+                <div class="ezo-code">{{ o.external_order_id or 'NO ID' }}</div>
+              </div>
+              {% if _has %}
+                <span class="ezo-badge b-assigned">Assigned</span>
+              {% else %}
+                <span class="ezo-badge b-needs">Needs driver</span>
+              {% endif %}
+            </div>
+            <div class="ezo-client">{{ o.client or '—' }}</div>
+            <div class="ezo-addr">{{ o.delivery_address or '—' }}</div>
+
+            <div class="ezo-cardbot">
+              <span class="ezo-chip">&#128205; {{ _row_loc }}</span>
+              {% if _has %}
+                <span class="ezo-chip driver">&#128100; {{ _dispatch }}</span>
+              {% else %}
+                <span class="ezo-chip nodriver">&#9888; Needs driver</span>
+              {% endif %}
+              {% if o.ezcater_driver_name %}
+                <span class="ezo-chip">ezC {{ o.ezcater_driver_name }}</span>
+              {% endif %}
+              <span class="ezo-botspacer"></span>
+              {# "Unhook driver" — frees the ezCater courier. Same
+                 endpoint + data attributes as the prior template's
+                 per-row button. #}
+              <button type="button"
+                      class="ezo-unhook"
+                      data-order="{{ o.external_order_id }}"
+                      data-store-scope="{{ _row_scope }}"
+                      data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
+                      onclick="unhookCourier(this);"
+                      title="Free up the ezCater driver on this order">
+                Unhook driver
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      {# per-day combined view — same target URL as the prior template #}
+      <a class="ezo-combined" href="/orders/{{ location }}/{{ grp.date }}">
+        All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view
+      </a>
+    {% endfor %}
+
   {% endif %}
 
-  {% for grp in groups %}
-    <div class="od-day">
-      {{ grp.display }}
-      <span class="od-count">({{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }})</span>
-    </div>
-    <table class="od-table">
-      <thead>
-        <tr>
-          <th>Order #</th>
-          <th>Deliver at</th>
-          <th>Customer</th>
-          <th>Address</th>
-          <th>Location</th>
-          <th>Ez Cater Driver</th>
-          <th>Unhook Driver</th>
-          <th>Dispatch</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for o in grp.orders %}
-        <tr class="od-row" onclick="window.location='/orders/view/{{ o.external_order_id }}'">
-          <td class="od-num" data-label="Order #">{{ o.external_order_id }}</td>
-          <td data-label="Deliver at">{{ o.deliver_at or '' }}</td>
-          <td data-label="Customer">{{ o.client or '—' }}</td>
-          <td data-label="Address">{{ o.delivery_address or '—' }}</td>
-          {# Per-row store derived from origin_store_id, not the route's
-             location_label (which is "All Orders" on the partner view and
-             would mis-stamp every row). store_1/store_3 = Copperfield
-             kitchen, store_2/store_4 = Tomball. #}
-          {% set _row_loc = 'Tomball' if o.origin_store_id in ('store_2', 'store_4') else ('Copperfield' if o.origin_store_id in ('store_1', 'store_3') else location_label) %}
-          {% set _row_scope = 'tomball' if o.origin_store_id in ('store_2', 'store_4') else ('copperfield' if o.origin_store_id in ('store_1', 'store_3') else location) %}
-          <td data-label="Location">{{ _row_loc }}</td>
-          <td data-label="Ez Cater Driver">{% if o.ezcater_driver_name %}{{ o.ezcater_driver_name }}{% else %}<span class="od-muted">—</span>{% endif %}</td>
-          <td data-label="Unhook Driver">
-            <button type="button"
-                    class="od-unhook"
-                    data-order="{{ o.external_order_id }}"
-                    data-store-scope="{{ _row_scope }}"
-                    data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
-                    onclick="event.stopPropagation(); unhookCourier(this);"
-                    title="Unhook the ezCater courier from this order">
-              Unhook driver
-            </button>
-          </td>
-          <td data-label="Dispatch">{{ (display_drivers or {}).get(o.id) or o.assigned_driver or '—' }}</td>
-          <td data-label="Status"><span class="od-muted">—</span></td>
-        </tr>
-        {% endfor %}
-        <tr class="od-combined" onclick="window.location='/orders/{{ location }}/{{ grp.date }}'">
-          <td colspan="9">All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view</td>
-        </tr>
-      </tbody>
-    </table>
-  {% endfor %}
 </div>
 
 <script>
-// Per-row unhook-courier button. Reuses the same
+// Week day-strip — clicking a cell smooth-scrolls to that day's
+// section and moves the active highlight. Pure client-side, no nav.
+(function () {
+  var strip = document.querySelector('.ezo-week');
+  if (!strip) return;
+  strip.addEventListener('click', function (e) {
+    var cell = e.target.closest('.ezo-day');
+    if (!cell) return;
+    var sec = document.getElementById(cell.dataset.target);
+    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    strip.querySelectorAll('.ezo-day').forEach(function (c) {
+      c.classList.remove('active');
+    });
+    cell.classList.add('active');
+  });
+})();
+
+// Per-card unhook-courier button. Reuses the same
 // /<scope>/orders/view/<order_id>/unassign-courier endpoint that
-// order_view.html's per-order button hits — same auth gate, same body
-// shape, same effect on the row.
+// order_view.html's per-order button hits — same auth gate, same
+// body shape, same effect on the order.
 async function unhookCourier(btn) {
   const order = btn.dataset.order;
   const scope = btn.dataset.storeScope;

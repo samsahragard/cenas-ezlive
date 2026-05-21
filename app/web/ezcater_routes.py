@@ -8,7 +8,7 @@ from uuid import uuid4
 import threading
 import time
 
-from flask import Blueprint, current_app, render_template, request, send_file, jsonify, redirect, url_for, g
+from flask import Blueprint, current_app, render_template, request, send_file, jsonify, redirect, url_for, g, session
 from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,41 @@ def _dashboard_banner_for(user) -> str:
     'general' banner. Never raises."""
     role = (getattr(user, "permission_level", None) or "").strip()
     return _ROLE_BANNERS.get(role, _DEFAULT_BANNER)
+
+
+def _dashboard_banner() -> str:
+    """Role-matched marquee banner stem for the *current request*.
+
+    The dashboard badge (base_dashboard.html) shows on every page, so the
+    banner value must be resolvable app-wide — not just from home(). This
+    mirrors base_dashboard.html's own ``user_role`` detection order so the
+    badge matches the sidebar:
+      (1) session['driver_id']  → 'driver'  (logged in via /driver/login —
+          driver sessions carry no g.current_user, so the permission_level
+          lookup below would otherwise mis-fall-through to 'general');
+      (2) otherwise resolve from g.current_user.permission_level via
+          _dashboard_banner_for (covers partner / gm / km / expo / ...).
+    Never raises — any failure yields the 'general' fallback."""
+    try:
+        if session.get("driver_id"):
+            return _ROLE_BANNERS["driver"]
+        return _dashboard_banner_for(getattr(g, "current_user", None))
+    except Exception:
+        return _DEFAULT_BANNER
+
+
+def register_dashboard_banner(app) -> None:
+    """Expose ``dashboard_banner`` to EVERY Jinja template.
+
+    base_dashboard.html renders the role marquee badge on every page; an
+    app-wide context processor makes the role-matched stem available to all
+    templates without each route having to pass it. Routes that already
+    pass an explicit ``dashboard_banner`` (e.g. ezcater.home) still win —
+    Flask lets a render_template() kwarg override a context-processor key."""
+
+    @app.context_processor
+    def _inject_dashboard_banner():
+        return {"dashboard_banner": _dashboard_banner()}
 
 
 def _run_job(app, job_id: str, pdf_paths: list[str], collapse_empty_rows: bool):

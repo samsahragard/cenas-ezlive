@@ -153,6 +153,17 @@ def create_app():
     # before_request that stashes g.current_user. Must come after ezauth so
     # its EXEMPT_PREFIXES updates win the path-match race for /keypad-login.
     ezkeypad.install(app)
+    # Role dashboard badge (Sam 2026-05-21). The marquee badge in
+    # base_dashboard.html shows on EVERY page, so the role-matched banner
+    # stem must be resolvable app-wide. register_dashboard_banner installs
+    # an @app.context_processor that injects `dashboard_banner` into every
+    # template; it mirrors base_dashboard.html's user_role detection
+    # (driver session / permission_level). Must come after ezkeypad so the
+    # _attach_current_user before_request that sets g.current_user is
+    # registered first. Routes that pass an explicit dashboard_banner still
+    # override the context-processor value.
+    from app.web.ezcater_routes import register_dashboard_banner
+    register_dashboard_banner(app)
     # Anomaly blueprint + Jinja global `anomaly_signals_for(page_slug)`.
     # Phase 1 / Block 3 (ck 2026-05-13). Templates opt in by setting
     # `anomaly_page_slug = '<slug>'` before {% block content %} — the

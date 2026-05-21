@@ -262,7 +262,9 @@
   var backdrop = document.getElementById('bn-pop-backdrop');
   if (!nav || !backdrop) return;
   var openId = null;
-  function closeAll() {
+  // Pure DOM close — no history side effects. closeAll() and the
+  // popstate (back-button) handler both build on this.
+  function hideMenu() {
     if (!openId) return;
     var pop = document.getElementById('bn-pop-' + openId);
     if (pop) pop.classList.remove('open');
@@ -272,9 +274,20 @@
     });
     openId = null;
   }
+  // User-initiated close (backdrop tap, Esc, re-tapping the open tab).
+  // Consumes the history entry pushed on open so a later back press
+  // doesn't land on a stale one.
+  function closeAll() {
+    if (!openId) return;
+    hideMenu();
+    if (history.state && history.state.bnavMenu) {
+      history.back();  // popstate fires; openId is null now -> no-op
+    }
+  }
   function open(id) {
     if (openId === id) { closeAll(); return; }
-    closeAll();
+    var hadOpen = !!openId;
+    hideMenu();  // close any current menu, no history change
     var pop = document.getElementById('bn-pop-' + id);
     if (!pop) return;
     pop.classList.add('open');
@@ -282,6 +295,12 @@
     var tab = nav.querySelector('.ck-bnav-tab[data-pop="' + id + '"]');
     if (tab) tab.classList.add('is-popping');
     openId = id;
+    // One history entry per open-session so the phone back button
+    // closes the menu instead of leaving the app (Sam #7:39).
+    // Switching directly between menus reuses the existing entry.
+    if (!hadOpen && !(history.state && history.state.bnavMenu)) {
+      history.pushState({ bnavMenu: true }, '');
+    }
   }
   nav.addEventListener('click', function(e) {
     var btn = e.target.closest('.ck-bnav-tab[data-pop]');
@@ -292,6 +311,13 @@
   backdrop.addEventListener('click', closeAll);
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeAll();
+  });
+  // Phone back button: when a bottom-nav menu is open, the back press
+  // pops the entry we pushed — close the menu instead of navigating
+  // away (Sam #7:39). With no menu open, popstate is a real
+  // navigation and is left alone.
+  window.addEventListener('popstate', function() {
+    if (openId) hideMenu();
   });
 })();
 </script>

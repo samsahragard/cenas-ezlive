@@ -1,0 +1,1058 @@
+{# ============================================================
+   manager_schedule.html — Weekly Schedule (production)
+   One responsive page built from the two owner-approved renderings:
+   schedules_v3.html (desktop 7-day grid) and schedules_v3_mobile.html
+   (phone day-view + week-view). Desktop shows the grid; a @media
+   query swaps to the stacked day / week views on phones.
+
+   Data source: AttendanceShift rows (manager_attendance_shift) — one
+   teammate's shift per day; a week is those rows across Mon..Sun,
+   grouped by teammate. The page renders cleanly empty until shifts
+   are entered (no fabricated data).
+
+   ROUTE CONTRACT (store_routes.py weekly_schedule):
+     days       -> list[ {iso, dow, dom, label, is_today, index,
+                           coverage} ]  Mon..Sun, 7 entries.
+     employees  -> list[ {name, initials, section ('foh'|'boh'),
+                          role_title, group, cells, total_minutes,
+                          total_hours, total_hours_num, shift_count} ]
+                   cells = 7-slot list aligned to days; each slot is
+                   None (off) or {range, start, end, hours, role,
+                   group, status, note}.
+     kpis       -> {total_hours, shifts, people, foh, boh}.
+     week_label / week_short / week_start / week_end (display + iso),
+     prev_week / next_week (iso), is_this_week (bool), today_iso.
+
+   Audience gate stays at the route: _manager_role_ok — manager-tier,
+   expo + drivers excluded (CENA.md L165).
+
+   CSS is fully scoped under .sched-page so the warm --sk-* tokens
+   never leak into the global sheet (mdl-/ir-/atr- pattern). The
+   wrapper carries an OPAQUE background so base_dashboard's restaurant
+   photo (body::before) never bleeds through the page surface.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'weekly_schedule' %}
+
+{% block title %}Weekly Schedule — Cenas Kitchen{% endblock %}
+{% block page_title %}Weekly Schedule{% endblock %}
+{% block page_subtitle %}{{ store_label }} — shifts for the week{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .sched-page so the warm
+     v3 palette never leaks into the global sheet (mdl-/ir-/atr-
+     pattern). The two source renderings set tokens on html, body and
+     body::before; those are re-rooted onto .sched-page here.
+     CSS-comment safety: no comment in this block contains the
+     two-char close-sequence inside its body, and every open is
+     paired — an unpaired or embedded close silently drops the next
+     rule and lets the base photo bleed through (the bug Sam #7:07
+     hit on the daily-log page). */
+  .sched-page {
+    --sk-red: #C73B36;
+    --sk-red-deep: #9B2A26;
+    --sk-red-bright: #E85852;
+    --sk-gold: #E4B340;
+    --sk-gold-bright: #FFD970;
+    --sk-teal: #2EA39F;
+    --sk-teal-bright: #5BCAC5;
+    --sk-cream: #FAF6EC;
+    --sk-cream-dim: rgba(250, 246, 236, 0.82);
+    --sk-cream-faint: rgba(250, 246, 236, 0.52);
+    --sk-cream-meta: rgba(250, 246, 236, 0.38);
+    --sk-bg-deep: #1a0d08;
+    --sk-bg-warm: #28160e;
+    --sk-bg-card: rgba(40, 22, 14, 0.65);
+    --sk-bg-card-hover: rgba(50, 28, 18, 0.85);
+    --sk-bg-input: rgba(0, 0, 0, 0.25);
+    --sk-border-subtle: rgba(217, 164, 54, 0.18);
+    --sk-border-active: rgba(228, 179, 64, 0.5);
+    --sk-radius-sm: 8px;
+    --sk-radius-md: 12px;
+    --sk-radius-lg: 16px;
+    --foh: #5BCAC5;
+    --boh: #E89B40;
+    --pos-mgmt: #E4B340;
+    --pos-prep: #F4A261;
+    --pos-line: #E85852;
+    --pos-utility: #9A8FE0;
+    --pos-floor: #5BCAC5;
+    --pos-bar: #C99368;
+    --pos-special: #95C75F;
+    --pos-driver: #DA92E0;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--sk-cream);
+    position: relative;
+    isolation: isolate;
+    /* OPAQUE surface — solid base colour first, warm gradient on top.
+       base_dashboard paints bg-tequila.jpg via body::before; without
+       this opaque fill the photo shows through and the page reads
+       washed-out. */
+    background-color: #1a0d08;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.14), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
+      linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-lg);
+    padding: 20px 20px 36px;
+    margin-bottom: 40px;
+    overflow: hidden;
+  }
+  .sched-page *, .sched-page *::before, .sched-page *::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sched-page h1, .sched-page h2, .sched-page h3, .sched-page p {
+    margin: 0;
+  }
+
+  /* ===== HEADER ===== */
+  .sched-page .sk-header {
+    padding: 4px 0 16px;
+    border-bottom: 0.5px solid var(--sk-border-subtle);
+    margin-bottom: 18px;
+  }
+  .sched-page .sk-header-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .sched-page .sk-store-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sk-gold-bright);
+    background: rgba(228, 179, 64, 0.12);
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .sched-page .sk-spacer { flex: 1; }
+  .sched-page h1 {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 38px;
+    line-height: 1;
+    letter-spacing: -0.015em;
+    color: var(--sk-cream);
+    margin-bottom: 6px;
+  }
+  .sched-page h1 .accent {
+    font-style: italic;
+    color: var(--sk-gold-bright);
+    text-shadow: 0 0 24px rgba(255, 217, 112, 0.30);
+  }
+  .sched-page .sk-subtitle {
+    color: var(--sk-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 640px;
+  }
+
+  /* ===== CONTROL BAR — week navigation ===== */
+  .sched-page .sk-control-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .sched-page .sk-week-nav {
+    display: inline-flex;
+    align-items: center;
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    overflow: hidden;
+  }
+  .sched-page .sk-week-nav-btn {
+    width: 38px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    color: var(--sk-gold);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    text-decoration: none;
+  }
+  .sched-page .sk-week-nav-btn:hover { background: rgba(228, 179, 64, 0.08); }
+  .sched-page .sk-week-nav-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .sched-page .sk-week-display {
+    padding: 0 16px;
+    color: var(--sk-cream);
+    font-weight: 600;
+    font-size: 13px;
+    border-left: 0.5px solid var(--sk-border-subtle);
+    border-right: 0.5px solid var(--sk-border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+  }
+  .sched-page .sk-live-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--sk-gold-bright);
+    background: rgba(228, 179, 64, 0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.1em;
+  }
+  .sched-page .sk-today-btn {
+    height: 40px;
+    padding: 0 14px;
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    color: var(--sk-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
+  .sched-page .sk-today-btn:hover {
+    border-color: var(--sk-border-active);
+    color: var(--sk-gold-bright);
+  }
+
+  /* ===== KPI STRIP ===== */
+  .sched-page .sk-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .sched-page .sk-kpi {
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    padding: 12px 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .sched-page .sk-kpi::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--kpi-color, var(--sk-gold));
+  }
+  .sched-page .sk-kpi.hours { --kpi-color: var(--sk-gold); }
+  .sched-page .sk-kpi.shifts { --kpi-color: var(--sk-teal); }
+  .sched-page .sk-kpi.people { --kpi-color: var(--sk-gold-bright); }
+  .sched-page .sk-kpi.split { --kpi-color: var(--pos-driver); }
+  .sched-page .sk-kpi-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--sk-cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 2px;
+  }
+  .sched-page .sk-kpi-value {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--kpi-color, var(--sk-gold));
+    line-height: 1;
+  }
+  .sched-page .sk-kpi-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--sk-cream-faint);
+    margin-top: 3px;
+  }
+
+  /* ===== WEEKLY GRID (desktop) ===== */
+  .sched-page .sk-grid-wrap { overflow-x: auto; }
+  .sched-page .sk-grid {
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    overflow: hidden;
+    min-width: 880px;
+  }
+  .sched-page .sk-grid-header,
+  .sched-page .sk-grid-row {
+    display: grid;
+    grid-template-columns: 200px repeat(7, minmax(96px, 1fr));
+  }
+  .sched-page .sk-grid-header {
+    background: rgba(0, 0, 0, 0.34);
+    border-bottom: 0.5px solid var(--sk-border-subtle);
+  }
+  .sched-page .sk-grid-hcell {
+    padding: 12px 8px;
+    border-right: 0.5px solid var(--sk-border-subtle);
+    text-align: center;
+  }
+  .sched-page .sk-grid-hcell:last-child { border-right: none; }
+  .sched-page .sk-grid-hcell.team-col {
+    text-align: left;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--sk-gold);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding-left: 16px;
+    display: flex;
+    align-items: center;
+  }
+  .sched-page .sk-grid-hday {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--sk-cream-faint);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .sched-page .sk-grid-hdate {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--sk-cream);
+    margin-top: 2px;
+  }
+  .sched-page .sk-grid-hcell.today { background: rgba(228, 179, 64, 0.06); }
+  .sched-page .sk-grid-hcell.today .sk-grid-hday { color: var(--sk-gold-bright); }
+  .sched-page .sk-grid-hcov {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--sk-cream-meta);
+    margin-top: 4px;
+  }
+
+  /* Role-group divider row spanning the whole grid width */
+  .sched-page .sk-grid-divider {
+    grid-column: 1 / -1;
+    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.42);
+    border-bottom: 0.5px solid var(--sk-border-subtle);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--sk-gold);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sched-page .sk-grid-divider .gd-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gd-color, var(--sk-gold));
+  }
+  .sched-page .sk-grid-divider .gd-flag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.1em;
+  }
+  .sched-page .sk-grid-divider.foh-grp .gd-flag {
+    background: rgba(91, 202, 197, 0.15);
+    color: var(--foh);
+  }
+  .sched-page .sk-grid-divider.boh-grp .gd-flag {
+    background: rgba(232, 155, 64, 0.15);
+    color: var(--boh);
+  }
+  .sched-page .sk-grid-divider .gd-count {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--sk-cream-faint);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+
+  .sched-page .sk-grid-row {
+    border-bottom: 0.5px solid var(--sk-border-subtle);
+    min-height: 78px;
+  }
+  .sched-page .sk-grid-row:last-child { border-bottom: none; }
+  .sched-page .sk-grid-row:hover .sk-emp-cell { background: var(--sk-bg-card-hover); }
+
+  .sched-page .sk-emp-cell {
+    padding: 12px 14px;
+    border-right: 0.5px solid var(--sk-border-subtle);
+    background: rgba(0, 0, 0, 0.22);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .sched-page .sk-emp-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--sk-bg-warm), var(--sk-bg-deep));
+    color: var(--sk-gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border: 1px solid var(--sk-border-subtle);
+  }
+  .sched-page .sk-emp-info { flex: 1; min-width: 0; }
+  .sched-page .sk-emp-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--sk-cream);
+    line-height: 1.2;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sched-page .sk-emp-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--pos-color, var(--sk-gold));
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .sched-page .sk-emp-role .rd {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .sched-page .sk-emp-hours {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sk-gold-bright);
+    font-weight: 700;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .sched-page .sk-cell {
+    padding: 6px;
+    border-right: 0.5px solid var(--sk-border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 78px;
+  }
+  .sched-page .sk-cell:last-child { border-right: none; }
+  .sched-page .sk-cell.today { background: rgba(228, 179, 64, 0.04); }
+
+  /* Shift card — grouped colour bar on the left edge */
+  .sched-page .sk-shift {
+    background: rgba(0, 0, 0, 0.35);
+    border-left: 3px solid var(--shift-color, var(--sk-gold));
+    border-radius: 6px;
+    padding: 6px 8px;
+    position: relative;
+  }
+  .sched-page .sk-shift.mgmt { --shift-color: var(--pos-mgmt); }
+  .sched-page .sk-shift.prep { --shift-color: var(--pos-prep); }
+  .sched-page .sk-shift.line { --shift-color: var(--pos-line); }
+  .sched-page .sk-shift.utility { --shift-color: var(--pos-utility); }
+  .sched-page .sk-shift.floor { --shift-color: var(--pos-floor); }
+  .sched-page .sk-shift.bar { --shift-color: var(--pos-bar); }
+  .sched-page .sk-shift.special { --shift-color: var(--pos-special); }
+  .sched-page .sk-shift.driver { --shift-color: var(--pos-driver); }
+  .sched-page .sk-shift-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--sk-cream);
+    line-height: 1.2;
+  }
+  .sched-page .sk-shift-role {
+    font-size: 10px;
+    color: var(--shift-color, var(--sk-gold));
+    font-weight: 600;
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .sched-page .sk-shift-hours {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--sk-cream-faint);
+    margin-top: 2px;
+  }
+  .sched-page .sk-day-off {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    color: var(--sk-cream-meta);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ===== EMPTY STATE ===== */
+  .sched-page .sk-empty {
+    background: var(--sk-bg-card);
+    border: 1px dashed var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    padding: 44px 24px;
+    text-align: center;
+  }
+  .sched-page .sk-empty-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: rgba(228, 179, 64, 0.08);
+    color: var(--sk-cream-faint);
+    display: grid;
+    place-items: center;
+    margin: 0 auto 14px;
+  }
+  .sched-page .sk-empty-icon svg { width: 26px; height: 26px; fill: currentColor; }
+  .sched-page .sk-empty-title {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 20px;
+    color: var(--sk-cream-dim);
+    margin-bottom: 6px;
+  }
+  .sched-page .sk-empty-text {
+    font-size: 12px;
+    color: var(--sk-cream-faint);
+    line-height: 1.55;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  /* ===== MOBILE (day-strip + per-employee cards) =====
+     Hidden on desktop; the @media block below reveals it and hides
+     the grid. Built from the two phone frames in the mobile
+     rendering: a day-view (one selected day) and a week-view
+     (per-teammate hour totals). */
+  .sched-page .sk-mobile { display: none; }
+
+  .sched-page .sk-mview-toggle {
+    display: flex;
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    padding: 3px;
+    margin-bottom: 14px;
+  }
+  .sched-page .sk-mview-opt {
+    flex: 1;
+    padding: 9px 10px;
+    background: transparent;
+    border: none;
+    color: var(--sk-cream-dim);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 8px;
+    letter-spacing: 0.04em;
+  }
+  .sched-page .sk-mview-opt.active {
+    background: var(--sk-gold);
+    color: var(--sk-bg-deep);
+  }
+
+  .sched-page .sk-day-strip {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+  .sched-page .sk-day-cell {
+    text-align: center;
+    padding: 8px 0;
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .sched-page .sk-day-cell.active {
+    background: var(--sk-gold);
+    border-color: var(--sk-gold);
+  }
+  .sched-page .sk-day-cell .dc-dow {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--sk-cream-faint);
+    font-weight: 600;
+  }
+  .sched-page .sk-day-cell.active .dc-dow { color: rgba(26, 13, 8, 0.7); }
+  .sched-page .sk-day-cell .dc-dom {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 2px;
+    color: var(--sk-cream);
+  }
+  .sched-page .sk-day-cell.active .dc-dom { color: var(--sk-bg-deep); }
+  .sched-page .sk-day-cell .dc-ct {
+    display: block;
+    font-size: 9px;
+    color: var(--sk-cream-meta);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .sched-page .sk-day-cell.active .dc-ct { color: rgba(26, 13, 8, 0.55); }
+
+  .sched-page .sk-role-hdr {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 4px 8px;
+    border-bottom: 0.5px solid var(--sk-border-subtle);
+    margin-bottom: 8px;
+  }
+  .sched-page .sk-role-hdr .rh-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .sched-page .sk-role-hdr.foh { color: var(--foh); }
+  .sched-page .sk-role-hdr.boh { color: var(--boh); }
+  .sched-page .sk-role-hdr .rh-text {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .sched-page .sk-role-hdr .rh-flag {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--sk-cream-dim);
+  }
+
+  .sched-page .sk-emp-row {
+    background: var(--sk-bg-card);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md);
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .sched-page .sk-emp-row .er-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--sk-gold), var(--sk-red));
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--sk-bg-deep);
+    flex-shrink: 0;
+  }
+  .sched-page .sk-emp-row .er-info { flex: 1; min-width: 0; }
+  .sched-page .sk-emp-row .er-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--sk-cream);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sched-page .sk-emp-row .er-role {
+    font-size: 11px;
+    color: var(--sk-cream-dim);
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sched-page .sk-emp-row .er-role .er-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pos-color, var(--sk-gold));
+    flex-shrink: 0;
+  }
+  .sched-page .sk-emp-row .er-shift {
+    text-align: right;
+    min-width: 84px;
+    flex-shrink: 0;
+  }
+  .sched-page .sk-emp-row .er-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sk-cream);
+    font-weight: 600;
+  }
+  .sched-page .sk-emp-row .er-hrs {
+    font-size: 10px;
+    color: var(--sk-cream-meta);
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+  }
+  .sched-page .sk-emp-row.off .er-time {
+    color: var(--sk-cream-meta);
+    font-style: italic;
+  }
+
+  .sched-page .sk-mobile .sk-empty { padding: 36px 18px; }
+
+  .sched-page .sk-mhint {
+    font-size: 11px;
+    color: var(--sk-cream-faint);
+    text-align: center;
+    margin: 14px 4px 0;
+    line-height: 1.5;
+  }
+
+  /* ----- Responsive switch: phones get the stacked views ----- */
+  @media (max-width: 720px) {
+    .sched-page {
+      padding: 16px 12px 28px;
+      border-radius: var(--sk-radius-md);
+    }
+    .sched-page h1 { font-size: 30px; }
+    .sched-page .sk-desktop { display: none; }
+    .sched-page .sk-mobile { display: block; }
+    .sched-page .sk-kpi-strip {
+      grid-template-columns: 1fr 1fr;
+      margin-bottom: 16px;
+    }
+    .sched-page .sk-control-bar .sk-week-display { font-size: 12px; padding: 0 12px; }
+  }
+</style>
+
+<div class="sched-page">
+
+  {# ===== HEADER (shared by both layouts) ===== #}
+  <div class="sk-header">
+    <div class="sk-header-top">
+      <span class="sk-store-badge">{{ store_label }}</span>
+      <span class="sk-spacer"></span>
+    </div>
+    <h1>Weekly <span class="accent">schedule</span></h1>
+    <p class="sk-subtitle">Every teammate's shifts for the week, grouped by side of house and role. Use the arrows to step between weeks.</p>
+  </div>
+
+  {# ===== CONTROL BAR — week navigation ===== #}
+  <div class="sk-control-bar">
+    <div class="sk-week-nav">
+      <a class="sk-week-nav-btn" href="{{ url_for('store.weekly_schedule') }}?date={{ prev_week }}" aria-label="Previous week">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </a>
+      <div class="sk-week-display">
+        {{ week_label }}
+        {% if is_this_week %}<span class="sk-live-tag">THIS WEEK</span>{% endif %}
+      </div>
+      <a class="sk-week-nav-btn" href="{{ url_for('store.weekly_schedule') }}?date={{ next_week }}" aria-label="Next week">
+        <svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </a>
+    </div>
+    {% if not is_this_week %}
+    <a class="sk-today-btn" href="{{ url_for('store.weekly_schedule') }}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+      This week
+    </a>
+    {% endif %}
+  </div>
+
+  {# ===== KPI STRIP ===== #}
+  <div class="sk-kpi-strip">
+    <div class="sk-kpi hours">
+      <div class="sk-kpi-label">Scheduled hours</div>
+      <div class="sk-kpi-value">{{ kpis.total_hours }}</div>
+      <div class="sk-kpi-sub">across the week</div>
+    </div>
+    <div class="sk-kpi shifts">
+      <div class="sk-kpi-label">Shifts</div>
+      <div class="sk-kpi-value">{{ kpis.shifts }}</div>
+      <div class="sk-kpi-sub">{{ kpis.people }} {{ 'teammate' if kpis.people == 1 else 'teammates' }}</div>
+    </div>
+    <div class="sk-kpi people">
+      <div class="sk-kpi-label">Front of house</div>
+      <div class="sk-kpi-value">{{ kpis.foh }}</div>
+      <div class="sk-kpi-sub">on the schedule</div>
+    </div>
+    <div class="sk-kpi split">
+      <div class="sk-kpi-label">Back of house</div>
+      <div class="sk-kpi-value">{{ kpis.boh }}</div>
+      <div class="sk-kpi-sub">on the schedule</div>
+    </div>
+  </div>
+
+  {# ============================================================
+     DESKTOP — weekly grid. One row per teammate, 7 day columns,
+     role-group divider rows. Hidden under 720px.
+     ============================================================ #}
+  <div class="sk-desktop">
+    {% if employees %}
+    <div class="sk-grid-wrap">
+      <div class="sk-grid">
+
+        {# Header row — TEAM label + 7 day headers #}
+        <div class="sk-grid-header">
+          <div class="sk-grid-hcell team-col">Team</div>
+          {% for d in days %}
+          <div class="sk-grid-hcell{% if d.is_today %} today{% endif %}">
+            <div class="sk-grid-hday">{{ d.dow }}{% if d.is_today %} · today{% endif %}</div>
+            <div class="sk-grid-hdate">{{ d.dom }}</div>
+            <div class="sk-grid-hcov">{{ d.coverage }} on</div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {# Teammate rows. employees is pre-sorted section -> group ->
+           name; emit a divider whenever the (section, group) key
+           changes so the grid reads grouped like the rendering. #}
+        {% set ns = namespace(key=none) %}
+        {% for emp in employees %}
+          {% set gkey = emp.section ~ '|' ~ emp.group %}
+          {% if gkey != ns.key %}
+            {% set ns.key = gkey %}
+            {% set _house = 'Front of house' if emp.section == 'foh' else 'Back of house' %}
+            {% set _grp = {'mgmt':'Management','floor':'Floor','bar':'Bar','special':'Special','prep':'Prep','line':'Line','utility':'Utility','driver':'Drivers'} %}
+            <div class="sk-grid-divider {{ 'foh-grp' if emp.section == 'foh' else 'boh-grp' }} {{ emp.group }}"
+                 style="--gd-color: var(--pos-{{ emp.group }});">
+              <span class="gd-dot"></span>
+              {{ _house }} · {{ _grp.get(emp.group, 'Team') }}
+              <span class="gd-flag">{{ 'FOH' if emp.section == 'foh' else 'BOH' }}</span>
+            </div>
+          {% endif %}
+          <div class="sk-grid-row">
+            <div class="sk-emp-cell">
+              <div class="sk-emp-avatar">{{ emp.initials }}</div>
+              <div class="sk-emp-info">
+                <div class="sk-emp-name">{{ emp.name }}</div>
+                <div class="sk-emp-role" style="--pos-color: var(--pos-{{ emp.group }});">
+                  <span class="rd"></span>{{ emp.role_title }}
+                </div>
+              </div>
+              <div class="sk-emp-hours">{{ emp.total_hours }}</div>
+            </div>
+            {% for cell in emp.cells %}
+            <div class="sk-cell{% if days[loop.index0].is_today %} today{% endif %}">
+              {% if cell %}
+              <div class="sk-shift {{ cell.group }}">
+                <div class="sk-shift-time">{{ cell.range }}</div>
+                <div class="sk-shift-role">{{ cell.role }}</div>
+                {% if cell.hours %}<div class="sk-shift-hours">{{ cell.hours }}</div>{% endif %}
+              </div>
+              {% else %}
+              <div class="sk-day-off">OFF</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+
+      </div>
+    </div>
+    {% else %}
+    {# Empty state — no shifts logged for the week. Expected until
+       attendance shifts start being entered; render clean, not blank. #}
+    <div class="sk-empty">
+      <div class="sk-empty-icon">
+        <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+      </div>
+      <div class="sk-empty-title">No shifts scheduled this week</div>
+      <div class="sk-empty-text">Shifts logged on the Attendance Tracking board for {{ week_short }} will appear here, grouped by teammate.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ============================================================
+     MOBILE — day-view + week-view. Revealed under 720px; the toggle
+     swaps between them client-side. Built from the two phone frames
+     in schedules_v3_mobile.html.
+     ============================================================ #}
+  <div class="sk-mobile">
+
+    <div class="sk-mview-toggle" role="tablist">
+      <button class="sk-mview-opt active" type="button" data-mview="day">Day</button>
+      <button class="sk-mview-opt" type="button" data-mview="week">Week</button>
+    </div>
+
+    {# ---- DAY VIEW ---- #}
+    <div class="sk-mview" id="skDayView">
+      {# Day picker strip — tapping a day filters the cards below. #}
+      <div class="sk-day-strip">
+        {% for d in days %}
+        <div class="sk-day-cell{% if d.is_today %} active{% endif %}" data-dayidx="{{ d.index }}">
+          <span class="dc-dow">{{ d.dow }}</span>
+          <span class="dc-dom">{{ d.dom }}</span>
+          <span class="dc-ct">{{ d.coverage }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if employees %}
+        {# One panel per day; JS shows the selected day's panel only. #}
+        {% for d in days %}
+        <div class="sk-day-panel" data-daypanel="{{ d.index }}"{% if not d.is_today %} hidden{% endif %}>
+          {% set ns2 = namespace(key=none, any=false) %}
+          {% for emp in employees %}
+            {% set cell = emp.cells[d.index] %}
+            {% if cell %}
+              {% set ns2.any = true %}
+              {% set gkey = emp.section ~ '|' ~ emp.group %}
+              {% if gkey != ns2.key %}
+                {% set ns2.key = gkey %}
+                {% set _grp = {'mgmt':'Management','floor':'Floor','bar':'Bar','special':'Special','prep':'Prep','line':'Line','utility':'Utility','driver':'Drivers'} %}
+                <div class="sk-role-hdr {{ 'foh' if emp.section == 'foh' else 'boh' }}">
+                  <span class="rh-dot"></span>
+                  <span class="rh-text">{{ 'Front' if emp.section == 'foh' else 'Back' }} · {{ _grp.get(emp.group, 'Team') }}</span>
+                  <span class="rh-flag">{{ 'FOH' if emp.section == 'foh' else 'BOH' }}</span>
+                </div>
+              {% endif %}
+              <div class="sk-emp-row">
+                <div class="er-avatar">{{ emp.initials }}</div>
+                <div class="er-info">
+                  <div class="er-name">{{ emp.name }}</div>
+                  <div class="er-role">
+                    <span class="er-dot" style="--pos-color: var(--pos-{{ cell.group }});"></span>{{ cell.role }}
+                  </div>
+                </div>
+                <div class="er-shift">
+                  <div class="er-time">{{ cell.range }}</div>
+                  <div class="er-hrs">{{ cell.hours or '' }}</div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+          {% if not ns2.any %}
+          <div class="sk-empty">
+            <div class="sk-empty-title">Nobody scheduled</div>
+            <div class="sk-empty-text">No shifts logged for {{ d.dow }}, {{ d.label }}.</div>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="sk-empty">
+        <div class="sk-empty-icon">
+          <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+        </div>
+        <div class="sk-empty-title">No shifts this week</div>
+        <div class="sk-empty-text">Shifts logged on the Attendance Tracking board will show up here.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ---- WEEK VIEW — per-teammate hour totals ---- #}
+    <div class="sk-mview" id="skWeekView" hidden>
+      {% if employees %}
+        {% set ns3 = namespace(key=none) %}
+        {% for emp in employees %}
+          {% set gkey = emp.section %}
+          {% if gkey != ns3.key %}
+            {% set ns3.key = gkey %}
+            {% set _staff = (kpis.foh if emp.section == 'foh' else kpis.boh) %}
+            <div class="sk-role-hdr {{ 'foh' if emp.section == 'foh' else 'boh' }}">
+              <span class="rh-dot"></span>
+              <span class="rh-text">{{ 'Front of House' if emp.section == 'foh' else 'Back of House' }}</span>
+              <span class="rh-flag">{{ _staff }} {{ 'teammate' if _staff == 1 else 'staff' }}</span>
+            </div>
+          {% endif %}
+          <div class="sk-emp-row{% if emp.shift_count == 0 %} off{% endif %}">
+            <div class="er-avatar">{{ emp.initials }}</div>
+            <div class="er-info">
+              <div class="er-name">{{ emp.name }}</div>
+              <div class="er-role">
+                <span class="er-dot" style="--pos-color: var(--pos-{{ emp.group }});"></span>{{ emp.role_title }} · {{ emp.shift_count }}-on
+              </div>
+            </div>
+            <div class="er-shift">
+              <div class="er-time">{{ emp.total_hours }}</div>
+              <div class="er-hrs">
+                {%- if emp.total_hours_num >= 38 %}Full
+                {%- elif emp.total_hours_num > 0 %}PT
+                {%- else %}—{% endif -%}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+        <p class="sk-mhint">Hours are the scheduled totals for {{ week_short }}. Switch to Day for the shift-by-shift breakdown.</p>
+      {% else %}
+      <div class="sk-empty">
+        <div class="sk-empty-icon">
+          <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+        </div>
+        <div class="sk-empty-title">No hours scheduled</div>
+        <div class="sk-empty-text">Per-teammate weekly hour totals appear here once shifts are logged.</div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  var root = document.querySelector('.sched-page');
+  if (!root) return;
+
+  // ---- Mobile day/week view toggle ----
+  var opts = root.querySelectorAll('.sk-mview-opt');
+  var dayView = root.querySelector('#skDayView');
+  var weekView = root.querySelector('#skWeekView');
+  opts.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var which = btn.getAttribute('data-mview');
+      opts.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      if (dayView) dayView.hidden = (which !== 'day');
+      if (weekView) weekView.hidden = (which !== 'week');
+    });
+  });
+
+  // ---- Day-strip: select a day, show its panel ----
+  var cells = root.querySelectorAll('.sk-day-cell');
+  var panels = root.querySelectorAll('[data-daypanel]');
+  cells.forEach(function (cell) {
+    cell.addEventListener('click', function () {
+      var idx = cell.getAttribute('data-dayidx');
+      cells.forEach(function (c) { c.classList.remove('active'); });
+      cell.classList.add('active');
+      panels.forEach(function (p) {
+        p.hidden = (p.getAttribute('data-daypanel') !== idx);
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

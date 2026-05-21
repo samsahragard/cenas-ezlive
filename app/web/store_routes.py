@@ -3179,12 +3179,234 @@ def drivers_toggle_active(driver_id: int):
 
 # ============== OPERATIONS — SCHEDULE ==============
 
+# ---- Weekly Schedule v3 (2026-05-20) --------------------------------
+# The Weekly Schedule page is a 7-day grid built from AttendanceShift
+# rows (manager_attendance_shift) — the same table behind the daily
+# Attendance Tracking board. One AttendanceShift = one teammate's shift
+# for one day; a week is those rows across Mon..Sun, grouped by
+# teammate. Renders cleanly empty until shifts are logged.
+
+# Position groups — map a free-text role_title onto one of the eight
+# colour buckets the grid + cards use (mgmt/prep/line/utility/floor/
+# bar/special/driver). Keys are lowercase substrings tested against the
+# role title; first match wins, default 'floor'.
+_SCHED_ROLE_GROUPS = [
+    ("driver", "driver"),
+    ("dishwash", "utility"),
+    ("busser", "utility"),
+    ("prep", "prep"),
+    ("enchilada", "prep"),
+    ("grill", "line"),
+    ("expo", "line"),
+    ("window", "special"),
+    ("train", "special"),
+    ("bartender", "bar"),
+    ("well", "bar"),
+    ("bar", "bar"),
+    ("host", "floor"),
+    ("cashier", "floor"),
+    ("server", "floor"),
+    ("manager", "mgmt"),
+    ("gm", "mgmt"),
+    ("km", "mgmt"),
+    ("lead", "mgmt"),
+]
+
+
+def _sched_role_group(role_title):
+    """Bucket a role title into one of the eight grid colour groups."""
+    r = (role_title or "").strip().lower()
+    for needle, group in _SCHED_ROLE_GROUPS:
+        if needle in r:
+            return group
+    return "floor"
+
+
+def _sched_week_start(d):
+    """Monday of the week containing date `d`."""
+    return d - timedelta(days=d.weekday())
+
+
+def _sched_fmt_time(dt):
+    """'10:00' / '7:00' from a datetime, or None — drops leading zero,
+    no AM/PM (the grid is compact; the shift card shows a range)."""
+    if not dt:
+        return None
+    return dt.strftime("%I:%M").lstrip("0")
+
+
+def _sched_shift_hours(start, end):
+    """Whole/short hour string ('9h', '8h 30m') between two datetimes,
+    or None. Used for the per-shift and per-week hour totals."""
+    if not start or not end or end <= start:
+        return None
+    mins = int((end - start).total_seconds() // 60)
+    h, m = mins // 60, mins % 60
+    return f"{h}h" if m == 0 else f"{h}h {m}m"
+
+
+def _sched_minutes(start, end):
+    if not start or not end or end <= start:
+        return 0
+    return int((end - start).total_seconds() // 60)
+
+
+@store_bp.route("/schedule/weekly")
+def weekly_schedule():
+    """Weekly Schedule — a 7-day (Mon..Sun) grid of AttendanceShift rows
+    grouped by teammate. ?date=<iso> picks any day in the target week
+    (default: the current week). Manager-tier audience gate, expo +
+    drivers excluded — same gate as the other manager pages."""
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import AttendanceShift
+
+    raw = request.args.get("date") or ""
+    try:
+        anchor = date.fromisoformat(raw) if raw else date.today()
+    except ValueError:
+        anchor = date.today()
+    week_start = _sched_week_start(anchor)
+    week_end = week_start + timedelta(days=6)
+    today = date.today()
+    loc = g.current_location
+
+    db = next(get_db())
+    try:
+        q = db.query(AttendanceShift).filter(
+            AttendanceShift.entry_date >= week_start,
+            AttendanceShift.entry_date <= week_end,
+        )
+        if loc in ("tomball", "copperfield"):
+            q = q.filter((AttendanceShift.store_scope == loc) |
+                         (AttendanceShift.store_scope.is_(None)))
+        shifts = q.all()
+    finally:
+        db.close()
+
+    # The 7 day columns.
+    days = []
+    for i in range(7):
+        d = week_start + timedelta(days=i)
+        days.append({
+            "iso": d.isoformat(),
+            "dow": d.strftime("%a"),
+            "dom": d.day,
+            "label": f"{d:%b} {d.day}",
+            "is_today": d == today,
+            "index": i,
+        })
+
+    # Group shifts by teammate. Each teammate row carries a 7-slot
+    # `cells` list aligned to `days` (None = day off / not scheduled).
+    emp = {}
+    for s in shifts:
+        name = (s.employee_name or "").strip()
+        if not name:
+            continue
+        rec = emp.get(name)
+        if rec is None:
+            rec = emp[name] = {
+                "name": name,
+                "section": (s.section or "boh").lower(),
+                "role_title": s.role_title or "Team member",
+                "group": _sched_role_group(s.role_title),
+                "cells": [None] * 7,
+                "total_minutes": 0,
+                "shift_count": 0,
+            }
+        idx = (s.entry_date - week_start).days
+        if not (0 <= idx <= 6):
+            continue
+        start_s = _sched_fmt_time(s.scheduled_start)
+        end_s = _sched_fmt_time(s.scheduled_end)
+        mins = _sched_minutes(s.scheduled_start, s.scheduled_end)
+        rec["cells"][idx] = {
+            "start": start_s,
+            "end": end_s,
+            "range": (f"{start_s} — {end_s}" if (start_s and end_s)
+                      else (start_s or end_s or "Shift")),
+            "hours": _sched_shift_hours(s.scheduled_start,
+                                        s.scheduled_end),
+            "role": s.role_title or rec["role_title"],
+            "group": _sched_role_group(s.role_title) or rec["group"],
+            "status": s.status,
+            "note": s.note,
+        }
+        rec["total_minutes"] += mins
+        rec["shift_count"] += 1
+        # A later row's non-default role/section refines the row label.
+        if s.role_title:
+            rec["role_title"] = s.role_title
+            rec["group"] = _sched_role_group(s.role_title)
+        if s.section:
+            rec["section"] = s.section.lower()
+
+    # Per-teammate hour totals + sort: section (FOH first), then role
+    # group, then name — so the grid reads grouped like the rendering.
+    _GROUP_ORDER = {"mgmt": 0, "floor": 1, "bar": 2, "special": 3,
+                    "prep": 4, "line": 5, "utility": 6, "driver": 7}
+    employees = []
+    for rec in emp.values():
+        h, m = rec["total_minutes"] // 60, rec["total_minutes"] % 60
+        rec["total_hours"] = (f"{h}h" if m == 0 else f"{h}h {m}m")
+        rec["total_hours_num"] = h + (1 if m else 0)
+        parts = [p for p in rec["name"].split() if p]
+        if not parts:
+            rec["initials"] = "?"
+        elif len(parts) == 1:
+            rec["initials"] = parts[0][:2].upper()
+        else:
+            rec["initials"] = (parts[0][0] + parts[-1][0]).upper()
+        employees.append(rec)
+    employees.sort(key=lambda r: (
+        0 if r["section"] == "foh" else 1,
+        _GROUP_ORDER.get(r["group"], 9),
+        r["name"].lower(),
+    ))
+
+    # KPI strip + per-day coverage counts.
+    total_minutes = sum(r["total_minutes"] for r in employees)
+    total_shifts = sum(r["shift_count"] for r in employees)
+    th, tm = total_minutes // 60, total_minutes % 60
+    for d in days:
+        d["coverage"] = sum(1 for r in employees
+                            if r["cells"][d["index"]] is not None)
+    kpis = {
+        "total_hours": (f"{th}h" if tm == 0 else f"{th}h {tm}m"),
+        "shifts": total_shifts,
+        "people": len(employees),
+        "foh": sum(1 for r in employees if r["section"] == "foh"),
+        "boh": sum(1 for r in employees if r["section"] != "foh"),
+    }
+
+    return render_template(
+        "manager_schedule.html",
+        active="weekly_schedule",
+        days=days,
+        employees=employees,
+        kpis=kpis,
+        week_start=week_start.isoformat(),
+        week_end=week_end.isoformat(),
+        week_label=f"{week_start:%b} {week_start.day} — {week_end:%b} {week_end.day}, {week_end.year}",
+        week_short=f"{week_start:%b} {week_start.day} – {week_end.day}",
+        prev_week=(week_start - timedelta(days=7)).isoformat(),
+        next_week=(week_start + timedelta(days=7)).isoformat(),
+        is_this_week=(week_start == _sched_week_start(today)),
+        today_iso=today.isoformat(),
+    )
+
+
 @store_bp.route("/schedule")
 @store_bp.route("/schedule/<view>")
 def schedule(view: str = "weekly"):
     """Schedule (Sling). Children: BOH Roster / FOH Roster / All Roster / Weekly.
     Phase 1: 'weekly' shows the current schedule report; the BOH/FOH/All roster
-    children are wired in Phase 2 with role classification."""
+    children are wired in Phase 2 with role classification.
+
+    NOTE: /schedule/weekly is served by weekly_schedule() above — Flask
+    matches that static rule ahead of this <view> converter, so the
+    Weekly Schedule subnav card lands on the real grid page."""
     from app.web.reports import schedule as schedule_view
     g.location_override = g.current_location if g.current_location != "both" else None
     return schedule_view()

@@ -139,14 +139,17 @@
       window.Capacitor.Plugins.App.addListener('backButton', function () {
         if (isOpen()) {
           close();
-        } else if (window.history.length > 1) {
-          // canGoBack from the Capacitor event is unreliable for a
-          // remote-loaded shell (it reports false mid-navigation and
-          // the app exits). Trust the webview history length instead.
-          window.history.back();
-        } else {
-          window.Capacitor.Plugins.App.exitApp();
+          return;
         }
+        // Hardware back -> a plain in-app history back. history.back()
+        // navigates back when there is history and is a harmless no-op
+        // at the first entry — it never exits the app. The website-side
+        // guards (base_dashboard entry-page guard, bottom-nav menu
+        // guard) pick it up via popstate. We deliberately do NOT call
+        // exitApp(): the old window.history.length check was unreliable
+        // for a remote-loaded Capacitor shell and spuriously exited the
+        // app (Sam: the back button kept closing the app). #39.
+        window.history.back();
       });
     }
     // Cordova-style fallback (older Capacitor versions or hybrid setups)

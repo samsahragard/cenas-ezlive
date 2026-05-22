@@ -44,6 +44,7 @@ EXEMPT_PREFIXES = (
     "/sam/cena/log",             # Cena gateway audit ingest — own X-Cena-Token header check inside
     "/sam/cena/usage-log",       # Cena gateway per-turn usage ingest — own X-Cena-Token header check inside
     "/sam/cena/db-probe/",       # Cena gateway read-only DB probe — own X-Cena-Token header check inside
+    "/sam/cena/resolve/",        # Cena gateway OQ-5 resolve_* endpoints — own X-Cena-Token header check inside
     "/sam/cena/dev-chat",        # Cena gateway dev-chat read — own X-Cena-Token header check inside
     "/sam/cena/sam-chat",        # dck observer read of /sam/chat — own X-Cena-Token header check inside (Track 8 per cena #1907)
     "/sam/cena/sam-chat-attachment/",  # binary attachment download for dev-team vision parity per Sam #837 item 5 — own X-Cena-Token check inside

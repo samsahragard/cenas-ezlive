@@ -2497,7 +2497,10 @@ def cena_resolve_catering_order():
     """OQ-5 / spec 8.5 — resolve a delivery date to catering order(s).
     Matches orders.delivery_date (the fully-populated YYYY-MM-DD text
     column; deliver_at is a sparse time-of-day field, not used).
-    Optional `client` substring and `location` filters."""
+    Optional `client` substring filter. A `location` filter is deferred
+    to v2: the only string store field (reported_store) holds delivery
+    addresses and silently mis-filters, and a real store-id map is not
+    yet available (samai review, 2026-05-22)."""
     gate = _require_gateway_token()
     if gate is not None:
         return gate
@@ -2505,7 +2508,6 @@ def cena_resolve_catering_order():
     if not date:
         return _resolve_missing("date")
     client = (request.args.get("client") or "").strip()
-    location = (request.args.get("location") or "").strip()
     from sqlalchemy import text as _sa_text
     from app.db import SessionLocal as _SL
     sql = ("SELECT id, client, delivery_date, deliver_at, status, headcount, "
@@ -2515,10 +2517,6 @@ def cena_resolve_catering_order():
     if client:
         sql += " AND client IS NOT NULL AND lower(client) LIKE :client"
         params["client"] = "%" + client.lower() + "%"
-    if location:
-        sql += (" AND reported_store IS NOT NULL "
-                "AND lower(reported_store) LIKE :loc")
-        params["loc"] = "%" + location.lower() + "%"
     db = _SL()
     try:
         cands = []
@@ -2536,9 +2534,7 @@ def cena_resolve_catering_order():
         db.close()
     cands.sort(key=lambda c: ((c["client"] or "").lower(), c["id"]))
     return _resolve_envelope(
-        "catering_order",
-        {"date": date, "client": client or None, "location": location or None},
-        cands)
+        "catering_order", {"date": date, "client": client or None}, cands)
 
 
 @cena_bp.route("/sam/cena/resolve/manager_log", methods=["GET"])

@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -189,6 +190,87 @@ def _cena_gateway_url() -> str | None:
     Returns None when the env var is absent — falls back to Anthropic."""
     url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
     return url or None
+
+
+# ============================================================
+# Phase 2 §9 — async gateway message layer
+# ============================================================
+# /sam/chat can run in two modes:
+#   - SSE-streaming (the original /sam/chat/send): one held connection
+#     streams the reply; lost if the tab closes mid-answer.
+#   - async (cena2 Phase 2 §9): /sam/chat/async/* proxy a gateway's
+#     /cena/messages/* queue endpoints — send returns immediately, the
+#     worker on the gateway produces the answer, the UI polls /status
+#     every 2s, /history restores the thread on page load. Tab closed
+#     mid-think → the answer still completes and waits on the gateway.
+#
+# Async mode is gated by SAM_CHAT_ASYNC, default OFF — the same
+# safe-closed/dormant pattern this module uses for SAM_CHAT_USER_ID.
+# Deploying this code changes nothing until the flag is set, so it can
+# land before the §11 Flask↔gateway reachability work is finished and
+# be switched on once both gateways are reachable. [ck]
+
+def _sam_chat_async_enabled() -> bool:
+    """True iff SAM_CHAT_ASYNC is set truthy — switches /sam/chat to the
+    Phase 2 async queue model (spec §9). Default off (safe-closed)."""
+    return (os.getenv("SAM_CHAT_ASYNC") or "").strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+def _message_gateways() -> list[dict]:
+    """The gateways /sam/chat may route a queued message to (spec §10.4).
+    Ordered list of {name, url, token}; the caller tries them in order
+    and uses the first that responds — automatic failover, no routing
+    config. A gateway appears only when its URL env var is configured."""
+    out: list[dict] = []
+    aick_url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
+    if aick_url:
+        out.append({"name": "aick", "url": aick_url,
+                    "token": os.getenv("CENA_GATEWAY_TOKEN", "")})
+    cena2_url = (os.getenv("CENA2_GATEWAY_URL") or "").strip().rstrip("/")
+    if cena2_url:
+        out.append({"name": "cena2", "url": cena2_url,
+                    "token": os.getenv("CENA2_GATEWAY_TOKEN", "")})
+    return out
+
+
+def _gw_message_call(method: str, path: str, json_body=None, params=None):
+    """Call a gateway's /cena/messages/* endpoint, trying each gateway in
+    _message_gateways() order and using the first that RESPONDS (spec
+    §10.4 first-responder routing — a transport error or a 5xx falls
+    through to the next gateway; a <500 response is a definitive answer
+    from a reachable gateway and is returned as-is). Routes through
+    CENA_PROXY when set (Render's userspace tailscaled SOCKS5 — the same
+    path the /cena/stream call uses). Returns (gateway_name, status,
+    json) — status is None when no gateway is reachable at all."""
+    import httpx
+    proxy = os.getenv("CENA_PROXY") or None
+    # 20s overall, but a short 5s CONNECT timeout so a dead primary
+    # gateway fails over to the next in ~5s instead of eating the full
+    # 20s (samai §13 review — §10.4 health-aware-routing intent).
+    client_kwargs: dict = {"timeout": httpx.Timeout(20.0, connect=5.0)}
+    if proxy:
+        client_kwargs["proxy"] = proxy
+    last = (None, None, None)
+    for gw in _message_gateways():
+        try:
+            with httpx.Client(**client_kwargs) as hx:
+                r = hx.request(
+                    method, gw["url"] + path,
+                    json=json_body if json_body is not None else None,
+                    params=params or None,
+                    headers={"X-Cena-Token": gw["token"]})
+            try:
+                body = r.json()
+            except Exception:  # noqa: BLE001
+                body = {}
+            if r.status_code < 500:
+                return gw["name"], r.status_code, body
+            last = (gw["name"], r.status_code, body)  # 5xx — try the next
+        except Exception as e:  # noqa: BLE001
+            logger.warning("sam_chat async: gateway %s unreachable: %s",
+                           gw["name"], e)
+    return last
 
 
 def _estimate_cost(model: str, in_tok: int, out_tok: int,
@@ -650,6 +732,9 @@ def sam_chat_page():
             token_estimate=token_estimate,
             context_warn_tokens=_CONTEXT_WARN_TOKENS,
             start_files=_read_start_files(),
+            # Phase 2 §9 — when on, the page's JS uses the async queue
+            # flow (send / poll-2s / history-restore) instead of SSE.
+            sam_chat_async=_sam_chat_async_enabled(),
         )
     finally:
         db.close()
@@ -1083,6 +1168,119 @@ def sam_chat_send():
 
     return Response(stream_with_context(generate()),
                     mimetype="text/event-stream")
+
+
+# ============================================================
+# Phase 2 §9 — async routes (active only when SAM_CHAT_ASYNC is set)
+# ============================================================
+
+@sam_chat_bp.route("/sam/chat/async/send", methods=["POST"])
+def sam_chat_async_send():
+    """Phase 2 §9 — async send. Enqueues the user's message on a gateway
+    and returns IMMEDIATELY with {message_id, conversation_id}; the
+    gateway's background worker produces the answer and the UI polls
+    /sam/chat/async/poll for it. The message bodies live in the
+    gateway's cena_message_log (spec §3) — the SamChatSession row is
+    kept only for the sidebar (title / archive)."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    if not _sam_chat_async_enabled():
+        return jsonify({"ok": False, "error": "async mode disabled"}), 409
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "error": "message is empty"}), 400
+    raw_session_id = body.get("session_id")
+
+    # Resolve / create the SamChatSession (sidebar metadata only).
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        session_row = None
+        if raw_session_id:
+            try:
+                session_row = db.get(SamChatSession, int(raw_session_id))
+            except (ValueError, TypeError):
+                pass
+        if session_row is None:
+            session_row = SamChatSession(started_at=now, last_message_at=now)
+            db.add(session_row)
+            db.flush()
+        session_id = session_row.id
+        if not session_row.title:
+            session_row.title = message[:60].strip() or "New chat"
+        session_row.last_message_at = now
+        session_row.updated_at = now
+        db.commit()
+    finally:
+        db.close()
+
+    conversation_id = f"samchat-{session_id}"
+    message_id = uuid.uuid4().hex
+    name, status, jbody = _gw_message_call(
+        "POST", "/cena/messages/send", json_body={
+            "message_id": message_id,
+            "idempotency_key": message_id,
+            "conversation_id": conversation_id,
+            "user_id": str(_sam_chat_user_id() or "sam"),
+            "content": message})
+    if status is None:
+        return jsonify({"ok": False,
+                        "error": "no gateway reachable"}), 502
+    if status >= 400:
+        return jsonify({"ok": False, "error": (jbody or {}).get(
+            "error", f"gateway returned {status}")}), 502
+    return jsonify({"ok": True, "message_id": message_id,
+                    "conversation_id": conversation_id,
+                    "session_id": session_id, "gateway": name})
+
+
+@sam_chat_bp.route("/sam/chat/async/poll", methods=["GET"])
+def sam_chat_async_poll():
+    """Phase 2 §9 — the 2-second poll. Proxies the gateway's
+    GET /cena/messages/status for the conversation; the UI calls this
+    every 2s while a message is in flight, then stops."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    if not _sam_chat_async_enabled():
+        return jsonify({"ok": False, "error": "async mode disabled"}), 409
+    conv = (request.args.get("conversation_id") or "").strip()
+    if not conv:
+        return jsonify({"ok": False,
+                        "error": "conversation_id required"}), 400
+    name, status, jbody = _gw_message_call(
+        "GET", "/cena/messages/status",
+        params={"conversation_id": conv,
+                "since": request.args.get("since", "")})
+    if status is None:
+        return jsonify({"ok": False, "error": "no gateway reachable"}), 502
+    return jsonify(jbody if isinstance(jbody, dict)
+                   else {"ok": False}), status
+
+
+@sam_chat_bp.route("/sam/chat/async/history", methods=["GET"])
+def sam_chat_async_history():
+    """Phase 2 §9 — thread restore on page load. Proxies the gateway's
+    GET /cena/messages/history so reopening /sam/chat shows the full
+    conversation, including a message still being worked."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    if not _sam_chat_async_enabled():
+        return jsonify({"ok": False, "error": "async mode disabled"}), 409
+    conv = (request.args.get("conversation_id") or "").strip()
+    if not conv:
+        return jsonify({"ok": False,
+                        "error": "conversation_id required"}), 400
+    name, status, jbody = _gw_message_call(
+        "GET", "/cena/messages/history",
+        params={"conversation_id": conv})
+    if status is None:
+        return jsonify({"ok": False, "error": "no gateway reachable"}), 502
+    return jsonify(jbody if isinstance(jbody, dict)
+                   else {"ok": False}), status
 
 
 def _persist_assistant(session_id: int, content: str, model: str,

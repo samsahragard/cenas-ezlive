@@ -537,13 +537,19 @@
     sessionCost: {{ session_cost | tojson }},
     cost30d: {{ cost_30d | tojson }},
     tokenEstimate: {{ token_estimate | tojson }},
-    contextWarnTokens: {{ context_warn_tokens | tojson }}
+    contextWarnTokens: {{ context_warn_tokens | tojson }},
+    samChatAsync: {{ sam_chat_async | tojson }}
   };
 </script>
 <script>
 {% raw %}
 (function () {
   const D = window.SAM_CHAT_DATA;
+  // Phase 2 §9 — async queue mode (server flag SAM_CHAT_ASYNC). When on,
+  // send / poll-2s / history-restore go through a gateway's
+  // /cena/messages/* queue instead of the SSE stream. Off => the
+  // original streaming path below is used unchanged. [ck]
+  const ASYNC = !!D.samChatAsync;
   const $ = (id) => document.getElementById(id);
   const railEl = $("sc-sessions"), msgsEl = $("sc-msgs"),
         inputEl = $("sc-input"), modelEl = $("sc-model"),
@@ -707,6 +713,14 @@
 
   async function loadSession(id) {
     if (streaming) return;
+    if (ASYNC) {
+      currentSessionId = id;
+      document.querySelectorAll(".sc-session")
+        .forEach((e) => e.classList.remove("is-active"));
+      await restoreAsyncHistory();
+      refreshSessions();
+      return;
+    }
     const r = await fetch("/sam/chat/sessions/" + id);
     if (!r.ok) return;
     const j = await r.json();
@@ -827,6 +841,7 @@
   }
 
   async function sendMessage(_q) {
+    if (ASYNC) return sendMessageAsync(_q);
     const text = _q ? _q.text : inputEl.value.trim();
     const _atts = _q ? _q.atts : [...attachments];
     if (!text && _atts.length === 0) return;
@@ -927,6 +942,143 @@
     }
   }
 
+  // ---- Phase 2 §9 — async queue mode (send / poll-2s / history) ----
+  const THINKING_DOTS =
+    '<span class="sc-thinking-dots"><span></span><span></span><span></span></span>';
+
+  // Poll a gateway's /cena/messages/status (via /sam/chat/async/poll)
+  // every 2s until `messageId` has an answer, then render it into
+  // `bubble`. Stops on the answer, on an error status, or after 5 min.
+  function pollAsync(conversationId, messageId, bubble) {
+    let stopped = false;
+    function finish() {
+      stopped = true;
+      setStreaming(false);
+      if (msgQueue.length > 0) { sendMessage(msgQueue.shift()); }
+      else { inputEl.focus(); }
+    }
+    const timer = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const r = await fetch("/sam/chat/async/poll?conversation_id="
+          + encodeURIComponent(conversationId));
+        if (!r.ok) return;  // transient — keep polling
+        const j = await r.json();
+        const msgs = (j && j.messages) || [];
+        const hit = msgs.find((m) => m.message_id === messageId
+          && (m.answer || "").trim());
+        if (hit) {
+          clearInterval(timer);
+          try { bubble.innerHTML = marked.parse(hit.answer); }
+          catch (e) { bubble.textContent = hit.answer; }
+          bubble.classList.remove("streaming");
+          bubble.dataset.raw = hit.answer;
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+          finish();
+          return;
+        }
+        const errd = ((j && j.pending) || []).find((p) =>
+          p.message_id === messageId && p.status === "error");
+        if (errd) {
+          clearInterval(timer);
+          bubble.textContent = "⚠ the gateway worker hit an error on "
+            + "this message";
+          bubble.classList.remove("streaming");
+          finish();
+        }
+      } catch (e) { /* transient — keep polling */ }
+    }, 2000);
+    setTimeout(() => {
+      if (stopped) return;
+      clearInterval(timer);
+      if (bubble.classList.contains("streaming")) {
+        bubble.textContent = "⚠ no response after 5 minutes — reload "
+          + "to check; the gateway may still finish it";
+        bubble.classList.remove("streaming");
+      }
+      finish();
+    }, 300000);
+  }
+
+  // Async send: enqueue on a gateway, return immediately, then poll.
+  async function sendMessageAsync(_q) {
+    const text = _q ? _q.text : inputEl.value.trim();
+    if (!text) return;
+    if (streaming && !_q) {
+      // a send while one is in flight — queue it (mirrors the SSE path)
+      msgQueue.push({ text: text, atts: [] });
+      addMessage("user", text, {});
+      inputEl.value = "";
+      inputEl.style.height = "auto";
+      return;
+    }
+    addMessage("user", text, {});
+    if (!_q) {
+      inputEl.value = "";
+      inputEl.style.height = "auto";
+      attachments = [];
+      renderChips();
+    }
+    const bubble = addMessage("assistant", "", { streaming: true });
+    bubble.innerHTML = THINKING_DOTS;
+    setStreaming(true);
+    try {
+      const r = await fetch("/sam/chat/async/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          session_id: currentSessionId ? String(currentSessionId) : null,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) {
+        bubble.textContent = "⚠ " + (j.error
+          || ("send failed (" + r.status + ")"));
+        bubble.classList.remove("streaming");
+        setStreaming(false);
+        if (msgQueue.length > 0) sendMessage(msgQueue.shift());
+        return;
+      }
+      currentSessionId = j.session_id;
+      refreshSessions();
+      pollAsync(j.conversation_id, j.message_id, bubble);
+    } catch (e) {
+      bubble.textContent = "⚠ connection error: " + e;
+      bubble.classList.remove("streaming");
+      setStreaming(false);
+    }
+  }
+
+  // Restore a conversation from the gateway log (spec §9 page-load).
+  async function restoreAsyncHistory() {
+    if (!currentSessionId) { renderMessages([]); return; }
+    const conv = "samchat-" + currentSessionId;
+    try {
+      const r = await fetch("/sam/chat/async/history?conversation_id="
+        + encodeURIComponent(conv));
+      if (!r.ok) { renderMessages([]); return; }
+      const j = await r.json();
+      const msgs = (j && j.messages) || [];
+      const pend = (j && j.pending) || [];
+      if (!msgs.length && !pend.length) { renderMessages([]); return; }
+      clearMessages();
+      msgs.forEach((m) => {
+        addMessage("user", m.question, {});
+        addMessage("assistant", m.answer, { model: m.model });
+      });
+      // A message still being worked → show it + resume polling for it.
+      pend.forEach((p) => {
+        if (p.status !== "pending" && p.status !== "in_progress") return;
+        addMessage("user", p.content || "(message)", {});
+        const b = addMessage("assistant", "", { streaming: true });
+        b.innerHTML = THINKING_DOTS;
+        setStreaming(true);
+        pollAsync(conv, p.message_id, b);
+      });
+    } catch (e) { renderMessages([]); }
+  }
+
   sendBtn.onclick = sendMessage;
   $("sc-newchat").onclick = newSession;
 
@@ -975,7 +1127,10 @@
 
   // ---- boot ----
   renderSessions(D.sessions);
-  renderMessages(D.messages);
+  // Phase 2 §9 — async mode restores the thread from the gateway log;
+  // sync mode renders the server-preloaded SamChatMessage rows.
+  if (ASYNC) { restoreAsyncHistory(); }
+  else { renderMessages(D.messages); }
   fmtSessionCost(D.sessionCost);
   fmtCost30(D.cost30d);
   updateWarn(D.tokenEstimate);

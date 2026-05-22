@@ -25,6 +25,14 @@
    it and the browser navigates normally. Its Catering popover block
    was removed.
 
+   2026-05-21 (Sam, dck): the Operations tab is exempt from the popover
+   model too — it links straight to the tabbed Operations dashboard
+   (/<store>/operations, default tab = Team), from where the seven
+   operations surfaces are reachable as tabs. Same shape as the Manager
+   and Catering tab changes: it is an <a> with no data-pop, so the
+   popover JS skips it and the browser navigates normally. Its
+   Operations popover block was removed.
+
    Per-role (tab set mirrors sidebar.html's section set):
      - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
      - expo    → 4 tabs, Manager dropped
@@ -175,19 +183,11 @@
      instead of opening a sub-option popover — same change as the
      Manager tab above. The other tabs keep their popovers. #}
 
-  <div class="bn-popover" id="bn-pop-operations" data-pop="operations">
-    <div class="bn-pop-title">Operations</div>
-    <div class="bn-popover-grid">
-      <a class="bn-pop-item{% if _bn_active == 'partner_team' %} active{% endif %}" href="/partner/team"><i class="ti ti-users-group"></i>Team</a>
-      <a class="bn-pop-item{% if _bn_active.startswith('sales_') %} active{% endif %}" href="/{{ store_slug }}/reports/sales/total"><i class="ti ti-cash"></i>Sales</a>
-      <a class="bn-pop-item{% if _bn_active.endswith('_labor') %} active{% endif %}" href="/{{ store_slug }}/reports/labor/boh"><i class="ti ti-users"></i>Labor</a>
-      <a class="bn-pop-item{% if _bn_active.startswith('perf_') %} active{% endif %}" href="/{{ store_slug }}/reports/performance/all"><i class="ti ti-medal"></i>Performance</a>
-      <a class="bn-pop-item{% if _bn_active == 'weekly_schedule' %} active{% endif %}" href="/{{ store_slug }}/schedule"><i class="ti ti-calendar"></i>Schedule</a>
-      <a class="bn-pop-item{% if _bn_active == 'kitchen_fresh_food' %} active{% endif %}" href="/{{ store_slug }}/fresh-food/place-order"><i class="ti ti-leaf"></i>Fresh Food</a>
-      <a class="bn-pop-item{% if _bn_active == 'kitchen_prep_list' %} active{% endif %}" href="/{{ store_slug }}/kitchen/prep-list"><i class="ti ti-tools-kitchen-2"></i>Prep List</a>
-      <a class="bn-pop-item{% if _bn_active == 'kitchen_recipes' %} active{% endif %}" href="/{{ store_slug }}/recipes"><i class="ti ti-book"></i>Recipes</a>
-    </div>
-  </div>
+  {# The Operations popover was removed 2026-05-21 (Sam, dck): the
+     Operations tab now links straight to the tabbed Operations
+     dashboard instead of opening a sub-option popover — same change as
+     the Manager and Catering tabs above. The other tabs keep their
+     popovers. #}
 
   <div class="bn-popover" id="bn-pop-vendors" data-pop="vendors">
     <div class="bn-pop-title">Vendors</div>
@@ -243,12 +243,18 @@
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
     </a>
-    {# Operations #}
-    <button type="button" data-pop="operations"
-       class="ck-bnav-tab{% if _bn_active in ['partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
+    {# Operations — per Sam 2026-05-21 (dck) this tab no longer opens a
+       popover: it links straight to the tabbed Operations dashboard
+       (default tab = Team), from where the seven operations surfaces
+       (Team / Forecasts / Sales / Labor / Performance / Schedule /
+       Corporate Order) are reachable as tabs. Same change as the
+       Manager and Catering tabs above — an <a> with no data-pop, so
+       the popover JS skips it. #}
+    <a href="/{{ store_slug }}/operations"
+       class="ck-bnav-tab{% if _bn_active in ['operations_dashboard', 'partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
       <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Operations</span>
-    </button>
+    </a>
     {# Vendors #}
     <button type="button" data-pop="vendors"
        class="ck-bnav-tab{% if _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">

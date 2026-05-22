@@ -4181,3 +4181,246 @@ def catering_dashboard():
         )
     finally:
         db.close()
+
+
+# ---- Operations dashboard (tabbed entry layer, Sam 2026-05-21, dck) --
+# Structural twin of the Catering dashboard above (itself a twin of the
+# Manager dashboard). The bottom-nav Operations tab no longer opens a
+# sub-option popover — it links straight here. This route renders
+# operations_dashboard.html: a tab strip across the seven operations
+# surfaces, defaulting to the Team tab. Each tab shows a short read-only
+# PREVIEW of that surface; "Open full page" links to the real,
+# unchanged page. Forecasts is not built yet — its tab shows a
+# coming-soon state with no full-page link. This is a new entry surface
+# — it does not alter the existing operations pages or routes.
+
+# Ordered tab spec: (tab key, caption, coming-soon flag). The key
+# matches the active_tab values operations_dashboard.html expects. The
+# first entry is the default tab. full_url is built per-request in the
+# route since the tabs point at a mix of store-scoped and flat routes,
+# and the coming-soon tab gets no link at all.
+_OPERATIONS_DASH_TABS = [
+    ("team",        "Team",            False),
+    ("forecasts",   "Forecasts",       True),
+    ("sales",       "Sales",           False),
+    ("labor",       "Labor",           False),
+    ("performance", "Performance",     False),
+    ("schedule",    "Schedule",        False),
+    ("corp-order",  "Corporate Order", False),
+]
+
+
+def _operations_dash_full_url(tab_key):
+    """Absolute href to the real operations page a tab previews.
+      team        -> /partner/team                  (team.team_page)
+      sales       -> /<store>/reports/sales          (store.sales)
+      labor       -> /<store>/reports/labor          (store.labor)
+      performance -> /<store>/reports/server-performance
+                                                     (store.server_performance)
+      schedule    -> /<store>/schedule               (store.schedule)
+      corp-order  -> /<store>/corporate-order         (corporate_order.view)
+      forecasts   -> not built yet — returns "" (no Open full page link)
+    team.team_page lives outside the /<store> blueprint, so url_for on
+    it resolves to the flat /partner/team with no slug. corporate_order
+    is reached with an explicit store_slug (the convention everywhere
+    else this file links to it). store.* endpoints take the slug from
+    the current request. Falls back to "" on an unknown key so a link
+    is never wrong."""
+    if tab_key == "team":
+        return url_for("team.team_page")
+    if tab_key == "sales":
+        return url_for("store.sales")
+    if tab_key == "labor":
+        return url_for("store.labor")
+    if tab_key == "performance":
+        return url_for("store.server_performance")
+    if tab_key == "schedule":
+        return url_for("store.schedule")
+    if tab_key == "corp-order":
+        return url_for("corporate_order.view", store_slug=g.current_store)
+    return ""   # 'forecasts' (not built) or any unknown key
+
+
+def _operations_dash_preview(db, tab_key, limit=3):
+    """Latest few preview rows for one operations tab, store-scoped,
+    shaped into {title, sub, meta} for the dashboard. Pure read; never
+    writes, never calls Toast or any external API. Returns
+    (rows, meta_line). Any model/query problem degrades to an empty
+    preview so one bad tab can never break the dashboard (the
+    _catering_dash_preview contract).
+
+    Team reads the live User table (active staff, by store). The other
+    tabs (Sales / Labor / Performance / Schedule / Corporate Order) have
+    no single clean preview table — they summarise into a few headline
+    rows the same way _catering_dash_preview's ez-manage tab does.
+    Forecasts is a coming-soon surface and is handled by the route, not
+    here.
+    """
+    log = logging.getLogger(__name__)
+
+    # ---- Team — User table, active staff, grouped by store ----------
+    if tab_key == "team":
+        try:
+            from app.models import User
+            q = db.query(User).filter(User.active == True)  # noqa: E712
+            users = q.all()
+        except Exception as ex:
+            log.warning("operations dashboard: team preview unavailable: %s", ex)
+            return [], ""
+        rows = []
+        try:
+            tomball = [u for u in users
+                       if (getattr(u, "store_scope", None) or "") == "tomball"]
+            copperfield = [u for u in users
+                           if (getattr(u, "store_scope", None) or "")
+                           == "copperfield"]
+            drivers = [u for u in users
+                       if (getattr(u, "role", None) or "") == "driver"]
+            if copperfield:
+                rows.append({
+                    "title": f"Copperfield · {len(copperfield)} staff",
+                    "sub": "Active team members at the Copperfield store",
+                    "meta": "Active",
+                })
+            if tomball:
+                rows.append({
+                    "title": f"Tomball · {len(tomball)} staff",
+                    "sub": "Active team members at the Tomball store",
+                    "meta": "Active",
+                })
+            if drivers:
+                rows.append({
+                    "title": f"Drivers · {len(drivers)} active",
+                    "sub": "Catering delivery drivers across both stores",
+                    "meta": "Available",
+                })
+        except Exception as ex:
+            log.warning("operations dashboard: team preview shaping failed: %s", ex)
+            return [], ""
+        total = len(users)
+        meta_line = (f"{total} active team member{'s' if total != 1 else ''}"
+                     if total else "No active team members")
+        return rows[:limit], meta_line
+
+    # ---- Sales — headline summary rows (no single preview table) ----
+    if tab_key == "sales":
+        rows = [
+            {"title": "Today's sales",
+             "sub": "In-store, online and third-party channels combined",
+             "meta": "Open full page"},
+            {"title": "Week to date",
+             "sub": "Running sales total for the current week",
+             "meta": "Open full page"},
+            {"title": "Channel breakdown",
+             "sub": "Toast, ezCater, DoorDash and Uber Eats by channel",
+             "meta": "Open full page"},
+        ]
+        return rows, "Sales reporting across every channel"
+
+    # ---- Labor — headline summary rows ------------------------------
+    if tab_key == "labor":
+        rows = [
+            {"title": "Labor as a percent of sales",
+             "sub": "Current labor cost against sales for the week",
+             "meta": "Open full page"},
+            {"title": "Hours by store",
+             "sub": "BOH and FOH hours worked across both stores",
+             "meta": "Open full page"},
+            {"title": "Coverage outlook",
+             "sub": "Where hours need adjusting against the forecast",
+             "meta": "Open full page"},
+        ]
+        return rows, "Labor cost and hours reporting"
+
+    # ---- Performance — headline summary rows ------------------------
+    if tab_key == "performance":
+        rows = [
+            {"title": "Sales trend",
+             "sub": "Week-over-week sales movement across the stores",
+             "meta": "Open full page"},
+            {"title": "Food cost variance",
+             "sub": "Actual food cost against the target percentage",
+             "meta": "Open full page"},
+            {"title": "Server performance",
+             "sub": "Server and bartender results over recent weeks",
+             "meta": "Open full page"},
+        ]
+        return rows, "Key operations metrics over recent weeks"
+
+    # ---- Schedule — headline summary rows ---------------------------
+    if tab_key == "schedule":
+        rows = [
+            {"title": "This week's schedule",
+             "sub": "Team scheduled and total hours for the current week",
+             "meta": "Open full page"},
+            {"title": "Coverage gaps",
+             "sub": "Open shifts still needing someone to fill them",
+             "meta": "Open full page"},
+            {"title": "Next week",
+             "sub": "Draft schedule to review before it is published",
+             "meta": "Open full page"},
+        ]
+        return rows, "Weekly team scheduling"
+
+    # ---- Corporate Order — headline summary rows --------------------
+    if tab_key == "corp-order":
+        rows = [
+            {"title": "Weekly food order",
+             "sub": "Standing corporate procurement order for the store",
+             "meta": "Open full page"},
+            {"title": "Protein delivery",
+             "sub": "Protein orders and their delivery status",
+             "meta": "Open full page"},
+            {"title": "Auto-replenishment",
+             "sub": "Recurring vendor refills on a set schedule",
+             "meta": "Open full page"},
+        ]
+        return rows, "Corporate procurement and vendor orders"
+
+    return [], ""
+
+
+@store_bp.route("/operations", methods=["GET"])
+def operations_dashboard():
+    """Tabbed Operations dashboard — the entry layer the bottom-nav
+    Operations tab links to. Defaults to the Team tab; ?tab=<key>
+    deep-links another tab (an invalid tab falls back to Team).
+    Read-only previews; each tab's "Open full page" link points at the
+    unchanged real operations page. Forecasts is not built yet — its
+    tab shows a coming-soon state with no link. Structural twin of
+    catering_dashboard."""
+    valid = {key for key, _, _ in _OPERATIONS_DASH_TABS}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = _OPERATIONS_DASH_TABS[0][0]   # 'team'
+    db = next(get_db())
+    try:
+        tabs = []
+        for key, caption, coming in _OPERATIONS_DASH_TABS:
+            if coming:
+                # Not-yet-built surface: no preview query, no link.
+                rows, meta_line = [], "Predictive sales and labor — coming soon"
+            else:
+                rows, meta_line = _operations_dash_preview(db, key)
+            tabs.append({
+                "key": key,
+                "label": caption,
+                "coming": coming,
+                "full_url": _operations_dash_full_url(key),
+                "meta": meta_line,
+                "rows": rows,
+            })
+        label = g.store_label or "Cenas Kitchen"
+        # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+        _t = date.today()
+        today_label = f"{_t:%a, %b} {_t.day}"
+        return render_template(
+            "operations_dashboard.html",
+            active="operations_dashboard",
+            store_label=label,
+            today_label=today_label,
+            active_tab=active_tab,
+            tabs=tabs,
+        )
+    finally:
+        db.close()

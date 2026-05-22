@@ -1,0 +1,590 @@
+{# ============================================================
+   operations_dashboard.html — Operations dashboard (tabbed entry
+   layer). dck build, structural twin of catering_dashboard.html
+   (dck's just-shipped Catering dashboard) and manager_dashboard.html
+   (samai's Manager dashboard). Per Sam: the bottom-nav Operations tab
+   no longer opens a popover — it links straight here, and this page
+   is a tab strip across the seven operations surfaces, defaulting to
+   the Team tab.
+
+   This page is a NEW entry layer, NOT a rewrite. Each tab shows a
+   short preview of that operations surface; the "Open full page" link
+   in every tab goes to the real, unchanged page (Team -> /partner/team,
+   Sales -> /<store>/reports/sales, Labor -> /<store>/reports/labor,
+   Performance -> /<store>/reports/server-performance, Schedule ->
+   /<store>/schedule, Corporate Order -> /<store>/corporate-order).
+   Forecasts is not built yet — it shows a coming-soon state with no
+   full-page link. All existing operations functionality is left as-is.
+
+   Extends base_dashboard.html — so the role-matched dashboard badge
+   top-right (dashboard_banner context processor) ships for free. The
+   shared topbar is suppressed; this page draws its own ribbon header
+   inside content (the catering_dashboard.html pattern). OPAQUE surface
+   — the restaurant-photo body backdrop never bleeds through page
+   content.
+
+   ROUTE CONTRACT (store_routes.py operations_dashboard):
+     active        -> 'operations_dashboard'
+     store_label   -> str (store display name)
+     today_label   -> str, e.g. "Wed, May 21"
+     active_tab    -> one of: team | forecasts | sales | labor |
+                      performance | schedule | corp-order
+                      (default 'team'; from ?tab=, validated)
+     tabs          -> ordered list[dict], one per tab:
+       key       (str)  — tab id, matches active_tab values
+       label     (str)  — tab strip caption
+       full_url  (str)  — absolute href to that page (Open full page);
+                          empty string for a not-yet-built surface
+       coming    (bool) — True for a not-yet-built ("soon") surface
+       meta      (str)  — one-line summary under the (hidden) heading
+       rows      -> list[dict] preview rows, each:
+         title (str), sub (str), meta (str)
+   Every tab is independently safe: a tab with no rows shows an empty
+   state and still links out (unless coming, which shows no link). The
+   dashboard route never touches Toast or any write path — it is a
+   read-only preview surface.
+   Audience gate at the route: same site gate as the operations pages.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'operations_dashboard' %}
+
+{% block title %}Operations — Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar — this page draws its own ribbon header
+   inside content (catering_dashboard.html pattern). The role badge is
+   rendered OUTSIDE the topbar block in base_dashboard.html, so it is
+   kept regardless. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .opsdash so the warm
+     Cenas palette never leaks into the global sheet (the catdash-
+     scoping pattern). Comments here never contain a slash-star pair. */
+  .opsdash {
+    --opsd-red: #C73B36;
+    --opsd-red-deep: #9B2A26;
+    --opsd-red-bright: #E85852;
+    --opsd-gold: #E4B340;
+    --opsd-gold-bright: #FFD970;
+    --opsd-teal: #2EA39F;
+    --opsd-teal-bright: #5BCAC5;
+    --opsd-cream: #FAF6EC;
+    --opsd-cream-dim: rgba(250, 246, 236, 0.78);
+    --opsd-cream-faint: rgba(250, 246, 236, 0.5);
+    --opsd-cream-meta: rgba(250, 246, 236, 0.4);
+    --opsd-bg-deep: #1a0d08;
+    --opsd-bg-warm: #28160e;
+    --opsd-surface: #241409;
+    --opsd-surface-2: #2e1a0d;
+    --opsd-surface-hover: #34200f;
+    --opsd-input: rgba(0, 0, 0, 0.3);
+    --opsd-border: rgba(217, 164, 54, 0.18);
+    --opsd-border-active: rgba(228, 179, 64, 0.5);
+    --opsd-accent: var(--opsd-gold-bright);
+    --opsd-glow: rgba(255, 217, 112, 0.18);
+    --opsd-glow-strong: rgba(255, 217, 112, 0.4);
+    --opsd-radius: 14px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--opsd-cream);
+    margin-bottom: 40px;
+  }
+  .opsdash * { box-sizing: border-box; }
+
+  /* SECTION LABEL above the card. */
+  .opsdash .opsd-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--opsd-cream-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0 4px 12px;
+  }
+
+  /* THE PAGE CARD — ribbon header plus the tab strip in one opaque
+     surface. OPAQUE base colour so the photo backdrop never washes
+     the header text out (the base_dashboard .ck-topbar landmine). */
+  .opsdash .opsd-card {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--opsd-border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .opsdash .opsd-card::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle, var(--opsd-glow), transparent 70%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* RIBBON HEADER. */
+  .opsdash .opsd-ribbon {
+    padding: 24px 26px 22px;
+    position: relative;
+    z-index: 1;
+  }
+  .opsdash .opsd-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .opsdash .opsd-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--opsd-red-bright);
+    box-shadow: 0 0 8px var(--opsd-red-bright), 0 0 0 3px rgba(232, 88, 82, 0.18);
+  }
+  .opsdash .opsd-brand-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--opsd-gold);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+  .opsdash .opsd-brand-text .opsd-div {
+    color: var(--opsd-cream-faint);
+    margin: 0 4px;
+    font-weight: 400;
+  }
+  .opsdash .opsd-brand-text .opsd-module { color: var(--opsd-accent); }
+
+  .opsdash .opsd-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    font-size: clamp(36px, 5.5vw, 52px);
+    line-height: 1;
+    color: var(--opsd-cream);
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .opsdash .opsd-rule {
+    height: 1px;
+    width: 56px;
+    background: linear-gradient(90deg, var(--opsd-accent), transparent);
+    margin-bottom: 12px;
+  }
+  .opsdash .opsd-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--opsd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+  .opsdash .opsd-meta .opsd-sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--opsd-cream-faint);
+  }
+  .opsdash .opsd-meta .opsd-meta-val {
+    color: var(--opsd-accent);
+    font-weight: 700;
+  }
+
+  /* TAB STRIP — horizontally scrollable on a phone. The tabs are real
+     anchors (href to ?tab=KEY) so the page works with JS off; JS
+     upgrades them to in-page panel swaps. */
+  .opsdash .opsd-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 0.5px solid var(--opsd-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 1;
+  }
+  .opsdash .opsd-tabs::-webkit-scrollbar { display: none; }
+  .opsdash .opsd-tab {
+    flex-shrink: 0;
+    padding: 13px 16px 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--opsd-cream-faint);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .opsdash .opsd-tab:hover { color: var(--opsd-cream); }
+  .opsdash .opsd-tab.active {
+    color: var(--opsd-cream);
+    border-bottom-color: var(--opsd-accent);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .opsdash .opsd-tab-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .opsdash .opsd-tab.active .opsd-tab-icon { opacity: 1; }
+
+  /* SOON badge — on a tab whose surface is not built yet (Forecasts).
+     Lifted from Sam's operations reference. */
+  .opsdash .opsd-soon {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--opsd-cream-faint);
+    background: rgba(228, 179, 64, 0.12);
+    border: 0.5px solid rgba(228, 179, 64, 0.3);
+    padding: 2px 6px;
+    border-radius: 999px;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+
+  /* TAB CONTENT — one panel per tab; the inactive ones are hidden. */
+  .opsdash .opsd-content-wrap { margin-top: 18px; }
+  .opsdash .opsd-panel {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--opsd-border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  .opsdash .opsd-panel.hidden { display: none; }
+
+  .opsdash .opsd-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 0.5px solid var(--opsd-border);
+    flex-wrap: wrap;
+  }
+  .opsdash .opsd-panel-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--opsd-cream);
+    letter-spacing: -0.01em;
+  }
+  .opsdash .opsd-panel-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--opsd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+
+  .opsdash .opsd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .opsdash .opsd-row {
+    background: var(--opsd-input);
+    border: 0.5px solid var(--opsd-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .opsdash .opsd-row:hover {
+    background: var(--opsd-surface-hover);
+    border-color: var(--opsd-border-active);
+  }
+  .opsdash .opsd-row-main { flex: 1; min-width: 0; }
+  .opsdash .opsd-row-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--opsd-cream);
+    margin-bottom: 3px;
+  }
+  .opsdash .opsd-row-sub {
+    font-size: 12px;
+    color: var(--opsd-cream-dim);
+    line-height: 1.4;
+  }
+  .opsdash .opsd-row-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--opsd-cream-faint);
+    letter-spacing: 0.05em;
+    text-align: right;
+    flex-shrink: 0;
+    max-width: 46%;
+  }
+
+  /* Empty state — a tab whose surface has no entries yet. */
+  .opsdash .opsd-empty {
+    text-align: center;
+    padding: 34px 18px;
+    color: var(--opsd-cream-faint);
+    font-size: 13px;
+    background: var(--opsd-input);
+    border: 0.5px dashed var(--opsd-border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  /* Coming-soon state — a surface that is not built yet (Forecasts).
+     Same shape as the empty state with a teal accent so it reads as
+     "planned" rather than "no data". */
+  .opsdash .opsd-soon-state {
+    text-align: center;
+    padding: 30px 18px;
+    border-radius: 8px;
+    background: rgba(46, 163, 159, 0.06);
+    border: 0.5px dashed rgba(46, 163, 159, 0.35);
+    margin-bottom: 16px;
+  }
+  .opsdash .opsd-soon-state .opsd-soon-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--opsd-teal-bright);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .opsdash .opsd-soon-state .opsd-soon-text {
+    color: var(--opsd-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .opsdash .opsd-footer {
+    text-align: right;
+    padding-top: 14px;
+    border-top: 0.5px solid var(--opsd-border);
+  }
+  .opsdash .opsd-open-link {
+    color: var(--opsd-gold);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+  }
+  .opsdash .opsd-open-link:hover { color: var(--opsd-gold-bright); }
+
+  /* MOBILE — mirror the reference design's phone treatment. */
+  @media (max-width: 760px) {
+    .opsdash .opsd-ribbon { padding: 16px 14px; }
+    .opsdash .opsd-brand { margin-bottom: 8px; }
+    .opsdash .opsd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
+    .opsdash .opsd-title { font-size: 30px; margin-bottom: 6px; }
+    .opsdash .opsd-rule { width: 40px; margin-bottom: 8px; }
+    .opsdash .opsd-meta { font-size: 10px; gap: 6px; }
+    .opsdash .opsd-tabs { padding: 0 8px; }
+    .opsdash .opsd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
+    .opsdash .opsd-tab-icon { width: 12px; height: 12px; }
+    .opsdash .opsd-content-wrap { margin-top: 14px; }
+    .opsdash .opsd-panel { padding: 16px 14px; border-radius: 12px; }
+    .opsdash .opsd-panel-head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+    }
+    .opsdash .opsd-panel-title { font-size: 15px; }
+    .opsdash .opsd-panel-meta { font-size: 10px; }
+    .opsdash .opsd-row {
+      padding: 10px 12px;
+      gap: 10px;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .opsdash .opsd-row-title { font-size: 13px; }
+    .opsdash .opsd-row-sub { font-size: 11px; }
+    .opsdash .opsd-row-meta {
+      text-align: left;
+      max-width: 100%;
+      font-size: 9px;
+      padding-top: 4px;
+      border-top: 0.5px dashed rgba(217, 164, 54, 0.12);
+    }
+    .opsdash .opsd-footer { text-align: center; padding-top: 12px; }
+    .opsdash .opsd-open-link { font-size: 12px; }
+    .opsdash .opsd-section-label { font-size: 9px; margin-bottom: 8px; }
+  }
+  @media (max-width: 380px) {
+    .opsdash .opsd-title { font-size: 26px; }
+    .opsdash .opsd-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .opsdash .opsd-ribbon { padding: 14px 14px 12px; }
+  }
+</style>
+
+{# Per-tab SVG glyphs — keyed by tab.key so the route stays glyph-free.
+   Plain Jinja dict; the icon falls back to the Team glyph if a key is
+   missing. Glyphs lifted from Sam's operations reference. #}
+{% set _opsd_icons = {
+  'team':        '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>',
+  'forecasts':   '<path d="M2.5 19.5l5.5-5.5 4 4 7-7L20.5 12V5h-7l2.5 2.5-5 5-4-4L2.5 14V19.5z"/>',
+  'sales':       '<path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>',
+  'labor':       '<path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/>',
+  'performance': '<path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/>',
+  'schedule':    '<path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>',
+  'corp-order':  '<path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49A.996.996 0 0 0 20.01 4H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>'
+} %}
+
+<div class="opsdash" id="opsdash">
+
+  <div class="opsd-section-label">Operations Dashboard</div>
+
+  {# PAGE CARD — ribbon header plus tab strip. #}
+  <div class="opsd-card">
+
+    {# RIBBON HEADER — the page's own header (the shared topbar is
+       suppressed). The role badge sits above this, rendered by
+       base_dashboard.html outside the topbar block. #}
+    <div class="opsd-ribbon">
+      <div class="opsd-brand">
+        <span class="opsd-brand-dot"></span>
+        <span class="opsd-brand-text">CENAS <span class="opsd-div">&middot;</span> OPS <span class="opsd-div">&middot;</span> <span class="opsd-module">OPERATIONS</span></span>
+      </div>
+      <h1 class="opsd-title">Operations</h1>
+      <div class="opsd-rule"></div>
+      <div class="opsd-meta">
+        <span>{{ today_label }}</span>
+        <span class="opsd-sep"></span>
+        <span class="opsd-meta-val">{{ store_label }}</span>
+        <span class="opsd-sep"></span>
+        <span>{{ tabs|length }} sections</span>
+      </div>
+    </div>
+
+    {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
+       JS upgrades them to in-page panel swaps. #}
+    <div class="opsd-tabs" id="opsdTabs" role="tablist">
+      {% for t in tabs %}
+      <a class="opsd-tab{% if t.key == active_tab %} active{% endif %}"
+         href="?tab={{ t.key }}"
+         role="tab"
+         data-tab="{{ t.key }}"
+         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
+        <svg class="opsd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _opsd_icons.get(t.key, _opsd_icons['team'])|safe }}</svg>
+        <span class="opsd-tab-label">{{ t.label }}</span>
+        {% if t.coming %}<span class="opsd-soon">soon</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {# TAB CONTENT — one preview panel per tab. Inactive panels carry
+     .hidden; JS toggles them. Each panel ends with an "Open full page"
+     link to the real, unchanged page — except a not-yet-built surface
+     (coming), which shows a coming-soon state and no link. #}
+  <div class="opsd-content-wrap">
+    {% for t in tabs %}
+    <div class="opsd-panel{% if t.key != active_tab %} hidden{% endif %}"
+         id="opsd-panel-{{ t.key }}"
+         data-tab-panel="{{ t.key }}"
+         role="tabpanel">
+      <div class="opsd-panel-head">
+        <div class="opsd-panel-title">{{ t.label }}</div>
+        <div class="opsd-panel-meta">{{ t.meta }}</div>
+      </div>
+      {% if t.coming %}
+      <div class="opsd-soon-state">
+        <span class="opsd-soon-tag">Coming soon</span>
+        <div class="opsd-soon-text">{{ t.label }} isn't live yet — it's on the Operations roadmap. Check back soon.</div>
+      </div>
+      {% elif t.rows %}
+      <div class="opsd-list">
+        {% for r in t.rows %}
+        <div class="opsd-row">
+          <div class="opsd-row-main">
+            <div class="opsd-row-title">{{ r.title }}</div>
+            <div class="opsd-row-sub">{{ r.sub }}</div>
+          </div>
+          <div class="opsd-row-meta">{{ r.meta }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="opsd-empty">No recent {{ t.label|lower }} activity — open the full page for the complete view.</div>
+      {% endif %}
+      {% if not t.coming %}
+      <div class="opsd-footer">
+        <a class="opsd-open-link" href="{{ t.full_url }}">Open full page &rarr;</a>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  // Tab switching — clicking a tab swaps the visible preview panel in
+  // place (no navigation). The tabs are real <a href="?tab=KEY"> links,
+  // so with JS off the route serves the right tab server-side; this
+  // just makes the switch instant. The "Open full page" links inside
+  // each panel are untouched — they navigate to the real operations page.
+  var root = document.getElementById("opsdash");
+  if (!root) return;
+  var tabs = root.querySelectorAll(".opsd-tab");
+  var panels = root.querySelectorAll(".opsd-panel");
+
+  function activate(key) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
+    });
+  }
+
+  root.querySelector("#opsdTabs").addEventListener("click", function (e) {
+    var tab = e.target.closest(".opsd-tab");
+    if (!tab) return;
+    e.preventDefault();
+    var key = tab.getAttribute("data-tab");
+    activate(key);
+    // Keep the URL in sync so a refresh / share lands on the same tab,
+    // without adding a history entry per tap.
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable — panel swap still works */ }
+  });
+})();
+</script>
+{% endblock %}

@@ -384,6 +384,21 @@
         margin-bottom: 12px;
       }
     }
+
+    /* Role-badge Option A (Sam #965) — auto-hide the standalone strip
+       wherever an in-header copy of the badge renders, so no page shows
+       the badge twice. An in-header copy is a .dash-role-banner inside the
+       shared topbar's .topbar-right, or inside a tabbed dashboard's
+       *-ribbon header. Self-header pages have neither and keep the strip. */
+    main.main:has(.topbar-right .dash-role-banner) .dash-role-badge-bar,
+    main.main:has([class$="-ribbon"] .dash-role-banner) .dash-role-badge-bar {
+      display: none;
+    }
+    /* topbar-right is a vertically-centered flex row; pin the badge to the
+       top so it reads as a top-right header badge, not a centered one. */
+    .ck-topbar .topbar-right .dash-role-banner {
+      align-self: flex-start;
+    }
   </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
   {# ribbon.js retired 2026-05-18 (commit 2). X/Check dismiss behavior
@@ -438,10 +453,11 @@
        role's banner stem, injected app-wide by the context processor in
        ezcater_routes.register_dashboard_banner — 'general' is the
        never-raises fallback. #}
+    {# Standalone role-badge strip — the self-header-page fallback. On pages
+       that render an in-header badge (shared topbar or a dashboard ribbon)
+       this strip auto-hides via the :has() rule in the role-badge styles. #}
     <div class="dash-role-badge-bar">
-      <img class="dash-role-banner"
-           src="{{ url_for('static', filename='brand/banners/' ~ (dashboard_banner|default('general')) ~ '.jpg') }}"
-           alt="{{ (dashboard_banner|default('general'))|replace('_', ' ')|title }} Dashboard">
+      {% include 'partials/_role_badge.html' %}
     </div>
 
     {# Shared topbar — Page Title Library treatment. Renders for every page
@@ -482,6 +498,10 @@
         </div>
       </div>
       <div class="topbar-right">
+        {# Role badge in the shared topbar (Option A). The standalone
+           .dash-role-badge-bar strip auto-hides on pages that show this
+           in-header copy, via the :has() rule in the role-badge styles. #}
+        {% include 'partials/_role_badge.html' %}
         {% block topbar_right %}{% endblock %}
       </div>
     </div>

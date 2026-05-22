@@ -142,6 +142,7 @@
     position: relative;
     z-index: 1;
   }
+  .catdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
   .catdash .catd-brand {
     display: inline-flex;
     align-items: center;
@@ -178,6 +179,7 @@
     color: var(--catd-cream);
     letter-spacing: -0.02em;
     margin-bottom: 10px;
+    margin-right: 150px;
   }
   .catdash .catd-rule {
     height: 1px;
@@ -323,9 +325,10 @@
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .catdash .catd-ribbon { padding: 16px 14px; }
+    .catdash .ribbon-role-badge { top: 16px; right: 14px; }
     .catdash .catd-brand { margin-bottom: 8px; }
     .catdash .catd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .catdash .catd-title { font-size: 30px; margin-bottom: 6px; }
+    .catdash .catd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
     .catdash .catd-rule { width: 40px; margin-bottom: 8px; }
     .catdash .catd-meta { font-size: 10px; gap: 6px; }
     .catdash .catd-tabs { padding: 0 8px; }
@@ -368,6 +371,7 @@
        suppressed). The role badge sits above this, rendered by
        base_dashboard.html outside the topbar block. #}
     <div class="catd-ribbon">
+      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       <div class="catd-brand">
         <span class="catd-brand-dot"></span>
         <span class="catd-brand-text">CENAS <span class="catd-div">&middot;</span> OPS <span class="catd-div">&middot;</span> <span class="catd-module">CATERING</span></span>

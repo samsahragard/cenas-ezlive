@@ -1,0 +1,10 @@
+{# Role-matched dashboard badge image (Option A, Sam #965). Extracted from
+   base_dashboard.html so it can render in three places: the standalone
+   .dash-role-badge-bar strip (self-header-page fallback), the shared
+   topbar's .topbar-right, and each tabbed dashboard's *-ribbon header.
+   The standalone strip auto-hides via :has() wherever an in-header copy
+   renders, so no page shows the badge twice. dashboard_banner is injected
+   app-wide by ezcater_routes.register_dashboard_banner ('general' = fallback). #}
+<img class="dash-role-banner"
+     src="{{ url_for('static', filename='brand/banners/' ~ (dashboard_banner|default('general')) ~ '.jpg') }}"
+     alt="{{ (dashboard_banner|default('general'))|replace('_', ' ')|title }} Dashboard">

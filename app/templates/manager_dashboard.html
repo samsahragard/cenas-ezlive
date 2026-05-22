@@ -144,6 +144,7 @@
     position: relative;
     z-index: 1;
   }
+  .mgrdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
   .mgrdash .mgd-brand {
     display: inline-flex;
     align-items: center;
@@ -180,6 +181,7 @@
     color: var(--mgd-cream);
     letter-spacing: -0.02em;
     margin-bottom: 10px;
+    margin-right: 150px;
   }
   .mgrdash .mgd-rule {
     height: 1px;
@@ -325,9 +327,10 @@
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .mgrdash .mgd-ribbon { padding: 16px 14px; }
+    .mgrdash .ribbon-role-badge { top: 16px; right: 14px; }
     .mgrdash .mgd-brand { margin-bottom: 8px; }
     .mgrdash .mgd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .mgrdash .mgd-title { font-size: 30px; margin-bottom: 6px; }
+    .mgrdash .mgd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
     .mgrdash .mgd-rule { width: 40px; margin-bottom: 8px; }
     .mgrdash .mgd-meta { font-size: 10px; gap: 6px; }
     .mgrdash .mgd-tabs { padding: 0 8px; }
@@ -372,6 +375,7 @@
        suppressed). The role badge sits above this, rendered by
        base_dashboard.html outside the topbar block. #}
     <div class="mgd-ribbon">
+      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       <div class="mgd-brand">
         <span class="mgd-brand-dot"></span>
         <span class="mgd-brand-text">CENAS <span class="mgd-div">&middot;</span> OPS <span class="mgd-div">&middot;</span> <span class="mgd-module">MANAGER</span></span>

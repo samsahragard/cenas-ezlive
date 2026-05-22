@@ -1,20 +1,38 @@
 {# ============================================================
    operations_dashboard.html — Operations dashboard (tabbed entry
    layer). dck build, structural twin of catering_dashboard.html
-   (dck's just-shipped Catering dashboard) and manager_dashboard.html
+   (dck's just-reworked Catering dashboard) and manager_dashboard.html
    (samai's Manager dashboard). Per Sam: the bottom-nav Operations tab
    no longer opens a popover — it links straight here, and this page
    is a tab strip across the seven operations surfaces, defaulting to
    the Team tab.
 
-   This page is a NEW entry layer, NOT a rewrite. Each tab shows a
-   short preview of that operations surface; the "Open full page" link
-   in every tab goes to the real, unchanged page (Team -> /partner/team,
-   Sales -> /<store>/reports/sales, Labor -> /<store>/reports/labor,
-   Performance -> /<store>/reports/server-performance, Schedule ->
-   /<store>/schedule, Corporate Order -> /<store>/corporate-order).
-   Forecasts is not built yet — it shows a coming-soon state with no
-   full-page link. All existing operations functionality is left as-is.
+   DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer
+   shows a short preview + an "Open full page" link. Each tab now
+   embeds the REAL, fully-functional operations page inline in an
+   <iframe> — click a tab and the actual working page is right there
+   (Team -> /partner/team, Sales -> /<store>/reports/sales, Labor ->
+   /<store>/reports/labor, Performance ->
+   /<store>/reports/server-performance, Schedule -> /<store>/schedule,
+   Corporate Order -> /<store>/corporate-order). All existing
+   operations functionality is left as-is — the pages are simply
+   iframed, not rewritten.
+
+   FORECASTS is the exception: it is not a built page, so it has no
+   real page to embed. Its tab keeps the coming-soon state — no
+   iframe, no full-page link — exactly as before.
+
+   The iframed pages are themselves full base_dashboard pages, so each
+   one carries its own sidebar / topbar / bottom-nav / role badge. The
+   <script> below reaches into each iframe on its load event (same
+   origin — allowed) and hides that page's chrome, leaving only the
+   page content visible inside the frame. To avoid a flash of doubled
+   chrome the iframe stays hidden until its load+strip completes.
+
+   LAZY-LOAD: each iframe carries a data-src, not a src. JS sets src
+   from data-src the first time that tab is activated, so the six
+   operations pages do not all load at once — only the default tab
+   (Team) loads on page load.
 
    Extends base_dashboard.html — so the role-matched dashboard badge
    top-right (dashboard_banner context processor) ships for free. The
@@ -31,18 +49,15 @@
                       performance | schedule | corp-order
                       (default 'team'; from ?tab=, validated)
      tabs          -> ordered list[dict], one per tab:
-       key       (str)  — tab id, matches active_tab values
-       label     (str)  — tab strip caption
-       full_url  (str)  — absolute href to that page (Open full page);
-                          empty string for a not-yet-built surface
-       coming    (bool) — True for a not-yet-built ("soon") surface
-       meta      (str)  — one-line summary under the (hidden) heading
-       rows      -> list[dict] preview rows, each:
-         title (str), sub (str), meta (str)
-   Every tab is independently safe: a tab with no rows shows an empty
-   state and still links out (unless coming, which shows no link). The
-   dashboard route never touches Toast or any write path — it is a
-   read-only preview surface.
+       key    (str)  — tab id, matches active_tab values
+       label  (str)  — tab strip caption
+       url    (str)  — absolute href to that page (the iframe target);
+                       empty string for a not-yet-built surface
+       coming (bool) — True for a not-yet-built ("soon") surface; that
+                       tab renders a coming-soon state, not an iframe
+   The dashboard route never touches Toast or any write path — it is a
+   thin shell that only resolves each tab's URL. The iframed pages run
+   their own queries when the browser loads them.
    Audience gate at the route: same site gate as the operations pages.
    ============================================================ #}
 {% extends "base_dashboard.html" %}
@@ -267,104 +282,83 @@
     vertical-align: middle;
   }
 
-  /* TAB CONTENT — one panel per tab; the inactive ones are hidden. */
+  /* TAB CONTENT — one panel per tab; the inactive ones are hidden.
+     A built tab's panel is just a frame holding ONE iframe of the real
+     page; the Forecasts panel instead holds a coming-soon state. */
   .opsdash .opsd-content-wrap { margin-top: 18px; }
   .opsdash .opsd-panel {
     background-color: #241610;
     background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
     border: 0.5px solid var(--opsd-border);
     border-radius: 14px;
-    padding: 22px 24px;
+    overflow: hidden;
+    position: relative;
   }
   .opsdash .opsd-panel.hidden { display: none; }
 
-  .opsdash .opsd-panel-head {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    margin-bottom: 14px;
-    padding-bottom: 10px;
-    border-bottom: 0.5px solid var(--opsd-border);
-    flex-wrap: wrap;
+  /* THE EMBED — the real operations page lives in this iframe. It fills
+     the panel: full width, and tall enough to feel like a page (the
+     viewport height minus the ribbon-card + tab strip + margins above
+     it, with a sane floor). The iframe's OWN content scrolls, so there
+     is no nested-scrollbar fight with the dashboard page. */
+  .opsdash .opsd-embed-frame {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 360px);
+    min-height: 600px;
+    border: 0;
+    background: #1a0d08;
+    /* Hidden until its load+chrome-strip completes — prevents a flash
+       of the iframed page's own (doubled) sidebar / topbar before the
+       strip script runs. JS flips this to visible. */
+    opacity: 0;
+    transition: opacity 0.18s ease;
   }
-  .opsdash .opsd-panel-title {
-    font-family: 'Manrope', sans-serif;
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--opsd-cream);
-    letter-spacing: -0.01em;
-  }
-  .opsdash .opsd-panel-meta {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--opsd-cream-faint);
-    letter-spacing: 0.05em;
-  }
+  .opsdash .opsd-embed-frame.ready { opacity: 1; }
 
-  .opsdash .opsd-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 16px;
-  }
-  .opsdash .opsd-row {
-    background: var(--opsd-input);
-    border: 0.5px solid var(--opsd-border);
-    border-radius: 8px;
-    padding: 12px 14px;
+  /* Loading shim — a quiet placeholder shown over the panel until the
+     iframe is ready. Removed (display:none) once the frame reveals. */
+  .opsdash .opsd-embed-loading {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
-    gap: 14px;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .opsdash .opsd-row:hover {
-    background: var(--opsd-surface-hover);
-    border-color: var(--opsd-border-active);
-  }
-  .opsdash .opsd-row-main { flex: 1; min-width: 0; }
-  .opsdash .opsd-row-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--opsd-cream);
-    margin-bottom: 3px;
-  }
-  .opsdash .opsd-row-sub {
-    font-size: 12px;
-    color: var(--opsd-cream-dim);
-    line-height: 1.4;
-  }
-  .opsdash .opsd-row-meta {
+    justify-content: center;
+    gap: 10px;
+    background: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     color: var(--opsd-cream-faint);
-    letter-spacing: 0.05em;
-    text-align: right;
-    flex-shrink: 0;
-    max-width: 46%;
+    z-index: 1;
   }
-
-  /* Empty state — a tab whose surface has no entries yet. */
-  .opsdash .opsd-empty {
-    text-align: center;
-    padding: 34px 18px;
-    color: var(--opsd-cream-faint);
-    font-size: 13px;
-    background: var(--opsd-input);
-    border: 0.5px dashed var(--opsd-border);
-    border-radius: 8px;
-    margin-bottom: 16px;
+  .opsdash .opsd-embed-loading.gone { display: none; }
+  .opsdash .opsd-embed-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--opsd-accent);
+    box-shadow: 0 0 8px var(--opsd-glow-strong);
+    animation: opsd-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes opsd-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1); }
   }
 
   /* Coming-soon state — a surface that is not built yet (Forecasts).
-     Same shape as the empty state with a teal accent so it reads as
-     "planned" rather than "no data". */
+     Sits inside its panel with a teal accent so it reads as "planned"
+     rather than "broken". The panel keeps its own padding here since,
+     unlike the iframe panels, this content is not edge-to-edge. */
+  .opsdash .opsd-soon-panel { padding: 22px 24px; }
   .opsdash .opsd-soon-state {
     text-align: center;
-    padding: 30px 18px;
+    padding: 44px 18px;
     border-radius: 8px;
     background: rgba(46, 163, 159, 0.06);
     border: 0.5px dashed rgba(46, 163, 159, 0.35);
-    margin-bottom: 16px;
   }
   .opsdash .opsd-soon-state .opsd-soon-tag {
     font-family: 'JetBrains Mono', monospace;
@@ -382,21 +376,6 @@
     line-height: 1.5;
   }
 
-  .opsdash .opsd-footer {
-    text-align: right;
-    padding-top: 14px;
-    border-top: 0.5px solid var(--opsd-border);
-  }
-  .opsdash .opsd-open-link {
-    color: var(--opsd-gold);
-    font-family: 'Manrope', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    text-decoration: none;
-    letter-spacing: 0.02em;
-  }
-  .opsdash .opsd-open-link:hover { color: var(--opsd-gold-bright); }
-
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .opsdash .opsd-ribbon { padding: 16px 14px; }
@@ -409,33 +388,13 @@
     .opsdash .opsd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .opsdash .opsd-tab-icon { width: 12px; height: 12px; }
     .opsdash .opsd-content-wrap { margin-top: 14px; }
-    .opsdash .opsd-panel { padding: 16px 14px; border-radius: 12px; }
-    .opsdash .opsd-panel-head {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 4px;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
+    .opsdash .opsd-panel { border-radius: 12px; }
+    .opsdash .opsd-embed-frame {
+      height: calc(100vh - 300px);
+      min-height: 560px;
     }
-    .opsdash .opsd-panel-title { font-size: 15px; }
-    .opsdash .opsd-panel-meta { font-size: 10px; }
-    .opsdash .opsd-row {
-      padding: 10px 12px;
-      gap: 10px;
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .opsdash .opsd-row-title { font-size: 13px; }
-    .opsdash .opsd-row-sub { font-size: 11px; }
-    .opsdash .opsd-row-meta {
-      text-align: left;
-      max-width: 100%;
-      font-size: 9px;
-      padding-top: 4px;
-      border-top: 0.5px dashed rgba(217, 164, 54, 0.12);
-    }
-    .opsdash .opsd-footer { text-align: center; padding-top: 12px; }
-    .opsdash .opsd-open-link { font-size: 12px; }
+    .opsdash .opsd-soon-panel { padding: 16px 14px; }
+    .opsdash .opsd-soon-state { padding: 34px 16px; }
     .opsdash .opsd-section-label { font-size: 9px; margin-bottom: 8px; }
   }
   @media (max-width: 380px) {
@@ -502,44 +461,38 @@
 
   </div>
 
-  {# TAB CONTENT — one preview panel per tab. Inactive panels carry
-     .hidden; JS toggles them. Each panel ends with an "Open full page"
-     link to the real, unchanged page — except a not-yet-built surface
-     (coming), which shows a coming-soon state and no link. #}
+  {# TAB CONTENT — one panel per tab. Inactive panels carry .hidden; JS
+     toggles them. A built tab's panel holds ONE iframe of the real
+     operations page; the iframe carries a data-src (not src) so the
+     page is lazy-loaded on first activation of its tab — only the
+     default tab loads now. On the iframe's load event the script
+     strips that page's own chrome (sidebar / topbar / bottom-nav /
+     role badge / wordmark) so only the page content shows inside the
+     frame. A not-yet-built surface (coming) holds a coming-soon state
+     instead — no iframe at all. #}
   <div class="opsd-content-wrap">
     {% for t in tabs %}
     <div class="opsd-panel{% if t.key != active_tab %} hidden{% endif %}"
          id="opsd-panel-{{ t.key }}"
          data-tab-panel="{{ t.key }}"
          role="tabpanel">
-      <div class="opsd-panel-head">
-        <div class="opsd-panel-title">{{ t.label }}</div>
-        <div class="opsd-panel-meta">{{ t.meta }}</div>
-      </div>
       {% if t.coming %}
-      <div class="opsd-soon-state">
-        <span class="opsd-soon-tag">Coming soon</span>
-        <div class="opsd-soon-text">{{ t.label }} isn't live yet — it's on the Operations roadmap. Check back soon.</div>
-      </div>
-      {% elif t.rows %}
-      <div class="opsd-list">
-        {% for r in t.rows %}
-        <div class="opsd-row">
-          <div class="opsd-row-main">
-            <div class="opsd-row-title">{{ r.title }}</div>
-            <div class="opsd-row-sub">{{ r.sub }}</div>
-          </div>
-          <div class="opsd-row-meta">{{ r.meta }}</div>
+      <div class="opsd-soon-panel">
+        <div class="opsd-soon-state">
+          <span class="opsd-soon-tag">Coming soon</span>
+          <div class="opsd-soon-text">{{ t.label }} isn't live yet — it's on the Operations roadmap. Check back soon.</div>
         </div>
-        {% endfor %}
       </div>
       {% else %}
-      <div class="opsd-empty">No recent {{ t.label|lower }} activity — open the full page for the complete view.</div>
-      {% endif %}
-      {% if not t.coming %}
-      <div class="opsd-footer">
-        <a class="opsd-open-link" href="{{ t.full_url }}">Open full page &rarr;</a>
+      <div class="opsd-embed-loading" data-embed-loading="{{ t.key }}">
+        <span class="opsd-embed-dot"></span>
+        <span>Loading {{ t.label }}</span>
       </div>
+      <iframe class="opsd-embed-frame"
+              data-embed-frame="{{ t.key }}"
+              data-src="{{ t.url }}"
+              title="{{ t.label }}"
+              loading="lazy"></iframe>
       {% endif %}
     </div>
     {% endfor %}
@@ -552,15 +505,114 @@
 <script>
 (function () {
   "use strict";
-  // Tab switching — clicking a tab swaps the visible preview panel in
-  // place (no navigation). The tabs are real <a href="?tab=KEY"> links,
-  // so with JS off the route serves the right tab server-side; this
-  // just makes the switch instant. The "Open full page" links inside
-  // each panel are untouched — they navigate to the real operations page.
+  /* Operations dashboard — tab switching plus iframe lazy-load and the
+     per-iframe chrome strip.
+
+     The tabs are real <a href="?tab=KEY"> links, so with JS off the
+     route serves the right tab server-side. With JS on, clicking a tab
+     swaps the visible panel in place (no navigation).
+
+     Each built tab's panel holds ONE iframe of the real, fully-
+     functional operations page. The iframe carries data-src, not src —
+     so the six operations pages do not all load at once. The default
+     tab's iframe is loaded immediately; every other iframe loads the
+     first time its tab is activated. Forecasts is not built yet — its
+     panel holds a coming-soon state and has no iframe, so loadFrame is
+     a no-op for it.
+
+     The iframed pages are full base_dashboard pages and so carry their
+     own sidebar / topbar / bottom-nav / role badge. Because the iframe
+     is same-origin, on its load event we reach into the iframe's
+     document and hide that chrome, then widen its <main> to full
+     width — so the frame shows ONLY the page content. The iframe is
+     kept hidden (opacity 0) until that strip finishes, so there is no
+     flash of doubled chrome. */
   var root = document.getElementById("opsdash");
   if (!root) return;
   var tabs = root.querySelectorAll(".opsd-tab");
   var panels = root.querySelectorAll(".opsd-panel");
+  var loaded = {};   // tab key -> true once its iframe src has been set
+
+  /* Hide one element inside the iframe document. Defensive: a missing
+     node (a page that suppresses the shared topbar, say) is a no-op. */
+  function hideEl(doc, selector) {
+    var nodes = doc.querySelectorAll(selector);
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].style.setProperty("display", "none", "important");
+    }
+  }
+
+  /* Strip the base_dashboard chrome from a loaded iframe so only the
+     page content remains. Same-origin, so contentDocument is readable;
+     wrapped in try/catch so a cross-origin redirect (e.g. a login
+     bounce) can never throw and leave the frame stuck hidden. */
+  function stripChrome(frame) {
+    var doc;
+    try {
+      doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+    } catch (err) {
+      doc = null;
+    }
+    if (doc) {
+      /* The page's own chrome — every landmark base_dashboard.html
+         renders around <main>. .ck-bnav is the bottom-nav root
+         element (partials/_bottom_nav.html). */
+      [
+        ".sidebar",
+        ".sidebar-overlay",
+        ".dash-role-badge-bar",
+        ".topbar",
+        ".subnav-row",
+        ".wordmark",
+        ".ck-bnav"
+      ].forEach(function (sel) { hideEl(doc, sel); });
+
+      /* Widen the page content to fill the frame. .layout is a CSS
+         grid (240px sidebar track + 1fr main); hiding .sidebar leaves
+         its empty track, so collapse the grid to a single column.
+         Then zero main.main's padding so the content uses the whole
+         frame width — no leftover sidebar-offset gutter. */
+      var layout = doc.querySelector(".layout");
+      if (layout) {
+        layout.style.setProperty("grid-template-columns", "1fr", "important");
+        layout.style.setProperty("display", "block", "important");
+      }
+      var main = doc.querySelector("main.main");
+      if (main) {
+        main.style.setProperty("margin", "0", "important");
+        main.style.setProperty("padding", "0", "important");
+        main.style.setProperty("width", "100%", "important");
+        main.style.setProperty("max-width", "100%", "important");
+      }
+    }
+    reveal(frame);
+  }
+
+  /* Reveal a frame and drop its loading shim. Runs after the strip (or
+     after a cross-origin load we could not strip — better to show the
+     page than to leave a permanent spinner). */
+  function reveal(frame) {
+    frame.classList.add("ready");
+    var key = frame.getAttribute("data-embed-frame");
+    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+    if (shim) shim.classList.add("gone");
+  }
+
+  /* Lazy-load: set src from data-src the first time a tab is shown.
+     The load handler runs stripChrome; loaded[] guards against
+     re-loading on every subsequent activation of the same tab. A tab
+     with no iframe (Forecasts, coming-soon) has no frame node, so this
+     is a clean no-op for it. */
+  function loadFrame(key) {
+    if (loaded[key]) return;
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!frame) return;
+    var src = frame.getAttribute("data-src");
+    if (!src) return;
+    loaded[key] = true;
+    frame.addEventListener("load", function () { stripChrome(frame); });
+    frame.setAttribute("src", src);
+  }
 
   function activate(key) {
     tabs.forEach(function (t) {
@@ -571,6 +623,7 @@
     panels.forEach(function (p) {
       p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
     });
+    loadFrame(key);   // first activation of this tab loads its iframe
   }
 
   root.querySelector("#opsdTabs").addEventListener("click", function (e) {
@@ -579,12 +632,22 @@
     e.preventDefault();
     var key = tab.getAttribute("data-tab");
     activate(key);
-    // Keep the URL in sync so a refresh / share lands on the same tab,
-    // without adding a history entry per tap.
+    /* Keep the URL in sync so a refresh / share lands on the same tab,
+       without adding a history entry per tap. */
     try {
       history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
     } catch (err) { /* history API unavailable — panel swap still works */ }
   });
+
+  /* Load the iframe for the tab that is active on page load (the
+     default tab, team, unless ?tab= deep-linked another). The other
+     iframes stay unloaded until their tab is clicked; if the active
+     tab is Forecasts there is no iframe and this is a no-op. */
+  var startTab = (function () {
+    var activeTabEl = root.querySelector(".opsd-tab.active");
+    return activeTabEl ? activeTabEl.getAttribute("data-tab") : null;
+  })();
+  if (startTab) loadFrame(startTab);
 })();
 </script>
 {% endblock %}

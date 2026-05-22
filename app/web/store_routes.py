@@ -3884,27 +3884,20 @@ def sales(channel: str = "all"):
 # Structural twin of the Manager dashboard above. The bottom-nav
 # Catering tab no longer opens a sub-option popover — it links straight
 # here. This route renders catering_dashboard.html: a tab strip across
-# the five catering surfaces, defaulting to the Ez Orders tab. Each tab
-# shows a short read-only PREVIEW of that surface; "Open full page"
-# links to the real, unchanged page. This is a new entry surface — it
-# does not alter the existing catering pages or routes.
+# the five catering surfaces, defaulting to the Ez Orders tab.
+#
+# DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer shows a
+# read-only preview + an "Open full page" link. Instead each tab embeds
+# the REAL, fully-functional catering page inline in an <iframe> — click
+# a tab and the working page is right there. So this route no longer
+# builds preview rows or pulls the Order / Driver / quote tables; it
+# only needs each tab's URL for the iframe to load. The existing
+# catering pages and routes are untouched — they are simply iframed.
 
-# Map an Order.origin_store_id to a store_scope token. store_1 + store_3
-# = Copperfield kitchen; store_2 + store_4 = Tomball. Mirrors
-# orders_browse._ORIGIN_STORE_ID_TO_SCOPE.
-_CATERING_ORIGIN_TO_LOCATION = {
-    "store_1": "copperfield", "store_3": "copperfield",
-    "store_2": "tomball",     "store_4": "tomball",
-}
-_CATERING_LOCATION_TO_ORIGINS = {
-    "tomball":     ("store_2", "store_4"),
-    "copperfield": ("store_1", "store_3"),
-}
-
-# Ordered tab spec: (tab key, caption, endpoint-or-path resolver name).
-# The key matches the active_tab values catering_dashboard.html expects.
-# First entry is the default tab. full_url is built per-request in the
-# route since two tabs point at store-scoped routes and three are flat.
+# Ordered tab spec: (tab key, caption). The key matches the active_tab
+# values catering_dashboard.html expects. First entry is the default
+# tab. The per-tab url is built per-request by _catering_dash_full_url
+# since two tabs point at store-scoped routes and three are flat.
 _CATERING_DASH_TABS = [
     ("ez-orders",  "Ez Orders"),
     ("ez-market",  "Ez Market"),
@@ -3915,7 +3908,8 @@ _CATERING_DASH_TABS = [
 
 
 def _catering_dash_full_url(tab_key):
-    """Absolute href to the real catering page a tab previews.
+    """Absolute href to the real catering page a tab embeds in its
+    iframe.
       ez-orders  -> /<store>/orders        (store.orders_list)
       ez-market  -> /ez-market             (flat, not store-scoped)
       ez-manage  -> /ez-manage             (flat, not store-scoped)
@@ -3924,7 +3918,7 @@ def _catering_dash_full_url(tab_key):
     The flat ez-market / ez-manage paths are written as literals because
     they live outside the /<store> blueprint; url_for on a store endpoint
     would prepend the slug. Falls back to the orders page on an unknown
-    key so a link is never empty."""
+    key so the iframe src is never empty."""
     if tab_key == "ez-orders":
         return url_for("store.orders_list")
     if tab_key == "ez-market":
@@ -3938,249 +3932,42 @@ def _catering_dash_full_url(tab_key):
     return url_for("store.orders_list")
 
 
-def _catering_dash_preview(db, tab_key, limit=3):
-    """Latest few preview rows for one catering tab, store-scoped, shaped
-    into {title, sub, meta} for the dashboard. Pure read; never writes,
-    never calls Toast or the ezCater API. Returns (rows, meta_line).
-    Any model/query problem degrades to an empty preview so one bad tab
-    can never break the dashboard (the _manager_dash_preview contract).
-
-    Data sources, all already used elsewhere in this file:
-      ez-orders  -> Order (today + upcoming, status != cancelled)
-      ez-market  -> Order (status == 'available' — the Ez Market bid pool)
-      ez-manage  -> Order counts, summarised into account-status rows
-      ez-drivers -> Driver (active, this store) + latest DriverShift state
-      in-house   -> InHouseCateringQuote (this store, newest first)
-    """
-    log = logging.getLogger(__name__)
-    loc = getattr(g, "current_location", "both")
-    origins = _CATERING_LOCATION_TO_ORIGINS.get(loc)  # None for both/corporate
-
-    # ---- Ez Orders / Ez Market / Ez Manage all read the Order table ----
-    if tab_key in ("ez-orders", "ez-market", "ez-manage"):
-        try:
-            from app.models import Order
-            from datetime import datetime, timezone
-            now_ct = datetime.now(timezone(timedelta(hours=-5)))
-            today_iso = now_ct.strftime("%Y-%m-%d")
-        except Exception as ex:
-            log.warning("catering dashboard: order preview setup failed: %s", ex)
-            return [], ""
-
-        if tab_key == "ez-orders":
-            try:
-                q = (db.query(Order)
-                     .filter(Order.delivery_date >= today_iso)
-                     .filter(Order.status != "cancelled"))
-                if origins:
-                    q = q.filter(Order.origin_store_id.in_(origins))
-                total = q.count()
-                recent = (q.order_by(Order.delivery_date.asc(),
-                                     Order.deliver_at.asc())
-                           .limit(limit).all())
-            except Exception as ex:
-                log.warning("catering dashboard: ez-orders preview unavailable: %s", ex)
-                return [], ""
-            rows = []
-            for o in recent:
-                origin = o.origin_store_id or ""
-                store = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
-                title = (o.external_order_id or "").strip() or "Catering order"
-                client = (o.client or "").strip()
-                sub = " · ".join(p for p in (
-                    client or f"{store} delivery",
-                    (o.deliver_at or "").strip()) if p)
-                driver = (o.assigned_driver or "").strip()
-                meta = " · ".join(p for p in (
-                    store, driver or "Needs driver") if p)
-                rows.append({"title": title, "sub": sub, "meta": meta})
-            meta_line = f"{total} today + upcoming" if total else "No upcoming orders"
-            return rows, meta_line
-
-        if tab_key == "ez-market":
-            try:
-                q = (db.query(Order)
-                     .filter(Order.status == "available"))
-                if origins:
-                    q = q.filter(Order.origin_store_id.in_(origins))
-                total = q.count()
-                recent = (q.order_by(Order.delivery_date.asc().nullslast(),
-                                     Order.deliver_at.asc())
-                           .limit(limit).all())
-            except Exception as ex:
-                log.warning("catering dashboard: ez-market preview unavailable: %s", ex)
-                return [], ""
-            rows = []
-            for o in recent:
-                origin = o.origin_store_id or ""
-                store = "Tomball" if origin in ("store_2", "store_4") else "Copperfield"
-                title = (o.external_order_id or "").strip() or "Open delivery"
-                client = (o.client or "").strip()
-                sub = " · ".join(p for p in (
-                    client or f"{store} delivery",
-                    (o.deliver_at or "").strip()) if p)
-                heads = getattr(o, "headcount", None)
-                meta = " · ".join(p for p in (
-                    store,
-                    (f"{heads} heads" if heads else ""),
-                    "Open for bid") if p)
-                rows.append({"title": title, "sub": sub, "meta": meta})
-            meta_line = (f"{total} order{'s' if total != 1 else ''} open for bid"
-                         if total else "No orders open for bid")
-            return rows, meta_line
-
-        # ez-manage — no dedicated per-store table; summarise the Order
-        # table into a few account-status rows (mirrors the reference's
-        # menu sync / pricing / coverage lines).
-        try:
-            base = db.query(Order).filter(Order.status != "cancelled")
-            if origins:
-                base = base.filter(Order.origin_store_id.in_(origins))
-            total_all = base.count()
-            upcoming = base.filter(Order.delivery_date >= today_iso).count()
-            unassigned = (base.filter(Order.delivery_date >= today_iso)
-                          .filter((Order.assigned_driver.is_(None)) |
-                                  (Order.assigned_driver == ""))
-                          .count())
-        except Exception as ex:
-            log.warning("catering dashboard: ez-manage preview unavailable: %s", ex)
-            return [], ""
-        rows = [
-            {"title": "ezCater orders on file",
-             "sub": "Imported catering orders for this store",
-             "meta": f"{total_all} total"},
-            {"title": "Upcoming coverage",
-             "sub": "Orders dated today or later",
-             "meta": f"{upcoming} upcoming"},
-            {"title": "Driver assignment",
-             "sub": "Upcoming orders still needing a driver",
-             "meta": (f"{unassigned} unassigned" if unassigned
-                      else "All assigned")},
-        ]
-        meta_line = "ezCater account management"
-        return rows, meta_line
-
-    # ---- Ez Drivers — Driver table, this store, active, + shift state ----
-    if tab_key == "ez-drivers":
-        try:
-            from sqlalchemy import func
-            q = db.query(Driver).filter(Driver.active == True)  # noqa: E712
-            if loc in ("tomball", "copperfield"):
-                q = q.filter(Driver.location == loc)
-            total = q.count()
-            recent = q.order_by(Driver.location, Driver.name).limit(limit).all()
-            latest_shift = {}
-            if recent:
-                ids = [d.id for d in recent]
-                pairs = (db.query(DriverShift.driver_id, func.max(DriverShift.id))
-                         .filter(DriverShift.driver_id.in_(ids))
-                         .group_by(DriverShift.driver_id)
-                         .all())
-                shift_ids = [sid for _, sid in pairs]
-                shift_by_id = {}
-                if shift_ids:
-                    for s in (db.query(DriverShift)
-                              .filter(DriverShift.id.in_(shift_ids)).all()):
-                        shift_by_id[s.id] = s
-                for did, sid in pairs:
-                    latest_shift[did] = shift_by_id.get(sid)
-        except Exception as ex:
-            logging.getLogger(__name__).warning(
-                "catering dashboard: ez-drivers preview unavailable: %s", ex)
-            return [], ""
-        rows = []
-        for d in recent:
-            name = (d.name or "").strip() or "Driver"
-            store = (d.location or "").strip().title() or "—"
-            shift = latest_shift.get(d.id)
-            if shift is not None and getattr(shift, "ended_at", None) is None \
-                    and getattr(shift, "started_at", None) is not None:
-                state = "On shift"
-            else:
-                state = "Off shift"
-            rows.append({
-                "title": name,
-                "sub": f"{store} catering driver",
-                "meta": state,
-            })
-        meta_line = (f"{total} active driver{'s' if total != 1 else ''}"
-                     if total else "No active drivers")
-        return rows, meta_line
-
-    # ---- In-House — InHouseCateringQuote, this store, newest first ----
-    if tab_key == "in-house":
-        try:
-            from app.models import InHouseCateringQuote as IHQ
-            q = db.query(IHQ)
-            if loc in ("tomball", "copperfield"):
-                q = q.filter((IHQ.store_scope == loc) |
-                             (IHQ.store_scope.is_(None)))
-            total = q.count()
-            recent = q.order_by(IHQ.created_at.desc()).limit(limit).all()
-        except Exception as ex:
-            logging.getLogger(__name__).warning(
-                "catering dashboard: in-house preview unavailable: %s", ex)
-            return [], ""
-        rows = []
-        for r in recent:
-            cust = (getattr(r, "customer_name", None) or "").strip()
-            title = cust or f"Quote #{getattr(r, 'id', '')}".strip()
-            ev = _central_dt(getattr(r, "event_date", None))
-            guests = getattr(r, "guest_count", None)
-            sub = " · ".join(p for p in (
-                "In-house catering quote",
-                (f"{guests} guests" if guests else ""),
-                (ev.strftime("%b %d") if ev else "")) if p)
-            subtotal = getattr(r, "subtotal", None)
-            status = (getattr(r, "status", None) or "").strip().title()
-            meta = " · ".join(p for p in (
-                (f"${subtotal:,.0f}" if isinstance(subtotal, (int, float)) else ""),
-                status) if p)
-            rows.append({"title": title, "sub": sub, "meta": meta})
-        meta_line = (f"{total} quote{'s' if total != 1 else ''} on file"
-                     if total else "No quotes yet")
-        return rows, meta_line
-
-    return [], ""
-
-
 @store_bp.route("/catering", methods=["GET"])
 def catering_dashboard():
     """Tabbed Catering dashboard — the entry layer the bottom-nav
     Catering tab links to. Defaults to the Ez Orders tab; ?tab=<key>
     deep-links another tab (an invalid tab falls back to Ez Orders).
-    Read-only previews; each tab's "Open full page" link points at the
-    unchanged real catering page. Structural twin of manager_dashboard."""
+    Each tab embeds the real, fully-functional catering page inline in
+    an iframe. Structural twin of manager_dashboard.
+
+    This route is now a thin shell: it builds only the tab list (key,
+    label, url) the template needs to point each iframe at its page. No
+    DB session is opened — the iframed pages run their own queries when
+    the browser loads them."""
     valid = {key for key, _ in _CATERING_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
         active_tab = _CATERING_DASH_TABS[0][0]   # 'ez-orders'
-    db = next(get_db())
-    try:
-        tabs = []
-        for key, caption in _CATERING_DASH_TABS:
-            rows, meta_line = _catering_dash_preview(db, key)
-            tabs.append({
-                "key": key,
-                "label": caption,
-                "full_url": _catering_dash_full_url(key),
-                "meta": meta_line,
-                "rows": rows,
-            })
-        label = g.store_label or "Cenas Kitchen"
-        # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-        _t = date.today()
-        today_label = f"{_t:%a, %b} {_t.day}"
-        return render_template(
-            "catering_dashboard.html",
-            active="catering_dashboard",
-            store_label=label,
-            today_label=today_label,
-            active_tab=active_tab,
-            tabs=tabs,
-        )
-    finally:
-        db.close()
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "url": _catering_dash_full_url(key),
+        }
+        for key, caption in _CATERING_DASH_TABS
+    ]
+    label = g.store_label or "Cenas Kitchen"
+    # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "catering_dashboard.html",
+        active="catering_dashboard",
+        store_label=label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )
 
 
 # ---- Operations dashboard (tabbed entry layer, Sam 2026-05-21, dck) --
@@ -4188,17 +3975,25 @@ def catering_dashboard():
 # Manager dashboard). The bottom-nav Operations tab no longer opens a
 # sub-option popover — it links straight here. This route renders
 # operations_dashboard.html: a tab strip across the seven operations
-# surfaces, defaulting to the Team tab. Each tab shows a short read-only
-# PREVIEW of that surface; "Open full page" links to the real,
-# unchanged page. Forecasts is not built yet — its tab shows a
-# coming-soon state with no full-page link. This is a new entry surface
-# — it does not alter the existing operations pages or routes.
+# surfaces, defaulting to the Team tab.
+#
+# DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer shows a
+# read-only preview + an "Open full page" link. Instead each tab embeds
+# the REAL, fully-functional operations page inline in an <iframe> —
+# click a tab and the working page is right there. So this route no
+# longer builds preview rows or opens a DB session; it only needs each
+# tab's URL for the iframe to load. The existing operations pages and
+# routes are untouched — they are simply iframed.
+#
+# FORECASTS is the exception: it is not a built page, so it has no real
+# page to embed. Its tab keeps the coming-soon state (no iframe, no
+# link), exactly as before.
 
 # Ordered tab spec: (tab key, caption, coming-soon flag). The key
 # matches the active_tab values operations_dashboard.html expects. The
-# first entry is the default tab. full_url is built per-request in the
-# route since the tabs point at a mix of store-scoped and flat routes,
-# and the coming-soon tab gets no link at all.
+# first entry is the default tab. The per-tab url is built per-request
+# by _operations_dash_full_url since the tabs point at a mix of
+# store-scoped and flat routes, and the coming-soon tab gets no url.
 _OPERATIONS_DASH_TABS = [
     ("team",        "Team",            False),
     ("forecasts",   "Forecasts",       True),
@@ -4211,7 +4006,8 @@ _OPERATIONS_DASH_TABS = [
 
 
 def _operations_dash_full_url(tab_key):
-    """Absolute href to the real operations page a tab previews.
+    """Absolute href to the real operations page a tab embeds in its
+    iframe.
       team        -> /partner/team                  (team.team_page)
       sales       -> /<store>/reports/sales          (store.sales)
       labor       -> /<store>/reports/labor          (store.labor)
@@ -4219,13 +4015,13 @@ def _operations_dash_full_url(tab_key):
                                                      (store.server_performance)
       schedule    -> /<store>/schedule               (store.schedule)
       corp-order  -> /<store>/corporate-order         (corporate_order.view)
-      forecasts   -> not built yet — returns "" (no Open full page link)
+      forecasts   -> not built yet — returns "" (no iframe, coming-soon)
     team.team_page lives outside the /<store> blueprint, so url_for on
     it resolves to the flat /partner/team with no slug. corporate_order
     is reached with an explicit store_slug (the convention everywhere
     else this file links to it). store.* endpoints take the slug from
-    the current request. Falls back to "" on an unknown key so a link
-    is never wrong."""
+    the current request. Falls back to "" on an unknown key so an
+    iframe src is never wrong."""
     if tab_key == "team":
         return url_for("team.team_page")
     if tab_key == "sales":
@@ -4241,186 +4037,42 @@ def _operations_dash_full_url(tab_key):
     return ""   # 'forecasts' (not built) or any unknown key
 
 
-def _operations_dash_preview(db, tab_key, limit=3):
-    """Latest few preview rows for one operations tab, store-scoped,
-    shaped into {title, sub, meta} for the dashboard. Pure read; never
-    writes, never calls Toast or any external API. Returns
-    (rows, meta_line). Any model/query problem degrades to an empty
-    preview so one bad tab can never break the dashboard (the
-    _catering_dash_preview contract).
-
-    Team reads the live User table (active staff, by store). The other
-    tabs (Sales / Labor / Performance / Schedule / Corporate Order) have
-    no single clean preview table — they summarise into a few headline
-    rows the same way _catering_dash_preview's ez-manage tab does.
-    Forecasts is a coming-soon surface and is handled by the route, not
-    here.
-    """
-    log = logging.getLogger(__name__)
-
-    # ---- Team — User table, active staff, grouped by store ----------
-    if tab_key == "team":
-        try:
-            from app.models import User
-            q = db.query(User).filter(User.active == True)  # noqa: E712
-            users = q.all()
-        except Exception as ex:
-            log.warning("operations dashboard: team preview unavailable: %s", ex)
-            return [], ""
-        rows = []
-        try:
-            tomball = [u for u in users
-                       if (getattr(u, "store_scope", None) or "") == "tomball"]
-            copperfield = [u for u in users
-                           if (getattr(u, "store_scope", None) or "")
-                           == "copperfield"]
-            drivers = [u for u in users
-                       if (getattr(u, "role", None) or "") == "driver"]
-            if copperfield:
-                rows.append({
-                    "title": f"Copperfield · {len(copperfield)} staff",
-                    "sub": "Active team members at the Copperfield store",
-                    "meta": "Active",
-                })
-            if tomball:
-                rows.append({
-                    "title": f"Tomball · {len(tomball)} staff",
-                    "sub": "Active team members at the Tomball store",
-                    "meta": "Active",
-                })
-            if drivers:
-                rows.append({
-                    "title": f"Drivers · {len(drivers)} active",
-                    "sub": "Catering delivery drivers across both stores",
-                    "meta": "Available",
-                })
-        except Exception as ex:
-            log.warning("operations dashboard: team preview shaping failed: %s", ex)
-            return [], ""
-        total = len(users)
-        meta_line = (f"{total} active team member{'s' if total != 1 else ''}"
-                     if total else "No active team members")
-        return rows[:limit], meta_line
-
-    # ---- Sales — headline summary rows (no single preview table) ----
-    if tab_key == "sales":
-        rows = [
-            {"title": "Today's sales",
-             "sub": "In-store, online and third-party channels combined",
-             "meta": "Open full page"},
-            {"title": "Week to date",
-             "sub": "Running sales total for the current week",
-             "meta": "Open full page"},
-            {"title": "Channel breakdown",
-             "sub": "Toast, ezCater, DoorDash and Uber Eats by channel",
-             "meta": "Open full page"},
-        ]
-        return rows, "Sales reporting across every channel"
-
-    # ---- Labor — headline summary rows ------------------------------
-    if tab_key == "labor":
-        rows = [
-            {"title": "Labor as a percent of sales",
-             "sub": "Current labor cost against sales for the week",
-             "meta": "Open full page"},
-            {"title": "Hours by store",
-             "sub": "BOH and FOH hours worked across both stores",
-             "meta": "Open full page"},
-            {"title": "Coverage outlook",
-             "sub": "Where hours need adjusting against the forecast",
-             "meta": "Open full page"},
-        ]
-        return rows, "Labor cost and hours reporting"
-
-    # ---- Performance — headline summary rows ------------------------
-    if tab_key == "performance":
-        rows = [
-            {"title": "Sales trend",
-             "sub": "Week-over-week sales movement across the stores",
-             "meta": "Open full page"},
-            {"title": "Food cost variance",
-             "sub": "Actual food cost against the target percentage",
-             "meta": "Open full page"},
-            {"title": "Server performance",
-             "sub": "Server and bartender results over recent weeks",
-             "meta": "Open full page"},
-        ]
-        return rows, "Key operations metrics over recent weeks"
-
-    # ---- Schedule — headline summary rows ---------------------------
-    if tab_key == "schedule":
-        rows = [
-            {"title": "This week's schedule",
-             "sub": "Team scheduled and total hours for the current week",
-             "meta": "Open full page"},
-            {"title": "Coverage gaps",
-             "sub": "Open shifts still needing someone to fill them",
-             "meta": "Open full page"},
-            {"title": "Next week",
-             "sub": "Draft schedule to review before it is published",
-             "meta": "Open full page"},
-        ]
-        return rows, "Weekly team scheduling"
-
-    # ---- Corporate Order — headline summary rows --------------------
-    if tab_key == "corp-order":
-        rows = [
-            {"title": "Weekly food order",
-             "sub": "Standing corporate procurement order for the store",
-             "meta": "Open full page"},
-            {"title": "Protein delivery",
-             "sub": "Protein orders and their delivery status",
-             "meta": "Open full page"},
-            {"title": "Auto-replenishment",
-             "sub": "Recurring vendor refills on a set schedule",
-             "meta": "Open full page"},
-        ]
-        return rows, "Corporate procurement and vendor orders"
-
-    return [], ""
-
-
 @store_bp.route("/operations", methods=["GET"])
 def operations_dashboard():
     """Tabbed Operations dashboard — the entry layer the bottom-nav
     Operations tab links to. Defaults to the Team tab; ?tab=<key>
     deep-links another tab (an invalid tab falls back to Team).
-    Read-only previews; each tab's "Open full page" link points at the
-    unchanged real operations page. Forecasts is not built yet — its
-    tab shows a coming-soon state with no link. Structural twin of
-    catering_dashboard."""
+    Each tab embeds the real, fully-functional operations page inline
+    in an iframe — except Forecasts, which is not built yet and shows a
+    coming-soon state (no iframe). Structural twin of catering_dashboard.
+
+    This route is now a thin shell: it builds only the tab list (key,
+    label, url, coming) the template needs to point each iframe at its
+    page. No DB session is opened — the iframed pages run their own
+    queries when the browser loads them."""
     valid = {key for key, _, _ in _OPERATIONS_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
         active_tab = _OPERATIONS_DASH_TABS[0][0]   # 'team'
-    db = next(get_db())
-    try:
-        tabs = []
-        for key, caption, coming in _OPERATIONS_DASH_TABS:
-            if coming:
-                # Not-yet-built surface: no preview query, no link.
-                rows, meta_line = [], "Predictive sales and labor — coming soon"
-            else:
-                rows, meta_line = _operations_dash_preview(db, key)
-            tabs.append({
-                "key": key,
-                "label": caption,
-                "coming": coming,
-                "full_url": _operations_dash_full_url(key),
-                "meta": meta_line,
-                "rows": rows,
-            })
-        label = g.store_label or "Cenas Kitchen"
-        # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-        _t = date.today()
-        today_label = f"{_t:%a, %b} {_t.day}"
-        return render_template(
-            "operations_dashboard.html",
-            active="operations_dashboard",
-            store_label=label,
-            today_label=today_label,
-            active_tab=active_tab,
-            tabs=tabs,
-        )
-    finally:
-        db.close()
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "coming": coming,
+            # Coming-soon surface has no real page to embed -> empty url.
+            "url": "" if coming else _operations_dash_full_url(key),
+        }
+        for key, caption, coming in _OPERATIONS_DASH_TABS
+    ]
+    label = g.store_label or "Cenas Kitchen"
+    # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "operations_dashboard.html",
+        active="operations_dashboard",
+        store_label=label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )

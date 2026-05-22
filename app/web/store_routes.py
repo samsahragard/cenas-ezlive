@@ -404,12 +404,6 @@ def _inject_subnav():
     return {"subnav_for": _subnav_for}
 
 
-@store_bp.route("/vendors")
-def vendors_landing():
-    cards = _vendors_subnav_cards(g.current_store)
-    return _render_landing("vendors", "Vendors", f"{g.store_label} · supply ops & catalogs", cards)
-
-
 @store_bp.route("/ezcater")
 def ezcater_landing():
     cards = _ezcater_subnav_cards(g.current_store)
@@ -4169,6 +4163,94 @@ def today_dashboard():
     return render_template(
         "today_dashboard.html",
         active="today_dashboard",
+        store_label=label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )
+
+
+# ---- Vendors dashboard (tabbed entry layer, Sam 2026-05-21, ck) -----
+# Structural twin of the Catering / Operations / Today dashboards above
+# (each a twin of the Manager dashboard). The bottom-nav Vendors tab no
+# longer opens a sub-option popover - it links straight here. This
+# route renders vendors_dashboard.html: a tab strip across the five
+# vendor surfaces, defaulting to the Produce tab.
+#
+# Each tab embeds the REAL, fully-functional vendor page inline in an
+# <iframe> - click a tab and the working page is right there. So this
+# route is a thin shell: it only resolves each tab's URL for the iframe
+# to load. The existing produce / vendor-recent-orders pages and routes
+# are untouched - they are simply iframed. Every tab points at a built,
+# live page (produce_root for Produce; vendor_recent_orders for the
+# four supply vendors), so - unlike Operations' Forecasts - there is no
+# coming-soon tab here.
+
+# Ordered tab spec: (tab key, caption). The key matches the active_tab
+# values vendors_dashboard.html expects; for the four supply-vendor
+# tabs it is also the <vendor> slug store.vendor_recent_orders takes.
+# The first entry is the default tab.
+_VENDORS_DASH_TABS = [
+    ("produce",          "Produce"),
+    ("webstaurant",      "Webstaurant"),
+    ("performance-food", "Performance Food"),
+    ("restaurant-depot", "Restaurant Depot"),
+    ("specs",            "Specs"),
+]
+
+
+def _vendors_dash_full_url(tab_key):
+    """Absolute href to the real vendor page a tab embeds in its iframe.
+      produce          -> /<store>/produce/   (store.produce_root)
+      webstaurant      -> /<store>/vendors/webstaurant/recent-orders
+      performance-food -> /<store>/vendors/performance-food/recent-orders
+      restaurant-depot -> /<store>/vendors/restaurant-depot/recent-orders
+      specs            -> /<store>/vendors/specs/recent-orders
+    The four supply-vendor tabs share store.vendor_recent_orders with
+    the tab key passed as the <vendor> slug (the tab keys are exactly
+    the slugs that route's _VENDOR_LABELS accepts). All are store-scoped
+    endpoints, so url_for fills the slug from the current request.
+    Falls back to the produce page on an unknown key so the iframe src
+    is never empty."""
+    if tab_key == "produce":
+        return url_for("store.produce_root")
+    if tab_key in ("webstaurant", "performance-food",
+                   "restaurant-depot", "specs"):
+        return url_for("store.vendor_recent_orders", vendor=tab_key)
+    return url_for("store.produce_root")
+
+
+@store_bp.route("/vendors", methods=["GET"])
+def vendors_dashboard():
+    """Tabbed Vendors dashboard - the entry layer the bottom-nav
+    Vendors tab links to. Defaults to the Produce tab; ?tab=<key>
+    deep-links another tab (an invalid tab falls back to Produce).
+    Each tab embeds the real, fully-functional vendor page inline in
+    an iframe. Structural twin of catering_dashboard.
+
+    This route is a thin shell: it builds only the tab list (key,
+    label, url) the template needs to point each iframe at its page. No
+    DB session is opened - the iframed pages run their own queries when
+    the browser loads them."""
+    valid = {key for key, _ in _VENDORS_DASH_TABS}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = _VENDORS_DASH_TABS[0][0]   # 'produce'
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "url": _vendors_dash_full_url(key),
+        }
+        for key, caption in _VENDORS_DASH_TABS
+    ]
+    label = g.store_label or "Cenas Kitchen"
+    # Portable "Wed, May 21" - no %-d / %#d (platform-specific).
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "vendors_dashboard.html",
+        active="vendors_dashboard",
         store_label=label,
         today_label=today_label,
         active_tab=active_tab,

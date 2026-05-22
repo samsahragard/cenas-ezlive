@@ -194,16 +194,10 @@
      the Manager and Catering tabs above. The other tabs keep their
      popovers. #}
 
-  <div class="bn-popover" id="bn-pop-vendors" data-pop="vendors">
-    <div class="bn-pop-title">Vendors</div>
-    <div class="bn-popover-grid">
-      <a class="bn-pop-item{% if _bn_active == 'produce' %} active{% endif %}" href="/{{ store_slug }}/produce/"><i class="ti ti-leaf"></i>Produce</a>
-      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_webstaurant' %} active{% endif %}" href="/{{ store_slug }}/vendors/webstaurant/recent-orders"><i class="ti ti-truck"></i>Webstaurant</a>
-      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_performance-food' %} active{% endif %}" href="/{{ store_slug }}/vendors/performance-food/recent-orders"><i class="ti ti-truck"></i>Performance Food</a>
-      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_restaurant-depot' %} active{% endif %}" href="/{{ store_slug }}/vendors/restaurant-depot/recent-orders"><i class="ti ti-truck"></i>Restaurant Depot</a>
-      <a class="bn-pop-item{% if _bn_active == 'vendor_recent_specs' %} active{% endif %}" href="/{{ store_slug }}/vendors/specs/recent-orders"><i class="ti ti-truck"></i>Specs</a>
-    </div>
-  </div>
+  {# The Vendors popover was removed 2026-05-21 (Sam, ck): the Vendors
+     tab now links straight to the tabbed Vendors dashboard instead of
+     opening a sub-option popover - the same change the Manager,
+     Catering, Operations and Today tabs already had. #}
   {% endif %}
 
   <div class="ck-bnav-inner">
@@ -266,12 +260,18 @@
       <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Operations</span>
     </a>
-    {# Vendors #}
-    <button type="button" data-pop="vendors"
-       class="ck-bnav-tab{% if _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
+    {# Vendors - per Sam 2026-05-21 (ck) this tab no longer opens a
+       popover: it links straight to the tabbed Vendors dashboard
+       (default tab = Produce), from where the five vendor surfaces
+       (Produce / Webstaurant / Performance Food / Restaurant Depot /
+       Specs) are reachable as tabs. Same change as the Manager,
+       Catering, Operations and Today tabs - an <a> with no data-pop,
+       so the popover JS skips it. #}
+    <a href="/{{ store_slug }}/vendors"
+       class="ck-bnav-tab{% if _bn_active == 'vendors_dashboard' or _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
       <i class="ti ti-leaf bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Vendors</span>
-    </button>
+    </a>
   {% endif %}
   </div>
 </nav>

@@ -80,11 +80,6 @@
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Manager</span>
     </a>
-    {# Interview Tracker was an item inside the old Manager drop-down but is NOT one of the 6 Manager-dashboard tabs, so it stays here as its own direct sidebar link rather than be orphaned (Sam 2026-05-21). #}
-    <a class="ck-sb-section-head" href="/partner/interview-tracker"
-       style="margin-top: 10px; text-decoration: none;">
-      <span class="ck-sb-section-label">Interview Tracker</span>
-    </a>
     {% endif %}
 
     {# ==== CATERING ==== direct link to the tabbed Catering dashboard (Sam 2026-05-21): the sidebar Catering entry no longer expands a sub-menu - it links straight to /<store>/catering (which opens on the Ez Orders tab; the other catering surfaces are reachable as tabs there). #}
@@ -93,139 +88,11 @@
       <span class="ck-sb-section-label">Catering</span>
     </a>
 
-        {# ==== OPERATIONS ==== restructured per Sam #837 spec — Team
-       (moved from former Admin), Forecasts, Sales/Labor/Performance
-       (moved from former Insights), Schedule, Kitchen (new, item 17),
-       Corporate Order, Vendors, Catering (with In-House, item 15). #}
-    <div class="ck-sb-section collapsed" data-id="operations">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Operations</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-
-        {% if has_permission('access.team_admin') %}
-        <a href="/partner/team" class="ck-sb-item{% if active == 'partner_team' %} active{% endif %}">
-          <i class="ti ti-users-group ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Team</span>
-        </a>
-        {% endif %}
-
-        <a href="#" class="ck-sb-item" aria-disabled="true">
-          <i class="ti ti-chart-arcs ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Forecasts</span>
-          <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
-        </a>
-
-        {% if user_role != 'expo' %}
-        <div class="ck-sb-branch" data-id="ops.sales">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-chart-bar ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Sales</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/reports/sales/total" class="ck-sb-subitem{% if active == 'sales_total' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">All</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/toast" class="ck-sb-subitem{% if active == 'sales_toast' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Toast</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/online" class="ck-sb-subitem{% if active == 'sales_online' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Online Toast</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/ezcater" class="ck-sb-subitem{% if active == 'sales_ezcater' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Ez Cater</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/doordash" class="ck-sb-subitem{% if active == 'sales_doordash' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">DoorDash</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/sales/uber" class="ck-sb-subitem{% if active == 'sales_uber' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Uber</span>
-            </a>
-          </div></div>
-        </div>
-
-        <div class="ck-sb-branch" data-id="ops.labor">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-clock ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Labor</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/reports/labor/boh" class="ck-sb-subitem{% if active == 'boh_labor' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">BOH labor</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/labor/foh" class="ck-sb-subitem{% if active == 'foh_labor' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">FOH labor</span>
-            </a>
-          </div></div>
-        </div>
-
-        <div class="ck-sb-branch" data-id="ops.performance">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-trending-up ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Performance</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/reports/server-performance/all" class="ck-sb-subitem{% if active == 'perf_all' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">All</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/server-performance/server" class="ck-sb-subitem{% if active == 'perf_server' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Server</span>
-            </a>
-            <a href="/{{ store_slug }}/reports/server-performance/bartenders" class="ck-sb-subitem{% if active == 'perf_bartenders' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Bartenders</span>
-            </a>
-            <a href="#" class="ck-sb-subitem" aria-disabled="true">
-              <span class="ck-sb-subitem-label">Prep</span>
-              <span class="ck-sb-soon">soon</span>
-            </a>
-          </div></div>
-        </div>
-        {% endif %}{# end user_role != 'expo' #}
-
-        <div class="ck-sb-branch" data-id="ops.schedule">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-calendar ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Schedule</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/roster/all" class="ck-sb-subitem{% if active == 'all_roster' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">All roster</span>
-            </a>
-            <a href="/{{ store_slug }}/roster/boh" class="ck-sb-subitem{% if active == 'boh_roster' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">BOH roster</span>
-            </a>
-            <a href="/{{ store_slug }}/roster/foh" class="ck-sb-subitem{% if active == 'foh_roster' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">FOH roster</span>
-            </a>
-            <a href="/{{ store_slug }}/schedule" class="ck-sb-subitem{% if active == 'weekly_schedule' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Weekly</span>
-            </a>
-          </div></div>
-        </div>
-
-        <div class="ck-sb-branch" data-id="ops.corporate_order">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-shopping-cart ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Corporate order</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/corporate-order" class="ck-sb-subitem{% if active == 'corporate_order' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Order</span>
-            </a>
-            <a href="/{{ store_slug }}/corporate-order/reports" class="ck-sb-subitem{% if active == 'corporate_order_reports' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Reports</span>
-            </a>
-          </div></div>
-        </div>
-
-      </div></div>
-    </div>
+    {# ==== OPERATIONS ==== direct link to the tabbed Operations dashboard (Sam 2026-05-21, dck/ck): the sidebar Operations entry no longer expands a sub-menu - it links straight to /<store>/operations (which opens on the Team tab; Sales / Labor / Performance / Schedule / Corporate Order are reachable as tabs there). #}
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/operations"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Operations</span>
+    </a>
 
     {# ==== KITCHEN ==== promoted from an Operations branch to its own
        section below Operations (Sam 2026-05-20 #1:35). Fresh Food /
@@ -253,52 +120,11 @@
       </div></div>
     </div>
 
-    <div class="ck-sb-section collapsed" data-id="vendors">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Vendors</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-
-        <div class="ck-sb-branch" data-id="vendors.produce">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-leaf ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">Produce</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/produce/" class="ck-sb-subitem{% if active == 'produce' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Order</span>
-            </a>
-            <a href="/{{ store_slug }}/produce/orders" class="ck-sb-subitem{% if active == 'produce_orders' %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Price history</span>
-            </a>
-          </div></div>
-        </div>
-
-        {% for vendor_slug, vendor_label in [
-          ('webstaurant',      'Webstaurant'),
-          ('performance-food', 'Performance Food'),
-          ('restaurant-depot', 'Restaurant Depot'),
-          ('specs',            'Specs'),
-        ] %}
-        <div class="ck-sb-branch" data-id="vendors.{{ vendor_slug }}">
-          <button class="ck-sb-branch-head">
-            <i class="ti ti-truck ck-sb-branch-icon" aria-hidden="true"></i>
-            <span class="ck-sb-branch-label">{{ vendor_label }}</span>
-            <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-          </button>
-          <div class="ck-sb-branch-body"><div class="ck-sb-branch-inner">
-            <a href="/{{ store_slug }}/vendors/{{ vendor_slug }}/recent-orders"
-               class="ck-sb-subitem{% if active == 'vendor_recent_' + vendor_slug.replace('-','_') %} active{% endif %}">
-              <span class="ck-sb-subitem-label">Recent orders</span>
-            </a>
-          </div></div>
-        </div>
-        {% endfor %}
-
-      </div></div>
-    </div>
+    {# ==== VENDORS ==== direct link to the tabbed Vendors dashboard (Sam 2026-05-21, ck): the sidebar Vendors entry no longer expands a sub-menu - it links straight to /<store>/vendors (which opens on the Produce tab; Webstaurant / Performance Food / Restaurant Depot / Specs are reachable as tabs there). #}
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/vendors"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Vendors</span>
+    </a>
 
         {# ==== ADMIN / LEGAL / ANOMALIES / DEVELOPER — per-section gates ====
 

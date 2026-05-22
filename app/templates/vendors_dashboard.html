@@ -1,0 +1,590 @@
+{# ============================================================
+   vendors_dashboard.html - Vendors dashboard (tabbed entry layer).
+   ck build, structural twin of catering_dashboard.html (dck's
+   reworked Catering dashboard). Per Sam: the bottom-nav Vendors tab
+   no longer opens a popover - it links straight here, and this page
+   is a tab strip across the five vendor surfaces, defaulting to
+   Produce.
+
+   Each tab embeds the REAL, fully-functional vendor page inline in
+   an <iframe> - click a tab and the actual working page is right
+   there (Produce -> /<store>/produce/, and a per-vendor Recent
+   Orders page for Webstaurant / Performance Food / Restaurant Depot
+   / Specs -> /<store>/vendors/<vendor>/recent-orders). All existing
+   vendor functionality is left as-is - the pages are simply iframed,
+   not rewritten.
+
+   The iframed pages are themselves full base_dashboard pages, so each
+   one carries its own sidebar / topbar / bottom-nav / role badge. The
+   <script> below reaches into each iframe on its load event (same
+   origin - allowed) and hides that page's chrome, leaving only the
+   page content visible inside the frame. To avoid a flash of doubled
+   chrome the iframe stays hidden until its load+strip completes.
+
+   LAZY-LOAD: each iframe carries a data-src, not a src. JS sets src
+   from data-src the first time that tab is activated, so the five
+   vendor pages do not all load at once - only the default tab
+   (Produce) loads on page load.
+
+   Extends base_dashboard.html - so the role-matched dashboard badge
+   top-right (dashboard_banner context processor) ships for free. The
+   shared topbar is suppressed; this page draws its own ribbon header
+   inside content (the catering_dashboard.html pattern). OPAQUE surface
+   - the restaurant-photo body backdrop never bleeds through page
+   content.
+
+   ROUTE CONTRACT (store_routes.py vendors_dashboard):
+     active        -> 'vendors_dashboard'
+     store_label   -> str (store display name)
+     today_label   -> str, e.g. "Wed, May 21"
+     active_tab    -> one of: produce | webstaurant | performance-food |
+                      restaurant-depot | specs
+                      (default 'produce'; from ?tab=, validated)
+     tabs          -> ordered list[dict], one per tab:
+       key   (str)  - tab id, matches active_tab values
+       label (str)  - tab strip caption
+       url   (str)  - absolute href to that page (the iframe target)
+   The dashboard route never touches Toast or any write path - it is a
+   thin shell that only resolves each tab's URL. The iframed pages run
+   their own queries when the browser loads them.
+   Audience gate at the route: same site gate as the vendor pages.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'vendors_dashboard' %}
+
+{% block title %}Vendors - Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar - this page draws its own ribbon header
+   inside content (catering_dashboard.html pattern). The role badge is
+   rendered OUTSIDE the topbar block in base_dashboard.html, so it is
+   kept regardless. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .vendash so the warm
+     Cenas palette never leaks into the global sheet (the catdash-
+     scoping pattern). Comments here never contain a slash-star pair. */
+  .vendash {
+    --vend-red: #C73B36;
+    --vend-red-deep: #9B2A26;
+    --vend-red-bright: #E85852;
+    --vend-gold: #E4B340;
+    --vend-gold-bright: #FFD970;
+    --vend-teal: #2EA39F;
+    --vend-teal-bright: #5BCAC5;
+    --vend-cream: #FAF6EC;
+    --vend-cream-dim: rgba(250, 246, 236, 0.78);
+    --vend-cream-faint: rgba(250, 246, 236, 0.5);
+    --vend-cream-meta: rgba(250, 246, 236, 0.4);
+    --vend-bg-deep: #1a0d08;
+    --vend-bg-warm: #28160e;
+    --vend-surface: #241409;
+    --vend-surface-2: #2e1a0d;
+    --vend-surface-hover: #34200f;
+    --vend-input: rgba(0, 0, 0, 0.3);
+    --vend-border: rgba(217, 164, 54, 0.18);
+    --vend-border-active: rgba(228, 179, 64, 0.5);
+    --vend-accent: var(--vend-gold-bright);
+    --vend-glow: rgba(255, 217, 112, 0.18);
+    --vend-glow-strong: rgba(255, 217, 112, 0.4);
+    --vend-radius: 14px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--vend-cream);
+    margin-bottom: 40px;
+  }
+  .vendash * { box-sizing: border-box; }
+
+  /* SECTION LABEL above the card. */
+  .vendash .vend-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--vend-cream-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0 4px 12px;
+  }
+
+  /* THE PAGE CARD - ribbon header plus the tab strip in one opaque
+     surface. OPAQUE base colour so the photo backdrop never washes
+     the header text out (the base_dashboard .ck-topbar landmine). */
+  .vendash .vend-card {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--vend-border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .vendash .vend-card::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle, var(--vend-glow), transparent 70%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* RIBBON HEADER. */
+  .vendash .vend-ribbon {
+    padding: 24px 26px 22px;
+    position: relative;
+    z-index: 1;
+  }
+  .vendash .vend-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .vendash .vend-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--vend-red-bright);
+    box-shadow: 0 0 8px var(--vend-red-bright), 0 0 0 3px rgba(232, 88, 82, 0.18);
+  }
+  .vendash .vend-brand-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--vend-gold);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+  .vendash .vend-brand-text .vend-div {
+    color: var(--vend-cream-faint);
+    margin: 0 4px;
+    font-weight: 400;
+  }
+  .vendash .vend-brand-text .vend-module { color: var(--vend-accent); }
+
+  .vendash .vend-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    font-size: clamp(36px, 5.5vw, 52px);
+    line-height: 1;
+    color: var(--vend-cream);
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .vendash .vend-rule {
+    height: 1px;
+    width: 56px;
+    background: linear-gradient(90deg, var(--vend-accent), transparent);
+    margin-bottom: 12px;
+  }
+  .vendash .vend-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--vend-cream-faint);
+    letter-spacing: 0.05em;
+  }
+  .vendash .vend-meta .vend-sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--vend-cream-faint);
+  }
+  .vendash .vend-meta .vend-meta-val {
+    color: var(--vend-accent);
+    font-weight: 700;
+  }
+
+  /* TAB STRIP - horizontally scrollable on a phone. The tabs are real
+     anchors (href to ?tab=KEY) so the page works with JS off; JS
+     upgrades them to in-page panel swaps. */
+  .vendash .vend-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 0.5px solid var(--vend-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 1;
+  }
+  .vendash .vend-tabs::-webkit-scrollbar { display: none; }
+  .vendash .vend-tab {
+    flex-shrink: 0;
+    padding: 13px 16px 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--vend-cream-faint);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .vendash .vend-tab:hover { color: var(--vend-cream); }
+  .vendash .vend-tab.active {
+    color: var(--vend-cream);
+    border-bottom-color: var(--vend-accent);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .vendash .vend-tab-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .vendash .vend-tab.active .vend-tab-icon { opacity: 1; }
+
+  /* TAB CONTENT - one panel per tab; the inactive ones are hidden.
+     Each panel is just a frame holding ONE iframe of the real page. */
+  .vendash .vend-content-wrap { margin-top: 18px; }
+  .vendash .vend-panel {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--vend-border);
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+  }
+  .vendash .vend-panel.hidden { display: none; }
+
+  /* THE EMBED - the real vendor page lives in this iframe. It fills
+     the panel: full width, and tall enough to feel like a page (the
+     viewport height minus the ribbon-card + tab strip + margins above
+     it, with a sane floor). The iframe's OWN content scrolls, so there
+     is no nested-scrollbar fight with the dashboard page. */
+  .vendash .vend-embed-frame {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 360px);
+    min-height: 600px;
+    border: 0;
+    background: #1a0d08;
+    /* Hidden until its load+chrome-strip completes - prevents a flash
+       of the iframed page's own (doubled) sidebar / topbar before the
+       strip script runs. JS flips this to visible. */
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .vendash .vend-embed-frame.ready { opacity: 1; }
+
+  /* Loading shim - a quiet placeholder shown over the panel until the
+     iframe is ready. Removed (display:none) once the frame reveals. */
+  .vendash .vend-embed-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--vend-cream-faint);
+    z-index: 1;
+  }
+  .vendash .vend-embed-loading.gone { display: none; }
+  .vendash .vend-embed-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--vend-accent);
+    box-shadow: 0 0 8px var(--vend-glow-strong);
+    animation: vend-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes vend-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1); }
+  }
+
+  /* MOBILE - mirror the reference design's phone treatment. */
+  @media (max-width: 760px) {
+    .vendash .vend-ribbon { padding: 16px 14px; }
+    .vendash .vend-brand { margin-bottom: 8px; }
+    .vendash .vend-brand-text { font-size: 9px; letter-spacing: 0.2em; }
+    .vendash .vend-title { font-size: 30px; margin-bottom: 6px; }
+    .vendash .vend-rule { width: 40px; margin-bottom: 8px; }
+    .vendash .vend-meta { font-size: 10px; gap: 6px; }
+    .vendash .vend-tabs { padding: 0 8px; }
+    .vendash .vend-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
+    .vendash .vend-tab-icon { width: 12px; height: 12px; }
+    .vendash .vend-content-wrap { margin-top: 14px; }
+    .vendash .vend-panel { border-radius: 12px; }
+    .vendash .vend-embed-frame {
+      height: calc(100vh - 300px);
+      min-height: 560px;
+    }
+    .vendash .vend-section-label { font-size: 9px; margin-bottom: 8px; }
+  }
+  @media (max-width: 380px) {
+    .vendash .vend-title { font-size: 26px; }
+    .vendash .vend-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .vendash .vend-ribbon { padding: 14px 14px 12px; }
+  }
+</style>
+
+{# Per-tab SVG glyphs - keyed by tab.key so the route stays glyph-free.
+   Plain Jinja dict; the icon falls back to the Produce glyph if a key
+   is missing. Produce gets a leaf glyph; the four supply vendors share
+   a delivery-truck glyph. #}
+{% set _vend_icons = {
+  'produce':          '<path d="M6.05 8.05c-2.73 2.73-2.73 7.15-.02 9.88 1.47-3.4 4.09-6.24 7.36-7.93-2.77 2.34-4.71 5.61-5.39 9.32 2.6 1.23 5.8.78 7.95-1.37C19.43 14.47 20 4 20 4S9.43 4.57 6.05 8.05z"/>',
+  'webstaurant':      '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
+  'performance-food': '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
+  'restaurant-depot': '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
+  'specs':            '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>'
+} %}
+
+<div class="vendash" id="vendash">
+
+  <div class="vend-section-label">Vendors Dashboard</div>
+
+  {# PAGE CARD - ribbon header plus tab strip. #}
+  <div class="vend-card">
+
+    {# RIBBON HEADER - the page's own header (the shared topbar is
+       suppressed). The role badge sits above this, rendered by
+       base_dashboard.html outside the topbar block. #}
+    <div class="vend-ribbon">
+      <div class="vend-brand">
+        <span class="vend-brand-dot"></span>
+        <span class="vend-brand-text">CENAS <span class="vend-div">&middot;</span> OPS <span class="vend-div">&middot;</span> <span class="vend-module">VENDORS</span></span>
+      </div>
+      <h1 class="vend-title">Vendors</h1>
+      <div class="vend-rule"></div>
+      <div class="vend-meta">
+        <span>{{ today_label }}</span>
+        <span class="vend-sep"></span>
+        <span class="vend-meta-val">{{ store_label }}</span>
+        <span class="vend-sep"></span>
+        <span>{{ tabs|length }} sections</span>
+      </div>
+    </div>
+
+    {# TAB STRIP - real anchors to ?tab=KEY so it works without JS;
+       JS upgrades them to in-page panel swaps. #}
+    <div class="vend-tabs" id="vendTabs" role="tablist">
+      {% for t in tabs %}
+      <a class="vend-tab{% if t.key == active_tab %} active{% endif %}"
+         href="?tab={{ t.key }}"
+         role="tab"
+         data-tab="{{ t.key }}"
+         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
+        <svg class="vend-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _vend_icons.get(t.key, _vend_icons['produce'])|safe }}</svg>
+        <span class="vend-tab-label">{{ t.label }}</span>
+      </a>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {# TAB CONTENT - one panel per tab, each holding ONE iframe of the
+     real vendor page. Inactive panels carry .hidden; JS toggles them.
+     The iframe carries a data-src (not src) so the page is lazy-loaded
+     on first activation of its tab - only the default tab loads now.
+     On the iframe's load event the script strips that page's own
+     chrome (sidebar / topbar / bottom-nav / role badge / wordmark) so
+     only the page content shows inside the frame. #}
+  <div class="vend-content-wrap">
+    {% for t in tabs %}
+    <div class="vend-panel{% if t.key != active_tab %} hidden{% endif %}"
+         id="vend-panel-{{ t.key }}"
+         data-tab-panel="{{ t.key }}"
+         role="tabpanel">
+      <div class="vend-embed-loading" data-embed-loading="{{ t.key }}">
+        <span class="vend-embed-dot"></span>
+        <span>Loading {{ t.label }}</span>
+      </div>
+      <iframe class="vend-embed-frame"
+              data-embed-frame="{{ t.key }}"
+              data-src="{{ t.url }}"
+              title="{{ t.label }}"
+              loading="lazy"></iframe>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  /* Vendors dashboard - tab switching plus iframe lazy-load and the
+     per-iframe chrome strip.
+
+     The tabs are real <a href="?tab=KEY"> links, so with JS off the
+     route serves the right tab server-side. With JS on, clicking a tab
+     swaps the visible panel in place (no navigation).
+
+     Each tab's panel holds ONE iframe of the real, fully-functional
+     vendor page. The iframe carries data-src, not src - so the five
+     vendor pages do not all load at once. The default tab's iframe is
+     loaded immediately; every other iframe loads the first time its
+     tab is activated.
+
+     The iframed pages are full base_dashboard pages and so carry their
+     own sidebar / topbar / bottom-nav / role badge. Because the iframe
+     is same-origin, on its load event we reach into the iframe's
+     document and hide that chrome, then widen its <main> to full
+     width - so the frame shows ONLY the page content. The iframe is
+     kept hidden (opacity 0) until that strip finishes, so there is no
+     flash of doubled chrome. */
+  var root = document.getElementById("vendash");
+  if (!root) return;
+  var tabs = root.querySelectorAll(".vend-tab");
+  var panels = root.querySelectorAll(".vend-panel");
+  var loaded = {};   // tab key -> true once its iframe src has been set
+
+  /* Hide one element inside the iframe document. Defensive: a missing
+     node (a page that suppresses the shared topbar, say) is a no-op. */
+  function hideEl(doc, selector) {
+    var nodes = doc.querySelectorAll(selector);
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].style.setProperty("display", "none", "important");
+    }
+  }
+
+  /* Strip the base_dashboard chrome from a loaded iframe so only the
+     page content remains. Same-origin, so contentDocument is readable;
+     wrapped in try/catch so a cross-origin redirect (e.g. a login
+     bounce) can never throw and leave the frame stuck hidden. */
+  function stripChrome(frame) {
+    var doc;
+    try {
+      doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+    } catch (err) {
+      doc = null;
+    }
+    if (doc) {
+      /* The page's own chrome - every landmark base_dashboard.html
+         renders around <main>. .ck-bnav is the bottom-nav root
+         element (partials/_bottom_nav.html). */
+      [
+        ".sidebar",
+        ".sidebar-overlay",
+        ".dash-role-badge-bar",
+        ".topbar",
+        ".subnav-row",
+        ".wordmark",
+        ".ck-bnav"
+      ].forEach(function (sel) { hideEl(doc, sel); });
+
+      /* Flatten the iframed page's own restaurant-photo body backdrop.
+         base_dashboard paints it on <body>; stripping the chrome alone
+         leaves it bleeding around a max-width content frame (the
+         manager pages) and behind short content. The dashboard panel
+         already supplies the surface, so set body + html to a solid. */
+      if (doc.body) {
+        doc.body.style.setProperty("background-image", "none", "important");
+        doc.body.style.setProperty("background-color", "#241610", "important");
+      }
+      if (doc.documentElement) {
+        doc.documentElement.style.setProperty("background-image", "none", "important");
+        doc.documentElement.style.setProperty("background-color", "#241610", "important");
+      }
+
+      /* Widen the page content to fill the frame. .layout is a CSS
+         grid (240px sidebar track + 1fr main); hiding .sidebar leaves
+         its empty track, so collapse the grid to a single column.
+         Then zero main.main's padding so the content uses the whole
+         frame width - no leftover sidebar-offset gutter. */
+      var layout = doc.querySelector(".layout");
+      if (layout) {
+        layout.style.setProperty("grid-template-columns", "1fr", "important");
+        layout.style.setProperty("display", "block", "important");
+      }
+      var main = doc.querySelector("main.main");
+      if (main) {
+        main.style.setProperty("margin", "0", "important");
+        main.style.setProperty("padding", "0", "important");
+        main.style.setProperty("width", "100%", "important");
+        main.style.setProperty("max-width", "100%", "important");
+      }
+    }
+    reveal(frame);
+  }
+
+  /* Reveal a frame and drop its loading shim. Runs after the strip (or
+     after a cross-origin load we could not strip - better to show the
+     page than to leave a permanent spinner). */
+  function reveal(frame) {
+    frame.classList.add("ready");
+    var key = frame.getAttribute("data-embed-frame");
+    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+    if (shim) shim.classList.add("gone");
+  }
+
+  /* Lazy-load: set src from data-src the first time a tab is shown.
+     The load handler runs stripChrome; loaded[] guards against
+     re-loading on every subsequent activation of the same tab. */
+  function loadFrame(key) {
+    if (loaded[key]) return;
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!frame) return;
+    var src = frame.getAttribute("data-src");
+    if (!src) return;
+    loaded[key] = true;
+    frame.addEventListener("load", function () { stripChrome(frame); });
+    frame.setAttribute("src", src);
+  }
+
+  function activate(key) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
+    });
+    loadFrame(key);   // first activation of this tab loads its iframe
+  }
+
+  root.querySelector("#vendTabs").addEventListener("click", function (e) {
+    var tab = e.target.closest(".vend-tab");
+    if (!tab) return;
+    e.preventDefault();
+    var key = tab.getAttribute("data-tab");
+    activate(key);
+    /* Keep the URL in sync so a refresh / share lands on the same tab,
+       without adding a history entry per tap. */
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable - panel swap still works */ }
+  });
+
+  /* Load the iframe for the tab that is active on page load (the
+     default tab, produce, unless ?tab= deep-linked another). The
+     other four iframes stay unloaded until their tab is clicked. */
+  var startTab = (function () {
+    var activeTabEl = root.querySelector(".vend-tab.active");
+    return activeTabEl ? activeTabEl.getAttribute("data-tab") : null;
+  })();
+  if (startTab) loadFrame(startTab);
+})();
+</script>
+{% endblock %}

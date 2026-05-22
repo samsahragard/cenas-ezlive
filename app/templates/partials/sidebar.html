@@ -68,39 +68,11 @@
     </div>
     {% else %}
 
-    {# ==== TODAY ==== #}
-    <div class="ck-sb-section collapsed" data-id="today">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Today</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/{{ store_slug }}/"
-           class="ck-sb-item{% if active == 'dashboard' %} active{% endif %}"
-           {% if active == 'dashboard' %}aria-current="page"{% endif %}>
-          <i class="ti ti-layout-dashboard ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">{{ store_label }} Dashboard</span>
-        </a>
-        <a href="/partner/notifications" class="ck-sb-item{% if active == 'notifications' %} active{% endif %}"
-           {% if active == 'notifications' %}aria-current="page"{% endif %}>
-          <i class="ti ti-bell ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Notifications</span>
-        </a>
-        {% if has_permission('team_reports.view') %}
-        <a href="/partner/team-reports/" class="ck-sb-item{% if active == 'team_reports' %} active{% endif %}">
-          <i class="ti ti-chart-bar ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Task Reports</span>
-        </a>
-        {% endif %}
-        {% if is_sam_chat_user() %}
-        <a href="/sam/chat" class="ck-sb-item{% if active == 'sam_chat' %} active{% endif %}"
-           {% if active == 'sam_chat' %}aria-current="page"{% endif %}>
-          <i class="ti ti-sparkles ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Cena</span>
-        </a>
-        {% endif %}
-      </div></div>
-    </div>
+    {# ==== TODAY ==== direct link to the tabbed Today dashboard (Sam 2026-05-21): the sidebar Today entry no longer expands a sub-menu - it links straight to /<store>/today (which opens on the Dashboard tab; Notifications / Task Reports / Cena are reachable as tabs there). Same change as the Manager + Catering entries below. #}
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/today"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Today</span>
+    </a>
 
     {# ==== MANAGER ==== direct link to the tabbed Manager dashboard (Sam 2026-05-21): the sidebar Manager entry no longer expands a sub-menu - it links straight to /<store>/manager (which opens on the Daily Log tab; the other manager pages are reachable as tabs there). Still Sam + Masood only via the is_sam_chat_user() gate. #}
     {% if is_sam_chat_user() %}

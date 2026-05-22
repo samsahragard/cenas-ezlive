@@ -2434,120 +2434,105 @@ def _prep_list_v3_post(db, store_scope, user):
     db.commit()
 
 
-# ---- Manager dashboard (tabbed entry layer, Sam 2026-05-21) ---------
-# The bottom-nav Manager tab no longer opens a sub-option popover — it
-# links straight here. This route renders manager_dashboard.html: a tab
-# strip across the six manager pages, defaulting to the Daily Log tab.
-# Each tab shows a short read-only PREVIEW of that page; "Open full
-# page" links to the real, unchanged page (manager_page_list). This is
-# a new entry surface — it does not alter the existing manager pages.
+# ---- Manager dashboard (tabbed entry layer, Sam 2026-05-21, samai) --
+# Structural twin of the Catering dashboard. The bottom-nav Manager tab
+# no longer opens a sub-option popover — it links straight here. This
+# route renders manager_dashboard.html: a tab strip across the seven
+# manager pages, defaulting to the Daily Log tab.
+#
+# DESIGN-CHANGE rework (Sam 2026-05-21, samai): each tab no longer shows
+# a read-only preview + an "Open full page" link. Instead each tab
+# embeds the REAL, fully-functional manager page inline in an <iframe> —
+# click a tab and the working page is right there. So this route no
+# longer builds preview rows or pulls the manager-section tables; it
+# only needs each tab's URL for the iframe to load. The existing
+# manager pages and routes are untouched — they are simply iframed.
 
-# Ordered tab spec: (tab key, caption, /manager/<slug> page it previews).
-# The key matches the active_tab values the template understands.
+# Ordered tab spec: (tab key, caption). The key matches the active_tab
+# values manager_dashboard.html expects. First entry is the default
+# tab. The per-tab url is built per-request by _manager_dash_full_url
+# since six tabs point at store-scoped /manager/<slug> routes and one
+# (interview) is a flat /partner route.
 _MANAGER_DASH_TABS = [
-    ("log",         "Log",         "daily-log"),
-    ("incidents",   "Incidents",   "incident-reports"),
-    ("attendance",  "Attendance",  "attendance"),
-    ("training",    "Training",    "training"),
-    ("maintenance", "Maintenance", "maintenance"),
-    ("counseling",  "Counseling",  "counseling"),
+    ("log",         "Daily Log"),
+    ("incidents",   "Incidents"),
+    ("attendance",  "Attendance"),
+    ("training",    "Training"),
+    ("maintenance", "Maintenance"),
+    ("counseling",  "Counseling"),
+    ("interview",   "Interview"),
 ]
 
 
-def _manager_dash_preview(db, page_slug, limit=3):
-    """Latest few rows for a manager page, store-scoped, newest first —
-    shaped into preview rows {title, sub, meta} for the dashboard. Pure
-    read; never writes, never calls Toast. Returns (rows, meta_line).
-    Any model/query problem degrades to an empty preview so one bad tab
-    can never break the dashboard."""
-    Model = _manager_model_for_slug(page_slug)
-    if Model is None:
-        return [], ""
-    try:
-        q = db.query(Model)
-        if g.current_location in ("tomball", "copperfield"):
-            q = q.filter(
-                (Model.store_scope == g.current_location) |
-                (Model.store_scope.is_(None))
-            )
-        total = q.count()
-        recent = q.order_by(Model.created_at.desc()).limit(limit).all()
-    except Exception as ex:
-        logging.getLogger(__name__).warning(
-            "manager dashboard: preview for %s unavailable: %s", page_slug, ex)
-        return [], ""
-
-    rows = []
-    for r in recent:
-        when = _central_dt(getattr(r, "created_at", None))
-        # Incident reports carry a human report_id + severity + type;
-        # the rest share the ManagerLogMixin title/body shape. Every
-        # incident-only field is read via getattr so the preview is
-        # safe even against an older IncidentReport schema.
-        if page_slug == "incident-reports":
-            title = ((getattr(r, "report_id", None) or "").strip()
-                     or (r.title or "").strip() or "Incident report")
-            sub = ((getattr(r, "incident_type", None) or r.title or "").strip()
-                   or "Incident on file")
-            sev = (getattr(r, "severity", None) or "").strip().title()
-            meta = " · ".join(p for p in (
-                sev, when.strftime("%b %d") if when else "") if p)
-        else:
-            title = (r.title or "").strip() or "Entry"
-            body = (r.body or "").strip()
-            sub = body.splitlines()[0] if body else ""
-            tag = (getattr(r, "type_tag", None) or "").strip()
-            meta = " · ".join(p for p in (
-                tag, when.strftime("%b %d") if when else "") if p)
-        rows.append({"title": title, "sub": sub, "meta": meta})
-
-    noun = {"daily-log": "log entries", "incident-reports": "filed",
-            "attendance": "entries", "training": "records",
-            "maintenance": "requests", "counseling": "records"}.get(
-                page_slug, "entries")
-    meta_line = f"{total} {noun}" if total else f"No {noun} yet"
-    return rows, meta_line
+def _manager_dash_full_url(tab_key):
+    """Absolute href to the real manager page a tab embeds in its
+    iframe.
+      log         -> /<store>/manager/daily-log         (store.manager_page_list)
+      incidents   -> /<store>/manager/incident-reports  (store.manager_page_list)
+      attendance  -> /<store>/manager/attendance        (store.manager_page_list)
+      training    -> /<store>/manager/training          (store.manager_page_list)
+      maintenance -> /<store>/manager/maintenance       (store.manager_page_list)
+      counseling  -> /<store>/manager/counseling        (store.manager_page_list)
+      interview   -> /partner/interview-tracker         (flat, not store-scoped)
+    The flat interview-tracker path is written as a literal because it
+    lives outside the /<store> blueprint; url_for on a store endpoint
+    would prepend the slug. Falls back to the daily-log page on an
+    unknown key so the iframe src is never empty."""
+    if tab_key == "log":
+        return url_for("store.manager_page_list", page="daily-log")
+    if tab_key == "incidents":
+        return url_for("store.manager_page_list", page="incident-reports")
+    if tab_key == "attendance":
+        return url_for("store.manager_page_list", page="attendance")
+    if tab_key == "training":
+        return url_for("store.manager_page_list", page="training")
+    if tab_key == "maintenance":
+        return url_for("store.manager_page_list", page="maintenance")
+    if tab_key == "counseling":
+        return url_for("store.manager_page_list", page="counseling")
+    if tab_key == "interview":
+        return "/partner/interview-tracker"
+    return url_for("store.manager_page_list", page="daily-log")
 
 
 @store_bp.route("/manager", methods=["GET"])
 def manager_dashboard():
     """Tabbed Manager dashboard — the entry layer the bottom-nav
-    Manager tab links to. Defaults to the Log tab; ?tab=<key> deep-links
-    another tab. Read-only previews; each tab's "Open full page" link
-    points at the unchanged /<store>/manager/<page> route."""
+    Manager tab links to. Defaults to the Daily Log tab; ?tab=<key>
+    deep-links another tab (an invalid tab falls back to Daily Log).
+    Each tab embeds the real, fully-functional manager page inline in
+    an iframe. Structural twin of catering_dashboard.
+
+    This route is now a thin shell: it builds only the tab list (key,
+    label, url) the template needs to point each iframe at its page. No
+    DB session is opened — the iframed pages run their own queries when
+    the browser loads them."""
     if not _manager_role_ok():
         abort(403)
-    valid = {key for key, _, _ in _MANAGER_DASH_TABS}
+    valid = {key for key, _ in _MANAGER_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
         active_tab = "log"
-    db = next(get_db())
-    try:
-        tabs = []
-        for key, caption, page_slug in _MANAGER_DASH_TABS:
-            rows, meta_line = _manager_dash_preview(db, page_slug)
-            tabs.append({
-                "key": key,
-                "label": caption,
-                "page_slug": page_slug,
-                "full_url": url_for("store.manager_page_list", page=page_slug),
-                "meta": meta_line,
-                "rows": rows,
-            })
-        label = g.store_label or "Cenas Kitchen"
-        # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-        _t = date.today()
-        today_label = f"{_t:%a, %b} {_t.day}"
-        return render_template(
-            "manager_dashboard.html",
-            active="manager_dashboard",
-            store_label=label,
-            today_label=today_label,
-            active_tab=active_tab,
-            tabs=tabs,
-        )
-    finally:
-        db.close()
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "url": _manager_dash_full_url(key),
+        }
+        for key, caption in _MANAGER_DASH_TABS
+    ]
+    label = g.store_label or "Cenas Kitchen"
+    # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "manager_dashboard.html",
+        active="manager_dashboard",
+        store_label=label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )
 
 
 @store_bp.route("/manager/<page>", methods=["GET"])
@@ -4071,6 +4056,119 @@ def operations_dashboard():
     return render_template(
         "operations_dashboard.html",
         active="operations_dashboard",
+        store_label=label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )
+
+
+# ---- Today dashboard (tabbed entry layer, Sam 2026-05-21, samai) ----
+# Structural twin of the Catering dashboard above. The bottom-nav Today
+# tab no longer opens a sub-option popover — it links straight here.
+# This route renders today_dashboard.html: a tab strip across the four
+# Today surfaces, defaulting to the Dashboard tab.
+#
+# DESIGN-CHANGE rework (Sam 2026-05-21, samai): each tab no longer shows
+# a read-only preview + an "Open full page" link. Instead each tab
+# embeds the REAL, fully-functional Today page inline in an <iframe> —
+# click a tab and the working page is right there. So this route no
+# longer builds preview rows; it only needs each tab's URL for the
+# iframe to load. The existing Today pages and routes are untouched —
+# they are simply iframed.
+
+# Ordered tab spec: (tab key, caption). The key matches the active_tab
+# values today_dashboard.html expects. First entry is the default tab.
+# The per-tab url is built per-request by _today_dash_full_url since
+# one tab points at a store-scoped route and three are flat (outside
+# the /<store> blueprint).
+_TODAY_DASH_TABS = [
+    ("dashboard",     "Dashboard"),
+    ("notifications", "Notifications"),
+    ("task-reports",  "Task Reports"),
+    ("cena",          "Cena"),
+]
+
+
+def _today_dash_full_url(tab_key):
+    """Absolute href to the real Today page a tab embeds in its iframe.
+      dashboard     -> /<store>/                  (store.home)
+      notifications -> /partner/notifications      (flat, not store-scoped)
+      task-reports  -> /partner/team-reports/      (flat, not store-scoped)
+      cena          -> /sam/chat                   (flat, not store-scoped)
+    The flat notifications / team-reports / chat paths are written as
+    literals because they live outside the /<store> blueprint; url_for
+    on a store endpoint would prepend the slug. Falls back to the store
+    home page on an unknown key so the iframe src is never empty."""
+    if tab_key == "dashboard":
+        return url_for("store.home")
+    if tab_key == "notifications":
+        return "/partner/notifications"
+    if tab_key == "task-reports":
+        return "/partner/team-reports/"
+    if tab_key == "cena":
+        return "/sam/chat"
+    return url_for("store.home")
+
+
+@store_bp.route("/today", methods=["GET"])
+def today_dashboard():
+    """Tabbed Today dashboard — the entry layer the bottom-nav Today
+    tab links to. Defaults to the Dashboard tab; ?tab=<key> deep-links
+    another tab (an invalid tab falls back to Dashboard). Each tab
+    embeds the real, fully-functional Today page inline in an iframe.
+    Structural twin of catering_dashboard.
+
+    This route is a thin shell: it builds only the tab list (key,
+    label, url) the template needs to point each iframe at its page. No
+    DB session is opened — the iframed pages run their own queries when
+    the browser loads them.
+
+    Tab gating mirrors the sidebar: the Task Reports tab is omitted
+    unless the viewer holds team_reports.view, and the Cena tab is
+    omitted unless the viewer is the Sam-chat user. Dashboard and
+    Notifications are always present, so the default tab is always
+    valid. Gating fails OPEN — if a gate helper raises, the tab is
+    kept and its destination page enforces its own gate."""
+    # Build the visible tab set, applying the same audience gates the
+    # Today section's sidebar entries use.
+    dash_tabs = []
+    for key, caption in _TODAY_DASH_TABS:
+        if key == "task-reports":
+            try:
+                from app.services.permissions import has_permission
+                if not has_permission("team_reports.view"):
+                    continue
+            except Exception:
+                pass  # fail open — the team-reports page enforces its own gate
+        elif key == "cena":
+            try:
+                from app.web.sam_chat import is_sam_chat_user
+                if not is_sam_chat_user():
+                    continue
+            except Exception:
+                pass  # fail open — the Cena page enforces its own gate
+        dash_tabs.append((key, caption))
+
+    valid = {key for key, _ in dash_tabs}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = _TODAY_DASH_TABS[0][0]   # 'dashboard' — always present
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "url": _today_dash_full_url(key),
+        }
+        for key, caption in dash_tabs
+    ]
+    label = g.store_label or "Cenas Kitchen"
+    # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "today_dashboard.html",
+        active="today_dashboard",
         store_label=label,
         today_label=today_label,
         active_tab=active_tab,

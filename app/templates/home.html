@@ -32,6 +32,10 @@
    store dashboard. The downstream sections (donuts + Upcoming list) cover
    the same info more usefully. #}
 
+{# Sales + Labor insight cards: gated to roles with sales access — expo /
+   drivers / hourly roles must not see sales (Sam 2026-05-21). The JS
+   below self-guards on a missing .dash-charts, so no JS change needed. #}
+{% if has_permission('sales.view_today') %}
 <!-- Sales + Labor donuts (real data, with Today / This Week / Last Week toggle) -->
 <div class="dash-charts" data-location="{{ dashboard_location|default('both') }}">
   <div class="dash-chart-tabs">
@@ -72,6 +76,7 @@
   </div>
   <div class="dash-chart-warnings" id="dash-chart-warnings"></div>
 </div>
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>

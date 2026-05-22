@@ -493,19 +493,20 @@
         ".ck-bnav"
       ].forEach(function (sel) { hideEl(doc, sel); });
 
-      /* Flatten the iframed page's own restaurant-photo body backdrop.
-         base_dashboard paints it on <body>; stripping the chrome alone
-         leaves it bleeding around a max-width content frame (the
-         manager pages) and behind short content. The dashboard panel
-         already supplies the surface, so set body + html to a solid. */
-      if (doc.body) {
-        doc.body.style.setProperty("background-image", "none", "important");
-        doc.body.style.setProperty("background-color", "#241610", "important");
-      }
-      if (doc.documentElement) {
-        doc.documentElement.style.setProperty("background-image", "none", "important");
-        doc.documentElement.style.setProperty("background-color", "#241610", "important");
-      }
+      /* Flatten the iframed page's restaurant-photo backdrop.
+         base_dashboard paints it via fixed body::before / body::after
+         pseudo-elements, so an inline body.style cannot reach it -
+         inject a stylesheet that strips the pseudo-layers and sets a
+         solid surface so nothing bleeds around the framed content. */
+      try {
+        var bgKill = doc.createElement("style");
+        bgKill.textContent =
+          "html,body{background-image:none!important;" +
+          "background-color:#241610!important}" +
+          "body::before,body::after,html::before,html::after" +
+          "{display:none!important;content:none!important}";
+        (doc.head || doc.documentElement).appendChild(bgKill);
+      } catch (e) { /* same-origin, but never let this throw */ }
 
       /* Widen the page content to fill the frame. .layout is a CSS
          grid (240px sidebar track + 1fr main); hiding .sidebar leaves

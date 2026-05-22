@@ -2328,6 +2328,261 @@ def _jsonable(v):
     return v
 
 
+# ============================================================
+# OQ-5 — cena resolve_* endpoints (spec section 8)
+# ============================================================
+# Five read-only GET resolvers so Cena can disambiguate an
+# ambiguous reference (a name, a date) to concrete record(s)
+# before composing a SQL query. Common envelope per spec 8.1;
+# token-authed via the existing gateway gate. Column targets
+# reconciled to the live cenas_kitchen.db schema (samai spec
+# section 8 reconciliation, 2026-05-22). [aick]
+
+
+def _resolve_rank(query, display):
+    """Relevance rank for spec 8.1 ordering: 0 exact, 1 prefix,
+    2 substring. Case-insensitive."""
+    q = (query or "").strip().lower()
+    d = (display or "").strip().lower()
+    if not q or not d:
+        return 2
+    if d == q:
+        return 0
+    if d.startswith(q):
+        return 1
+    return 2
+
+
+def _resolve_envelope(entity, query, candidates):
+    """Spec 8.1 resolve envelope: cap candidates at 10, report the
+    true total, flag truncation. `candidates` must already be
+    relevance-ordered by the caller."""
+    total = len(candidates)
+    return jsonify({
+        "entity": entity,
+        "query": query,
+        "candidates": candidates[:10],
+        "total_matches": total,
+        "more_available": total > 10,
+    })
+
+
+def _resolve_missing(param):
+    """Spec 8.1 missing-required-param error (HTTP 400)."""
+    return jsonify({"error": "missing_query_param", "param": param}), 400
+
+
+@cena_bp.route("/sam/cena/resolve/employee", methods=["GET"])
+def cena_resolve_employee():
+    """OQ-5 / spec 8.2 — resolve a person's name to roster record(s):
+    case-insensitive substring match on users.full_name and
+    drivers.name, each candidate tagged with its source."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return _resolve_missing("name")
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    pat = "%" + name.lower() + "%"
+    db = _SL()
+    try:
+        cands = []
+        for r in db.execute(_sa_text(
+                "SELECT id, full_name, permission_level, store_scope, active "
+                "FROM users WHERE full_name IS NOT NULL "
+                "AND lower(full_name) LIKE :pat"), {"pat": pat}):
+            cands.append({"id": r[0], "display": r[1], "source": "user",
+                          "role": r[2], "store_scope": r[3],
+                          "active": bool(r[4])})
+        for r in db.execute(_sa_text(
+                "SELECT id, name, status, active FROM drivers "
+                "WHERE name IS NOT NULL AND lower(name) LIKE :pat"),
+                {"pat": pat}):
+            cands.append({"id": r[0], "display": r[1], "source": "driver",
+                          "status": r[2], "active": bool(r[3])})
+    finally:
+        db.close()
+    cands.sort(key=lambda c: (_resolve_rank(name, c["display"]),
+                              (c["display"] or "").lower()))
+    return _resolve_envelope("employee", {"name": name}, cands)
+
+
+@cena_bp.route("/sam/cena/resolve/vendor", methods=["GET"])
+def cena_resolve_vendor():
+    """OQ-5 / spec 8.3 — resolve a vendor name to vendor record(s).
+    No vendors master table: returns distinct `vendor` strings from
+    produce_price_snapshot and vendor_recent_orders, with a
+    most-recent-activity hint for disambiguation."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return _resolve_missing("name")
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    pat = "%" + name.lower() + "%"
+    db = _SL()
+    try:
+        merged = {}
+
+        def _bump(vendor, src, dt):
+            m = merged.setdefault(vendor, {"id": vendor, "display": vendor,
+                                           "source": [], "last_seen": None})
+            if src not in m["source"]:
+                m["source"].append(src)
+            dt = str(dt) if dt is not None else None
+            if dt and (m["last_seen"] is None or dt > m["last_seen"]):
+                m["last_seen"] = dt
+
+        for r in db.execute(_sa_text(
+                "SELECT vendor, max(snapshot_date) FROM produce_price_snapshot "
+                "WHERE vendor IS NOT NULL AND lower(vendor) LIKE :pat "
+                "GROUP BY vendor"), {"pat": pat}):
+            _bump(r[0], "produce_price_snapshot", r[1])
+        for r in db.execute(_sa_text(
+                "SELECT vendor, max(placed_at) FROM vendor_recent_orders "
+                "WHERE vendor IS NOT NULL AND lower(vendor) LIKE :pat "
+                "GROUP BY vendor"), {"pat": pat}):
+            _bump(r[0], "vendor_recent_orders", r[1])
+    finally:
+        db.close()
+    cands = list(merged.values())
+    cands.sort(key=lambda c: (_resolve_rank(name, c["display"]),
+                              (c["display"] or "").lower()))
+    return _resolve_envelope("vendor", {"name": name}, cands)
+
+
+@cena_bp.route("/sam/cena/resolve/menu_item", methods=["GET"])
+def cena_resolve_menu_item():
+    """OQ-5 / spec 8.4 — resolve a menu-item phrase to item(s). No
+    menu_items master table: matches order_items.raw_alias (with an
+    order-frequency hint) and recipes.name."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return _resolve_missing("q")
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    pat = "%" + q.lower() + "%"
+    db = _SL()
+    try:
+        cands = []
+        for r in db.execute(_sa_text(
+                "SELECT raw_alias, item_key, count(*) AS n FROM order_items "
+                "WHERE raw_alias IS NOT NULL AND lower(raw_alias) LIKE :pat "
+                "GROUP BY raw_alias, item_key"), {"pat": pat}):
+            cands.append({"id": r[1], "display": r[0],
+                          "source": "order_items", "order_count": r[2]})
+        for r in db.execute(_sa_text(
+                "SELECT id, name, category FROM recipes "
+                "WHERE name IS NOT NULL AND lower(name) LIKE :pat"),
+                {"pat": pat}):
+            cands.append({"id": r[0], "display": r[1], "source": "recipes",
+                          "category": r[2]})
+    finally:
+        db.close()
+    cands.sort(key=lambda c: (_resolve_rank(q, c["display"]),
+                              -(c.get("order_count") or 0),
+                              (c["display"] or "").lower()))
+    return _resolve_envelope("menu_item", {"q": q}, cands)
+
+
+@cena_bp.route("/sam/cena/resolve/catering_order", methods=["GET"])
+def cena_resolve_catering_order():
+    """OQ-5 / spec 8.5 — resolve a delivery date to catering order(s).
+    Matches orders.delivery_date (the fully-populated YYYY-MM-DD text
+    column; deliver_at is a sparse time-of-day field, not used).
+    Optional `client` substring and `location` filters."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    date = (request.args.get("date") or "").strip()
+    if not date:
+        return _resolve_missing("date")
+    client = (request.args.get("client") or "").strip()
+    location = (request.args.get("location") or "").strip()
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    sql = ("SELECT id, client, delivery_date, deliver_at, status, headcount, "
+           "origin_store_id, total_amount, reported_store FROM orders "
+           "WHERE delivery_date = :date")
+    params = {"date": date}
+    if client:
+        sql += " AND client IS NOT NULL AND lower(client) LIKE :client"
+        params["client"] = "%" + client.lower() + "%"
+    if location:
+        sql += (" AND reported_store IS NOT NULL "
+                "AND lower(reported_store) LIKE :loc")
+        params["loc"] = "%" + location.lower() + "%"
+    db = _SL()
+    try:
+        cands = []
+        for r in db.execute(_sa_text(sql), params):
+            disp = "#%s - %s" % (r[0], r[1] or "(no client)")
+            if r[3]:
+                disp += " - " + str(r[3])
+            cands.append({"id": r[0], "display": disp, "client": r[1],
+                          "delivery_date": r[2], "deliver_at": r[3],
+                          "status": r[4], "headcount": r[5],
+                          "origin_store_id": r[6],
+                          "total_amount": _jsonable(r[7]),
+                          "reported_store": r[8]})
+    finally:
+        db.close()
+    cands.sort(key=lambda c: ((c["client"] or "").lower(), c["id"]))
+    return _resolve_envelope(
+        "catering_order",
+        {"date": date, "client": client or None, "location": location or None},
+        cands)
+
+
+@cena_bp.route("/sam/cena/resolve/manager_log", methods=["GET"])
+def cena_resolve_manager_log():
+    """OQ-5 / spec 8.6 — resolve a date (and optional topic) to manager
+    daily-log entries. Matches manager_daily_log on entry_date, with an
+    optional topic substring against title/body/subject/issue/module."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    date = (request.args.get("date") or "").strip()
+    if not date:
+        return _resolve_missing("date")
+    topic = (request.args.get("topic") or "").strip()
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    sql = ("SELECT id, entry_date, title, body, subject, issue, module, "
+           "priority, store_scope, created_at FROM manager_daily_log "
+           "WHERE entry_date = :date")
+    params = {"date": date}
+    if topic:
+        sql += (" AND (lower(coalesce(title,'')) LIKE :t "
+                "OR lower(coalesce(body,'')) LIKE :t "
+                "OR lower(coalesce(subject,'')) LIKE :t "
+                "OR lower(coalesce(issue,'')) LIKE :t "
+                "OR lower(coalesce(module,'')) LIKE :t)")
+        params["t"] = "%" + topic.lower() + "%"
+    db = _SL()
+    try:
+        cands = []
+        for r in db.execute(_sa_text(sql), params):
+            label = r[2] or r[4] or r[3] or "(entry)"
+            cands.append({"id": r[0], "display": str(label)[:80],
+                          "entry_date": _jsonable(r[1]), "title": r[2],
+                          "subject": r[4], "issue": r[5], "module": r[6],
+                          "priority": r[7], "store_scope": r[8],
+                          "created_at": _jsonable(r[9])})
+    finally:
+        db.close()
+    cands.sort(key=lambda c: c["id"])
+    return _resolve_envelope("manager_log",
+                             {"date": date, "topic": topic or None}, cands)
+
+
 @cena_bp.route("/sam/cena/run-ingest-vendor-emails", methods=["POST"])
 def cena_run_ingest_vendor_emails():
     """Kick a full vendor-email ingest pass — scan orders@ + ezcater@

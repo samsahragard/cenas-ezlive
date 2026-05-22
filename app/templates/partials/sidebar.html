@@ -102,76 +102,24 @@
       </div></div>
     </div>
 
-    {# ==== MANAGER ==== per Sam #837 item 8 — 7 placeholder entries
-       routing to a single Coming Soon page. Sam + Masood only (same
-       is_sam_chat_user() gate that scopes the Cena entry above). When
-       the underlying features ship, swap each placeholder href for the
-       real route + active key. #}
+    {# ==== MANAGER ==== direct link to the tabbed Manager dashboard (Sam 2026-05-21): the sidebar Manager entry no longer expands a sub-menu - it links straight to /<store>/manager (which opens on the Daily Log tab; the other manager pages are reachable as tabs there). Still Sam + Masood only via the is_sam_chat_user() gate. #}
     {% if is_sam_chat_user() %}
-    <div class="ck-sb-section collapsed" data-id="manager">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Manager</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        {# 'recipe-page' (old text-heavy v1 recipe log) removed per Sam
-           #9:44 — it duplicated the real Recipes page under Kitchen. #}
-        {% for slug, label, icon in [
-          ('daily-log', 'Daily manager log', 'ti-clipboard-text'),
-          ('incident-reports', 'Incident reports', 'ti-alert-triangle'),
-          ('attendance', 'Attendance tracking', 'ti-calendar-time'),
-          ('training', 'Training records', 'ti-school'),
-          ('maintenance', 'Maintenance requests', 'ti-tools'),
-          ('counseling', 'Employee counseling', 'ti-user-exclamation'),
-        ] %}
-        <a href="/{{ store_slug }}/manager/{{ slug }}"
-           class="ck-sb-item{% if active == 'manager_' + slug.replace('-','_') %} active{% endif %}">
-          <i class="ti {{ icon }} ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">{{ label }}</span>
-        </a>
-        {% endfor %}
-        {# Interview Tracker — dck's candidate hiring pipeline (Sam
-           #5:48). A standalone /partner/ page, not a /manager/<slug>
-           route, so it's a custom link outside the loop above. The old
-           text-shell 'Interview surface' was removed from this menu. #}
-        <a href="/partner/interview-tracker"
-           class="ck-sb-item{% if active == 'interview_tracker' %} active{% endif %}">
-          <i class="ti ti-user-search ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Interview Tracker</span>
-        </a>
-      </div></div>
-    </div>
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/manager"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Manager</span>
+    </a>
+    {# Interview Tracker was an item inside the old Manager drop-down but is NOT one of the 6 Manager-dashboard tabs, so it stays here as its own direct sidebar link rather than be orphaned (Sam 2026-05-21). #}
+    <a class="ck-sb-section-head" href="/partner/interview-tracker"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Interview Tracker</span>
+    </a>
     {% endif %}
 
-    <div class="ck-sb-section collapsed" data-id="catering">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Catering</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        <a href="/{{ store_slug }}/orders" class="ck-sb-item{% if active == 'ezcater_orders' %} active{% endif %}">
-          <i class="ti ti-clipboard-list ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Ez Orders</span>
-        </a>
-        <a href="/ez-market" class="ck-sb-item{% if active == 'ez_market' %} active{% endif %}">
-          <i class="ti ti-shopping-bag ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Ez Market</span>
-        </a>
-        <a href="/ez-manage" class="ck-sb-item{% if active == 'ez_manage' %} active{% endif %}" style="display:flex;align-items:center;gap:6px;">
-          <i class="ti ti-settings ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Ez Manage</span>
-          <span id="ezm-sidebar-badge" style="display:none;background:rgba(228,179,64,0.22);color:#E4B340;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto;line-height:1.5;"></span>
-        </a>
-        <a href="/{{ store_slug }}/drivers" class="ck-sb-item{% if active == 'drivers_admin' or active == 'driver_tracking' %} active{% endif %}">
-          <i class="ti ti-steering-wheel ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Ez Drivers</span>
-        </a>
-        <a href="/{{ store_slug }}/in-house-catering" class="ck-sb-item{% if active == 'in_house_catering' %} active{% endif %}">
-          <i class="ti ti-shopping-cart ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">In-House</span>
-        </a>
-      </div></div>
-    </div>
+    {# ==== CATERING ==== direct link to the tabbed Catering dashboard (Sam 2026-05-21): the sidebar Catering entry no longer expands a sub-menu - it links straight to /<store>/catering (which opens on the Ez Orders tab; the other catering surfaces are reachable as tabs there). #}
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/catering"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Catering</span>
+    </a>
 
         {# ==== OPERATIONS ==== restructured per Sam #837 spec — Team
        (moved from former Admin), Forecasts, Sales/Labor/Performance

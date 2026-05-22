@@ -1,0 +1,416 @@
+{# ============================================================
+   training_records.html — Training Records (production)
+   samai build per Sam dev-chat #9:16 ("create these two pages …
+   maintenance, and training … the tabs need to look like this").
+   The v3 warm design from Sam's training_records.html mockup,
+   wired as a real Manager-section page (the attendance / counseling
+   v3 pattern) — NOT a preview. Slots into the Manager dashboard's
+   Training tab; renders standalone too.
+
+   ROUTE CONTRACT (store_routes.py _render_training_v3):
+     records -> list[dict], sorted soonest-to-expire first:
+       id, employee, role_label, cert_name, cert_issuer,
+       issued_label, expires_label,
+       status ('current'|'expiring'|'overdue'|'none'),
+       status_label, status_class ('ok'|'warn'|'alert'|''),
+       row_class (''|'warn'|'alert'),
+       age_days (int — row created_at age), mine (bool),
+       search (lowercased haystack), detail_url.
+     kpis -> {total, current, expiring, overdue}.
+     viewer_label -> current user's role title (filter-meta).
+     new_url -> the +New entry link. page_label.
+   Audience gate at the route: _manager_role_ok.
+   CSS is scoped under .tr-page so the warm palette never leaks
+   into the global sheet (the ec-/atr-/ir- pattern). The page sits
+   on an opaque surface so the dashboard photo never bleeds through.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_training' %}
+
+{% block title %}Training Records — Cenas Kitchen{% endblock %}
+{% block page_title %}Training Records{% endblock %}
+{% block page_subtitle %}{{ page_label }} — certifications &amp; renewal tracking{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .tr-page so the v3
+     warm palette never leaks into the global sheet (ec-/atr-/ir-
+     pattern). */
+  .tr-page {
+    --ck-red: #C73B36; --ck-red-deep: #9B2A26; --ck-red-bright: #E85852;
+    --ck-gold: #E4B340; --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F; --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250,246,236,0.82);
+    --ck-cream-faint: rgba(250,246,236,0.52);
+    --ck-cream-meta: rgba(250,246,236,0.40);
+    --ck-bg-input: rgba(0,0,0,0.3);
+    --ck-border-subtle: rgba(217,164,54,0.18);
+    --ck-border-active: rgba(228,179,64,0.5);
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--ck-cream);
+    /* opaque surface — the dashboard photo never bleeds through */
+    background: #1f1308;
+    border: 1px solid var(--ck-border-subtle);
+    border-radius: 16px;
+    padding: 18px 20px 30px;
+    margin-bottom: 40px;
+  }
+  .tr-page * { box-sizing: border-box; }
+
+  .tr-page .tr-intro {
+    font-size: 12px; color: var(--ck-cream-faint); font-style: italic;
+    line-height: 1.5; margin-bottom: 14px; max-width: 680px;
+  }
+
+  /* Sub-header strip — page title + count + roles + new entry */
+  .tr-page .sub-header {
+    display: flex; align-items: center; gap: 16px; padding: 14px 18px;
+    background: rgba(0,0,0,0.25); border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 12px 12px 0 0; flex-wrap: wrap;
+  }
+  .tr-page .sub-header-left {
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+    flex-wrap: wrap;
+  }
+  .tr-page .sub-header-icon {
+    width: 16px; height: 16px; fill: var(--ck-gold); flex-shrink: 0;
+  }
+  .tr-page .sub-header-title {
+    font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 700;
+    color: var(--ck-cream);
+  }
+  .tr-page .entry-count {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ck-cream-faint); background: rgba(228,179,64,0.1);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .tr-page .role-tags {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+    flex-wrap: wrap;
+  }
+  .tr-page .role-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--ck-cream-faint); border: 0.5px solid var(--ck-border-subtle);
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em;
+  }
+  .tr-page .new-entry-btn {
+    background: var(--ck-gold); color: #1a0d08; border: none;
+    padding: 8px 14px; border-radius: 8px; font-family: 'Manrope', sans-serif;
+    font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    text-decoration: none; display: inline-block; transition: background 0.15s;
+  }
+  .tr-page .new-entry-btn:hover { background: var(--ck-gold-bright); }
+
+  /* Filter bar */
+  .tr-page .filter-bar {
+    display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+    background: rgba(0,0,0,0.15);
+    border-left: 0.5px solid var(--ck-border-subtle);
+    border-right: 0.5px solid var(--ck-border-subtle); flex-wrap: wrap;
+  }
+  .tr-page .search-wrap { flex: 1; min-width: 200px; position: relative; }
+  .tr-page .search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; fill: var(--ck-cream-faint);
+  }
+  .tr-page .search-input {
+    width: 100%; background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle); border-radius: 8px;
+    padding: 9px 12px 9px 36px; color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif; font-size: 13px;
+  }
+  .tr-page .search-input::placeholder { color: var(--ck-cream-faint); }
+  .tr-page .search-input:focus { outline: none; border-color: var(--ck-border-active); }
+  .tr-page .filter-group { display: inline-flex; align-items: center; gap: 4px; }
+  .tr-page .filter-chip {
+    background: transparent; border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-cream-faint); padding: 6px 11px; border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s;
+  }
+  .tr-page .filter-chip:hover { color: var(--ck-cream); border-color: var(--ck-border-active); }
+  .tr-page .filter-chip.active {
+    background: rgba(228,179,64,0.15); border-color: var(--ck-gold);
+    color: var(--ck-gold-bright);
+  }
+  .tr-page .filter-meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ck-cream-faint); margin-left: 6px;
+  }
+
+  /* Records table */
+  .tr-page .records-table {
+    background: var(--ck-bg-input); border: 0.5px solid var(--ck-border-subtle);
+    border-top: none;
+  }
+  .tr-page .records-header {
+    display: grid; grid-template-columns: 1.6fr 1.6fr 0.8fr 0.9fr 1fr;
+    gap: 12px; padding: 10px 18px;
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    color: var(--ck-cream-faint); letter-spacing: 0.06em; text-transform: uppercase;
+    background: rgba(0,0,0,0.3);
+  }
+  .tr-page .record-row {
+    display: grid; grid-template-columns: 1.6fr 1.6fr 0.8fr 0.9fr 1fr;
+    gap: 12px; padding: 12px 18px;
+    border-bottom: 0.5px solid var(--ck-border-subtle);
+    align-items: center; transition: background 0.12s;
+  }
+  .tr-page .record-row:last-child { border-bottom: none; }
+  .tr-page .record-row:hover { background: rgba(228,179,64,0.04); }
+  .tr-page .record-row.warn {
+    background: rgba(228,179,64,0.04);
+    border-left: 2px solid var(--ck-gold); padding-left: 16px;
+  }
+  .tr-page .record-row.alert {
+    background: rgba(232,88,82,0.06);
+    border-left: 2px solid var(--ck-red-bright); padding-left: 16px;
+  }
+  .tr-page .emp-name, .tr-page .cert-name {
+    font-size: 13px; font-weight: 700; color: var(--ck-cream); margin-bottom: 2px;
+  }
+  .tr-page .emp-role, .tr-page .cert-issuer {
+    font-size: 11px; color: var(--ck-cream-faint);
+  }
+  .tr-page .col-issued, .tr-page .col-expires {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ck-cream-dim);
+  }
+  .tr-page .status-pill {
+    display: inline-block; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; padding: 4px 9px; border-radius: 999px;
+    letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap;
+    background: rgba(255,255,255,0.06); color: var(--ck-cream-dim);
+    border: 0.5px solid var(--ck-border-subtle);
+  }
+  .tr-page .status-pill.ok {
+    background: rgba(46,163,159,0.18); color: var(--ck-teal-bright);
+    border-color: rgba(91,202,197,0.4);
+  }
+  .tr-page .status-pill.warn {
+    background: rgba(228,179,64,0.18); color: var(--ck-gold-bright);
+    border-color: rgba(255,217,112,0.4);
+  }
+  .tr-page .status-pill.alert {
+    background: rgba(232,88,82,0.18); color: var(--ck-red-bright);
+    border-color: rgba(232,88,82,0.5);
+  }
+
+  /* Footer */
+  .tr-page .records-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; background: rgba(0,0,0,0.2);
+    border: 0.5px solid var(--ck-border-subtle); border-top: none;
+    border-radius: 0 0 12px 12px; flex-wrap: wrap; gap: 12px;
+  }
+  .tr-page .summary-stats {
+    display: inline-flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .tr-page .stat-block {
+    font-family: 'Manrope', sans-serif; font-size: 12px; color: var(--ck-cream-dim);
+  }
+  .tr-page .stat-val {
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700;
+    margin-right: 4px;
+  }
+  .tr-page .stat-val.ok { color: var(--ck-teal-bright); }
+  .tr-page .stat-val.warn { color: var(--ck-gold-bright); }
+  .tr-page .stat-val.alert { color: var(--ck-red-bright); }
+  .tr-page .action-links { display: inline-flex; align-items: center; gap: 12px; }
+  .tr-page .action-link {
+    background: transparent; border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-cream-dim); padding: 6px 12px; border-radius: 6px;
+    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; text-decoration: none;
+    display: inline-block;
+  }
+  .tr-page .action-link:hover { color: var(--ck-gold); border-color: var(--ck-border-active); }
+
+  /* Empty / no-results state */
+  .tr-page .tr-empty {
+    text-align: center; padding: 40px 20px; color: var(--ck-cream-faint);
+    font-size: 13px; background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle); border-top: none;
+  }
+  .tr-page .tr-empty.hidden { display: none; }
+
+  @media (max-width: 760px) {
+    .tr-page { padding: 14px 13px 24px; }
+    .tr-page .sub-header { padding: 12px 14px; gap: 10px; }
+    .tr-page .new-entry-btn { padding: 7px 12px; font-size: 12px; }
+    .tr-page .filter-bar {
+      padding: 10px 14px; flex-direction: column; align-items: stretch; gap: 8px;
+    }
+    .tr-page .filter-group { flex-wrap: wrap; }
+    .tr-page .records-header { display: none; }
+    .tr-page .record-row { grid-template-columns: 1fr; gap: 6px; padding: 14px; }
+    .tr-page .record-row.warn, .tr-page .record-row.alert {
+      padding-left: 12px; border-left-width: 3px;
+    }
+    .tr-page .col-employee, .tr-page .col-cert {
+      padding-bottom: 4px; border-bottom: 0.5px dashed rgba(217,164,54,0.1);
+    }
+    .tr-page .col-issued::before  { content: 'Issued: ';  opacity: 0.6; }
+    .tr-page .col-expires::before { content: 'Expires: '; opacity: 0.6; }
+    .tr-page .records-footer {
+      padding: 12px 14px; flex-direction: column; align-items: flex-start;
+    }
+    .tr-page .role-tags { display: none; }
+  }
+</style>
+
+<div class="tr-page" id="trPage">
+
+  <p class="tr-intro">Track food-handler cards, ServSafe and TABC certifications for every
+    teammate. Records nearing expiry are flagged amber; lapsed ones are flagged red so a
+    renewal is never missed.</p>
+
+  <!-- Sub-header strip -->
+  <div class="sub-header">
+    <div class="sub-header-left">
+      <svg class="sub-header-icon" viewBox="0 0 24 24"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3 1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>
+      <span class="sub-header-title">Training Records</span>
+      <span class="entry-count">{{ kpis.total }} {{ 'entry' if kpis.total == 1 else 'entries' }}</span>
+      <span class="role-tags">
+        <span class="role-pill">GM</span>
+        <span class="role-pill">KM</span>
+        <span class="role-pill">ASST KM</span>
+        <span class="role-pill">FOH MANAGER</span>
+      </span>
+    </div>
+    <a class="new-entry-btn" href="{{ new_url }}">+ New entry</a>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input class="search-input" type="text" id="trSearch" placeholder="Search entries..." autocomplete="off">
+    </div>
+    <div class="filter-group" id="trScope" data-group="scope">
+      <button type="button" class="filter-chip" data-scope="30d">Last 30d</button>
+      <button type="button" class="filter-chip" data-scope="7d">Last 7d</button>
+      <button type="button" class="filter-chip" data-scope="today">Today</button>
+      <button type="button" class="filter-chip active" data-scope="all">All</button>
+    </div>
+    <div class="filter-group" id="trAuthor" data-group="author">
+      <button type="button" class="filter-chip active" data-author="all">All authors</button>
+      <button type="button" class="filter-chip" data-author="mine">Mine only</button>
+      <span class="filter-meta" id="trMeta"></span>
+    </div>
+  </div>
+
+  <!-- Records table -->
+  <div class="records-table">
+    <div class="records-header">
+      <div class="col-employee">Employee</div>
+      <div class="col-cert">Certification</div>
+      <div class="col-issued">Issued</div>
+      <div class="col-expires">Expires</div>
+      <div class="col-status">Status</div>
+    </div>
+    <div id="trList">
+      {% for r in records %}
+      <div class="record-row{% if r.row_class %} {{ r.row_class }}{% endif %}"
+           data-age="{{ r.age_days }}" data-mine="{{ '1' if r.mine else '0' }}"
+           data-search="{{ r.search }}">
+        <div class="col-employee">
+          <div class="emp-name">{{ r.employee }}</div>
+          <div class="emp-role">{{ r.role_label }}</div>
+        </div>
+        <div class="col-cert">
+          <div class="cert-name">{{ r.cert_name }}</div>
+          <div class="cert-issuer">{{ r.cert_issuer }}</div>
+        </div>
+        <div class="col-issued">{{ r.issued_label }}</div>
+        <div class="col-expires">{{ r.expires_label }}</div>
+        <div class="col-status"><span class="status-pill {{ r.status_class }}">{{ r.status_label }}</span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="tr-empty{% if records %} hidden{% endif %}" id="trEmpty">
+    {% if records %}No records match this filter.
+    {% else %}No training records on file yet — click <strong>+ New entry</strong> to log the first certification.{% endif %}
+  </div>
+
+  <!-- Footer summary -->
+  <div class="records-footer">
+    <div class="summary-stats">
+      <span class="stat-block"><span class="stat-val ok">{{ kpis.current }}</span> current</span>
+      <span class="stat-block"><span class="stat-val warn">{{ kpis.expiring }}</span> expiring &lt;30d</span>
+      <span class="stat-block"><span class="stat-val alert">{{ kpis.overdue }}</span> overdue</span>
+    </div>
+    <div class="action-links">
+      <a class="action-link" href="{{ new_url }}">+ New entry</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var list   = document.getElementById("trList");
+  var empty  = document.getElementById("trEmpty");
+  var search = document.getElementById("trSearch");
+  var meta   = document.getElementById("trMeta");
+  var rows   = Array.prototype.slice.call(list.querySelectorAll(".record-row"));
+  var viewerLabel = {{ (viewer_label or 'Manager') | tojson }};
+  var scope = "all", author = "all", query = "";
+
+  function matches(r) {
+    if (query && (r.dataset.search || "").indexOf(query) < 0) return false;
+    if (author === "mine" && r.dataset.mine !== "1") return false;
+    var age = parseInt(r.dataset.age || "0", 10);
+    if (scope === "today") return age < 1;
+    if (scope === "7d")    return age <= 7;
+    if (scope === "30d")   return age <= 30;
+    return true; /* all */
+  }
+  function apply() {
+    var shown = 0;
+    rows.forEach(function (r) {
+      var ok = matches(r);
+      r.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    });
+    if (rows.length) {
+      empty.textContent = "No records match this filter.";
+      empty.classList.toggle("hidden", shown > 0);
+    }
+    meta.textContent = viewerLabel + " · " + shown + " of " + rows.length;
+  }
+  function wireGroup(id, set) {
+    var grp = document.getElementById(id);
+    if (!grp) return;
+    grp.addEventListener("click", function (e) {
+      var chip = e.target.closest(".filter-chip");
+      if (!chip) return;
+      grp.querySelectorAll(".filter-chip").forEach(function (x) {
+        x.classList.remove("active");
+      });
+      chip.classList.add("active");
+      set(chip);
+      apply();
+    });
+  }
+  wireGroup("trScope",  function (chip) { scope  = chip.dataset.scope; });
+  wireGroup("trAuthor", function (chip) { author = chip.dataset.author; });
+  search.addEventListener("input", function () {
+    query = search.value.trim().toLowerCase();
+    apply();
+  });
+  apply();
+})();
+</script>
+{% endblock %}

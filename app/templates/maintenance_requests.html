@@ -1,0 +1,412 @@
+{# ============================================================
+   maintenance_requests.html — Maintenance Requests (production)
+   samai build per Sam dev-chat #9:16 ("create these two pages …
+   maintenance, and training … the tabs need to look like this").
+   The v3 warm design from Sam's maintenance_requests.html mockup,
+   wired as a real Manager-section page (the attendance / counseling
+   v3 pattern) — NOT a preview. Slots into the Manager dashboard's
+   Maintenance tab; renders standalone too.
+
+   ROUTE CONTRACT (store_routes.py _render_maintenance_v3):
+     requests -> list[dict], newest/urgent first, one per request:
+       id, title, priority ('urgent'|'high'|'medium'|'low'),
+       priority_label, urgent (bool), sub (store · area · reported),
+       desc, meta_tags (list[str]),
+       status ('open'|'in_progress'|'scheduled'|'closed'),
+       status_label, status_class (''|'ok'|'warn'|'alert'),
+       time_since, age_days (int), store ('uno'|'dos'|''),
+       search (lowercased haystack), detail_url.
+     kpis -> {open, urgent, in_progress, scheduled, closed_30d}.
+     new_url -> the +New request link. page_label.
+   Audience gate at the route: _manager_role_ok.
+   CSS is scoped under .mr-page so the warm palette never leaks
+   into the global sheet (the ec-/atr-/ir- pattern). The page sits
+   on an opaque surface so the dashboard photo never bleeds through.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_maintenance' %}
+
+{% block title %}Maintenance Requests — Cenas Kitchen{% endblock %}
+{% block page_title %}Maintenance Requests{% endblock %}
+{% block page_subtitle %}{{ page_label }} — equipment &amp; facility repair tracking{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .mr-page so the v3
+     warm palette never leaks into the global sheet (ec-/atr-/ir-
+     pattern). */
+  .mr-page {
+    --ck-red: #C73B36; --ck-red-deep: #9B2A26; --ck-red-bright: #E85852;
+    --ck-gold: #E4B340; --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F; --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250,246,236,0.82);
+    --ck-cream-faint: rgba(250,246,236,0.52);
+    --ck-cream-meta: rgba(250,246,236,0.40);
+    --ck-bg-input: rgba(0,0,0,0.3);
+    --ck-border-subtle: rgba(217,164,54,0.18);
+    --ck-border-active: rgba(228,179,64,0.5);
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--ck-cream);
+    /* opaque surface — the dashboard photo never bleeds through */
+    background: #1f1308;
+    border: 1px solid var(--ck-border-subtle);
+    border-radius: 16px;
+    padding: 18px 20px 30px;
+    margin-bottom: 40px;
+  }
+  .mr-page * { box-sizing: border-box; }
+
+  .mr-page .mr-intro {
+    font-size: 12px; color: var(--ck-cream-faint); font-style: italic;
+    line-height: 1.5; margin-bottom: 14px; max-width: 680px;
+  }
+
+  /* Sub-header strip — page title + count + roles + new request */
+  .mr-page .sub-header {
+    display: flex; align-items: center; gap: 16px; padding: 14px 18px;
+    background: rgba(0,0,0,0.25); border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 12px 12px 0 0; flex-wrap: wrap;
+  }
+  .mr-page .sub-header-left {
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+    flex-wrap: wrap;
+  }
+  .mr-page .sub-header-icon {
+    width: 16px; height: 16px; fill: var(--ck-gold); flex-shrink: 0;
+  }
+  .mr-page .sub-header-title {
+    font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 700;
+    color: var(--ck-cream);
+  }
+  .mr-page .entry-count {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ck-cream-faint); background: rgba(228,179,64,0.1);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .mr-page .role-tags {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+    flex-wrap: wrap;
+  }
+  .mr-page .role-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--ck-cream-faint); border: 0.5px solid var(--ck-border-subtle);
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em;
+  }
+  .mr-page .new-entry-btn {
+    background: var(--ck-gold); color: #1a0d08; border: none;
+    padding: 8px 14px; border-radius: 8px; font-family: 'Manrope', sans-serif;
+    font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    text-decoration: none; display: inline-block; transition: background 0.15s;
+  }
+  .mr-page .new-entry-btn:hover { background: var(--ck-gold-bright); }
+
+  /* Filter bar */
+  .mr-page .filter-bar {
+    display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+    background: rgba(0,0,0,0.15);
+    border-left: 0.5px solid var(--ck-border-subtle);
+    border-right: 0.5px solid var(--ck-border-subtle); flex-wrap: wrap;
+  }
+  .mr-page .search-wrap { flex: 1; min-width: 200px; position: relative; }
+  .mr-page .search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; fill: var(--ck-cream-faint);
+  }
+  .mr-page .search-input {
+    width: 100%; background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle); border-radius: 8px;
+    padding: 9px 12px 9px 36px; color: var(--ck-cream);
+    font-family: 'Manrope', sans-serif; font-size: 13px;
+  }
+  .mr-page .search-input::placeholder { color: var(--ck-cream-faint); }
+  .mr-page .search-input:focus { outline: none; border-color: var(--ck-border-active); }
+  .mr-page .filter-group { display: inline-flex; align-items: center; gap: 4px; }
+  .mr-page .filter-chip {
+    background: transparent; border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-cream-faint); padding: 6px 11px; border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s;
+  }
+  .mr-page .filter-chip:hover { color: var(--ck-cream); border-color: var(--ck-border-active); }
+  .mr-page .filter-chip.active {
+    background: rgba(228,179,64,0.15); border-color: var(--ck-gold);
+    color: var(--ck-gold-bright);
+  }
+
+  /* Request cards */
+  .mr-page .request-list {
+    background: var(--ck-bg-input); border: 0.5px solid var(--ck-border-subtle);
+    border-top: none; display: flex; flex-direction: column;
+  }
+  .mr-page .request-card {
+    display: grid; grid-template-columns: 90px 1fr 140px; gap: 16px;
+    padding: 16px 18px; border-bottom: 0.5px solid var(--ck-border-subtle);
+    align-items: start; transition: background 0.12s;
+  }
+  .mr-page .request-card:last-child { border-bottom: none; }
+  .mr-page .request-card:hover { background: rgba(228,179,64,0.03); }
+  .mr-page .request-card.urgent {
+    background: rgba(232,88,82,0.04);
+    border-left: 3px solid var(--ck-red-bright); padding-left: 15px;
+  }
+  .mr-page .request-priority {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    color: var(--ck-cream-faint); letter-spacing: 0.1em; padding-top: 2px;
+  }
+  .mr-page .request-card.urgent .request-priority { color: var(--ck-red-bright); }
+  .mr-page .request-main { min-width: 0; }
+  .mr-page .request-title {
+    font-size: 14px; font-weight: 700; color: var(--ck-cream); margin-bottom: 4px;
+  }
+  .mr-page .request-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ck-cream-faint); margin-bottom: 8px; letter-spacing: 0.04em;
+  }
+  .mr-page .request-desc {
+    font-size: 12px; color: var(--ck-cream-dim); line-height: 1.55;
+    margin-bottom: 8px;
+  }
+  .mr-page .request-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mr-page .meta-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    color: var(--ck-cream-faint); background: rgba(0,0,0,0.3);
+    border: 0.5px solid var(--ck-border-subtle); padding: 3px 7px;
+    border-radius: 4px; letter-spacing: 0.04em;
+  }
+  .mr-page .request-status {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  }
+  .mr-page .time-since {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ck-cream-faint);
+  }
+  .mr-page .status-pill {
+    display: inline-block; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; padding: 4px 9px; border-radius: 999px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    background: rgba(255,255,255,0.06); color: var(--ck-cream-dim);
+    border: 0.5px solid var(--ck-border-subtle); white-space: nowrap;
+  }
+  .mr-page .status-pill.ok {
+    background: rgba(46,163,159,0.18); color: var(--ck-teal-bright);
+    border-color: rgba(91,202,197,0.4);
+  }
+  .mr-page .status-pill.warn {
+    background: rgba(228,179,64,0.18); color: var(--ck-gold-bright);
+    border-color: rgba(255,217,112,0.4);
+  }
+  .mr-page .status-pill.alert {
+    background: rgba(232,88,82,0.18); color: var(--ck-red-bright);
+    border-color: rgba(232,88,82,0.5);
+  }
+
+  /* Footer */
+  .mr-page .records-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; background: rgba(0,0,0,0.2);
+    border: 0.5px solid var(--ck-border-subtle); border-top: none;
+    border-radius: 0 0 12px 12px; flex-wrap: wrap; gap: 12px;
+  }
+  .mr-page .summary-stats {
+    display: inline-flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .mr-page .stat-block {
+    font-family: 'Manrope', sans-serif; font-size: 12px; color: var(--ck-cream-dim);
+  }
+  .mr-page .stat-val {
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700;
+    margin-right: 4px;
+  }
+  .mr-page .stat-val.ok { color: var(--ck-teal-bright); }
+  .mr-page .stat-val.warn { color: var(--ck-gold-bright); }
+  .mr-page .stat-val.alert { color: var(--ck-red-bright); }
+  .mr-page .action-links { display: inline-flex; align-items: center; gap: 12px; }
+  .mr-page .action-link {
+    background: transparent; border: 0.5px solid var(--ck-border-subtle);
+    color: var(--ck-cream-dim); padding: 6px 12px; border-radius: 6px;
+    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; text-decoration: none;
+    display: inline-block;
+  }
+  .mr-page .action-link:hover { color: var(--ck-gold); border-color: var(--ck-border-active); }
+
+  /* Empty / no-results state */
+  .mr-page .mr-empty {
+    text-align: center; padding: 40px 20px; color: var(--ck-cream-faint);
+    font-size: 13px; background: var(--ck-bg-input);
+    border: 0.5px solid var(--ck-border-subtle); border-top: none;
+  }
+  .mr-page .mr-empty.hidden { display: none; }
+
+  @media (max-width: 760px) {
+    .mr-page { padding: 14px 13px 24px; }
+    .mr-page .sub-header { padding: 12px 14px; gap: 10px; }
+    .mr-page .new-entry-btn { padding: 7px 12px; font-size: 12px; }
+    .mr-page .filter-bar {
+      padding: 10px 14px; flex-direction: column; align-items: stretch; gap: 8px;
+    }
+    .mr-page .filter-group { flex-wrap: wrap; }
+    .mr-page .request-card { grid-template-columns: 1fr; gap: 8px; padding: 14px; }
+    .mr-page .request-card.urgent { padding-left: 11px; }
+    .mr-page .request-status {
+      flex-direction: row; align-items: center; justify-content: space-between;
+      padding-top: 6px; border-top: 0.5px dashed rgba(217,164,54,0.1);
+    }
+    .mr-page .records-footer {
+      padding: 12px 14px; flex-direction: column; align-items: flex-start;
+    }
+    .mr-page .role-tags { display: none; }
+  }
+</style>
+
+<div class="mr-page" id="mrPage">
+
+  <p class="mr-intro">Log equipment and facility repairs, track who is on them, and keep
+    urgent issues visible until they are closed. Urgent requests are flagged and pinned
+    to the top.</p>
+
+  <!-- Sub-header strip -->
+  <div class="sub-header">
+    <div class="sub-header-left">
+      <svg class="sub-header-icon" viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+      <span class="sub-header-title">Maintenance Requests</span>
+      <span class="entry-count">{{ kpis.open }} open · {{ kpis.urgent }} urgent</span>
+      <span class="role-tags">
+        <span class="role-pill">GM</span>
+        <span class="role-pill">KM</span>
+        <span class="role-pill">ASST KM</span>
+        <span class="role-pill">FOH MANAGER</span>
+      </span>
+    </div>
+    <a class="new-entry-btn" href="{{ new_url }}">+ New request</a>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input class="search-input" type="text" id="mrSearch" placeholder="Search requests..." autocomplete="off">
+    </div>
+    <div class="filter-group" id="mrScope" data-group="scope">
+      <button type="button" class="filter-chip" data-scope="30d">Last 30d</button>
+      <button type="button" class="filter-chip" data-scope="7d">Last 7d</button>
+      <button type="button" class="filter-chip" data-scope="today">Today</button>
+      <button type="button" class="filter-chip active" data-scope="open">Open</button>
+      <button type="button" class="filter-chip" data-scope="all">All</button>
+    </div>
+    <div class="filter-group" id="mrStore" data-group="store">
+      <button type="button" class="filter-chip active" data-store="all">Both stores</button>
+      <button type="button" class="filter-chip" data-store="uno">UNO only</button>
+      <button type="button" class="filter-chip" data-store="dos">DOS only</button>
+    </div>
+  </div>
+
+  <!-- Request cards -->
+  <div class="request-list" id="mrList">
+    {% for r in requests %}
+    <div class="request-card{% if r.urgent %} urgent{% endif %}"
+         data-age="{{ r.age_days }}" data-status="{{ r.status }}"
+         data-store="{{ r.store }}" data-search="{{ r.search }}">
+      <div class="request-priority">{{ r.priority_label }}</div>
+      <div class="request-main">
+        <div class="request-title">{{ r.title }}</div>
+        <div class="request-sub">{{ r.sub }}</div>
+        {% if r.desc %}<div class="request-desc">{{ r.desc }}</div>{% endif %}
+        {% if r.meta_tags %}
+        <div class="request-meta">
+          {% for t in r.meta_tags %}<span class="meta-tag">{{ t }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="request-status">
+        <span class="status-pill {{ r.status_class }}">{{ r.status_label }}</span>
+        <span class="time-since">{{ r.time_since }}</span>
+        <a class="action-link" href="{{ r.detail_url }}">View →</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="mr-empty{% if requests %} hidden{% endif %}" id="mrEmpty">
+    {% if requests %}No requests match this filter.
+    {% else %}No maintenance requests on file yet — click <strong>+ New request</strong> to log the first one.{% endif %}
+  </div>
+
+  <!-- Footer summary -->
+  <div class="records-footer">
+    <div class="summary-stats">
+      <span class="stat-block"><span class="stat-val alert">{{ kpis.urgent }}</span> urgent</span>
+      <span class="stat-block"><span class="stat-val warn">{{ kpis.in_progress }}</span> in progress</span>
+      <span class="stat-block"><span class="stat-val ok">{{ kpis.scheduled }}</span> scheduled</span>
+      <span class="stat-block"><span class="stat-val">{{ kpis.closed_30d }}</span> closed last 30d</span>
+    </div>
+    <div class="action-links">
+      <a class="action-link" href="{{ new_url }}">+ New request</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var page   = document.getElementById("mrPage");
+  var list   = document.getElementById("mrList");
+  var empty  = document.getElementById("mrEmpty");
+  var search = document.getElementById("mrSearch");
+  var cards  = Array.prototype.slice.call(list.querySelectorAll(".request-card"));
+  var scope = "open", store = "all", query = "";
+
+  function matches(c) {
+    if (query && (c.dataset.search || "").indexOf(query) < 0) return false;
+    if (store !== "all" && (c.dataset.store || "") !== store) return false;
+    var age = parseInt(c.dataset.age || "0", 10);
+    if (scope === "open")  return (c.dataset.status || "") === "open";
+    if (scope === "today") return age < 1;
+    if (scope === "7d")    return age <= 7;
+    if (scope === "30d")   return age <= 30;
+    return true; /* all */
+  }
+  function apply() {
+    var shown = 0;
+    cards.forEach(function (c) {
+      var ok = matches(c);
+      c.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    });
+    if (cards.length) {
+      empty.textContent = "No requests match this filter.";
+      empty.classList.toggle("hidden", shown > 0);
+    }
+  }
+  function wireGroup(id, set) {
+    var grp = document.getElementById(id);
+    if (!grp) return;
+    grp.addEventListener("click", function (e) {
+      var chip = e.target.closest(".filter-chip");
+      if (!chip) return;
+      grp.querySelectorAll(".filter-chip").forEach(function (x) {
+        x.classList.remove("active");
+      });
+      chip.classList.add("active");
+      set(chip);
+      apply();
+    });
+  }
+  wireGroup("mrScope", function (chip) { scope = chip.dataset.scope; });
+  wireGroup("mrStore", function (chip) { store = chip.dataset.store; });
+  search.addEventListener("input", function () {
+    query = search.value.trim().toLowerCase();
+    apply();
+  });
+  apply();
+})();
+</script>
+{% endblock %}

@@ -1667,6 +1667,256 @@ def _counsel_body(category, what, expected, response, followup):
     return "\n\n".join(chunks).strip()
 
 
+# ============================================================
+# Maintenance Requests v3 + Training Records v3 — dedicated
+# renderers (Sam dev chat #9:16; samai build). Same pattern as
+# _render_employee_counseling_v3: a rich v3 page off the shared
+# ManagerLogMixin shape (title + type_tag + body) — NO migration.
+# Structured detail is packed into `body` as leading "Key: value"
+# header lines; _kv_body parses them and degrades gracefully so
+# plain pre-v3 rows still render.
+# ============================================================
+import re as _re_mt
+
+_MAINT_PRIORITY = {"urgent": "URGENT", "high": "HIGH",
+                   "medium": "MEDIUM", "low": "LOW"}
+_MAINT_PRIORITY_ORDER = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+# status key -> (display label, status-pill class)
+_MAINT_STATUS = {
+    "open":        ("Open",          "alert"),
+    "in_progress": ("In progress",   "warn"),
+    "scheduled":   ("Scheduled",     "warn"),
+    "parts":       ("Parts ordered", "warn"),
+    "quoted":      ("Quoted",        ""),
+    "closed":      ("Closed",        "ok"),
+}
+_KV_RE = _re_mt.compile(r"^([A-Za-z][A-Za-z /]{0,21}):\s+(.+)$")
+
+
+def _kv_body(body):
+    """(fields, description) from a manager-log body. Leading
+    'Key: value' lines (key = letters/spaces/slash, <=22 chars)
+    are collected case-insensitively; the first line that is not
+    such a pair starts the free-text description. A plain body
+    with no header parses to ({}, body) so pre-v3 rows render."""
+    fields, desc, header = {}, [], True
+    for ln in (body or "").replace("\r\n", "\n").split("\n"):
+        m = _KV_RE.match(ln) if header else None
+        if m:
+            fields[m.group(1).strip().lower()] = m.group(2).strip()
+        else:
+            if header and not ln.strip():
+                continue  # blank line(s) between header and description
+            header = False
+            desc.append(ln)
+    return fields, "\n".join(desc).strip()
+
+
+def _loose_date(s):
+    """Tolerant date parse -> date or None. Accepts ISO, 'YYYY-MM',
+    'Mon YYYY', 'Mon DD, YYYY', 'MM/DD/YYYY'."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y-%m", "%b %d, %Y", "%B %d, %Y",
+                "%b %Y", "%B %Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _store_uno_dos(scope):
+    """ManagerLogMixin.store_scope -> (filter key, display label).
+    Sam's #9:16 reference labels: UNO = Copperfield, DOS = Tomball."""
+    if scope == "copperfield":
+        return "uno", "UNO Copperfield"
+    if scope == "tomball":
+        return "dos", "DOS Tomball"
+    return "", "Both stores"
+
+
+def _time_since(dt):
+    if not dt:
+        return ""
+    secs = (datetime.utcnow() - dt).total_seconds()
+    if secs < 3600:
+        return "%dm ago" % max(1, int(secs // 60))
+    if secs < 86400:
+        return "%dh ago" % int(secs // 3600)
+    return "%dd ago" % int(secs // 86400)
+
+
+def _render_maintenance_v3(db, label, active_key):
+    """Maintenance Requests v3 — equipment/facility repair board."""
+    from app.models import MaintenanceRequest
+    q = db.query(MaintenanceRequest)
+    if g.current_location in ("tomball", "copperfield"):
+        q = q.filter(
+            (MaintenanceRequest.store_scope == g.current_location) |
+            (MaintenanceRequest.store_scope.is_(None)))
+    raw = q.order_by(MaintenanceRequest.created_at.desc()).limit(300).all()
+
+    now = datetime.utcnow()
+    requests = []
+    kpis = {"open": 0, "urgent": 0, "in_progress": 0,
+            "scheduled": 0, "closed_30d": 0}
+    for r in raw:
+        fields, desc = _kv_body(r.body)
+        prio = (r.type_tag or fields.get("priority") or "medium").strip().lower()
+        if prio not in _MAINT_PRIORITY:
+            prio = "medium"
+        status = (fields.get("status") or "open").strip().lower().replace(" ", "_")
+        if status in ("parts_ordered", "ordered"):
+            status = "parts"
+        st_label, st_class = _MAINT_STATUS.get(status, ("Open", "alert"))
+        store, store_label = _store_uno_dos(r.store_scope)
+        local = _central_dt(r.created_at)
+        area = fields.get("area") or fields.get("location") or ""
+        reported = local.strftime("%b %d") if local else ""
+        sub_bits = [b for b in (store_label or None, area or None,
+                    ("reported " + reported) if reported else None) if b]
+        meta_tags = []
+        for key, prefix in (("reporter", "Reporter: "), ("vendor", "Vendor: "),
+                            ("cost", "Cost: "), ("scheduled", "Scheduled: "),
+                            ("photos", "")):
+            if fields.get(key):
+                meta_tags.append(prefix + fields[key])
+        is_urgent = (prio == "urgent")
+        age_days = int((now - r.created_at).total_seconds() // 86400) \
+            if r.created_at else 0
+        if status != "closed":
+            kpis["open"] += 1
+            if is_urgent:
+                kpis["urgent"] += 1
+        if status == "in_progress":
+            kpis["in_progress"] += 1
+        if status in ("scheduled", "parts"):
+            kpis["scheduled"] += 1
+        if status == "closed" and r.created_at and (now - r.created_at).days <= 30:
+            kpis["closed_30d"] += 1
+        requests.append({
+            "id": r.id,
+            "title": r.title or "(untitled request)",
+            "priority": prio,
+            "priority_label": _MAINT_PRIORITY[prio],
+            "urgent": is_urgent,
+            "sub": " · ".join(sub_bits),
+            "desc": desc,
+            "meta_tags": meta_tags,
+            "status": status,
+            "status_label": st_label,
+            "status_class": st_class,
+            "time_since": _time_since(r.created_at),
+            "age_days": age_days,
+            "store": store,
+            "search": " ".join(x for x in [
+                (r.title or "").lower(), desc.lower(),
+                " ".join(meta_tags).lower(), store_label.lower()] if x),
+            "detail_url": url_for("store.manager_page_detail",
+                                  page="maintenance", entry_id=r.id),
+        })
+    # urgent first, closed last, then newest
+    requests.sort(key=lambda x: (x["status"] == "closed",
+                                 _MAINT_PRIORITY_ORDER.get(x["priority"], 2),
+                                 -x["id"]))
+    return render_template(
+        "maintenance_requests.html",
+        page_slug="maintenance", page_label=label,
+        requests=requests, kpis=kpis,
+        new_url=url_for("store.manager_page_new", page="maintenance"),
+        active=active_key,
+    )
+
+
+def _render_training_v3(db, label, active_key):
+    """Training Records v3 — certification + renewal tracking."""
+    from app.models import TrainingRecord
+    q = db.query(TrainingRecord)
+    if g.current_location in ("tomball", "copperfield"):
+        q = q.filter(
+            (TrainingRecord.store_scope == g.current_location) |
+            (TrainingRecord.store_scope.is_(None)))
+    raw = q.order_by(TrainingRecord.created_at.desc()).limit(400).all()
+
+    user = getattr(g, "current_user", None)
+    uid = getattr(user, "id", None)
+    today = date.today()
+    now = datetime.utcnow()
+    records = []
+    kpis = {"total": 0, "current": 0, "expiring": 0, "overdue": 0}
+    for r in raw:
+        fields, desc = _kv_body(r.body)
+        cert = (fields.get("certification") or fields.get("cert")
+                or r.type_tag or "Certification").strip()
+        issuer = fields.get("issuer") or fields.get("authority") or ""
+        role = fields.get("role") or ""
+        store, store_label = _store_uno_dos(r.store_scope)
+        role_label = " · ".join(
+            b for b in (role or None, store_label if store else None) if b
+        ) or "Team member"
+        issued = _loose_date(fields.get("issued"))
+        expires = _loose_date(fields.get("expires"))
+        issued_label = issued.strftime("%b %Y") if issued else "—"
+        if expires:
+            days = (expires - today).days
+            if days < 0:
+                status, st_label, st_class, row_class = (
+                    "overdue", "Overdue · %d days" % abs(days),
+                    "alert", "alert")
+                expires_label = expires.strftime("%b %d, %Y")
+            elif days <= 30:
+                status, st_label, st_class, row_class = (
+                    "expiring", "Expiring soon", "warn", "warn")
+                expires_label = "%s · %d days" % (
+                    expires.strftime("%b %Y"), days)
+            else:
+                status, st_label, st_class, row_class = (
+                    "current", "Current", "ok", "")
+                expires_label = expires.strftime("%b %Y")
+        else:
+            status, st_label, st_class, row_class = (
+                "none", "No expiry", "", "")
+            expires_label = "—"
+        kpis["total"] += 1
+        if status in kpis:
+            kpis[status] += 1
+        age_days = int((now - r.created_at).total_seconds() // 86400) \
+            if r.created_at else 0
+        records.append({
+            "id": r.id,
+            "employee": r.title or "(unnamed)",
+            "role_label": role_label,
+            "cert_name": cert,
+            "cert_issuer": issuer or "—",
+            "issued_label": issued_label,
+            "expires_label": expires_label,
+            "status": status, "status_label": st_label,
+            "status_class": st_class, "row_class": row_class,
+            "age_days": age_days,
+            "mine": bool(uid) and r.author_id == uid,
+            "_exp_sort": expires.toordinal() if expires else 10 ** 9,
+            "search": " ".join(x for x in [
+                (r.title or "").lower(), cert.lower(),
+                issuer.lower(), role_label.lower()] if x),
+            "detail_url": url_for("store.manager_page_detail",
+                                  page="training", entry_id=r.id),
+        })
+    records.sort(key=lambda x: x["_exp_sort"])  # soonest-to-expire first
+    for x in records:
+        x.pop("_exp_sort", None)
+    viewer_label = (getattr(user, "permission_level", None) or "Manager")
+    viewer_label = viewer_label.replace("-", " ").replace("_", " ").title()
+    return render_template(
+        "training_records.html",
+        page_slug="training", page_label=label,
+        records=records, kpis=kpis, viewer_label=viewer_label,
+        new_url=url_for("store.manager_page_new", page="training"),
+        active=active_key,
+    )
+
+
 def _render_employee_counseling_v3(db, label, active_key):
     """Employee Counseling v3 — per-employee board.
 
@@ -2552,6 +2802,10 @@ def manager_page_list(page: str):
             return _render_employee_counseling_v3(db, label, active_key)
         if page == "attendance":
             return _render_attendance_v3(db, label, active_key)
+        if page == "maintenance":
+            return _render_maintenance_v3(db, label, active_key)
+        if page == "training":
+            return _render_training_v3(db, label, active_key)
         q = db.query(Model)
         if g.current_location in ("tomball", "copperfield"):
             q = q.filter(

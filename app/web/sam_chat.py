@@ -58,17 +58,23 @@ sam_chat_bp = Blueprint("sam_chat", __name__)
 
 # ---- model routing ----
 _DEFAULT_MODEL = "claude-sonnet-4-6"
-_ALLOWED_MODELS = {"claude-opus-4-7", "claude-sonnet-4-6", "gemini-2.5-flash"}
+_ALLOWED_MODELS = {"claude-opus-4-7", "claude-sonnet-4-6",
+                   "gemini-2.5-flash", "gemini-3.5-flash"}
 _MODEL_LABELS = {
     "claude-opus-4-7":  "Opus 4.7",
     "claude-sonnet-4-6": "Sonnet 4.6",
     "gemini-2.5-flash":  "Gemini 2.5 Flash",
+    "gemini-3.5-flash":  "Gemini 3.5 Flash",
 }
 # Rough list-price estimates, USD per million tokens.
+# Sam directive 2026-05-23 #236: added gemini-3.5-flash. Rates here are
+# a placeholder mirroring 2.5-flash until Sam confirms actual 3.5-flash
+# pricing; cost-display is best-effort either way.
 _MODEL_RATES = {
     "claude-opus-4-7":   {"in": 5.0,  "out": 25.0},
     "claude-sonnet-4-6": {"in": 3.0,  "out": 15.0},
     "gemini-2.5-flash":  {"in": 0.15, "out": 0.60},
+    "gemini-3.5-flash":  {"in": 0.15, "out": 0.60},
 }
 
 # ---- auto model selection ----
@@ -716,7 +722,7 @@ def sam_chat_page():
         # schema — no fabricated tool trail. Sonnet/Opus still route
         # through the gateway when it is wired.
         _picker_models = ("claude-sonnet-4-6", "claude-opus-4-7",
-                          "gemini-2.5-flash")
+                          "gemini-2.5-flash", "gemini-3.5-flash")
 
         return render_template(
             "sam_chat.html",

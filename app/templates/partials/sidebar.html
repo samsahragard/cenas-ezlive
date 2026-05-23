@@ -184,6 +184,16 @@
           <i class="ti ti-messages ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Chat</span>
         </a>
+        {# Side-by-side view: /sam/chat (Cena) on the left + /partner/developer/chat
+           (this dev chat) on the right. Sam-only per the /sam/combined route gate
+           (Sam directive 2026-05-23). Placed right next to the dev Chat entry so
+           it sits in the Sam mental-model of "Cena + Dev". #}
+        {% if is_sam_chat_user() %}
+        <a href="/sam/combined" class="ck-sb-item{% if active == 'sam_combined' %} active{% endif %}">
+          <i class="ti ti-layout-columns ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Cena + Dev</span>
+        </a>
+        {% endif %}
         <a href="/partner/developer/samples" class="ck-sb-item{% if active == 'dev_samples' %} active{% endif %}">
           <i class="ti ti-photo ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Samples</span>

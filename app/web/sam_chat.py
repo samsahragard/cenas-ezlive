@@ -750,7 +750,7 @@ def sam_chat_combined():
     gate = _require_sam_page()
     if gate is not None:
         return gate
-    return render_template("sam_combined.html", active="sam_chat")
+    return render_template("sam_combined.html", active="sam_combined")
 
 
 @sam_chat_bp.route("/sam/chat/sessions", methods=["GET"])

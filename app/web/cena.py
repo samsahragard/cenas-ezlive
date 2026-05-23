@@ -2252,17 +2252,206 @@ def cena_usage_view():
         db.close()
 
 
+# ============================================================
+# OQ-3 — SQL Query Tool Data-Access Protection (structural gate)
+# ============================================================
+# Per Sam #2576 6-piece architecture + samai's 2026-05-22 standalone
+# spec + cena #132/#140 amendments + ck (reviewer) #135/#141 amendments,
+# all locked 2026-05-23. Replaces the prior naive substring gate (which
+# was bypassable via comment / case / whitespace obfuscation per
+# samai's analysis) with a structural sqlglot-based gate.
+#
+# Three layers:
+#   1. sqlglot.parse with sqlite dialect. Multi-statement -> reject.
+#      ANY parse error -> reject (samai §3.5 fail-closed).
+#   2. Top-level must be SELECT-shaped. Any write/DDL/PRAGMA/ATTACH
+#      construct anywhere in the AST -> reject (samai §3.4 ban list).
+#   3. Every exp.Column reference (in SELECT, WHERE, JOIN, ORDER BY,
+#      GROUP BY, HAVING, subqueries, CTEs) is collected and tested
+#      against the hard denylist + the backstop name-pattern, with
+#      the exempt-set carving out operational metrics. ck #141
+#      WHERE/JOIN predicate-leak amendment: covered automatically by
+#      find_all(exp.Column) which visits ALL column nodes.
+#
+# v1 fail-closed posture: if a column name matches the bare-name
+# denylist and the qualifier is not on the exempt-full list, reject —
+# even if the qualifier happens to be a table where the column is
+# unrelated (e.g., access_request.email). Cena's #132 intent was
+# "staff contact info shouldn't surface in casual queries" — we err
+# strict for v1; v2 can layer schema-aware qualification if needed.
+
+# Hard denylist (14 cols) — locked by cena #140 (2026-05-23).
+_OQ3_DENY_COLUMNS = {
+    ("access_request", "temp_passcode_one_shot"),
+    ("drivers", "passcode_hash"),
+    ("drivers", "password_hash"),
+    ("drivers", "failed_attempts"),
+    ("drivers", "lockout_until"),
+    ("drivers", "email"),
+    ("drivers", "phone"),
+    ("drivers", "address"),
+    ("users", "passcode_hash"),
+    ("users", "failed_attempts"),
+    ("users", "lockout_until"),
+    ("users", "email"),
+    ("users", "phone"),
+    ("legal_company_structure", "ein"),
+}
+
+# Backstop pattern (samai §4 belt-and-suspenders). Deny any column
+# whose name contains one of these substrings unless explicitly
+# exempted in _OQ3_BACKSTOP_EXEMPT below.
+_OQ3_BACKSTOP_PATTERNS = ("hash", "secret", "token", "passcode", "password")
+
+# Exempt: column names match the backstop pattern but are NOT auth
+# secrets — operational metrics (token COUNTS, content hashes for
+# dedup). Cena legitimately queries these for budget review.
+_OQ3_BACKSTOP_EXEMPT = {
+    ("cena_usage_logs", "in_tokens"),
+    ("cena_usage_logs", "out_tokens"),
+    ("cena_usage_logs", "cache_read_tokens"),
+    ("cena_usage_logs", "cache_write_tokens"),
+    ("sam_chat_messages", "cost_input_tokens"),
+    ("sam_chat_messages", "cost_output_tokens"),
+    ("sam_chat_messages", "cost_cache_creation_tokens"),
+    ("sam_chat_messages", "cost_cache_read_tokens"),
+    ("cena_wake_decisions", "classifier_input_tokens"),
+    ("cena_wake_decisions", "classifier_output_tokens"),
+    ("cena_wake_decisions", "classifier_cache_create_tokens"),
+    ("cena_wake_decisions", "classifier_cache_read_tokens"),
+    ("ambient_signals", "payload_hash"),
+}
+
+
+def _oq3_gate(sql):
+    """Return (ok: bool, error_payload: dict).
+
+    ok=True means the query passes all three gate layers and is safe
+    to execute. ok=False means reject — the caller renders the
+    error_payload as the JSON body (with HTTP 400).
+    """
+    import sqlglot
+    from sqlglot import expressions as exp
+
+    if not sql or not sql.strip():
+        return (False, {"error": "missing_sql"})
+
+    # Layer 1 — parse + statement-count
+    try:
+        statements = sqlglot.parse(sql, read="sqlite")
+    except Exception as e:  # noqa: BLE001
+        return (False, {"error": "parse_failed",
+                        "detail": f"{type(e).__name__}: {e}"})
+    # Drop empty trailing statements (sqlglot may yield None for
+    # trailing-semicolon-only input).
+    statements = [s for s in (statements or []) if s is not None]
+    if not statements:
+        return (False, {"error": "parse_failed",
+                        "detail": "no parseable statement"})
+    if len(statements) > 1:
+        return (False, {"error": "multiple_statements",
+                        "detail": f"got {len(statements)} statements; "
+                                  f"only one SELECT permitted"})
+    parsed = statements[0]
+
+    # Layer 2 — top-level must be SELECT-shaped + no writes anywhere
+    if not isinstance(parsed, (exp.Select, exp.Union, exp.Subquery,
+                               exp.With)):
+        return (False, {"error": "not_a_select",
+                        "detail": f"top-level is "
+                                  f"{type(parsed).__name__}"})
+    # Class names match sqlglot 30.x (Alter not AlterTable;
+    # TruncateTable not Truncate).
+    _write_classes = (exp.Insert, exp.Update, exp.Delete, exp.Drop,
+                      exp.Create, exp.Alter, exp.TruncateTable,
+                      exp.Pragma, exp.Attach, exp.Detach)
+    for w in parsed.find_all(*_write_classes):
+        return (False, {"error": "forbidden_construct",
+                        "detail": type(w).__name__})
+
+    # Layer 2b — reject star projections. sqlglot does NOT expand `*`
+    # to actual column names, so the column-level denylist below cannot
+    # see what `SELECT *` would return. A query like `SELECT * FROM
+    # users` would otherwise leak passcode_hash + email + phone past
+    # the gate. Force explicit column lists. COUNT(*) is fine: the
+    # projection is exp.Count, not exp.Star.
+    for select_node in parsed.find_all(exp.Select):
+        for proj in (select_node.expressions or []):
+            # SELECT * — direct Star node as projection
+            if isinstance(proj, exp.Star):
+                return (False, {"error": "star_not_allowed",
+                                "detail": ("SELECT * is rejected because "
+                                           "OQ-3 cannot verify column-level "
+                                           "access without expansion. "
+                                           "Enumerate columns explicitly.")})
+            # SELECT users.* / SELECT u.* — parses as Column(name='*',
+            # table=<table-or-alias>)
+            if isinstance(proj, exp.Column) and proj.name == "*":
+                return (False, {"error": "star_not_allowed",
+                                "detail": (f"Qualified star ({proj.sql()}) "
+                                           f"is rejected — enumerate columns "
+                                           f"explicitly.")})
+
+    # Layer 3 — column denylist + backstop check
+    deny_full = _OQ3_DENY_COLUMNS
+    deny_bare = {c for (_, c) in _OQ3_DENY_COLUMNS}
+    exempt_full = _OQ3_BACKSTOP_EXEMPT
+    exempt_bare = {c for (_, c) in _OQ3_BACKSTOP_EXEMPT}
+    backstop = _OQ3_BACKSTOP_PATTERNS
+
+    for col_node in parsed.find_all(exp.Column):
+        col_name = (col_node.name or "").lower()
+        qualifier = (col_node.table or "").lower()  # table or alias
+
+        # 3a — hard denylist by full (table, column) match
+        if qualifier and (qualifier, col_name) in deny_full:
+            return (False, {"error": "restricted_column",
+                            "column": f"{qualifier}.{col_name}",
+                            "detail": "hard OQ-3 denylist"})
+
+        # 3b — bare column name hits the denylist (catches unqualified
+        # AND alias-hidden refs). Fail-closed per samai §3.5: if the
+        # column name alone is denied SOMEWHERE in the schema, reject
+        # unless the qualifier explicitly exempts.
+        if col_name in deny_bare:
+            if qualifier and (qualifier, col_name) in exempt_full:
+                continue  # exempt
+            return (False, {"error": "restricted_column",
+                            "column": col_name,
+                            "qualifier": qualifier or None,
+                            "detail": ("hard OQ-3 denylist (bare name; "
+                                       "qualifier did not resolve to "
+                                       "an exempt table — rejected "
+                                       "fail-closed)")})
+
+        # 3c — backstop name pattern (hash/secret/token/passcode/
+        # password substring), with exempts.
+        if any(p in col_name for p in backstop):
+            if qualifier and (qualifier, col_name) in exempt_full:
+                continue
+            if (not qualifier) and col_name in exempt_bare:
+                continue
+            return (False, {"error": "restricted_column",
+                            "column": col_name,
+                            "qualifier": qualifier or None,
+                            "detail": ("OQ-3 backstop name-pattern "
+                                       "(hash/secret/token/passcode/"
+                                       "password) without an exempt "
+                                       "entry")})
+
+    return (True, {})
+
+
 @cena_bp.route("/sam/cena/db-probe/query", methods=["POST"])
 def cena_db_probe_query():
     """Read-only SQL surface for the cena gateway's sql_query tool.
 
     Body: {"sql": "SELECT ...", "limit": 200}
-    Refuses anything that isn't a bare SELECT (no semicolons, no
-    INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/PRAGMA/ATTACH/etc.). Caps
-    result row count to `limit` (max 1000). Returns {ok, rows, columns,
-    row_count}. Per Sam /sam/chat session 13 — cena wants a clean SQL
-    surface against the live DB instead of needing a per-question
-    Python script."""
+    Gated by the OQ-3 structural parse-gate (above). Caps result row
+    count to `limit` (max 1000). Returns {ok, rows, columns, row_count}.
+    Per Sam /sam/chat session 13 — cena wants a clean SQL surface
+    against the live DB instead of needing a per-question Python script.
+    """
     gate = _require_gateway_token()
     if gate is not None:
         return gate
@@ -2272,19 +2461,13 @@ def cena_db_probe_query():
     if not sql:
         return jsonify({"ok": False, "error": "sql required"}), 400
 
-    upper = sql.upper()
-    if not upper.startswith("SELECT") and not upper.startswith("WITH"):
-        return jsonify({"ok": False,
-                        "error": "only SELECT/WITH queries are allowed"}), 400
-    if ";" in sql.rstrip(";"):
-        return jsonify({"ok": False,
-                        "error": "multi-statement queries not allowed"}), 400
-    banned = ("INSERT ", "UPDATE ", "DELETE ", "CREATE ", "ALTER ",
-              "DROP ", "TRUNCATE ", "PRAGMA ", "ATTACH ", "DETACH ",
-              "REPLACE ", "VACUUM ", "REINDEX ")
-    if any(b in upper for b in banned):
-        return jsonify({"ok": False,
-                        "error": "DDL/DML keywords not allowed"}), 400
+    # OQ-3 structural parse-gate. Replaces the prior naive substring
+    # gate (bypassable via comment/case/whitespace obfuscation per
+    # samai's 2026-05-22 analysis). See _oq3_gate above for the full
+    # spec lineage; all three layers are enforced fail-closed.
+    ok, gate_err = _oq3_gate(sql)
+    if not ok:
+        return jsonify({"ok": False, **gate_err}), 400
 
     limit = int(body.get("limit") or 200)
     if limit < 1 or limit > 1000:

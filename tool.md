@@ -5,7 +5,7 @@
 
 ---
 
-## Current Tools (19)
+## Current Tools (21)
 
 | # | Tool | What it does |
 |---|---|---|
@@ -28,27 +28,18 @@
 | 17 | `web_search` | Search the internet for up-to-date information. Max 5 uses per turn. |
 | 18 | `screenshot_url` | Load any web page in headless Chrome on AiCk and capture a screenshot. Use to visually inspect the live site. |
 | 19 | `post_to_sam_chat` | Inject a message into /sam/chat as role='cena'. Use ONLY when Sam explicitly asks from another channel. |
+| 20 | `read_hub_inbox` | Read messages from the local LAN chat hub inbox file (`C:\Users\sam\cena\cena_hub_inbox.jsonl`). Allows Cena to see team messages on demand. **LIVE as of 2026-05-23.** |
+| 21 | `wake_on_hub` | Proactively wake Cena when new messages arrive on the local chat hub (`/cena/wake-on-hub` endpoint on cena_gateway.py). **LIVE as of 2026-05-23.** |
 
 ---
 
-## Tools Approved but Not Yet Built
+## Tools Approved but Not Yet Built (3)
 
 | # | Tool | What it does | Status |
 |---|---|---|---|
-| 20 | `read_hub_inbox` | Read messages from the local LAN chat hub inbox file (`C:\Users\sam\cena\cena_hub_inbox.jsonl`). Allows Cena to see team messages on demand. | **In progress — aick building** |
-| 21 | `wake_on_hub` | Proactively wake Cena when new messages arrive on the local chat hub (`/cena/wake-on-hub` endpoint on cena_gateway.py). | **In progress — aick building (Option A approved by Sam)** |
 | 22 | `remove_participant` | Remove a participant from the /sam/chat interface. | **Sam approved — team building** |
 | 23 | `toast_live_tables` | Query Toast's live POS data for tables and open tickets in real time. | **Sam approved — urgent — team building** |
-
----
-
-## Tools Greenlit but Not Yet Requested
-
-| Tool | What it does | Status |
-|---|---|---|
-| WhatsApp send | Send WhatsApp messages via Baileys (346-462-0476, standalone Node process). | Baileys connection built by ck. QR scan pending from Sam. Send layer still to build. |
-| Telegram receive | Receive Telegram messages from Sam via Cenasai bot (token: provided). | Greenlit, not built. |
-| Voice | Voice interface for Cena. | Greenlit, not built. |
+| 24 | `whatsapp_send` | Send WhatsApp messages via Baileys (346-462-0476, standalone Node process). | **Baileys connection built by ck. QR scan pending from Sam. Send layer still to build.** |
 
 ---
 

@@ -451,7 +451,9 @@ This means:
 
 **ck** — Frontend and UI. Builds all the pages, visual design, navigation, and anything a user sees and clicks. Lives on a second machine (Mini_IT13). Authors work locally and asks aick to push it live.
 
-**samai** — Spec and review. Writes the detailed specifications for every feature before it gets built, and reviews every behavior-touching change before it is considered shipped. Nothing is done until samai gives the all-clear. samai's review is the finish line, not the merge.
+**samai** — Spec author. Writes the detailed specifications for every feature before it gets built. Note (2026-05-23, Sam direction): samai is not always available; do not block on samai when he's unavailable — route review to ck and keep moving. When samai is unavailable, review duties pass to ck (below).
+
+**ck holds review while samai is unavailable.** Three-gate rubric and Playwright batch discipline inherited unchanged. ck reviews aick's backend changes; aick reviews ck's chat-server / relay / Playwright work (cross-review covers ck's own conflict-of-interest cases).
 
 **dck** — Design. Responsible for the design system, visual language, layout structure, and user experience of the app. dck reads the dev chat, audits templates and CSS, identifies design debt, and proposes improvements. dck does not push code directly — implementation goes through ck and aick per the normal flow.
 
@@ -477,7 +479,9 @@ This means:
 - All design conversations between Cena and dck happen in the dev chat.
 - **Cena is not passive. If something looks wrong, unclear, or could serve operators better, Cena says so.**
 
-### samai's three-gate review — every behavior-touching change must clear all three
+### Three-gate review — every behavior-touching change must clear all three
+
+*(samai's authored rubric, held by ck while samai is unavailable per the §12 team section above.)*
 
 - Gate 1: Full test suite passes locally.
 - Gate 2: The change actually matches what the commit says it does — semantics and safety reasoned through. Completeness-vs-brief check added 2026-05-19: deliverable must match the full scope of the brief, not just a partial.
@@ -485,7 +489,7 @@ This means:
 
 ### The flow
 
-Sam tells Cena what is needed. Cena directs the team. aick and ck build and commit. aick pushes live. samai reviews and clears. samai's clear = shipped.
+Sam tells Cena what is needed. Cena directs the team. aick and ck build and commit. aick or ck pushes live (both have push access since 2026-05-20). ck reviews and clears (was samai; ck inherited 2026-05-23). The reviewer's clear = shipped.
 
 ### Human-style testing — required before calling anything done
 

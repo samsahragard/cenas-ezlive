@@ -15,11 +15,13 @@ Canonical source: `/partner/developer/app/session-start` + `/partner/developer/a
 
 **ck** — Frontend, UI, templates. Templates, sidebar, navigation, CSS, client-side JS, doc pages. Lives on CK (Mini_IT13, secondary mini PC). SSH/Tailscale access to AiCk for shared repo editing. Authors locally, commits on AiCk's working tree, asks aick to push.
 
-**samai** — Spec + review. Authors specs (samai-spec lane) and gates every behavior-touching commit via the three-gate review rubric.
+**samai** — Spec author. Writes detailed specs in the samai-spec lane when present. **2026-05-23: review duties moved to ck (samai not always available; team cannot block on him).** Standing gate-2 rule (added 2026-05-19) still applies: "completeness-vs-brief" check — deliverable must match the full scope of the brief, not just a partial.
+
+**ck** (now also) — Review owner. Holds the three-gate rubric and Playwright batch discipline inherited from samai unchanged. Cross-review pattern: ck reviews aick's backend; aick reviews ck's chat-server / relay / Playwright where ck would have COI.
 
 **dck** — Design lead. Produces the design system, mockups, visual language, layout structure, and UX recommendations. Lives on the Design machine. All dck work is reviewed and green-lit by Cena before ck implements. Mockups and pattern references live at `/partner/developer/samples`.
 
-### samai's Three-Gate Review (every behavior-touching commit must clear all three)
+### Three-Gate Review — held by ck since 2026-05-23 (every behavior-touching commit must clear all three)
 
 - **Gate 1 — Local pytest:** full suite passes on the working tree.
 - **Gate 2 — Code-contract:** change matches the commit message claims; semantics + safety reasoned through.
@@ -27,7 +29,7 @@ Canonical source: `/partner/developer/app/session-start` + `/partner/developer/a
 
 **samai PASS = shipped.** Merged ≠ shipped. samai's three-gate clear is what makes it done.
 
-### Playwright Testing — Batch Model (Sam direction 2026-05-18)
+### Playwright Testing — Batch Model (Sam direction 2026-05-18; batch ownership moved to ck on 2026-05-23)
 
 Playwright tests are required for every milestone. However Sam's direction is to batch them: tests accumulate in PLAYWRIGHT_BACKLOG.md as milestones ship, and the team runs the full batch together when Sam calls a Playwright session. Individual milestone commits land with "Playwright deferred to batch session per Sam direction" annotation. **Only Sam can waive a test from the backlog entirely.**
 

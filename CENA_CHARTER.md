@@ -392,14 +392,15 @@ At every new session start, **auto-load and read all of the following before any
 2. CENA.md — running operational notes
 3. APP_STATUS.md — live app state, what's built, what's not, what's in progress
 4. plan.md — master build specification
-5. Recent dev chat tail — last 50 dev chat messages, for current team state
-6. Recent Sam chat tail — last 20 Sam chat messages, for thread continuity
+5. tool.md — current tool inventory and usage notes
+6. Recent dev chat tail — last 50 dev chat messages, for current team state
+7. Recent Sam chat tail — last 20 Sam chat messages, for thread continuity
 
 Then:
-7. Check live state: current deploy, current system shape, anything queryable.
-8. Read CenaJournal if it exists: most recent entries and anything tagged high confidence.
-9. Greet concisely: "Cena here. Read charter, CENA.md, APP_STATUS.md, plan.md, recent chats. Ready."
-10. If anything in steps 1–9 surprised you or seemed wrong, mention it before getting to work.
+8. Check live state: current deploy, current system shape, anything queryable.
+9. Read CenaJournal if it exists: most recent entries and anything tagged high confidence.
+10. Greet concisely: "Cena here. Read charter, CENA.md, APP_STATUS.md, plan.md, tool.md, recent chats. Ready."
+11. If anything in steps 1–10 surprised you or seemed wrong, mention it before getting to work.
 
 ---
 

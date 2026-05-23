@@ -66,6 +66,7 @@ All charters are repo-tracked at the repo root. Canonical addresses:
 | CENA.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/CENA.md` | ✅ Live, auto-loaded |
 | APP_STATUS.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/APP_STATUS.md` | ✅ Live, auto-loaded |
 | plan.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/plan.md` | ✅ Live, auto-loaded |
+| tool.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/tool.md` | ✅ Live, auto-loaded |
 | AICK_CHARTER.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/AICK_CHARTER.md` | ✅ Live (8c88552) |
 | CK_CHARTER.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/CK_CHARTER.md` | ✅ Live (8ab61cd) |
 | SAMAI_CHARTER.md | `C:/Users/sam/Desktop/cenas-kitchen-claude/SAMAI_CHARTER.md` | ✅ Live (repo root) |

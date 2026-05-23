@@ -11,15 +11,21 @@ Canonical source: `/partner/developer/app/session-start` + `/partner/developer/a
 
 ### The Team
 
-**aick** — Backend + integration. Primary author of server-side code: Flask routes, SQLAlchemy models, services, DB probes, ingest pipelines. Lives on AiCk (Mini_IT12, always-on Windows desktop). Working dir: `C:/Users/sam/Desktop/cenas-kitchen-claude`. **Only Claude with wincredman GitHub credentials** — push orchestrator for the whole team. ck and samai commit locally, then ping aick in dev chat (`aick — push <SHA>`); aick verifies the diff and pushes to origin/main (which triggers Render auto-deploy). Also runs and restarts the Cena gateway on AiCk (port 8765). Default: silent in dev chat unless addressed by name or operationally concerned.
+**aick** — Backend + integration. Primary author of server-side code: Flask routes, SQLAlchemy models, services, DB probes, ingest pipelines. Lives on AiCk (Mini_IT12, always-on Windows desktop). Working dir: `C:/Users/sam/Desktop/cenas-kitchen-claude`. Has direct push access to origin/main. Also runs and restarts the Cena gateway on AiCk (port 8765). Default: silent in dev chat unless addressed by name or operationally concerned.
 
-**ck** — Frontend, UI, templates. Templates, sidebar, navigation, CSS, client-side JS, doc pages. Lives on CK (Mini_IT13, secondary mini PC). SSH/Tailscale access to AiCk for shared repo editing. Authors locally, commits on AiCk's working tree, asks aick to push.
+**ck** — Frontend, UI, templates. Templates, sidebar, navigation, CSS, client-side JS, doc pages. Lives on CK (Mini_IT13, secondary mini PC). **Has own SSH deploy-key push access since 2026-05-20** — ck pushes direct, does not route through aick. Fetch + check origin divergence before every push per staged-diff discipline.
 
 **samai** — Spec author. Writes detailed specs in the samai-spec lane when present. **2026-05-23: review duties moved to ck (samai not always available; team cannot block on him).** Standing gate-2 rule (added 2026-05-19) still applies: "completeness-vs-brief" check — deliverable must match the full scope of the brief, not just a partial.
 
 **ck** (now also) — Review owner. Holds the three-gate rubric and Playwright batch discipline inherited from samai unchanged. Cross-review pattern: ck reviews aick's backend; aick reviews ck's chat-server / relay / Playwright where ck would have COI.
 
 **dck** — Design lead. Produces the design system, mockups, visual language, layout structure, and UX recommendations. Lives on the Design machine. All dck work is reviewed and green-lit by Cena before ck implements. Mockups and pattern references live at `/partner/developer/samples`.
+
+### Repo
+
+- SSH: `git@github.com:samsahragard/cenas-ezlive.git`
+- HTTPS: `https://github.com/samsahragard/cenas-ezlive.git`
+- Branch: `main` (push triggers Render auto-deploy)
 
 ### Three-Gate Review — held by ck since 2026-05-23 (every behavior-touching commit must clear all three)
 
@@ -44,8 +50,8 @@ Playwright tests are required for every milestone. However Sam's direction is to
 ### The Flow
 
 ```
-aick/ck author + commit → aick pushes to origin/main → Render auto-deploy
-→ samai three-gates → samai PASS = done
+aick/ck author + commit → push direct to origin/main (each has own credentials) → Render auto-deploy
+→ ck three-gates (samai backstop when available) → PASS = done
 ```
 
 ---
@@ -140,4 +146,4 @@ All credentials live in **1Password** and **Render env vars** only. No credentia
 
 ---
 
-*Last updated: 2026-05-18*
+*Last updated: 2026-05-23 — corrected stale "aick sole pusher" line; ck has own push access since 2026-05-20. Repo URL clarified: samsahragard/cenas-ezlive.*

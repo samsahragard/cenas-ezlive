@@ -1,0 +1,55 @@
+{# Cena Surface — derived from cena_operational_spec (scrubbed). Sam directive #240. #}
+<h1>Cena Surface <span class="status-chip">Active</span></h1>
+<p class="meta">The operator-only AI assistant. The surface, the tools, and the escalation policy.</p>
+
+<h2>What it is</h2>
+<p>Cena is the operator-facing AI assistant: an Anthropic-backed runtime that runs on an internal host, exposes a chat surface on the web app at <code>/sam/chat</code>, and operates the system on the operator's behalf with a defined tool catalogue and audit log.</p>
+
+<h2>Where it runs</h2>
+<table>
+  <thead><tr><th>Component</th><th>Location</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>Primary gateway</td><td>Internal host (Tailscale-bound); externally reachable via Cloudflare Tunnel.</td><td>The Cena runtime. Hosts the streaming endpoint, the tool catalogue, the audit log, and the wake-on-chat / wake-on-hub triggers.</td></tr>
+    <tr><td>Peer gateway</td><td>Secondary internal host (Tailscale-only).</td><td>Cross-host message queue + worker + sync. Provides resilient delivery if the primary is offline.</td></tr>
+    <tr><td>Web entry point</td><td>Render web service.</td><td><code>/sam/chat</code> SSE-streams to the operator browser; calls the gateway for each turn.</td></tr>
+    <tr><td>Persistent chat</td><td>Internal host port 8770 (Tailscale-only).</td><td>Sam ↔ Cena local chat that persists through operator disconnects.</td></tr>
+  </tbody>
+</table>
+
+<h2>Audience gate</h2>
+<p>The Cena chat surface is gated to a single user: the operator whose user id matches the <code>SAM_CHAT_USER_ID</code> env var. The capability is NOT role-inherited — even a partner / admin role does not unlock it without the explicit user-id match. When the env var is unset, the surface is dormant and inaccessible to everyone.</p>
+
+<h2>Tool catalogue</h2>
+<p>Cena operates the system via a defined tool surface. Tools are written as JSON-schema-typed endpoints on the gateway; each call is logged to the audit table. Tool categories:</p>
+<ul>
+  <li><strong>Read tools</strong> — DB probes, account lookups, vendor / catering / order reads.</li>
+  <li><strong>Action tools</strong> — vendor-order operations, task creates, status updates.</li>
+  <li><strong>Integration tools</strong> — Render env get/set, Render deploy, Telegram-send, dev-chat post.</li>
+  <li><strong>Coordination tools</strong> — message-queue ops, hub-read, gateway peer sync.</li>
+  <li><strong>Restart tool</strong> — agent-restart, single-use, permission-gated per call (no standing grant).</li>
+</ul>
+
+<h2>SQL safety</h2>
+<p>Read-only DB probes pass through a three-layer parse gate before execution:</p>
+<ol>
+  <li><strong>Parse + count</strong> — the input must parse as a single statement.</li>
+  <li><strong>Shape + write-ban</strong> — the statement must be a SELECT (DML rejected: INSERT / UPDATE / DELETE / DDL all blocked).</li>
+  <li><strong>Column denylist + exempts</strong> — columns containing secrets (hashed passwords, tokens) are denied unless the call is in the exempt whitelist for legitimate ops.</li>
+</ol>
+
+<h2>Audit log</h2>
+<p>Every tool call writes a row to the audit table: which tool, what arguments, what return, who fired it, when. The audit is read-only via a separate operator-only endpoint; tools cannot rewrite it.</p>
+
+<h2>Escalate-on-uncertainty</h2>
+<p>When the assistant is uncertain about an action that would be destructive or hard to reverse, it stops and asks the operator. The pattern:</p>
+<ul>
+  <li>Any irreversible action: explicit operator confirmation required, per-call (no standing "yes, do this kind of thing").</li>
+  <li>Restart of another assistant: requires a fresh operator approval in the operator chat with the exact phrase the tool expects (single-use; no carry-over).</li>
+  <li>Destructive DB action: explicit confirmation + dry-run summary before execution.</li>
+</ul>
+
+<h2>Persistent chat (local)</h2>
+<p>The operator ↔ Cena local chat at port 8770 on the primary internal host persists conversation state independently of the web chat. This is the channel Cena uses to continue work through operator disconnects: when the operator drops off the web, Cena can pick up the conversation from the local chat next time they reconnect.</p>
+
+<h2>External reachability</h2>
+<p>Internal-only by design. The gateway binds to Tailscale only; external traffic enters via a Cloudflare Tunnel terminator. There is no public-internet binding on the gateway port. The web app at <code>/sam/chat</code> is the public-facing entry point and is gated on user id.</p>

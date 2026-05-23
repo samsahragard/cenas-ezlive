@@ -1,0 +1,287 @@
+{# ============================================================
+   sam_docs.html — Docs tab (Sam directive #240, ck owner).
+   Consolidated, agent-attribution-free documentation surface.
+
+   Replaces the old /partner/developer/app/* sidebar section in
+   one place; that section is slated for full removal after this
+   ships (Sam #241). The content here is consolidated from the
+   prior 33 pages into 10 thematically-organized tabs.
+
+   Structural rules (Sam directive):
+     - NO agent references in any tab content (no aick / ck /
+       samai / dck names; no "who's doing what")
+     - Tabs render inline as panels (no iframe-in-iframe)
+     - Sam-only audience
+
+   Iframed by today_dashboard.html (key="docs"); the today
+   dashboard strips this page's base_dashboard chrome on load.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'sam_docs' %}
+
+{% block title %}Docs — Cenas Kitchen{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every selector scoped under .ckdocs so the warm palette never
+     leaks into the global sheet. Comments here never contain a
+     slash-star pair. */
+  .ckdocs-frame { max-width: 1240px; margin: 0 auto;
+    padding: 28px 28px 80px;
+    background: #1a0d08;
+    background-image:
+      radial-gradient(circle at 80% 0%, rgba(228,179,64,0.06), transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(199,59,54,0.05), transparent 50%);
+    min-height: 100vh;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: #FAF6EC; }
+  .ckdocs-frame * { box-sizing: border-box; }
+  .ckdocs-frame .frame-top { display: flex; align-items: center; gap: 14px;
+    padding: 0 4px 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18); margin-bottom: 22px; }
+  .ckdocs-frame .frame-mark { font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+    color: #E4B340; background: rgba(228,179,64,0.1);
+    border: 0.5px solid rgba(228,179,64,0.3);
+    padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
+  .ckdocs-frame .frame-bread { font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: rgba(250,246,236,0.52); letter-spacing: 0.04em; }
+  .ckdocs-frame .frame-bread b { color: rgba(250,246,236,0.82); font-weight: 700; }
+  .ckdocs-frame .frame-title-block { padding: 0 4px 18px; }
+  .ckdocs-frame .frame-title { font-size: 28px; font-weight: 800; margin: 0; }
+  .ckdocs-frame .frame-subtitle { font-size: 13px;
+    color: rgba(250,246,236,0.52); margin: 4px 0 0; }
+
+  /* Nested tab strip — same visual language as today_dashboard's
+     tab strip but compact, since we have 10 entries. */
+  .ckdocs-tabs {
+    display: flex; gap: 4px; overflow-x: auto; padding: 0 0 12px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18);
+    margin-bottom: 22px; scrollbar-width: none;
+  }
+  .ckdocs-tabs::-webkit-scrollbar { display: none; }
+  .ckdocs-tab {
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    font-weight: 700; letter-spacing: 0.04em;
+    padding: 10px 14px 8px; border-radius: 6px 6px 0 0;
+    background: transparent; border: none;
+    color: rgba(250,246,236,0.52); cursor: pointer;
+    text-transform: uppercase; text-decoration: none;
+    transition: color 0.15s, background 0.15s;
+  }
+  .ckdocs-tab:hover { color: #FAF6EC;
+    background: rgba(228,179,64,0.06); }
+  .ckdocs-tab.active {
+    color: #FFD970;
+    background: rgba(228,179,64,0.12);
+    box-shadow: inset 0 -2px 0 #E4B340;
+  }
+
+  /* Content panel — one per tab, hidden until active. */
+  .ckdocs-panel { display: none; }
+  .ckdocs-panel.active { display: block; }
+  .ckdocs-panel {
+    background: #1f1308; border: 1px solid rgba(217,164,54,0.18);
+    border-radius: 14px; padding: 22px 26px 28px;
+  }
+
+  /* Doc content typography (scoped). */
+  .ckdocs-panel h1 { font-size: 22px; font-weight: 800;
+    color: #FFD970; margin: 0 0 8px; }
+  .ckdocs-panel h2 { font-size: 16px; font-weight: 700;
+    color: #FAF6EC; margin: 22px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18); }
+  .ckdocs-panel h3 { font-size: 13px; font-weight: 700;
+    color: #E4B340; margin: 16px 0 6px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace; }
+  .ckdocs-panel p, .ckdocs-panel li {
+    color: rgba(250,246,236,0.82); font-size: 13px;
+    line-height: 1.55; margin: 0 0 8px;
+  }
+  .ckdocs-panel ul, .ckdocs-panel ol { padding-left: 22px;
+    margin: 0 0 10px; }
+  .ckdocs-panel li { margin: 4px 0; }
+  .ckdocs-panel code {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    background: rgba(0,0,0,0.35);
+    border: 0.5px solid rgba(217,164,54,0.2);
+    padding: 1px 6px; border-radius: 4px;
+    color: #5BCAC5;
+  }
+  .ckdocs-panel pre {
+    background: rgba(0,0,0,0.4);
+    border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 8px; padding: 12px 14px;
+    overflow-x: auto; font-size: 11.5px;
+    line-height: 1.45; color: rgba(250,246,236,0.86);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ckdocs-panel table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; margin: 10px 0;
+    background: rgba(0,0,0,0.18);
+    border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 8px; overflow: hidden;
+  }
+  .ckdocs-panel th, .ckdocs-panel td {
+    text-align: left; padding: 8px 12px; vertical-align: top;
+    border-top: 0.5px solid rgba(217,164,54,0.08);
+  }
+  .ckdocs-panel th {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: rgba(250,246,236,0.6);
+    background: rgba(0,0,0,0.22); border-top: 0;
+  }
+  .ckdocs-panel .meta { font-size: 11px;
+    color: rgba(250,246,236,0.45); font-style: italic;
+    margin: 0 0 18px; }
+  .ckdocs-panel strong { color: #FAF6EC; }
+  .ckdocs-panel a { color: #5BCAC5; }
+
+  /* Status chip used by some pages (ACTIVE / SHIPPED / DRAFT). */
+  .ckdocs-panel .status-chip {
+    display: inline-block; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; padding: 2px 8px;
+    border-radius: 4px; letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: rgba(228,179,64,0.18); color: #FFD970;
+    border: 0.5px solid rgba(255,217,112,0.4);
+    margin-left: 8px; vertical-align: middle;
+  }
+  .ckdocs-panel .status-chip.shipped {
+    background: rgba(46,163,159,0.18); color: #5BCAC5;
+    border-color: rgba(91,202,197,0.4);
+  }
+  .ckdocs-panel .status-chip.draft {
+    background: rgba(232,88,82,0.18); color: #E85852;
+    border-color: rgba(232,88,82,0.4);
+  }
+
+  @media (max-width: 760px) {
+    .ckdocs-frame { padding: 18px 14px 60px; }
+    .ckdocs-panel { padding: 14px 14px 18px; }
+    .ckdocs-tab { font-size: 10px; padding: 9px 10px 7px; }
+  }
+</style>
+
+<div class="ckdocs-frame">
+
+  <div class="frame-top">
+    <span class="frame-mark">Cena · Docs</span>
+    <span class="frame-bread">Cena &nbsp;/&nbsp; <b>Docs</b></span>
+  </div>
+
+  <div class="frame-title-block">
+    <h1 class="frame-title">Docs</h1>
+    <p class="frame-subtitle">Consolidated project documentation for Cenas Kitchen. Tap a tab to jump.</p>
+  </div>
+
+  {# Tab strip — 10 slots. Order matters: Start here first. #}
+  <div class="ckdocs-tabs" role="tablist">
+    <a class="ckdocs-tab active" data-tab="start"        role="tab" href="#start">Start here</a>
+    <a class="ckdocs-tab"        data-tab="architecture" role="tab" href="#architecture">Architecture</a>
+    <a class="ckdocs-tab"        data-tab="methodology"  role="tab" href="#methodology">Methodology</a>
+    <a class="ckdocs-tab"        data-tab="permissions"  role="tab" href="#permissions">Permissions</a>
+    <a class="ckdocs-tab"        data-tab="operations"   role="tab" href="#operations">Operations</a>
+    <a class="ckdocs-tab"        data-tab="phase2"       role="tab" href="#phase2">Phase 2 Roadmap</a>
+    <a class="ckdocs-tab"        data-tab="cena"         role="tab" href="#cena">Cena Surface</a>
+    <a class="ckdocs-tab"        data-tab="block1"       role="tab" href="#block1">Block 1 — Foundation</a>
+    <a class="ckdocs-tab"        data-tab="block2"       role="tab" href="#block2">Block 2 — Manager Tools</a>
+    <a class="ckdocs-tab"        data-tab="integrations" role="tab" href="#integrations">Integrations</a>
+  </div>
+
+  {# Content panels — exactly one .active at a time. JS toggles. #}
+  <div class="ckdocs-panel active" data-panel="start">
+    {% include 'sam_docs/start.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="architecture">
+    {% include 'sam_docs/architecture.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="methodology">
+    {% include 'sam_docs/methodology.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="permissions">
+    {% include 'sam_docs/permissions.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="operations">
+    {% include 'sam_docs/operations.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="phase2">
+    {% include 'sam_docs/phase2.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="cena">
+    {% include 'sam_docs/cena.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="block1">
+    {% include 'sam_docs/block1.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="block2">
+    {% include 'sam_docs/block2.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="integrations">
+    {% include 'sam_docs/integrations.html' %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  /* Nested-tab switcher. Tabs are real anchors so the hash deep-links
+     the right tab on page load; JS upgrades them to in-page panel
+     swaps without navigation. */
+  var root = document.querySelector(".ckdocs-frame");
+  if (!root) return;
+  var tabs = root.querySelectorAll(".ckdocs-tab");
+  var panels = root.querySelectorAll(".ckdocs-panel");
+
+  function activate(key) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle("active", p.getAttribute("data-panel") === key);
+    });
+  }
+
+  /* Click handler — preventDefault + swap panel + update hash. */
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function (e) {
+      e.preventDefault();
+      var key = t.getAttribute("data-tab");
+      activate(key);
+      try {
+        history.replaceState(null, "", "#" + encodeURIComponent(key));
+      } catch (err) { /* history API unavailable — swap still works */ }
+    });
+  });
+
+  /* Hash-on-load: deep-link to a specific tab. Falls back to "start". */
+  var startKey = (function () {
+    var h = (window.location.hash || "").replace(/^#/, "");
+    var valid = false;
+    tabs.forEach(function (t) {
+      if (t.getAttribute("data-tab") === h) valid = true;
+    });
+    return valid ? h : "start";
+  })();
+  activate(startKey);
+})();
+</script>
+{% endblock %}

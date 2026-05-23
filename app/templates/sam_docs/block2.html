@@ -1,0 +1,52 @@
+{# Block 2 — Manager Tools — derived from block_2i_recipe_page_spec. Sam directive #240. #}
+<h1>Block 2 — Manager Tools <span class="status-chip">Partial</span></h1>
+<p class="meta">Manager-facing surfaces. Recipe Page (2I) shipped; the remaining 2A–2H, 2J slots open as work begins.</p>
+
+<h2>Block 2 in one sentence</h2>
+<p>Block 2 turns the Manager dashboard from a reporting surface into an operating surface — the tools managers use during a shift, not just to review one.</p>
+
+<h2>2I — Recipe Page <span class="status-chip shipped">Shipped</span></h2>
+
+<h3>What it is</h3>
+<p>The manager-facing recipe reference. Each store has a recipe catalogue: dish, ingredients, portions, prep notes, equipment, last-modified. Per-store; recipes are scoped to the store the manager is logged in to.</p>
+
+<h3>Surface</h3>
+<table>
+  <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>/&lt;store&gt;/manager/recipes</code></td><td>Recipe catalogue (list + search + open).</td></tr>
+    <tr><td><code>/&lt;store&gt;/manager/recipes/&lt;id&gt;</code></td><td>Recipe detail page.</td></tr>
+    <tr><td><code>/&lt;store&gt;/manager/recipes/seed</code></td><td>Bulk-seed (admin only).</td></tr>
+  </tbody>
+</table>
+
+<h3>Permission gate</h3>
+<ul>
+  <li><code>recipes.view</code> — read access (manager + GM + corporate).</li>
+  <li><code>recipes.write</code> — edit / create access (manager + corporate; not GM by default).</li>
+</ul>
+
+<h3>Data model</h3>
+<ul>
+  <li><strong>Recipe table</strong> — id, store, name, category, portions, prep_minutes, notes, created_at, updated_at.</li>
+  <li><strong>RecipeIngredient table</strong> — recipe_id, ingredient_name, quantity, unit, notes (one row per ingredient).</li>
+  <li><strong>RecipeStep table</strong> — recipe_id, order, text (one row per prep step).</li>
+</ul>
+
+<h3>Seed</h3>
+<p>Initial recipe set seeds on first deploy via the seed entry point. Bulk-insert is supported for migrating an external recipe list; per-store seeds preserve the store scope.</p>
+
+<h2>Block 2 open slots</h2>
+<p>The following are spec slots awaiting authoring. They open as the operator decides to start work on each:</p>
+<ul>
+  <li>2A — TBD (manager surface yet to be specced).</li>
+  <li>2B — TBD.</li>
+  <li>2C — TBD.</li>
+  <li>2D — TBD.</li>
+  <li>2E — TBD.</li>
+  <li>2F — TBD.</li>
+  <li>2G — TBD.</li>
+  <li>2H — TBD.</li>
+  <li>2J — TBD.</li>
+</ul>
+<p>The spec format is consistent across Block 2: surface, audience gate, data model, seed (if any), three-gate verification probe.</p>

@@ -1,0 +1,55 @@
+{# Phase 2 Roadmap — derived from phase_2_directive (scrubbed/condensed). Sam directive #240. #}
+<h1>Phase 2 Roadmap <span class="status-chip">Active</span></h1>
+<p class="meta">The current build-cycle master direction. What is being built and why.</p>
+
+<h2>Phase 2 in one sentence</h2>
+<p>Phase 2 turns the Cenas Kitchen app from a reporting surface into an operating system — manager-actionable tools, an operator-side AI assistant, and the integrations that feed both.</p>
+
+<h2>Three concurrent blocks</h2>
+<table>
+  <thead><tr><th>Block</th><th>Theme</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Block 1 — Foundation</strong></td><td>Cross-cutting primitives every Block 2/3 feature depends on: role taxonomy, scheduled events, task system, ribbon component + router, sales insights, team tab, pay masking, ambient signal.</td><td><span class="status-chip shipped">Shipped</span></td></tr>
+    <tr><td><strong>Block 2 — Manager Tools</strong></td><td>Manager-facing surfaces: recipe page (2I shipped), more spec slots open as work begins.</td><td>Partial</td></tr>
+    <tr><td><strong>Block 3 — Agent Surface</strong></td><td>The in-app AI assistant for managers (distinct from the operator-only assistant). Future; opens after Blocks 1 + 2 close out.</td><td><span class="status-chip draft">Draft</span></td></tr>
+  </tbody>
+</table>
+
+<h2>Block 1 — Foundation (shipped)</h2>
+<ul>
+  <li><strong>Preconditions</strong>: Role Taxonomy spec; ScheduledEvent spec.</li>
+  <li><strong>1A — Task System</strong>: tasks model, escalation policy, audit log.</li>
+  <li><strong>1B — Ribbon Component</strong>: the shared in-page ribbon control.</li>
+  <li><strong>1C — Ribbon Router</strong>: deep-link routing through the ribbon.</li>
+  <li><strong>1F — Sales Insights</strong>: Toast-derived sales rollup surface.</li>
+  <li><strong>1G — Team Tab</strong>: per-store team management.</li>
+  <li><strong>1H — Pay Masking</strong>: privacy controls on driver pay surfaces.</li>
+  <li><strong>1J — AmbientSignal Refactor</strong>: cross-cutting signal primitives.</li>
+</ul>
+<p>Block 1 is closed and verified; amend only via formal spec amendment citing commit SHA.</p>
+
+<h2>Block 2 — Manager Tools (partial)</h2>
+<ul>
+  <li><strong>2I — Recipe Page</strong> <span class="status-chip shipped">Shipped</span>: manager-facing recipe reference per store.</li>
+  <li><strong>2A–2H, 2J</strong>: spec slots open; work begins as the operator opens them.</li>
+</ul>
+
+<h2>Block 3 — Agent Surface (future)</h2>
+<p>The in-app assistant for managers — distinct from the operator-only chat. Block 3 opens after Blocks 1 and 2 close. No live specs yet; the agent_surface is currently used internally for testing tool wiring.</p>
+
+<h2>Cross-block primitives</h2>
+<ul>
+  <li><strong>Permission system</strong>: role-to-permission map gates every mutating action (see Permissions tab).</li>
+  <li><strong>Tab-strip dashboards</strong>: Today / Manager / Catering / Operations / Vendors share the tabbed-iframe pattern so each tab embeds the real working page.</li>
+  <li><strong>Per-store scoping</strong>: every store-scoped route is prefixed <code>/&lt;store&gt;/</code>; the store-blueprint resolves the store at request time.</li>
+  <li><strong>Deploy gates</strong>: every commit runs the three-gate verification (see Methodology tab).</li>
+</ul>
+
+<h2>Open work — current focus</h2>
+<ul>
+  <li>Operator-side AI assistant: <code>/sam/chat</code> + the AI gateway feeding the operator surface.</li>
+  <li>Cena page tab suite: Cena chat / Cena + Dev / Agents / Page Info / Pass / Docs (this surface).</li>
+  <li>Vendor email-parse pipeline: ingest WebstaurantStore equipment and warranty emails.</li>
+  <li>Cross-host message queue: the secondary peer host wires into the primary for resilient delivery.</li>
+  <li>Anomaly engine extensions: additional rules for the daily / weekly brief.</li>
+</ul>

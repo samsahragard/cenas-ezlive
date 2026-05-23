@@ -785,6 +785,19 @@ def sam_pass_page():
     return render_template("sam_pass.html", active="sam_pass")
 
 
+@sam_chat_bp.route("/sam/docs", methods=["GET"])
+def sam_docs_page():
+    """Cena-page tab: consolidated project documentation. Sam directive
+    #240 (2026-05-23) — the new docs surface that replaces the prior
+    /partner/developer/app/* sidebar section. 10 nested tabs, content
+    rendered inline as Jinja includes from app/templates/sam_docs/.
+    Zero agent attribution by design. Hard-gated to Sam."""
+    gate = _require_sam_page()
+    if gate is not None:
+        return gate
+    return render_template("sam_docs.html", active="sam_docs")
+
+
 @sam_chat_bp.route("/sam/chat/sessions", methods=["GET"])
 def sam_chat_list_sessions():
     """JSON list of non-archived sessions, most-recent first."""

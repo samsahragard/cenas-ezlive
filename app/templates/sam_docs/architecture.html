@@ -1,0 +1,133 @@
+{# Architecture — consolidated from: architecture, site_map, node_link_diagram, features, tech_stack, data_sources, readme, system_inventory. Sam directive #240. #}
+<h1>Architecture</h1>
+<p class="meta">High-level system design + the operational map of every account, machine, and data source.</p>
+
+<h2>System at a glance</h2>
+<p>The platform is a Flask application served from a Render web service, sitting behind a Cloudflare-fronted partner gate, with a Postgres database, scheduled cron services for background work, and several outbound integrations.</p>
+<ul>
+  <li><strong>Web app</strong> — <code>app.cenaskitchen.com</code>, Render-hosted Flask + Jinja templates.</li>
+  <li><strong>Database</strong> — Postgres on Render (managed); SQLAlchemy ORM + Alembic-style migrations baked into <code>create_all</code>.</li>
+  <li><strong>Background jobs</strong> — Render cron jobs (Toast refreshes, anomaly briefs, calendar rolls, event-traffic refresh, sales insights, etc.).</li>
+  <li><strong>External integrations</strong> — Toast (POS + analytics), Sling (scheduling), EZCater (catering intake), vendor email channels, Sentry (error monitoring).</li>
+  <li><strong>AI surface</strong> — model gateway for operator chat (<code>/sam/chat</code>) and the team-internal assistant.</li>
+</ul>
+
+<h2>Tech stack</h2>
+<table>
+  <thead><tr><th>Layer</th><th>Technology</th></tr></thead>
+  <tbody>
+    <tr><td>Web framework</td><td>Flask + Jinja templates</td></tr>
+    <tr><td>ORM</td><td>SQLAlchemy 2.x (declarative)</td></tr>
+    <tr><td>Database</td><td>Postgres (Render-managed)</td></tr>
+    <tr><td>Hosting</td><td>Render (web service + crons + Postgres)</td></tr>
+    <tr><td>DNS / CDN</td><td>Cloudflare (proxied; Tunnel exposes internal services)</td></tr>
+    <tr><td>VPN mesh</td><td>Tailscale (private; internal services and operator runtime)</td></tr>
+    <tr><td>Error monitoring</td><td>Sentry</td></tr>
+    <tr><td>Auth (web)</td><td>Site-password gate + keypad-login + role permissions</td></tr>
+    <tr><td>AI providers</td><td>Anthropic Claude (Opus, Sonnet); Google Gemini (Flash)</td></tr>
+    <tr><td>Source control</td><td>GitHub; push triggers Render auto-deploy</td></tr>
+  </tbody>
+</table>
+
+<h2>Service graph</h2>
+<pre>
+  Cloudflare DNS + CDN
+       │
+       ▼
+  Render web service (Flask app — app.cenaskitchen.com)
+       │
+       ├── Postgres (cenas-ezlive DB) ─ SQLAlchemy
+       │
+       ├── Render crons:
+       │     - sales-insights-refresh
+       │     - traffic-refresh
+       │     - vendor-status-refresh
+       │     - catering-pipeline-refresh
+       │     - events-refresh
+       │     - weather-refresh
+       │     - task-escalation
+       │     - outages-refresh
+       │     - anomaly-brief (weekly)
+       │     - anomaly-brief (daily)
+       │
+       ├── Toast API (POS + analytics OAuth)
+       ├── Sling API (scheduling)
+       ├── EZCater (catering intake)
+       ├── Sentry (errors)
+       │
+       └── Operator chat surface
+             - /sam/chat (Anthropic + Gemini)
+             - /sam/combined (side-by-side dev chat)
+             - /sam/agents, /sam/pass, /sam/docs (Cena page tabs)
+</pre>
+
+<h2>Audience surfaces</h2>
+<table>
+  <thead><tr><th>Surface</th><th>Gate</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td><code>/</code> (site root)</td><td>Site password (EZLIVE_PASSWORD)</td><td>Partner landing.</td></tr>
+    <tr><td><code>/partner/*</code></td><td>Partner password (rotating)</td><td>Internal partner dashboard surfaces.</td></tr>
+    <tr><td><code>/&lt;store&gt;/*</code></td><td>Manager keypad-login</td><td>Per-store manager surfaces (Tomball, Copperfield, Corporate).</td></tr>
+    <tr><td><code>/sam/*</code></td><td>SAM_CHAT_USER_ID match</td><td>Operator-only surfaces: chat, combined view, Cena page tabs (Agents, Page Info, Pass, Docs).</td></tr>
+    <tr><td><code>/driver/*</code></td><td>Driver login</td><td>Driver mobile flows.</td></tr>
+    <tr><td><code>/ez-market</code></td><td>Driver login</td><td>Catering pickup market for drivers.</td></tr>
+  </tbody>
+</table>
+
+<h2>Operational inventory</h2>
+<h3>Accounts (top-level)</h3>
+<ul>
+  <li>Render — hosts the web service + crons + Postgres.</li>
+  <li>Cloudflare — DNS + Tunnel for internal-service exposure.</li>
+  <li>Tailscale — VPN mesh across machines.</li>
+  <li>GitHub — source control; SSH deploy key authorizes pushes.</li>
+  <li>Anthropic — API key; primary AI provider.</li>
+  <li>Google — Gemini API + Workspace.</li>
+  <li>Toast — POS account + Analytics OAuth app.</li>
+  <li>Sling — scheduling.</li>
+  <li>EZCater — catering intake.</li>
+  <li>Sentry — errors.</li>
+  <li>1Password — canonical credential vault (CLI integration available).</li>
+</ul>
+
+<h3>Machines</h3>
+<ul>
+  <li><strong>Render web service</strong> — production app + cron runtime.</li>
+  <li><strong>Primary internal host</strong> — runs the operator chat backend, gateway services, and Cloudflare Tunnel client. Tailscale-bound for internal access.</li>
+  <li><strong>Peer internal host</strong> — secondary gateway, message-queue worker, cross-host sync. Tailscale-bound.</li>
+  <li><strong>Operator phone</strong> — Tailscale member for on-the-go access to internal services.</li>
+</ul>
+
+<h3>Credential locations</h3>
+<p>The Pass tab is the source of truth for credential locations. This page records the categories only; never the values.</p>
+<ul>
+  <li>Render env vars — every prod secret used by the Flask app + crons.</li>
+  <li>1Password — canonical store for human-typeable credentials (logins, master passwords).</li>
+  <li>Internal-host on-disk secrets — local files at well-known paths for service runtime (mirrored to Render env where needed).</li>
+</ul>
+
+<h2>Where the data lives</h2>
+<table>
+  <thead><tr><th>Data class</th><th>Primary store</th><th>Origin</th></tr></thead>
+  <tbody>
+    <tr><td>Sales / labor / menu</td><td>Postgres (Toast-derived tables)</td><td>Toast Analytics API; refreshed by cron.</td></tr>
+    <tr><td>Shifts / roster</td><td>Postgres (Sling-derived)</td><td>Sling API + manual rosters.</td></tr>
+    <tr><td>Catering orders</td><td>Postgres (catering tables)</td><td>EZCater webhooks + IMAP ingest from vendor mailboxes.</td></tr>
+    <tr><td>Tasks / events</td><td>Postgres (Block 1 tables)</td><td>App-authored.</td></tr>
+    <tr><td>Operator chat</td><td>Postgres (sam_chat tables)</td><td>App-authored; per-session message log + token cost.</td></tr>
+    <tr><td>Vendor / outage / produce</td><td>Postgres (operations tables)</td><td>App-authored + cron-refreshed.</td></tr>
+    <tr><td>Anomaly briefs</td><td>Postgres (anomaly tables)</td><td>Anomaly rules engine; cron-emitted.</td></tr>
+  </tbody>
+</table>
+
+<h2>External-facing endpoints</h2>
+<ul>
+  <li><code>app.cenaskitchen.com/healthz</code> — liveness probe.</li>
+  <li><code>app.cenaskitchen.com/ezcater-webhook</code> — EZCater inbound order webhook (signature-verified).</li>
+  <li><code>app.cenaskitchen.com/partner/*</code> — partner dashboard.</li>
+  <li><code>app.cenaskitchen.com/&lt;store&gt;/*</code> — store manager surfaces.</li>
+  <li><code>app.cenaskitchen.com/sam/*</code> — operator-only surfaces.</li>
+</ul>
+
+<h2>Deployment surface</h2>
+<p>The single deployable artifact is the Flask app on Render. Every push to <code>origin/main</code> triggers a Render auto-deploy (~2–3 minute swap). The crons share the same deploy image, so a single git push updates the web service and all background jobs together.</p>

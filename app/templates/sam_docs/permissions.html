@@ -1,0 +1,68 @@
+{# Permissions — consolidated from: permission_system. Sam directive #240. #}
+<h1>Permissions</h1>
+<p class="meta">Role taxonomy and the audience-gate system that fronts every mutating action in the app.</p>
+
+<h2>Role taxonomy</h2>
+<p>Every authenticated session resolves to exactly one role. Role is the source of permission; permissions are NEVER granted individually outside the role-to-permission map.</p>
+<table>
+  <thead><tr><th>Role</th><th>Audience</th><th>Login path</th></tr></thead>
+  <tbody>
+    <tr><td><code>partner</code></td><td>Internal staff with partner-dashboard access.</td><td>Site password + Partner password gate.</td></tr>
+    <tr><td><code>corporate</code></td><td>Corporate / payroll role.</td><td>Site password + Corporate password gate.</td></tr>
+    <tr><td><code>gm</code></td><td>General manager (per store).</td><td>Manager keypad-login.</td></tr>
+    <tr><td><code>expo</code></td><td>Expo / kitchen line role.</td><td>Manager keypad-login.</td></tr>
+    <tr><td><code>driver</code></td><td>Delivery driver.</td><td>Driver login flow.</td></tr>
+    <tr><td><code>operator</code></td><td>System owner; <code>/sam/*</code> surfaces.</td><td>SAM_CHAT_USER_ID env match against the authenticated user.</td></tr>
+  </tbody>
+</table>
+
+<h2>How a request is gated</h2>
+<ol>
+  <li><strong>Site-password gate</strong> (EZLIVE_PASSWORD) — intercepts all paths that aren't on the exempt list (<code>/healthz</code>, the keypad-login itself, static assets). Returns a 302 to the gate if not present.</li>
+  <li><strong>Keypad-login gate</strong> — paths under <code>/partner/*</code>, <code>/&lt;store&gt;/*</code>, <code>/sam/*</code> require an authenticated user session. Unauthenticated requests redirect to <code>/keypad-login?next=&lt;path&gt;</code>.</li>
+  <li><strong>Per-route permission check</strong> — once authenticated, the route's <code>@requires_permission("&lt;cap&gt;")</code> decorator (or an inline gate) runs. A denial returns a 302 to <code>/access-denied?need=&lt;cap&gt;</code>.</li>
+  <li><strong>Per-row audience filter</strong> — for list views and reports, the rows themselves are filtered by the user's store / role scope. Cross-store reads never leak.</li>
+</ol>
+
+<h2>Permission catalogue</h2>
+<p>Permissions are keyed strings of the form <code>&lt;area&gt;.&lt;action&gt;</code>. They map many-to-many to roles via <code>ROLE_PERMISSIONS</code>. Adding a new permission means adding the key in code + the role mappings; <strong>never inline grant by user-id</strong>.</p>
+<p>Indicative permission keys:</p>
+<ul>
+  <li><code>team_reports.view</code> — see the team-reports surface.</li>
+  <li><code>manager.daily_log.write</code> — log into the manager daily-log surface for a store.</li>
+  <li><code>vendor.recent_orders.view</code> — vendor recent-orders dashboard.</li>
+  <li><code>catering.dashboard.view</code> — catering dashboard.</li>
+  <li><code>operations.dashboard.view</code> — operations dashboard.</li>
+  <li><code>recipes.view</code> / <code>recipes.write</code> — recipe page R/W.</li>
+  <li><code>driver.live_tracking.view</code> — driver live-tracking map.</li>
+</ul>
+<p>The full live list is enumerated in <code>app/services/permissions.py</code> (the source of truth); the <strong>Operations</strong> tab covers day-to-day permission additions.</p>
+
+<h2>Audience-eligibility-before-mutation</h2>
+<p>This is the strictest rule. Every mutating action must check audience BEFORE the database mutation:</p>
+<pre>
+  @bp.route("/some/mutator", methods=["POST"])
+  def some_mutator():
+      # 1. Audience gate first
+      if not has_permission("area.action"):
+          return redirect(url_for("auth.access_denied", need="area.action"))
+      # 2. Validate payload
+      payload = request.get_json() or {}
+      ...
+      # 3. THEN mutate
+      with SessionLocal() as db:
+          ...
+</pre>
+<p>A failure of step 1 must leave zero rows. Audience checks AFTER a mutation are treated as a vulnerability, not a style issue.</p>
+
+<h2>Operator-only (Sam) surfaces</h2>
+<p>The <code>/sam/*</code> family — <code>/sam/chat</code>, <code>/sam/combined</code>, <code>/sam/agents</code>, <code>/sam/pass</code>, <code>/sam/docs</code> — is gated on a direct match between the authenticated user's id and the <code>SAM_CHAT_USER_ID</code> env var, NOT via the role-to-permission map. This is intentional: the capability cannot be role-inherited; only the explicitly configured user id has access. When <code>SAM_CHAT_USER_ID</code> is unset, the surface is closed for everyone (safe-closed dormant).</p>
+
+<h2>Public / unauthenticated</h2>
+<p>Only the following paths bypass authentication:</p>
+<ul>
+  <li><code>/healthz</code> — liveness probe.</li>
+  <li><code>/keypad-login</code>, <code>/access-denied</code> — the login + denial surfaces themselves.</li>
+  <li>Static assets (CSS, fonts, images).</li>
+  <li>Signed webhook endpoints (e.g. EZCater inbound), gated by signature verification instead of session auth.</li>
+</ul>

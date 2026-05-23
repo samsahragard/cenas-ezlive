@@ -1,0 +1,82 @@
+{# Operations — consolidated from: session_start, session_closeout, operations_reference. Sam directive #240. #}
+<h1>Operations</h1>
+<p class="meta">Day-to-day runbook for opening a session, closing a session, and the recurring manager / operator procedures.</p>
+
+<h2>Session start — opening checklist</h2>
+<p>When the dev session begins (whether a code change cycle or an ops triage), the first responsibilities are environment health + state awareness.</p>
+<ol>
+  <li><strong>Repo state</strong>: <code>git fetch &amp;&amp; git status</code>. Confirm working tree is clean or known-dirty (scratch files only).</li>
+  <li><strong>Origin/main HEAD</strong>: confirm you are at the latest <code>origin/main</code> SHA. Pull-rebase if not.</li>
+  <li><strong>Render web service</strong>: hit <code>/healthz</code> — expect a 200 (or 302 to keypad-login when the site-password gate is active).</li>
+  <li><strong>Render cron health</strong>: glance at the Render dashboard for any failing cron. A red cron usually indicates a Toast / Sling / EZCater API outage or a credential rotation.</li>
+  <li><strong>External vendors</strong>: if a flow is reported broken, confirm vendor side first (Toast Analytics status, Sling, EZCater).</li>
+  <li><strong>Outstanding tasks</strong>: review the working punch list before introducing new work.</li>
+</ol>
+
+<h2>Session closeout — leaving the system safe</h2>
+<ol>
+  <li><strong>Working-tree audit</strong>: <code>git status</code>. Stage only files you authored; never <code>git add -A</code>.</li>
+  <li><strong>Stage-by-name discipline</strong>: <code>git add path/file1 path/file2</code> — explicit. Scratch files (plan.md, debug dumps, data dirs) stay out.</li>
+  <li><strong>Commit</strong> with a clear subject + the why in the body. Never amend a previous commit; create a new one.</li>
+  <li><strong>Three-gate verify</strong>: per the Methodology tab — pytest, CI, deploy probe.</li>
+  <li><strong>Operational notes</strong>: leave a short closing note for the next session if anything is mid-flight (which task, which branch, which gate is blocked).</li>
+</ol>
+
+<h2>Manager daily flow (per store)</h2>
+<p>Managers operate the <code>/&lt;store&gt;/manager</code> dashboard tabs throughout the day. Key surfaces:</p>
+<table>
+  <thead><tr><th>Surface</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>/&lt;store&gt;/manager/daily-log</code></td><td>Manager daily log — opening/closing checks, notes, anomalies.</td></tr>
+    <tr><td><code>/&lt;store&gt;/manager/recipes</code></td><td>Recipe reference (Block 2I).</td></tr>
+    <tr><td><code>/&lt;store&gt;/today</code></td><td>Today dashboard — sales, notifications, task reports.</td></tr>
+    <tr><td><code>/&lt;store&gt;/catering</code></td><td>Catering dashboard — EZCater orders + delivery roster.</td></tr>
+    <tr><td><code>/&lt;store&gt;/operations</code></td><td>Operations dashboard — vendor, produce, outages.</td></tr>
+    <tr><td><code>/&lt;store&gt;/vendors</code></td><td>Vendor dashboard — produce ordering + recent orders.</td></tr>
+  </tbody>
+</table>
+
+<h2>Recurring cron jobs</h2>
+<table>
+  <thead><tr><th>Cron</th><th>Cadence</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>sales-insights</code></td><td>~30 min</td><td>Pull recent Toast sales windows for the dashboards.</td></tr>
+    <tr><td><code>refresh-traffic</code></td><td>15 min</td><td>Refresh order-traffic rollups.</td></tr>
+    <tr><td><code>refresh-vendor-status</code></td><td>Hourly</td><td>Roll up vendor-order state.</td></tr>
+    <tr><td><code>refresh-catering-pipeline</code></td><td>Hourly</td><td>Roll up catering pipeline.</td></tr>
+    <tr><td><code>refresh-outages</code></td><td>Hourly</td><td>Outage rollup.</td></tr>
+    <tr><td><code>refresh-events</code></td><td>Daily</td><td>Roll the events calendar forward.</td></tr>
+    <tr><td><code>refresh-weather</code></td><td>Hourly</td><td>Weather context refresh.</td></tr>
+    <tr><td><code>task-escalation</code></td><td>Hourly</td><td>Escalate overdue tasks per the escalation policy.</td></tr>
+    <tr><td><code>anomaly-brief</code></td><td>Daily / weekly</td><td>Compose the anomaly brief from the anomaly engine output.</td></tr>
+  </tbody>
+</table>
+
+<h2>Common procedures</h2>
+<h3>Adding a manager / GM to a store</h3>
+<ol>
+  <li>Create the user via the access-request flow (manager keypad-login admin surface).</li>
+  <li>Assign role <code>gm</code> + store affiliation.</li>
+  <li>The manager keypad-login pin is set via the env var rotation procedure.</li>
+</ol>
+
+<h3>Rotating a vendor / API credential</h3>
+<ol>
+  <li>Update the secret at its source (Render env var, on-disk secret file, or 1Password).</li>
+  <li>If Render env: trigger a redeploy to pick up the new value.</li>
+  <li>Hit a cron that consumes the credential to confirm the rotation worked.</li>
+</ol>
+
+<h3>Investigating a failing cron</h3>
+<ol>
+  <li>Render dashboard → cron service → recent runs → failed run logs.</li>
+  <li>Common causes: external-API outage, credential rotation not yet propagated, schema mismatch from a recent migration.</li>
+  <li>Once root cause is identified, fix and trigger a manual run to confirm.</li>
+</ol>
+
+<h3>Responding to a partner-side 502 spike</h3>
+<ol>
+  <li>30–60s of 502s immediately after a push is normal Render swap; ignore.</li>
+  <li>Persistent 502s (>2 min) — check the Render web-service deploy status; if "build failed", revert the offending commit.</li>
+  <li>If the deploy is "live" but 502s continue, check Sentry for the most-recent error and the application logs.</li>
+</ol>

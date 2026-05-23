@@ -1,0 +1,44 @@
+{# Block 1 — Foundation — consolidated from 9 Block 1 spec docs. Sam directive #240. #}
+<h1>Block 1 — Foundation <span class="status-chip shipped">Shipped</span></h1>
+<p class="meta">The cross-cutting primitives every Block 2 and Block 3 feature depends on. Block 1 is closed; amendments only via formal spec amendment citing commit SHA.</p>
+
+<h2>Block 1 in one sentence</h2>
+<p>Block 1 establishes the data primitives, the cross-page UI primitives, and the cross-cutting signal primitives — so subsequent blocks build features without re-inventing infrastructure each time.</p>
+
+<h2>Preconditions</h2>
+<h3>Role Taxonomy</h3>
+<p>The canonical role enumeration for the system. Every authenticated session resolves to exactly one role; the role-to-permission map is the source of audience eligibility. Roles: <code>partner</code>, <code>corporate</code>, <code>gm</code>, <code>expo</code>, <code>driver</code>, <code>operator</code>. The Permissions tab covers the full model.</p>
+
+<h3>ScheduledEvent</h3>
+<p>The unified scheduled-event primitive — a single table model that backs reservations, deliveries, catering events, manager rituals, and any other time-bounded event in the system. Replaces the prior fragmented per-feature tables. Carries: start/end timestamps, store, type, status, owner, payload (typed via JSON).</p>
+
+<h2>1A — Task System</h2>
+<p>Task model + escalation policy + audit log. Tasks are the primary work-tracking primitive: they have a status (<code>open</code> / <code>in_progress</code> / <code>completed</code> / <code>cancelled</code>), an owner, a store scope, an optional deadline, and an audit trail of every state transition. The escalation cron runs hourly and bumps overdue tasks per the per-type escalation rules.</p>
+
+<h2>1B — Ribbon Component</h2>
+<p>The shared in-page ribbon control — a unified header / breadcrumb / status bar component used across the partner dashboards. Single Jinja partial + a scoped style block. All dashboards adopt it for a consistent ribbon UX.</p>
+
+<h2>1C — Ribbon Router</h2>
+<p>Deep-link routing through the ribbon: any ribbon item can be addressed via URL parameters and the router resolves the page state accordingly. Enables shareable links into specific dashboard tabs / filters / time ranges.</p>
+
+<h2>1F — Sales Insights</h2>
+<p>The Toast-derived sales rollup surface. Cron-refreshed (~30 min cadence) sales windows that feed the dashboards. Covers per-store, per-period (today / week / month / YTD), revenue, ticket count, average ticket, and labor cost percentage.</p>
+
+<h2>1G — Team Tab</h2>
+<p>Per-store team management — roster, shift status, contact info, role/store assignment. Sling-derived shift data drives the schedule view; manual overrides land in the per-store team table.</p>
+
+<h2>1H — Pay Masking</h2>
+<p>Privacy controls on driver pay surfaces. Pay amounts on shared surfaces (live tracking, pay history visible to non-owners) display masked; full amounts surface only to the row owner and to permitted roles.</p>
+
+<h2>1J — AmbientSignal Refactor</h2>
+<p>Cross-cutting signal primitives. The ambient-signal system standardizes how lightweight notifications, status badges, and background-cron-derived state surface across the UI. Single signal table + a Jinja partial that any page can include.</p>
+
+<h2>Block 1 cross-references</h2>
+<ul>
+  <li>Tasks (1A) consume ScheduledEvent (precond) for deadline scheduling.</li>
+  <li>The ribbon (1B) + router (1C) front every dashboard surface from Block 2 onward.</li>
+  <li>Sales Insights (1F) feeds Today / Operations / Catering dashboards.</li>
+  <li>Team Tab (1G) consumes per-store roster + ScheduledEvent for shift state.</li>
+  <li>Pay Masking (1H) gates pay display per the role/audience map (see Permissions).</li>
+  <li>AmbientSignal (1J) underlies Notifications, anomaly alerts, and cron-status badges.</li>
+</ul>

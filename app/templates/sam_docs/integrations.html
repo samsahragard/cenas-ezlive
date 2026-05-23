@@ -1,0 +1,79 @@
+{# Integrations — consolidated from ezcater_guidelines, toast_api_reference, anomaly_service_spec, anomaly_rules, morning_brief_composer_spec, brief_calibration_runbook. Sam directive #240. #}
+<h1>Integrations</h1>
+<p class="meta">External-API integrations and internal pipelines that feed the dashboards.</p>
+
+<h2>EZCater</h2>
+<p>Catering order intake from EZCater. Two ingest paths:</p>
+<ul>
+  <li><strong>Webhook</strong> — EZCater posts inbound order events to <code>/ezcater-webhook</code> (signature-verified). The webhook handler upserts the order into the catering tables and triggers downstream rollups.</li>
+  <li><strong>IMAP backup</strong> — EZCater also emails order confirmations to the vendor mailbox. An IMAP ingest periodically scans the mailbox for any orders missed by the webhook (defense in depth).</li>
+</ul>
+
+<h3>EZCater rules</h3>
+<ul>
+  <li><strong>Idempotent upsert</strong> — every order is keyed on the EZCater order id; re-ingest is a no-op if the row hasn't changed.</li>
+  <li><strong>Status transitions</strong> — the EZCater pipeline statuses map to internal statuses (pending → confirmed → fulfilled → delivered).</li>
+  <li><strong>Driver assignment</strong> — once confirmed, the order surfaces to the per-store catering dashboard for driver assignment via the Ez Market for drivers.</li>
+  <li><strong>Cancellation</strong> — vendor cancellations come through the webhook and mark the row cancelled; manual cancellations require the catering dashboard surface.</li>
+</ul>
+
+<h2>Toast</h2>
+<p>POS data flows through two distinct Toast surfaces:</p>
+
+<h3>Toast API (standard)</h3>
+<ul>
+  <li>Sales rollups, menu, order history.</li>
+  <li>OAuth client (server-to-server); access token refresh is managed by the Toast client wrapper.</li>
+  <li>Refreshed by the sales-insights cron every ~30 minutes.</li>
+</ul>
+
+<h3>Toast Analytics API</h3>
+<ul>
+  <li>Higher-resolution analytics: sales, labor, menu mix.</li>
+  <li>Separate OAuth credentials from the standard API (analytics has its own client_id + client_secret).</li>
+  <li>Pre-aggregated rollups land in the Postgres analytics tables for fast dashboard reads.</li>
+</ul>
+
+<h3>Toast rules</h3>
+<ul>
+  <li><strong>Per-store mapping</strong> — Toast's restaurant id maps to the internal store slug. Mapping lives in the toast_store_map table.</li>
+  <li><strong>Time windows</strong> — every analytics query carries an explicit start/end; never an unbounded scan.</li>
+  <li><strong>Idempotent writes</strong> — rollup writes are keyed on (store, period, metric); a re-run overwrites cleanly.</li>
+</ul>
+
+<h2>Anomaly engine</h2>
+<p>A rules-driven engine that compares incoming Toast-derived metrics against expected baselines and emits anomaly events.</p>
+
+<h3>Anomaly service</h3>
+<ul>
+  <li>Runs as a cron job at configurable cadence (daily + weekly anomaly briefs).</li>
+  <li>Loads the rule registry on startup; each rule is a typed Python class with <code>evaluate(window, baseline) -> [AnomalyEvent]</code>.</li>
+  <li>Emits anomaly events to the anomaly table; downstream the morning-brief composer reads them.</li>
+</ul>
+
+<h3>Anomaly rules</h3>
+<p>The rule registry contains rules covering revenue, labor, menu mix, catering pipeline, vendor status, and outages. Rule classes:</p>
+<ul>
+  <li>Threshold rules — metric outside an absolute band.</li>
+  <li>Trend rules — metric outside its trailing rolling baseline.</li>
+  <li>Composite rules — multiple metrics together (e.g. revenue down + labor up = margin compression).</li>
+  <li>Absence rules — expected event missing (e.g. catering rollup didn't run).</li>
+</ul>
+<p>Rules are added by writing the class + registering it in the rule registry. Each rule has a unique key, a severity, and a description that surfaces in the brief.</p>
+
+<h2>Morning brief composer</h2>
+<p>The composer reads the most recent anomaly batch, renders a per-store summary, and emits the daily morning brief. The brief lands in the dashboard's notifications surface and (when enabled) goes out via email to the on-call recipient.</p>
+
+<h3>Brief calibration</h3>
+<p>A calibration runbook covers how to tune the anomaly rules without bouncing the production engine:</p>
+<ul>
+  <li><strong>Dry-run mode</strong> — run a rule against historical windows and inspect the output without writing the anomaly table.</li>
+  <li><strong>Per-rule enable/disable</strong> — env-driven; flip a noisy rule off without a deploy.</li>
+  <li><strong>Baseline windows</strong> — adjust the rolling baseline window for trend rules; defaults to 30 days.</li>
+</ul>
+
+<h2>Sling</h2>
+<p>Scheduling + shift management. Sling drives the team-tab roster + the per-store schedule view. API-pulled rosters are cached in the team table; manual overrides land in the same table with a provenance flag.</p>
+
+<h2>Sentry</h2>
+<p>Error monitoring for the Flask app. Configured via <code>SENTRY_DSN</code> env var; integration is automatic for Flask + SQLAlchemy + the cron entry points. Critical anomalies in the anomaly engine optionally trigger a Sentry message for visibility.</p>

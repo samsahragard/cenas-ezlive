@@ -1,0 +1,50 @@
+{# Methodology — consolidated from: methodology_rules + deployment. Sam directive #240. #}
+<h1>Methodology</h1>
+<p class="meta">Engineering standards for the Cenas Kitchen codebase. The rules below are non-negotiable gates before a change ships.</p>
+
+<h2>The six standing rules</h2>
+<p>Every commit that touches user-facing state, a database mutation, or a partner doc must pass each rule that applies. These are not guidelines — they are the gate.</p>
+
+<ol>
+  <li><strong>Audience-eligibility-before-mutation</strong> — the audience check (who can perform this action) runs BEFORE any database mutation. A 403 leaves zero rows.</li>
+  <li><strong>Verify-against-prod-not-local</strong> — deploy-verify hits production state, not local state. Must check something BUILD-SPECIFIC: a route or asset unique to the new commit. A build-agnostic response (a partner-gate 302) proves the service is up, NOT which commit it is serving.</li>
+  <li><strong>Deploy-success-verify</strong> — every commit gets a real deploy-verify pass after the deploy lands. <code>BLOCKED-PENDING-DEPLOY</code> is a valid state during build-pipeline outages; never claim "deploy-verified" against a stale build.</li>
+  <li><strong>Doc-registration-checks-both-route-AND-nav</strong> — a new documented surface requires the route AND the nav entry. Both surfaces, both updated together.</li>
+  <li><strong>Hit-new-doc-URL-once-before-trusting-it</strong> — render-verify the URL returns 200 with expected content before claiming the surface is live.</li>
+  <li><strong>Amendments-against-git-show-HEAD</strong> — spec doc amendments are authored against the committed tree (<code>git show HEAD:&lt;path&gt;</code>), NEVER a local pre-commit copy. The tree is the source of truth.</li>
+</ol>
+
+<h2>Three-gate deploy verification rubric</h2>
+<p>Rule 3 (deploy-success-verify) is operationalized as three independent gates. A commit is "deploy-verified" only when ALL THREE pass on the same SHA, and the verification is reported with the gate-by-gate breakdown.</p>
+
+<ol>
+  <li><strong>Gate 1 — Local pytest</strong>: the full suite passes on the working tree. Catches schema mismatches, fixture drift, and obvious regressions before the change ever leaves the dev machine. Run from the repo's <code>.venv</code>: <code>.\.venv\Scripts\python.exe -m pytest -q</code> (or platform equivalent).</li>
+  <li><strong>Gate 2 — CI</strong>: the GitHub Actions <code>tests.yml</code> workflow lands <code>completed / success</code> for the SHA. CI's environment differs from local in subtle ways (no <code>.env</code>, hermetic fixtures); a green CI proves the change still passes in a clean room.</li>
+  <li><strong>Gate 3 — Build-specific deploy probe</strong>: a probe that confirms the COMMIT is live — not just "the service is up". Per rule 2, the probe must check something BUILD-SPECIFIC: a new route, a new asset, a new string in a known route's body. A partner-gate 302 redirect proves the service is up, NOT which commit it is serving.</li>
+</ol>
+
+<h2>Verifying a deploy in practice</h2>
+<ol>
+  <li><strong>Push</strong> the commit to <code>origin/main</code>.</li>
+  <li><strong>Wait</strong> for Render's auto-deploy. Typical: 2–3 minutes from push to live.</li>
+  <li><strong>Poll the Render API</strong> for the deploy id matching the SHA; wait for <code>status == "live"</code>.</li>
+  <li><strong>Hit the build-specific probe</strong>. For a new route: <code>curl -sI https://app.cenaskitchen.com/&lt;new-route&gt;</code> — expect a 302 to <code>/keypad-login?next=/&lt;new-route&gt;</code> if the route is gated (which proves the route exists). A 302 to the global site-password gate also returns for unknown paths, so prefer probes that hit content (after authenticating) or signed-route patterns.</li>
+  <li><strong>Three-gate report</strong>: explicitly call out Gate 1 / Gate 2 / Gate 3 status when reporting "deploy verified".</li>
+</ol>
+
+<h2>Workflow norms</h2>
+<ul>
+  <li><strong>Pull-rebase before commit</strong>. Stage by name — <code>git add file1 file2</code> with explicit filenames, never <code>-A</code>. The working tree often has scratch files from prior debugging; <code>-A</code> sweeps them in.</li>
+  <li><strong>Coordinate shared-file edits</strong> in advance for high-traffic files (<code>base_dashboard.html</code>, <code>store_routes.py</code>, <code>sidebar.html</code>, etc.). One coordinator at a time avoids overwrites.</li>
+  <li><strong>Render-deploy swap noise</strong> — every push triggers ~30–60s of 502s + "connection forcibly closed" errors. Benign swap artifact. If 502s persist past ~2 minutes, check the Render API for the deploy status.</li>
+  <li><strong>Hash protection on user-typed secrets</strong> — passwords (keypad PINs, partner gate, manager pins) are stored hashed, never plaintext. Migrations that touch hash columns must remain idempotent.</li>
+</ul>
+
+<h2>Adding a documented surface</h2>
+<ol>
+  <li>Write the page (template under <code>app/templates/&lt;area&gt;/</code>).</li>
+  <li>Register the route (in the appropriate blueprint).</li>
+  <li>Register the nav entry (the relevant sidebar / tab strip).</li>
+  <li>Gate the surface (audience eligibility per rule 1).</li>
+  <li>Verify the URL renders 200 with the expected content (rule 5).</li>
+</ol>

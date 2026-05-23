@@ -1,0 +1,44 @@
+{# Start here — Docs landing. Sam directive #240. #}
+<h1>Start here</h1>
+<p class="meta">Documentation for the Cenas Kitchen system. Project-level reference — operations, architecture, integrations, and engineering standards.</p>
+
+<h2>What this is</h2>
+<p>The Cenas Kitchen platform is the partner-facing dashboard and operations system for the restaurant. It runs at <code>app.cenaskitchen.com</code> and integrates with Toast (POS), Sling (scheduling), EZCater (catering intake), and several vendor channels. This Docs surface is the single index of how the system is built and how it operates.</p>
+
+<h2>If you're new, read these six first</h2>
+<ol>
+  <li><strong>Architecture</strong> — the high-level system picture: services, data flow, where things live.</li>
+  <li><strong>Methodology</strong> — the engineering standards: how changes ship, how they are verified, what counts as "done".</li>
+  <li><strong>Permissions</strong> — the role + permission model gating every surface of the app.</li>
+  <li><strong>Operations</strong> — the day-to-day runbook: opening, closing, anomalies, manager workflows.</li>
+  <li><strong>Phase 2 Roadmap</strong> — what is currently being built and why.</li>
+  <li><strong>Cena Surface</strong> — the operator-only AI assistant: what it does, what it touches.</li>
+</ol>
+
+<h2>What each tab contains</h2>
+<table>
+  <thead><tr><th>Tab</th><th>Contents</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Start here</strong></td><td>This landing page.</td><td>Reference</td></tr>
+    <tr><td><strong>Architecture</strong></td><td>System design, services, tech stack, data sources, site map, where every account and machine lives.</td><td>Reference</td></tr>
+    <tr><td><strong>Methodology</strong></td><td>Engineering standards: the six rules, the three-gate deploy verification rubric, doc registration protocol.</td><td>Reference</td></tr>
+    <tr><td><strong>Permissions</strong></td><td>Role taxonomy, permission system, audience gates, who can do what.</td><td>Reference</td></tr>
+    <tr><td><strong>Operations</strong></td><td>Operational runbook: session start, session closeout, manager workflows, recurring procedures.</td><td>Reference</td></tr>
+    <tr><td><strong>Phase 2 Roadmap</strong></td><td>Master direction for the current build cycle.</td><td>Active</td></tr>
+    <tr><td><strong>Cena Surface</strong></td><td>The Sam-only AI assistant: tunnel topology, tool surface, audit, escalation.</td><td>Active</td></tr>
+    <tr><td><strong>Block 1 — Foundation</strong></td><td>Foundation features that shipped: role taxonomy, scheduled events, task system, ribbon component + router, sales insights, team tab, pay masking, ambient signal.</td><td>Shipped</td></tr>
+    <tr><td><strong>Block 2 — Manager Tools</strong></td><td>Manager-facing tools (recipe page; more spec slots open as work begins).</td><td>Partial</td></tr>
+    <tr><td><strong>Integrations</strong></td><td>External-API specs: EZCater, Toast, anomaly engine, morning brief composer + calibration runbook.</td><td>Reference</td></tr>
+  </tbody>
+</table>
+
+<h2>Status conventions</h2>
+<ul>
+  <li><strong>Active</strong> — work currently in progress; subject to change.</li>
+  <li><strong>Shipped</strong> — code shipped and verified; amend only via formal spec amendment.</li>
+  <li><strong>Reference</strong> — long-lived operational doc; updated as state changes.</li>
+  <li><strong>Draft</strong> — spec authored, implementation not yet started.</li>
+</ul>
+
+<h2>Editing protocol</h2>
+<p>This Docs surface is read-only at runtime. Content updates ship via git commit + Render auto-deploy, never via an in-app edit form. Secrets (tokens, passwords, GUIDs) are never recorded here — they are referenced by env-var name or secrets-file path only. Credential locations live on the <strong>Pass</strong> tab, not here.</p>

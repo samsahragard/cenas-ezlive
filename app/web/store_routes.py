@@ -4343,6 +4343,10 @@ _TODAY_DASH_TABS = [
     ("agents",        "Agents"),
     ("page-info",     "Page Info"),
     ("pass",          "Pass"),
+    # Sam #240 (2026-05-23): consolidated docs surface — the prior
+    # /partner/developer/app/* sidebar section is slated for full
+    # removal (Sam #241) and this Docs tab is its replacement.
+    ("docs",          "Docs"),
 ]
 
 
@@ -4377,6 +4381,8 @@ def _today_dash_full_url(tab_key):
         return "/partner/developer/app/page-guide"
     if tab_key == "pass":
         return "/sam/pass"
+    if tab_key == "docs":
+        return "/sam/docs"
     return url_for("store.home")
 
 
@@ -4403,7 +4409,7 @@ def today_dashboard():
     # Build the visible tab set, applying the same audience gates the
     # Today section's sidebar entries use.
     dash_tabs = []
-    _SAM_ONLY_KEYS = {"cena", "cena-dev", "agents", "pass"}
+    _SAM_ONLY_KEYS = {"cena", "cena-dev", "agents", "pass", "docs"}
     for key, caption in _TODAY_DASH_TABS:
         if key == "task-reports":
             try:

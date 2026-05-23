@@ -1,0 +1,323 @@
+{# ============================================================
+   sam_agents.html — Agents tab (Sam directive #200, Cena owner).
+   Roster of every agent on the system: who they are, what they do,
+   where they run, and their starting docs.
+
+   Iframed by today_dashboard.html (key="agents"); the today dashboard
+   strips this page's base_dashboard chrome on load.
+
+   Hard-gated to Sam at the route (/sam/agents via sam_chat.py);
+   internal-only surface.
+
+   Ownership: Sam #188 named ck initially; Cena claimed in hub #189
+   and Sam moved on without redirecting, implicitly confirming Cena
+   as the owner. This is a first-pass placeholder draft assembled
+   from team hub posts (aick #194-195, ck #197, samai #198, cena
+   #192). Cena will refine + finalize the content in a follow-up
+   push — the route + template + iframe wiring are stable.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'sam_agents' %}
+
+{% block title %}Agents — Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar — the page draws its own ribbon header. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every selector scoped under .ckagents so the warm palette never
+     leaks into the global sheet. Comments here never contain a
+     slash-star pair. */
+  .ckagents-frame { max-width: 1240px; margin: 0 auto;
+    padding: 28px 28px 80px;
+    background: #1a0d08;
+    background-image:
+      radial-gradient(circle at 80% 0%, rgba(228,179,64,0.06), transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(199,59,54,0.05), transparent 50%);
+    min-height: 100vh;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: #FAF6EC; }
+  .ckagents-frame * { box-sizing: border-box; }
+  .ckagents-frame .frame-top { display: flex; align-items: center; gap: 14px;
+    padding: 0 4px 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18); margin-bottom: 22px; }
+  .ckagents-frame .frame-mark { font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+    color: #E4B340; background: rgba(228,179,64,0.1);
+    border: 0.5px solid rgba(228,179,64,0.3);
+    padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
+  .ckagents-frame .frame-bread { font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: rgba(250,246,236,0.52); letter-spacing: 0.04em; }
+  .ckagents-frame .frame-bread b { color: rgba(250,246,236,0.82); font-weight: 700; }
+  .ckagents-frame .frame-title-block { padding: 0 4px 18px; }
+  .ckagents-frame .frame-title { font-size: 28px; font-weight: 800; margin: 0; }
+  .ckagents-frame .frame-subtitle { font-size: 13px;
+    color: rgba(250,246,236,0.52); margin: 4px 0 0; }
+  .ckagents-frame .owner-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 6px;
+    background: rgba(46,163,159,0.12); border: 0.5px solid rgba(91,202,197,0.4);
+    color: rgba(91,202,197,0.95); font-size: 11px; font-style: italic;
+    font-family: 'JetBrains Mono', monospace; margin-bottom: 18px;
+  }
+  .ckagents-frame .owner-banner b { color: #5BCAC5; }
+
+  .ckagents-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    margin-top: 8px;
+  }
+  .ckagents-card {
+    background: #1f1308; border: 1px solid rgba(217,164,54,0.22);
+    border-radius: 14px; padding: 18px 20px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .ckagents-card .head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding-bottom: 8px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18);
+  }
+  .ckagents-card .name {
+    font-size: 18px; font-weight: 800; color: #FFD970;
+    letter-spacing: 0.02em;
+  }
+  .ckagents-card .role {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: rgba(250,246,236,0.6); letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .ckagents-card dl { margin: 0; display: grid; gap: 6px; }
+  .ckagents-card dt { font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: rgba(228,179,64,0.85);
+    margin-top: 4px; }
+  .ckagents-card dd { margin: 0; font-size: 12px;
+    color: rgba(250,246,236,0.86); line-height: 1.5; }
+  .ckagents-card dd code, .ckagents-card .path {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: #5BCAC5;
+  }
+  .ckagents-card .docs li { font-size: 12px;
+    color: rgba(250,246,236,0.78); line-height: 1.45; }
+  .ckagents-card .docs li code { font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: #5BCAC5; }
+  .ckagents-card .status-chip {
+    margin-left: auto;
+    display: inline-block; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    background: rgba(228,179,64,0.18); color: #FFD970;
+    border: 0.5px solid rgba(255,217,112,0.4);
+  }
+  .ckagents-card .status-chip.live { background: rgba(46,163,159,0.18);
+    color: #5BCAC5; border-color: rgba(91,202,197,0.4); }
+  .ckagents-card .status-chip.standby { background: rgba(232,88,82,0.18);
+    color: #E85852; border-color: rgba(232,88,82,0.4); }
+  .ckagents-card .status-chip.human { background: rgba(199,59,54,0.18);
+    color: #E85852; border-color: rgba(232,88,82,0.4); }
+
+  @media (max-width: 760px) {
+    .ckagents-frame { padding: 18px 14px 60px; }
+    .ckagents-grid { grid-template-columns: 1fr; }
+    .ckagents-card { padding: 14px 14px 16px; }
+  }
+</style>
+
+<div class="ckagents-frame">
+
+  <div class="frame-top">
+    <span class="frame-mark">Cena · Agents</span>
+    <span class="frame-bread">Cena &nbsp;/&nbsp; <b>Agents</b></span>
+  </div>
+
+  <div class="frame-title-block">
+    <h1 class="frame-title">Agents</h1>
+    <p class="frame-subtitle">Who's on the team, what they do, where they run, and their starting docs.</p>
+  </div>
+
+  <div class="owner-banner">
+    <span><b>Owner:</b> Cena</span>
+    <span>·</span>
+    <span>First-pass draft assembled from team hub posts. Cena will refine and finalize.</span>
+  </div>
+
+  <div class="ckagents-grid">
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">Cena</span>
+        <span class="role">Chief of Staff · Agentic runtime</span>
+        <span class="status-chip live">Live</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Sam's chief-of-staff and the live agentic runtime that owns the cross-team work queue. Drives the Sam ↔ Cena private chat, sees the team hub (FEED / TOGGLE / PING), pings on new messages, and pursues work through Sam's disconnects.</dd>
+        <dt>Where it runs</dt>
+        <dd>Primary: <code>cena_gateway.py</code> on <b>AiCk</b> (Tailscale: <code>100.108.119.19:8765</code>) + Cloudflare-tunneled externally. Peer: <code>cena2_gateway.py</code> on <b>Mini_IT13</b> (Tailscale-only). Phase 2 cross-gateway sync wires the two together.</dd>
+        <dt>Backbone</dt>
+        <dd>Anthropic API (Opus/Sonnet) with the 21-tool catalogue, 10-round tool-use loop, ephemeral cache (1h TTL). Multimodal — image + document + text blocks.</dd>
+        <dt>Starting docs</dt>
+        <dd>
+          <ul class="docs">
+            <li><code>C:\Users\sam\cena\cena_tool.md</code> — full tool catalogue (will list agent_restart once dropped per Sam #166)</li>
+            <li><code>C:\Users\sam\cena\cena_gateway.py</code> — runtime, /cena/stream, /cena/wake-on-* endpoints</li>
+            <li><code>C:\Users\sam\cena\cena_sam_chat.py</code> — private Sam ↔ Cena chat server, persists through disconnects</li>
+            <li>Phase 2 cross-gateway spec — message queue + worker + sync</li>
+          </ul>
+        </dd>
+        <dt>Authority</dt>
+        <dd>Sam authorized Cena to direct aick / ck / samai (per <code>feedback_cena_authority.md</code>). Destructive / irreversible actions still need Sam's explicit go.</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">aick</span>
+        <span class="role">Backend engineer · Flask app</span>
+        <span class="status-chip live">Live</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Owns the cenas-ezlive Flask backend: routes, DB layer, models, services, partner-side surfaces (developer chat, developer docs, page guide). Pushes to <code>origin/main</code> direct (default), Render auto-deploys.</dd>
+        <dt>Where it runs</dt>
+        <dd>Anthropic Console + Claude Code on <b>AiCk</b> (hostname <code>Mini_IT12</code>). Working tree at <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code>.</dd>
+        <dt>Starting docs</dt>
+        <dd>
+          <ul class="docs">
+            <li><code>~/.claude/CLAUDE.md</code> on AiCk — operating memory</li>
+            <li>Project structure under <code>app/web/</code>, <code>app/services/</code>, <code>app/templates/</code></li>
+            <li>The page-guide at <code>/partner/developer/app/page-guide</code> (refreshed 2026-05-23, commit ab5a7e4)</li>
+          </ul>
+        </dd>
+        <dt>Coordination</dt>
+        <dd>Reachable on the LAN hub as <b>aick</b>; dev chat as the same. ck announces pushes in dev chat so aick + ck never push the same thing concurrently (hybrid push authority, 2026-05-20).</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">ck</span>
+        <span class="role">Frontend / pages / cross-machine glue</span>
+        <span class="status-chip live">Live</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Owns frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, cena_hub_relay), and the Sam-facing tabs on the Cena page (Pass, Agents). Cross-reviewer for aick (gate-2 / gate-3 for COI cases per Cena #114 takeover).</dd>
+        <dt>Where it runs</dt>
+        <dd>Anthropic Console + Claude Code on <b>Mini_IT13</b> (hostname <code>Mini_IT13</code>). SSH alias <code>ssh aick</code> available. Working trees in <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code> + <code>C:\Users\sam\cenas-chat-hub\</code>.</dd>
+        <dt>Starting docs</dt>
+        <dd>
+          <ul class="docs">
+            <li><code>~/.claude/projects/C--/memory/MEMORY.md</code> on Mini_IT13 — operating memory</li>
+            <li>Hub: <code>C:\Users\sam\cenas-chat-hub\hub.py</code> + <code>chat_ui.html</code> + <code>lanchat.py</code> + <code>bridge.py</code> + <code>cena_hub_relay.py</code></li>
+            <li>Standing feedback memos under <code>~/.claude/projects/C--/memory/feedback_*.md</code></li>
+          </ul>
+        </dd>
+        <dt>Push authority</dt>
+        <dd>Direct git push via SSH deploy key on AiCk. Announces every push in dev chat per Sam's standing rule (2026-05-20).</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">dck</span>
+        <span class="role">Secondary agent on AiCk</span>
+        <span class="status-chip standby">Standby</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Second Claude session on AiCk (separate Windows user). Used for parallel / overflow work without contending with aick on the same working tree. Subject to the agent_restart permission gate — only Cena can restart dck, and ONLY with Sam's per-call "approve restart dck" in <code>cena_sam_chat</code> (Cena directive #166, single-use, no standing grant).</dd>
+        <dt>Where it runs</dt>
+        <dd>Claude Code on <b>AiCk</b> under the <code>dck</code> Windows user.</dd>
+        <dt>Starting docs</dt>
+        <dd>
+          <ul class="docs">
+            <li>dck's own <code>~/.claude/CLAUDE.md</code> on AiCk (under the dck home)</li>
+            <li>Restart wiring: <code>C:\Users\sam\cena\agent_restart.py</code> + <code>agent_restart.json</code> (Sam to drop with dck's launch_cmd)</li>
+          </ul>
+        </dd>
+        <dt>Restart policy</dt>
+        <dd>Per Cena directive #166: requires Sam's explicit per-call permission. No standing grant. Every invocation = fresh ask.</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">samai</span>
+        <span class="role">Document parser · Roaming</span>
+        <span class="status-chip">Not always available</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Roaming parser / extractor: WebstaurantStore equipment + warranty emails, document parsing surfaces. Previously held gate-2 / gate-3 review until Cena directive #114 reassigned to ck. Not always available — others cover when samai is offline.</dd>
+        <dt>Where it runs</dt>
+        <dd>Anthropic Console (roaming; not pinned to a single machine).</dd>
+        <dt>Starting docs</dt>
+        <dd>
+          <ul class="docs">
+            <li>WebstaurantStore email-ingest spec (samai #65)</li>
+            <li>Three-gate review rubric (gate-1 build verify / gate-2 code review / gate-3 live verify) — handed to ck per Cena #114</li>
+          </ul>
+        </dd>
+        <dt>Coordination</dt>
+        <dd>Reachable in dev chat when online. Cena pings if a samai task is needed during a Sam disconnect.</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">Sam</span>
+        <span class="role">Owner · Cenas Kitchen operator</span>
+        <span class="status-chip human">Human</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Operator. Runs the two-bot AiCk + CK system on OpenClaw. Authorizes pushes, destructive actions, agent_restart calls, and authoritative changes. Hard-gated as the only user of <code>/sam/chat</code> + <code>/sam/combined</code> + <code>/sam/agents</code> + <code>/sam/pass</code> via the SAM_CHAT_USER_ID env var match.</dd>
+        <dt>Channels</dt>
+        <dd>WhatsApp (silent observer per standing rule), <code>/sam/chat</code> online, <code>cena_sam_chat</code> local, dev chat (rare), LAN hub (when at the machine).</dd>
+        <dt>Standing rules</dt>
+        <dd>Documented in <code>feedback_*.md</code> memos under ck's MEMORY.md and aick's CLAUDE.md.</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">Masood</span>
+        <span class="role">Partner · Roving operator</span>
+        <span class="status-chip human">Human</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Partner-side operator. Holds the manager keypad-login for both stores, surfaces in the partner dashboard, and is the second authorized user of <code>/sam/chat</code> (§7A approval-gate). All change-requests from Masood escalate to Sam first per the standing approval gate (<code>feedback_masood_approval_gate.md</code>).</dd>
+        <dt>Channels</dt>
+        <dd>Dev chat, partner dashboard, /sam/chat (per §7A).</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">Cena</span>
+        <span class="role">Cenas Kitchen owner · Restaurant operator</span>
+        <span class="status-chip human">Human</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Restaurant owner. Authority on the team (per <code>feedback_cena_authority.md</code>): Cena directs aick / ck / samai with Sam-equivalent weight; destructive / irreversible actions still need Sam's explicit go.</dd>
+        <dt>Channels</dt>
+        <dd>LAN team hub (migrated 2026-05-22); reachable as <b>@cena</b> in the hub.</dd>
+        <dt>Note</dt>
+        <dd>The runtime agent above is also named "Cena" — distinct entities: this row is the human restaurant owner, the first row is Sam's chief-of-staff agent.</dd>
+      </dl>
+    </article>
+
+  </div>
+
+</div>
+{% endblock %}

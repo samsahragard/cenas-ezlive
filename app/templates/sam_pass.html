@@ -1,0 +1,400 @@
+{# ============================================================
+   sam_pass.html — Pass tab (Sam directive #200, ck owner).
+   Credentials & Connections index: every login, API token, and
+   communication channel + WHERE the secret lives. NEVER the secret
+   itself; the page is LOCATIONS-only by design.
+
+   Iframed by today_dashboard.html (key="pass"); the today dashboard
+   strips this page's base_dashboard chrome on load, so the surface
+   reads as a flush in-tab panel.
+
+   Hard-gated to Sam at the route (/sam/pass via sam_chat.py); the
+   destination page also enforces is_sam_chat_user via the same
+   _require_sam_page() helper.
+
+   Inventory folds aick #42 (25 files in LOCATION 1) + aick #204
+   (the LOCATION 2 sweep, 6 unique on top) + the standing
+   1Password-as-canonical migration target. Every TBD row is a place
+   to fill in once aick / Sam confirm.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'sam_pass' %}
+
+{% block title %}Pass — Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar — the page draws its own ribbon header. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Pass tab — sample preview pattern, every selector scoped under
+     .ckpass-frame so the warm Cenas palette never leaks into the
+     global sheet. Comments here never contain a slash-star pair. */
+  .ckpass-frame { max-width: 1240px; margin: 0 auto; padding: 28px 28px 80px;
+    background: #1a0d08;
+    background-image:
+      radial-gradient(circle at 80% 0%, rgba(228,179,64,0.06), transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(199,59,54,0.05), transparent 50%);
+    min-height: 100vh;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: #FAF6EC; }
+  .ckpass-frame * { box-sizing: border-box; }
+  .ckpass-frame .frame-top { display: flex; align-items: center; gap: 14px;
+    padding: 0 4px 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18); margin-bottom: 22px; }
+  .ckpass-frame .frame-mark { font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+    color: #E4B340; background: rgba(228,179,64,0.1);
+    border: 0.5px solid rgba(228,179,64,0.3);
+    padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
+  .ckpass-frame .frame-bread { font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: rgba(250,246,236,0.52); letter-spacing: 0.04em; }
+  .ckpass-frame .frame-bread b { color: rgba(250,246,236,0.82); font-weight: 700; }
+  .ckpass-frame .frame-title-block { padding: 0 4px 18px; }
+  .ckpass-frame .frame-title { font-size: 28px; font-weight: 800; margin: 0; }
+  .ckpass-frame .frame-subtitle { font-size: 13px;
+    color: rgba(250,246,236,0.52); margin: 4px 0 0; }
+
+  .ckpass-page {
+    --ck-red: #C73B36; --ck-red-bright: #E85852;
+    --ck-gold: #E4B340; --ck-gold-bright: #FFD970;
+    --ck-teal: #2EA39F; --ck-teal-bright: #5BCAC5;
+    --ck-cream: #FAF6EC;
+    --ck-cream-dim: rgba(250,246,236,0.82);
+    --ck-cream-faint: rgba(250,246,236,0.52);
+    --ck-border-subtle: rgba(217,164,54,0.18);
+    background: #1f1308; border: 1px solid var(--ck-border-subtle);
+    border-radius: 16px; padding: 18px 22px 30px;
+    color: var(--ck-cream);
+  }
+  .ckpass-page .intro {
+    font-size: 12px; color: var(--ck-cream-faint); font-style: italic;
+    line-height: 1.5; margin: 0 0 18px; max-width: 800px;
+  }
+  .ckpass-page .intro b { color: var(--ck-gold); font-style: normal; }
+  .ckpass-page section { margin-top: 24px; }
+  .ckpass-page h2 {
+    font-size: 14px; font-weight: 700; color: var(--ck-gold);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0 0 10px; padding: 8px 12px;
+    background: rgba(0,0,0,0.25);
+    border: 0.5px solid var(--ck-border-subtle);
+    border-radius: 8px 8px 0 0;
+  }
+  .ckpass-page table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    background: rgba(0,0,0,0.15);
+    border: 0.5px solid var(--ck-border-subtle); border-top: none;
+    border-radius: 0 0 8px 8px;
+  }
+  .ckpass-page th, .ckpass-page td {
+    text-align: left; padding: 8px 12px; vertical-align: top;
+    border-top: 0.5px solid rgba(217,164,54,0.08);
+  }
+  .ckpass-page th {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ck-cream-faint); background: rgba(0,0,0,0.18);
+    border-top: 0;
+  }
+  .ckpass-page td.svc { font-weight: 700; color: var(--ck-cream); }
+  .ckpass-page td.path {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ck-teal-bright);
+  }
+  .ckpass-page .path {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ck-teal-bright);
+  }
+  .ckpass-page .tag {
+    display: inline-block; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    background: rgba(228,179,64,0.18); color: var(--ck-gold-bright);
+    border: 0.5px solid rgba(255,217,112,0.4);
+  }
+  .ckpass-page .tag.tbd { background: rgba(232,88,82,0.18);
+    color: var(--ck-red-bright); border-color: rgba(232,88,82,0.4); }
+  .ckpass-page .tag.onepw { background: rgba(46,163,159,0.18);
+    color: var(--ck-teal-bright); border-color: rgba(91,202,197,0.4); }
+  .ckpass-page .tag.envvar { background: rgba(228,179,64,0.10);
+    color: var(--ck-gold); }
+  .ckpass-page .note {
+    font-size: 11px; color: var(--ck-cream-faint);
+    margin: 6px 0 0; font-style: italic;
+  }
+
+  @media (max-width: 760px) {
+    .ckpass-frame { padding: 18px 14px 60px; }
+    .ckpass-page { padding: 14px 12px 24px; }
+    .ckpass-page table { font-size: 11px; }
+    .ckpass-page th, .ckpass-page td { padding: 6px 8px; }
+  }
+</style>
+
+<div class="ckpass-frame">
+
+  <div class="frame-top">
+    <span class="frame-mark">Cena · Pass</span>
+    <span class="frame-bread">Cena &nbsp;/&nbsp; <b>Pass</b></span>
+  </div>
+
+  <div class="frame-title-block">
+    <h1 class="frame-title">Pass</h1>
+    <p class="frame-subtitle">Credentials &amp; Connections — LOCATIONS only (no values).
+      Per Sam: never the password itself — just where it lives.</p>
+  </div>
+
+  <div class="ckpass-page">
+
+    <p class="intro">
+      Tag legend:
+      <span class="tag onepw">1Password</span> = stored in Sam's 1Password vault (the canonical store going forward, via the 1Password CLI — op_account + op_secret_key on AiCk).
+      <span class="tag envvar">env</span> = Render environment variable.
+      <span class="tag tbd">TBD</span> = we have it but the location is not documented yet.
+      Plain monospace paths (cyan) = local file on the machine listed.
+      <b>Never put the actual password / key value in this table.</b>
+    </p>
+    <p class="intro">
+      <b>On-disk credential stores (AiCk):</b>
+      <span class="path">~/.openclaw/.secrets/</span> = LOCATION 1, legacy, 25 files, will disappear when OpenClaw uninstall (Track 5) closes.
+      <span class="path">C:\Users\sam\cena\.secrets\</span> = LOCATION 2, the cena gateway lane, current; 31 files (all 25 from L1 + 6 unique: gemini_api_key, cena2_anthropic_key, op_account, op_secret_key, peers.json, 1Password Emergency Kit PDF).
+      Migration target = LOCATION 2 + 1Password via op-cli; LOCATION 1 deprecates.
+    </p>
+
+    <section>
+    <h2>1. Websites &amp; Logins</h2>
+    <table>
+      <thead><tr>
+        <th>Service</th><th>What it does</th><th>Username</th><th>Password location</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="svc">WebstaurantStore</td>
+            <td>Restaurant equipment + supplies vendor; orders, warranty registration, invoices.</td>
+            <td>orders@cenaskitchen.com</td>
+            <td><span class="tag onepw">1Password</span> <span class="tag tbd">TBD if not</span></td></tr>
+        <tr><td class="svc">Toast</td>
+            <td>POS + reporting (sales / labor / menu).</td>
+            <td>TBD</td>
+            <td><span class="tag onepw">1Password</span> + client secret at <span class="path">~/.openclaw/.secrets/toast_client_secret.txt</span> (AiCk)</td></tr>
+        <tr><td class="svc">Sling</td>
+            <td>Scheduling + shift management.</td>
+            <td>TBD</td>
+            <td><span class="tag onepw">1Password</span></td></tr>
+        <tr><td class="svc">EZCater</td>
+            <td>Catering order intake; webhooks + API ingest.</td>
+            <td>TBD</td>
+            <td><span class="tag onepw">1Password</span> + API key at <span class="path">~/.openclaw/.secrets/ezcater_api_key.txt</span> (AiCk, TBD if path differs)</td></tr>
+        <tr><td class="svc">Render</td>
+            <td>Hosts the cenas-ezlive Flask app (app.cenaskitchen.com).</td>
+            <td>Sam's account</td>
+            <td><span class="tag onepw">1Password</span></td></tr>
+        <tr><td class="svc">Cloudflare</td>
+            <td>DNS for cenaskitchen.com + the Tunnel that exposes AiCk's Cena gateway.</td>
+            <td>Sam's account</td>
+            <td><span class="tag onepw">1Password</span> + API token at <span class="path">~/.openclaw/.secrets/cloudflare_api_token.txt</span> (AiCk, confirm name)</td></tr>
+        <tr><td class="svc">Tailscale</td>
+            <td>Private mesh VPN (AiCk + Mini_IT13 + Sam's phone + Render tailscaled).</td>
+            <td>Sam's account</td>
+            <td><span class="tag onepw">1Password</span> + Render authkey at <span class="path">~/.openclaw/.secrets/tailscale_render_authkey.txt</span> (AiCk, confirm name)</td></tr>
+        <tr><td class="svc">GitHub (samsahragard/cenas-ezlive)</td>
+            <td>Source control; push triggers Render auto-deploy.</td>
+            <td>n/a (SSH deploy key)</td>
+            <td>Deploy key on AiCk at <span class="path">~/.ssh/id_*</span> (AiCk; same key used by ck via the ssh aick alias)</td></tr>
+        <tr><td class="svc">Anthropic Console</td>
+            <td>API key management + usage billing.</td>
+            <td>Sam's account</td>
+            <td><span class="tag onepw">1Password</span> + active key at <span class="path">~/.openclaw/.secrets/anthropic_api_key.txt</span> (Mini_IT13 + AiCk) + <span class="tag envvar">Render ANTHROPIC_API_KEY</span></td></tr>
+        <tr><td class="svc">Google Workspace</td>
+            <td>Email + Drive (TBD which workspace and which accounts; samai parses some email surfaces).</td>
+            <td>TBD</td>
+            <td><span class="tag onepw">1Password</span></td></tr>
+        <tr><td class="svc">Sentry</td>
+            <td>Error monitoring (cenas-ezlive Flask app).</td>
+            <td>Sam's account</td>
+            <td>DSN at <span class="path">~/.openclaw/.secrets/sentry_dsn.txt</span> (AiCk, confirm name) + <span class="tag envvar">Render SENTRY_DSN</span></td></tr>
+        <tr><td class="svc">Performance Foodservice (PFG)</td>
+            <td>Wholesale food vendor; email-only operations (no web login surface in use).</td>
+            <td>orders@cenaskitchen.com</td>
+            <td>n/a (no web login — email channel only)</td></tr>
+        <tr><td class="svc">Restaurant Depot</td>
+            <td>Wholesale food vendor; email-only operations.</td>
+            <td>orders@cenaskitchen.com</td>
+            <td>n/a (no web login — email channel only)</td></tr>
+        <tr><td class="svc">Spec's / Provi</td>
+            <td>Wine + beverage vendor; email-only operations.</td>
+            <td>orders@cenaskitchen.com</td>
+            <td>n/a (no web login — email channel only)</td></tr>
+        <tr><td class="svc">app.cenaskitchen.com (site itself)</td>
+            <td>Our partner-facing dashboard (Render-hosted).</td>
+            <td>Sam (keypad-authed for /sam/chat; Partner-password gate for /partner/*)</td>
+            <td>Site password EZLIVE_PASSWORD at <span class="tag envvar">Render</span>; Partner password rotates — <span class="path">~/.openclaw/.secrets/partner_password.txt</span> on AiCk + Mini_IT13</td></tr>
+      </tbody>
+    </table>
+    </section>
+
+    <section>
+    <h2>2. APIs &amp; Tokens</h2>
+    <table>
+      <thead><tr>
+        <th>API / Token</th><th>What it does</th><th>Key location</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="svc">ANTHROPIC_API_KEY</td>
+            <td>Powers Cena (Opus/Sonnet) + sam_chat + cena_gateway worker.</td>
+            <td><span class="path">~/.openclaw/.secrets/anthropic_api_key.txt</span> (AiCk + Mini_IT13) + <span class="tag envvar">Render ANTHROPIC_API_KEY</span></td></tr>
+        <tr><td class="svc">GOOGLE_API_KEY</td>
+            <td>Gemini direct calls from /sam/chat when Sam picks Gemini.</td>
+            <td><span class="path">~/.openclaw/.secrets/google_api_key.txt</span> (AiCk + Mini_IT13) + <span class="tag envvar">Render GEMINI_API_KEY</span></td></tr>
+        <tr><td class="svc">Toast Analytics (client_id + client_secret + render env)</td>
+            <td>Sales / labor / menu reports pulled into Operations dashboards via the Toast Analytics OAuth API.</td>
+            <td>Three files on AiCk LOCATION 2: <span class="path">C:\Users\sam\cena\.secrets\toast_analytics_client_id.txt</span> + <span class="path">toast_analytics_client_secret.txt</span> + <span class="path">toast_render_env.txt</span> (pre-formatted env block for Render). Same files in LOCATION 1. Also <span class="tag envvar">Render TOAST_CLIENT_ID / TOAST_CLIENT_SECRET</span>.</td></tr>
+        <tr><td class="svc">Cloudflare API token</td>
+            <td>DNS + Tunnel management for the Cena gateway exposure.</td>
+            <td><span class="path">~/.openclaw/.secrets/cloudflare_api_token.txt</span> (AiCk, confirm name)</td></tr>
+        <tr><td class="svc">EZCater API key</td>
+            <td>Catering order webhooks + history ingest.</td>
+            <td><span class="path">~/.openclaw/.secrets/ezcater_api_key.txt</span> (AiCk, confirm name) + IMAP password at <span class="path">~/.openclaw/.secrets/ezcater_imap_pwd.txt</span> (AiCk)</td></tr>
+        <tr><td class="svc">Sling API</td>
+            <td>Scheduling + shift API for the labor pipeline.</td>
+            <td><span class="path">~/.openclaw/.secrets/sling_api_key.txt</span> (AiCk, confirm name)</td></tr>
+        <tr><td class="svc">Sentry DSN</td>
+            <td>Error reporting endpoint for the Flask app.</td>
+            <td><span class="path">~/.openclaw/.secrets/sentry_dsn.txt</span> (AiCk, confirm name) + <span class="tag envvar">Render SENTRY_DSN</span></td></tr>
+        <tr><td class="svc">Tailscale Render authkey</td>
+            <td>Render's userspace tailscaled connects to the Cena gateway over Tailscale.</td>
+            <td><span class="path">~/.openclaw/.secrets/tailscale_render_authkey.txt</span> (AiCk, confirm name)</td></tr>
+        <tr><td class="svc">Render API key (cena_render_api_key.txt + render_api_key.txt)</td>
+            <td>Cena's render_env_get / render_env_set / render_deploy tools. Two keys: a Cena-dedicated key (primary) and aick's legacy key (fallback).</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\cena_render_api_key.txt</span> (primary, Cena lane) + <span class="path">render_api_key.txt</span> (legacy fallback). Same in LOCATION 1.</td></tr>
+        <tr><td class="svc">GEMINI_API_KEY</td>
+            <td>Google Gemini model option in /sam/chat (when Sam picks Gemini in the model picker the gateway is bypassed and the API is called directly).</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\gemini_api_key.txt</span> (AiCk LOCATION 2 unique) + <span class="path">google_api_key.txt</span> for Maps + <span class="tag envvar">Render GEMINI_API_KEY</span></td></tr>
+        <tr><td class="svc">cena2_anthropic_key</td>
+            <td>Dedicated Anthropic key for the cena2 peer gateway (on Mini_IT13). Keeps the peer's spend separate from the main Cena gateway.</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\cena2_anthropic_key.txt</span> (AiCk LOCATION 2 unique) + same file at <span class="path">C:\Users\sam\cena2\.secrets\anthropic_key.txt</span> on Mini_IT13 (cena2's own copy)</td></tr>
+        <tr><td class="svc">1Password CLI account (op_account + op_secret_key)</td>
+            <td><b>The CANONICAL credential store going forward.</b> op_account.txt is the 1Password CLI account config; op_secret_key.txt is the secret key for op-cli authentication. Migration target: LOCATION 1 (.openclaw/.secrets/) disappears once OpenClaw uninstall (Track 5) closes; LOCATION 2 + 1Password via op-cli is the durable home.</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\op_account.txt</span> + <span class="path">op_secret_key.txt</span> (AiCk LOCATION 2 unique)</td></tr>
+        <tr><td class="svc"><span style="color:var(--ck-red-bright);">1Password Emergency Kit (HIGHLY SENSITIVE)</span></td>
+            <td><b>Sam's 1Password recovery document.</b> Holds the master password + secret key needed to recover access if Sam loses his account. If this leaks, the entire credential store is compromised.</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\1Password Emergency Kit A3-A2ZBHH-my.pdf</span> (AiCk LOCATION 2 unique). Should also be in a physical safe + a non-AiCk offline backup; <span class="tag tbd">confirm offline backup</span>.</td></tr>
+        <tr><td class="svc">cena2 + aick peer registry</td>
+            <td>Not a secret per se — the peer-SDK auth wiring config that lists the cena2 ↔ aick gateway peers + their tokens. Sensitive because it contains the per-peer auth tokens.</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\peers.json</span> (AiCk LOCATION 2 unique) + similar config at <span class="path">C:\Users\sam\cena2\cena2_config.json</span> on Mini_IT13</td></tr>
+        <tr><td class="svc">Twilio SID + auth token</td>
+            <td>SMS notification surface (planned).</td>
+            <td><span class="tag tbd">TBD</span> (1Password TBD per aick #42 audit; not yet provisioned)</td></tr>
+        <tr><td class="svc">OpenWeatherMap API key</td>
+            <td>Weather context (planned).</td>
+            <td><span class="tag tbd">TBD</span> (1Password TBD per aick #42 audit; not yet provisioned)</td></tr>
+        <tr><td class="svc">ck Telegram bot token</td>
+            <td>Sam ↔ ck Telegram bridge (ck side).</td>
+            <td><span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> (Mini_IT13)</td></tr>
+        <tr><td class="svc">dck Telegram bot token</td>
+            <td>Sam ↔ dck Telegram bridge (dck side, when wired).</td>
+            <td><span class="tag tbd">TBD</span></td></tr>
+        <tr><td class="svc">CENA_GATEWAY_TOKEN (X-Cena-Token)</td>
+            <td>Auth between /sam/chat ↔ cena_gateway and other gateway endpoints.</td>
+            <td><span class="path">C:\Users\sam\cena\cena_token.txt</span> (AiCk) + <span class="tag envvar">Render CENA_GATEWAY_TOKEN</span></td></tr>
+        <tr><td class="svc">cena_sam_chat token (X-Auth-Token)</td>
+            <td>Auth for the local Sam–Cena chat at aick:8770; gateway uses it for the wake loop.</td>
+            <td><span class="path">C:\Users\sam\cena\cena_sam_chat_token.txt</span> (AiCk; generated 2026-05-23)</td></tr>
+        <tr><td class="svc">Cena2 gateway token</td>
+            <td>Token-gates cena2 endpoints on Mini_IT13 (Tailscale-only).</td>
+            <td><span class="path">C:\Users\sam\cena2\cena2_token.txt</span> (Mini_IT13)</td></tr>
+        <tr><td class="svc">SECRET_KEY (Flask session)</td>
+            <td>Flask session-cookie signing key on cenas-ezlive.</td>
+            <td><span class="tag envvar">Render SECRET_KEY</span> — also <span class="tag tbd">1Password TBD</span> per aick #42</td></tr>
+        <tr><td class="svc">MANAGER_PASSWORD_COPPERFIELD / _TOMBALL</td>
+            <td>Manager keypad-login pins for the two stores.</td>
+            <td><span class="tag envvar">Render MANAGER_PASSWORD_*</span> — <span class="tag tbd">1Password TBD</span> per aick #42</td></tr>
+        <tr><td class="svc">CORPORATE_PASSWORD + CORPORATE_DB_URL</td>
+            <td>Corporate / payroll connection (DB URL is the connection string; password is the keypad-login for the corporate role).</td>
+            <td><span class="tag envvar">Render</span> — <span class="tag tbd">1Password TBD</span> per aick #42</td></tr>
+        <tr><td class="svc">Android signing keystore + passwords</td>
+            <td>Signs the Cenas mobile (driver) APK uploaded to the Play Store.</td>
+            <td>Five files on AiCk (LOCATION 2 — cena lane): <span class="path">C:\Users\sam\cena\.secrets\android_upload_keystore.jks</span> (the keystore binary) + <span class="path">android_key_alias.txt</span> + <span class="path">android_key_password.txt</span> (password to the key INSIDE the keystore) + <span class="path">android_keystore_password.txt</span> (password to the keystore FILE itself) + <span class="path">android_keystore_b64.txt</span> (base64 of the keystore for CI). Same files also in LOCATION 1 (legacy ~/.openclaw/.secrets/).</td></tr>
+        <tr><td class="svc">ingest_token + cron_token + site_review_creds</td>
+            <td>Internal tokens for the ingest pipelines + scheduled jobs + site-review automation.</td>
+            <td><span class="path">~/.openclaw/.secrets/ingest_token.txt + cron_token.txt + site_review_creds.txt</span> (AiCk + Mini_IT13 has site_review_creds locally too)</td></tr>
+      </tbody>
+    </table>
+    </section>
+
+    <section>
+    <h2>3. Communication Channels</h2>
+    <table>
+      <thead><tr>
+        <th>Channel</th><th>Where it lives</th><th>What it does</th><th>Auth location</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="svc">LAN team hub</td>
+            <td><span class="path">http://192.168.1.134:8765</span> on Mini_IT13</td>
+            <td>Internal team chat: ck, aick, dck, cena, sam post + read here.</td>
+            <td>None — LAN-trusted (firewall is the gate)</td></tr>
+        <tr><td class="svc">Online dev chat</td>
+            <td><span class="path">https://app.cenaskitchen.com/partner/developer/chat</span></td>
+            <td>Sam + Masood + samai (roaming) read + post; bridge.py mirrors to/from the LAN hub.</td>
+            <td>Site password (EZLIVE_PASSWORD) + Partner password (rotating; <span class="path">~/.openclaw/.secrets/partner_password.txt</span>)</td></tr>
+        <tr><td class="svc">/sam/chat (Sam ↔ Cena online)</td>
+            <td><span class="path">https://app.cenaskitchen.com/sam/chat</span></td>
+            <td>Sam's private chat with Cena on the live site (multi-session, attachments, model picker).</td>
+            <td>SAM_CHAT_USER_ID env var match on Sam's user_id (and Masood's per §7A)</td></tr>
+        <tr><td class="svc">cena_sam_chat (Sam ↔ Cena local)</td>
+            <td><span class="path">http://100.108.119.19:8770</span> on AiCk (Tailscale-only)</td>
+            <td>Persistent local Sam–Cena chat; Cena works through Sam's disconnects.</td>
+            <td>X-Auth-Token at <span class="path">C:\Users\sam\cena\cena_sam_chat_token.txt</span> (AiCk)</td></tr>
+        <tr><td class="svc">/sam/combined</td>
+            <td><span class="path">https://app.cenaskitchen.com/sam/combined</span></td>
+            <td>Side-by-side /sam/chat + /partner/developer/chat for Sam (Sam #167 / #184).</td>
+            <td>Same Sam-gate as /sam/chat</td></tr>
+        <tr><td class="svc">Cena gateway</td>
+            <td><span class="path">http://100.108.119.19:8765</span> on AiCk (Tailscale-bound) + Cloudflare-tunneled externally</td>
+            <td>Cena's runtime: tools, /cena/stream, /cena/wake-on-chat, /cena/wake-on-hub, /cena/messages/* (Phase 2).</td>
+            <td>X-Cena-Token at <span class="path">C:\Users\sam\cena\cena_token.txt</span> (AiCk) + <span class="tag envvar">Render CENA_GATEWAY_TOKEN</span></td></tr>
+        <tr><td class="svc">cena2 gateway</td>
+            <td><span class="path">http://100.73.38.82:8766</span> on Mini_IT13 (Tailscale-only)</td>
+            <td>Peer cena gateway on ck's box: message queue + worker + cross-gateway sync (Phase 2).</td>
+            <td>cena2 token at <span class="path">C:\Users\sam\cena2\cena2_token.txt</span> (Mini_IT13)</td></tr>
+        <tr><td class="svc">WhatsApp (Cenas Kitchen business)</td>
+            <td>Paired session on Mini_IT13: <span class="path">C:\Users\sam\cena2\whatsapp\auth_state\</span> (credential-equivalent)</td>
+            <td>Outbound business notifications (planned send layer; receive is silent-observer per Sam standing rule).</td>
+            <td>The auth_state directory IS the credential (Baileys WhatsApp Web multi-device session).</td></tr>
+        <tr><td class="svc">Telegram bot (ck)</td>
+            <td>Bot account on Telegram; token at <span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> (Mini_IT13)</td>
+            <td>Sam ↔ ck escalation channel (stub on Cena's side via telegram_send).</td>
+            <td>Bot token (above)</td></tr>
+        <tr><td class="svc">Email: orders@cenaskitchen.com</td>
+            <td>cPanel mailbox (server: <span class="path">mail.cenaskitchen.com</span>)</td>
+            <td>Vendor channel (Webstaurant, PFG, Restaurant Depot, Spec's, EZcater receipts).</td>
+            <td>IMAP password at <span class="path">~/.openclaw/.secrets/orders_imap_pwd.txt</span> + SMTP at <span class="path">~/.openclaw/.secrets/orders_smtp_pwd.txt</span> (AiCk + Mini_IT13)</td></tr>
+        <tr><td class="svc">Email: sams@aguirrestexmex.com</td>
+            <td>cPanel mailbox (server: <span class="path">mail.aguirrestexmex.com</span>)</td>
+            <td>Sam's personal/operational mailbox; samai parses for WebstaurantStore equipment + warranty.</td>
+            <td>IMAP password <span class="tag tbd">TBD on file</span> — intended location <span class="path">~/.openclaw/.secrets/sams_imap_pwd.txt</span> (AiCk; samai #65 spec)</td></tr>
+        <tr><td class="svc">Email: atm@aguirrestexmex.com</td>
+            <td>Same cPanel as sams@</td>
+            <td>Secondary mailbox; samai parses if WebstaurantStore receipts landed there.</td>
+            <td>IMAP password <span class="tag tbd">TBD on file</span> — intended location <span class="path">~/.openclaw/.secrets/atm_imap_pwd.txt</span> (AiCk)</td></tr>
+        <tr><td class="svc">Email: ck@cenaskitchen.com</td>
+            <td>Same cPanel as orders@</td>
+            <td>ck-addressable mailbox (some vendor traffic lands here).</td>
+            <td>IMAP password <span class="tag tbd">TBD on file</span> — intended location <span class="path">~/.openclaw/.secrets/ck_cenaskitchen_imap_pwd.txt</span> (AiCk)</td></tr>
+      </tbody>
+    </table>
+    </section>
+
+    <p class="note">Inventory drawn from: ck-side .openclaw/.secrets/ (8 files, hub #43) + aick-side .openclaw/.secrets/ (25 files, aick #42) + aick #204 LOCATION 2 sweep (6 unique on top) + the standing 1Password-as-canonical-store per aick #42. Anything tagged TBD: aick or Sam to confirm path / 1Password status. This document is LOCATIONS-only by design — no key value appears anywhere in this page.</p>
+
+  </div>
+
+</div>
+{% endblock %}

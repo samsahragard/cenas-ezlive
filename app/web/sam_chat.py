@@ -753,6 +753,32 @@ def sam_chat_combined():
     return render_template("sam_combined.html", active="sam_combined")
 
 
+@sam_chat_bp.route("/sam/agents", methods=["GET"])
+def sam_agents_page():
+    """Cena-page tab: roster of every agent on the system - who they are,
+    what they do, where they run, and their starting docs. Sam directive
+    2026-05-22 #188 + #200. Cena owns the canonical content (#189), the
+    template assembles the profiles from the hub posts the team filed.
+    Hard-gated to Sam (this surface is internal-only)."""
+    gate = _require_sam_page()
+    if gate is not None:
+        return gate
+    return render_template("sam_agents.html", active="sam_agents")
+
+
+@sam_chat_bp.route("/sam/pass", methods=["GET"])
+def sam_pass_page():
+    """Cena-page tab: the credentials index - every login, API token,
+    and communication channel + WHERE the secret lives (1Password / env
+    file / TBD). NEVER the secret values themselves; only the location
+    tag. Sam directive 2026-05-22 #200. Inventory folds aick's #204
+    sweep (25 L1 files + 6 L2 uniques). Hard-gated to Sam."""
+    gate = _require_sam_page()
+    if gate is not None:
+        return gate
+    return render_template("sam_pass.html", active="sam_pass")
+
+
 @sam_chat_bp.route("/sam/chat/sessions", methods=["GET"])
 def sam_chat_list_sessions():
     """JSON list of non-archived sessions, most-recent first."""

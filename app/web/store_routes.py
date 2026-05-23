@@ -4335,6 +4335,14 @@ _TODAY_DASH_TABS = [
     ("notifications", "Notifications"),
     ("task-reports",  "Task Reports"),
     ("cena",          "Cena"),
+    # Sam #205 (2026-05-23): the four siblings live RIGHT NEXT to the
+    # Cena tab — not under a sidebar dropdown. Order matches the spec:
+    # Cena + Dev (the combined chat surface), then Agents (Cena's roster),
+    # then Page Info (aick's page guide), then Pass (credential locations).
+    ("cena-dev",      "Cena + Dev"),
+    ("agents",        "Agents"),
+    ("page-info",     "Page Info"),
+    ("pass",          "Pass"),
 ]
 
 
@@ -4344,10 +4352,15 @@ def _today_dash_full_url(tab_key):
       notifications -> /partner/notifications      (flat, not store-scoped)
       task-reports  -> /partner/team-reports/      (flat, not store-scoped)
       cena          -> /sam/chat                   (flat, not store-scoped)
-    The flat notifications / team-reports / chat paths are written as
-    literals because they live outside the /<store> blueprint; url_for
-    on a store endpoint would prepend the slug. Falls back to the store
-    home page on an unknown key so the iframe src is never empty."""
+      cena-dev      -> /sam/combined               (flat; side-by-side chat)
+      agents        -> /sam/agents                 (flat; Cena's roster)
+      page-info     -> /partner/developer/app/page-guide  (flat; aick's page guide)
+      pass          -> /sam/pass                   (flat; credential LOCATIONS only)
+    The flat notifications / team-reports / chat / combined / agents /
+    page-guide / pass paths are written as literals because they live
+    outside the /<store> blueprint; url_for on a store endpoint would
+    prepend the slug. Falls back to the store home page on an unknown
+    key so the iframe src is never empty."""
     if tab_key == "dashboard":
         return url_for("store.home")
     if tab_key == "notifications":
@@ -4356,6 +4369,14 @@ def _today_dash_full_url(tab_key):
         return "/partner/team-reports/"
     if tab_key == "cena":
         return "/sam/chat"
+    if tab_key == "cena-dev":
+        return "/sam/combined"
+    if tab_key == "agents":
+        return "/sam/agents"
+    if tab_key == "page-info":
+        return "/partner/developer/app/page-guide"
+    if tab_key == "pass":
+        return "/sam/pass"
     return url_for("store.home")
 
 
@@ -4373,14 +4394,16 @@ def today_dashboard():
     the browser loads them.
 
     Tab gating mirrors the sidebar: the Task Reports tab is omitted
-    unless the viewer holds team_reports.view, and the Cena tab is
-    omitted unless the viewer is the Sam-chat user. Dashboard and
-    Notifications are always present, so the default tab is always
-    valid. Gating fails OPEN — if a gate helper raises, the tab is
-    kept and its destination page enforces its own gate."""
+    unless the viewer holds team_reports.view, and the Cena / Cena+Dev
+    / Agents / Pass tabs are omitted unless the viewer is the Sam-chat
+    user. Page Info is open (the dev page-guide enforces its own gate).
+    Dashboard and Notifications are always present, so the default tab
+    is always valid. Gating fails OPEN — if a gate helper raises, the
+    tab is kept and its destination page enforces its own gate."""
     # Build the visible tab set, applying the same audience gates the
     # Today section's sidebar entries use.
     dash_tabs = []
+    _SAM_ONLY_KEYS = {"cena", "cena-dev", "agents", "pass"}
     for key, caption in _TODAY_DASH_TABS:
         if key == "task-reports":
             try:
@@ -4389,13 +4412,13 @@ def today_dashboard():
                     continue
             except Exception:
                 pass  # fail open — the team-reports page enforces its own gate
-        elif key == "cena":
+        elif key in _SAM_ONLY_KEYS:
             try:
                 from app.web.sam_chat import is_sam_chat_user
                 if not is_sam_chat_user():
                     continue
             except Exception:
-                pass  # fail open — the Cena page enforces its own gate
+                pass  # fail open — the destination page enforces its own gate
         dash_tabs.append((key, caption))
 
     valid = {key for key, _ in dash_tabs}

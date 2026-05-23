@@ -563,19 +563,42 @@
     let msgQueue = [];
 
   // ---- model selector ----
+  // Sam directive #276 (2026-05-23): the gateway holds the canonical
+  // active-model selection. The dropdown reflects whatever Sam last
+  // picked on ANY surface; changing the dropdown POSTs back so other
+  // surfaces (cena_sam_chat on aick) immediately pick up the new model
+  // on their next turn. localStorage stays as a fast local fallback in
+  // case the gateway is unreachable, but the gateway is the source of
+  // truth.
   D.models.forEach((m) => {
     const o = document.createElement("option");
     o.value = m.id; o.textContent = m.label;
     modelEl.appendChild(o);
   });
-  // Restore the model Sam last picked; it sticks until he changes it.
   const SAVED_MODEL_KEY = "sam_chat_model";
   let savedModel = null;
   try { savedModel = localStorage.getItem(SAVED_MODEL_KEY); } catch (e) {}
-  modelEl.value = D.models.some((m) => m.id === savedModel)
-    ? savedModel : D.defaultModel;
+  // Default rendered server-side already reflects the gateway's current
+  // active-model (sam_chat.py calls _gateway_active_model_get on render).
+  // Prefer the server default; fall back to localStorage only if the
+  // server default isn't in the picker.
+  modelEl.value = D.models.some((m) => m.id === D.defaultModel)
+    ? D.defaultModel
+    : (D.models.some((m) => m.id === savedModel) ? savedModel : D.defaultModel);
   modelEl.addEventListener("change", () => {
-    try { localStorage.setItem(SAVED_MODEL_KEY, modelEl.value); } catch (e) {}
+    const m = modelEl.value;
+    try { localStorage.setItem(SAVED_MODEL_KEY, m); } catch (e) {}
+    // Fire-and-forget POST to the gateway-backed canonical active model.
+    // No await; the next turn will read whichever value landed. Errors
+    // are logged to the console but never surfaced — the chat still
+    // works (using the local picker value) if the gateway is down.
+    fetch("/sam/chat/active-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: m }),
+    }).then((r) => {
+      if (!r.ok) console.warn("active-model POST returned", r.status);
+    }).catch((e) => console.warn("active-model POST failed:", e));
   });
 
   // ---- helpers ----

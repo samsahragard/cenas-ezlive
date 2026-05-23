@@ -198,6 +198,65 @@ def _cena_gateway_url() -> str | None:
     return url or None
 
 
+def _gateway_active_model_get() -> str:
+    """GET the canonical active model from the gateway. Sam directive #276
+    (2026-05-23) — the gateway holds the source-of-truth so /sam/chat
+    and cena_sam_chat agree on which model Cena is running. Returns
+    _DEFAULT_MODEL on any failure (network, gateway down, auth, etc.) so
+    the chat page always renders — silent degradation, not a crash."""
+    url = _cena_gateway_url()
+    if not url:
+        return _DEFAULT_MODEL
+    token = os.getenv("CENA_GATEWAY_TOKEN", "")
+    proxy = os.getenv("CENA_PROXY") or None
+    try:
+        import httpx
+        client_kwargs: dict = {"timeout": httpx.Timeout(5.0, connect=3.0)}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as hx:
+            r = hx.get(url + "/cena/active-model",
+                       headers={"X-Cena-Token": token})
+            if r.status_code != 200:
+                return _DEFAULT_MODEL
+            m = (r.json() or {}).get("model")
+            if isinstance(m, str) and m in _ALLOWED_MODELS:
+                return m
+    except Exception:  # noqa: BLE001
+        pass
+    return _DEFAULT_MODEL
+
+
+def _gateway_active_model_set(model: str) -> tuple[bool, str]:
+    """POST a new active-model selection to the gateway. Returns
+    (ok, model_or_error). Same gateway-down silent-degradation
+    behavior as the GET twin — but here we surface the error to the
+    caller so /sam/chat can show Sam a status, not silently swallow."""
+    url = _cena_gateway_url()
+    if not url:
+        return False, "gateway URL unset"
+    if model not in _ALLOWED_MODELS:
+        return False, f"model {model!r} not in allowed set"
+    token = os.getenv("CENA_GATEWAY_TOKEN", "")
+    proxy = os.getenv("CENA_PROXY") or None
+    try:
+        import httpx
+        client_kwargs: dict = {"timeout": httpx.Timeout(5.0, connect=3.0)}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as hx:
+            r = hx.post(url + "/cena/active-model",
+                        headers={"X-Cena-Token": token,
+                                 "Content-Type": "application/json"},
+                        json={"model": model})
+            if r.status_code != 200:
+                return False, f"gateway returned {r.status_code}"
+            m = (r.json() or {}).get("model")
+            return True, (m or model)
+    except Exception as e:  # noqa: BLE001
+        return False, f"gateway error: {e}"
+
+
 # ============================================================
 # Phase 2 §9 — async gateway message layer
 # ============================================================
@@ -724,6 +783,12 @@ def sam_chat_page():
         _picker_models = ("claude-sonnet-4-6", "claude-opus-4-7",
                           "gemini-2.5-flash", "gemini-3.5-flash")
 
+        # Source-of-truth model (Sam directive #276 2026-05-23): the
+        # gateway holds the canonical active-model selection. Reading it
+        # at render time means the picker defaults to whatever Sam most-
+        # recently selected on ANY surface — and a hard refresh keeps the
+        # selection sticky across sessions. Silent-fall-back to
+        # _DEFAULT_MODEL if the gateway is unreachable.
         return render_template(
             "sam_chat.html",
             active="sam_chat",
@@ -732,7 +797,7 @@ def sam_chat_page():
             messages=[_message_json(m) for m in messages],
             models=[{"id": m, "label": _MODEL_LABELS[m]}
                     for m in _picker_models],
-            default_model=_DEFAULT_MODEL,
+            default_model=_gateway_active_model_get(),
             session_cost=session_cost,
             cost_30d=_cost_last_30d(db),
             token_estimate=token_estimate,
@@ -783,6 +848,40 @@ def sam_pass_page():
     if gate is not None:
         return gate
     return render_template("sam_pass.html", active="sam_pass")
+
+
+@sam_chat_bp.route("/sam/chat/active-model", methods=["GET"])
+def sam_chat_active_model_get():
+    """Return the canonical active model the dropdown should reflect.
+    Sam directive #276 (2026-05-23): one knob, propagates everywhere.
+    Sam-only audience."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    return jsonify({"ok": True, "model": _gateway_active_model_get()})
+
+
+@sam_chat_bp.route("/sam/chat/active-model", methods=["POST"])
+def sam_chat_active_model_set():
+    """Persist Sam's new model selection through the gateway. JS calls
+    this when the user changes the picker so the cena_sam_chat handler
+    (and any other surface that reads cena_active_model.txt) picks up
+    the change on the very next turn."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    body = request.get_json(silent=True) or {}
+    raw = body.get("model")
+    if not isinstance(raw, str) or not raw.strip():
+        return jsonify({"ok": False, "error": "model required"}), 400
+    m = raw.strip()
+    if m not in _ALLOWED_MODELS:
+        return jsonify({"ok": False,
+                        "error": f"model {m!r} not in allowed set"}), 400
+    ok, info = _gateway_active_model_set(m)
+    if not ok:
+        return jsonify({"ok": False, "error": info}), 502
+    return jsonify({"ok": True, "model": info})
 
 
 @sam_chat_bp.route("/sam/docs", methods=["GET"])

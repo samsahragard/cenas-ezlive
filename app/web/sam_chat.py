@@ -198,6 +198,52 @@ def _cena_gateway_url() -> str | None:
     return url or None
 
 
+def _mirror_to_cena_sam_chat(author: str, body: str) -> None:
+    """Best-effort POST of a /sam/chat message into the private
+    cena_sam_chat surface at aick:8770. Sam directive #292 (2026-05-23):
+    cena_sam_chat is the unified VIEW; every Sam-typed message and every
+    Cena reply on /sam/chat mirrors there so Sam sees one stream.
+
+    Author MUST start with 'sam-online' or 'cena-online' so the
+    cena_sam_chat wake-on-sam trigger (which fires only on literal
+    'sam') is never re-fired by a mirror (that would double-trigger
+    Cena, who already replied on the /sam/chat side).
+
+    Routes via CENA_PROXY (Render's userspace tailscaled) just like
+    /cena/stream — the Tailscale endpoint 100.108.119.19:8770 is not
+    reachable from Render without it. Token comes from the
+    CENA_SAM_CHAT_TOKEN env var; unset = silent skip. Never raises:
+    a failed mirror must not break the user's chat turn."""
+    if not body or not author:
+        return
+    if author not in ("sam-online", "cena-online"):
+        return
+    url = (os.getenv("CENA_SAM_CHAT_URL")
+           or "http://100.108.119.19:8770").rstrip("/")
+    token = (os.getenv("CENA_SAM_CHAT_TOKEN") or "").strip()
+    if not token:
+        return
+    proxy = os.getenv("CENA_PROXY") or None
+    try:
+        import httpx
+        client_kwargs: dict = {"timeout": httpx.Timeout(5.0, connect=3.0)}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as hx:
+            hx.post(url + "/post",
+                    json={"author": author, "body": body},
+                    headers={"X-Auth-Token": token,
+                             "Content-Type": "application/json"})
+    except Exception:  # noqa: BLE001
+        # silent — Sam sees nothing if the mirror fails; the primary
+        # chat path is unaffected. (We log via logger but no chat
+        # surface noise.)
+        try:
+            logger.exception("sam_chat: cena_sam_chat mirror failed")
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _gateway_active_model_get() -> str:
     """GET the canonical active model from the gateway. Sam directive #276
     (2026-05-23) — the gateway holds the source-of-truth so /sam/chat
@@ -1133,6 +1179,14 @@ def sam_chat_send():
     finally:
         db.close()
 
+    # Sam #292 (2026-05-23): mirror Sam's typed message into the
+    # cena_sam_chat surface so the local view shows the full /sam/chat
+    # turn alongside the LAN-hub + dev-chat mirrors. Author is forced to
+    # "sam-online" so the cena_sam_chat wake-on-sam trigger DOES NOT
+    # re-fire (Cena already gets the message via the /sam/chat path
+    # below). Best-effort; mirror failure never blocks the chat.
+    _mirror_to_cena_sam_chat("sam-online", stored_content)
+
     # The new user turn for the API: content blocks when there are
     # image/PDF attachments, else a plain string.
     if api_blocks:
@@ -1447,7 +1501,11 @@ def _persist_assistant(session_id: int, content: str, model: str,
                        cache_read_tok: int = 0) -> int | None:
     """Append the assistant SamChatMessage + bump the session. Its own
     session — the assistant turn is recorded independent of the request
-    transaction. Returns the new message id (or None on failure)."""
+    transaction. Returns the new message id (or None on failure).
+
+    Sam #292 (2026-05-23): mirror Cena's reply into cena_sam_chat too
+    so the local unified view sees the full conversation. Done AFTER
+    the DB commit so a mirror failure can never lose the reply itself."""
     db = SessionLocal()
     try:
         now = datetime.utcnow()
@@ -1467,13 +1525,20 @@ def _persist_assistant(session_id: int, content: str, model: str,
             s.updated_at = now
         db.commit()
         db.refresh(row)
-        return row.id
+        result_id = row.id
     except Exception:  # noqa: BLE001
         logger.exception("sam_chat: failed to persist assistant message")
         db.rollback()
         return None
     finally:
         db.close()
+    # Post-commit mirror to cena_sam_chat. Outside the try/except so a
+    # mirror error doesn't poison the return value (the row IS already
+    # persisted at this point). Author "cena-online" so cena_sam_chat
+    # renders it as a Cena turn but does NOT trigger any wake.
+    _mirror_to_cena_sam_chat("cena-online",
+                             content or "(empty response)")
+    return result_id
 
 
 def install(app):

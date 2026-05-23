@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cena + Dev Chat - Cenas Kitchen</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #0d0805; color: #FAF6EC;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  body { display: flex; flex-direction: column; }
+  .top {
+    flex: 0 0 auto; padding: 8px 14px;
+    background: #1a0d08;
+    border-bottom: 1px solid rgba(228,179,64,0.18);
+    display: flex; align-items: center; gap: 14px;
+    font-size: 11px; font-family: ui-monospace, monospace;
+    color: rgba(250,246,236,0.6);
+  }
+  .top h1 {
+    margin: 0; font-size: 12px; font-weight: 700;
+    color: #E4B340; letter-spacing: 0.08em;
+  }
+  .top .gap { flex: 1; }
+  .top a { color: rgba(250,246,236,0.5); text-decoration: none; margin-right: 12px; }
+  .top a:hover { color: #E4B340; }
+  .grid {
+    flex: 1; display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px; padding: 6px;
+  }
+  .pane {
+    background: #1a0d08; border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column;
+    border: 1px solid rgba(228,179,64,0.14);
+  }
+  .pane-title {
+    padding: 6px 10px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #E4B340; background: rgba(0,0,0,0.3);
+    border-bottom: 1px solid rgba(228,179,64,0.14);
+    font-family: ui-monospace, monospace;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .pane-title a {
+    margin-left: auto; color: rgba(250,246,236,0.5);
+    text-decoration: none; font-weight: 400;
+    text-transform: none; letter-spacing: 0;
+  }
+  .pane-title a:hover { color: #E4B340; }
+  iframe {
+    flex: 1; border: 0; width: 100%; background: #0d0805;
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>CENA &middot; DEV CHAT</h1>
+  <span class="gap"></span>
+  <a href="/sam/chat">open /sam/chat alone &rarr;</a>
+  <a href="/partner/developer/chat">open dev chat alone &rarr;</a>
+</div>
+<div class="grid">
+  <div class="pane">
+    <div class="pane-title">
+      /sam/chat &middot; Cena
+      <a href="/sam/chat" target="_blank">full screen &rarr;</a>
+    </div>
+    <iframe src="/sam/chat" title="/sam/chat"></iframe>
+  </div>
+  <div class="pane">
+    <div class="pane-title">
+      /partner/developer/chat &middot; team
+      <a href="/partner/developer/chat" target="_blank">full screen &rarr;</a>
+    </div>
+    <iframe src="/partner/developer/chat" title="dev chat"></iframe>
+  </div>
+</div>
+</body>
+</html>

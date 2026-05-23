@@ -4341,11 +4341,12 @@ _TODAY_DASH_TABS = [
     # then Page Info (aick's page guide), then Pass (credential locations).
     ("cena-dev",      "Cena + Dev"),
     ("agents",        "Agents"),
-    ("page-info",     "Page Info"),
     ("pass",          "Pass"),
-    # Sam #240 (2026-05-23): consolidated docs surface — the prior
-    # /partner/developer/app/* sidebar section is slated for full
-    # removal (Sam #241) and this Docs tab is its replacement.
+    # Sam #240 (2026-05-23): consolidated docs surface — replaces the
+    # prior /partner/developer/app/* sidebar section in one place.
+    # The "page-info" tab (which iframed /partner/developer/app/page-
+    # guide) was retired in the same batch per Sam #241 — its content
+    # is now folded into /sam/docs.
     ("docs",          "Docs"),
 ]
 
@@ -4377,8 +4378,6 @@ def _today_dash_full_url(tab_key):
         return "/sam/combined"
     if tab_key == "agents":
         return "/sam/agents"
-    if tab_key == "page-info":
-        return "/partner/developer/app/page-guide"
     if tab_key == "pass":
         return "/sam/pass"
     if tab_key == "docs":
@@ -4401,11 +4400,11 @@ def today_dashboard():
 
     Tab gating mirrors the sidebar: the Task Reports tab is omitted
     unless the viewer holds team_reports.view, and the Cena / Cena+Dev
-    / Agents / Pass tabs are omitted unless the viewer is the Sam-chat
-    user. Page Info is open (the dev page-guide enforces its own gate).
-    Dashboard and Notifications are always present, so the default tab
-    is always valid. Gating fails OPEN — if a gate helper raises, the
-    tab is kept and its destination page enforces its own gate."""
+    / Agents / Pass / Docs tabs are omitted unless the viewer is the
+    Sam-chat user. Dashboard and Notifications are always present, so
+    the default tab is always valid. Gating fails OPEN — if a gate
+    helper raises, the tab is kept and its destination page enforces
+    its own gate."""
     # Build the visible tab set, applying the same audience gates the
     # Today section's sidebar entries use.
     dash_tabs = []

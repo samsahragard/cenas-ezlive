@@ -212,6 +212,14 @@
           </div></div>
         </div>
 
+        {# App docs section removed per Sam directive #241 (2026-05-23):
+           the entire /partner/developer/app/* docs subtree is retired
+           and replaced by the consolidated /sam/docs surface under the
+           Cena page. Templates backed up to aick:Desktop/docssamonly
+           before deletion. The dev chat itself (/partner/developer/chat)
+           stays — only the per-page App-docs nav + routes were removed.
+           Anchor preserved here to mark the historical removal point. #}
+        {% if false %}{# legacy app-docs nav, removed Sam #241 #}
         <div class="ck-sb-branch" data-id="dev.app">
           <button class="ck-sb-branch-head">
             <i class="ti ti-app-window ck-sb-branch-icon" aria-hidden="true"></i>
@@ -480,6 +488,7 @@
 
           </div></div>
         </div>
+        {% endif %}{# end legacy app-docs nav (Sam directive #241) #}
 
       </div></div>
     </div>

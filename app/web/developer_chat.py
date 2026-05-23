@@ -468,85 +468,31 @@ def _render_msg(m: DeveloperChatMessage) -> dict:
     return d
 
 
-# ============== App Docs (Partner-only) ==============
-# Read-only documentation served from Jinja templates. NO secrets in any of
-# these templates — tokens, passwords, API keys are referenced by env-var
-# name or by their secrets-file path, never by value. Updates only via Sam-
-# approved git commits; no edit UI.
-DOC_PAGES = [
-    ("session-start",            "Session Start",     "doc_session_start"),
-    ("session-closeout",         "Session Closeout",  "doc_session_closeout"),
-    ("operations-reference",     "Operations Reference", "doc_operations_reference"),
-    ("site-map",                 "Site Map",          "doc_site_map"),
-    ("page-guide",               "Page Guide",        "doc_page_guide"),
-    ("site-code",                "Site Code",         "doc_site_code"),
-    ("architecture-diagrams",    "Architecture Diagrams", "doc_architecture_diagrams"),
-    ("arc-code",                 "Arc Code",          "doc_arc_code"),
-    ("node-link-diagram",        "Node Link Diagram", "doc_node_link_diagram"),
-    ("node-map",                 "Node Map",          "doc_node_map"),
-    ("readme",                   "README",            "doc_readme"),
-    ("architecture",             "Architecture",      "doc_architecture"),
-    ("features",                 "Features",          "doc_features"),
-    ("tech-stack",               "Tech Stack",        "doc_tech_stack"),
-    ("deployment",               "Deployment",        "doc_deployment"),
-    ("data-sources",             "Data Sources",      "doc_data_sources"),
-    ("ezcater-guidelines",       "ezCater Guidelines", "doc_ezcater_guidelines"),
-    ("toast-api-reference",      "Toast API Reference", "doc_toast_api_reference"),
-    ("toast-analytics-api",      "Toast Analytics API", "doc_toast_analytics_api"),
-    ("agent-bootstrap",          "Agent Bootstrap",   "doc_agent_bootstrap"),
-    ("permission-system",        "Permission System", "doc_permission_system"),
-    ("anomaly-rules",            "Anomaly Rules",     "doc_anomaly_rules"),
-    ("anomaly-service-spec",     "Anomaly Service Spec", "doc_anomaly_service_spec"),
-    ("morning-brief-composer-spec", "Morning Brief Composer Spec", "doc_morning_brief_composer_spec"),
-    ("brief-calibration-runbook", "Brief Calibration Runbook", "doc_brief_calibration_runbook"),
-    ("phase-2-directive",        "Phase 2 Directive", "doc_phase_2_directive"),
-    ("block-1-precond-role-taxonomy-spec", "Block 1 Precond - Role Taxonomy", "doc_block_1_precond_role_taxonomy_spec"),
-    ("block-1-precond-scheduled-event-spec", "Block 1 Precond - ScheduledEvent Model", "doc_block_1_precond_scheduled_event_spec"),
-    ("block-1a-task-system-spec", "Block 1A - Task System Spec", "doc_block_1a_task_system_spec"),
-    ("block-1b-ribbon-component-spec", "Block 1B - Ribbon Component Spec", "doc_block_1b_ribbon_component_spec"),
-    ("block-1c-ribbon-router-spec", "Block 1C - Ribbon Content Router Spec", "doc_block_1c_ribbon_router_spec"),
-    ("block-1f-sales-insights-spec", "Block 1F - Sales Insights Spec", "doc_block_1f_sales_insights_spec"),
-    ("block-1g-team-tab-spec",    "Block 1G - Team Tab Spec", "doc_block_1g_team_tab_spec"),
-    ("block-1h-pay-masking-spec", "Block 1H - Pay Masking Spec", "doc_block_1h_pay_masking_spec"),
-    ("block-1j-ambient-signal-spec", "Block 1J - AmbientSignal Refactor", "doc_block_1j_ambient_signal_spec"),
-    ("block-2i-recipe-page-spec", "Block 2I - Recipe Page Spec", "doc_block_2i_recipe_page_spec"),
-    ("handoff-aick-2026-05-14",  "Aick Handoff — 2026-05-14",  "doc_handoff_aick_2026_05_14"),
-    ("handoff-ck-2026-05-14",    "ck Handoff — 2026-05-14",    "doc_handoff_ck_2026_05_14"),
-    ("handoff-samai-2026-05-14", "samai Handoff — 2026-05-14", "doc_handoff_samai_2026_05_14"),
-    ("cena-operational-spec",    "Cena — Operational Spec",     "doc_cena_operational_spec"),
-    ("design-system-reference",   "Design System Reference",     "doc_design_system_reference"),
-    ("system-inventory",          "System Inventory",            "doc_system_inventory"),
-    ("methodology-rules",         "Methodology Rules",           "doc_methodology_rules"),
-    ("dev-section-organization",  "Dev Section — Start Here",    "doc_dev_section_organization"),
-    ("denials",                  "Permission Denials", "doc_denials"),
-    ("chats",                    "Chats",             "doc_chats"),
-    ("spec-dev-samples-page",    "Spec: Dev Samples Page", "doc_spec_dev_samples_page"),
-    ("spec-drivers-redesign",     "Spec: Drivers Redesign",  "doc_spec_drivers_redesign"),
-    ("spec-samples-approval-workflow", "Spec: Samples Approval Workflow", "doc_spec_samples_approval_workflow"),
-    ("spec-produce-mobile-redesign", "Spec: Produce Mobile Redesign", "doc_spec_produce_mobile_redesign"),
-]
-
-# Per-session chat handoff docs. Lives in its own list (not DOC_PAGES) so the
-# top doc nav stays short — the "Chats" entry in DOC_PAGES is the index page
-# that lists all of these. To add a new chat: create
-# app/templates/docs/<slug>.html and append a tuple here. The /partner/developer/app/<slug>
-# route resolves from both lists, so direct links keep working.
-CHAT_PAGES = [
-    ("ck-session-2026-05-10",    "ck — 5/10",    "doc_ck_session_2026_05_10"),
-    ("aick-session-2026-05-10",  "aick — 5/10",  "doc_aick_session_2026_05_10"),
-    ("ck-session-2026-05-11",    "ck — 5/11",    "doc_ck_session_2026_05_11"),
-    ("aick-session-2026-05-11",  "aick — 5/11",  "doc_aick_session_2026_05_11"),
-    ("samai-session-2026-05-11", "samai — 5/11", "doc_samai_session_2026_05_11"),
-    ("ck-session-2026-05-12",    "ck — 5/12",    "doc_ck_session_2026_05_12"),
-    ("aick-session-2026-05-12",  "aick — 5/12",  "doc_aick_session_2026_05_12"),
-    ("samai-session-2026-05-12", "samai — 5/12", "doc_samai_session_2026_05_12"),
-    ("ck-session-2026-05-13",    "ck — 5/13",    "doc_ck_session_2026_05_13"),
-    ("aick-session-2026-05-13",  "aick — 5/13",  "doc_aick_session_2026_05_13"),
-    ("samai-session-2026-05-13", "samai — 5/13", "doc_samai_session_2026_05_13"),
-    ("ck-session-2026-05-19",    "ck — 5/19",    "doc_ck_session_2026_05_19"),
-    ("aick-session-2026-05-19",  "aick — 5/19",  "doc_aick_session_2026_05_19"),
-    ("samai-session-2026-05-19", "samai — 5/19", "doc_samai_session_2026_05_19"),
-]
+# ============== App Docs — REMOVED (Sam directive #241 2026-05-23) ==============
+# The /partner/developer/app/* docs subtree was retired in favor of the
+# consolidated /sam/docs surface under the Cena page. Every template
+# under app/templates/docs/ was backed up to
+# aick:Desktop/docssamonly/ before deletion. The three serving routes
+# (download.zip, denials, app/<page>) were removed alongside DOC_PAGES,
+# CHAT_PAGES, and SOURCE_PAGES.
+#
+# The dev chat itself (/partner/developer/chat) is unaffected; only the
+# App-docs per-page nav + routes went away. Surfaces that previously
+# linked into /partner/developer/app/<slug>:
+#   * sidebar.html — App-docs section disabled in the same batch.
+#   * access_denied.html — permission-system link dropped.
+#   * Module docstring breadcrumbs in app/models.py + app/services/*
+#     kept as comments (no live links) — they document spec provenance,
+#     not navigation, and removing them would lose history.
+# Recovery: aick:Desktop/docssamonly/developer_chat.py.bak holds the
+# pre-deletion file; aick:Desktop/docssamonly/<slug>.html holds each
+# template. Sam approved the move + delete (#241).
+#
+# Stub kept here so existing imports of DOC_PAGES + CHAT_PAGES from
+# this module don't ImportError at startup. The lists are empty; any
+# code that still iterates them produces zero rows (safe degrade).
+DOC_PAGES: list = []
+CHAT_PAGES: list = []
 
 
 @dev_chat.route("/partner/developer/plan")
@@ -616,7 +562,6 @@ def developer_samples():
         all_samples=enriched,
         approved_total=approved_total,
         show_approved=show_approved,
-        doc_pages=DOC_PAGES,
         is_sam=is_sam_chat_user(),
     )
 
@@ -1178,7 +1123,6 @@ def developer_cena_stats():
     return render_template(
         "developer_cena_stats.html",
         active="dev_cena_stats",
-        doc_pages=DOC_PAGES,
         total_24h=total_24h,
         cost_24h=cost_24h,
         label_counts_24h=label_counts_24h,
@@ -1233,139 +1177,10 @@ def ezcater_review_queue():
     )
 
 
-@dev_chat.route("/partner/developer/app/download.zip", methods=["GET"])
-@requires_permission("developer.view_app_docs")
-def app_doc_download():
-    """Stream a fresh zip of every file under app/templates/docs/ so Sam can
-    download the whole Developer → App docs section in one click. Built
-    in-memory at request time, so what you download always matches what's
-    currently in git/on disk."""
-    gate = _enforce_partner()
-    if gate is not None:
-        return gate
-    import io, zipfile
-    from datetime import datetime
-    from pathlib import Path
-    docs_dir = Path(current_app.root_path) / "templates" / "docs"
-    if not docs_dir.exists():
-        abort(404)
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in sorted(docs_dir.rglob("*")):
-            if f.is_file():
-                # arcname relative to docs/ so the zip unpacks as "docs/...".
-                rel = f.relative_to(docs_dir.parent)  # → "docs/foo.html"
-                zf.write(f, arcname=str(rel).replace("\\", "/"))
-    buf.seek(0)
-    stamp = datetime.now().strftime("%Y-%m-%d")
-    return send_file(
-        buf,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=f"developer_docs_{stamp}.zip",
-        max_age=0,
-    )
-
-
-# Permission denials surface (samai spec §5.3). Has its own route — not
-# a static doc template — so it can render live rows from the
-# PermissionDenial table populated by _log_denial(). Registered BEFORE the
-# `/<page>` catch-all so Flask routes the exact match first.
-@dev_chat.route("/partner/developer/app/denials")
-@requires_permission("developer.view_app_docs")
-def denials_page():
-    gate = _enforce_partner()
-    if gate is not None:
-        return gate
-    g.current_store = "partner"
-    g.store_label = "Partner"
-    g.current_location = "both"
-    db = SessionLocal()
-    try:
-        # Latest 500 denials, newest first. Older rows still in the table
-        # but not surfaced — partners use the page for triage, not history.
-        rows = (db.query(PermissionDenial)
-                  .order_by(PermissionDenial.created_at.desc())
-                  .limit(500)
-                  .all())
-        total = db.query(PermissionDenial).count()
-    finally:
-        db.close()
-    return render_template(
-        "docs/denials.html",
-        active="doc_denials",
-        page_title="Permission Denials",
-        rows=rows,
-        total=total,
-        doc_pages=DOC_PAGES,
-        chat_pages=CHAT_PAGES,
-        current_doc_slug="denials",
-    )
-
-
-# Source-view pages: each entry mirrors one of the visual doc pages above
-# but renders its raw HTML/Mermaid/JS source so Sam can read or copy the
-# code without view-source-ing the rendered page. The source is read from
-# disk at request time, so it always matches the live template (no manual
-# snapshot to keep in sync).
-SOURCE_PAGES = {
-    # url-slug:         (mirrored-doc-slug,       label-on-rendered-link)
-    "arc-code":          ("architecture-diagrams", "Architecture Diagrams"),
-    "site-code":         ("site-map",              "Site Map"),
-    "node-map":          ("node-link-diagram",     "Node Link Diagram"),
-}
-
-
-@dev_chat.route("/partner/developer/app")
-@dev_chat.route("/partner/developer/app/<page>")
-@requires_permission("developer.view_app_docs")
-def app_doc(page: str = "readme"):
-    gate = _enforce_partner()
-    if gate is not None:
-        return gate
-    # Resolve from DOC_PAGES first, then CHAT_PAGES — direct chat slug links
-    # (e.g. /partner/developer/app/aick-session-2026-05-10) keep working.
-    page_meta = next(((slug, label, active_key) for slug, label, active_key in DOC_PAGES + CHAT_PAGES
-                      if slug == page), None)
-    if page_meta is None:
-        abort(404)
-    slug, label, active_key = page_meta
-    # Set partner context for the sidebar
-    g.current_store = "partner"
-    g.store_label = "Partner"
-    g.current_location = "both"
-
-    # Source-view pages share a single template; the underlying file is read
-    # from disk at request time so the rendered code matches the live page.
-    if slug in SOURCE_PAGES:
-        mirrored_slug, mirrored_label = SOURCE_PAGES[slug]
-        from pathlib import Path
-        source_filename = f"docs/{mirrored_slug.replace('-', '_')}.html"
-        source_path = Path(current_app.root_path) / "templates" / source_filename
-        try:
-            source_text = source_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            abort(404)
-        return render_template(
-            "docs/_source_view.html",
-            active=active_key,
-            page_title=label,
-            mirrored_slug=mirrored_slug,
-            mirrored_label=mirrored_label,
-            source_filename=source_filename,
-            source_text=source_text,
-            source_len=len(source_text),
-            doc_pages=DOC_PAGES,
-            chat_pages=CHAT_PAGES,
-            current_doc_slug=slug,
-        )
-
-    template_name = f"docs/{slug.replace('-', '_')}.html"
-    return render_template(
-        template_name,
-        active=active_key,
-        page_title=label,
-        doc_pages=DOC_PAGES,
-        chat_pages=CHAT_PAGES,
-        current_doc_slug=slug,
-    )
+# /partner/developer/app/* routes (download.zip, denials, app/<page>)
+# and the SOURCE_PAGES mapping were removed per Sam directive #241
+# (2026-05-23). The full subtree was backed up to
+# aick:Desktop/docssamonly/ — recovery via that directory if ever
+# needed. The denials VIEW is gone but the PermissionDenial table is
+# untouched (rows continue to write from _log_denial()); a future
+# replacement surface can read from there.

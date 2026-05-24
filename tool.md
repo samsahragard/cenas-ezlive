@@ -33,13 +33,14 @@
 
 ---
 
-## Tools Approved but Not Yet Built (3)
+## Tools Approved but Not Yet Built (4)
 
 | # | Tool | What it does | Status |
 |---|---|---|---|
 | 22 | `remove_participant` | Remove a participant from the /sam/chat interface. | **Sam approved — team building** |
 | 23 | `toast_live_tables` | Query Toast's live POS data for tables and open tickets in real time. | **Sam approved — urgent — team building** |
 | 24 | `whatsapp_send` | Send WhatsApp messages via Baileys (346-462-0476, standalone Node process). | **Baileys connection built by ck. QR scan pending from Sam. Send layer still to build.** |
+| 25 | `get_current_todo` | Returns Sam's top-priority active TODO from /sam/chat. Cena MUST work on this item next; do not skip ahead. Returns the single top item or null when the list is empty. Backend live (ck shipped 29f1d55 — SamChatTodo model + 6 REST routes, /sam/chat/todos/current dual-gated by Sam session OR X-Cena-Token). Gateway-side wiring pending aick. | **Backend live — gateway tool pending aick** |
 
 ---
 
@@ -59,7 +60,8 @@
 - `shell_execute` gives full shell access on AiCk — use carefully for destructive operations.
 - `post_to_dev_chat` has been intermittently failing (silent failures noted 2026-05-22). Use `shell_execute` with `lanchat.py` as fallback for hub posts.
 - `sql_query` hits the **production database** — read-only, but live data. Entity-resolve before querying per §4B.1.
+- **TODO discipline (Sam directive 2026-05-23):** When `get_current_todo` is live, Cena MUST work on the returned top item next — no skipping ahead. The UI enforces it for Sam; the tool enforces it for me. Call `get_current_todo` at the start of every working session and after every TODO completion.
 
 ---
 
-*Last updated: 2026-05-23. Updated by Cena.*
+*Last updated: 2026-05-23. Updated by Cena — added #25 `get_current_todo` (backend live per ck 29f1d55, gateway wiring pending aick) + TODO discipline rule.*

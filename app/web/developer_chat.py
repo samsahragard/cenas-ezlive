@@ -175,6 +175,18 @@ def post_message():
     author = (request.form.get("author") or "unknown").strip()[:60]
     body = (request.form.get("body") or "").strip()
 
+    # Sam directive 2026-05-23: cena is disconnected from /partner/developer/chat.
+    # Server-side belt against every path — bridge mirror, Cena's
+    # post_to_dev_chat tool, or any future relay — that might try to
+    # surface a cena-authored post here. Reject loudly so the caller
+    # (typically Cena's tool) gets the reason back and stops retrying.
+    if author.strip().lower() == "cena":
+        log.info("dev-chat post: rejected cena (Sam directive 2026-05-23)")
+        return _post_error(
+            "cena is disconnected from dev chat (Sam directive 2026-05-23) — "
+            "post lands on the LAN hub + cena_sam_chat only"
+        )
+
     # Parse uploaded files. Empty FileStorage entries (no filename) get skipped.
     files = [f for f in request.files.getlist("attachments") if f and f.filename]
     if len(files) > MAX_ATTACHMENTS_PER_MESSAGE:

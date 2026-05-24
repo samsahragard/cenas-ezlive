@@ -259,11 +259,13 @@
     background: rgba(228,179,64,0.10);
     color: var(--cream);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 4px 8px;
-    font-size: 12px;
+    border-radius: 10px;
+    /* Sam #855 2026-05-24: bump up so it's easy to tap on phone. */
+    padding: 10px 14px;
+    font-size: 15px; font-weight: 600;
     font-family: inherit;
-    max-width: 180px;
+    min-width: 220px;
+    max-width: 100%;
     cursor: pointer;
   }
   .ezo-page .ezo-driver-pick select:hover { background: rgba(228,179,64,0.18); }

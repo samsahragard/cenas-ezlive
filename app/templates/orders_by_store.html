@@ -455,9 +455,15 @@
               {% set _ck_prefix = 2 if _row_scope == 'tomball' else (1 if _row_scope == 'copperfield' else 0) %}
               {% set _driver_options = (active_drivers_by_prefix or {}).get(_ck_prefix) or [] %}
               {% if _driver_options %}
+                {# data-store-scope is the PAGE's store_slug (dos/uno/
+                   corporate/partner) for the assign_driver POST route
+                   which lives on store_bp. _row_scope above is a
+                   different value (tomball/copperfield) used by the
+                   unassign-courier endpoint on orders_browse — don't
+                   reuse it here or the POST 404s. #}
                 <span class="ezo-driver-pick"
                       data-order="{{ o.external_order_id }}"
-                      data-store-scope="{{ _row_scope }}"
+                      data-store-scope="{{ g.current_store }}"
                       data-current="{{ o.ezcater_driver_name or '' }}"
                       onclick="event.stopPropagation();">
                   <select onchange="assignDriver(this);">

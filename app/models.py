@@ -1862,6 +1862,47 @@ class SamChatMessage(Base):
         DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+# Sam's TODO list under /sam/chat (Sam directive 2026-05-23 #563).
+# Sam adds items, the team works them top-down — Cena cannot skip,
+# must complete the top item before moving to the next. Reorderable
+# by Sam via up/down. ALL fields Sam-filled (no auto-default for
+# date_added per Sam's literal "everything has to be filled out by me").
+#
+# Lifecycle: position is 1-based; smaller = higher priority. When Sam
+# marks an item done, status flips to 'done' and the renumber-active
+# pass on the route pulls remaining active positions tight (no holes).
+class SamChatTodo(Base):
+    """One Sam-authored TODO item under /sam/chat.
+
+    Top row (smallest position among status='active') is the current
+    focus the team is required to work on next. UI prevents skipping;
+    Cena's get_current_todo tool returns ONLY this row so the agent
+    sees a single priority at a time.
+    """
+    __tablename__ = "sam_chat_todos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    details: Mapped[str] = mapped_column(Text, nullable=False)
+    # Sam-typed; not auto-defaulted. Per Sam #563: "everything has to
+    # be filled out by me" — the form refuses empty date_added.
+    date_added: Mapped[date] = mapped_column(Date, nullable=False)
+    date_completed: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 1-based ordering; smaller = higher priority. Renumbered tight
+    # on every move + on every status change.
+    position: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # 'active' | 'done'. Validated application-side.
+    status: Mapped[str] = mapped_column(String(12), nullable=False,
+                                        default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
+_VALID_SAM_CHAT_TODO_STATUS = frozenset({"active", "done"})
+
+
 # ---- Block 1J — AmbientSignal data plane (samai spec, 2026-05-14) ----
 # The in-app data-plane / control-plane separation: six per-source
 # /cron/refresh-* crons WRITE AmbientSignal rows; the 1C ribbon router

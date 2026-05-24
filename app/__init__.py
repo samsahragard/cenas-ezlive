@@ -974,6 +974,29 @@ def create_app():
         logging.getLogger(__name__).exception(
             "manager_incident_report v4 backfill failed (non-fatal)")
 
+    # Idempotent table create — sam_chat_todos (migration 37, Sam
+    # directive 2026-05-23 #563 + re-raise "this is job number 2").
+    # Sam's TODO list under /sam/chat: he writes items in, top item is
+    # the current focus, Cena cannot skip. All fields Sam-filled (no
+    # auto-default for date_added). create_all is a no-op when the
+    # table already exists; scoped to just the SamChatTodo table so it
+    # never touches unrelated metadata.
+    try:
+        from sqlalchemy import inspect as _sa_insp_37
+        from app.db import engine as _eng_37
+        from app.models import (Base as _Base_37,
+                                SamChatTodo as _SCTD_37)
+        if _eng_37 is not None:
+            insp_37 = _sa_insp_37(_eng_37)
+            if "sam_chat_todos" not in set(insp_37.get_table_names()):
+                _Base_37.metadata.create_all(
+                    bind=_eng_37, tables=[_SCTD_37.__table__])
+                logging.getLogger(__name__).info(
+                    "sam_chat_todos (migration 37): table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "sam_chat_todos backfill failed (non-fatal)")
+
     # Idempotent destructive teardown — DROP TABLE whatsapp_messages
     # (migration 27, Track 3 final teardown per cena #2257: Sam green-
     # light on all 4 Track 3 items). The WhatsApp ingest route + model

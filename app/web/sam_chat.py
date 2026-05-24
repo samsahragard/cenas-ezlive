@@ -944,6 +944,318 @@ def sam_chat_active_model_set():
     return jsonify({"ok": True, "model": info})
 
 
+# ============================================================
+# TODO list under /sam/chat (Sam directive 2026-05-23 #563).
+# Sam writes items in for the team to complete; Cena must work them
+# top-down (no skipping). All fields Sam-filled — the routes refuse
+# empty details and empty date_added on add. UI surfaces ▲▼ for
+# reorder, a check for done, and an inline edit.
+#
+# Auth: Sam-only for mutations + the full list. The /current endpoint
+# is dual-gated (Sam session OR X-Cena-Token) so Cena's gateway tool
+# can read the top priority without Sam's browser session cookie.
+# ============================================================
+
+def _todo_render(t) -> dict:
+    """Serialise a SamChatTodo row to JSON-safe dict for the UI."""
+    return {
+        "id": t.id,
+        "details": t.details,
+        "date_added": t.date_added.isoformat() if t.date_added else None,
+        "date_completed": (t.date_completed.isoformat()
+                           if t.date_completed else None),
+        "position": t.position,
+        "status": t.status,
+    }
+
+
+def _parse_iso_date(raw):
+    """date|None from an ISO yyyy-mm-dd string. Returns None on empty
+    or unparseable input rather than raising — the route turns None
+    into a 400 itself when the field is required."""
+    from datetime import date as _date_cls
+    if raw is None:
+        return None
+    s = (raw or "").strip() if isinstance(raw, str) else ""
+    if not s:
+        return None
+    try:
+        return _date_cls.fromisoformat(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _renumber_active(db) -> None:
+    """Pull active todos' positions tight (1,2,3,...) after any
+    insert / delete / status change / move. Keeps get_current_todo
+    deterministic — the top is always position=1."""
+    from app.models import SamChatTodo as _SCTD
+    rows = (db.query(_SCTD)
+            .filter(_SCTD.status == "active")
+            .order_by(_SCTD.position.asc(), _SCTD.id.asc())
+            .all())
+    for new_pos, row in enumerate(rows, start=1):
+        if row.position != new_pos:
+            row.position = new_pos
+
+
+def _cena_token_value() -> str:
+    """Read CENA_GATEWAY_TOKEN env (Cena's shared gateway auth) for
+    the dual-gate path on /sam/chat/todos/current. Same env var the
+    rest of /sam/cena/* checks."""
+    raw = (os.getenv("CENA_GATEWAY_TOKEN") or "").strip()
+    return raw
+
+
+def _require_sam_or_cena_token():
+    """Gate for /sam/chat/todos/current — accept Sam's session OR a
+    matching X-Cena-Token header. Returns a Response to short-circuit
+    or None to proceed."""
+    if is_sam_chat_user():
+        return None
+    want = _cena_token_value()
+    got = request.headers.get("X-Cena-Token", "")
+    if want and got == want:
+        return None
+    return jsonify({"ok": False, "error": "forbidden"}), 403
+
+
+@sam_chat_bp.route("/sam/chat/todos", methods=["GET"])
+def sam_chat_todos_list():
+    """List Sam's TODOs. Returns {active: [...], done: [...]} so the UI
+    can render the two sections cleanly. Active sorted by position;
+    done sorted by date_completed desc."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    from app.models import SamChatTodo
+    db = SessionLocal()
+    try:
+        active = (db.query(SamChatTodo)
+                  .filter(SamChatTodo.status == "active")
+                  .order_by(SamChatTodo.position.asc(),
+                            SamChatTodo.id.asc())
+                  .all())
+        done = (db.query(SamChatTodo)
+                .filter(SamChatTodo.status == "done")
+                .order_by(SamChatTodo.date_completed.desc().nullslast(),
+                          SamChatTodo.id.desc())
+                .all())
+        return jsonify({
+            "ok": True,
+            "active": [_todo_render(t) for t in active],
+            "done": [_todo_render(t) for t in done],
+        })
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/todos", methods=["POST"])
+def sam_chat_todos_add():
+    """Add a new TODO. details + date_added required (Sam's literal
+    'everything has to be filled out by me'); date_completed is set
+    later via PATCH. New row goes to the bottom of the active list
+    (largest position); Sam can ▲ it to the top as needed."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    body = request.get_json(silent=True) or {}
+    details = (body.get("details") or "").strip()
+    date_added = _parse_iso_date(body.get("date_added"))
+    if not details:
+        return jsonify({"ok": False,
+                        "error": "details required"}), 400
+    if date_added is None:
+        return jsonify({"ok": False,
+                        "error": "date_added required (yyyy-mm-dd)"}), 400
+    from app.models import SamChatTodo
+    db = SessionLocal()
+    try:
+        # New row appends to the bottom of the active list.
+        max_pos = (db.query(SamChatTodo.position)
+                   .filter(SamChatTodo.status == "active")
+                   .order_by(SamChatTodo.position.desc())
+                   .limit(1).scalar()) or 0
+        row = SamChatTodo(
+            details=details,
+            date_added=date_added,
+            position=max_pos + 1,
+            status="active",
+        )
+        db.add(row)
+        db.flush()
+        # No renumber needed for a clean append, but call it to defend
+        # against any prior holes from out-of-band edits.
+        _renumber_active(db)
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True, "todo": _todo_render(row)}), 201
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/todos/<int:tid>", methods=["PATCH"])
+def sam_chat_todos_edit(tid: int):
+    """Edit any field on a TODO. Setting date_completed to a real date
+    flips status to 'done' and renumbers active. Setting it back to
+    null flips status to 'active' and appends to the bottom of the
+    active list."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    body = request.get_json(silent=True) or {}
+    from app.models import SamChatTodo, _VALID_SAM_CHAT_TODO_STATUS
+    db = SessionLocal()
+    try:
+        row = db.get(SamChatTodo, tid)
+        if row is None:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        # details
+        if "details" in body:
+            new_details = (body.get("details") or "").strip()
+            if not new_details:
+                return jsonify({"ok": False,
+                                "error": "details cannot be empty"}), 400
+            row.details = new_details
+        # date_added
+        if "date_added" in body:
+            new_added = _parse_iso_date(body.get("date_added"))
+            if new_added is None:
+                return jsonify({"ok": False,
+                                "error": "date_added must be yyyy-mm-dd"}), 400
+            row.date_added = new_added
+        # date_completed (drives status)
+        if "date_completed" in body:
+            raw = body.get("date_completed")
+            if raw in (None, "", False):
+                # Cleared — flip back to active, position to bottom.
+                row.date_completed = None
+                row.status = "active"
+                max_pos = (db.query(SamChatTodo.position)
+                           .filter(SamChatTodo.status == "active",
+                                   SamChatTodo.id != row.id)
+                           .order_by(SamChatTodo.position.desc())
+                           .limit(1).scalar()) or 0
+                row.position = max_pos + 1
+            else:
+                parsed = _parse_iso_date(raw)
+                if parsed is None:
+                    return jsonify({"ok": False,
+                                    "error": "date_completed must be yyyy-mm-dd"}), 400
+                row.date_completed = parsed
+                row.status = "done"
+                # position is meaningless once done — leave the value
+                # alone (audit trail), renumber will tighten the
+                # remaining actives.
+        # status override (rarely used; PATCH date_completed is the
+        # primary path). Validate against the allow-list.
+        if "status" in body:
+            st = (body.get("status") or "").strip().lower()
+            if st not in _VALID_SAM_CHAT_TODO_STATUS:
+                return jsonify({"ok": False,
+                                "error": f"status must be one of {sorted(_VALID_SAM_CHAT_TODO_STATUS)}"}), 400
+            row.status = st
+        _renumber_active(db)
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True, "todo": _todo_render(row)})
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/todos/<int:tid>/move", methods=["POST"])
+def sam_chat_todos_move(tid: int):
+    """Reorder one TODO up or down by one slot in the active list.
+    Body: {"direction": "up" | "down"}. A no-op (already at the
+    boundary) is OK — returns the unchanged row so the UI re-renders
+    the same state without erroring."""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    body = request.get_json(silent=True) or {}
+    direction = (body.get("direction") or "").strip().lower()
+    if direction not in ("up", "down"):
+        return jsonify({"ok": False,
+                        "error": "direction must be 'up' or 'down'"}), 400
+    from app.models import SamChatTodo
+    db = SessionLocal()
+    try:
+        row = db.get(SamChatTodo, tid)
+        if row is None:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        if row.status != "active":
+            return jsonify({"ok": False,
+                            "error": "only active todos reorder"}), 400
+        # Find the neighbor in the move direction.
+        if direction == "up":
+            neighbor = (db.query(SamChatTodo)
+                        .filter(SamChatTodo.status == "active",
+                                SamChatTodo.position < row.position)
+                        .order_by(SamChatTodo.position.desc())
+                        .first())
+        else:
+            neighbor = (db.query(SamChatTodo)
+                        .filter(SamChatTodo.status == "active",
+                                SamChatTodo.position > row.position)
+                        .order_by(SamChatTodo.position.asc())
+                        .first())
+        if neighbor is not None:
+            row.position, neighbor.position = neighbor.position, row.position
+        _renumber_active(db)
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True, "todo": _todo_render(row)})
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/todos/<int:tid>", methods=["DELETE"])
+def sam_chat_todos_delete(tid: int):
+    """Remove a TODO outright. Renumbers active so the list stays
+    tight. (Use cases: Sam adds something by mistake; Sam decides a
+    done item shouldn't even live in the Done section.)"""
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    from app.models import SamChatTodo
+    db = SessionLocal()
+    try:
+        row = db.get(SamChatTodo, tid)
+        if row is None:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        db.delete(row)
+        _renumber_active(db)
+        db.commit()
+        return jsonify({"ok": True, "deleted": tid})
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/todos/current", methods=["GET"])
+def sam_chat_todos_current():
+    """Return the single top active TODO (position=1) or null if the
+    list is empty. Dual-gated: Sam session OR X-Cena-Token, because
+    Cena's gateway tool calls this from outside Sam's browser context
+    to enforce the no-skip rule (work on position=1 only)."""
+    gate = _require_sam_or_cena_token()
+    if gate is not None:
+        return gate
+    from app.models import SamChatTodo
+    db = SessionLocal()
+    try:
+        row = (db.query(SamChatTodo)
+               .filter(SamChatTodo.status == "active")
+               .order_by(SamChatTodo.position.asc(),
+                         SamChatTodo.id.asc())
+               .first())
+        if row is None:
+            return jsonify({"ok": True, "current": None,
+                            "note": "no active TODOs"})
+        return jsonify({"ok": True, "current": _todo_render(row)})
+    finally:
+        db.close()
+
+
 @sam_chat_bp.route("/sam/docs", methods=["GET"])
 def sam_docs_page():
     """Cena-page tab: consolidated project documentation. Sam directive

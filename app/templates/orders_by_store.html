@@ -497,18 +497,11 @@
                   <span class="ezo-driver-status"></span>
                 </span>
               {% endif %}
-              {# "Unhook driver" — frees the ezCater courier. Same
-                 endpoint + data attributes as the prior template's
-                 per-row button. #}
-              <button type="button"
-                      class="ezo-unhook"
-                      data-order="{{ o.external_order_id }}"
-                      data-store-scope="{{ _row_scope }}"
-                      data-has-driver="{{ '1' if o.ezcater_driver_name else '0' }}"
-                      onclick="event.stopPropagation(); unhookCourier(this);"
-                      title="Free up the ezCater driver on this order">
-                Unhook driver
-              </button>
+              {# 'Unhook driver' button removed per Sam #835 2026-05-24
+                 — the dropdown's '— no driver (unhook only) —' option
+                 covers this on the cards. Order DETAIL page (order_view)
+                 still has the 'Free up ezCater driver field' button as
+                 the backup path. #}
             </div>
           </div>
         {% endfor %}

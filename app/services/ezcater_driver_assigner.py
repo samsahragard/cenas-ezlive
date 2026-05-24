@@ -41,15 +41,32 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from selenium import webdriver
-from selenium.common.exceptions import (
-    NoSuchElementException, TimeoutException, WebDriverException,
-)
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+# Selenium is only needed on the AiCk gateway side where the Selenium
+# flow actually runs. Render imports this module to call
+# dispatch_assignment_job (HTTP POST only — no selenium). Wrapping
+# the import in a try/except keeps Render's import path working even
+# without selenium installed; the selenium-driving functions raise at
+# runtime if you call them on a side that doesn't have it.
+try:
+    from selenium import webdriver
+    from selenium.common.exceptions import (
+        NoSuchElementException, TimeoutException, WebDriverException,
+    )
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    _SELENIUM_OK = True
+except ImportError:
+    webdriver = None  # type: ignore
+    NoSuchElementException = TimeoutException = WebDriverException = Exception  # type: ignore
+    ChromeOptions = None  # type: ignore
+    By = None  # type: ignore
+    Keys = None  # type: ignore
+    EC = None  # type: ignore
+    WebDriverWait = None  # type: ignore
+    _SELENIUM_OK = False
 
 from app.db import get_db
 from app.models import DriverAssignmentJob

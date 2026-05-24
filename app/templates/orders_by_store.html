@@ -213,8 +213,13 @@
     background: rgba(232,88,82,0.18); color: var(--red-bright);
   }
   .ezo-page .ezo-code {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    color: var(--cream-meta); letter-spacing: 0.04em; margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    /* Sam #848 2026-05-24: larger + centered, was 10px / left-aligned
+       under deliver_at — managers needed the order code to be the
+       scannable element on the card. */
+    font-size: 18px; font-weight: 700;
+    color: var(--gold-bright); letter-spacing: 0.06em;
+    text-align: center; margin-top: 8px;
   }
   .ezo-page .ezo-client {
     font-size: 15px; font-weight: 700; color: var(--cream);

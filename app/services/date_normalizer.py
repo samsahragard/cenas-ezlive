@@ -89,15 +89,37 @@ def normalize_pdf_time(raw_time: str) -> str:
       '11:30 AM CST' -> '11:30 AM'
       '9:05 AM' -> '9:05 AM'
       '13:00' -> '1:00 PM'
+      '5:15' -> '5:15 PM'   (catering-heuristic: bare 1-11 without an
+                              explicit AM/PM marker is PM — Cenas
+                              doesn't deliver between 1am and 11am
+                              for catering; pre-fix this returned
+                              '5:15 AM' for ezCater orders whose
+                              raw time field lacked the marker,
+                              Sam #846 2026-05-24)
     """
     cleaned = raw_time.strip()
 
-    # Strip trailing timezone text like CST / CDT
-    cleaned = re.sub(r"\s+[A-Z]{2,4}$", "", cleaned).strip()
+    # Check for the meridiem marker BEFORE timezone stripping — the
+    # tz regex below ('AM'/'PM' both match 2-4 uppercase letters) would
+    # eat 'AM' off '9:05 AM' and leave bare '9:05', causing the
+    # heuristic below to mis-flip it to PM.
+    has_meridiem = bool(
+        re.search(r"(?:^|[^A-Za-z])[AaPp][Mm](?:$|[^A-Za-z])", cleaned)
+    )
+
+    # Strip trailing timezone text like CST / CDT. Use a negative
+    # lookahead so we don't eat AM/PM (also 2 uppercase letters).
+    cleaned = re.sub(r"\s+(?!AM|PM|am|pm)[A-Za-z]{2,5}$", "", cleaned).strip()
 
     for fmt in _TIME_FORMATS:
         try:
             parsed = datetime.strptime(cleaned, fmt)
+            # Catering-PM heuristic: when the source had no AM/PM
+            # marker AND the parsed hour is 1-11, treat as PM. (Hour
+            # 0 = midnight = 12 AM. Hour 12 = noon = 12 PM. Hours
+            # 13-23 already format unambiguously as PM.)
+            if not has_meridiem and 1 <= parsed.hour <= 11:
+                parsed = parsed.replace(hour=parsed.hour + 12)
             return parsed.strftime("%I:%M %p").lstrip("0")
         except ValueError:
             continue

@@ -520,6 +520,96 @@ class EzcaterKnownDriver(Base):
     ck_prefix: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class EzcaterOrderDetails(Base):
+    """PDF-extracted detail fields per order (migration 36, Sam #530
+    pipeline). One row per external_order_id; UPSERT on re-extraction.
+
+    Holds fields the ezCater Partner API does NOT surface but the PDF
+    does: per-item prices, setup-piece counts, dietary notes, day-of
+    contact, gate codes, special-instructions free-text, and the fee
+    breakdown (commission / service / processing) that orders.fee
+    bundles into a single total. Cena #534 locked the field list;
+    aick built the migration + model + extractor; ck built the
+    Step-1 Playwright download script.
+
+    Kept separate from `orders` per Cena #534 directive: "don't bolt
+    PDF-derived fields onto orders, keep API-authoritative fields
+    pristine in their own table."
+    """
+    __tablename__ = "ezcater_order_details"
+    __table_args__ = (
+        UniqueConstraint("external_order_id",
+                         name="uq_ezcater_order_details_external_order_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_order_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    # PDF-only fields per Cena #534.
+    items_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    setup_pieces_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    special_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gate_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    day_of_contact_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    day_of_contact_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # ezCater fee breakdown — cents (integer) to avoid float drift.
+    commission_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    service_fee_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    processing_fee_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Provenance — reproducible audit trail.
+    source_pdf_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_pdf_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    extractor_version: Mapped[str | None] = mapped_column(String(20), nullable=True, default="1")
+    parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    extracted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False,
+    )
+
+
+class DriverAssignmentJob(Base):
+    """One in-flight or completed re-assignment of an ezCater order's
+    driver (migration 37, Sam #669 build). Spawned by the per-order
+    dropdown on the catering Ez Orders page; consumed by the Selenium
+    flow in app/services/ezcater_driver_assigner.py.
+
+    Per Sam's amendment, verification is done by DOM re-read on the
+    order page after submit — NOT by PDF parse — so no
+    verification_pdf_path column. The PDF-archive flow (nightly cron)
+    is unrelated and unaffected.
+    """
+    __tablename__ = "driver_assignment_jobs"
+    __table_args__ = (
+        UniqueConstraint("job_id", name="uq_driver_assignment_jobs_job_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    order_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    current_driver: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    new_driver: Mapped[str] = mapped_column(String(160), nullable=False)
+
+    # pending -> running -> completed | failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    gateway_processed: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False,
+    )
+
+
 class User(Base):
     """Site-wide user account (migration 13). Replaces the shared-password
     Tier 1/Tier 2 gates with per-person 5-digit numeric passcodes. Roles in

@@ -240,6 +240,49 @@
   .ezo-page .ezo-chip.driver { color: var(--gold-bright); }
   .ezo-page .ezo-chip.nodriver { color: var(--red-bright); }
   .ezo-page .ezo-botspacer { flex: 1; }
+  /* Per-card driver dropdown (Sam #669 driver-assignment build).
+     Picks a real in-house driver from the store's roster; on change
+     fires POST /<scope>/catering/assign_driver, locks the dropdown
+     with "assigning [name]…", polls /status every 2s, then flashes
+     green ✓ on success or red ✗ on failure. */
+  .ezo-page .ezo-driver-pick {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 12px; color: var(--cream);
+  }
+  .ezo-page .ezo-driver-pick select {
+    background: rgba(228,179,64,0.10);
+    color: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    max-width: 180px;
+    cursor: pointer;
+  }
+  .ezo-page .ezo-driver-pick select:hover { background: rgba(228,179,64,0.18); }
+  .ezo-page .ezo-driver-pick select:disabled {
+    opacity: 0.6; cursor: progress;
+  }
+  .ezo-page .ezo-driver-pick.s-pending select {
+    border-color: var(--gold-bright);
+  }
+  .ezo-page .ezo-driver-pick.s-ok select {
+    border-color: #4cb86d; background: rgba(76,184,109,0.18);
+  }
+  .ezo-page .ezo-driver-pick.s-err select {
+    border-color: var(--red-bright); background: rgba(232,88,82,0.18);
+  }
+  .ezo-page .ezo-driver-pick .ezo-driver-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.04em;
+    color: var(--cream-meta);
+    white-space: nowrap;
+  }
+  .ezo-page .ezo-driver-pick.s-pending .ezo-driver-status { color: var(--gold-bright); }
+  .ezo-page .ezo-driver-pick.s-ok .ezo-driver-status { color: #80d098; }
+  .ezo-page .ezo-driver-pick.s-err .ezo-driver-status { color: var(--red-bright); }
   /* "Unhook driver" — live red action, restyled to fit the card */
   .ezo-page .ezo-unhook {
     cursor: pointer; background: rgba(199,59,54,0.16);
@@ -401,6 +444,34 @@
                 <span class="ezo-chip">ezC {{ o.ezcater_driver_name }}</span>
               {% endif %}
               <span class="ezo-botspacer"></span>
+              {# Sam #669 driver-assignment dropdown — manager picks a
+                 real in-house driver from the store's roster, change
+                 fires the Selenium re-assignment flow on aick. The
+                 store's roster comes from EzcaterKnownDriver via the
+                 active_drivers_by_prefix dict; ck_prefix 2 = Tomball,
+                 1 = Copperfield. Cards in other-store contexts (no
+                 ck_prefix match) get no dropdown — assignment isn't
+                 meaningful there. #}
+              {% set _ck_prefix = 2 if _row_scope == 'tomball' else (1 if _row_scope == 'copperfield' else 0) %}
+              {% set _driver_options = (active_drivers_by_prefix or {}).get(_ck_prefix) or [] %}
+              {% if _driver_options %}
+                <span class="ezo-driver-pick"
+                      data-order="{{ o.external_order_id }}"
+                      data-store-scope="{{ _row_scope }}"
+                      data-current="{{ o.ezcater_driver_name or '' }}"
+                      onclick="event.stopPropagation();">
+                  <select onchange="assignDriver(this);">
+                    <option value="">— pick driver —</option>
+                    {% for name in _driver_options %}
+                      <option value="{{ name }}"
+                              {% if o.ezcater_driver_name and name == o.ezcater_driver_name %}selected{% endif %}>
+                        {{ name }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <span class="ezo-driver-status"></span>
+                </span>
+              {% endif %}
               {# "Unhook driver" — frees the ezCater courier. Same
                  endpoint + data attributes as the prior template's
                  per-row button. #}
@@ -479,6 +550,88 @@ async function unhookCourier(btn) {
     btn.textContent = original;
     alert(`Unhook failed: ${e}`);
   }
+}
+
+// Sam #669 driver-assignment dropdown handler.
+// On change: POST /<scope>/catering/assign_driver, get job_id, then
+// poll /catering/assign_driver/status?job_id=X every 2s until
+// completed | failed. Locks the dropdown for the duration so the
+// manager can't double-pick; other cards' dropdowns remain free.
+async function assignDriver(selectEl) {
+  const wrap = selectEl.closest('.ezo-driver-pick');
+  if (!wrap) return;
+  const order = wrap.dataset.order;
+  const scope = wrap.dataset.storeScope;
+  const current = wrap.dataset.current || '';
+  const picked = selectEl.value;
+  if (!order || !scope || !picked) return;
+  if (picked === current) return; // no-op pick of the already-shown driver
+
+  const status = wrap.querySelector('.ezo-driver-status');
+  const setState = (klass, text) => {
+    wrap.classList.remove('s-pending', 's-ok', 's-err');
+    if (klass) wrap.classList.add(klass);
+    if (status) status.textContent = text;
+  };
+  selectEl.disabled = true;
+  setState('s-pending', `assigning ${picked}…`);
+
+  let jobId;
+  try {
+    const resp = await fetch(`/${scope}/catering/assign_driver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: order, new_driver: picked, current_driver: current }),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok || !body.job_id) {
+      setState('s-err', body.error || `submit failed (HTTP ${resp.status})`);
+      selectEl.disabled = false;
+      return;
+    }
+    jobId = body.job_id;
+  } catch (e) {
+    setState('s-err', `submit error: ${e}`);
+    selectEl.disabled = false;
+    return;
+  }
+
+  // Poll status every 2s, with a hard cap so a stuck job doesn't
+  // hold the dropdown forever (90 polls = ~3 min).
+  const pollUrl = `/${scope}/catering/assign_driver/status?job_id=${encodeURIComponent(jobId)}`;
+  for (let i = 0; i < 90; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    let st;
+    try {
+      const r = await fetch(pollUrl);
+      st = await r.json();
+    } catch (e) {
+      // Transient — keep polling.
+      continue;
+    }
+    if (!st.ok) continue;
+    if (st.status === 'completed') {
+      setState('s-ok', `✓ ${picked}`);
+      // Briefly show success then return to default styling with new
+      // driver as the locked-in current value.
+      wrap.dataset.current = picked;
+      setTimeout(() => { setState('', ''); selectEl.disabled = false; }, 2000);
+      return;
+    }
+    if (st.status === 'failed') {
+      const why = st.error_message || 'assignment failed';
+      setState('s-err', `✗ ${why.slice(0, 60)}`);
+      selectEl.value = current; // revert dropdown to old value
+      selectEl.disabled = false;
+      return;
+    }
+    // pending / running — keep status text fresh
+    if (status && st.status === 'running') {
+      status.textContent = `assigning ${picked}…`;
+    }
+  }
+  setState('s-err', 'timeout after 3 min — check job log');
+  selectEl.disabled = false;
 }
 </script>
 

@@ -51,9 +51,29 @@ def location_orders(location: str):
             location_label=LOCATION_LABELS[location],
             groups=groups,
             display_drivers=display_drivers,
+            active_drivers_by_prefix=_active_drivers_by_prefix(db),
         )
     finally:
         db.close()
+
+
+def _active_drivers_by_prefix(db) -> dict[int, list[str]]:
+    """Build the per-store driver dropdown options for the Ez Orders
+    card driver picker (Sam #669). Pulls from EzcaterKnownDriver
+    (the roster ck imports from the partner-portal driver list) and
+    groups by ck_prefix: 1=Copperfield/UNO, 2=Tomball/DOS. Drivers
+    with ck_prefix NULL are ambiguous and not offered."""
+    from app.models import EzcaterKnownDriver
+    out: dict[int, list[str]] = {1: [], 2: []}
+    roster = (
+        db.query(EzcaterKnownDriver)
+        .filter(EzcaterKnownDriver.ck_prefix.in_((1, 2)))
+        .order_by(EzcaterKnownDriver.name.asc())
+        .all()
+    )
+    for kd in roster:
+        out.setdefault(kd.ck_prefix, []).append(kd.name)
+    return out
 
 
 @browse.route("/orders/view/<external_order_id>")

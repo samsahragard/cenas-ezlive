@@ -2762,6 +2762,147 @@ def cena_resolve_manager_log():
                              {"date": date, "topic": topic or None}, cands)
 
 
+@cena_bp.route("/sam/cena/ezcater-order-full", methods=["GET"])
+def cena_ezcater_order_full():
+    """Combined Cena-facing read of an ezCater order: API-side fields
+    (orders + order_items) merged with PDF-extracted detail fields
+    (ezcater_order_details). Backs the `ezcater_get_order_full_details`
+    gateway tool (Sam #530 pipeline).
+
+    Per Cena #534 column-split discipline: this endpoint does the
+    JOIN view-side — the orders table stays API-authoritative, the
+    ezcater_order_details table stays PDF-authoritative; conflicts
+    are surfaced both sides so Cena can decide which to trust.
+
+    Query: ?external_order_id=<id>  (e.g. 742-V7Y)
+    Returns: {ok, external_order_id, order: {...}, order_items: [...],
+             pdf_details: {...|null}, pdf_extracted_at: <iso|null>}
+    pdf_details is null when no PDF has been extracted yet for this
+    order (Step 1 download + Step 2 extract not run, or order is too
+    new to have a PDF). Cena tool surfaces that gracefully.
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    ext_id = (request.args.get("external_order_id") or "").strip()
+    if not ext_id:
+        return jsonify({"ok": False,
+                        "error": "external_order_id required"}), 400
+
+    from sqlalchemy import text as _sa_text
+    from app.db import SessionLocal as _SL
+    db = _SL()
+    try:
+        # Order (API-authoritative)
+        order_row = db.execute(_sa_text(
+            "SELECT id, external_order_id, external_delivery_id, "
+            "client, customer_phone, delivery_address, "
+            "delivery_instructions, delivery_date, delivery_time, "
+            "headcount, food_total, tax, tip, fee, total, "
+            "origin_store_id, ezcater_driver_name, created_at, updated_at "
+            "FROM orders WHERE external_order_id = :eid LIMIT 1"
+        ), {"eid": ext_id}).first()
+        if order_row is None:
+            return jsonify({"ok": False,
+                            "error": "no_such_order",
+                            "external_order_id": ext_id}), 404
+        order_dict = {
+            "id": order_row[0], "external_order_id": order_row[1],
+            "external_delivery_id": order_row[2], "client": order_row[3],
+            "customer_phone": order_row[4],
+            "delivery_address": order_row[5],
+            "delivery_instructions": order_row[6],
+            "delivery_date": _jsonable(order_row[7]),
+            "delivery_time": _jsonable(order_row[8]),
+            "headcount": order_row[9],
+            "food_total": _jsonable(order_row[10]),
+            "tax": _jsonable(order_row[11]),
+            "tip": _jsonable(order_row[12]),
+            "fee": _jsonable(order_row[13]),
+            "total": _jsonable(order_row[14]),
+            "origin_store_id": order_row[15],
+            "ezcater_driver_name": order_row[16],
+            "created_at": _jsonable(order_row[17]),
+            "updated_at": _jsonable(order_row[18]),
+        }
+
+        # Order items (API-authoritative, from order_items)
+        items_rows = db.execute(_sa_text(
+            "SELECT id, name, quantity, special_instructions, "
+            "sort_order FROM order_items "
+            "WHERE order_id = :oid ORDER BY COALESCE(sort_order, id)"
+        ), {"oid": order_row[0]}).all()
+        order_items = [
+            {"id": r[0], "name": r[1], "quantity": r[2],
+             "special_instructions": r[3], "sort_order": r[4]}
+            for r in items_rows
+        ]
+
+        # PDF-extracted details (may be null if Step 1+2 haven't run
+        # against this order yet — Cena tool surfaces gracefully).
+        pdf_row = db.execute(_sa_text(
+            "SELECT items_json, setup_pieces_json, special_instructions, "
+            "gate_code, day_of_contact_name, day_of_contact_phone, "
+            "commission_cents, service_fee_cents, processing_fee_cents, "
+            "source_pdf_path, extractor_version, parse_error, "
+            "extracted_at "
+            "FROM ezcater_order_details WHERE external_order_id = :eid "
+            "LIMIT 1"
+        ), {"eid": ext_id}).first()
+        # parse_status (Cena #560 refinement): explicit state field so
+        # the /sam/chat UI can render the right thing instead of
+        # guessing from null pdf_details. Three states:
+        #   - "extracted"     — Step 1+2 ran cleanly, pdf_details populated.
+        #   - "parse_error"   — extractor ran but failed; parse_error
+        #                       column has the reason; partial fields
+        #                       may be present.
+        #   - "not_extracted" — no row in ezcater_order_details yet
+        #                       (Step 1 download or Step 2 extract
+        #                       not run for this order).
+        if pdf_row is not None:
+            import json as _json
+            def _parse_json(s):
+                if not s:
+                    return None
+                try:
+                    return _json.loads(s)
+                except Exception:
+                    return {"_raw": s}
+            pdf_details = {
+                "items": _parse_json(pdf_row[0]),
+                "setup_pieces": _parse_json(pdf_row[1]),
+                "special_instructions": pdf_row[2],
+                "gate_code": pdf_row[3],
+                "day_of_contact_name": pdf_row[4],
+                "day_of_contact_phone": pdf_row[5],
+                "commission_cents": pdf_row[6],
+                "service_fee_cents": pdf_row[7],
+                "processing_fee_cents": pdf_row[8],
+                "source_pdf_path": pdf_row[9],
+                "extractor_version": pdf_row[10],
+                "parse_error": pdf_row[11],
+            }
+            pdf_extracted_at = _jsonable(pdf_row[12])
+            parse_status = ("parse_error" if pdf_row[11]
+                            else "extracted")
+        else:
+            pdf_details = None
+            pdf_extracted_at = None
+            parse_status = "not_extracted"
+
+        return jsonify({
+            "ok": True,
+            "external_order_id": ext_id,
+            "order": order_dict,
+            "order_items": order_items,
+            "pdf_details": pdf_details,
+            "pdf_extracted_at": pdf_extracted_at,
+            "parse_status": parse_status,
+        })
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-ingest-vendor-emails", methods=["POST"])
 def cena_run_ingest_vendor_emails():
     """Kick a full vendor-email ingest pass — scan orders@ + ezcater@

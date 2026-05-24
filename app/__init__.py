@@ -650,6 +650,46 @@ def create_app():
         logging.getLogger(__name__).exception(
             "attendance v3 table backfill failed (non-fatal)")
 
+    # Idempotent table create — ezcater_order_details (migration 36,
+    # Sam #530 PDF pipeline + Cena #534 field-list lock). Holds the
+    # PDF-only extraction fields that the ezCater Partner API does not
+    # surface (per-item prices, setup-piece counts, dietary notes,
+    # day-of contact, gate codes, special-instructions free-text, fee
+    # breakdown). One row per external_order_id with UPSERT semantics.
+    try:
+        from sqlalchemy import inspect as _sa_insp_eod
+        from app.db import engine as _eng_eod
+        from app.models import Base as _Base_eod, EzcaterOrderDetails as _EOD_eod
+        if _eng_eod is not None:
+            insp_eod = _sa_insp_eod(_eng_eod)
+            if "ezcater_order_details" not in set(insp_eod.get_table_names()):
+                _Base_eod.metadata.create_all(
+                    bind=_eng_eod, tables=[_EOD_eod.__table__])
+                logging.getLogger(__name__).info(
+                    "ezcater_order_details: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "ezcater_order_details backfill failed (non-fatal)")
+
+    # Idempotent table create — driver_assignment_jobs (migration 37,
+    # Sam #669 driver-assignment build). One row per re-assignment job
+    # the catering Ez Orders dropdown spawns; consumed by the Selenium
+    # flow in app/services/ezcater_driver_assigner.py.
+    try:
+        from sqlalchemy import inspect as _sa_insp_daj
+        from app.db import engine as _eng_daj
+        from app.models import Base as _Base_daj, DriverAssignmentJob as _DAJ_daj
+        if _eng_daj is not None:
+            insp_daj = _sa_insp_daj(_eng_daj)
+            if "driver_assignment_jobs" not in set(insp_daj.get_table_names()):
+                _Base_daj.metadata.create_all(
+                    bind=_eng_daj, tables=[_DAJ_daj.__table__])
+                logging.getLogger(__name__).info(
+                    "driver_assignment_jobs: table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "driver_assignment_jobs backfill failed (non-fatal)")
+
     # Idempotent table create — interview_candidates (Interview Tracker,
     # Sam #5:48, aick build). The unconditional Base.metadata.create_all
     # above already covers this new table; this scoped block mirrors the

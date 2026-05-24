@@ -489,7 +489,10 @@ def orders_list():
     store_bp.url_value_preprocessor — without that, bare /orders/<location>
     would lose store context (same shape as the driver-tracking bug)."""
     if g.current_location == "both":
-        from app.web.orders_browse import list_orders_for_location, group_orders_by_date
+        from app.web.orders_browse import (
+            list_orders_for_location, group_orders_by_date,
+            _active_drivers_by_prefix,
+        )
         from app.services.orders_query import rotated_dispatch_letters
         db = next(get_db())
         try:
@@ -504,6 +507,7 @@ def orders_list():
                 location_label="All Orders",
                 groups=groups,
                 display_drivers=display_drivers,
+                active_drivers_by_prefix=_active_drivers_by_prefix(db),
             )
         finally:
             db.close()
@@ -4544,3 +4548,111 @@ def vendors_dashboard():
         active_tab=active_tab,
         tabs=tabs,
     )
+
+
+# ============== CATERING — DRIVER ASSIGNMENT (Sam #669) ==============
+#
+# Two endpoints backing the per-order driver dropdown on the catering
+# Ez Orders page:
+#
+#   POST /<store>/catering/assign_driver
+#     body: {order_id, new_driver, current_driver}
+#     -> creates a driver_assignment_jobs row (status=pending), pings
+#        the aick gateway to run the Selenium flow, returns {job_id}.
+#
+#   GET  /<store>/catering/assign_driver/status?job_id=X
+#     -> {status: pending|running|completed|failed, error_message?,
+#         new_driver, current_driver, gateway_processed, retry_count}
+#
+# Concurrency guard per Sam #669: a second job for the same order_id
+# within 5 seconds of the first is rejected server-side (idempotency
+# window). The frontend dropdown lock prevents this from the UI side
+# too, but this guard catches double-clicks and races. The Selenium
+# flow itself + amendment (verify via DOM re-read, not PDF parse)
+# lives in app/services/ezcater_driver_assigner.py (Phase 2).
+
+@store_bp.route("/catering/assign_driver", methods=["POST"])
+def catering_assign_driver():
+    from app.models import DriverAssignmentJob
+    import uuid
+    payload = request.get_json(silent=True) or {}
+    order_id = (payload.get("order_id") or "").strip()
+    new_driver = (payload.get("new_driver") or "").strip()
+    current_driver = (payload.get("current_driver") or "").strip() or None
+    if not order_id or not new_driver:
+        return jsonify({"ok": False, "error": "order_id + new_driver required"}), 400
+
+    db = next(get_db())
+    try:
+        # 5-second same-order guard. A pending/running job for this order
+        # within the last 5 seconds blocks a second submit.
+        cutoff = datetime.utcnow() - timedelta(seconds=5)
+        existing = (
+            db.query(DriverAssignmentJob)
+            .filter(DriverAssignmentJob.order_id == order_id)
+            .filter(DriverAssignmentJob.created_at >= cutoff)
+            .filter(DriverAssignmentJob.status.in_(("pending", "running")))
+            .first()
+        )
+        if existing:
+            return jsonify({
+                "ok": False, "error": "assignment already in progress",
+                "job_id": existing.job_id,
+            }), 409
+
+        job = DriverAssignmentJob(
+            job_id=str(uuid.uuid4()),
+            order_id=order_id,
+            current_driver=current_driver,
+            new_driver=new_driver,
+            status="pending",
+        )
+        db.add(job)
+        db.commit()
+        job_id = job.job_id
+    finally:
+        db.close()
+
+    # Dispatch to the aick gateway (the Selenium runner). Done out of
+    # band so a slow gateway never blocks the HTTP response. The
+    # gateway endpoint + actual Selenium flow land in Phase 2; until
+    # then the job stays pending and the frontend's polling will see
+    # that state.
+    try:
+        from app.services.ezcater_driver_assigner import dispatch_assignment_job
+        dispatch_assignment_job(job_id)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "catering_assign_driver: dispatch raised (job stays pending)")
+
+    return jsonify({"ok": True, "job_id": job_id}), 202
+
+
+@store_bp.route("/catering/assign_driver/status", methods=["GET"])
+def catering_assign_driver_status():
+    from app.models import DriverAssignmentJob
+    job_id = (request.args.get("job_id") or "").strip()
+    if not job_id:
+        return jsonify({"ok": False, "error": "job_id required"}), 400
+    db = next(get_db())
+    try:
+        job = (db.query(DriverAssignmentJob)
+                 .filter(DriverAssignmentJob.job_id == job_id)
+                 .first())
+        if not job:
+            return jsonify({"ok": False, "error": "job not found"}), 404
+        return jsonify({
+            "ok": True,
+            "job_id": job.job_id,
+            "order_id": job.order_id,
+            "status": job.status,
+            "error_message": job.error_message,
+            "current_driver": job.current_driver,
+            "new_driver": job.new_driver,
+            "gateway_processed": job.gateway_processed,
+            "retry_count": job.retry_count,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        })
+    finally:
+        db.close()

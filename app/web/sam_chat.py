@@ -698,6 +698,7 @@ _START_FILES = (
     "CENA.md",
     "APP_STATUS.md",
     "plan.md",
+    "tool.md",
 )
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 

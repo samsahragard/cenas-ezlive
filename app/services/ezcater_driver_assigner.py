@@ -126,28 +126,41 @@ def dispatch_assignment_job(job_id: str, order_id: str, current_driver: Optional
     writing the job row to its local DB. Aick gateway runs the flow
     + POSTs back to /catering/assign_driver/result with the outcome.
 
-    Falls back to a no-op log line if CENA_GATEWAY_URL is unset (dev
-    mode) — the route's polling fallback can still observe the row.
+    Routes via CENA_PROXY (Render's userspace tailscaled SOCKS5
+    proxy) when set, so 100.108.x.x Tailscale IPs are reachable from
+    Render web service. Same pattern app/web/sam_chat.py uses for
+    the cena_sam_chat mirror. Falls back to direct connection when
+    CENA_PROXY is unset (e.g. local dev with the gateway on
+    localhost).
     """
     gateway = (os.environ.get("CENA_GATEWAY_URL") or "").strip().rstrip("/")
     token = os.environ.get("CENA_GATEWAY_TOKEN", "").strip()
     callback = (os.environ.get("CENA_RENDER_ORIGIN") or "https://app.cenaskitchen.com").strip().rstrip("/")
+    proxy = (os.environ.get("CENA_PROXY") or "").strip() or None
     if not gateway:
         logger.info("dispatch_assignment_job: CENA_GATEWAY_URL unset — job %s queued without wake", job_id)
         return
-    payload = json.dumps({
+    body = {
         "job_id": job_id,
         "order_id": order_id,
         "current_driver": current_driver,
         "new_driver": new_driver,
         "callback_url": f"{callback}/catering/assign_driver/result",
-    }).encode()
+    }
     headers = {"Content-Type": "application/json", "X-Cena-Token": token}
-    req = urllib.request.Request(f"{gateway}/jobs/driver-assign",
-                                 data=payload, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=8) as r:
-            logger.info("dispatch_assignment_job: aick gateway 202 for job %s", job_id)
+        import httpx
+        client_kwargs: dict = {"timeout": httpx.Timeout(10.0, connect=5.0)}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as hx:
+            r = hx.post(f"{gateway}/jobs/driver-assign", json=body, headers=headers)
+            logger.info(
+                "dispatch_assignment_job: aick gateway responded %s for job %s (proxy=%s)",
+                r.status_code, job_id, bool(proxy),
+            )
+            if r.status_code >= 300:
+                logger.warning("dispatch body: %s", r.text[:200])
     except Exception:
         logger.exception("dispatch_assignment_job: gateway wake failed for job %s", job_id)
 

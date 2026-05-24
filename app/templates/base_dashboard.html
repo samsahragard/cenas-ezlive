@@ -546,8 +546,19 @@
 </div>
 
 {# Phone bottom navigation — mobile-only (<=1024px), hidden on desktop.
-   Per-role tab bar built to the phone_nav_permissions_v3 rendering. #}
-{% include 'partials/_bottom_nav.html' %}
+   Per-role tab bar built to the phone_nav_permissions_v3 rendering.
+
+   Suppress when this page is rendered INSIDE an iframe (the tabbed
+   dashboards at /sam/today, /partner/catering etc. embed sibling
+   pages). Otherwise the outer dashboard's nav + each iframe's own
+   nav stack up (Sam #841 2026-05-24). Modern browsers set
+   Sec-Fetch-Dest: iframe natively on iframe sub-resource requests
+   — no per-template wiring needed. ?embed=1 is an explicit-opt-in
+   fallback for clients that don't send Sec-Fetch-Dest. #}
+{% set _sfd = (request.headers.get('Sec-Fetch-Dest') or '').lower() %}
+{% if _sfd not in ('iframe', 'frame') and not request.args.get('embed') %}
+  {% include 'partials/_bottom_nav.html' %}
+{% endif %}
 
 <img class="wordmark" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen">
 

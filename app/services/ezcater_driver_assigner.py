@@ -238,6 +238,23 @@ def _run_one_attempt_inline(order_id: str, new_driver: str) -> None:
             except (TimeoutException, NoSuchElementException, WebDriverException):
                 continue
         time.sleep(2.0)
+        # Sam #833 2026-05-24: '__no_driver__' sentinel means unhook
+        # only — skip the assign-driver modal, verify the field is
+        # empty, done.
+        if new_driver == "__no_driver__":
+            driver.get(order_url)
+            WebDriverWait(driver, 30).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            time.sleep(2.5)
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            m = re.search(r"Assigned Driver\s*\n?\s*([^\n]+)", body_text)
+            if m and m.group(1).strip():
+                raise _AssignmentMismatch(
+                    f"expected empty driver field after no-driver unhook, "
+                    f"saw '{m.group(1).strip()}'"
+                )
+            return  # success
         # Open the assign-driver modal.
         opened = False
         for label in ("Assign in-house driver", "Assign driver", "Change driver"):

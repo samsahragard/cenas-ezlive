@@ -265,6 +265,24 @@
   .ezo-page .ezo-driver-pick select:disabled {
     opacity: 0.6; cursor: progress;
   }
+  /* The native <option> dropdown panel that Chrome/Edge renders is a
+     separate OS surface that ignores most parent styles. Force a dark
+     background + cream text so options aren't white-on-white when the
+     panel opens (Sam #833 2026-05-24). */
+  .ezo-page .ezo-driver-pick select option {
+    background: #2e1a0d;
+    color: #FAF6EC;
+    font-weight: 500;
+  }
+  .ezo-page .ezo-driver-pick select option:hover,
+  .ezo-page .ezo-driver-pick select option:checked {
+    background: #E4B340;
+    color: #2a1607;
+  }
+  .ezo-page .ezo-driver-pick select option[value="__no_driver__"] {
+    color: #E85852;
+    font-style: italic;
+  }
   .ezo-page .ezo-driver-pick.s-pending select {
     border-color: var(--gold-bright);
   }
@@ -468,6 +486,7 @@
                       onclick="event.stopPropagation();">
                   <select onchange="assignDriver(this);">
                     <option value="">— pick driver —</option>
+                    <option value="__no_driver__">— no driver (unhook only) —</option>
                     {% for name in _driver_options %}
                       <option value="{{ name }}"
                               {% if o.ezcater_driver_name and name == o.ezcater_driver_name %}selected{% endif %}>
@@ -573,6 +592,12 @@ async function assignDriver(selectEl) {
   if (!order || !scope || !picked) return;
   if (picked === current) return; // no-op pick of the already-shown driver
 
+  // Sam #833 2026-05-24: '__no_driver__' sentinel means unhook only,
+  // leave the field empty. UI shows "unhooking driver…" instead of
+  // "assigning X…", success state shows ✓ unhooked.
+  const isNoDriver = picked === '__no_driver__';
+  const pickedLabel = isNoDriver ? '(no driver)' : picked;
+
   const status = wrap.querySelector('.ezo-driver-status');
   const setState = (klass, text) => {
     wrap.classList.remove('s-pending', 's-ok', 's-err');
@@ -580,7 +605,7 @@ async function assignDriver(selectEl) {
     if (status) status.textContent = text;
   };
   selectEl.disabled = true;
-  setState('s-pending', `assigning ${picked}…`);
+  setState('s-pending', isNoDriver ? `unhooking…` : `assigning ${picked}…`);
 
   let jobId;
   try {
@@ -617,10 +642,12 @@ async function assignDriver(selectEl) {
     }
     if (!st.ok) continue;
     if (st.status === 'completed') {
-      setState('s-ok', `✓ ${picked}`);
+      setState('s-ok', `✓ ${pickedLabel}`);
       // Briefly show success then return to default styling with new
-      // driver as the locked-in current value.
-      wrap.dataset.current = picked;
+      // driver as the locked-in current value. For no-driver, the
+      // current value becomes empty so the next pick is also a real
+      // change (not a no-op revert).
+      wrap.dataset.current = isNoDriver ? '' : picked;
       setTimeout(() => { setState('', ''); selectEl.disabled = false; }, 2000);
       return;
     }

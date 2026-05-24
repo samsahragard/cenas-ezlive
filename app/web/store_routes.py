@@ -4348,6 +4348,10 @@ _TODAY_DASH_TABS = [
     # guide) was retired in the same batch per Sam #241 — its content
     # is now folded into /sam/docs.
     ("docs",          "Docs"),
+    # Sam directive 2026-05-23: every automated job in one place —
+    # Render crons + always-on services + scheduled tasks + IMAP
+    # polling + gateway auto-mirrors + third-party API integrations.
+    ("automation",    "Automation"),
 ]
 
 
@@ -4382,6 +4386,8 @@ def _today_dash_full_url(tab_key):
         return "/sam/pass"
     if tab_key == "docs":
         return "/sam/docs"
+    if tab_key == "automation":
+        return "/sam/automation"
     return url_for("store.home")
 
 

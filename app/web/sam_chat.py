@@ -897,6 +897,19 @@ def sam_pass_page():
     return render_template("sam_pass.html", active="sam_pass")
 
 
+@sam_chat_bp.route("/sam/automation", methods=["GET"])
+def sam_automation_page():
+    """Cena-page tab: every automated job currently running - Render
+    cron jobs, always-on background services, Windows scheduled tasks,
+    IMAP polling, gateway auto-mirrors, and third-party API
+    integrations. For each entry: trigger, runner, secret/API touched,
+    purpose. Sam directive 2026-05-23. Hard-gated to Sam."""
+    gate = _require_sam_page()
+    if gate is not None:
+        return gate
+    return render_template("sam_automation.html", active="sam_automation")
+
+
 @sam_chat_bp.route("/sam/chat/active-model", methods=["GET"])
 def sam_chat_active_model_get():
     """Return the canonical active model the dropdown should reflect.

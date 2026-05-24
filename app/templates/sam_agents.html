@@ -123,10 +123,38 @@
   .ckagents-card .status-chip.human { background: rgba(199,59,54,0.18);
     color: #E85852; border-color: rgba(232,88,82,0.4); }
 
+  .ckagents-startup {
+    margin-top: 36px;
+    background: #1f1308; border: 1px solid rgba(217,164,54,0.22);
+    border-radius: 14px; padding: 22px 24px 24px;
+  }
+  .ckagents-startup h2 {
+    margin: 0 0 4px; font-size: 18px; font-weight: 800; color: #FFD970;
+    letter-spacing: 0.02em;
+  }
+  .ckagents-startup .sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: rgba(250,246,236,0.55); letter-spacing: 0.08em;
+    text-transform: uppercase; margin: 0 0 14px;
+  }
+  .ckagents-startup pre {
+    background: rgba(0,0,0,0.45);
+    color: rgba(250,246,236,0.92);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px; line-height: 1.55;
+    padding: 16px 18px; border-radius: 8px;
+    margin: 0;
+    white-space: pre-wrap; word-break: break-word;
+    border: 0.5px solid rgba(217,164,54,0.16);
+    overflow-x: auto;
+  }
+
   @media (max-width: 760px) {
     .ckagents-frame { padding: 18px 14px 60px; }
     .ckagents-grid { grid-template-columns: 1fr; }
     .ckagents-card { padding: 14px 14px 16px; }
+    .ckagents-startup { padding: 16px 16px 18px; }
+    .ckagents-startup pre { font-size: 11.5px; padding: 12px 14px; }
   }
 </style>
 
@@ -143,9 +171,9 @@
   </div>
 
   <div class="owner-banner">
-    <span><b>Owner:</b> Cena</span>
+    <span><b>Team:</b> Sam, Cena, aick, ck</span>
     <span>·</span>
-    <span>First-pass draft assembled from team hub posts. Cena will refine and finalize.</span>
+    <span>Roster + agent start-up instructions, refreshed 2026-05-23.</span>
   </div>
 
   <div class="ckagents-grid">
@@ -185,7 +213,7 @@
       </div>
       <dl>
         <dt>Role</dt>
-        <dd>Owns the cenas-ezlive Flask backend: routes, DB layer, models, services, partner-side surfaces (developer chat, developer docs, page guide). Pushes to <code>origin/main</code> direct (default), Render auto-deploys.</dd>
+        <dd>Works on the cenas-ezlive Flask backend: routes, DB layer, models, services, partner-side surfaces (developer chat, developer docs, page guide). Pushes to <code>origin/main</code> direct, Render auto-deploys. Coordinates with ck on anything that crosses the backend/frontend line.</dd>
         <dt>Where it runs</dt>
         <dd>Anthropic Console + Claude Code on <b>AiCk</b> (hostname <code>Mini_IT12</code>). Working tree at <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code>.</dd>
         <dt>Starting docs</dt>
@@ -193,25 +221,25 @@
           <ul class="docs">
             <li><code>~/.claude/CLAUDE.md</code> on AiCk — operating memory</li>
             <li>Project structure under <code>app/web/</code>, <code>app/services/</code>, <code>app/templates/</code></li>
-            <li>The page-guide at <code>/partner/developer/app/page-guide</code> (refreshed 2026-05-23, commit ab5a7e4)</li>
+            <li>Page guide at <code>/partner/developer/app/page-guide</code></li>
           </ul>
         </dd>
         <dt>Coordination</dt>
-        <dd>Reachable on the LAN hub as <b>aick</b>; dev chat as the same. ck announces pushes in dev chat so aick + ck never push the same thing concurrently (hybrid push authority, 2026-05-20).</dd>
+        <dd>Reachable on the LAN hub as <b>aick</b>; dev chat as the same. Announces pushes in dev chat so aick + ck never push the same thing concurrently.</dd>
       </dl>
     </article>
 
     <article class="ckagents-card">
       <div class="head">
         <span class="name">ck</span>
-        <span class="role">Frontend / pages / cross-machine glue</span>
+        <span class="role">Frontend, pages, cross-machine glue</span>
         <span class="status-chip live">Live</span>
       </div>
       <dl>
         <dt>Role</dt>
-        <dd>Owns frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, cena_hub_relay), and the Sam-facing tabs on the Cena page (Pass, Agents). Cross-reviewer for aick (gate-2 / gate-3 for COI cases per Cena #114 takeover).</dd>
+        <dd>Works on frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, cena_hub_relay), and the Sam-facing tabs on the Cena page (Pass, Agents). Coordinates with aick on anything that crosses the backend/frontend line.</dd>
         <dt>Where it runs</dt>
-        <dd>Anthropic Console + Claude Code on <b>Mini_IT13</b> (hostname <code>Mini_IT13</code>). SSH alias <code>ssh aick</code> available. Working trees in <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code> + <code>C:\Users\sam\cenas-chat-hub\</code>.</dd>
+        <dd>Anthropic Console + Claude Code on <b>Mini_IT13</b> (hostname <code>Mini_IT13</code>). SSH alias <code>ssh aick</code> available. Working trees in <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code> and <code>C:\Users\sam\cenas-chat-hub\</code>.</dd>
         <dt>Starting docs</dt>
         <dd>
           <ul class="docs">
@@ -221,53 +249,7 @@
           </ul>
         </dd>
         <dt>Push authority</dt>
-        <dd>Direct git push via SSH deploy key on AiCk. Announces every push in dev chat per Sam's standing rule (2026-05-20).</dd>
-      </dl>
-    </article>
-
-    <article class="ckagents-card">
-      <div class="head">
-        <span class="name">dck</span>
-        <span class="role">Secondary agent on AiCk</span>
-        <span class="status-chip standby">Standby</span>
-      </div>
-      <dl>
-        <dt>Role</dt>
-        <dd>Second Claude session on AiCk (separate Windows user). Used for parallel / overflow work without contending with aick on the same working tree. Subject to the agent_restart permission gate — only Cena can restart dck, and ONLY with Sam's per-call "approve restart dck" in <code>cena_sam_chat</code> (Cena directive #166, single-use, no standing grant).</dd>
-        <dt>Where it runs</dt>
-        <dd>Claude Code on <b>AiCk</b> under the <code>dck</code> Windows user.</dd>
-        <dt>Starting docs</dt>
-        <dd>
-          <ul class="docs">
-            <li>dck's own <code>~/.claude/CLAUDE.md</code> on AiCk (under the dck home)</li>
-            <li>Restart wiring: <code>C:\Users\sam\cena\agent_restart.py</code> + <code>agent_restart.json</code> (Sam to drop with dck's launch_cmd)</li>
-          </ul>
-        </dd>
-        <dt>Restart policy</dt>
-        <dd>Per Cena directive #166: requires Sam's explicit per-call permission. No standing grant. Every invocation = fresh ask.</dd>
-      </dl>
-    </article>
-
-    <article class="ckagents-card">
-      <div class="head">
-        <span class="name">samai</span>
-        <span class="role">Document parser · Roaming</span>
-        <span class="status-chip">Not always available</span>
-      </div>
-      <dl>
-        <dt>Role</dt>
-        <dd>Roaming parser / extractor: WebstaurantStore equipment + warranty emails, document parsing surfaces. Previously held gate-2 / gate-3 review until Cena directive #114 reassigned to ck. Not always available — others cover when samai is offline.</dd>
-        <dt>Where it runs</dt>
-        <dd>Anthropic Console (roaming; not pinned to a single machine).</dd>
-        <dt>Starting docs</dt>
-        <dd>
-          <ul class="docs">
-            <li>WebstaurantStore email-ingest spec (samai #65)</li>
-            <li>Three-gate review rubric (gate-1 build verify / gate-2 code review / gate-3 live verify) — handed to ck per Cena #114</li>
-          </ul>
-        </dd>
-        <dt>Coordination</dt>
-        <dd>Reachable in dev chat when online. Cena pings if a samai task is needed during a Sam disconnect.</dd>
+        <dd>Direct git push via SSH deploy key on AiCk. Announces every push in dev chat.</dd>
       </dl>
     </article>
 
@@ -318,6 +300,69 @@
     </article>
 
   </div>
+
+  <section class="ckagents-startup">
+    <h2>Start-up instructions for aick and ck</h2>
+    <p class="sub">Paste this in one block when you start them up.</p>
+<pre>START-UP INSTRUCTIONS — read this fully before doing anything.
+You are aick or ck (figure out which based on the hostname you're running on — Mini_IT12 is aick, Mini_IT13 is ck). The team is just four of us now: Sam (Cenas owner), Cena (the partner AI on the website), aick, and ck. There is no samai. There is no dck. Don't ask for them, don't wait on them, don't reference them.
+
+Your first job — get connected.
+Connection happens in this order:
+
+1. Read your operating memory file.
+   - aick: ~/.claude/CLAUDE.md on AiCk
+   - ck:   ~/.claude/projects/C--/memory/MEMORY.md on Mini_IT13
+
+2. Connect to the LAN dev chat.
+   Both of you reach the dev chat through chat_tail.py in the cenas-ezlive repo's scripts folder. Run it as a background process so every new message reaches you while you work.
+   To post: chat_tail.py --author aick --post "your message"  (or --author ck).
+   Auth: the Partner password lives in PARTNER_PASSWORD env var or in ~/.openclaw/.secrets/partner_password.txt. If Sam needs to give it to you, he'll give it to you directly — don't post it in dev chat.
+
+3. Verify two-way.
+   Post one short line in dev chat announcing you're alive (e.g. "ck — online and listening").
+   Confirm it appears in your tail.
+   If you get a 401 or login-failed error, the partner password is wrong — flag it to Sam and stop.
+
+4. Connect to /sam/chat (the website chat surface).
+   This is where Sam talks to Cena from anywhere. You don't post here directly — but you do need to know it exists, that Cena is the agent there, and that your work might affect what /sam/chat can do.
+
+5. Wait for Sam's instructions.
+   Once you're connected, you're done with startup. Don't go look for work. Don't audit codebases preemptively. Sit and wait until Sam tells you what to build.
+
+
+Once Sam gives you a task — how to approach it:
+
+- Build by default. If Sam asks you to do something and it's clearly within your reach (your machine, your codebase, your area), just do it. Don't ask permission. Don't propose a four-phase plan. Build, test, report.
+- If it's outside your reach physically (different machine, different codebase you don't have access to), say so plainly and offer to coordinate with the other one of you. "ck — this needs aick's box, want me to ask aick to handle it?" Not "this isn't my lane." Don't talk about lanes.
+- If you're unsure what Sam wants, ask one clear question. Not a multi-part survey. One question, get the answer, proceed.
+- If something fails, try again with a different approach. If it fails twice, escalate in dev chat: "Stuck on X because Y, anyone have a path forward?" Don't go silent.
+- If Sam asks for something across both of you, divide it cleanly and tell Sam who's doing what. Don't both work on the same thing.
+
+
+Some context about the system you're working in:
+
+- The production app lives at app.cenaskitchen.com, hosted on Render, Flask + gunicorn.
+- The database is SQLite at /var/data/cenas_kitchen.db (production) or local equivalents on dev.
+- The repo is github.com/samsahragard/cenas-ezlive. Both of you can push to main — coordinate via dev chat announcements so you're never pushing on top of each other.
+- Cena (the partner AI Sam talks to at /sam/chat) runs against aick's gateway by default. There's a second gateway called cena2 on ck's machine being built out as a peer node.
+- The team uses a LAN dev chat (the hub running on Mini_IT13) for cross-machine coordination. Sam reads everything posted there.
+- You both have access to the same repo and can read each other's code. If you need something the other one wrote, read their code — don't ask the other agent to explain it unless something's actually unclear.
+- Sam communicates by voice transcript a lot, so messages from him may be informal, fragment-y, or have typos. Read for intent, ask if genuinely confused, don't pedantically parse.
+
+
+Quality bar (this stays in place — it's not a permission gate, it's how you don't ship broken things):
+
+- Test locally before you push.
+- Announce every push in dev chat with what changed.
+- If your change touches production behavior, do a quick production probe after deploy (hit the actual URL, confirm it works) and report in dev chat.
+
+
+One thing about Sam's style worth knowing:
+He doesn't want ceremony. He doesn't want endless "standing by" or "ready when you are" messages. If you have nothing to do, just be quiet until something comes in. When you DO have something to report, lead with the result, not the process.
+
+Now: connect, verify, announce you're alive, and wait for Sam.</pre>
+  </section>
 
 </div>
 {% endblock %}

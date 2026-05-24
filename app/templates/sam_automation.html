@@ -1,0 +1,861 @@
+{# ============================================================
+   sam_automation.html — Automation tab (Sam directive 2026-05-23).
+   Every automated job currently running: Render cron jobs, always-on
+   background services, Windows scheduled tasks, IMAP polling, gateway
+   auto-mirrors, and third-party API integrations.
+
+   For each entry: what triggers it, what runs it, what API/secret it
+   touches, and what it's for.
+
+   Iframed by today_dashboard.html (key="automation"); the today
+   dashboard strips this page's base_dashboard chrome on load.
+
+   Hard-gated to Sam at the route (/sam/automation via sam_chat.py);
+   internal-only surface.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'sam_automation' %}
+
+{% block title %}Automation — Cenas Kitchen{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  .ckauto-frame { max-width: 1240px; margin: 0 auto;
+    padding: 28px 28px 80px;
+    background: #1a0d08;
+    background-image:
+      radial-gradient(circle at 80% 0%, rgba(228,179,64,0.06), transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(199,59,54,0.05), transparent 50%);
+    min-height: 100vh;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: #FAF6EC; }
+  .ckauto-frame * { box-sizing: border-box; }
+  .ckauto-frame .frame-top { display: flex; align-items: center; gap: 14px;
+    padding: 0 4px 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18); margin-bottom: 22px; }
+  .ckauto-frame .frame-mark { font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+    color: #E4B340; background: rgba(228,179,64,0.1);
+    border: 0.5px solid rgba(228,179,64,0.3);
+    padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
+  .ckauto-frame .frame-bread { font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: rgba(250,246,236,0.52); letter-spacing: 0.04em; }
+  .ckauto-frame .frame-bread b { color: rgba(250,246,236,0.82); font-weight: 700; }
+  .ckauto-frame .frame-title-block { padding: 0 4px 18px; }
+  .ckauto-frame .frame-title { font-size: 28px; font-weight: 800; margin: 0; }
+  .ckauto-frame .frame-subtitle { font-size: 13px;
+    color: rgba(250,246,236,0.52); margin: 4px 0 0; }
+  .ckauto-frame .owner-banner {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 6px;
+    background: rgba(46,163,159,0.12); border: 0.5px solid rgba(91,202,197,0.4);
+    color: rgba(91,202,197,0.95); font-size: 11px; font-style: italic;
+    font-family: 'JetBrains Mono', monospace; margin-bottom: 18px;
+  }
+  .ckauto-frame .owner-banner b { color: #5BCAC5; }
+
+  .ckauto-section { margin-bottom: 34px; }
+  .ckauto-section > h2 {
+    font-size: 17px; font-weight: 800; color: #FFD970;
+    letter-spacing: 0.02em; margin: 0 0 4px;
+  }
+  .ckauto-section > .h2-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    color: rgba(250,246,236,0.55); letter-spacing: 0.04em;
+    margin: 0 0 14px;
+  }
+
+  .ckauto-grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  }
+  .ckauto-card {
+    background: #1f1308; border: 1px solid rgba(217,164,54,0.22);
+    border-radius: 12px; padding: 16px 18px 18px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .ckauto-card .head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding-bottom: 6px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18);
+  }
+  .ckauto-card .name {
+    font-size: 15px; font-weight: 700; color: #FFD970;
+    letter-spacing: 0.01em;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ckauto-card .role {
+    font-size: 11.5px;
+    color: rgba(250,246,236,0.7);
+  }
+  .ckauto-card .status-chip {
+    margin-left: auto;
+    display: inline-block; font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    background: rgba(228,179,64,0.18); color: #FFD970;
+    border: 0.5px solid rgba(255,217,112,0.4); white-space: nowrap;
+  }
+  .ckauto-card .status-chip.live { background: rgba(46,163,159,0.18);
+    color: #5BCAC5; border-color: rgba(91,202,197,0.4); }
+  .ckauto-card .status-chip.disabled { background: rgba(120,120,120,0.18);
+    color: rgba(250,246,236,0.55); border-color: rgba(150,150,150,0.3); }
+  .ckauto-card .status-chip.scheduled { background: rgba(199,59,54,0.16);
+    color: #FFB099; border-color: rgba(232,88,82,0.35); }
+  .ckauto-card dl { margin: 0; display: grid; gap: 4px; }
+  .ckauto-card dt { font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: rgba(228,179,64,0.85);
+    margin-top: 3px; }
+  .ckauto-card dd { margin: 0; font-size: 12px;
+    color: rgba(250,246,236,0.86); line-height: 1.5; }
+  .ckauto-card dd code {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: #5BCAC5;
+  }
+
+  .ckauto-card.api .name { color: #FFB099; }
+
+  @media (max-width: 760px) {
+    .ckauto-frame { padding: 18px 14px 60px; }
+    .ckauto-grid { grid-template-columns: 1fr; }
+    .ckauto-card { padding: 12px 14px 14px; }
+  }
+</style>
+
+<div class="ckauto-frame">
+
+  <div class="frame-top">
+    <span class="frame-mark">Cena · Automation</span>
+    <span class="frame-bread">Cena &nbsp;/&nbsp; <b>Automation</b></span>
+  </div>
+
+  <div class="frame-title-block">
+    <h1 class="frame-title">Automation</h1>
+    <p class="frame-subtitle">Every automated job currently running — what triggers it, what runs it, what API or secret it touches, and what it's for.</p>
+  </div>
+
+  <div class="owner-banner">
+    <span><b>As of 2026-05-23.</b></span>
+    <span>·</span>
+    <span>Render crons + always-on services + Windows scheduled tasks + IMAP polling + gateway auto-mirrors + third-party API integrations.</span>
+  </div>
+
+  <!-- ============================================================
+       Section 1: Render cron jobs
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Render cron jobs</h2>
+    <p class="h2-sub">Triggered by Render's own scheduler hitting the listed endpoints. All gated by the <code>X-Cron-Token</code> header matching the <code>CRON_TOKEN</code> env var. Routes live in <code>app/web/driver_system.py</code>. Cadence is configured in the Render dashboard (Cron Jobs), not in the repo.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/no-show-sweep</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Phase 0 no-show driver detection — sweeps delivery rows where the driver never arrived and flips them to a no-show state.</dd>
+          <dt>Trigger</dt>
+          <dd>Render cron resource hits the endpoint on schedule.</dd>
+          <dt>Auth</dt>
+          <dd><code>CRON_TOKEN</code> env var (Render). Source-of-truth in <code>~/.openclaw/.secrets/cron_token.txt</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/recompute-scores</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Recomputes <code>drivers.current_score</code> and <code>current_tier</code> from recent delivery + behavior signals.</dd>
+          <dt>Trigger</dt>
+          <dd>Render cron resource on schedule.</dd>
+          <dt>Auth</dt>
+          <dd><code>CRON_TOKEN</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/anomaly-eval</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Evaluates anomaly rules against recent ops data and writes anomaly events.</dd>
+          <dt>Trigger</dt>
+          <dd>Render cron resource on schedule.</dd>
+          <dt>Auth</dt>
+          <dd><code>CRON_TOKEN</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/anomaly-brief</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Composes a morning brief from accumulated anomaly events (the Morning Brief Composer pipeline).</dd>
+          <dt>Trigger</dt>
+          <dd>Render cron resource on schedule (typically daily AM).</dd>
+          <dt>Auth</dt>
+          <dd><code>CRON_TOKEN</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/task-escalation</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1A task-system escalation — promotes overdue or stalled tasks to the next escalation level.</dd>
+          <dt>Trigger</dt>
+          <dd>Render cron resource on schedule.</dd>
+          <dt>Auth</dt>
+          <dd><code>CRON_TOKEN</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/sales-insights</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1F sales-insights pipeline — joins ambient signals + sales data into per-store insights.</dd>
+          <dt>Trigger</dt>
+          <dd>Render cron resource on schedule.</dd>
+          <dt>Auth</dt>
+          <dd><code>CRON_TOKEN</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/refresh-weather</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1J: refresh weather AmbientSignals from OpenWeatherMap + NOAA.</dd>
+          <dt>Cadence</dt>
+          <dd>Every 2h, 6am–8pm CT.</dd>
+          <dt>API touched</dt>
+          <dd><code>OPENWEATHERMAP_API_KEY</code> (Render env, currently TBD per the Pass tab) + NOAA public endpoint.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/refresh-events</span>
+          <span class="status-chip scheduled">STUB</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1J: refresh events AmbientSignals from Ticketmaster + Google Calendar. Adapter stub — wiring proven, credentials pending.</dd>
+          <dt>Cadence</dt>
+          <dd>Every 4h after noon (12:00 / 16:00 / 20:00 CT).</dd>
+          <dt>API touched</dt>
+          <dd>Ticketmaster API + Google Calendar API (credentials pending).</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/refresh-outages</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1J: refresh outage AmbientSignals — scrapes CenterPoint outage map and Haiku-normalizes the payload.</dd>
+          <dt>Cadence</dt>
+          <dd>Every 15 minutes.</dd>
+          <dt>API touched</dt>
+          <dd>CenterPoint outage page (web scrape) + Anthropic Claude Haiku for normalization.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/refresh-catering-pipeline</span>
+          <span class="status-chip live">POST</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1J: refresh catering-pipeline AmbientSignals from upcoming <code>ScheduledEvent</code> rows.</dd>
+          <dt>Cadence</dt>
+          <dd>8am + 2pm CT.</dd>
+          <dt>API touched</dt>
+          <dd>None — reads from the local DB.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/refresh-vendor-status</span>
+          <span class="status-chip scheduled">STUB</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1J: refresh vendor-status AmbientSignals. Phase-3 stub — wiring proven, no source adapter wired yet.</dd>
+          <dt>Cadence</dt>
+          <dd>Twice daily.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/cron/refresh-traffic</span>
+          <span class="status-chip scheduled">STUB</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Block 1J: refresh traffic AmbientSignals from Google Maps. Credentials pending.</dd>
+          <dt>Cadence</dt>
+          <dd>Every 2h, business hours (8am–6pm CT).</dd>
+          <dt>API touched</dt>
+          <dd>Google Maps API (credentials pending).</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Section 2: Always-on background services
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Always-on background services</h2>
+    <p class="h2-sub">Long-running processes supervised by their own wrappers so they survive restarts and respawn on crash.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cenas-chat-hub</span>
+          <span class="role">Mini_IT13</span>
+          <span class="status-chip live">Running</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>The LAN team chat hub. SQLite-backed message store + REST endpoints + the web UI at <code>http://192.168.1.134:8765/</code> (also Tailscale <code>100.73.38.82:8765</code>). Every agent reads + posts here.</dd>
+          <dt>What runs it</dt>
+          <dd>Supervisor <code>run_hub.py</code> → child <code>hub.py</code>. Windows scheduled task <code>cenas-chat-hub</code> with at-logon trigger.</dd>
+          <dt>Triggered by</dt>
+          <dd>HTTP traffic from agents (LAN + Tailscale).</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cenas-chat-bridge</span>
+          <span class="role">Mini_IT13</span>
+          <span class="status-chip live">Running</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Bidirectional mirror between the LAN hub and the online <code>/partner/developer/chat</code>. Polls both sides every 6s, push-up and pull-down with attachment passthrough. <b>cena</b> author is now skipped on PUSH per Sam directive 2026-05-23.</dd>
+          <dt>What runs it</dt>
+          <dd>Supervisor <code>run_bridge.py</code> → child <code>bridge.py</code>. Windows scheduled task <code>cenas-chat-bridge</code> at-logon.</dd>
+          <dt>Auth</dt>
+          <dd>Cookie jar via <code>EZLIVE_PASSWORD</code> + <code>PARTNER_PASSWORD</code> against Render. <code>cena_sam_chat_token.txt</code> for the local Sam ↔ Cena mirror leg.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cena_gateway.py</span>
+          <span class="role">AiCk</span>
+          <span class="status-chip live">Running</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>The Cena runtime. Hosts <code>/cena/stream</code>, <code>/cena/wake-on-hub</code>, <code>/cena/wake-on-chat</code>, <code>/cena/active-model</code>, and the full 21-tool catalogue. Every Cena turn (any surface) runs here.</dd>
+          <dt>What runs it</dt>
+          <dd>Windows scheduled task <code>CenaGateway</code> on AiCk. Port 8765 (Tailscale <code>100.108.119.19:8765</code> + Cloudflare-tunneled externally).</dd>
+          <dt>Triggered by</dt>
+          <dd>Render <code>/sam/chat</code> calls, <code>cena_sam_chat</code> wake POSTs, <code>cena-hub-relay</code> wake POSTs, the dev-chat watcher when active.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cena-sam-chat</span>
+          <span class="role">AiCk</span>
+          <span class="status-chip live">Running</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>The private Sam ↔ Cena chat surface on AiCk. Persists every message in SQLite so Cena work continues through Sam's disconnects. Web UI at <code>http://100.108.119.19:8770/</code> (Tailscale-only).</dd>
+          <dt>What runs it</dt>
+          <dd>Windows scheduled task <code>cena-sam-chat</code> on AiCk → <code>run_cena_sam_chat.bat</code>.</dd>
+          <dt>Auth</dt>
+          <dd><code>X-Auth-Token</code> from <code>C:\Users\sam\cena\cena_sam_chat_token.txt</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">lanchat.py (agent tail)</span>
+          <span class="role">per-agent</span>
+          <span class="status-chip live">Polling</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Each agent runs a background <code>lanchat.py</code> tail that polls the LAN hub every 3–5s. Every new hub message arrives as an event the agent sees in their session.</dd>
+          <dt>What runs it</dt>
+          <dd>Launched by each agent at session start as a hidden background process or Monitor task.</dd>
+          <dt>Post-back</dt>
+          <dd>Same script with <code>--post "..."</code> writes to the hub as the named author.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Section 3: Windows scheduled tasks
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Windows scheduled tasks</h2>
+    <p class="h2-sub">Tasks registered with Windows Task Scheduler, split by host. <code>schtasks /query /v</code> on each machine shows the full picture.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">CenaTaskPinger</span>
+          <span class="role">AiCk · Ready</span>
+          <span class="status-chip scheduled">Scheduled</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Periodically pings Cena's runtime to keep her warm and surface any pending follow-ups (open-tasks state file watcher).</dd>
+          <dt>What runs it</dt>
+          <dd><code>C:\Users\sam\cena\cena_task_pinger.py</code> on AiCk.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">EzCater_IMAP_IDLE</span>
+          <span class="role">AiCk · Ready</span>
+          <span class="status-chip live">Polling</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Persistent IMAP IDLE connection to <code>orders@aguirrestexmex.com</code>. New ezCater order emails get picked up the instant they land and feed the order-ingest pipeline.</dd>
+          <dt>What runs it</dt>
+          <dd><code>C:\Users\sam\.openclaw\scripts\ezcater_idle.py</code> on AiCk. Also live on Mini_IT13 (PID 10552) as a backup mirror.</dd>
+          <dt>Auth</dt>
+          <dd><code>orders_imap_pwd.txt</code> + <code>ezcater_imap_pwd.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">CenaOrderButtonSelftest</span>
+          <span class="role">AiCk · Ready</span>
+          <span class="status-chip scheduled">Scheduled</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Periodic Playwright selftest of the order-button surface — checks the live page still renders + the order CTA still fires.</dd>
+          <dt>What runs it</dt>
+          <dd><code>scripts/_order_button_selftest.py</code> on AiCk.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cena-hub-relay</span>
+          <span class="role">AiCk · Disabled</span>
+          <span class="status-chip disabled">Retired</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Polled the LAN hub and POSTed new message IDs to <code>/cena/wake-on-hub</code> on the local gateway. Retired 2026-05-23 — wake-on-hub is now driven directly off the gateway's own poll loop.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">CenaChatWatcher</span>
+          <span class="role">AiCk · Disabled</span>
+          <span class="status-chip disabled">Retired</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Phase A shadow-mode classifier watcher on the online dev chat. Died in a 502 storm 2026-05-23 09:31 and not restarted — the team has since migrated to the LAN hub, so this watcher's window is closed.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">CenaDevChatRelay</span>
+          <span class="role">AiCk · Disabled</span>
+          <span class="status-chip disabled">Retired</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Older dev-chat → Cena inbox relay. Superseded by the LAN hub + wake-on-hub direct path.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Section 4: Email + IMAP ingestion
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Email + IMAP ingestion</h2>
+    <p class="h2-sub">Inbound email surfaces that feed the platform automatically.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">orders@aguirrestexmex.com</span>
+          <span class="role">IMAP IDLE</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Live ezCater order intake via email (fallback to the GraphQL API). PDFs and order confirmations land here and are parsed by the ezCater ingest pipeline.</dd>
+          <dt>What runs it</dt>
+          <dd><code>ezcater_idle.py</code> persistent IMAP IDLE on AiCk + Mini_IT13.</dd>
+          <dt>Auth</dt>
+          <dd><code>orders_imap_pwd.txt</code> + <code>orders_smtp_pwd.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">Vendor email scanning</span>
+          <span class="role">Manual + scheduled</span>
+          <span class="status-chip scheduled">On-demand</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Walks vendor inboxes (WebstaurantStore, etc.) for equipment orders, warranty PDFs, shipping confirmations. Feeds the equipment_tracker dataset.</dd>
+          <dt>What runs it</dt>
+          <dd><code>scripts/ingest_vendor_emails.py</code> + <code>scripts/scan_vendor_inbox.py</code>.</dd>
+          <dt>Auth (pending)</dt>
+          <dd><code>sams_imap_pwd.txt</code>, <code>atm_imap_pwd.txt</code>, <code>ck_cenaskitchen_imap_pwd.txt</code> in <code>~/.openclaw/.secrets/</code> — these credentials are still open asks to Sam.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Section 5: Outbound auto-mirrors (gateway)
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Cross-surface auto-mirrors</h2>
+    <p class="h2-sub">Server-side fan-out so a single Cena reply lands on every surface Sam might be reading from without Cena having to call a tool per surface.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">wake-on-hub → /sam/chat</span>
+          <span class="role">Gateway helper</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Every Cena reply on the LAN hub is also auto-posted to the active <code>/sam/chat</code> session on Render. Sam sees the same message in both places without Cena thinking about it.</dd>
+          <dt>What runs it</dt>
+          <dd><code>_mirror_to_render_sam_chat()</code> in <code>cena_gateway.py</code>, fired at the end of every wake-on-hub turn.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">wake-on-hub → cena_sam_chat</span>
+          <span class="role">Gateway helper</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Every Cena reply on the LAN hub also lands in <code>cena_sam_chat</code> as a native <code>author='cena'</code> message — the proper Cena lane, not the dim "dev-mirror" bubble.</dd>
+          <dt>What runs it</dt>
+          <dd><code>_post_to_sam_chat("cena", ...)</code> in <code>cena_gateway.py</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">bridge: dev chat → cena_sam_chat</span>
+          <span class="role">bridge.py helper</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Every non-cena dev-chat message is mirrored into <code>cena_sam_chat</code> with a <code>dev-&lt;author&gt;</code> prefix so Sam sees one unified stream. Cena posts are skipped here because the gateway writes those directly (no double-print).</dd>
+          <dt>What runs it</dt>
+          <dd><code>_mirror_dev_to_cena_sam_chat()</code> in <code>bridge.py</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">/sam/chat → cena_sam_chat</span>
+          <span class="role">Flask helper</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Sam's posts on <code>/sam/chat</code> and Cena's replies there both auto-mirror to <code>cena_sam_chat</code> as <code>sam-online</code> / <code>cena-online</code> bubbles (gold border tag). Display-only — no wake re-trigger.</dd>
+          <dt>What runs it</dt>
+          <dd><code>_mirror_to_cena_sam_chat()</code> in <code>app/web/sam_chat.py</code>, fires after persist in the send + persist-assistant paths.</dd>
+          <dt>Auth</dt>
+          <dd><code>CENA_SAM_CHAT_TOKEN</code> env var, routed via <code>CENA_PROXY</code> (Render's userspace Tailscaled).</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cena disconnected from dev chat</span>
+          <span class="role">Two-layer block</span>
+          <span class="status-chip live">Active</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Per Sam directive 2026-05-23: cena does not appear in <code>/partner/developer/chat</code>. (1) Bridge skips <code>author='cena'</code> on PUSH. (2) Render <code>/partner/developer/chat/post</code> rejects <code>author='cena'</code> server-side regardless of source.</dd>
+          <dt>What runs it</dt>
+          <dd>Filter in <code>bridge.py</code> PUSH loop + early-return in <code>app/web/developer_chat.py post_message()</code>.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Section 6: Third-party API integrations
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Third-party API integrations</h2>
+    <p class="h2-sub">External APIs the platform calls. Some are pulled on cron, some on user/agent action, some on webhook.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Anthropic API</span>
+          <span class="role">Cena runtime</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Every Cena turn (Opus / Sonnet / Haiku for the anomaly classifier) hits Anthropic. Tool-use loop, 1h ephemeral cache, multimodal blocks.</dd>
+          <dt>Trigger</dt>
+          <dd>Gateway endpoints (<code>/cena/stream</code>, <code>/cena/wake-on-*</code>) and the Render-side <code>/sam/chat</code> path.</dd>
+          <dt>Auth</dt>
+          <dd><code>anthropic_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>; <code>cena2_anthropic_key.txt</code> for the peer gateway.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Google Gemini API</span>
+          <span class="role">/sam/chat model option</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Gemini 2.5 Flash + 3.5 Flash in the <code>/sam/chat</code> model picker. Routes through the gateway's tool-bridge so Gemini gets the same tool surface as Claude.</dd>
+          <dt>Trigger</dt>
+          <dd>User picks Gemini in the dropdown.</dd>
+          <dt>Auth</dt>
+          <dd><code>gemini_api_key.txt</code> in <code>~/cena/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Render API</span>
+          <span class="role">Deploy + env mgmt</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Cena's <code>render_env_get</code> / <code>render_env_set</code> / <code>render_deploy</code> tools. Triggered by Cena on Sam's instruction.</dd>
+          <dt>Auth</dt>
+          <dd><code>cena_render_api_key.txt</code> (primary) + <code>render_api_key.txt</code> (legacy fallback) in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Render auto-deploy webhook</span>
+          <span class="role">GitHub → Render</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Every push to <code>origin/main</code> on <code>samsahragard/cenas-ezlive</code> fires a Render auto-deploy webhook. Push-to-live is typically ~2m30s.</dd>
+          <dt>Trigger</dt>
+          <dd>GitHub push event from aick or ck.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">ezCater Partner API (GraphQL)</span>
+          <span class="role">api.ezcater.com/graphql</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Structured ezCater order data ingest (<code>scripts/ezcater_api_ingest.py</code>). Backup path when the IMAP route is unhealthy.</dd>
+          <dt>Auth</dt>
+          <dd><code>ezcater_api_token.txt</code> in <code>~/.openclaw/.secrets/</code> (Partner API bearer).</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">ezCater Partner Portal (cookies)</span>
+          <span class="role">partnerportal.ezcater.com</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>PDF order downloads + portal scraping. Cookie-jar session, not the API token (different surface).</dd>
+          <dt>Auth</dt>
+          <dd><code>ezcater_session.json</code> in <code>~/.openclaw/.secrets/</code> + <code>~/cena/.secrets/</code>. Captured via browser_cookie3 from Sam's Edge session; refreshed when cookies expire.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Toast Analytics OAuth</span>
+          <span class="role">Sales + labor</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Pulls per-store sales and labor metrics into the daily-log + sales-insights pipelines.</dd>
+          <dt>Auth</dt>
+          <dd><code>toast_analytics_client_id.txt</code> + <code>toast_analytics_client_secret.txt</code> in <code>~/.openclaw/.secrets/</code>; Render env block in <code>toast_render_env.txt</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Sling API</span>
+          <span class="role">Weekly schedule import</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Imports the weekly staff schedule from Sling into the platform's labor/scheduling tables.</dd>
+          <dt>Auth</dt>
+          <dd><code>sling_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Google Maps API</span>
+          <span class="role">Geocoding + routing</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Driver live map, delivery routing, address geocoding.</dd>
+          <dt>Auth</dt>
+          <dd><code>google_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Cloudflare API</span>
+          <span class="role">Tunnel + DNS</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Maintains the Cloudflare tunnel that exposes Cena's gateway externally; DNS edits via Cena's <code>fetch_url</code> tool when needed.</dd>
+          <dt>Auth</dt>
+          <dd><code>cloudflare_api_token.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Tailscale</span>
+          <span class="role">Render userspace tailscaled</span>
+          <span class="status-chip scheduled">Rotates</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Reachability from Render → AiCk (Cena gateway) and Mini_IT13 (LAN hub). Render runs a userspace <code>tailscaled</code> wired with this key.</dd>
+          <dt>Auth</dt>
+          <dd><code>tailscale_render_authkey.txt</code> in <code>~/.openclaw/.secrets/</code>. Currently the 24h ephemeral form — the 90-day reusable swap is an open ask to Sam.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Telegram bot (@Cenasbot)</span>
+          <span class="role">Sam pings</span>
+          <span class="status-chip scheduled">Stub</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Cena's <code>telegram_send</code> tool routes here. Currently stubbed to a local outbox log; wiring to live send is the open piece.</dd>
+          <dt>Auth</dt>
+          <dd><code>ck_telegram_bot_token.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">WhatsApp (Baileys)</span>
+          <span class="role">cena2/whatsapp</span>
+          <span class="status-chip scheduled">Connection paired, send pending</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Outbound notifications to drivers / customers / managers from the Cenas line 346-462-0746. Connection paired 2026-05-22. The send layer (driver / customer / manager notifications + ban-safe pacing) is the open build.</dd>
+          <dt>Where it runs</dt>
+          <dd><code>C:\Users\sam\cena2\whatsapp\</code> on Mini_IT13; session state in <code>auth_state/</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Sentry</span>
+          <span class="role">Render-side error capture</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Captures unhandled exceptions on the Render app for post-incident triage.</dd>
+          <dt>Auth</dt>
+          <dd><code>sentry_dsn.txt</code> in <code>~/.openclaw/.secrets/</code>; <code>SENTRY_DSN</code> Render env.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+</div>
+{% endblock %}

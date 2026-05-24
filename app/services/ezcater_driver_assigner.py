@@ -102,14 +102,213 @@ LANCHAT_HUB_URL = (
 
 # --- public entry points (called by worker + Render endpoint) -------------
 
-def dispatch_assignment_job(job_id: str) -> None:
-    """Called from the Render-side Flask endpoint after a job row is
-    created. The assigner_worker on AiCk polls the DB every few seconds
-    and picks up pending jobs, so dispatch_assignment_job is currently
-    a no-op + log line. Kept as a hook so a future tweak — e.g. an
-    HTTP wake-ping to the gateway to skip the poll delay — can land
-    here without touching the route handler."""
-    logger.info("driver_assignment_jobs: queued job_id=%s (worker will pick up)", job_id)
+def dispatch_assignment_job(job_id: str, order_id: str, current_driver: Optional[str],
+                            new_driver: str) -> None:
+    """HTTP-wake the aick gateway to run the flow (Sam #669 + 2026-05-24
+    architecture choice b). Render-side endpoint calls this after
+    writing the job row to its local DB. Aick gateway runs the flow
+    + POSTs back to /catering/assign_driver/result with the outcome.
+
+    Falls back to a no-op log line if CENA_GATEWAY_URL is unset (dev
+    mode) — the route's polling fallback can still observe the row.
+    """
+    gateway = (os.environ.get("CENA_GATEWAY_URL") or "").strip().rstrip("/")
+    token = os.environ.get("CENA_GATEWAY_TOKEN", "").strip()
+    callback = (os.environ.get("CENA_RENDER_ORIGIN") or "https://app.cenaskitchen.com").strip().rstrip("/")
+    if not gateway:
+        logger.info("dispatch_assignment_job: CENA_GATEWAY_URL unset — job %s queued without wake", job_id)
+        return
+    payload = json.dumps({
+        "job_id": job_id,
+        "order_id": order_id,
+        "current_driver": current_driver,
+        "new_driver": new_driver,
+        "callback_url": f"{callback}/catering/assign_driver/result",
+    }).encode()
+    headers = {"Content-Type": "application/json", "X-Cena-Token": token}
+    req = urllib.request.Request(f"{gateway}/jobs/driver-assign",
+                                 data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            logger.info("dispatch_assignment_job: aick gateway 202 for job %s", job_id)
+    except Exception:
+        logger.exception("dispatch_assignment_job: gateway wake failed for job %s", job_id)
+
+
+def run_assignment_flow_inline(order_id: str, current_driver: Optional[str],
+                               new_driver: str) -> dict:
+    """HTTP-callable entry point that takes the job payload directly
+    (no DB row lookup needed) and returns a result dict. Used by the
+    aick gateway's /jobs/driver-assign endpoint — the gateway HTTP-
+    POSTs the result back to Render's callback endpoint so Render can
+    update its own DB row.
+
+    Returns:
+      {status: 'completed'|'failed', error_message: str|None,
+       retry_count: int, gateway_processed: str}
+    """
+    last_error: Optional[str] = None
+    attempts = 0
+    final_status = "failed"
+    for attempts in range(3):
+        try:
+            _run_one_attempt_inline(order_id, new_driver)
+            final_status = "completed"
+            last_error = None
+            break
+        except _AuthExpired as e:
+            last_error = f"auth_expired: {e}"; break
+        except _PopupStuck as e:
+            last_error = f"popup_stuck: {e}"; continue
+        except _AssignmentMismatch as e:
+            last_error = f"verification_mismatch: {e}"; break
+        except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"; continue
+    return {
+        "status": final_status,
+        "error_message": last_error,
+        "retry_count": attempts,
+        "gateway_processed": GATEWAY_NAME,
+    }
+
+
+def _run_one_attempt_inline(order_id: str, new_driver: str) -> None:
+    """One Selenium pass, payload-driven (no DB)."""
+    driver = _make_driver()
+    try:
+        driver.get(PARTNER_PORTAL + "/")
+        time.sleep(1)
+        _inject_cookies(driver)
+        numeric = _resolve_numeric_order_id(driver, order_id)
+        order_url = f"{PARTNER_PORTAL}/orders/{numeric}"
+        driver.get(order_url)
+        WebDriverWait(driver, 30).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        time.sleep(2.5)
+        if "sign_in" in driver.current_url or "/login" in driver.current_url:
+            raise _AuthExpired(f"redirected to {driver.current_url}")
+        _dismiss_popups(driver)
+        # ezCater Unassign button (frees the driver field server-side)
+        try:
+            _click_button_with_text(driver, "Unassign driver", timeout=8)
+        except (TimeoutException, NoSuchElementException):
+            pass  # field was already empty
+        except WebDriverException:
+            try:
+                el = driver.find_element(By.XPATH, "//button[normalize-space()='Unassign driver']")
+                driver.execute_script("arguments[0].click();", el)
+            except Exception:
+                pass
+        time.sleep(1.0)
+        for confirm_label in ("Yes, unassign", "Unassign", "Confirm", "Yes", "OK"):
+            try:
+                _click_button_with_text(driver, confirm_label, timeout=2)
+                break
+            except (TimeoutException, NoSuchElementException, WebDriverException):
+                continue
+        time.sleep(2.0)
+        # Open the assign-driver modal.
+        opened = False
+        for label in ("Assign in-house driver", "Assign driver", "Change driver"):
+            try:
+                _click_button_with_text(driver, label, timeout=5)
+                opened = True; break
+            except (TimeoutException, NoSuchElementException):
+                continue
+            except WebDriverException:
+                try:
+                    el = driver.find_element(By.XPATH, f"//button[normalize-space()='{label}']")
+                    driver.execute_script("arguments[0].click();", el)
+                    opened = True; break
+                except Exception:
+                    continue
+        if not opened:
+            raise RuntimeError("no assign-driver button found")
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'driver')]"))
+        )
+        time.sleep(1.0)
+        # Type new driver name into search.
+        search_box = None
+        for sel in ["input[type='search']", "input[placeholder*='Search' i]",
+                    "input[placeholder*='driver' i]"]:
+            els = driver.find_elements(By.CSS_SELECTOR, sel)
+            if els:
+                search_box = els[0]; break
+        if search_box:
+            search_box.clear()
+            search_box.send_keys(new_driver)
+            time.sleep(1.2)
+        # Find + click matching label.
+        match_el = None
+        deadline = time.time() + 6.0
+        while time.time() < deadline and match_el is None:
+            for lab in driver.find_elements(By.CSS_SELECTOR, "label"):
+                try:
+                    txt = (lab.text or "").strip()
+                    if not txt or len(txt) > 120:
+                        continue
+                    if _driver_names_match(txt, new_driver):
+                        match_el = lab
+                        logger.info("modal match: %r ~ %r", txt, new_driver)
+                        break
+                except Exception:
+                    continue
+            if match_el is None:
+                time.sleep(0.4)
+        if match_el is None:
+            raise RuntimeError(f"driver '{new_driver}' not in modal list")
+        try:
+            match_el.click()
+        except WebDriverException:
+            driver.execute_script("arguments[0].click();", match_el)
+        # Click modal submit. Find inside the dialog to avoid the
+        # page-level Unassign/Change driver buttons by accident.
+        try:
+            dlg = driver.find_element(By.CSS_SELECTOR, "[role='dialog']")
+            for b in dlg.find_elements(By.CSS_SELECTOR, "button"):
+                if (b.text or "").strip() == "Assign driver":
+                    b.click(); break
+        except Exception:
+            _click_button_with_text(driver, "Assign driver", timeout=10)
+        time.sleep(3)
+        # Watch for the ezCater error dialog ("There was an error
+        # assigning the driver.") — common on cross-kitchen assigns.
+        try:
+            for d in driver.find_elements(By.CSS_SELECTOR, "[role='dialog']"):
+                if "error assigning the driver" in (d.text or "").lower():
+                    raise _AssignmentMismatch(
+                        "ezCater rejected the assignment: 'There was an "
+                        "error assigning the driver.' (likely cross-"
+                        "kitchen — driver's store doesn't match the "
+                        "order's pickup store)"
+                    )
+        except _AssignmentMismatch:
+            raise
+        except Exception:
+            pass
+        # Reload + DOM re-read.
+        driver.get(order_url)
+        WebDriverWait(driver, 30).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        time.sleep(2.5)
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        m = re.search(r"Assigned Driver\s*\n?\s*([^\n]+)", body_text)
+        if not m:
+            raise _AssignmentMismatch(
+                "no 'Assigned Driver' field found after assign — "
+                "field still empty (assign didn't persist)"
+            )
+        actual = m.group(1).strip()
+        if not _driver_names_match(actual, new_driver):
+            raise _AssignmentMismatch(f"expected '{new_driver}', saw '{actual}'")
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
 
 def run_assignment_flow(job_id: str) -> None:

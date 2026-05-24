@@ -35,6 +35,44 @@ browse = Blueprint("orders_browse", __name__)
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+@browse.route("/catering/assign_driver/result", methods=["POST"])
+def catering_assign_driver_result():
+    """Callback from the aick gateway after a driver re-assign job
+    runs. Token-gated (X-Cena-Token shared with the gateway) so only
+    the gateway can flip job status. Body: {job_id, status,
+    error_message, retry_count, gateway_processed}.
+
+    Flat (non-store-scoped) route so the EXEMPT_PREFIXES match in
+    auth.py is a single prefix.
+    """
+    import os
+    from datetime import datetime
+    from app.models import DriverAssignmentJob
+    expected_token = os.environ.get("CENA_GATEWAY_TOKEN", "").strip()
+    got_token = (request.headers.get("X-Cena-Token") or "").strip()
+    if not expected_token or got_token != expected_token:
+        return jsonify({"ok": False, "error": "unauthorized"}), 403
+    body = request.get_json(silent=True) or {}
+    job_id = (body.get("job_id") or "").strip()
+    if not job_id:
+        return jsonify({"ok": False, "error": "job_id required"}), 400
+    db = next(get_db())
+    try:
+        job = (db.query(DriverAssignmentJob)
+                 .filter(DriverAssignmentJob.job_id == job_id).first())
+        if not job:
+            return jsonify({"ok": False, "error": "job not found"}), 404
+        job.status = body.get("status") or "failed"
+        job.error_message = body.get("error_message") or None
+        job.retry_count = int(body.get("retry_count") or 0)
+        job.gateway_processed = body.get("gateway_processed") or "aick"
+        job.completed_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
 @browse.route("/orders/<location>")
 def location_orders(location: str):
     location = location.lower()

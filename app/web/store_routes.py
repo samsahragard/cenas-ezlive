@@ -4613,14 +4613,14 @@ def catering_assign_driver():
     finally:
         db.close()
 
-    # Dispatch to the aick gateway (the Selenium runner). Done out of
-    # band so a slow gateway never blocks the HTTP response. The
-    # gateway endpoint + actual Selenium flow land in Phase 2; until
-    # then the job stays pending and the frontend's polling will see
-    # that state.
+    # HTTP-wake the aick gateway (Sam #669 + 2026-05-24 architecture
+    # choice b). dispatch_assignment_job sends the job payload to
+    # CENA_GATEWAY_URL/jobs/driver-assign — aick runs the flow + POSTs
+    # the result back to /catering/assign_driver/result. Gateway hop
+    # out-of-band so a slow ezCater never blocks this HTTP response.
     try:
         from app.services.ezcater_driver_assigner import dispatch_assignment_job
-        dispatch_assignment_job(job_id)
+        dispatch_assignment_job(job_id, order_id, current_driver, new_driver)
     except Exception:
         logging.getLogger(__name__).exception(
             "catering_assign_driver: dispatch raised (job stays pending)")
@@ -4656,3 +4656,5 @@ def catering_assign_driver_status():
         })
     finally:
         db.close()
+
+

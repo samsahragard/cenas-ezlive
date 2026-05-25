@@ -585,24 +585,36 @@
 <script>
   /* Back-button guard — website-side mitigation.
 
-     Two layers:
+     Three layers, each scoped to a different runtime so they don't
+     collide:
 
      LAYER 1 (Sam #11:11) — deep-entry-page redirect to home.
      When a page is the WebView's entry page (history.length <= 1) and
      it isn't already home, seed a guard entry so the first back press
      navigates to the store dashboard instead of exiting the app.
+     Fires in BROWSER tabs.
 
      LAYER 2 (Sam #878 2026-05-24) — standalone-PWA trap at root.
-     When the page is running as an installed PWA (display-mode:
-     standalone — Play Store TWA wrapper or browser-installed PWA),
-     ALWAYS seed a sentinel and re-push it on popstate. The Android
-     hardware back at the root view would otherwise exit the whole
-     app, which is exactly what Sam was hitting. Browser-tab use is
-     unaffected because the standalone check is false there.
+     When the page is running as a browser-installed PWA (Chrome's
+     "Add to Home Screen" — display-mode: standalone, NOT a wrapped
+     native app), ALWAYS seed a sentinel and re-push it on popstate.
+     Browser-tab use is unaffected because the standalone check is
+     false there.
 
-     Both layers use distinct state markers so they don't collide with
-     each other or with the bnavMenu popstate handler in
-     _bottom_nav.html (commit 857a778). */
+     LAYER 3 (Sam #914 2026-05-25) — Capacitor App.backButton trap.
+     The Play Store app is a Capacitor 7 WebView wrapper (mobile/
+     capacitor.config.json, appId com.cenaskitchen.app). In Capacitor
+     the Android hardware back is dispatched through the native App
+     plugin, NOT via webview popstate. Layer 2 was the wrong API for
+     this case. Layer 3 listens on window.Capacitor.Plugins.App.
+     backButton: if canGoBack -> history.back() (normal in-app nav);
+     else -> no-op (traps at root, does NOT exit the app). Requires
+     the @capacitor/app plugin to be present in the native shell
+     (mobile/package.json — added in this same push).
+
+     All three layers use distinct state markers / event sources so
+     they don't collide with each other or with the bnavMenu popstate
+     handler in _bottom_nav.html (commit 857a778). */
   (function () {
     var HOME = {{ ('/' ~ store_slug ~ '/') | tojson }};
     var isStandalone = false;
@@ -644,6 +656,26 @@
           window.location.replace(HOME);
         }
       });
+
+      // Layer 3: Capacitor App.backButton. Only fires inside the
+      // Play Store app (Capacitor injects window.Capacitor.Plugins
+      // into the WebView even when loading from a remote server.url).
+      // canGoBack is reported by the native bridge — perfect signal.
+      // Adding ANY listener here suppresses Capacitor's default
+      // "exit the app" fallback, which is the actual fix for the
+      // Play Store back-exits-app bug.
+      try {
+        if (window.Capacitor && window.Capacitor.Plugins
+            && window.Capacitor.Plugins.App
+            && typeof window.Capacitor.Plugins.App.addListener === 'function') {
+          window.Capacitor.Plugins.App.addListener('backButton', function (ev) {
+            if (ev && ev.canGoBack) {
+              window.history.back();
+            }
+            // else: do nothing — traps at root, app stays open.
+          });
+        }
+      } catch (e) { /* Capacitor bridge missing — keep default behavior */ }
     } catch (e) { /* history API unavailable — keep default behavior */ }
   })();
 </script>

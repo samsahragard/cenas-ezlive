@@ -528,9 +528,21 @@
                       data-store-scope="{{ g.current_store }}"
                       data-current="{{ o.ezcater_driver_name or '' }}"
                       onclick="event.stopPropagation();">
+                  {# Sam #864 2026-05-24: include the in-house default
+                     driver (Masood CK#1 for Copperfield, Sam CK#2 for
+                     Tomball) as a first-class dropdown option so
+                     managers can pick the default explicitly — same
+                     name the webhook hardcoded table uses. #}
+                  {% set _inhouse = 'Masood CK #1' if _ck_prefix == 1 else ('Sam CK #2' if _ck_prefix == 2 else '') %}
                   <select onchange="assignDriver(this);">
                     <option value="">— pick driver —</option>
                     <option value="__no_driver__">— no driver (unhook only) —</option>
+                    {% if _inhouse %}
+                      <option value="{{ _inhouse }}"
+                              {% if o.ezcater_driver_name and _inhouse == o.ezcater_driver_name %}selected{% endif %}>
+                        {{ _inhouse }}
+                      </option>
+                    {% endif %}
                     {% for name in _driver_options %}
                       <option value="{{ name }}"
                               {% if o.ezcater_driver_name and name == o.ezcater_driver_name %}selected{% endif %}>

@@ -221,6 +221,32 @@
     color: var(--gold-bright); letter-spacing: 0.06em;
     text-align: center; margin-top: 8px;
   }
+  /* Sam #856 2026-05-24: always-on display of the live ezCater
+     'Assigned Driver' field. Renders between the address line and
+     the chip row inside each card. 'no driver' state uses red for
+     instant visibility on a phone scan. */
+  .ezo-page .ezo-ezdriver {
+    margin: 10px 0 6px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 13px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  }
+  .ezo-page .ezo-ezdriver-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--cream-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .ezo-page .ezo-ezdriver-name {
+    font-weight: 700;
+    color: var(--cream);
+  }
+  .ezo-page .ezo-ezdriver-name.empty {
+    color: var(--red-bright);
+    font-weight: 600;
+    font-style: italic;
+  }
   .ezo-page .ezo-client {
     font-size: 15px; font-weight: 700; color: var(--cream);
     margin-top: 3px;
@@ -458,15 +484,26 @@
             <div class="ezo-client">{{ o.client or '—' }}</div>
             <div class="ezo-addr">{{ o.delivery_address or '—' }}</div>
 
+            {# Sam #856 2026-05-24: always-on row showing the live
+               'Assigned Driver' field as ezCater reports it. When a
+               new order lands the cron auto-assigns Masood / Sam
+               (default in-house drivers) and that value lands here;
+               when a manager picks via the dropdown below + the
+               flow completes, this same value updates. Empty source
+               renders 'no driver'. #}
+            <div class="ezo-ezdriver">
+              <span class="ezo-ezdriver-label">current ez-driver:</span>
+              <span class="ezo-ezdriver-name {{ 'empty' if not o.ezcater_driver_name }}">
+                {{ o.ezcater_driver_name or 'no driver' }}
+              </span>
+            </div>
+
             <div class="ezo-cardbot">
               <span class="ezo-chip">&#128205; {{ _row_loc }}</span>
               {% if _has %}
                 <span class="ezo-chip driver">&#128100; {{ _dispatch }}</span>
               {% else %}
                 <span class="ezo-chip nodriver">&#9888; Needs driver</span>
-              {% endif %}
-              {% if o.ezcater_driver_name %}
-                <span class="ezo-chip">ezC {{ o.ezcater_driver_name }}</span>
               {% endif %}
               <span class="ezo-botspacer"></span>
               {# Sam #669 driver-assignment dropdown — manager picks a

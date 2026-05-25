@@ -62,11 +62,27 @@ def catering_assign_driver_result():
                  .filter(DriverAssignmentJob.job_id == job_id).first())
         if not job:
             return jsonify({"ok": False, "error": "job not found"}), 404
-        job.status = body.get("status") or "failed"
+        new_status = body.get("status") or "failed"
+        job.status = new_status
         job.error_message = body.get("error_message") or None
         job.retry_count = int(body.get("retry_count") or 0)
         job.gateway_processed = body.get("gateway_processed") or "aick"
         job.completed_at = datetime.utcnow()
+        # Sam #862 2026-05-24: when the re-assign succeeds, write the
+        # new driver name back to Order.ezcater_driver_name so the
+        # 'current ez-driver' row on the catering card reflects it.
+        # __no_driver__ sentinel -> clear to None (matches the actual
+        # ezCater portal state after the flow's Unassign + skip-assign
+        # branch). Failed re-assigns leave the field as-is.
+        if new_status == "completed":
+            from app.models import Order
+            _row = (db.query(Order)
+                      .filter_by(external_order_id=job.order_id).first())
+            if _row is not None:
+                _row.ezcater_driver_name = (
+                    None if job.new_driver == "__no_driver__"
+                    else job.new_driver
+                )
         db.commit()
         return jsonify({"ok": True})
     finally:

@@ -557,6 +557,31 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
         # to /partner/developer/ezcater for review. Sam asked for no
         # Telegram on warnings.
         lines.append(f"EZLive: ingested {view_url}")
+        # Sam #862 2026-05-24: backfill ezcater_driver_name on the
+        # freshly-ingested order row so the catering Ez Orders card's
+        # 'current ez-driver' display reflects who we just told ezCater
+        # to assign. The ingest path doesn't set this column; without
+        # this update the card would say 'no driver' until the next
+        # XLSX import. Only writes on courierAssign success — a failed
+        # assign leaves the field null (correct: ezCater didn't take it).
+        if assign_ok:
+            try:
+                from app.db import get_db as _get_db
+                from app.models import Order as _Order
+                _ezd_name = f"{driver['firstName']} {driver['lastName']}".strip()
+                _db = next(_get_db())
+                try:
+                    _row = (_db.query(_Order)
+                              .filter_by(external_order_id=order_number).first())
+                    if _row:
+                        _row.ezcater_driver_name = _ezd_name
+                        _db.commit()
+                        logger.info("webhook: set ezcater_driver_name=%r on %s",
+                                    _ezd_name, order_number)
+                finally:
+                    _db.close()
+            except Exception:
+                logger.exception("webhook: ezcater_driver_name backfill failed (non-fatal)")
     else:
         lines.append(f"EZLive: FAILED — {json.dumps(ingest_resp)[:200]}")
 

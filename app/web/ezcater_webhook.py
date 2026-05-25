@@ -480,12 +480,45 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
     dist = _distance_check(drop_off, store_num)
     exception_flag = bool(dist and dist.get("exception"))
 
-    # Step 3: assign courier (skip if delivery_uuid was missing — handled below)
+    # Step 3: assign courier. Sam #900 2026-05-25: route through the
+    # SAME Chrome+UI gateway flow the dropdown re-assigns use, instead
+    # of the courierAssign API. The webhook just enqueues a
+    # DriverAssignmentJob + HTTP-wakes the AiCk gateway; the gateway
+    # runs the 12-step Selenium flow (which skips Unassign when the
+    # driver field is already empty), submits, verifies, then POSTs
+    # the result back to /catering/assign_driver/result — which writes
+    # Order.ezcater_driver_name on success. One assign codepath for
+    # both new-order auto + manager dropdown re-assigns.
     if delivery_missing:
         assign_ok = False
         assign_err = "skipped — ezCater hadn't populated deliveryId after 3 retries"
     else:
-        assign_ok, assign_err = _assign_courier(delivery_uuid, driver)
+        try:
+            from app.models import DriverAssignmentJob as _DAJ
+            from app.db import get_db as _get_db
+            from app.services.ezcater_driver_assigner import dispatch_assignment_job as _dispatch
+            import uuid as _uuid
+            new_driver_name = f"{driver['firstName']} {driver['lastName']}".strip()
+            job_id = str(_uuid.uuid4())
+            _db = next(_get_db())
+            try:
+                _db.add(_DAJ(
+                    job_id=job_id, order_id=order_number,
+                    current_driver=None, new_driver=new_driver_name,
+                    status="pending",
+                ))
+                _db.commit()
+            finally:
+                _db.close()
+            _dispatch(job_id, order_number, None, new_driver_name)
+            assign_ok = True
+            assign_err = f"queued via UI flow (job_id={job_id[:8]}, driver={new_driver_name})"
+            logger.info("webhook: queued UI assign job %s for %s -> %s",
+                        job_id, order_number, new_driver_name)
+        except Exception as e:
+            assign_ok = False
+            assign_err = f"queue-dispatch failed: {type(e).__name__}: {e}"
+            logger.exception("webhook: UI-assign dispatch failed for %s", order_number)
 
     # Step 4: ingest into EZLive
     raw_order = map_to_raw_order(api_order)
@@ -557,31 +590,11 @@ def _process_submitted(entity_id: str, parent_id: str | None) -> None:
         # to /partner/developer/ezcater for review. Sam asked for no
         # Telegram on warnings.
         lines.append(f"EZLive: ingested {view_url}")
-        # Sam #862 2026-05-24: backfill ezcater_driver_name on the
-        # freshly-ingested order row so the catering Ez Orders card's
-        # 'current ez-driver' display reflects who we just told ezCater
-        # to assign. The ingest path doesn't set this column; without
-        # this update the card would say 'no driver' until the next
-        # XLSX import. Only writes on courierAssign success — a failed
-        # assign leaves the field null (correct: ezCater didn't take it).
-        if assign_ok:
-            try:
-                from app.db import get_db as _get_db
-                from app.models import Order as _Order
-                _ezd_name = f"{driver['firstName']} {driver['lastName']}".strip()
-                _db = next(_get_db())
-                try:
-                    _row = (_db.query(_Order)
-                              .filter_by(external_order_id=order_number).first())
-                    if _row:
-                        _row.ezcater_driver_name = _ezd_name
-                        _db.commit()
-                        logger.info("webhook: set ezcater_driver_name=%r on %s",
-                                    _ezd_name, order_number)
-                finally:
-                    _db.close()
-            except Exception:
-                logger.exception("webhook: ezcater_driver_name backfill failed (non-fatal)")
+        # Sam #862 manual backfill removed Sam #900 2026-05-25: the
+        # UI-flow path above queues a DriverAssignmentJob; when the
+        # gateway runs it + the callback fires, /catering/assign_driver/
+        # result writes ezcater_driver_name on success (or leaves it
+        # null on failure). Same column, single writer, accurate state.
     else:
         lines.append(f"EZLive: FAILED — {json.dumps(ingest_resp)[:200]}")
 

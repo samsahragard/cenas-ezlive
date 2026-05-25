@@ -167,7 +167,6 @@
           ).join('\n');
           smDetails.textContent =
             `Sequence: ${rr.sequence || '—'}\n` +
-            `Total drive: ${rr.total_drive_minutes || '—'} min\n` +
             `Total late:  ${rr.total_minutes_late || 0} min\n` +
             (stops ? '\nStops:\n' + stops : '');
         }

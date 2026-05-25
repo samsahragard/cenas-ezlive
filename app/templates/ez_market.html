@@ -208,7 +208,7 @@
               <div class="em-trip-text">
                 <div class="em-trip-name">{{ o.delivery_address or 'n/a' }}</div>
                 {% if o.pickup_miles %}
-                <div class="em-trip-sub">{{ "%.1f"|format(o.pickup_miles) }} mi from pickup · ~{{ ((o.pickup_miles / 30) * 60)|round|int }} min drive</div>
+                <div class="em-trip-sub">{{ "%.1f"|format(o.pickup_miles) }} mi from pickup</div>
                 {% endif %}
               </div>
             </div>

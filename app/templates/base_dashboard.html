@@ -583,26 +583,63 @@
   };
 </script>
 <script>
-  /* Back-button guard (Sam #11:11) — website-side mitigation.
-     When a page is the WebView's entry page (nothing in in-app history
-     behind it), the Android hardware back button would close the whole
-     app. Seed one guard entry so the first back press navigates to the
-     store dashboard instead of exiting. Bounded to the entry page only
-     (history.length <= 1); normal multi-page back navigation is left
-     untouched. Uses its own ckHomeGuard state marker so it does not
-     interfere with the bnavMenu popstate handler in _bottom_nav.html
-     (commit 857a778). The complete fix is wrapper-side (the native
-     Android wrapper). */
+  /* Back-button guard — website-side mitigation.
+
+     Two layers:
+
+     LAYER 1 (Sam #11:11) — deep-entry-page redirect to home.
+     When a page is the WebView's entry page (history.length <= 1) and
+     it isn't already home, seed a guard entry so the first back press
+     navigates to the store dashboard instead of exiting the app.
+
+     LAYER 2 (Sam #878 2026-05-24) — standalone-PWA trap at root.
+     When the page is running as an installed PWA (display-mode:
+     standalone — Play Store TWA wrapper or browser-installed PWA),
+     ALWAYS seed a sentinel and re-push it on popstate. The Android
+     hardware back at the root view would otherwise exit the whole
+     app, which is exactly what Sam was hitting. Browser-tab use is
+     unaffected because the standalone check is false there.
+
+     Both layers use distinct state markers so they don't collide with
+     each other or with the bnavMenu popstate handler in
+     _bottom_nav.html (commit 857a778). */
   (function () {
     var HOME = {{ ('/' ~ store_slug ~ '/') | tojson }};
+    var isStandalone = false;
     try {
+      isStandalone =
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+        (window.navigator && window.navigator.standalone === true);
+    } catch (e) { /* matchMedia missing — treat as browser */ }
+
+    try {
+      // Layer 1: deep-entry guard (unchanged behavior — redirect to HOME).
       if (window.history.length <= 1 && window.location.pathname !== HOME) {
         history.replaceState({ ckHomeGuard: 1 }, '');
         history.pushState({ ckHomeReal: 1 }, '');
       }
+
+      // Layer 2: standalone trap — keep the user inside the app.
+      // Push one sentinel on load; on back, push another so the system
+      // back never pops past it. The bottom nav (and any in-app links)
+      // push their own entries on top, so normal forward+back between
+      // pages still works — the trap only kicks in when the user is at
+      // the bottom of the stack.
+      if (isStandalone) {
+        history.pushState({ ckStandaloneTrap: 1 }, '');
+      }
+
       window.addEventListener('popstate', function (ev) {
-        // React only to our own guard entry; the bottom-nav menu's
-        // bnavMenu pops are handled by _bottom_nav.html's listener.
+        // Layer 2 first: in standalone, re-push the sentinel if the
+        // back press would have exited. This is the only listener that
+        // intercepts the trap state.
+        if (isStandalone) {
+          history.pushState({ ckStandaloneTrap: 1 }, '');
+          return;
+        }
+        // Layer 1: only react to our own deep-entry guard. The
+        // bottom-nav menu's bnavMenu pops are handled by
+        // _bottom_nav.html's listener.
         if (ev.state && ev.state.ckHomeGuard) {
           window.location.replace(HOME);
         }

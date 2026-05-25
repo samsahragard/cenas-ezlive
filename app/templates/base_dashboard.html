@@ -647,6 +647,46 @@
     } catch (e) { /* history API unavailable — keep default behavior */ }
   })();
 </script>
+<!-- TEMP: Sam #919 2026-05-25 Capacitor diagnostic overlay. Reports which
+     Capacitor APIs are present in the WebView so we can choose the right
+     back-button fix path. Remove after Sam screenshots from the Play Store
+     app. -->
+<script>
+  (function () {
+    try {
+      var build = function () {
+        var d = document.createElement('div');
+        d.id = 'aick_capdiag';
+        d.style.cssText = 'position:fixed;top:8px;left:8px;z-index:99999;'
+          + 'background:rgba(0,0,0,0.92);color:#0f0;'
+          + 'font:12px/1.4 ui-monospace,monospace;padding:10px 12px;'
+          + 'border:2px solid #0f0;border-radius:6px;'
+          + 'max-width:92vw;white-space:pre;pointer-events:auto;';
+        var C = (typeof window.Capacitor !== 'undefined') ? window.Capacitor : null;
+        var plugins = C && C.Plugins;
+        var App = plugins && plugins.App;
+        var addL = App && typeof App.addListener === 'function';
+        var nat = C && typeof C.isNativePlatform === 'function' && C.isNativePlatform();
+        var plat = C && C.getPlatform ? C.getPlatform() : 'n/a';
+        var st = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+        d.textContent = 'CAPACITOR DIAG\n'
+          + 'window.Capacitor: ' + (C ? 'YES' : 'NO') + '\n'
+          + '.Plugins: ' + (plugins ? 'YES' : 'NO') + '\n'
+          + '.Plugins.App: ' + (App ? 'YES' : 'NO') + '\n'
+          + '.App.addListener: ' + (addL ? 'YES' : 'NO') + '\n'
+          + 'isNativePlatform: ' + (nat ? 'YES' : 'NO') + '\n'
+          + 'getPlatform: ' + plat + '\n'
+          + 'display:standalone: ' + (st ? 'YES' : 'NO') + '\n'
+          + 'UA: ' + (navigator.userAgent || '').slice(0, 80);
+        d.addEventListener('click', function () { d.remove(); });
+        (document.body || document.documentElement).appendChild(d);
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', build);
+      } else { build(); }
+    } catch (e) { /* swallow — diagnostic is best-effort */ }
+  })();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

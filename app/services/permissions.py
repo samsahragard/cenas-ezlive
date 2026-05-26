@@ -167,6 +167,11 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "orders.assign_driver", "orders.unassign_driver",
         "orders.mark_picked_up", "orders.mark_delivered",
         "orders.edit_attachments",
+        # Sam #1063 (2026-05-26): drivers.admin opened to every non-driver
+        # role so any store team can add / deactivate drivers; store scope
+        # is enforced by the /<store>/drivers URL prefix + blueprint
+        # before_request, so Tomball team only reaches Tomball drivers.
+        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
         "produce.order", "produce.invoice_verify",
         "produce.view_quotes", "produce.view_vendor_list",
         "produce.upload_invoice", "produce.dispute",
@@ -186,6 +191,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "orders.assign_driver", "orders.unassign_driver",
         "orders.mark_picked_up", "orders.mark_delivered",
         "orders.edit_attachments",
+        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
+        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
         "produce.view_quotes", "produce.view_vendor_list",
         "produce.upload_invoice",
         "manager_log.write", "manager_log.read_own_store",
@@ -206,6 +213,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "orders.assign_driver", "orders.unassign_driver",
         "orders.mark_picked_up", "orders.mark_delivered",
         "orders.edit_attachments",
+        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
+        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
         "produce.order", "produce.invoice_verify",
         "produce.view_quotes", "produce.view_vendor_list",
         "produce.upload_invoice", "produce.dispute",
@@ -224,6 +233,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "labor.view_all_stores",
         "orders.view", "orders.view_history",
         "orders.mark_picked_up", "orders.mark_delivered",
+        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
+        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
         "produce.invoice_verify",  # receive + verify, no place-order
         "produce.view_quotes", "produce.view_vendor_list",
         "produce.upload_invoice",
@@ -244,6 +255,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "orders.assign_driver", "orders.unassign_driver",
         "orders.mark_picked_up", "orders.mark_delivered",
         "orders.edit_attachments",
+        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
+        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
         "manager_log.write", "manager_log.read_own_store",
         "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
         "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
@@ -255,6 +268,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "orders.view",
         "orders.mark_picked_up", "orders.mark_delivered",
         "orders.edit_attachments",
+        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
+        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
         "ai.ask_claude_personal", "ai.view_transcripts",
         "transcripts.search", "transcripts.read",
         "kds.view_kitchen_display",
@@ -283,16 +298,26 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     # etc.) is a deliberate follow-up once these roles have actual app
     # surfaces — see the precondition spec §6 Q1. Do NOT mistake the thin
     # set for an oversight.
+    # Sam #1063 (2026-05-26): drivers.admin opened to every non-driver
+    # role. The hourly-tier roles get the tag here too so when the user
+    # taxonomy fills out, a cook or server can also add a driver from
+    # their store. Store scope is auto-enforced by the /<store>/drivers
+    # URL prefix + blueprint before_request.
     "cook":      {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read"},
+                  "transcripts.search", "transcripts.read",
+                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
     "server":    {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read"},
+                  "transcripts.search", "transcripts.read",
+                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
     "busser":    {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read"},
+                  "transcripts.search", "transcripts.read",
+                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
     "host":      {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read"},
+                  "transcripts.search", "transcripts.read",
+                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
     "bartender": {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read"},
+                  "transcripts.search", "transcripts.read",
+                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
 }
 
 

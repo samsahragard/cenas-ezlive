@@ -193,7 +193,7 @@
         <div class="ezm-order-info">
           <div class="ezm-time">{{ o.deliver_at or '—' }}</div>
           <div class="ezm-route">{{ pickup_label(o) or '—' }} → {{ o.delivery_address or '—' }}</div>
-          <div class="ezm-meta">{{ o.external_order_id }} · {{ o.headcount or '—' }} heads · ${{ "%.0f"|format(o.total_amount or 0) }}</div>
+          <div class="ezm-meta">{{ o.external_order_id }} · {{ o.headcount or '—' }} heads</div>
         </div>
         <div>
           <div class="ezm-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>

@@ -202,6 +202,74 @@ def _format_key_dates(d: dict | None) -> str:
 # -----------------------------------------------------------
 # 1. Overview
 # -----------------------------------------------------------
+# ---- Legal dashboard (tabbed entry layer, Sam #1066 TODO #3, 2026-05-26)
+# Twin of kitchen_dashboard / operations_dashboard. Sidebar Legal entry
+# no longer expands a dropdown — it links straight here. Each tab embeds
+# the real legal page inline via iframe.
+_LEGAL_DASH_TABS = [
+    ("overview",  "Overview",  False),
+    ("matters",   "Matters",   False),
+    ("structure", "Structure", False),
+    ("insurance", "Insurance", False),
+    ("documents", "Documents", False),
+    ("audit-log", "Audit log", False),
+]
+
+
+def _legal_dash_full_url(tab_key):
+    """Absolute href to the real legal page each tab iframes."""
+    if tab_key == "overview":
+        return url_for("legal.legal_overview")
+    if tab_key == "matters":
+        return url_for("legal.legal_matters")
+    if tab_key == "structure":
+        return url_for("legal.legal_structure")
+    if tab_key == "insurance":
+        return url_for("legal.legal_insurance")
+    if tab_key == "documents":
+        return url_for("legal.legal_documents")
+    if tab_key == "audit-log":
+        return url_for("legal.legal_audit")
+    return ""
+
+
+@legal.route("/partner/legal/dashboard", methods=["GET"])
+@requires_permission("legal.view")
+def legal_dashboard():
+    """Tabbed Legal dashboard — the entry layer the sidebar Legal entry
+    links to (Sam #1066 TODO #3). Defaults to the Overview tab;
+    ?tab=<key> deep-links another. Each tab embeds the real legal page
+    inline in an iframe."""
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    _set_partner_g()
+    valid = {key for key, _, _ in _LEGAL_DASH_TABS}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = _LEGAL_DASH_TABS[0][0]   # 'overview'
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "coming": coming,
+            "url": "" if coming else _legal_dash_full_url(key),
+        }
+        for key, caption, coming in _LEGAL_DASH_TABS
+    ]
+    store_label = g.store_label or "Cenas Kitchen"
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "legal_dashboard.html",
+        active="legal_dashboard",
+        store_label=store_label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )
+
+
 @legal.route("/partner/legal", methods=["GET"])
 @requires_permission("legal.view")
 def legal_overview():

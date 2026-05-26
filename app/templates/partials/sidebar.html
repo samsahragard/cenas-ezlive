@@ -126,34 +126,18 @@
        Partner's {"*"} wildcard matches every tag so the section set
        is unchanged for Sam. #}
 
-    {# ==== LEGAL ==== per Sam #837 item 8 — 6 placeholder entries to
-       the same Coming Soon page until the legal features ship.
-       Partner-only by default (matches the existing per-section gating
-       pattern Admin uses elsewhere). #}
+    {# ==== LEGAL ==== direct link to the tabbed Legal dashboard
+       (Sam #1066 TODO #3, 2026-05-26): the sidebar Legal entry no
+       longer expands a sub-menu — it links straight to /partner/legal/
+       dashboard which opens on the Overview tab; Matters / Structure /
+       Insurance / Documents / Audit log reachable as tabs there. Twin
+       of Today / Manager / Catering / Operations / Kitchen.
+       Partner-only by default (matches the existing gating). #}
     {% if user_role == 'partner' %}
-    <div class="ck-sb-section collapsed" data-id="legal">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Legal</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-        {% for slug, label, icon in [
-          ('overview', 'Overview', 'ti-scale'),
-          ('matters', 'Matters', 'ti-folder'),
-          ('structure', 'Structure', 'ti-building-bank'),
-          ('insurance', 'Insurance', 'ti-shield-check'),
-          ('documents', 'Documents', 'ti-file-text'),
-          ('audit-log', 'Audit log', 'ti-history'),
-        ] %}
-        <a href="/{{ store_slug }}/legal/{{ slug }}"
-           class="ck-sb-item{% if active == 'legal_' + slug.replace('-','_') %} active{% endif %}">
-          <i class="ti {{ icon }} ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">{{ label }}</span>
-          <span class="ck-sb-soon" style="margin-left:auto;">soon</span>
-        </a>
-        {% endfor %}
-      </div></div>
-    </div>
+    <a class="ck-sb-section-head" href="/partner/legal/dashboard"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Legal</span>
+    </a>
     {% endif %}
 
     {% if has_permission('developer.view_chat') %}

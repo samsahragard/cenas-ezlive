@@ -1993,6 +1993,43 @@ class SamChatTodo(Base):
 _VALID_SAM_CHAT_TODO_STATUS = frozenset({"active", "done"})
 
 
+class DevChatTodo(Base):
+    """Sam-authored TODO under /partner/developer/chat (Sam #1066, 2026-05-26).
+
+    Distinct from SamChatTodo (which is the cena-page focus-queue) — this
+    one is the dev-chat shared work list. Items are assignable to a
+    specific agent (aick / ck / cena) or left unassigned (any can grab).
+    The agent who is the assignee picks the item up when they refresh
+    the dev chat page.
+    """
+    __tablename__ = "dev_chat_todos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 'aick' | 'ck' | 'cena' | NULL (= any agent).
+    assigned_to: Mapped[str | None] = mapped_column(
+        String(40), nullable=True, index=True)
+    # 'open' | 'in_progress' | 'done' | 'cancelled'. Validated app-side.
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="open", index=True)
+    # Author label — usually 'sam' for Sam-typed items; agents can also
+    # leave themselves a TODO.
+    created_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
+_VALID_DEV_CHAT_TODO_STATUS = frozenset(
+    {"open", "in_progress", "done", "cancelled"})
+_VALID_DEV_CHAT_TODO_ASSIGNEES = frozenset({"aick", "ck", "cena"})
+
+
 # ---- Block 1J — AmbientSignal data plane (samai spec, 2026-05-14) ----
 # The in-app data-plane / control-plane separation: six per-source
 # /cron/refresh-* crons WRITE AmbientSignal rows; the 1C ribbon router

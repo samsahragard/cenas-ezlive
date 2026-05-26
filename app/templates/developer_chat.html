@@ -164,6 +164,70 @@
     outline-offset: -4px;
   }
 
+  /* Sam #1066 — dev-chat TODO widget */
+  .dc-todos { background: rgba(0,0,0,0.25); border-bottom: 1px solid var(--glass-border);
+    font-size: 12px; }
+  .dc-todos-head { display: flex; align-items: center; gap: 10px;
+    padding: 8px 16px; cursor: default; }
+  .dc-todos-title { font-weight: 700; color: #FFD970; letter-spacing: 0.04em; }
+  .dc-todos-count { color: rgba(250,246,236,0.7); font-family: ui-monospace, monospace; font-size: 11px; }
+  .dc-todos-toggle { margin-left: auto; background: transparent; border: 0.5px solid rgba(255,255,255,0.18);
+    color: rgba(250,246,236,0.65); padding: 3px 9px; border-radius: 3px;
+    font-family: ui-monospace, monospace; font-size: 10px; cursor: pointer; }
+  .dc-todos-toggle:hover { color: #FAF6EC; border-color: rgba(255,255,255,0.4); }
+  .dc-todos-body { padding: 4px 16px 12px; }
+  .dc-todos-body.is-collapsed { display: none; }
+  .dc-todos-add { display: flex; gap: 6px; margin-bottom: 8px; }
+  .dc-todos-add input[type=text] {
+    flex: 1; background: rgba(0,0,0,0.30); color: #FAF6EC;
+    border: 0.5px solid rgba(255,255,255,0.18); border-radius: 3px;
+    padding: 6px 9px; font-size: 12px;
+  }
+  .dc-todos-add input[type=text]:focus { outline: none; border-color: rgba(232,122,62,0.7); }
+  .dc-todos-add select {
+    background: rgba(0,0,0,0.30); color: #FAF6EC;
+    border: 0.5px solid rgba(255,255,255,0.18); border-radius: 3px;
+    padding: 6px 9px; font-size: 12px;
+  }
+  .dc-todos-add button {
+    background: rgba(232,122,62,0.18); color: #FFD970;
+    border: 0.5px solid rgba(232,122,62,0.55); border-radius: 3px;
+    padding: 6px 12px; font-weight: 600; font-size: 12px; cursor: pointer;
+  }
+  .dc-todos-add button:hover { background: rgba(232,122,62,0.28); }
+  .dc-todos-open, .dc-todos-done {
+    list-style: none; padding: 0; margin: 0;
+  }
+  .dc-todo {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 0; border-top: 0.5px solid rgba(255,255,255,0.06);
+  }
+  .dc-todo:first-child { border-top: 0; }
+  .dc-todo .ttitle { flex: 1; color: #FAF6EC; }
+  .dc-todo .tassignee { font-family: ui-monospace, monospace; font-size: 10px;
+    color: #FFD970; background: rgba(255,217,112,0.10);
+    border: 0.5px solid rgba(255,217,112,0.35);
+    padding: 1px 6px; border-radius: 3px; text-transform: lowercase; }
+  .dc-todo .tassignee.any { color: rgba(250,246,236,0.55);
+    border-color: rgba(255,255,255,0.18); background: rgba(0,0,0,0.20); }
+  .dc-todo .tstatus { font-family: ui-monospace, monospace; font-size: 10px;
+    padding: 1px 6px; border-radius: 3px; cursor: pointer; }
+  .dc-todo .tstatus.open    { color: #5BCAC5; border: 0.5px solid rgba(46,163,159,0.4); background: rgba(46,163,159,0.10); }
+  .dc-todo .tstatus.in_progress { color: #FFD970; border: 0.5px solid rgba(255,217,112,0.4); background: rgba(255,217,112,0.10); }
+  .dc-todo .tstatus.done   { color: rgba(250,246,236,0.55); border: 0.5px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.20); }
+  .dc-todo .tstatus.cancelled { color: rgba(199,59,54,0.85); border: 0.5px solid rgba(199,59,54,0.4); background: rgba(199,59,54,0.10); text-decoration: line-through; }
+  .dc-todo .tdel {
+    background: transparent; border: 0; color: rgba(250,246,236,0.30);
+    cursor: pointer; font-size: 13px; padding: 0 2px;
+  }
+  .dc-todo .tdel:hover { color: #E85852; }
+  .dc-todo .tmeta { font-family: ui-monospace, monospace; font-size: 10px;
+    color: rgba(250,246,236,0.40); }
+  .dc-todos-done-wrap summary { color: rgba(250,246,236,0.55); font-size: 11px;
+    cursor: pointer; padding: 6px 0 2px; outline: none; }
+  .dc-todos-done-wrap summary::-webkit-details-marker { color: rgba(250,246,236,0.4); }
+  .dc-todos-done .dc-todo .ttitle { color: rgba(250,246,236,0.55); }
+
   .chat-status {
     font-size: 11px; color: var(--text-3); padding: 4px 16px;
     background: rgba(0,0,0,0.20); border-bottom: 1px solid var(--glass-border);
@@ -366,6 +430,34 @@
   {% if upload_error %}
   <div class="upload-error">⚠️ {{ upload_error }}</div>
   {% endif %}
+
+  <!-- Sam #1066 — TODO widget: assignable to specific agents (aick/ck/cena)
+       or unassigned (any agent picks it up). Lives in dev_chat_todos table;
+       REST endpoints at /partner/developer/chat/todos. -->
+  <div class="dc-todos" id="dc-todos">
+    <div class="dc-todos-head">
+      <span class="dc-todos-title">📌 TODO list</span>
+      <span class="dc-todos-count" id="dc-todos-count">—</span>
+      <button type="button" class="dc-todos-toggle" id="dc-todos-toggle">hide</button>
+    </div>
+    <div class="dc-todos-body" id="dc-todos-body">
+      <form class="dc-todos-add" id="dc-todos-add" autocomplete="off">
+        <input type="text" name="title" id="dc-todo-title" placeholder="What needs to happen?" maxlength="500" required>
+        <select name="assigned_to" id="dc-todo-assignee">
+          <option value="">any agent</option>
+          <option value="aick">aick</option>
+          <option value="ck">ck</option>
+          <option value="cena">cena</option>
+        </select>
+        <button type="submit">Add</button>
+      </form>
+      <ul class="dc-todos-open" id="dc-todos-open"></ul>
+      <details class="dc-todos-done-wrap">
+        <summary><span id="dc-todos-done-count">0</span> done / cancelled</summary>
+        <ul class="dc-todos-done" id="dc-todos-done"></ul>
+      </details>
+    </div>
+  </div>
 
   <div class="chat-list" id="chat-list">
     {% for m in messages %}
@@ -985,6 +1077,118 @@
   setInterval(poll, 4000);
   // Also poll once on load to initialize the "last sync" stamp
   poll();
+})();
+
+// ============================================================
+// Sam #1066 — dev-chat TODO widget JS
+// ============================================================
+(function () {
+  const TODOS_URL = "{{ url_for('developer_chat.dev_chat_todos_list') }}";
+  const STATUS_CYCLE = ["open", "in_progress", "done", "cancelled"];
+  const openList   = document.getElementById("dc-todos-open");
+  const doneList   = document.getElementById("dc-todos-done");
+  const countEl    = document.getElementById("dc-todos-count");
+  const doneCount  = document.getElementById("dc-todos-done-count");
+  const addForm    = document.getElementById("dc-todos-add");
+  const titleInput = document.getElementById("dc-todo-title");
+  const assigneeIn = document.getElementById("dc-todo-assignee");
+  const toggleBtn  = document.getElementById("dc-todos-toggle");
+  const bodyEl     = document.getElementById("dc-todos-body");
+
+  function esc(s) {
+    return String(s || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function renderItem(t) {
+    const li = document.createElement("li");
+    li.className = "dc-todo";
+    li.dataset.id = t.id;
+    const assigneeClass = t.assigned_to ? "" : "any";
+    const assigneeLabel = t.assigned_to || "any";
+    li.innerHTML = (
+      `<span class="ttitle">${esc(t.title)}</span>` +
+      `<span class="tassignee ${assigneeClass}" title="assigned to">${esc(assigneeLabel)}</span>` +
+      `<span class="tstatus ${t.status}" data-status="${t.status}" title="click to cycle status">${t.status}</span>` +
+      `<button type="button" class="tdel" title="delete">✕</button>`
+    );
+    li.querySelector(".tstatus").addEventListener("click", () => cycleStatus(t.id, t.status));
+    li.querySelector(".tdel").addEventListener("click", () => deleteTodo(t.id));
+    return li;
+  }
+
+  async function refresh() {
+    let resp;
+    try { resp = await fetch(TODOS_URL, {credentials: "same-origin"}); }
+    catch (e) { return; }
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.ok) return;
+    openList.innerHTML = "";
+    doneList.innerHTML = "";
+    (data.open || []).forEach(t => openList.appendChild(renderItem(t)));
+    (data.done || []).forEach(t => doneList.appendChild(renderItem(t)));
+    countEl.textContent = (data.open || []).length + " open";
+    doneCount.textContent = (data.done || []).length;
+  }
+
+  async function cycleStatus(id, current) {
+    const idx = STATUS_CYCLE.indexOf(current);
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+    const resp = await fetch(TODOS_URL + "/" + id, {
+      method: "PATCH", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({status: next}),
+    });
+    if (resp.ok) refresh();
+  }
+
+  async function deleteTodo(id) {
+    if (!confirm("Delete this todo?")) return;
+    const resp = await fetch(TODOS_URL + "/" + id, {
+      method: "DELETE", credentials: "same-origin",
+    });
+    if (resp.ok) refresh();
+  }
+
+  addForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = titleInput.value.trim();
+    if (!title) return;
+    const payload = {
+      title: title,
+      assigned_to: assigneeIn.value || null,
+      created_by: "sam",
+    };
+    const resp = await fetch(TODOS_URL, {
+      method: "POST", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (resp.ok) {
+      titleInput.value = "";
+      refresh();
+    }
+  });
+
+  toggleBtn.addEventListener("click", () => {
+    const collapsed = bodyEl.classList.toggle("is-collapsed");
+    toggleBtn.textContent = collapsed ? "show" : "hide";
+    try { localStorage.setItem("dc_todos_collapsed", collapsed ? "1" : "0"); } catch (e) {}
+  });
+
+  // Restore collapsed state from last visit
+  try {
+    if (localStorage.getItem("dc_todos_collapsed") === "1") {
+      bodyEl.classList.add("is-collapsed");
+      toggleBtn.textContent = "show";
+    }
+  } catch (e) {}
+
+  refresh();
+  // Light refresh cadence so other agents adding TODOs surface here.
+  setInterval(refresh, 15000);
 })();
 </script>
 {% endblock %}

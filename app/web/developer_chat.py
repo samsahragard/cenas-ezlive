@@ -30,6 +30,7 @@ from app.db import SessionLocal
 from app.models import (
     DeveloperChatMessage, DeveloperChatAttachment, PermissionDenial,
     SampleApproval, SampleApprovalAttachment, CenaWakeDecision,
+    DevChatTodo, _VALID_DEV_CHAT_TODO_STATUS, _VALID_DEV_CHAT_TODO_ASSIGNEES,
 )
 # Phase 0 Block 4: gate routes on the permission system. Decorator
 # runs first; the in-handler _enforce_partner() helper stays as
@@ -1196,3 +1197,155 @@ def ezcater_review_queue():
 # needed. The denials VIEW is gone but the PermissionDenial table is
 # untouched (rows continue to write from _log_denial()); a future
 # replacement surface can read from there.
+
+
+# ============================================================
+# Dev chat TODO list (Sam #1066, 2026-05-26)
+# ============================================================
+# Sam adds items via the widget on /partner/developer/chat; each item
+# can be assigned to a specific agent (aick / ck / cena) or left
+# unassigned (any agent grabs it). The assigned agent reads the list
+# when they refresh the page. Body fields:
+#   title:       short text (required)
+#   body:        optional details
+#   assigned_to: one of aick / ck / cena, or null
+#   status:      open / in_progress / done / cancelled
+
+def _todo_render(t: "DevChatTodo") -> dict:
+    return {
+        "id": t.id,
+        "title": t.title,
+        "body": t.body or "",
+        "assigned_to": t.assigned_to,
+        "status": t.status,
+        "created_by": t.created_by,
+        "created_at": (t.created_at.isoformat()
+                       if t.created_at else None),
+        "completed_at": (t.completed_at.isoformat()
+                         if t.completed_at else None),
+    }
+
+
+@dev_chat.route("/partner/developer/chat/todos", methods=["GET"])
+@requires_permission("developer.view_chat")
+def dev_chat_todos_list():
+    """List dev chat todos. Returns {open: [...], done: [...]} so the
+    widget can render two sections. Open sorted newest-first; done
+    sorted by completed_at desc."""
+    db = SessionLocal()
+    try:
+        active = (db.query(DevChatTodo)
+                  .filter(DevChatTodo.status.in_(
+                      ("open", "in_progress")))
+                  .order_by(DevChatTodo.created_at.desc(),
+                            DevChatTodo.id.desc())
+                  .all())
+        done = (db.query(DevChatTodo)
+                .filter(DevChatTodo.status.in_(("done", "cancelled")))
+                .order_by(DevChatTodo.completed_at.desc().nullslast(),
+                          DevChatTodo.id.desc())
+                .limit(50)
+                .all())
+        return jsonify({
+            "ok": True,
+            "open": [_todo_render(t) for t in active],
+            "done": [_todo_render(t) for t in done],
+        })
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/chat/todos", methods=["POST"])
+@requires_permission("developer.view_chat")
+def dev_chat_todos_add():
+    """Add a new dev chat todo. Body: {title, body?, assigned_to?,
+    created_by?}."""
+    body_in = request.get_json(silent=True) or {}
+    title = (body_in.get("title") or "").strip()
+    if not title:
+        return jsonify({"ok": False, "error": "title required"}), 400
+    extra = (body_in.get("body") or "").strip() or None
+    assigned_to = (body_in.get("assigned_to") or "").strip().lower() or None
+    if assigned_to and assigned_to not in _VALID_DEV_CHAT_TODO_ASSIGNEES:
+        return jsonify({"ok": False,
+                        "error": f"assigned_to must be one of "
+                                  f"{sorted(_VALID_DEV_CHAT_TODO_ASSIGNEES)} "
+                                  f"or empty"}), 400
+    created_by = (body_in.get("created_by") or "").strip()[:80] or None
+    db = SessionLocal()
+    try:
+        row = DevChatTodo(
+            title=title[:500],
+            body=extra,
+            assigned_to=assigned_to,
+            status="open",
+            created_by=created_by,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True, "todo": _todo_render(row)}), 201
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/chat/todos/<int:tid>", methods=["PATCH"])
+@requires_permission("developer.view_chat")
+def dev_chat_todos_edit(tid: int):
+    """Edit a todo. Body fields are all optional. Setting status to
+    'done' or 'cancelled' stamps completed_at; setting back to 'open'/
+    'in_progress' clears it."""
+    body_in = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        row = db.get(DevChatTodo, tid)
+        if row is None:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        if "title" in body_in:
+            new_title = (body_in.get("title") or "").strip()
+            if not new_title:
+                return jsonify({"ok": False,
+                                "error": "title cannot be empty"}), 400
+            row.title = new_title[:500]
+        if "body" in body_in:
+            row.body = (body_in.get("body") or "").strip() or None
+        if "assigned_to" in body_in:
+            new_assignee = (body_in.get("assigned_to") or "").strip().lower() or None
+            if new_assignee and new_assignee not in _VALID_DEV_CHAT_TODO_ASSIGNEES:
+                return jsonify({"ok": False,
+                                "error": f"assigned_to must be one of "
+                                          f"{sorted(_VALID_DEV_CHAT_TODO_ASSIGNEES)} "
+                                          f"or empty"}), 400
+            row.assigned_to = new_assignee
+        if "status" in body_in:
+            new_status = (body_in.get("status") or "").strip().lower()
+            if new_status not in _VALID_DEV_CHAT_TODO_STATUS:
+                return jsonify({"ok": False,
+                                "error": f"status must be one of "
+                                          f"{sorted(_VALID_DEV_CHAT_TODO_STATUS)}"}), 400
+            row.status = new_status
+            if new_status in ("done", "cancelled"):
+                if row.completed_at is None:
+                    row.completed_at = datetime.utcnow()
+            else:
+                row.completed_at = None
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True, "todo": _todo_render(row)})
+    finally:
+        db.close()
+
+
+@dev_chat.route("/partner/developer/chat/todos/<int:tid>", methods=["DELETE"])
+@requires_permission("developer.view_chat")
+def dev_chat_todos_delete(tid: int):
+    db = SessionLocal()
+    try:
+        row = db.get(DevChatTodo, tid)
+        if row is None:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        db.delete(row)
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()

@@ -94,31 +94,15 @@
       <span class="ck-sb-section-label">Operations</span>
     </a>
 
-    {# ==== KITCHEN ==== promoted from an Operations branch to its own
-       section below Operations (Sam 2026-05-20 #1:35). Fresh Food /
-       Prep List / Recipes are all live shipped pages. #}
-    <div class="ck-sb-section collapsed" data-id="kitchen">
-      <button class="ck-sb-section-head" aria-expanded="false">
-        <span class="ck-sb-section-label">Kitchen</span>
-        <i class="ti ti-chevron-down ck-sb-chev" aria-hidden="true"></i>
-      </button>
-      <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
-
-        <a href="/{{ store_slug }}/fresh-food/place-order" class="ck-sb-item{% if active in ('fresh_food_place_order', 'fresh_food_recent_orders') %} active{% endif %}">
-          <i class="ti ti-leaf ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Fresh Food</span>
-        </a>
-        <a href="/{{ store_slug }}/kitchen/prep-list" class="ck-sb-item{% if active == 'kitchen_prep_list' %} active{% endif %}">
-          <i class="ti ti-clipboard-text ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Prep List</span>
-        </a>
-        <a href="/{{ store_slug }}/recipes" class="ck-sb-item{% if active == 'kitchen_recipes' %} active{% endif %}">
-          <i class="ti ti-chef-hat ck-sb-item-icon" aria-hidden="true"></i>
-          <span class="ck-sb-item-label">Recipes</span>
-        </a>
-
-      </div></div>
-    </div>
+    {# ==== KITCHEN ==== direct link to the tabbed Kitchen dashboard
+       (Sam #1066 TODO #2, 2026-05-26): the sidebar Kitchen entry no
+       longer expands a sub-menu — it links straight to /<store>/kitchen
+       which opens on the Fresh Food tab; Prep List / Recipes reachable
+       as tabs there. Twin of Today / Manager / Catering / Operations. #}
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/kitchen"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Kitchen</span>
+    </a>
 
     {# ==== VENDORS ==== direct link to the tabbed Vendors dashboard (Sam 2026-05-21, ck): the sidebar Vendors entry no longer expands a sub-menu - it links straight to /<store>/vendors (which opens on the Produce tab; Webstaurant / Performance Food / Restaurant Depot / Specs are reachable as tabs there). #}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/vendors"

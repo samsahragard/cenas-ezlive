@@ -1,0 +1,668 @@
+{# ============================================================
+   operations_dashboard.html — Operations dashboard (tabbed entry
+   layer). dck build, structural twin of catering_dashboard.html
+   (dck's just-reworked Catering dashboard) and manager_dashboard.html
+   (samai's Manager dashboard). Per Sam: the bottom-nav Operations tab
+   no longer opens a popover — it links straight here, and this page
+   is a tab strip across the seven operations surfaces, defaulting to
+   the Team tab.
+
+   DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer
+   shows a short preview + an "Open full page" link. Each tab now
+   embeds the REAL, fully-functional operations page inline in an
+   <iframe> — click a tab and the actual working page is right there
+   (Team -> /partner/team, Sales -> /<store>/reports/sales, Labor ->
+   /<store>/reports/labor, Performance ->
+   /<store>/reports/server-performance, Schedule -> /<store>/schedule,
+   Corporate Order -> /<store>/corporate-order). All existing
+   operations functionality is left as-is — the pages are simply
+   iframed, not rewritten.
+
+   FORECASTS is the exception: it is not a built page, so it has no
+   real page to embed. Its tab keeps the coming-soon state — no
+   iframe, no full-page link — exactly as before.
+
+   The iframed pages are themselves full base_dashboard pages, so each
+   one carries its own sidebar / topbar / bottom-nav / role badge. The
+   <script> below reaches into each iframe on its load event (same
+   origin — allowed) and hides that page's chrome, leaving only the
+   page content visible inside the frame. To avoid a flash of doubled
+   chrome the iframe stays hidden until its load+strip completes.
+
+   LAZY-LOAD: each iframe carries a data-src, not a src. JS sets src
+   from data-src the first time that tab is activated, so the six
+   operations pages do not all load at once — only the default tab
+   (Team) loads on page load.
+
+   Extends base_dashboard.html — so the role-matched dashboard badge
+   top-right (dashboard_banner context processor) ships for free. The
+   shared topbar is suppressed; this page draws its own ribbon header
+   inside content (the catering_dashboard.html pattern). OPAQUE surface
+   — the restaurant-photo body backdrop never bleeds through page
+   content.
+
+   ROUTE CONTRACT (store_routes.py operations_dashboard):
+     active        -> 'operations_dashboard'
+     store_label   -> str (store display name)
+     today_label   -> str, e.g. "Wed, May 21"
+     active_tab    -> one of: team | forecasts | sales | labor |
+                      performance | schedule | corp-order
+                      (default 'team'; from ?tab=, validated)
+     tabs          -> ordered list[dict], one per tab:
+       key    (str)  — tab id, matches active_tab values
+       label  (str)  — tab strip caption
+       url    (str)  — absolute href to that page (the iframe target);
+                       empty string for a not-yet-built surface
+       coming (bool) — True for a not-yet-built ("soon") surface; that
+                       tab renders a coming-soon state, not an iframe
+   The dashboard route never touches Toast or any write path — it is a
+   thin shell that only resolves each tab's URL. The iframed pages run
+   their own queries when the browser loads them.
+   Audience gate at the route: same site gate as the operations pages.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'kitchen_dashboard' %}
+
+{% block title %}Kitchen — Cenas Kitchen{% endblock %}
+
+{# Suppress the shared topbar — this page draws its own ribbon header
+   inside content (catering_dashboard.html pattern). The role badge is
+   rendered OUTSIDE the topbar block in base_dashboard.html, so it is
+   kept regardless. #}
+{% block topbar %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Every custom property + class scoped under .kitdash so the warm
+     Cenas palette never leaks into the global sheet (the catdash-
+     scoping pattern). Comments here never contain a slash-star pair. */
+  .kitdash {
+    --kitd-red: #C73B36;
+    --kitd-red-deep: #9B2A26;
+    --kitd-red-bright: #E85852;
+    --kitd-gold: #E4B340;
+    --kitd-gold-bright: #FFD970;
+    --kitd-teal: #2EA39F;
+    --kitd-teal-bright: #5BCAC5;
+    --kitd-cream: #FAF6EC;
+    --kitd-cream-dim: rgba(250, 246, 236, 0.78);
+    --kitd-cream-faint: rgba(250, 246, 236, 0.5);
+    --kitd-cream-meta: rgba(250, 246, 236, 0.4);
+    --kitd-bg-deep: #1a0d08;
+    --kitd-bg-warm: #28160e;
+    --kitd-surface: #241409;
+    --kitd-surface-2: #2e1a0d;
+    --kitd-surface-hover: #34200f;
+    --kitd-input: rgba(0, 0, 0, 0.3);
+    --kitd-border: rgba(217, 164, 54, 0.18);
+    --kitd-border-active: rgba(228, 179, 64, 0.5);
+    --kitd-accent: var(--kitd-gold-bright);
+    --kitd-glow: rgba(255, 217, 112, 0.18);
+    --kitd-glow-strong: rgba(255, 217, 112, 0.4);
+    --kitd-radius: 14px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--kitd-cream);
+    margin-bottom: 40px;
+  }
+  .kitdash * { box-sizing: border-box; }
+
+  /* SECTION LABEL above the card. */
+  .kitdash .kitd-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--kitd-cream-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0 4px 12px;
+  }
+
+  /* THE PAGE CARD — ribbon header plus the tab strip in one opaque
+     surface. OPAQUE base colour so the photo backdrop never washes
+     the header text out (the base_dashboard .ck-topbar landmine). */
+  .kitdash .kitd-card {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--kitd-border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kitdash .kitd-card::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle, var(--kitd-glow), transparent 70%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* RIBBON HEADER. */
+  .kitdash .kitd-ribbon {
+    padding: 24px 26px 22px;
+    position: relative;
+    z-index: 1;
+  }
+  .kitdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
+  .kitdash .kitd-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .kitdash .kitd-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--kitd-red-bright);
+    box-shadow: 0 0 8px var(--kitd-red-bright), 0 0 0 3px rgba(232, 88, 82, 0.18);
+  }
+  .kitdash .kitd-brand-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--kitd-gold);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+  .kitdash .kitd-brand-text .kitd-div {
+    color: var(--kitd-cream-faint);
+    margin: 0 4px;
+    font-weight: 400;
+  }
+  .kitdash .kitd-brand-text .kitd-module { color: var(--kitd-accent); }
+
+  .kitdash .kitd-title {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    font-size: clamp(36px, 5.5vw, 52px);
+    line-height: 1;
+    color: var(--kitd-cream);
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    margin-right: 150px;
+  }
+  .kitdash .kitd-rule {
+    height: 1px;
+    width: 56px;
+    background: linear-gradient(90deg, var(--kitd-accent), transparent);
+    margin-bottom: 12px;
+  }
+  .kitdash .kitd-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--kitd-cream-faint);
+    letter-spacing: 0.05em;
+  }
+  .kitdash .kitd-meta .kitd-sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--kitd-cream-faint);
+  }
+  .kitdash .kitd-meta .kitd-meta-val {
+    color: var(--kitd-accent);
+    font-weight: 700;
+  }
+
+  /* TAB STRIP — horizontally scrollable on a phone. The tabs are real
+     anchors (href to ?tab=KEY) so the page works with JS off; JS
+     upgrades them to in-page panel swaps. */
+  .kitdash .kitd-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 0.5px solid var(--kitd-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 1;
+  }
+  .kitdash .kitd-tabs::-webkit-scrollbar { display: none; }
+  .kitdash .kitd-tab {
+    flex-shrink: 0;
+    padding: 13px 16px 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--kitd-cream-faint);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .kitdash .kitd-tab:hover { color: var(--kitd-cream); }
+  .kitdash .kitd-tab.active {
+    color: var(--kitd-cream);
+    border-bottom-color: var(--kitd-accent);
+    background: rgba(228, 179, 64, 0.06);
+  }
+  .kitdash .kitd-tab-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .kitdash .kitd-tab.active .kitd-tab-icon { opacity: 1; }
+
+  /* SOON badge — on a tab whose surface is not built yet (Forecasts).
+     Lifted from Sam's operations reference. */
+  .kitdash .kitd-soon {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--kitd-cream-faint);
+    background: rgba(228, 179, 64, 0.12);
+    border: 0.5px solid rgba(228, 179, 64, 0.3);
+    padding: 2px 6px;
+    border-radius: 999px;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+
+  /* TAB CONTENT — one panel per tab; the inactive ones are hidden.
+     A built tab's panel is just a frame holding ONE iframe of the real
+     page; the Forecasts panel instead holds a coming-soon state. */
+  .kitdash .kitd-content-wrap { margin-top: 18px; }
+  .kitdash .kitd-panel {
+    background-color: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    border: 0.5px solid var(--kitd-border);
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+  }
+  .kitdash .kitd-panel.hidden { display: none; }
+
+  /* THE EMBED — the real operations page lives in this iframe. It fills
+     the panel: full width, and tall enough to feel like a page (the
+     viewport height minus the ribbon-card + tab strip + margins above
+     it, with a sane floor). The iframe's OWN content scrolls, so there
+     is no nested-scrollbar fight with the dashboard page. */
+  .kitdash .kitd-embed-frame {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 360px);
+    min-height: 600px;
+    border: 0;
+    background: #1a0d08;
+    /* Hidden until its load+chrome-strip completes — prevents a flash
+       of the iframed page's own (doubled) sidebar / topbar before the
+       strip script runs. JS flips this to visible. */
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .kitdash .kitd-embed-frame.ready { opacity: 1; }
+
+  /* Loading shim — a quiet placeholder shown over the panel until the
+     iframe is ready. Removed (display:none) once the frame reveals. */
+  .kitdash .kitd-embed-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #241610;
+    background-image: linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--kitd-cream-faint);
+    z-index: 1;
+  }
+  .kitdash .kitd-embed-loading.gone { display: none; }
+  .kitdash .kitd-embed-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--kitd-accent);
+    box-shadow: 0 0 8px var(--kitd-glow-strong);
+    animation: kitd-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes kitd-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1); }
+  }
+
+  /* Coming-soon state — a surface that is not built yet (Forecasts).
+     Sits inside its panel with a teal accent so it reads as "planned"
+     rather than "broken". The panel keeps its own padding here since,
+     unlike the iframe panels, this content is not edge-to-edge. */
+  .kitdash .kitd-soon-panel { padding: 22px 24px; }
+  .kitdash .kitd-soon-state {
+    text-align: center;
+    padding: 44px 18px;
+    border-radius: 8px;
+    background: rgba(46, 163, 159, 0.06);
+    border: 0.5px dashed rgba(46, 163, 159, 0.35);
+  }
+  .kitdash .kitd-soon-state .kitd-soon-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--kitd-teal-bright);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .kitdash .kitd-soon-state .kitd-soon-text {
+    color: var(--kitd-cream-dim);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* MOBILE — mirror the reference design's phone treatment. */
+  @media (max-width: 760px) {
+    .kitdash .kitd-ribbon { padding: 16px 14px; }
+    .kitdash .ribbon-role-badge { top: 16px; right: 14px; }
+    .kitdash .kitd-brand { margin-bottom: 8px; }
+    .kitdash .kitd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
+    .kitdash .kitd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
+    .kitdash .kitd-rule { width: 40px; margin-bottom: 8px; }
+    .kitdash .kitd-meta { font-size: 10px; gap: 6px; }
+    .kitdash .kitd-tabs { padding: 0 8px; }
+    .kitdash .kitd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
+    .kitdash .kitd-tab-icon { width: 12px; height: 12px; }
+    .kitdash .kitd-content-wrap { margin-top: 14px; }
+    .kitdash .kitd-panel { border-radius: 12px; }
+    .kitdash .kitd-embed-frame {
+      height: calc(100vh - 300px);
+      min-height: 560px;
+    }
+    .kitdash .kitd-soon-panel { padding: 16px 14px; }
+    .kitdash .kitd-soon-state { padding: 34px 16px; }
+    .kitdash .kitd-section-label { font-size: 9px; margin-bottom: 8px; }
+  }
+  @media (max-width: 380px) {
+    .kitdash .kitd-title { font-size: 26px; }
+    .kitdash .kitd-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .kitdash .kitd-ribbon { padding: 14px 14px 12px; }
+  }
+</style>
+
+{# Per-tab SVG glyphs — keyed by tab.key so the route stays glyph-free.
+   Plain Jinja dict; the icon falls back to the Team glyph if a key is
+   missing. Glyphs lifted from Sam's operations reference. #}
+{% set _kitd_icons = {
+  'fresh-food':  '<path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zM9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1z"/>',
+  'prep-list':   '<path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>',
+  'recipes':     '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/>'
+} %}
+
+<div class="kitdash" id="kitdash">
+
+  <div class="kitd-section-label">Kitchen Dashboard</div>
+
+  {# PAGE CARD — ribbon header plus tab strip. #}
+  <div class="kitd-card">
+
+    {# RIBBON HEADER — the page's own header (the shared topbar is
+       suppressed). The role badge sits above this, rendered by
+       base_dashboard.html outside the topbar block. #}
+    <div class="kitd-ribbon">
+      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
+      <div class="kitd-brand">
+        <span class="kitd-brand-dot"></span>
+        <span class="kitd-brand-text">CENAS <span class="kitd-div">&middot;</span> OPS <span class="kitd-div">&middot;</span> <span class="kitd-module">KITCHEN</span></span>
+      </div>
+      <h1 class="kitd-title">Kitchen</h1>
+      <div class="kitd-rule"></div>
+      <div class="kitd-meta">
+        <span>{{ today_label }}</span>
+        <span class="kitd-sep"></span>
+        <span class="kitd-meta-val">{{ store_label }}</span>
+        <span class="kitd-sep"></span>
+        <span>{{ tabs|length }} sections</span>
+      </div>
+    </div>
+
+    {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
+       JS upgrades them to in-page panel swaps. #}
+    <div class="kitd-tabs" id="kitdTabs" role="tablist">
+      {% for t in tabs %}
+      <a class="kitd-tab{% if t.key == active_tab %} active{% endif %}"
+         href="?tab={{ t.key }}"
+         role="tab"
+         data-tab="{{ t.key }}"
+         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
+        <svg class="kitd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _kitd_icons.get(t.key, _kitd_icons['prep-list'])|safe }}</svg>
+        <span class="kitd-tab-label">{{ t.label }}</span>
+        {% if t.coming %}<span class="kitd-soon">soon</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {# TAB CONTENT — one panel per tab. Inactive panels carry .hidden; JS
+     toggles them. A built tab's panel holds ONE iframe of the real
+     operations page; the iframe carries a data-src (not src) so the
+     page is lazy-loaded on first activation of its tab — only the
+     default tab loads now. On the iframe's load event the script
+     strips that page's own chrome (sidebar / topbar / bottom-nav /
+     role badge / wordmark) so only the page content shows inside the
+     frame. A not-yet-built surface (coming) holds a coming-soon state
+     instead — no iframe at all. #}
+  <div class="kitd-content-wrap">
+    {% for t in tabs %}
+    <div class="kitd-panel{% if t.key != active_tab %} hidden{% endif %}"
+         id="kitd-panel-{{ t.key }}"
+         data-tab-panel="{{ t.key }}"
+         role="tabpanel">
+      {% if t.coming %}
+      <div class="kitd-soon-panel">
+        <div class="kitd-soon-state">
+          <span class="kitd-soon-tag">Coming soon</span>
+          <div class="kitd-soon-text">{{ t.label }} isn't live yet — it's on the Kitchen roadmap. Check back soon.</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="kitd-embed-loading" data-embed-loading="{{ t.key }}">
+        <span class="kitd-embed-dot"></span>
+        <span>Loading {{ t.label }}</span>
+      </div>
+      <iframe class="kitd-embed-frame"
+              data-embed-frame="{{ t.key }}"
+              data-src="{{ t.url }}"
+              title="{{ t.label }}"
+              loading="lazy"></iframe>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  /* Operations dashboard — tab switching plus iframe lazy-load and the
+     per-iframe chrome strip.
+
+     The tabs are real <a href="?tab=KEY"> links, so with JS off the
+     route serves the right tab server-side. With JS on, clicking a tab
+     swaps the visible panel in place (no navigation).
+
+     Each built tab's panel holds ONE iframe of the real, fully-
+     functional operations page. The iframe carries data-src, not src —
+     so the six operations pages do not all load at once. The default
+     tab's iframe is loaded immediately; every other iframe loads the
+     first time its tab is activated. Forecasts is not built yet — its
+     panel holds a coming-soon state and has no iframe, so loadFrame is
+     a no-op for it.
+
+     The iframed pages are full base_dashboard pages and so carry their
+     own sidebar / topbar / bottom-nav / role badge. Because the iframe
+     is same-origin, on its load event we reach into the iframe's
+     document and hide that chrome, then widen its <main> to full
+     width — so the frame shows ONLY the page content. The iframe is
+     kept hidden (opacity 0) until that strip finishes, so there is no
+     flash of doubled chrome. */
+  var root = document.getElementById("kitdash");
+  if (!root) return;
+  var tabs = root.querySelectorAll(".kitd-tab");
+  var panels = root.querySelectorAll(".kitd-panel");
+  var loaded = {};   // tab key -> true once its iframe src has been set
+
+  /* Hide one element inside the iframe document. Defensive: a missing
+     node (a page that suppresses the shared topbar, say) is a no-op. */
+  function hideEl(doc, selector) {
+    var nodes = doc.querySelectorAll(selector);
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].style.setProperty("display", "none", "important");
+    }
+  }
+
+  /* Strip the base_dashboard chrome from a loaded iframe so only the
+     page content remains. Same-origin, so contentDocument is readable;
+     wrapped in try/catch so a cross-origin redirect (e.g. a login
+     bounce) can never throw and leave the frame stuck hidden. */
+  function stripChrome(frame) {
+    var doc;
+    try {
+      doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+    } catch (err) {
+      doc = null;
+    }
+    if (doc) {
+      /* The page's own chrome — every landmark base_dashboard.html
+         renders around <main>. .ck-bnav is the bottom-nav root
+         element (partials/_bottom_nav.html). */
+      [
+        ".sidebar",
+        ".sidebar-overlay",
+        ".dash-role-badge-bar",
+        ".topbar",
+        ".subnav-row",
+        ".wordmark",
+        ".ck-bnav"
+      ].forEach(function (sel) { hideEl(doc, sel); });
+
+      /* Flatten the iframed page's restaurant-photo backdrop.
+         base_dashboard paints it via fixed body::before / body::after
+         pseudo-elements, so an inline body.style cannot reach it -
+         inject a stylesheet that strips the pseudo-layers and sets a
+         solid surface so nothing bleeds around the framed content. */
+      try {
+        var bgKill = doc.createElement("style");
+        bgKill.textContent =
+          "html,body{background-image:none!important;" +
+          "background-color:#241610!important}" +
+          "body::before,body::after,html::before,html::after" +
+          "{display:none!important;content:none!important}";
+        (doc.head || doc.documentElement).appendChild(bgKill);
+      } catch (e) { /* same-origin, but never let this throw */ }
+
+      /* Widen the page content to fill the frame. .layout is a CSS
+         grid (240px sidebar track + 1fr main); hiding .sidebar leaves
+         its empty track, so collapse the grid to a single column.
+         Then zero main.main's padding so the content uses the whole
+         frame width — no leftover sidebar-offset gutter. */
+      var layout = doc.querySelector(".layout");
+      if (layout) {
+        layout.style.setProperty("grid-template-columns", "1fr", "important");
+        layout.style.setProperty("display", "block", "important");
+      }
+      var main = doc.querySelector("main.main");
+      if (main) {
+        main.style.setProperty("margin", "0", "important");
+        main.style.setProperty("padding", "0", "important");
+        main.style.setProperty("width", "100%", "important");
+        main.style.setProperty("max-width", "100%", "important");
+      }
+    }
+    reveal(frame);
+  }
+
+  /* Reveal a frame and drop its loading shim. Runs after the strip (or
+     after a cross-origin load we could not strip — better to show the
+     page than to leave a permanent spinner). */
+  function reveal(frame) {
+    frame.classList.add("ready");
+    var key = frame.getAttribute("data-embed-frame");
+    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+    if (shim) shim.classList.add("gone");
+  }
+
+  /* Lazy-load: set src from data-src the first time a tab is shown.
+     The load handler runs stripChrome; loaded[] guards against
+     re-loading on every subsequent activation of the same tab. A tab
+     with no iframe (Forecasts, coming-soon) has no frame node, so this
+     is a clean no-op for it. */
+  function loadFrame(key) {
+    if (loaded[key]) return;
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!frame) return;
+    var src = frame.getAttribute("data-src");
+    if (!src) return;
+    loaded[key] = true;
+    frame.addEventListener("load", function () { stripChrome(frame); });
+    frame.setAttribute("src", src);
+  }
+
+  function activate(key) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
+    });
+    loadFrame(key);   // first activation of this tab loads its iframe
+  }
+
+  root.querySelector("#kitdTabs").addEventListener("click", function (e) {
+    var tab = e.target.closest(".kitd-tab");
+    if (!tab) return;
+    e.preventDefault();
+    var key = tab.getAttribute("data-tab");
+    activate(key);
+    /* Keep the URL in sync so a refresh / share lands on the same tab,
+       without adding a history entry per tap. */
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable — panel swap still works */ }
+  });
+
+  /* Load the iframe for the tab that is active on page load (the
+     default tab, team, unless ?tab= deep-linked another). The other
+     iframes stay unloaded until their tab is clicked; if the active
+     tab is Forecasts there is no iframe and this is a no-op. */
+  var startTab = (function () {
+    var activeTabEl = root.querySelector(".kitd-tab.active");
+    return activeTabEl ? activeTabEl.getAttribute("data-tab") : null;
+  })();
+  if (startTab) loadFrame(startTab);
+})();
+</script>
+{% endblock %}

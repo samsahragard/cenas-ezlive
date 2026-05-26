@@ -4274,6 +4274,61 @@ def _operations_dash_full_url(tab_key):
     return ""   # 'forecasts' (not built) or any unknown key
 
 
+_KITCHEN_DASH_TABS = [
+    ("fresh-food", "Fresh Food", False),
+    ("prep-list",  "Prep List",  False),
+    ("recipes",    "Recipes",    False),
+]
+
+
+def _kitchen_dash_full_url(tab_key):
+    """Absolute href to the real kitchen page each tab iframes.
+      fresh-food → /<store>/fresh-food/place-order
+      prep-list  → /<store>/kitchen/prep-list
+      recipes    → /<store>/recipes
+    Falls back to '' on an unknown key."""
+    if tab_key == "fresh-food":
+        return url_for("store.fresh_food_place_order")
+    if tab_key == "prep-list":
+        return url_for("store.kitchen_prep_list")
+    if tab_key == "recipes":
+        return url_for("store.recipes_index")
+    return ""
+
+
+@store_bp.route("/kitchen", methods=["GET"])
+def kitchen_dashboard():
+    """Tabbed Kitchen dashboard (Sam #1066 TODO #2, 2026-05-26) — twin of
+    operations_dashboard. Replaces the prior sidebar dropdown
+    (Fresh Food / Prep List / Recipes were direct sub-items) with a
+    single direct link to /<store>/kitchen that opens this tabbed page.
+    Each tab embeds the real page inline via iframe."""
+    valid = {key for key, _, _ in _KITCHEN_DASH_TABS}
+    active_tab = (request.args.get("tab") or "").strip().lower()
+    if active_tab not in valid:
+        active_tab = _KITCHEN_DASH_TABS[0][0]   # 'fresh-food'
+    tabs = [
+        {
+            "key": key,
+            "label": caption,
+            "coming": coming,
+            "url": "" if coming else _kitchen_dash_full_url(key),
+        }
+        for key, caption, coming in _KITCHEN_DASH_TABS
+    ]
+    label = g.store_label or "Cenas Kitchen"
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "kitchen_dashboard.html",
+        active="kitchen_dashboard",
+        store_label=label,
+        today_label=today_label,
+        active_tab=active_tab,
+        tabs=tabs,
+    )
+
+
 @store_bp.route("/operations", methods=["GET"])
 def operations_dashboard():
     """Tabbed Operations dashboard — the entry layer the bottom-nav

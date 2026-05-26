@@ -166,12 +166,17 @@ def dispatch_assignment_job(job_id: str, order_id: str, current_driver: Optional
 
 
 def run_assignment_flow_inline(order_id: str, current_driver: Optional[str],
-                               new_driver: str) -> dict:
+                               new_driver: str,
+                               job_id: Optional[str] = None) -> dict:
     """HTTP-callable entry point that takes the job payload directly
     (no DB row lookup needed) and returns a result dict. Used by the
     aick gateway's /jobs/driver-assign endpoint — the gateway HTTP-
     POSTs the result back to Render's callback endpoint so Render can
     update its own DB row.
+
+    job_id (when provided) is used as the Chrome user-data-dir suffix
+    so concurrent flows on the same gateway don't collide on Chrome's
+    single-instance lock.
 
     Returns:
       {status: 'completed'|'failed', error_message: str|None,
@@ -180,9 +185,13 @@ def run_assignment_flow_inline(order_id: str, current_driver: Optional[str],
     last_error: Optional[str] = None
     attempts = 0
     final_status = "failed"
+    # Truncate job_id to 12 chars for a cleaner dir name; full uuids are
+    # noisy on disk + 12 is plenty unique within the active-job set.
+    profile_suffix = (job_id[:12] if job_id else None)
     for attempts in range(3):
         try:
-            _run_one_attempt_inline(order_id, new_driver)
+            _run_one_attempt_inline(order_id, new_driver,
+                                    profile_suffix=profile_suffix)
             final_status = "completed"
             last_error = None
             break
@@ -202,9 +211,14 @@ def run_assignment_flow_inline(order_id: str, current_driver: Optional[str],
     }
 
 
-def _run_one_attempt_inline(order_id: str, new_driver: str) -> None:
-    """One Selenium pass, payload-driven (no DB)."""
-    driver = _make_driver()
+def _run_one_attempt_inline(order_id: str, new_driver: str,
+                            profile_suffix: Optional[str] = None) -> None:
+    """One Selenium pass, payload-driven (no DB).
+
+    profile_suffix isolates the Chrome user-data-dir per concurrent job
+    so back-to-back POSTs don't collide on Chrome's single-instance
+    lock. Pass the job_id from the gateway."""
+    driver = _make_driver(profile_suffix=profile_suffix)
     try:
         driver.get(PARTNER_PORTAL + "/")
         time.sleep(1)
@@ -687,15 +701,27 @@ def _run_one_attempt(job_id: str) -> None:
 
 # --- helpers --------------------------------------------------------------
 
-def _make_driver() -> webdriver.Chrome:
+def _make_driver(profile_suffix: Optional[str] = None) -> webdriver.Chrome:
     """Launch a clean Chrome context + inject cookies from SESSION_FILE.
     Chrome is canonical on AiCk per [[cenas_canonical_browser_chrome]];
     the session cookies were captured from the Sam-driven Chrome login
     so they pair correctly here. Caller MUST call _inject_cookies()
     after navigating to ezcater.com — add_cookie requires a matching
-    domain already loaded."""
+    domain already loaded.
+
+    Concurrency note (2026-05-26): when two jobs arrive within ~60s,
+    they would share SELENIUM_PROFILE_DIR + the second hits
+    SessionNotCreatedException because Chrome enforces single-instance
+    per user-data-dir. profile_suffix carves a per-job subdirectory so
+    concurrent attempts run in isolated profiles. Cookies are re-injected
+    each call so the subdir doesn't need any persistent state."""
+    if profile_suffix:
+        profile_dir = SELENIUM_PROFILE_DIR / f"job_{profile_suffix}"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        profile_dir = SELENIUM_PROFILE_DIR
     opts = ChromeOptions()
-    opts.add_argument(f"--user-data-dir={SELENIUM_PROFILE_DIR}")
+    opts.add_argument(f"--user-data-dir={profile_dir}")
     opts.add_argument("--window-size=1920,1200")
     # Headless is OK once selectors are stable; keep headed during build
     # so ezCater's bot-detection-style flagging doesn't surprise us.

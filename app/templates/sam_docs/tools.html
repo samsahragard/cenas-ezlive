@@ -136,7 +136,7 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <li>Env vars:
     <ul>
       <li><code>CENA_GATEWAY_URL=http://100.108.119.19:8765</code> (aick's Tailscale IP)</li>
-      <li><code>CENA2_GATEWAY_URL=http://&lt;ck-tailscale-ip&gt;:&lt;port&gt;</code> (for failover — currently optional)</li>
+      <li><code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code> (ck failover — <b>wired 2026-05-25</b>)</li>
       <li><code>CENA_GATEWAY_TOKEN=&lt;shared with cena_token.txt on AiCk&gt;</code></li>
       <li><code>CENA_PROXY=socks5h://localhost:1055</code> (Render's userspace tailscaled SOCKS5)</li>
       <li><code>DATABASE_URL=sqlite:////var/data/cenas_kitchen.db</code></li>
@@ -295,5 +295,127 @@ AND started_at &lt; datetime('now', '-5 minutes');</pre>
 <ul>
   <li><strong>aick (Selenium+Edge):</strong> 10 cycles on XZ8-RCA alternating Britney / Masood, all completed, 23–25s each, 0 retries</li>
   <li><strong>ck (Playwright+Chromium):</strong> 10 cycles on XGC-T07 assigning Gina, all completed, ~17s each, 0 retries</li>
-  <li>Both stacks proven independently. Failover path wired but not exercised under real failure (would require breaking aick's stack mid-flight to test — recommend doing this in a staging environment before relying on it in prod).</li>
+  <li>Both stacks proven independently. Failover path <strong>wired 2026-05-25</strong> (Render <code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code>, ck gateway at-logon scheduled). Not yet exercised under real failure (would require breaking aick's stack mid-flight to test — recommend doing this in a staging environment before relying on it in prod).</li>
+</ul>
+
+<hr>
+
+<h2>Mobile app — Capacitor shell + Play Console deploy</h2>
+<p class="meta"><strong>Status:</strong> Shipped 2026-05-25 (Sam #957/#960). Layer-3 Capacitor back-button listener live; <code>scripts/upload_aab.py</code> driving Android Publisher API; GitHub Actions <code>mobile-android.yml</code> chained.</p>
+
+<h3>Purpose</h3>
+<p>The Cenas Kitchen Driver Portal is published on Google Play as <code>com.cenaskitchen.app</code>. The app itself is a Capacitor 7 WebView pointed at <code>app.cenaskitchen.com</code> — meaning the JavaScript and HTML are served live from Render and the native shell only handles the Android container concerns (back button, splash, permissions). New web deploys land in the app on the next reload; new APK/AAB only needs to ship when the native shell changes.</p>
+
+<h3>Architecture</h3>
+<pre class="ckdocs-code">[Android phone]
+Play Store -&gt; com.cenaskitchen.app (native Android shell)
+   |
+   v Capacitor 7 WebView
+[Capacitor bridge injected]
+   v server.url = https://app.cenaskitchen.com
+[Render web app — same HTML/JS/CSS Sam sees in a browser]</pre>
+<p>The bridge injects <code>window.Capacitor.Plugins</code> into the WebView even though the page is loaded from a remote URL. That's how the Layer-3 back-button listener catches Android's native back button — there's no <code>popstate</code> event to listen for, so the page calls into the bridge.</p>
+
+<h3>The three back-button layers</h3>
+<p>Three different "back" mechanisms exist depending on how the page is being viewed. <code>base_dashboard.html</code> handles all three from one IIFE:</p>
+<ol>
+  <li><strong>Layer 1 — in-page back affordance.</strong> The top-bar back caret triggers <code>window.history.back()</code> directly. Works in every context.</li>
+  <li><strong>Layer 2 — browser/PWA <code>popstate</code>.</strong> Catches the browser back button + the swipe-back gesture in Chrome/Safari. Standard web behavior.</li>
+  <li><strong>Layer 3 — Capacitor <code>App.backButton</code>.</strong> Fires on Android hardware back + the system gesture back when running inside the Play Store app. Calls <code>history.back()</code> when <code>ev.canGoBack</code>, traps at root otherwise (app stays open).</li>
+</ol>
+<p>Layer 3 only attaches if <code>window.Capacitor.Plugins.App.addListener</code> is callable, so loading the page as a browser tab is a no-op — the existing Layer 2 popstate path handles it.</p>
+
+<h3>Build + sign + upload pipeline</h3>
+<p>GitHub Actions workflow <code>mobile-android.yml</code> runs on pushes to <code>main</code> that touch the <code>mobile/</code> tree (or manual dispatch):</p>
+<ol>
+  <li><strong>Sync.</strong> <code>cap sync android</code> mirrors the JS + Capacitor config into the Android project.</li>
+  <li><strong>Build.</strong> <code>./gradlew assembleRelease</code> in <code>mobile/android/</code> produces a signed <code>.aab</code> (keystore + password supplied as GitHub Actions secrets).</li>
+  <li><strong>Upload.</strong> <code>scripts/upload_aab.py</code> drives Android Publisher v3 — Edit → Upload → Track → Commit. Default track <code>internal</code>; service account <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code>.</li>
+</ol>
+<p>Sam updates the app on his phone by joining the internal testing track once; from then on every CI build lands automatically and Sam pulls the update from Play Store like any other app.</p>
+
+<h3><code>scripts/upload_aab.py</code> reference</h3>
+<table class="ckdocs-table">
+  <thead><tr><th>Flag</th><th>Default</th><th>Notes</th></tr></thead>
+  <tbody>
+  <tr><td><code>--aab PATH</code></td><td>(required)</td><td>Path to the signed <code>.aab</code>.</td></tr>
+  <tr><td><code>--track NAME</code></td><td><code>internal</code></td><td>One of <code>internal</code> / <code>alpha</code> / <code>beta</code> / <code>production</code>.</td></tr>
+  <tr><td><code>--creds PATH</code></td><td>auto-resolved</td><td>Service-account JSON. Falls back to <code>GOOGLE_PLAY_PUBLISHER_JSON_PATH</code> env, then <code>~/.openclaw/.secrets/play_publisher.json</code>.</td></tr>
+  <tr><td><code>--release-notes T</code></td><td>none</td><td>One-line release notes (en-US, truncated at 500 chars).</td></tr>
+  <tr><td><code>--package PKG</code></td><td><code>com.cenaskitchen.app</code></td><td>Android package name.</td></tr>
+  <tr><td><code>--status STATUS</code></td><td><code>completed</code></td><td><code>draft</code> / <code>completed</code> / <code>inProgress</code> / <code>halted</code>. <code>completed</code> pushes live on the track immediately.</td></tr>
+  <tr><td><code>--dry-run</code></td><td>off</td><td>Create the edit + upload the bundle but don't commit. Useful for sanity-checks on a non-prod track.</td></tr>
+  </tbody>
+</table>
+
+<h3>Exit codes</h3>
+<ul>
+  <li><code>0</code> — success, release published on the track</li>
+  <li><code>1</code> — bad input / file missing</li>
+  <li><code>2</code> — auth failure (403 / invalid creds)</li>
+  <li><code>3</code> — upload failed (4xx / 5xx during bundle upload)</li>
+  <li><code>4</code> — commit failed</li>
+</ul>
+
+<h3>Service account + Play Console grant</h3>
+<p>Personal Play Console accounts don't expose the <em>API Access</em> UI (that's an Enterprise / Org-tier feature). The workaround:</p>
+<ol>
+  <li>Create the service account in Google Cloud Console (<code>favorable-valor-493419-r9</code>).</li>
+  <li>Download its JSON key, drop it at <code>~/.openclaw/.secrets/play_publisher.json</code>, ACL-lock the file.</li>
+  <li>Enable the Android Publisher API in the same Cloud project.</li>
+  <li>In Play Console → <b>Users and permissions</b>, invite <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code> as a user.</li>
+  <li>Grant App-level permissions on <code>com.cenaskitchen.app</code> — needs at minimum "Release apps to testing tracks" (currently granted 13 permissions including release management).</li>
+</ol>
+<p>Verify with: <code>python scripts/upload_aab.py --aab path/to/test.aab --dry-run --track internal</code> — should return exit 0 and clean up the edit.</p>
+
+<h3>Files touched by this tool</h3>
+<h4>On Render (repo <code>cenas-ezlive</code>)</h4>
+<ul>
+  <li><code>app/templates/base_dashboard.html</code> (Layer-3 back-button listener IIFE)</li>
+  <li><code>mobile/package.json</code> (<code>@capacitor/app ^7.0.0</code>)</li>
+  <li><code>mobile/capacitor.config.json</code> (Capacitor 7, <code>server.url</code> mode)</li>
+  <li><code>scripts/upload_aab.py</code> (Android Publisher client)</li>
+  <li><code>.github/workflows/mobile-android.yml</code> (build + sign + upload chain — aick owns)</li>
+</ul>
+
+<h4>Local secrets (Mini_IT13)</h4>
+<ul>
+  <li><code>~/.openclaw/.secrets/play_publisher.json</code> — service account JSON, ACL-locked</li>
+  <li>GitHub repo secret <code>GOOGLE_PLAY_PUBLISHER_JSON</code> — same JSON contents for CI runs</li>
+  <li>GitHub repo secrets for keystore + keystore password (aick set these)</li>
+</ul>
+
+<h3>Two root causes that burned time during build</h3>
+<ol>
+  <li><strong>The Play Store app is Capacitor, not browser PWA.</strong> Initial fix (commit fd42f32) wired a PWA back-button workaround that targets browser <code>popstate</code>. That works for Chrome / Safari tabs but Capacitor's native back doesn't generate <code>popstate</code>. Real fix is <code>Capacitor.Plugins.App.addListener('backButton', ...)</code> — different API, different stack, same UX.</li>
+  <li><strong>Personal Play Console accounts hide API Access.</strong> The Cloud-side service account grants alone aren't enough — Play Console refuses API auth until the service account email is invited as a Play Console user. That UI is buried under Users-and-permissions, and the documentation assumes Enterprise tier where API Access is its own tab.</li>
+</ol>
+
+<hr>
+
+<h2>Team chat — LAN hub, dev-chat bridge, Telegram bridge</h2>
+<p class="meta"><strong>Status:</strong> All three live. Telegram bridge added 2026-05.</p>
+
+<h3>Purpose</h3>
+<p>The team coordinates across machines and surfaces through a single LAN hub on Mini_IT13. Two bridges fan the hub out to other surfaces so Sam doesn't have to read three places:</p>
+<ul>
+  <li><strong>LAN hub</strong> (<code>hub.py</code>, port 8765) — every agent + Sam reads/posts here. SQLite-backed message store + REST + web UI.</li>
+  <li><strong>Dev-chat bridge</strong> (<code>bridge.py</code>) — bidirectional mirror with the online <code>/partner/developer/chat</code>. <code>author='cena'</code> is filtered on PUSH (per Sam directive 2026-05-23).</li>
+  <li><strong>Telegram bridge</strong> — bidirectional with Sam's Telegram. Inbound messages surface in hub as <code>sam-tg</code>; outbound messages addressed to Sam reach Telegram. Image attachments pass through both directions.</li>
+</ul>
+
+<h3>Posting from an agent</h3>
+<ul>
+  <li><strong>aick / ck:</strong> <code>chat_tail.py --author aick --post "..."</code> (or <code>--author ck</code>) from the repo's <code>scripts/</code> folder.</li>
+  <li><strong>ck (specifically):</strong> uses the <code>chat_tail_ck.py</code> variant when running on Mini_IT13.</li>
+  <li><strong>Cena:</strong> her gateway posts directly via the hub's POST endpoint with her service token.</li>
+  <li><strong>Never POST from browser/Chrome MCP</strong> — those are read-only for agents.</li>
+</ul>
+
+<h3>Authoring rules</h3>
+<ul>
+  <li>Reply only when addressed by name (default silence on hub messages not concerning you).</li>
+  <li><code>"confirm"</code> from Sam → reply <code>"i confirm"</code> (overrides address-by-name default).</li>
+  <li><code>"qs"</code> prefix from Sam → aick → ck → samai answer independently; later agents must differ.</li>
+  <li>No dot-acks for chat events. If you have nothing relevant, stay quiet.</li>
 </ul>

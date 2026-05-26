@@ -194,7 +194,7 @@
         <dt>Starting docs</dt>
         <dd>
           <ul class="docs">
-            <li><code>C:\Users\sam\cena\cena_tool.md</code> — full tool catalogue (will list agent_restart once dropped per Sam #166)</li>
+            <li><code>C:\Users\sam\cena\cena_tool.md</code> — full tool catalogue (21 tools; <code>agent_restart</code> orphaned 2026-05-23 with the dck retirement)</li>
             <li><code>C:\Users\sam\cena\cena_gateway.py</code> — runtime, /cena/stream, /cena/wake-on-* endpoints</li>
             <li><code>C:\Users\sam\cena\cena_sam_chat.py</code> — private Sam ↔ Cena chat server, persists through disconnects</li>
             <li>Phase 2 cross-gateway spec — message queue + worker + sync</li>
@@ -232,24 +232,35 @@
     <article class="ckagents-card">
       <div class="head">
         <span class="name">ck</span>
-        <span class="role">Frontend, pages, cross-machine glue</span>
+        <span class="role">Frontend, pages, cross-machine glue, Tier-3 backup</span>
         <span class="status-chip live">Live</span>
       </div>
       <dl>
         <dt>Role</dt>
-        <dd>Works on frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, cena_hub_relay), and the Sam-facing tabs on the Cena page (Pass, Agents). Coordinates with aick on anything that crosses the backend/frontend line.</dd>
+        <dd>Works on frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, Telegram bridge), Sam-facing tabs on the Cena page (Pass, Agents, Automation, Tools), and the mobile (Capacitor) deploy pipeline. Also runs the <b>Tier-3 backup gateway</b> for manager-triggered job pipelines — when aick's primary fails twice with fresh contexts, jobs forward to ck and ck runs the same flow on an independent stack.</dd>
         <dt>Where it runs</dt>
-        <dd>Anthropic Console + Claude Code on <b>Mini_IT13</b> (hostname <code>Mini_IT13</code>). SSH alias <code>ssh aick</code> available. Working trees in <code>C:\Users\sam\Desktop\cenas-kitchen-claude\</code> and <code>C:\Users\sam\cenas-chat-hub\</code>.</dd>
+        <dd>Anthropic Console + Claude Code on <b>Mini_IT13</b>. SSH alias <code>ssh aick</code> available. Working trees in <code>C:\Users\sam\cenas-ezlive\</code>, <code>C:\Users\sam\cenas-chat-hub\</code>, and <code>C:\Users\sam\ck-ezcater\</code>.</dd>
+        <dt>Running services on ck</dt>
+        <dd>
+          <ul class="docs">
+            <li><b>ck failover gateway</b> — <code>ck_gateway.py</code> on port 8766, at-logon Startup launcher, mirrors aick's <code>/jobs/driver-assign</code> contract</li>
+            <li><b>LAN team hub</b> — <code>hub.py</code> on 192.168.1.134:8765 (also Tailscale 100.73.38.82:8765)</li>
+            <li><b>dev-chat bridge</b> — <code>bridge.py</code> mirrors LAN ↔ partner dev chat with the cena-skip filter</li>
+            <li><b>Telegram bridge</b> — bidirectional LAN-hub ↔ Telegram with image passthrough; surfaces as <code>sam-tg</code> in the hub</li>
+            <li><b>ezCater IMAP IDLE</b> — backup mirror of aick's persistent IDLE on <code>orders@aguirrestexmex.com</code></li>
+          </ul>
+        </dd>
         <dt>Starting docs</dt>
         <dd>
           <ul class="docs">
             <li><code>~/.claude/projects/C--/memory/MEMORY.md</code> on Mini_IT13 — operating memory</li>
-            <li>Hub: <code>C:\Users\sam\cenas-chat-hub\hub.py</code> + <code>chat_ui.html</code> + <code>lanchat.py</code> + <code>bridge.py</code> + <code>cena_hub_relay.py</code></li>
+            <li>ck-side ezCater backup: <code>C:\Users\sam\ck-ezcater\ck_assigner.py</code> (Playwright + Chromium), <code>ck_gateway.py</code> (Flask)</li>
             <li>Standing feedback memos under <code>~/.claude/projects/C--/memory/feedback_*.md</code></li>
+            <li>Play Console upload pipeline: <code>scripts/upload_aab.py</code> + service account at <code>~/.openclaw/.secrets/play_publisher.json</code></li>
           </ul>
         </dd>
         <dt>Push authority</dt>
-        <dd>Direct git push via SSH deploy key on AiCk. Announces every push in dev chat.</dd>
+        <dd>Two paths — SSH deploy key when on AiCk, HTTPS PAT (<code>~/.openclaw/.secrets/github_pat_ck.txt</code>) when on Mini_IT13. Announces every push in dev chat. Holds pushes during another agent's active live test.</dd>
       </dl>
     </article>
 

@@ -426,6 +426,40 @@
         </dl>
       </article>
 
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">ck_gateway.py</span>
+          <span class="role">Mini_IT13</span>
+          <span class="status-chip live">Running</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd><b>Tier-3 backup gateway.</b> Mirrors aick's <code>cena_gateway.py</code> contract on port 8766 so manager-triggered jobs can failover from aick → ck without the frontend knowing the difference. Currently wired for <code>/jobs/driver-assign</code>; same template extends to any future ezCater UI automation.</dd>
+          <dt>What runs it</dt>
+          <dd>Flask service <code>C:\Users\sam\ck-ezcater\ck_gateway.py</code>, launched at logon by <code>run_ck_gateway.bat</code> in the Startup folder. Bound to Tailscale + LAN.</dd>
+          <dt>Triggered by</dt>
+          <dd>Render's <code>CENA2_GATEWAY_URL</code> failover path — aick forwards the job to ck after two fresh-context retries fail. ck runs an independent Playwright + Chromium flow.</dd>
+          <dt>Auth</dt>
+          <dd><code>X-Cena-Token</code> shared secret in <code>C:\Users\sam\ck-ezcater\cena_token.txt</code> (mirrored from aick, ACL-locked).</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">cenas-chat-telegram-bridge</span>
+          <span class="role">Mini_IT13</span>
+          <span class="status-chip live">Running</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Bidirectional bridge between the LAN team hub and Telegram. Inbound Telegram messages from Sam surface in the hub as <code>sam-tg</code>; outbound hub messages addressed to Sam reach Telegram. Image attachments pass through both directions.</dd>
+          <dt>What runs it</dt>
+          <dd>Bridge script under <code>C:\Users\sam\cenas-chat-hub\</code>, supervised the same way as the dev-chat bridge.</dd>
+          <dt>Auth</dt>
+          <dd><code>ck_telegram_bot_token.txt</code> in <code>~/.openclaw/.secrets/</code> + Sam's chat-id allowlist.</dd>
+        </dl>
+      </article>
+
     </div>
   </section>
 
@@ -672,11 +706,75 @@
           <dt>Execution (primary)</dt>
           <dd><b>aick / Mini_IT12 · Selenium + Edge.</b> Cycle ~23–25s. Code: <code>app/services/ezcater_driver_assigner.py</code> + <code>/jobs/driver-assign</code> on <code>cena_gateway.py</code>.</dd>
           <dt>Execution (backup)</dt>
-          <dd><b>ck / Mini_IT13 · Playwright + Chromium.</b> Cycle ~17s. Code: <code>C:/Users/sam/ck-ezcater/ck_assigner.py</code>. Verifies via Apollo cache parse instead of DOM scrape. Failover kicks in after aick's primary fails twice with fresh contexts.</dd>
+          <dd><b>ck / Mini_IT13 · Playwright + Chromium.</b> Cycle ~17s. Code: <code>C:/Users/sam/ck-ezcater/ck_assigner.py</code>; gateway at <code>ck_gateway.py</code> port 8766. Verifies via Apollo cache parse instead of DOM scrape. <b>Failover wired:</b> Render env <code>CENA2_GATEWAY_URL</code> set; after aick's primary fails twice with fresh contexts, aick forwards the job to ck and ck runs the same flow on its independent stack.</dd>
           <dt>Auth</dt>
           <dd>ezCater session cookies (~139 cookies) in <code>~/.openclaw/.secrets/ezcater_session.json</code> on both machines. <code>X-Cena-Token</code> shared secret on every HTTP hop between Render, aick, and ck.</dd>
           <dt>Observability</dt>
           <dd>Dev chat auto-posts on start / success / failure. Per-job rows in <code>driver_assignment_jobs</code> table for SQL audit. Full doc in the Tools tab of /sam/docs.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Section 5c: Mobile build + deploy pipeline
+       Capacitor 7 shell around the Render web app; GitHub Actions
+       builds the .aab, signs it, and uploads it to Play Console
+       internal testing via scripts/upload_aab.py.
+       ============================================================ -->
+  <section class="ckauto-section">
+    <h2>Mobile build + deploy pipeline</h2>
+    <p class="h2-sub">Capacitor 7 wraps the live web app at <code>app.cenaskitchen.com</code> in a native Android WebView. GitHub Actions builds the signed bundle; <code>scripts/upload_aab.py</code> pushes it to Play Console without anyone touching the Console UI.</p>
+    <div class="ckauto-grid">
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">mobile-android.yml (GitHub Actions)</span>
+          <span class="role">Build + sign + upload</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>End-to-end Android build. Gradle assembleRelease produces the signed .aab; then <code>scripts/upload_aab.py</code> uploads it to the Play Console <b>internal testing</b> track so Sam can update the app on his phone without drag-and-dropping the bundle in Play Console.</dd>
+          <dt>Trigger</dt>
+          <dd>Push to <code>origin/main</code> that touches the <code>mobile/</code> tree (or manual workflow dispatch).</dd>
+          <dt>Auth (signing)</dt>
+          <dd>Signing keystore + password supplied as GitHub Actions secrets.</dd>
+          <dt>Auth (upload)</dt>
+          <dd><code>GOOGLE_PLAY_PUBLISHER_JSON</code> secret — the service-account JSON for <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code> (granted App permissions on <code>com.cenaskitchen.app</code>, 13 perms incl. "Release apps to testing tracks").</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">scripts/upload_aab.py</span>
+          <span class="role">Android Publisher API client</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Uploads a signed <code>.aab</code> to Play Console via the Android Publisher v3 API. Drives the full Edit → Upload → Track → Commit flow with cleanup on failure. Default track <code>internal</code>; <code>--dry-run</code> creates the edit + uploads the bundle but doesn't commit (sanity-checks against a non-prod track).</dd>
+          <dt>Trigger</dt>
+          <dd>Called by <code>mobile-android.yml</code> after gradle assembleRelease, or manually for one-off uploads.</dd>
+          <dt>Auth</dt>
+          <dd>Service-account JSON. Default path: <code>~/.openclaw/.secrets/play_publisher.json</code> (ACL-locked). Env override: <code>GOOGLE_PLAY_PUBLISHER_JSON_PATH</code> or <code>GOOGLE_PLAY_PUBLISHER_JSON</code> (raw JSON for CI).</dd>
+          <dt>Exit codes</dt>
+          <dd><code>0</code> success · <code>1</code> bad input · <code>2</code> auth failure · <code>3</code> upload failed · <code>4</code> commit failed.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">Capacitor App.backButton listener</span>
+          <span class="role">base_dashboard.html · Layer 3</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Android hardware/gesture back inside the Play Store app. Browser PWA <code>popstate</code> doesn't fire on Capacitor's native back, so the Layer-3 IIFE attaches <code>App.backButton</code> via the Capacitor bridge: <code>history.back()</code> when <code>ev.canGoBack</code>, traps at root (app stays open). Falls through to default behavior if the Capacitor bridge isn't injected (i.e. when loaded as a browser tab).</dd>
+          <dt>Stack</dt>
+          <dd>Capacitor 7 · <code>@capacitor/app ^7.0.0</code> · <code>server.url = app.cenaskitchen.com</code> (remote-URL mode — the JS bridge is still injected into the WebView).</dd>
         </dl>
       </article>
 
@@ -852,14 +950,32 @@
       <article class="ckauto-card api">
         <div class="head">
           <span class="name">Telegram bot (@Cenasbot)</span>
-          <span class="role">Sam pings</span>
-          <span class="status-chip scheduled">Stub</span>
+          <span class="role">Sam ↔ team bridge</span>
+          <span class="status-chip live">Live (bidirectional)</span>
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>Cena's <code>telegram_send</code> tool routes here. Currently stubbed to a local outbox log; wiring to live send is the open piece.</dd>
+          <dd>Bidirectional bridge between Sam's Telegram and the LAN team hub. Sam's inbound messages surface in hub as <code>sam-tg</code>; outbound hub messages addressed to Sam reach Telegram. Image attachments pass through both directions. Cena's <code>telegram_send</code> tool routes here for direct sends.</dd>
+          <dt>Where it runs</dt>
+          <dd>Telegram bridge in <code>cenas-chat-hub/</code> on Mini_IT13, same supervision pattern as the dev-chat bridge.</dd>
           <dt>Auth</dt>
-          <dd><code>ck_telegram_bot_token.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>ck_telegram_bot_token.txt</code> in <code>~/.openclaw/.secrets/</code> + Sam's chat-id allowlist.</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card api">
+        <div class="head">
+          <span class="name">Google Play Console (Android Publisher API)</span>
+          <span class="role">.aab uploads</span>
+          <span class="status-chip live">Live</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd>Uploads signed Android App Bundles to the Play Console <b>internal testing</b> track without anyone touching the Console UI. Drives the full Edit → Upload → Track → Commit flow.</dd>
+          <dt>Trigger</dt>
+          <dd><code>scripts/upload_aab.py</code> called by GitHub Actions <code>mobile-android.yml</code> (or manually for one-off uploads).</dd>
+          <dt>Auth</dt>
+          <dd>Service account <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code>. JSON key at <code>~/.openclaw/.secrets/play_publisher.json</code> (local, ACL-locked) and as the <code>GOOGLE_PLAY_PUBLISHER_JSON</code> GitHub secret (CI). Granted App permissions on <code>com.cenaskitchen.app</code> via Play Console user-invite (Personal accounts don't expose API access UI — invite-user is the workaround).</dd>
         </dl>
       </article>
 

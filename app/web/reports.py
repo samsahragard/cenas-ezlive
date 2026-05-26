@@ -358,7 +358,10 @@ def schedule():
             ctx["error"] = "Range too long — pick 4 weeks (28 days) or less."
         else:
             try:
-                ctx["report"] = sling_reports.schedule_report(start, end, location)
+                # Sam #1018 (2026-05-26) — schedule now reads from Toast
+                # /labor/v1/shifts instead of Sling. Copperfield will show
+                # zero shifts until Toast Scheduling is enabled there.
+                ctx["report"] = toast_reports.schedule_report(start, end, location)
             except Exception as ex:
                 log.exception("schedule report failed")
                 ctx["error"] = f"Could not generate schedule: {ex}"

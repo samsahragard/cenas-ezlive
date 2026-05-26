@@ -949,3 +949,200 @@ def weekly_schedule_status(week_start, location_filter=None, refresh=False):
             rec["days"] = days
             out.append(rec)
     return out
+
+
+# ============== SCHEDULE REPORT (Sling → Toast switch, Sam #1018) ==============
+#
+# Mirror of app.services.sling_reports.schedule_report — same output shape so
+# the /reports/schedule template renders unchanged. Source is Toast's
+# /labor/v1/shifts (scheduled shifts, not time-entries / clock-ins).
+
+# Toast's scheduled-shift in/out are UTC ISO; render in Central.
+_SCHEDULE_TZ = timezone(timedelta(hours=-5))
+
+# Sling-compatible location labels (the /reports/schedule template uses these).
+TOAST_SCHEDULE_LOCATIONS = {
+    "tomball": ("tomball", "Tomball"),
+    "copperfield": ("copperfield", "Copperfield"),
+}
+
+
+def _parse_toast_iso(s):
+    """Parse Toast's '2026-05-24T20:00:00.000+0000' into a tz-aware datetime,
+    then convert to Central for display. Returns None on falsy / bad input."""
+    if not s:
+        return None
+    try:
+        # Handle both '+0000' and '+00:00' forms.
+        if s.endswith("+0000"):
+            s = s[:-5] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        return dt.astimezone(_SCHEDULE_TZ)
+    except Exception:
+        return None
+
+
+def schedule_report(start: datetime, end: datetime,
+                    location_filter=None, refresh: bool = False) -> dict:
+    """Build the /reports/schedule shape from Toast shifts.
+    location_filter: 'both' | 'tomball' | 'copperfield' | None (=both).
+    Returns the same dict shape as sling_reports.schedule_report:
+      days[].{date,weekday,label,shifts[],shift_count,hours_total}
+      by_position[].{title,shifts,hours,people_count}
+      by_location{key:{label,shifts,hours}}
+      totals{shifts,hours,open_shifts}
+      open_shifts[]
+    """
+    import os
+    client = ToastClient.shared()
+    rests = restaurant_guids()  # {location_key: guid}
+    if not rests:
+        raise RuntimeError(
+            "TOAST_RESTAURANT_GUID_COPPERFIELD / _TOMBALL not set in env; "
+            "schedule_report needs the per-store guids to fetch shifts."
+        )
+
+    if location_filter and location_filter != "both":
+        wanted_locations = {location_filter}
+    else:
+        wanted_locations = set(rests.keys())
+
+    rows_by_date: dict = defaultdict(list)
+    by_position: dict = defaultdict(lambda: {"shifts": 0, "hours": 0.0,
+                                              "people": set()})
+    by_location: dict = defaultdict(lambda: {"shifts": 0, "hours": 0.0})
+    open_shifts: list = []
+
+    for loc_key, guid in rests.items():
+        if loc_key not in wanted_locations:
+            continue
+        loc_label = TOAST_SCHEDULE_LOCATIONS.get(loc_key, (loc_key, loc_key))[1]
+
+        # Pull employees + jobs once per restaurant (cached).
+        try:
+            employees = client.fetch_employees(loc_key, guid)
+        except Exception as ex:
+            log.warning("toast: schedule_report skipping %s employees: %s",
+                        loc_key, ex)
+            employees = []
+        try:
+            jobs = client.fetch_jobs(loc_key, guid)
+        except Exception as ex:
+            log.warning("toast: schedule_report skipping %s jobs: %s",
+                        loc_key, ex)
+            jobs = []
+        try:
+            shifts = client.fetch_shifts(loc_key, guid, start, end,
+                                         refresh=refresh)
+        except Exception as ex:
+            log.warning("toast: schedule_report skipping %s shifts: %s",
+                        loc_key, ex)
+            continue
+
+        # Build lookups (Toast cross-refs by guid).
+        emp_by_guid = {e.get("guid"): e for e in (employees or [])}
+        job_by_guid = {j.get("guid"): j for j in (jobs or [])}
+
+        for shift in (shifts or []):
+            if shift.get("deleted"):
+                continue
+            in_dt = _parse_toast_iso(shift.get("inDate"))
+            out_dt = _parse_toast_iso(shift.get("outDate"))
+            if not in_dt:
+                continue
+            # Range filter (template renders in Central; in_dt is Central).
+            if in_dt.date() < start.date() or in_dt.date() > end.date():
+                continue
+
+            # Employee name lookup.
+            emp_ref = shift.get("employeeReference") or {}
+            emp_guid = emp_ref.get("guid")
+            emp = emp_by_guid.get(emp_guid) if emp_guid else None
+            if emp and not emp.get("deleted"):
+                first = (emp.get("firstName") or emp.get("chosenName") or "").strip()
+                last = (emp.get("lastName") or "").strip()
+                name = (f"{first} {last}".strip()
+                        or emp.get("email") or f"emp-{emp_guid[:8]}")
+            else:
+                name = None  # → open shift
+
+            # Job title (Sling calls this "position").
+            job_ref = shift.get("jobReference") or {}
+            job_guid = job_ref.get("guid")
+            job = job_by_guid.get(job_guid) if job_guid else None
+            position = (job.get("title") if job else None) or "(no position)"
+
+            # Hours; Toast scheduled shifts don't carry break duration in
+            # the public API the way Sling does — use the raw in/out span.
+            hours = ((out_dt - in_dt).total_seconds() / 3600.0
+                     if (in_dt and out_dt) else 0.0)
+            hours = max(0.0, hours)
+
+            row = {
+                "id": shift.get("guid"),
+                "status": "published",  # Toast shifts in the API are live
+                "in_dt": in_dt,
+                "out_dt": out_dt,
+                "user_id": emp_guid,
+                "name": name,
+                "position": position,
+                "location_key": loc_key,
+                "location_label": loc_label,
+                "hours": hours,
+                "break_minutes": 0,
+                "is_open": name is None,
+            }
+            if name is None:
+                open_shifts.append({**row, "slots": 1})
+                continue
+            rows_by_date[in_dt.date()].append(row)
+            by_position[position]["shifts"] += 1
+            by_position[position]["hours"] += hours
+            by_position[position]["people"].add(name)
+            by_location[loc_key]["shifts"] += 1
+            by_location[loc_key]["hours"] += hours
+
+    # Render-friendly shape (identical to sling_reports.schedule_report).
+    days = []
+    for day in sorted(rows_by_date.keys()):
+        shifts_on_day = sorted(rows_by_date[day],
+                               key=lambda r: (r["in_dt"], r["position"],
+                                              r["name"] or ""))
+        days.append({
+            "date": day.isoformat(),
+            "weekday": day.strftime("%A"),
+            "label": day.strftime("%a, %b %d"),
+            "shifts": shifts_on_day,
+            "shift_count": len(shifts_on_day),
+            "hours_total": sum(s["hours"] for s in shifts_on_day),
+        })
+
+    by_position_sorted = []
+    for title, s in sorted(by_position.items(),
+                           key=lambda kv: -kv[1]["hours"]):
+        by_position_sorted.append({
+            "title": title,
+            "shifts": s["shifts"],
+            "hours": s["hours"],
+            "people_count": len(s["people"]),
+        })
+
+    by_location_out = {}
+    for key, data in by_location.items():
+        _, label = TOAST_SCHEDULE_LOCATIONS.get(key, (key, key))
+        by_location_out[key] = {"label": label, **data}
+
+    return {
+        "start": start.strftime("%Y-%m-%d"),
+        "end": end.strftime("%Y-%m-%d"),
+        "location_filter": location_filter or "both",
+        "days": days,
+        "by_position": by_position_sorted,
+        "by_location": by_location_out,
+        "totals": {
+            "shifts": sum(d["shift_count"] for d in days),
+            "hours": sum(d["hours_total"] for d in days),
+            "open_shifts": len(open_shifts),
+        },
+        "open_shifts": sorted(open_shifts, key=lambda r: r["in_dt"]),
+    }

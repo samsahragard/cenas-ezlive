@@ -200,12 +200,12 @@
 <div style="margin-top: 24px; color: var(--text-3); font-size: 12px; line-height: 1.6;">
   <p><strong>Notes</strong></p>
   <ul>
-    <li>Source: <strong>Sling</strong> (getsling.com), the underlying scheduling tool. Toast's scheduling UI shows the same shifts but only exposes Tomball-roster ones via its Partner API; Sling has both locations.</li>
-    <li><strong>Hours</strong> = (out − in) − break duration. Break is whatever the schedule lists for that shift.</li>
-    <li><strong>Status</strong>: <em>Published</em> = visible to the employee in their Sling app. <em>Planning</em> = manager has drafted but not yet sent.</li>
-    <li><strong>Open shifts</strong> are unassigned blocks where a position needs to be filled. Manager assigns from inside Sling.</li>
+    <li>Source: <strong>Toast</strong> Partner API (<code>/labor/v1/shifts</code>). Migrated from Sling on 2026-05-26 (Sam #1018) — Toast OAuth refreshes automatically so no more token-expiry surprises.</li>
+    <li><strong>Tomball</strong> shows the full schedule. <strong>Copperfield</strong> will show zero shifts until Toast Scheduling is enabled for that location in Toast admin.</li>
+    <li><strong>Hours</strong> = (out − in). Break duration isn't carried by the Toast Partner shift API, so the hours figure is raw shift length.</li>
+    <li><strong>Status</strong>: <em>Published</em> = visible to the employee. Toast publishes shifts as a unit; if a shift is exposed via API, it's live.</li>
+    <li><strong>Open shifts</strong> are unassigned blocks where a position needs to be filled. Manager assigns from inside Toast Scheduling.</li>
     <li>Time off / leave / availability requests aren't shown here yet — only assigned shifts. Could add a tab if useful.</li>
-    <li>Sling token is captured from a logged-in browser session and lasts ~30 days. If shifts stop loading with a "401" or "token expired" banner, log in fresh and refresh.</li>
   </ul>
 </div>
 

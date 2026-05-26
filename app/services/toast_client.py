@@ -204,6 +204,48 @@ class ToastClient:
         path.write_text(json.dumps(data), encoding="utf-8")
         return data  # type: ignore[return-value]
 
+    def fetch_shifts(self, location: str, restaurant_guid: str,
+                     start: datetime, end: datetime, refresh: bool = False) -> list:
+        """Pull SCHEDULED shifts (Toast scheduling, not time-entries) for
+        [start, end] inclusive. Each shift carries:
+          - guid, inDate, outDate (scheduled in/out timestamps, UTC ISO)
+          - employeeReference.guid (cross-ref with fetch_employees)
+          - jobReference.guid (cross-ref with fetch_jobs)
+          - scheduleConfig (grace windows + break rules)
+          - deleted (true for cancelled shifts; filter out)
+
+        Replaces Sling's calendar-shift pull (Sam #1018 2026-05-26).
+        Same recent-date cache invalidation as fetch_time_entries: dates
+        within the last 2 days are re-fetched if the cached result is
+        empty or stale (>30 min), past dates cache indefinitely.
+        """
+        key = f"shifts_{start.strftime('%Y-%m-%d')}_{end.strftime('%Y-%m-%d')}_{location}.json"
+        path = _cache_dir() / key
+        if path.exists() and not refresh:
+            try:
+                ct_today = (datetime.utcnow() - timedelta(hours=5)).date()
+                age_days = (ct_today - end.date()).days
+                cached = json.loads(path.read_text(encoding="utf-8"))
+                if age_days <= 2:
+                    mtime = path.stat().st_mtime
+                    age_min = (time.time() - mtime) / 60
+                    if cached and age_min < 30:
+                        return cached
+                else:
+                    return cached
+            except Exception:
+                pass
+        start_iso = start.strftime("%Y-%m-%dT00:00:00.000-0500")
+        end_iso = (end + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00.000-0500")
+        url = (f"{API_HOST}/labor/v1/shifts"
+               f"?startDate={urllib.parse.quote(start_iso)}"
+               f"&endDate={urllib.parse.quote(end_iso)}")
+        log.info("toast: fetching shifts for %s %s..%s",
+                 location, start.date(), end.date())
+        data = self._http_get(url, restaurant_guid)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return data  # type: ignore[return-value]
+
     def fetch_orders_for_date(self, location: str, restaurant_guid: str,
                               business_date: str, refresh: bool = False) -> list:
         """business_date is YYYYMMDD.

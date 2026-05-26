@@ -56,7 +56,7 @@
 <p>A failure of step 1 must leave zero rows. Audience checks AFTER a mutation are treated as a vulnerability, not a style issue.</p>
 
 <h2>Operator-only (Sam) surfaces</h2>
-<p>The <code>/sam/*</code> family — <code>/sam/chat</code>, <code>/sam/combined</code>, <code>/sam/agents</code>, <code>/sam/pass</code>, <code>/sam/docs</code> — is gated on a direct match between the authenticated user's id and the <code>SAM_CHAT_USER_ID</code> env var, NOT via the role-to-permission map. This is intentional: the capability cannot be role-inherited; only the explicitly configured user id has access. When <code>SAM_CHAT_USER_ID</code> is unset, the surface is closed for everyone (safe-closed dormant).</p>
+<p>The <code>/sam/*</code> family — <code>/sam/chat</code>, <code>/sam/combined</code>, <code>/sam/agents</code>, <code>/sam/pass</code>, <code>/sam/docs</code>, <code>/sam/automation</code>, <code>/sam/cena</code> — is gated on a direct match between the authenticated user's id and the <code>SAM_CHAT_USER_ID</code> env var, NOT via the role-to-permission map. This is intentional: the capability cannot be role-inherited; only the explicitly configured user id has access. When <code>SAM_CHAT_USER_ID</code> is unset, the surface is closed for everyone (safe-closed dormant). Masood gets the same gate via <code>SAM_CHAT_USER_ID_2</code> per §7A of the operational rules.</p>
 
 <h2>Public / unauthenticated</h2>
 <p>Only the following paths bypass authentication:</p>

@@ -80,3 +80,30 @@
   <li>Persistent 502s (>2 min) — check the Render web-service deploy status; if "build failed", revert the offending commit.</li>
   <li>If the deploy is "live" but 502s continue, check Sentry for the most-recent error and the application logs.</li>
 </ol>
+
+<h3>Triaging a stuck driver-assignment job</h3>
+<ol>
+  <li>Look up the job in the DB: <code>SELECT * FROM driver_assignment_jobs WHERE order_id=&lt;X&gt; ORDER BY created_at DESC LIMIT 5</code>.</li>
+  <li>If <code>status='pending'</code> for &gt;2 min: the AiCk gateway probably isn't running or the Render→AiCk Tailscale hop is broken (check that Render outbound uses <code>CENA_PROXY=socks5h://localhost:1055</code> with <strong>httpx</strong> — plain urllib silently bypasses the proxy + never arrives).</li>
+  <li>If <code>status='failed'</code> with <code>error_message</code> starting <code>verification_mismatch</code>: ezCater rejected on its side (same-driver re-pick or driver doesn't match the order's store). Not a bug — surfaces back to the manager via the dropdown's error chip.</li>
+  <li>If <code>error_message</code> starts <code>auth_expired</code>: ezCater session cookies dead. Sam logs in to partnerportal.ezcater.com via Cenas Edge; aick re-extracts cookies via DPAPI into <code>~/.openclaw/.secrets/ezcater_session.json</code>.</li>
+  <li>If <code>gateway_processed='ck'</code>: aick selenium failed + ck's Playwright took over via the failover hop. Expected behavior; no action unless ck also reports failure.</li>
+  <li>Repeat-failure storm with no modal-match log lines on aick: likely the stale-module-cache bug (Chrome import returned None at gateway-startup). Bounce <code>cena_gateway.py</code> on AiCk to force a fresh import.</li>
+</ol>
+
+<h3>Releasing a new mobile (Capacitor) build</h3>
+<ol>
+  <li>Edit anything under <code>mobile/</code> (typically <code>mobile/package.json</code> for a plugin/version bump, or root <code>app/templates/</code> changes for WebView UX).</li>
+  <li>Commit + push. GitHub Actions <code>.github/workflows/mobile-android.yml</code> builds the .aab + signs it with the upload keystore from secrets.</li>
+  <li>The workflow's last step calls <code>scripts/upload_aab.py</code> which uploads to Play Console internal testing via the Android Publisher API (service account <code>ck-play-publisher</code>).</li>
+  <li>Sam updates the app on his phone via the Play Store internal-testing flow; verify the new build behaves as expected.</li>
+  <li>Promote to production track in Play Console when stable. PWA cache is not relevant — Capacitor doesn't cache server.url content the way browsers cache PWAs.</li>
+</ol>
+
+<h3>Toast nested-modifier &gt;15 (Uber Eats rejection)</h3>
+<ol>
+  <li>Run <code>C:\Users\sam\_count_deep_nested_modifiers.py</code> on AiCk to scan both restaurants' menus. Threshold is depth &gt;12 in my-walker terms (= Uber level &gt;15).</li>
+  <li>For each flagged item, the dumped trail (saved to <code>C:\Users\sam\_deep_modifier_items.json</code>) shows the exact mg→mo chain that exceeds.</li>
+  <li>In Toast web UI, navigate the item's modifier tree + delete the shared "Choose your option..," / "Add Jalapenos" group at the bottom of the chain (often shared across all flagged items in a category).</li>
+  <li>Re-run the scanner to verify 0 violations before re-publishing the DD-prefixed menus to Uber.</li>
+</ol>

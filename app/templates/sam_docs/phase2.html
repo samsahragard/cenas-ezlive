@@ -45,11 +45,20 @@
   <li><strong>Deploy gates</strong>: every commit runs the three-gate verification (see Methodology tab).</li>
 </ul>
 
+<h2>Recently shipped (Phase 2 surfaces now live)</h2>
+<ul>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Operator-side AI assistant</strong>: <code>/sam/chat</code> + Cena gateway runtime on AiCk (8765). SSE-streamed to the browser; tool catalogue + audit log live.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Cena page tab suite</strong>: Cena + Dev / Agents / Page Info / Pass / Docs (this surface) / Automation — all live under <code>/sam/*</code>.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Catering driver-assignment via Selenium UI flow</strong>: webhook auto-assigns + manager dropdown re-assigns drive partnerportal.ezcater.com from the AiCk gateway (Sam #669 + #900, 2026-05-24..2026-05-25). Replaces the courierAssign GraphQL API path; gateway callback writes back to Render.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>ck failover gateway</strong>: Mini_IT13 (100.73.38.82:8766) accepts forwarded driver-assign jobs when aick's Selenium fails (CENA2_GATEWAY_URL). Proven end-to-end in production 2026-05-25.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Mobile shell (Capacitor)</strong>: <code>com.cenaskitchen.app</code> Capacitor 7 WebView wrapping the live Flask site. Built + signed in GitHub Actions; uploaded to Play Console internal testing via the Android Publisher API service account.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Bidirectional Telegram bridge</strong>: <code>@Cenasbot</code> on AiCk forwards Sam ↔ dev-chat both directions. Auth via allow-list of Telegram user ids.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Cross-host message queue</strong>: cena2 peer on Mini_IT13 syncs every 30s with the AiCk gateway via the Phase 2 message layer.</li>
+</ul>
+
 <h2>Open work — current focus</h2>
 <ul>
-  <li>Operator-side AI assistant: <code>/sam/chat</code> + the AI gateway feeding the operator surface.</li>
-  <li>Cena page tab suite: Cena chat / Cena + Dev / Agents / Page Info / Pass / Docs (this surface).</li>
   <li>Vendor email-parse pipeline: ingest WebstaurantStore equipment and warranty emails.</li>
-  <li>Cross-host message queue: the secondary peer host wires into the primary for resilient delivery.</li>
   <li>Anomaly engine extensions: additional rules for the daily / weekly brief.</li>
+  <li>Play Console legal declarations + 14-day closed-test gate before prod-access app submission.</li>
 </ul>

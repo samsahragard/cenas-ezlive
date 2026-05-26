@@ -1283,14 +1283,14 @@ def dev_chat_todos_add():
         )
         db.add(row)
         db.flush()
-        # Notification chat message so the assigned agent (or any agent
-        # watching the dev-chat tail) sees the new TODO without needing
-        # to poll the widget endpoint.
-        author_label = created_by or "someone"
-        target = assigned_to or "any agent"
-        body_msg = (f"📌 TODO #{row.id} added by {author_label} → {target}: "
-                    f"{title[:300]}")
-        db.add(DeveloperChatMessage(author="system", body=body_msg))
+        # ONLY post a chat-message ping when an agent is explicitly
+        # assigned. Unassigned ("any") todos don't auto-post — Sam
+        # asked at #1071 to avoid that spam path. Sam #1066 follow-up.
+        if assigned_to:
+            author_label = created_by or "someone"
+            body_msg = (f"📌 @{assigned_to}-claude — {author_label} "
+                        f"assigned you TODO #{row.id}: {title[:280]}")
+            db.add(DeveloperChatMessage(author="system", body=body_msg))
         db.commit()
         db.refresh(row)
         return jsonify({"ok": True, "todo": _todo_render(row)}), 201

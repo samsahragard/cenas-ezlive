@@ -2027,7 +2027,7 @@ class DevChatTodo(Base):
 
 _VALID_DEV_CHAT_TODO_STATUS = frozenset(
     {"open", "in_progress", "done", "cancelled"})
-_VALID_DEV_CHAT_TODO_ASSIGNEES = frozenset({"aick", "ck", "cena"})
+_VALID_DEV_CHAT_TODO_ASSIGNEES = frozenset({"aick", "ck", "cena", "samai"})
 
 
 # ---- Block 1J — AmbientSignal data plane (samai spec, 2026-05-14) ----

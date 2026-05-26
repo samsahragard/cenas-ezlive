@@ -113,21 +113,45 @@ def location_orders(location: str):
 
 def _active_drivers_by_prefix(db) -> dict[int, list[str]]:
     """Build the per-store driver dropdown options for the Ez Orders
-    card driver picker (Sam #669). Pulls from EzcaterKnownDriver
-    (the roster ck imports from the partner-portal driver list) and
-    groups by ck_prefix: 1=Copperfield/UNO, 2=Tomball/DOS. Drivers
-    with ck_prefix NULL are ambiguous and not offered."""
-    from app.models import EzcaterKnownDriver
-    out: dict[int, list[str]] = {1: [], 2: []}
-    roster = (
-        db.query(EzcaterKnownDriver)
-        .filter(EzcaterKnownDriver.ck_prefix.in_((1, 2)))
-        .order_by(EzcaterKnownDriver.name.asc())
-        .all()
-    )
-    for kd in roster:
-        out.setdefault(kd.ck_prefix, []).append(kd.name)
-    return out
+    card driver picker (Sam #669). Sources merged so a manager-added
+    driver appears in the dropdown immediately (Sam #1103, 2026-05-26):
+      1. EzcaterKnownDriver — the roster ck imports from ezCater's
+         partner-portal driver list. Grouped by ck_prefix
+         (1=Copperfield/UNO, 2=Tomball/DOS). Drivers with ck_prefix
+         NULL are ambiguous and skipped.
+      2. Driver (the local drivers table) — entries added via the
+         /<store>/drivers admin page. Active rows only. location maps:
+         copperfield -> ck_prefix 1, tomball -> ck_prefix 2.
+    Names deduped per-prefix (case-insensitive) so an ezCater entry +
+    a local entry of the same driver don't double up. Sorted A-Z."""
+    from app.models import EzcaterKnownDriver, Driver
+    out: dict[int, set[str]] = {1: set(), 2: set()}
+    seen_lower: dict[int, set[str]] = {1: set(), 2: set()}
+
+    def _add(prefix: int, name: str) -> None:
+        n = (name or "").strip()
+        if not n:
+            return
+        key = n.lower()
+        if key in seen_lower[prefix]:
+            return
+        seen_lower[prefix].add(key)
+        out[prefix].add(n)
+
+    for kd in (db.query(EzcaterKnownDriver)
+                 .filter(EzcaterKnownDriver.ck_prefix.in_((1, 2)))
+                 .all()):
+        _add(kd.ck_prefix, kd.name)
+
+    _loc_to_prefix = {"copperfield": 1, "tomball": 2}
+    for d in (db.query(Driver)
+                .filter(Driver.active.is_(True))
+                .all()):
+        prefix = _loc_to_prefix.get((d.location or "").strip().lower())
+        if prefix is not None:
+            _add(prefix, d.name)
+
+    return {1: sorted(out[1], key=str.lower), 2: sorted(out[2], key=str.lower)}
 
 
 @browse.route("/orders/view/<external_order_id>")

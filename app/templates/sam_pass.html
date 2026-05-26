@@ -262,6 +262,12 @@
         <tr><td class="svc">EZCater API key</td>
             <td>Catering order webhooks + history ingest.</td>
             <td><span class="path">~/.openclaw/.secrets/ezcater_api_key.txt</span> (AiCk, confirm name) + IMAP password at <span class="path">~/.openclaw/.secrets/ezcater_imap_pwd.txt</span> (AiCk)</td></tr>
+        <tr><td class="svc">EZCater partner portal session</td>
+            <td>139 browser cookies for partnerportal.ezcater.com. Drives the Selenium UI flow that auto-assigns Masood/Sam on new orders + handles manager dropdown re-assigns. Re-extract via Edge cookie decrypt when the session expires (Sam logs in fresh on Cenas Edge, then aick reads the cookies via DPAPI).</td>
+            <td><span class="path">~/.openclaw/.secrets/ezcater_session.json</span> (AiCk) — Selenium-driver lane only; same file used by ck's Playwright failover</td></tr>
+        <tr><td class="svc">Google Play Console publisher (service-account JSON)</td>
+            <td>Programmatic .aab upload to Play Console internal testing. Auth = service account ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com (granted Release Manager on com.cenaskitchen.app). Generated 2026-05-25 to break the Sam-manual-upload gate.</td>
+            <td><span class="path">C:\Users\sam\.openclaw\.secrets\play_publisher.json</span> (AiCk) + same file at <span class="path">C:\Users\sam\.openclaw\.secrets\play_publisher.json</span> (Mini_IT13, ACL-locked to ck + SYSTEM + Administrators). Used by <span class="path">scripts/upload_aab.py</span>.</td></tr>
         <tr><td class="svc">Sling API</td>
             <td>Scheduling + shift API for the labor pipeline.</td>
             <td><span class="path">~/.openclaw/.secrets/sling_api_key.txt</span> (AiCk, confirm name)</td></tr>
@@ -362,16 +368,16 @@
             <td>X-Cena-Token at <span class="path">C:\Users\sam\cena\cena_token.txt</span> (AiCk) + <span class="tag envvar">Render CENA_GATEWAY_TOKEN</span></td></tr>
         <tr><td class="svc">cena2 gateway</td>
             <td><span class="path">http://100.73.38.82:8766</span> on Mini_IT13 (Tailscale-only)</td>
-            <td>Peer cena gateway on ck's box: message queue + worker + cross-gateway sync (Phase 2).</td>
-            <td>cena2 token at <span class="path">C:\Users\sam\cena2\cena2_token.txt</span> (Mini_IT13)</td></tr>
+            <td>Peer cena gateway on ck's box: message queue + worker + cross-gateway sync (Phase 2). Now ALSO the driver-assign failover target: POST /jobs/driver-assign (same contract as aick's gateway) — aick forwards here when its own Selenium fails. Env var: CENA2_GATEWAY_URL on aick gateway + on Render.</td>
+            <td>cena2 token at <span class="path">C:\Users\sam\cena2\cena2_token.txt</span> (Mini_IT13); shares X-Cena-Token with aick's gateway for failover hops</td></tr>
         <tr><td class="svc">WhatsApp (Cenas Kitchen business)</td>
             <td>Paired session on Mini_IT13: <span class="path">C:\Users\sam\cena2\whatsapp\auth_state\</span> (credential-equivalent)</td>
             <td>Outbound business notifications (planned send layer; receive is silent-observer per Sam standing rule).</td>
             <td>The auth_state directory IS the credential (Baileys WhatsApp Web multi-device session).</td></tr>
-        <tr><td class="svc">Telegram bot (ck)</td>
-            <td>Bot account on Telegram; token at <span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> (Mini_IT13)</td>
-            <td>Sam ↔ ck escalation channel (stub on Cena's side via telegram_send).</td>
-            <td>Bot token (above)</td></tr>
+        <tr><td class="svc">Telegram bot (@Cenasbot)</td>
+            <td>Bot account on Telegram; token at <span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> (AiCk + Mini_IT13).</td>
+            <td>Bidirectional Sam ↔ agents channel (live since 2026-05-24). <span class="path">cena/telegram_dev_chat_bridge.py</span> runs on AiCk: forwards Sam's TG messages into the LAN hub (as author 'sam-tg') and forwards every hub message OUT to Sam's private chat (chat_id at <span class="path">cena/.secrets/telegram_chat_id.txt</span>). Restart the bridge if outbound goes silent (daemon-thread death has happened once).</td>
+            <td>Bot token (above) + authorized user-id allow-list at <span class="path">cena/.secrets/telegram_authorized_user_ids.txt</span></td></tr>
         <tr><td class="svc">Email: orders@cenaskitchen.com</td>
             <td>cPanel mailbox (server: <span class="path">mail.cenaskitchen.com</span>)</td>
             <td>Vendor channel (Webstaurant, PFG, Restaurant Depot, Spec's, EZcater receipts).</td>

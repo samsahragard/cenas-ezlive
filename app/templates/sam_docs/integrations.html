@@ -3,17 +3,27 @@
 <p class="meta">External-API integrations and internal pipelines that feed the dashboards.</p>
 
 <h2>EZCater</h2>
-<p>Catering order intake from EZCater. Two ingest paths:</p>
+<p>Catering order intake from EZCater. Two ingest paths + a Selenium-driven driver-assignment surface that drives the partnerportal.ezcater.com UI from our side:</p>
 <ul>
-  <li><strong>Webhook</strong> — EZCater posts inbound order events to <code>/ezcater-webhook</code> (signature-verified). The webhook handler upserts the order into the catering tables and triggers downstream rollups.</li>
+  <li><strong>Webhook</strong> — EZCater posts inbound order events to <code>/ezcater/webhook</code> (signature-verified). The webhook handler ingests the order into the catering tables, picks the default in-house driver from the store map (Masood CK #1 for Copperfield, Sam CK #2 for Tomball), and queues a <code>DriverAssignmentJob</code> row that the AiCk gateway picks up to drive the partnerportal Chrome flow (Sam #900, 2026-05-25).</li>
   <li><strong>IMAP backup</strong> — EZCater also emails order confirmations to the vendor mailbox. An IMAP ingest periodically scans the mailbox for any orders missed by the webhook (defense in depth).</li>
 </ul>
+
+<h3>Driver assignment (Selenium UI flow)</h3>
+<p>The dropdown on each catering Ez Orders card AND the new-order auto-assign both run through the same gateway path. The path:</p>
+<ol>
+  <li>Render route (<code>/&lt;store&gt;/catering/assign_driver</code> or the webhook) creates a <code>DriverAssignmentJob</code> row and POSTs a wake to AiCk's <code>cena_gateway.py:/jobs/driver-assign</code> over Tailscale via <code>CENA_PROXY=socks5h://localhost:1055</code> (httpx, not urllib — urllib bypasses the proxy and never arrives).</li>
+  <li>The gateway spawns a Selenium thread that loads cookies from <code>~/.openclaw/.secrets/ezcater_session.json</code> into a dedicated Chrome profile (<code>C:\Users\sam\ezcater_assigner_chrome_profile</code>), navigates to the order page, clicks <em>Unassign driver</em> if needed, clicks <em>Assign in-house driver</em>, types the new driver name, clicks the matching label, submits, and re-reads the DOM to verify.</li>
+  <li>The gateway POSTs the result back to Render's <code>/catering/assign_driver/result</code> callback (X-Cena-Token gated). On status='completed', Render writes the new driver name into <code>Order.ezcater_driver_name</code>; on '__no_driver__' unhook, it clears the field.</li>
+  <li><strong>Failover hop (Sam #900, 2026-05-25)</strong> — if aick's Selenium fails (auth, popup-stuck, RuntimeError, etc., but NOT verification_mismatch which is an ezCater-side state rejection), the gateway forwards the same job payload to <code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code> on Mini_IT13. ck's Playwright gateway runs the same flow + posts the callback with <code>gateway_processed='ck'</code> instead of <code>'aick'</code>. End-to-end proven in production 2026-05-25 (8 consecutive failovers caught cleanly during a stale-module-cache outage on aick).</li>
+</ol>
 
 <h3>EZCater rules</h3>
 <ul>
   <li><strong>Idempotent upsert</strong> — every order is keyed on the EZCater order id; re-ingest is a no-op if the row hasn't changed.</li>
   <li><strong>Status transitions</strong> — the EZCater pipeline statuses map to internal statuses (pending → confirmed → fulfilled → delivered).</li>
-  <li><strong>Driver assignment</strong> — once confirmed, the order surfaces to the per-store catering dashboard for driver assignment via the Ez Market for drivers.</li>
+  <li><strong>Driver assignment is UI-mediated</strong> — both auto-assign on new orders AND manager dropdown re-assigns go through the partnerportal Chrome flow. The direct <code>courierAssign</code> GraphQL API is only used as a last-resort restoration path (e.g. when ezCater UI silently rejects a same-driver re-pick) — per Sam standing rule, agents do not use the API except for in-house Masood/Sam restoration when the UI path cannot complete.</li>
+  <li><strong>Same-driver re-assigns are ezCater-rejected via UI</strong> — re-picking the driver who's already on the order surfaces the red "There was an error assigning the driver" dialog. The Selenium flow detects this and raises <code>_AssignmentMismatch</code> so the dropdown reports failure cleanly to the manager.</li>
   <li><strong>Cancellation</strong> — vendor cancellations come through the webhook and mark the row cancelled; manual cancellations require the catering dashboard surface.</li>
 </ul>
 
@@ -39,7 +49,19 @@
   <li><strong>Per-store mapping</strong> — Toast's restaurant id maps to the internal store slug. Mapping lives in the toast_store_map table.</li>
   <li><strong>Time windows</strong> — every analytics query carries an explicit start/end; never an unbounded scan.</li>
   <li><strong>Idempotent writes</strong> — rollup writes are keyed on (store, period, metric); a re-run overwrites cleanly.</li>
+  <li><strong>Nested modifier depth ≤ 15 (Uber Eats limit)</strong> — Uber Eats rejects items where the menu→category→item→(mg→mo)* chain exceeds 15 levels. Run <span class="path">_count_deep_nested_modifiers.py</span> on AiCk to scan; the Menus v2 API uses REFERENCE-based structure (top-level <code>modifierGroupReferences</code> + <code>modifierOptionReferences</code> dicts) — naive inline walkers will return 0. The 2026-05-25 sweep identified 22 items in 1DD-COMBINATION- / 1DD-ENCHILADAS- with depth 16-17; Sam cut the shared <code>Choose your option..,</code> mg to bring all 22 back under the limit. Re-run the scan after any DD-menu edit.</li>
 </ul>
+
+<h2>Telegram bridge</h2>
+<p>Bidirectional Sam ↔ agents channel (live 2026-05-24). <span class="path">cena/telegram_dev_chat_bridge.py</span> on AiCk runs two daemon threads:</p>
+<ul>
+  <li><strong>tg → hub</strong> — long-polls Telegram getUpdates, accepts messages from authorized user-ids (allow-list at <span class="path">cena/.secrets/telegram_authorized_user_ids.txt</span>), posts them to the LAN hub as author <code>sam-tg</code> (text + image attachments via JSON + base64).</li>
+  <li><strong>hub → tg</strong> — polls the LAN hub for new messages, forwards every non-<code>sam-tg</code> author to Sam's private chat (chat_id at <span class="path">cena/.secrets/telegram_chat_id.txt</span>). Daemon-thread death has happened once silently (no log, but cursor file kept advancing) — if outbound stops, restart the bridge.</li>
+</ul>
+<p>Bot identity: <code>@Cenasbot</code>. Token at <span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> on both AiCk + Mini_IT13.</p>
+
+<h2>Google Play Console (Android Publisher API)</h2>
+<p>Programmatic .aab upload for the <code>com.cenaskitchen.app</code> Capacitor mobile shell. Service account <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code> (Cloud project favorable-valor-493419-r9) holds the Release Manager grant on the app. JSON key at <span class="path">C:\Users\sam\.openclaw\.secrets\play_publisher.json</span> (AiCk) + ACL-locked copy on Mini_IT13. The upload pipeline (GitHub Actions <code>.github/workflows/mobile-android.yml</code> builds + signs the .aab; <code>scripts/upload_aab.py</code> uploads to internal testing) replaces the manual Sam-uploads-each-build gate. Service-account creation walkthrough in <code>/sam/docs</code> Tools tab.</p>
 
 <h2>Anomaly engine</h2>
 <p>A rules-driven engine that compares incoming Toast-derived metrics against expected baselines and emits anomaly events.</p>

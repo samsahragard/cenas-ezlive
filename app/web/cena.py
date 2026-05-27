@@ -3572,6 +3572,83 @@ def cena_run_add_drivers():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-dispatch-default-driver-backlog", methods=["POST"])
+def cena_run_dispatch_default_driver_backlog():
+    """Take a list of {order_id, new_driver} pairs and route each through
+    the existing DriverAssignmentJob + dispatch_assignment_job path —
+    same code-path as the webhook + manager dropdown. Sam #1167
+    (2026-05-27): process the backlog of orders whose partnerportal
+    assignment may have been skipped (e.g. IMAP-ingested rows where
+    the webhook never fired).
+
+    Body: {"items": [{"order_id": "XZW-Y6J", "new_driver": "Masood CK #1"}, ...]}
+    Returns {"ok": True, "dispatched": [...], "errors": [...]}
+
+    X-Cena-Token gated. The dispatch is fire-and-forget — pwck gateway
+    runs the flow asynchronously and POSTs back to
+    /catering/assign_driver/result with the outcome. Each job_id is
+    fresh per item so the gateway can collapse retries cleanly."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    items = body.get("items") or []
+    if not isinstance(items, list) or not items:
+        return jsonify({"ok": False,
+                        "error": "items (non-empty list) required"}), 400
+    if len(items) > 50:
+        return jsonify({"ok": False,
+                        "error": "max 50 items per call"}), 400
+
+    import uuid as _uuid
+    from app.models import DriverAssignmentJob as _DAJ
+    from app.services.ezcater_driver_assigner import (
+        dispatch_assignment_job as _dispatch,
+    )
+
+    db = SessionLocal()
+    dispatched: list[dict] = []
+    errors: list[dict] = []
+    try:
+        for it in items:
+            order_id = (it.get("order_id") or "").strip()
+            new_driver = (it.get("new_driver") or "").strip()
+            current_driver = it.get("current_driver")
+            if current_driver is not None:
+                current_driver = str(current_driver).strip() or None
+            if not order_id or not new_driver:
+                errors.append({"item": it,
+                               "error": "order_id + new_driver required"})
+                continue
+            job_id = str(_uuid.uuid4())
+            try:
+                db.add(_DAJ(job_id=job_id, order_id=order_id,
+                            current_driver=current_driver,
+                            new_driver=new_driver, status="pending"))
+                db.commit()
+            except Exception as e:  # noqa: BLE001
+                db.rollback()
+                errors.append({"item": it,
+                               "error": f"DB add failed: "
+                                        f"{type(e).__name__}: {e}"})
+                continue
+            try:
+                _dispatch(job_id, order_id, current_driver, new_driver)
+                dispatched.append({"job_id": job_id, "order_id": order_id,
+                                   "new_driver": new_driver,
+                                   "current_driver": current_driver})
+            except Exception as e:  # noqa: BLE001
+                errors.append({"job_id": job_id, "item": it,
+                               "error": f"dispatch raised: "
+                                        f"{type(e).__name__}: {e}"})
+        return jsonify({"ok": True,
+                        "dispatched": dispatched,
+                        "errors": errors})
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-suspend-driver", methods=["POST"])
 def cena_run_suspend_driver():
     """Soft-suspend a single Driver row (active=False, status=terminated,

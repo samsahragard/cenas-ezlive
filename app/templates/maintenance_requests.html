@@ -350,6 +350,153 @@
       <a class="action-link" href="{{ new_url }}">+ New request</a>
     </div>
   </div>
+
+  {# Equipment Warranties section (Sam #1129 / #1137 — 2026-05-26).
+     Sourced from docs/equipment_warranties.json (parsed via
+     scripts/parse_warranty_list.py). Status: active / portal / expired
+     (portal = WebstaurantStore offloaded to Safeware — actual reg /
+     claim lives on the Safeware portal). #}
+  {% if warranties %}
+  <style>
+    .mr-page .wr-block { margin-top: 28px; }
+    .mr-page .wr-block h3 {
+      font-size: 14px; font-weight: 800; color: var(--ck-gold-bright);
+      letter-spacing: 0.04em; text-transform: uppercase;
+      margin: 0 0 6px;
+    }
+    .mr-page .wr-sub { font-size: 11px; color: var(--ck-cream-meta);
+      margin: 0 0 12px; font-style: italic; }
+    .mr-page .wr-stats {
+      display: flex; gap: 18px; margin: 0 0 14px; flex-wrap: wrap;
+      padding: 10px 14px; background: rgba(0,0,0,0.25);
+      border: 0.5px solid var(--ck-border-subtle); border-radius: 8px;
+    }
+    .mr-page .wr-stats .wr-stat { font-size: 11px; color: var(--ck-cream-faint);
+      font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
+    .mr-page .wr-stats .wr-stat strong { color: var(--ck-cream); font-weight: 700; }
+    .mr-page .wr-stats .wr-stat.alert strong { color: #FFB099; }
+    .mr-page .wr-stats .wr-stat.ok strong { color: var(--ck-teal-bright); }
+    .mr-page .wr-stats .wr-stat.warn strong { color: var(--ck-gold-bright); }
+    .mr-page .wr-filters {
+      display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .mr-page .wr-filter {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--ck-cream-faint);
+      background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px;
+      border: 0.5px solid var(--ck-border-subtle); cursor: pointer;
+    }
+    .mr-page .wr-filter.active {
+      background: rgba(228,179,64,0.18); color: var(--ck-gold-bright);
+      border-color: var(--ck-border-active);
+    }
+    .mr-page .wr-search {
+      width: 100%; padding: 8px 12px; border-radius: 6px;
+      background: var(--ck-bg-input); border: 0.5px solid var(--ck-border-subtle);
+      color: var(--ck-cream); font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 12px;
+    }
+    .mr-page .wr-table {
+      width: 100%; border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    }
+    .mr-page .wr-table th {
+      text-align: left; padding: 8px 10px;
+      color: var(--ck-cream-faint); font-weight: 700;
+      font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+      border-bottom: 0.5px solid var(--ck-border-subtle);
+    }
+    .mr-page .wr-table td {
+      padding: 8px 10px; vertical-align: top;
+      color: var(--ck-cream-dim);
+      border-bottom: 0.5px solid rgba(217,164,54,0.08);
+    }
+    .mr-page .wr-table tr.wr-row.hidden { display: none; }
+    .mr-page .wr-table .wr-title { color: var(--ck-cream); font-weight: 600; }
+    .mr-page .wr-status-pill {
+      display: inline-block; padding: 2px 8px; border-radius: 3px;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(228,179,64,0.18); color: var(--ck-gold-bright);
+    }
+    .mr-page .wr-status-pill.ok { background: rgba(46,163,159,0.18); color: var(--ck-teal-bright); }
+    .mr-page .wr-status-pill.alert { background: rgba(199,59,54,0.18); color: #FFB099; }
+    .mr-page .wr-expiring-soon { color: var(--ck-gold-bright); font-weight: 700; }
+    .mr-page .wr-empty {
+      padding: 24px 12px; text-align: center;
+      color: var(--ck-cream-faint); font-size: 12px; font-style: italic;
+    }
+    .mr-page .wr-empty.hidden { display: none; }
+  </style>
+
+  <div class="wr-block" id="wrBlock">
+    <h3>Equipment Warranties</h3>
+    <p class="wr-sub">From WebstaurantStore Extended Warranty Protection portal +
+      vendor warranty emails. Click a row's order # to look it up in the source mailbox.</p>
+
+    <div class="wr-stats">
+      <span class="wr-stat"><strong>{{ warranty_kpis.total }}</strong> total plans</span>
+      <span class="wr-stat ok"><strong>{{ warranty_kpis.active }}</strong> active</span>
+      <span class="wr-stat warn"><strong>{{ warranty_kpis.portal }}</strong> Safeware portal</span>
+      <span class="wr-stat alert"><strong>{{ warranty_kpis.expired }}</strong> expired</span>
+      <span class="wr-stat warn"><strong>{{ warranty_kpis.expiring_30d }}</strong> expiring ≤30d</span>
+      <span class="wr-stat warn"><strong>{{ warranty_kpis.expiring_90d }}</strong> expiring ≤90d</span>
+    </div>
+
+    <div class="wr-filters" id="wrFilters">
+      <button type="button" class="wr-filter active" data-wstatus="all">All</button>
+      <button type="button" class="wr-filter" data-wstatus="active">Active</button>
+      <button type="button" class="wr-filter" data-wstatus="portal">Safeware Portal</button>
+      <button type="button" class="wr-filter" data-wstatus="expired">Expired</button>
+      <button type="button" class="wr-filter" data-wstatus="expiring_90d">Expiring ≤90d</button>
+    </div>
+
+    <input type="text" class="wr-search" id="wrSearch" placeholder="Search item / model / order #">
+
+    <table class="wr-table">
+      <thead>
+        <tr>
+          <th style="width:46%">Item</th>
+          <th style="width:13%">Model #</th>
+          <th style="width:13%">Order #</th>
+          <th style="width:14%">Expires</th>
+          <th style="width:14%">Status</th>
+        </tr>
+      </thead>
+      <tbody id="wrTbody">
+        {% for w in warranties %}
+        <tr class="wr-row" data-wstatus="{{ w.status }}"
+            data-expiring90d="{{ '1' if (w.expires_in_days is not none and 0 <= w.expires_in_days <= 90) else '0' }}"
+            data-search="{{ w.search }}">
+          <td class="wr-title">{{ w.title }}</td>
+          <td>{{ w.item_number }}</td>
+          <td>{{ w.order_number }}</td>
+          <td>
+            {% if w.expiration_date %}
+              <span{% if w.expires_in_days is not none and 0 <= w.expires_in_days <= 90 %} class="wr-expiring-soon"{% endif %}>
+                {{ w.expiration_date }}
+                {% if w.expires_in_days is not none and w.expires_in_days < 0 %}
+                  (expired {{ -w.expires_in_days }}d ago)
+                {% elif w.expires_in_days is not none and w.expires_in_days <= 90 %}
+                  ({{ w.expires_in_days }}d left)
+                {% endif %}
+              </span>
+            {% elif w.portal_only %}
+              <span style="color: var(--ck-cream-meta);">on Safeware portal</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td><span class="wr-status-pill {{ w.status_class }}">{{ w.status_label }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="wr-empty hidden" id="wrEmpty">No warranties match this filter.</div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -407,6 +554,50 @@
     apply();
   });
   apply();
+
+  /* Warranty section filter / search (Sam #1129). */
+  var wrBlock = document.getElementById("wrBlock");
+  if (wrBlock) {
+    var wrFilters = document.getElementById("wrFilters");
+    var wrSearch = document.getElementById("wrSearch");
+    var wrEmpty = document.getElementById("wrEmpty");
+    var wrRows = Array.prototype.slice.call(
+      document.querySelectorAll("#wrTbody .wr-row"));
+    var wrStatus = "all", wrQuery = "";
+    function wrMatches(r) {
+      if (wrStatus === "expiring_90d") {
+        if ((r.dataset.expiring90d || "0") !== "1") return false;
+      } else if (wrStatus !== "all") {
+        if ((r.dataset.wstatus || "") !== wrStatus) return false;
+      }
+      if (wrQuery && (r.dataset.search || "").indexOf(wrQuery) < 0) return false;
+      return true;
+    }
+    function wrApply() {
+      var shown = 0;
+      wrRows.forEach(function (r) {
+        var ok = wrMatches(r);
+        r.classList.toggle("hidden", !ok);
+        if (ok) shown++;
+      });
+      wrEmpty.classList.toggle("hidden", shown > 0);
+    }
+    wrFilters.addEventListener("click", function (e) {
+      var btn = e.target.closest(".wr-filter");
+      if (!btn) return;
+      wrFilters.querySelectorAll(".wr-filter").forEach(function (x) {
+        x.classList.remove("active");
+      });
+      btn.classList.add("active");
+      wrStatus = btn.dataset.wstatus;
+      wrApply();
+    });
+    wrSearch.addEventListener("input", function () {
+      wrQuery = wrSearch.value.trim().toLowerCase();
+      wrApply();
+    });
+    wrApply();
+  }
 })();
 </script>
 {% endblock %}

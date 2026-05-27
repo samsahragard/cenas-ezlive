@@ -1752,6 +1752,93 @@ def _time_since(dt):
     return "%dd ago" % int(secs // 86400)
 
 
+_WARRANTY_JSON = None
+_WARRANTY_JSON_MTIME = 0.0
+
+
+def _load_warranties() -> list[dict]:
+    """Load + cache the WebstaurantStore + email-derived warranty roster
+    from docs/equipment_warranties.json (parsed via
+    scripts/parse_warranty_list.py from Sam dev-chat #1129).
+    Reloads if the JSON file changed on disk."""
+    import json
+    from datetime import datetime as _dt
+    from pathlib import Path as _P
+    global _WARRANTY_JSON, _WARRANTY_JSON_MTIME
+    p = _P(__file__).resolve().parents[2] / "docs" / "equipment_warranties.json"
+    if not p.exists():
+        return []
+    mt = p.stat().st_mtime
+    if _WARRANTY_JSON is None or mt != _WARRANTY_JSON_MTIME:
+        _WARRANTY_JSON = json.loads(p.read_text(encoding="utf-8"))
+        _WARRANTY_JSON_MTIME = mt
+    return _WARRANTY_JSON or []
+
+
+def _warranty_for_template() -> tuple[list[dict], dict]:
+    """Sort + label warranties for the maintenance page render. Returns
+    (rows, kpis). Rows carry: title, item_number, order_number, status
+    ('active'|'expired'|'portal'), status_label, expiration_date,
+    expires_in_days (int or None), portal_only, source. Sorted: expired
+    last, then by soonest expiry first, then alphabetically."""
+    from datetime import datetime as _dt
+    raw = _load_warranties()
+    out: list[dict] = []
+    today = _dt.utcnow().date()
+    k = {"total": 0, "active": 0, "expired": 0, "portal": 0,
+         "expiring_30d": 0, "expiring_90d": 0}
+    for r in raw:
+        title = r.get("title") or ""
+        item_no = r.get("item_number") or ""
+        order_no = r.get("order_number") or ""
+        raw_status = (r.get("status") or "").strip().lower()
+        exp_str = r.get("expiration_date")
+        portal_only = bool(r.get("portal_only"))
+        exp_dt = None
+        if exp_str:
+            try:
+                exp_dt = _dt.strptime(exp_str, "%m/%d/%Y").date()
+            except Exception:
+                exp_dt = None
+        if portal_only or raw_status == "safeware warranty":
+            status, label, cls = "portal", "Safeware Portal", ""
+        elif raw_status == "expired" or (exp_dt and exp_dt < today):
+            status, label, cls = "expired", "Expired", "alert"
+        else:
+            status, label, cls = "active", "Active", "ok"
+        days_left = (exp_dt - today).days if exp_dt else None
+        k["total"] += 1
+        k[status] += 1
+        if days_left is not None and 0 <= days_left <= 30:
+            k["expiring_30d"] += 1
+        if days_left is not None and 0 <= days_left <= 90:
+            k["expiring_90d"] += 1
+        out.append({
+            "title": title,
+            "item_number": item_no,
+            "order_number": order_no,
+            "status": status,
+            "status_label": label,
+            "status_class": cls,
+            "expiration_date": exp_str,
+            "expires_in_days": days_left,
+            "portal_only": portal_only,
+            "source": r.get("source") or "",
+            "search": " ".join(x for x in [
+                title.lower(), item_no.lower(), order_no.lower()] if x),
+        })
+
+    def _sort_key(x):
+        # expired last; portal items after active items; then by soonest
+        # expiry; then alphabetical.
+        bucket = 0 if x["status"] == "active" else (1 if x["status"] == "portal" else 2)
+        d = x["expires_in_days"]
+        d_sort = d if d is not None else 99999
+        return (bucket, d_sort, x["title"].lower())
+    out.sort(key=_sort_key)
+    return out, k
+
+
 def _render_maintenance_v3(db, label, active_key):
     """Maintenance Requests v3 — equipment/facility repair board."""
     from app.models import MaintenanceRequest
@@ -1825,10 +1912,12 @@ def _render_maintenance_v3(db, label, active_key):
     requests.sort(key=lambda x: (x["status"] == "closed",
                                  _MAINT_PRIORITY_ORDER.get(x["priority"], 2),
                                  -x["id"]))
+    warranties, warranty_kpis = _warranty_for_template()
     return render_template(
         "maintenance_requests.html",
         page_slug="maintenance", page_label=label,
         requests=requests, kpis=kpis,
+        warranties=warranties, warranty_kpis=warranty_kpis,
         new_url=url_for("store.manager_page_new", page="maintenance"),
         active=active_key,
     )

@@ -3455,6 +3455,108 @@ def cena_run_cleanup_dev_chat():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-add-drivers", methods=["POST"])
+def cena_run_add_drivers():
+    """Bulk-add Driver rows and (optionally) soft-suspend duplicate name
+    groups within a store. Sam #1163 (2026-05-27): add Angelica + James
+    to copperfield + tomball, dedup case/whitespace variants.
+
+    Body: {"adds": [{"name": "...", "location": "copperfield"|"tomball"}, ...],
+           "dedup": true}
+
+    Returns {"ok": True, "inserted": [...], "skipped": [...],
+             "dupes_seen": {...}, "dupes_suspended": [...]}
+    Duplicate strategy: group rows by lower(strip(name)) per store; keep
+    the lowest-id (oldest) row active, set the rest to active=False +
+    status='terminated' + termination_reason='duplicate consolidated …'.
+    Hard delete is avoided to preserve DriverLog FK rows."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    adds = body.get("adds") or []
+    do_dedup = bool(body.get("dedup", False))
+    valid_locs = ("copperfield", "tomball")
+
+    db = SessionLocal()
+    inserted: list[dict] = []
+    skipped: list[dict] = []
+    dupes_suspended: list[dict] = []
+    try:
+        for row in adds:
+            name = (row.get("name") or "").strip()
+            loc = (row.get("location") or "").strip().lower()
+            if not name or loc not in valid_locs:
+                skipped.append({"name": name, "location": loc,
+                                "reason": "bad name/location"})
+                continue
+            existing = db.query(Driver).filter(
+                Driver.location == loc,
+                func.lower(Driver.name) == name.lower(),
+            ).first()
+            if existing:
+                skipped.append({"name": name, "location": loc,
+                                "reason": f"exists id={existing.id} "
+                                          f"as {existing.name!r}"})
+                continue
+            d = Driver(name=name, location=loc, status="active", active=True)
+            db.add(d)
+            db.flush()
+            inserted.append({"id": d.id, "name": name, "location": loc})
+
+        dupes_seen: dict[str, list] = {}
+        for loc in valid_locs:
+            rows = (db.query(Driver)
+                    .filter(Driver.location == loc)
+                    .order_by(Driver.id).all())
+            buckets: dict[str, list] = {}
+            for r in rows:
+                key = (r.name or "").strip().lower()
+                if not key:
+                    continue
+                buckets.setdefault(key, []).append(r)
+            dupes_seen[loc] = [
+                {"canonical": k,
+                 "rows": [{"id": r.id, "name": r.name, "active": r.active,
+                           "status": r.status} for r in v]}
+                for k, v in buckets.items() if len(v) > 1
+            ]
+            if do_dedup:
+                for k, v in buckets.items():
+                    if len(v) <= 1:
+                        continue
+                    keep = v[0]
+                    for r in v[1:]:
+                        if not r.active and r.status == "terminated":
+                            continue
+                        r.active = False
+                        r.status = "terminated"
+                        r.terminated_at = datetime.utcnow()
+                        r.termination_reason = (
+                            f"duplicate of id={keep.id} ({keep.name!r}); "
+                            f"consolidated 2026-05-27 Sam #1163"
+                        )
+                        dupes_suspended.append({
+                            "suspended_id": r.id, "suspended_name": r.name,
+                            "kept_id": keep.id, "kept_name": keep.name,
+                            "location": loc,
+                        })
+        db.commit()
+        return jsonify({"ok": True,
+                        "inserted": inserted,
+                        "skipped": skipped,
+                        "dupes_seen": dupes_seen,
+                        "dupes_suspended": dupes_suspended})
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-add-drivers crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

@@ -3572,6 +3572,54 @@ def cena_run_add_drivers():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-suspend-driver", methods=["POST"])
+def cena_run_suspend_driver():
+    """Soft-suspend a single Driver row (active=False, status=terminated,
+    termination_reason). Used for one-off dedup ops where the canonical
+    name comparator doesn't catch the match (e.g. 'James' vs 'james
+    paddie'). X-Cena-Token gated.
+
+    Body: {"driver_id": int, "reason": str (required)}
+    Returns {"ok": True, "suspended": {"id":..., "name":..., "was_active":...}}
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    try:
+        driver_id = int(body.get("driver_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "driver_id (int) required"}), 400
+    reason = (body.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"ok": False, "error": "reason required"}), 400
+
+    db = SessionLocal()
+    try:
+        d = db.query(Driver).filter(Driver.id == driver_id).first()
+        if not d:
+            return jsonify({"ok": False,
+                            "error": f"driver id={driver_id} not found"}), 404
+        was_active = d.active
+        d.active = False
+        d.status = "terminated"
+        d.terminated_at = datetime.utcnow()
+        d.termination_reason = reason
+        db.commit()
+        return jsonify({"ok": True,
+                        "suspended": {"id": d.id, "name": d.name,
+                                      "location": d.location,
+                                      "was_active": was_active}})
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-suspend-driver crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-list-default-driver-orders", methods=["POST"])
 def cena_run_list_default_driver_orders():
     """List recent orders where ezcater_driver_name is still the default

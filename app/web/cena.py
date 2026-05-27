@@ -3572,6 +3572,102 @@ def cena_run_add_drivers():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-list-default-driver-orders", methods=["POST"])
+def cena_run_list_default_driver_orders():
+    """List recent orders where ezcater_driver_name is still the default
+    Sam/Masood placeholder (i.e. nobody real has been assigned yet) +
+    the active driver roster per store. Sam #1167 (2026-05-27) — pwck
+    auto-sweep prereq: surface the backlog before triggering assignments.
+
+    Body: {"days": int = 14, "kitchen": "tomball"|"copperfield"|null}
+    Returns {"ok": True,
+             "default_driver_orders": {"tomball": [...], "copperfield": [...]},
+             "active_drivers": {"tomball": [...], "copperfield": [...]}}
+
+    Match rule: ezcater_driver_name LIKE '%sam%#%2%' OR '%masood%#%1%'
+    OR '%sam ck 2%' / '%masood ck 1%' (covers the variants the assigner's
+    _driver_names_match normalizes). status NOT IN ('delivered',
+    'cancelled', 'no_show')."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    try:
+        days = max(1, min(90, int(body.get("days") or 14)))
+    except (TypeError, ValueError):
+        days = 14
+    kitchen_filter = (body.get("kitchen") or "").strip().lower() or None
+    valid_locs = ("tomball", "copperfield")
+    if kitchen_filter and kitchen_filter not in valid_locs:
+        return jsonify({"ok": False,
+                        "error": "kitchen must be tomball/copperfield/null"}), 400
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    db = SessionLocal()
+    try:
+        q = (db.query(Order)
+               .filter(Order.created_at >= cutoff)
+               .filter(Order.ezcater_driver_name.isnot(None))
+               .filter(~Order.status.in_(("delivered", "cancelled", "no_show"))))
+        if kitchen_filter:
+            q = q.filter(Order.pickup_kitchen == kitchen_filter)
+        rows = q.order_by(Order.created_at.desc()).limit(500).all()
+
+        def _is_default(name: str | None) -> bool:
+            if not name:
+                return False
+            n = name.lower()
+            # Default Sam/Masood courier names — any reasonable variant
+            return (("sam" in n and "2" in n) or
+                    ("masood" in n and "1" in n))
+
+        per_store: dict[str, list] = {k: [] for k in valid_locs}
+        for r in rows:
+            if not _is_default(r.ezcater_driver_name):
+                continue
+            loc = (r.pickup_kitchen or "").strip().lower()
+            if loc not in valid_locs:
+                continue
+            per_store[loc].append({
+                "id": r.id,
+                "external_order_id": r.external_order_id,
+                "client": r.client,
+                "ezcater_driver_name": r.ezcater_driver_name,
+                "status": r.status,
+                "delivery_date": r.delivery_date,
+                "deliver_at": r.deliver_at,
+                "pickup_kitchen": r.pickup_kitchen,
+                "external_delivery_id": r.external_delivery_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "total_amount": r.total_amount,
+            })
+
+        active_drivers: dict[str, list] = {}
+        for loc in valid_locs:
+            drv = (db.query(Driver)
+                     .filter(Driver.location == loc,
+                             Driver.active.is_(True),
+                             Driver.status == "active")
+                     .order_by(Driver.name).all())
+            active_drivers[loc] = [
+                {"id": d.id, "name": d.name,
+                 "lifetime_delivery_count": d.lifetime_delivery_count}
+                for d in drv
+            ]
+        return jsonify({"ok": True,
+                        "days_window": days,
+                        "kitchen_filter": kitchen_filter,
+                        "default_driver_orders": per_store,
+                        "active_drivers": active_drivers})
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: run-list-default-driver-orders crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
 def install(app):
     """Register the cena blueprint."""
     app.register_blueprint(cena_bp)

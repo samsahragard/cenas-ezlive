@@ -3477,12 +3477,14 @@ def cena_run_add_drivers():
     body = request.get_json(silent=True) or {}
     adds = body.get("adds") or []
     do_dedup = bool(body.get("dedup", False))
+    list_all = bool(body.get("list_all", False))
     valid_locs = ("copperfield", "tomball")
 
     db = SessionLocal()
     inserted: list[dict] = []
     skipped: list[dict] = []
     dupes_suspended: list[dict] = []
+    roster: dict[str, list] = {}
     try:
         for row in adds:
             name = (row.get("name") or "").strip()
@@ -3542,12 +3544,25 @@ def cena_run_add_drivers():
                             "kept_id": keep.id, "kept_name": keep.name,
                             "location": loc,
                         })
+        if list_all:
+            for loc in valid_locs:
+                rows = (db.query(Driver)
+                        .filter(Driver.location == loc)
+                        .order_by(Driver.id).all())
+                roster[loc] = [
+                    {"id": r.id, "name": r.name, "active": r.active,
+                     "status": r.status, "phone": r.phone, "email": r.email,
+                     "lifetime_delivery_count": r.lifetime_delivery_count,
+                     "termination_reason": r.termination_reason}
+                    for r in rows
+                ]
         db.commit()
         return jsonify({"ok": True,
                         "inserted": inserted,
                         "skipped": skipped,
                         "dupes_seen": dupes_seen,
-                        "dupes_suspended": dupes_suspended})
+                        "dupes_suspended": dupes_suspended,
+                        "roster": roster})
     except Exception as e:  # noqa: BLE001
         db.rollback()
         logger.exception("cena: run-add-drivers crashed")

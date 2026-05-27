@@ -8,7 +8,7 @@
 <hr>
 
 <h2>ezCater Driver Re-Assignment</h2>
-<p class="meta"><strong>Status:</strong> Live in production. Verified 10/10 by aick (primary) and 10/10 by ck (backup) on 2026-05-24.</p>
+<p class="meta"><strong>Status:</strong> Live in production. <strong>2026-05-27 architecture change (Sam #1148/#1151/#1155):</strong> pwck is the new primary, ck failover is the secondary, aick's Selenium gateway is OUT of the playwright chain. Verified 10/10 + 100/100 by ck Playwright + pwck.</p>
 
 <h3>Purpose</h3>
 <p>When a manager picks a new driver from the dropdown on the catering Ez Orders page, the system unhooks ezCater's default driver (Sam #2 / Masood #1) and assigns the chosen driver, then verifies the change actually landed by re-reading the order page.</p>
@@ -18,7 +18,7 @@
 
 <h3>How it works (plain English)</h3>
 <p>You pick a driver. The dropdown grays out and shows "assigning [name]...". The system opens a real Chrome browser somewhere on your network, drives the ezCater website like a person would, unhooks the current driver, assigns your pick, then re-reads the page to confirm it worked. Green check if it landed, red X if not.</p>
-<p>By default this runs on aick (Mini_IT12). If aick fails twice with a fresh browser, ck (Mini_IT13) takes over. The two run completely different software stacks (Selenium+Edge vs Playwright+Chromium), so a problem on one usually doesn't affect the other.</p>
+<p>By default this runs on <b>pwck</b> (Mini_IT13:9000 — the dedicated Playwright agent shipped 2026-05-26). If pwck fails twice with a fresh browser, <b>ck failover</b> (Mini_IT13:8766) takes over. Both run the same ck_assigner.py Playwright + Chromium stack — pwck wraps ck_assigner.run_one_assignment so the working code stays single-sourced. aick's Selenium gateway was removed from this chain 2026-05-27 (Sam #1155) — the Selenium code at <code>app/services/ezcater_driver_assigner.py</code> + <code>cena_gateway.py</code> on AiCk is dormant but preserved for emergency-revert.</p>
 
 <h3>Architecture (three tiers)</h3>
 <pre class="ckdocs-code">[Tier 1: Frontend]
@@ -27,46 +27,47 @@ Manager's browser -&gt; catering Ez Orders page -&gt; dropdown change
 
 [Tier 2: Control Plane - Render web service]
 Creates DriverAssignmentJob row (status=pending)
-HTTP-pings AiCk via SOCKS5 proxy through Tailscale
-        v POST http://100.108.119.19:8765/jobs/driver-assign
+HTTP-pings pwck via SOCKS5 proxy through Tailscale
+        v POST http://100.73.38.82:9000/jobs/driver-assign
 
-[Tier 3: Execution Plane - AiCk gateway]
-Spawns daemon thread -&gt; opens Chrome -&gt; drives ezCater UI
-Verifies via DOM re-read after fresh page load
+[Tier 3: Execution Plane - pwck gateway (Mini_IT13)]
+Spawns daemon thread -&gt; opens Chromium -&gt; drives ezCater UI
+Wraps ck_assigner.run_one_assignment (single-sourced)
+Verifies via Apollo cache parse on fresh page load
         v POST https://app.cenaskitchen.com/catering/assign_driver/result
 
 [Back to Control Plane]
 Flips job status to completed/failed
 Frontend polling sees the update -&gt; flashes check or X</pre>
-<p>If aick's execution fails twice with fresh browser contexts, it forwards the job to ck's gateway at the same <code>/jobs/driver-assign</code> endpoint shape. ck runs its own independent flow on Mini_IT13.</p>
+<p>If pwck's execution fails twice with fresh browser contexts, Render swings the job to <code>CENA2_GATEWAY_URL</code> (ck failover on the same machine, port 8766). aick's Selenium gateway was removed from this chain 2026-05-27.</p>
 
-<h3>Two independent implementations (primary + backup)</h3>
-<p>The same flow is built two different ways on two different machines, so a failure on one stack doesn't take the whole tool down.</p>
+<h3>Two implementations (primary + failover)</h3>
+<p>Same flow, two processes on Mini_IT13, both wrapping <code>ck_assigner.run_one_assignment</code>. Primary lives in the dedicated pwck service (FastAPI + SQLite selector-vault), failover lives in the long-running ck_gateway. Failover triggers on two consecutive pwck failures with fresh contexts.</p>
 
-<h4>Primary — aick on Mini_IT12</h4>
+<h4>Primary — pwck on Mini_IT13:9000</h4>
 <ul>
-  <li><strong>Browser engine:</strong> Selenium WebDriver + Microsoft Edge</li>
-  <li><strong>Verification method:</strong> DOM re-read of the "Assigned Driver" field after fresh page reload</li>
-  <li><strong>Cycle time:</strong> ~23–25 seconds end-to-end</li>
-  <li><strong>Code location:</strong> <code>app/services/ezcater_driver_assigner.py</code> + <code>cena_gateway.py</code> <code>/jobs/driver-assign</code></li>
-  <li><strong>Profile dir:</strong> <code>C:/Users/sam/ezcater_assigner_chrome_profile</code></li>
+  <li><strong>Browser engine:</strong> Playwright + Chromium (via <code>ck_assigner</code>)</li>
+  <li><strong>Service:</strong> FastAPI <code>C:/Users/sam/pwck/pwck/server.py</code> (<code>POST /jobs/driver-assign</code>)</li>
+  <li><strong>Wraps:</strong> <code>from ck_assigner import run_one_assignment</code> — working code stays single-sourced (Sam #1078 constraint)</li>
+  <li><strong>Verification method:</strong> Apollo GraphQL cache parse from the page HTML (<code>DeliveryDriverAssigned:&lt;uuid&gt;:{fullName:...}</code>)</li>
+  <li><strong>Cycle time:</strong> ~17 seconds end-to-end</li>
+  <li><strong>Extras over plain ck:</strong> SQLite selector-vault, failure-pattern library, $5/day + $0.50/job spend gate, 100/100 acceptance test passed twice</li>
 </ul>
 
-<h4>Backup — ck on Mini_IT13</h4>
+<h4>Failover — ck on Mini_IT13:8766</h4>
 <ul>
   <li><strong>Browser engine:</strong> Playwright + Chromium</li>
-  <li><strong>Verification method:</strong> Reads the Apollo GraphQL cache embedded in the page HTML (<code>DeliveryDriverAssigned:&lt;uuid&gt;:{fullName:...}</code>) — faster and more deterministic than DOM scraping</li>
+  <li><strong>Service:</strong> Flask <code>C:/Users/sam/ck-ezcater/ck_gateway.py</code> (mirrors the same <code>/jobs/driver-assign</code> contract)</li>
+  <li><strong>Same code:</strong> <code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> — pwck imports this verbatim, ck runs it directly</li>
+  <li><strong>Verification method:</strong> Same Apollo cache parse</li>
   <li><strong>Cycle time:</strong> ~17 seconds end-to-end</li>
-  <li><strong>Code location:</strong> <code>C:/Users/sam/ck-ezcater/ck_assigner.py</code></li>
-  <li><strong>Profile dir:</strong> Playwright's per-context isolated storage</li>
 </ul>
 
-<h4>Why two stacks matter</h4>
+<h4>Dormant — aick on Mini_IT12 (emergency-revert only)</h4>
 <ul>
-  <li>If Edge updates and breaks Selenium, ck still works.</li>
-  <li>If Chromium gets a quirk that breaks Playwright, aick still works.</li>
-  <li>If both happen at once, both stacks need fixing — but that's extremely unlikely simultaneously.</li>
-  <li>The two are intentionally different. <strong>Don't "harmonize" them.</strong></li>
+  <li><strong>Browser engine:</strong> Selenium + Microsoft Edge</li>
+  <li><strong>Code:</strong> <code>app/services/ezcater_driver_assigner.py</code> + <code>cena_gateway.py</code> on AiCk — preserved untouched</li>
+  <li><strong>Why dormant:</strong> Sam #1155 (2026-05-27) — removed from the live chain because the pwck + ck pair gives identical-stack reliability on a single host with the dedicated selector-vault upgrades pwck adds. Re-enable by re-pointing Render's <code>CENA_GATEWAY_URL</code> back to <code>http://100.108.119.19:8765</code>.</li>
 </ul>
 
 <h3>The 12-step flow (same logic, both stacks)</h3>
@@ -83,7 +84,7 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <li><strong>Click matching name</strong> — iterate visible labels, normalize each (strip <code>CK #N</code> / <code>CK#N</code> / <code>Ck#N</code> kitchen prefixes via regex), tokenize, case-fold, check for subset match against the target driver name. First match wins. JS-click fallback if standard click fails.</li>
   <li><strong>Submit</strong> — find the modal's "Assign driver" submit button, click it.</li>
   <li><strong>Error dialog watch</strong> — wait 3 seconds. If a dialog appears with text matching "error assigning the driver", mark as <code>verification_mismatch</code> (this catches ezCater's silent cross-kitchen rejection where they show an error modal but the page state doesn't change).</li>
-  <li><strong>Verify</strong> — fresh GET on the order page (don't trust the modal closure). Wait for document ready. Either re-read the "Assigned Driver" DOM field (aick) OR parse the Apollo cache JSON embedded in the HTML (ck). Compare to the picked driver name using the same normalizer from step 9. Match = success. Mismatch = failure with the actual driver name surfaced as the error.</li>
+  <li><strong>Verify</strong> — fresh GET on the order page (don't trust the modal closure). Wait for document ready. Parse the Apollo cache JSON embedded in the HTML (<code>DeliveryDriverAssigned:&lt;uuid&gt;:{fullName:...}</code>). Compare to the picked driver name using the same normalizer from step 9. Match = success. Mismatch = failure with the actual driver name surfaced as the error.</li>
 </ol>
 
 <h3>Failure handling</h3>
@@ -95,7 +96,7 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <tr><td>Driver not in list</td><td>No label match in Step 9</td><td>Mark failed. Driver name doesn't exist on this caterer's roster. Manager needs to add the driver to ezCater first.</td></tr>
   <tr><td>Cross-kitchen rejection</td><td>"Error assigning the driver" dialog in Step 11</td><td>Mark <code>verification_mismatch</code>. ezCater blocks CK#1 drivers on CK#2 orders and vice versa. Manager must pick a driver from the order's own kitchen.</td></tr>
   <tr><td>Generic exception</td><td>Any unhandled error in flow</td><td>Fresh-context retry. Max 2 attempts.</td></tr>
-  <tr><td>All retries exhausted (aick)</td><td><code>retry_count == 2 AND gateway_processed == aick AND not auth_expired</code></td><td>Forward job to <code>${CENA2_GATEWAY_URL}/jobs/driver-assign</code> (ck). ck runs its own independent flow with its Playwright stack. Dev chat logs "aick failed twice, ck took over".</td></tr>
+  <tr><td>All retries exhausted (pwck)</td><td><code>retry_count == 2 AND gateway_processed == pwck AND not auth_expired</code></td><td>Forward job to <code>${CENA2_GATEWAY_URL}/jobs/driver-assign</code> (ck failover on Mini_IT13:8766). ck runs the same <code>ck_assigner</code> flow in its own process. Dev chat logs "pwck failed twice, ck took over".</td></tr>
   <tr><td>All retries exhausted (ck)</td><td>Same condition on ck side</td><td>Mark failed. Surface to frontend. Dev chat logs full failure with order ID, attempted driver, error reasons.</td></tr>
   </tbody>
 </table>
@@ -120,7 +121,7 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <tr><td><code>error_message</code></td><td>TEXT</td><td>If failed, reason here</td></tr>
   <tr><td><code>started_at</code></td><td>DATETIME</td><td>When execution plane received it</td></tr>
   <tr><td><code>completed_at</code></td><td>DATETIME</td><td>When status flipped to terminal</td></tr>
-  <tr><td><code>gateway_processed</code></td><td>VARCHAR(40)</td><td><code>aick</code> or <code>ck</code> — which machine ran it</td></tr>
+  <tr><td><code>gateway_processed</code></td><td>VARCHAR(40)</td><td><code>pwck</code> (primary) or <code>ck</code> (failover) — which service ran it. Legacy <code>aick</code> values exist in rows from before 2026-05-27.</td></tr>
   <tr><td><code>retry_count</code></td><td>INT DEFAULT 0</td><td>Fresh-context retries used (0–2)</td></tr>
   <tr><td><code>created_at</code></td><td>DATETIME</td><td></td></tr>
   <tr><td><code>updated_at</code></td><td>DATETIME</td><td></td></tr>
@@ -135,9 +136,9 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <li>Web service <code>cenas-ezlive</code> at <code>app.cenaskitchen.com</code></li>
   <li>Env vars:
     <ul>
-      <li><code>CENA_GATEWAY_URL=http://100.108.119.19:8765</code> (aick's Tailscale IP)</li>
-      <li><code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code> (ck failover — <b>wired 2026-05-25</b>)</li>
-      <li><code>CENA_GATEWAY_TOKEN=&lt;shared with cena_token.txt on AiCk&gt;</code></li>
+      <li><code>CENA_GATEWAY_URL=http://100.73.38.82:9000</code> (pwck primary on Mini_IT13 — <b>swung 2026-05-27 Sam #1155</b>; was AiCk <code>:8765</code> before)</li>
+      <li><code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code> (ck failover on Mini_IT13 — wired 2026-05-25)</li>
+      <li><code>CENA_GATEWAY_TOKEN=&lt;shared with cena_token.txt on Mini_IT13 + AiCk&gt;</code></li>
       <li><code>CENA_PROXY=socks5h://localhost:1055</code> (Render's userspace tailscaled SOCKS5)</li>
       <li><code>DATABASE_URL=sqlite:////var/data/cenas_kitchen.db</code></li>
     </ul>
@@ -146,25 +147,32 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <li>Routes registered: <code>POST /&lt;store&gt;/catering/assign_driver</code>, <code>GET /&lt;store&gt;/catering/assign_driver/status</code>, <code>POST /catering/assign_driver/result</code></li>
 </ul>
 
-<h4>On AiCk / Mini_IT12 (Tier 3, Primary)</h4>
+<h4>On pwck / Mini_IT13:9000 (Tier 3, Primary)</h4>
 <ul>
-  <li><code>cena_gateway.py</code> running on port 8765, bound to Tailscale IP</li>
-  <li>Token file at <code>C:/Users/sam/cena/cena_token.txt</code> matching Render's <code>CENA_GATEWAY_TOKEN</code></li>
-  <li>Authed ezCater cookie jar at <code>C:/Users/sam/.openclaw/.secrets/ezcater_session.json</code> (~139 cookies, refreshed via SSO+MFA when expired)</li>
-  <li>Chrome + Edge installed</li>
-  <li>Selenium pip package in the cenas-kitchen-claude venv</li>
-  <li><code>app/services/ezcater_driver_assigner.py</code> deployed</li>
-  <li>Gateway endpoint <code>/jobs/driver-assign</code> registered</li>
+  <li><code>pwck/server.py</code> FastAPI app running on port 9000, bound to Tailscale + LAN</li>
+  <li>Token file at <code>C:/Users/sam/ck-ezcater/cena_token.txt</code> matching Render's <code>CENA_GATEWAY_TOKEN</code></li>
+  <li>Imports <code>ck_assigner.run_one_assignment</code> from <code>C:/Users/sam/ck-ezcater/</code> (single-sourced — does not duplicate the Playwright code)</li>
+  <li>Shares ck's authed ezCater cookie jar at <code>C:/Users/sam/.openclaw/.secrets/ezcater_session.json</code></li>
+  <li>Chromium installed (via Playwright's <code>playwright install chromium</code>)</li>
+  <li>SQLite at <code>C:/Users/sam/pwck/pwck.db</code> — selector vault + failure-pattern library + run log</li>
+  <li>Endpoint <code>POST /jobs/driver-assign</code> registered (mirrors aick's legacy contract — drop-in)</li>
 </ul>
 
-<h4>On ck / Mini_IT13 (Tier 3, Backup)</h4>
+<h4>On ck / Mini_IT13:8766 (Tier 3, Failover)</h4>
 <ul>
-  <li>ck gateway running on its Tailscale IP at its configured port</li>
-  <li>Mirrored ezCater cookie jar at <code>~/.openclaw/.secrets/ezcater_session.json</code></li>
-  <li>Chromium installed (via Playwright's <code>playwright install chromium</code>)</li>
-  <li>Playwright pip package in ck's venv</li>
-  <li><code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> deployed</li>
-  <li>ck gateway endpoint <code>/jobs/driver-assign</code> registered (mirrors aick's contract)</li>
+  <li><code>ck_gateway.py</code> Flask service running on port 8766, bound to Tailscale + LAN</li>
+  <li>Token file at <code>C:/Users/sam/ck-ezcater/cena_token.txt</code> (same file pwck reads)</li>
+  <li>Same authed ezCater cookie jar at <code>~/.openclaw/.secrets/ezcater_session.json</code></li>
+  <li>Chromium + Playwright installed in ck's venv</li>
+  <li><code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> deployed (this is the file pwck imports)</li>
+  <li>Endpoint <code>POST /jobs/driver-assign</code> registered (same contract as pwck)</li>
+</ul>
+
+<h4>On AiCk / Mini_IT12 (Dormant — emergency-revert only)</h4>
+<ul>
+  <li><code>cena_gateway.py</code> on port 8765 still runs (other Cena endpoints depend on it), but its <code>/jobs/driver-assign</code> path no longer receives traffic from Render</li>
+  <li>Selenium + Edge + <code>app/services/ezcater_driver_assigner.py</code> kept in place for emergency revert</li>
+  <li>To re-enable: <code>CENA_GATEWAY_URL=http://100.108.119.19:8765</code> in Render env, then redeploy</li>
 </ul>
 
 <h3>Security posture</h3>
@@ -198,7 +206,7 @@ SELECT status, COUNT(*) FROM driver_assignment_jobs
 WHERE created_at &gt;= datetime('now', '-1 day')
 GROUP BY status;
 
--- Jobs that failed on aick and went to ck
+-- Jobs that failed on pwck and went to ck failover
 SELECT * FROM driver_assignment_jobs
 WHERE gateway_processed = 'ck'
 AND error_message LIKE '%failover%';
@@ -235,10 +243,10 @@ AND started_at &lt; datetime('now', '-5 minutes');</pre>
   <li><strong>Job table.</strong> New <code>$thing_jobs</code> SQLAlchemy model + migration. Boot-time <code>create_all</code> backfill.</li>
   <li><strong>Frontend trigger.</strong> Button / dropdown / form on the relevant dashboard page. POST + lock + poll status every 2s + flash green/red.</li>
   <li><strong>Render-side dispatch.</strong> Three endpoints: <code>POST /catering/$thing</code> (creates job, 5s same-resource guard, dispatches), <code>GET /catering/$thing/status</code> (polling), <code>POST /catering/$thing/result</code> (callback from gateway, token-gated, in <code>EXEMPT_PREFIXES</code>).</li>
-  <li><strong>Gateway endpoint.</strong> <code>/jobs/$thing</code> on <code>cena_gateway.py</code> (aick) AND on ck's gateway. Both accept payload + spawn daemon thread + run inline flow.</li>
-  <li><strong>Inline flow.</strong> <code>$thing_inline_flow</code> in <code>app/services/ezcater_$thing.py</code> mirroring <code>run_assignment_flow_inline</code>:
+  <li><strong>Gateway endpoint.</strong> <code>/jobs/$thing</code> on <code>pwck/server.py</code> (primary) AND on <code>ck_gateway.py</code> (failover). Both accept payload + spawn daemon thread + run inline flow. The pwck handler should wrap the same ck_assigner helper to keep the working code single-sourced.</li>
+  <li><strong>Inline flow.</strong> <code>$thing_inline_flow</code> in <code>C:/Users/sam/ck-ezcater/ck_$thing.py</code> mirroring <code>ck_assigner.run_one_assignment</code>:
     <ul>
-      <li>Lazy Selenium/Playwright import</li>
+      <li>Playwright import at module top (both services already pin it)</li>
       <li>Same exception taxonomy (<code>_AuthExpired</code>, <code>_PopupStuck</code>, <code>_AssignmentMismatch</code>, generic)</li>
       <li>Same retry policy (max 2 fresh-context, optional failover to ck)</li>
       <li>Same observability (dev chat start/success/failure, logger per step)</li>
@@ -247,17 +255,17 @@ AND started_at &lt; datetime('now', '-5 minutes');</pre>
 </ol>
 <p>After the 5 pieces:</p>
 <ul>
-  <li>Reuse <code>CENA_GATEWAY_URL</code> / <code>CENA_GATEWAY_TOKEN</code> / <code>CENA_PROXY</code> envs (no new envs needed).</li>
-  <li>Bounce <code>cena_gateway.py</code> on AiCk and ck's gateway to pick up the new endpoint.</li>
+  <li>Reuse <code>CENA_GATEWAY_URL</code> / <code>CENA2_GATEWAY_URL</code> / <code>CENA_GATEWAY_TOKEN</code> / <code>CENA_PROXY</code> envs (no new envs needed).</li>
+  <li>Bounce <code>pwck/server.py</code> and <code>ck_gateway.py</code> on Mini_IT13 to pick up the new endpoint.</li>
 </ul>
 
 <h3>Operator quick reference (for Sam)</h3>
 <ul>
   <li><strong>Daily check:</strong> open catering dashboard. Look at Ez Orders cards. Every order should show a real driver name (not Sam #2 or Masood #1). If you see fallback names still, the cron didn't catch them — open the dropdown and pick manually.</li>
   <li><strong>When something looks stuck:</strong> if a dropdown has been spinning "assigning..." for more than 90 seconds, refresh the page. If it still looks stuck, check dev chat — there should be a failure message with the reason.</li>
-  <li><strong>When ezCater login expires:</strong> you'll see "session expired" alerts in dev chat. Log into <code>partnerportal.ezcater.com</code> manually in Chrome on AiCk. Once logged in, post in dev chat "session refreshed" — aick will re-extract the cookies and resume.</li>
-  <li><strong>To manually trigger a re-assignment outside the dropdown:</strong> tell aick or ck in dev chat: "reassign order [ID] from [current driver] to [new driver]." They run the same flow manually.</li>
-  <li><strong>To pause the whole tool:</strong> tell aick "pause driver auto-assign." He'll stop the worker thread. Dropdown stops responding. Resume with "resume driver auto-assign."</li>
+  <li><strong>When ezCater login expires:</strong> you'll see "session expired" alerts in dev chat. Log into <code>partnerportal.ezcater.com</code> manually in Chrome (on whichever machine — pwck + ck both read the same cookie jar on Mini_IT13). Post in dev chat "session refreshed."</li>
+  <li><strong>To manually trigger a re-assignment outside the dropdown:</strong> tell ck in dev chat: "reassign order [ID] from [current driver] to [new driver]." ck runs the same flow manually via <code>ck_assigner.run_one_assignment</code>.</li>
+  <li><strong>To pause the whole tool:</strong> tell ck "pause driver auto-assign." Render's dispatch path is paused at the control plane. Resume with "resume driver auto-assign."</li>
 </ul>
 
 <h3>Files touched by this tool</h3>
@@ -273,29 +281,38 @@ AND started_at &lt; datetime('now', '-5 minutes');</pre>
   <li><code>app/web/auth.py</code> (<code>EXEMPT_PREFIXES</code> for callback route)</li>
 </ul>
 
-<h4>On AiCk (Mini_IT12)</h4>
+<h4>On pwck (Mini_IT13 — primary, port 9000)</h4>
 <ul>
-  <li><code>C:/Users/sam/cena/cena_gateway.py</code> (added <code>/jobs/driver-assign</code>)</li>
-  <li><code>C:/Users/sam/cena/cena_token.txt</code> (shared secret)</li>
-  <li><code>C:/Users/sam/.openclaw/.secrets/ezcater_session.json</code> (cookie jar)</li>
-  <li><code>C:/Users/sam/ezcater_assigner_chrome_profile/</code> (browser state)</li>
-  <li><code>C:/Users/sam/cena/gateway_stdout.log</code> (run logs)</li>
+  <li><code>C:/Users/sam/pwck/pwck/server.py</code> (FastAPI app + <code>/jobs/driver-assign</code> handler — wraps <code>ck_assigner.run_one_assignment</code>)</li>
+  <li><code>C:/Users/sam/pwck/pwck/jobs.py</code>, <code>db.py</code>, <code>chat.py</code> (orchestration, selector vault, dev-chat post helper)</li>
+  <li><code>C:/Users/sam/pwck/pwck.db</code> (SQLite — selector vault, failure-pattern library, run log)</li>
+  <li><code>C:/Users/sam/ck-ezcater/cena_token.txt</code> (shared secret — also read by ck failover)</li>
+  <li><code>~/.openclaw/.secrets/ezcater_session.json</code> (cookie jar — shared with ck)</li>
 </ul>
 
-<h4>On ck (Mini_IT13)</h4>
+<h4>On ck (Mini_IT13 — failover, port 8766)</h4>
 <ul>
-  <li><code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> (Playwright implementation)</li>
-  <li><code>C:/Users/sam/.openclaw/.secrets/ezcater_session.json</code> (mirrored cookie jar)</li>
-  <li>ck's gateway script (added matching <code>/jobs/driver-assign</code> endpoint)</li>
-  <li>ck's gateway stdout log</li>
+  <li><code>C:/Users/sam/ck-ezcater/ck_gateway.py</code> (Flask app + <code>/jobs/driver-assign</code> handler)</li>
+  <li><code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> (Playwright implementation — pwck imports this verbatim)</li>
+  <li><code>C:/Users/sam/ck-ezcater/cena_token.txt</code> (same shared secret as pwck)</li>
+  <li><code>~/.openclaw/.secrets/ezcater_session.json</code> (cookie jar — shared with pwck)</li>
+  <li>ck_gateway stdout log</li>
+</ul>
+
+<h4>On AiCk (Mini_IT12 — dormant, emergency-revert only)</h4>
+<ul>
+  <li><code>C:/Users/sam/cena/cena_gateway.py</code> — <code>/jobs/driver-assign</code> path preserved but no longer receives Render dispatches as of 2026-05-27</li>
+  <li><code>C:/Users/sam/cena/cena_token.txt</code> — kept in sync in case of revert</li>
+  <li><code>app/services/ezcater_driver_assigner.py</code> (Selenium implementation) — untouched per Sam #1078</li>
+  <li><code>C:/Users/sam/ezcater_assigner_chrome_profile/</code> (Edge profile)</li>
 </ul>
 
 <h3>Test verification record</h3>
-<p><strong>2026-05-24 — 10/10 success cycle:</strong></p>
 <ul>
-  <li><strong>aick (Selenium+Edge):</strong> 10 cycles on XZ8-RCA alternating Britney / Masood, all completed, 23–25s each, 0 retries</li>
-  <li><strong>ck (Playwright+Chromium):</strong> 10 cycles on XGC-T07 assigning Gina, all completed, ~17s each, 0 retries</li>
-  <li>Both stacks proven independently. Failover path <strong>wired 2026-05-25</strong> (Render <code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code>, ck gateway at-logon scheduled). Not yet exercised under real failure (would require breaking aick's stack mid-flight to test — recommend doing this in a staging environment before relying on it in prod).</li>
+  <li><strong>2026-05-24 — aick (Selenium+Edge):</strong> 10 cycles on XZ8-RCA alternating Britney / Masood, all completed, 23–25s each, 0 retries. (Stack now dormant — kept for historical record.)</li>
+  <li><strong>2026-05-24 — ck (Playwright+Chromium):</strong> 10 cycles on XGC-T07 assigning Gina, all completed, ~17s each, 0 retries.</li>
+  <li><strong>2026-05-25/26 — pwck Phase 1 acceptance:</strong> 100/100 cycles passed, then re-run, 100/100 passed again. test_hello_world job (httpbin.org), $5/day + $0.50/job spend gate proven.</li>
+  <li><strong>2026-05-27 — Phase 2 swing (Sam #1155):</strong> Render <code>CENA_GATEWAY_URL</code> swapped from <code>http://100.108.119.19:8765</code> (aick) to <code>http://100.73.38.82:9000</code> (pwck); <code>CENA2_GATEWAY_URL</code> kept at <code>http://100.73.38.82:8766</code> (ck failover). pwck endpoint <code>/jobs/driver-assign</code> verified live via direct curl pre-swap; first real production assignment to pwck pending on the next manager dropdown change.</li>
 </ul>
 
 <hr>

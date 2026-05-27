@@ -381,12 +381,12 @@
       <article class="ckauto-card">
         <div class="head">
           <span class="name">cena_gateway.py</span>
-          <span class="role">AiCk</span>
+          <span class="role">AiCk · port 8765</span>
           <span class="status-chip live">Running</span>
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>The Cena runtime. Hosts <code>/cena/stream</code>, <code>/cena/wake-on-hub</code>, <code>/cena/wake-on-chat</code>, <code>/cena/active-model</code>, and the full 21-tool catalogue. Every Cena turn (any surface) runs here.</dd>
+          <dd>The Cena runtime. Hosts <code>/cena/stream</code>, <code>/cena/wake-on-hub</code>, <code>/cena/wake-on-chat</code>, <code>/cena/active-model</code>, and the full 21-tool catalogue. Every Cena turn (any surface) runs here. <b>Note:</b> the <code>/jobs/driver-assign</code> path on this service was the ezCater dispatch target before 2026-05-27; it is preserved (Selenium + Edge, <code>app/services/ezcater_driver_assigner.py</code>) but Render no longer points <code>CENA_GATEWAY_URL</code> at it — pwck:9000 is the live target now (Sam #1155). Re-enable by re-pointing the env var.</dd>
           <dt>What runs it</dt>
           <dd>Windows scheduled task <code>CenaGateway</code> on AiCk. Port 8765 (Tailscale <code>100.108.119.19:8765</code> + Cloudflare-tunneled externally).</dd>
           <dt>Triggered by</dt>
@@ -428,19 +428,37 @@
 
       <article class="ckauto-card">
         <div class="head">
-          <span class="name">ck_gateway.py</span>
-          <span class="role">Mini_IT13</span>
-          <span class="status-chip live">Running</span>
+          <span class="name">pwck server.py</span>
+          <span class="role">Mini_IT13 · port 9000</span>
+          <span class="status-chip live">Running · Primary</span>
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd><b>Tier-3 backup gateway.</b> Mirrors aick's <code>cena_gateway.py</code> contract on port 8766 so manager-triggered jobs can failover from aick → ck without the frontend knowing the difference. Currently wired for <code>/jobs/driver-assign</code>; same template extends to any future ezCater UI automation.</dd>
+          <dd><b>Tier-3 primary gateway (2026-05-27, Sam #1155).</b> Dedicated Playwright specialist service — FastAPI app exposing <code>/jobs/driver-assign</code> (mirrors aick's legacy contract drop-in). Wraps <code>ck_assigner.run_one_assignment</code> so the working code stays single-sourced. Adds SQLite selector vault + failure-pattern library + $5/day + $0.50/job spend gate over plain ck.</dd>
+          <dt>What runs it</dt>
+          <dd>FastAPI / uvicorn at <code>C:\Users\sam\pwck\pwck\server.py</code>, launched at logon by <code>run_pwck.bat</code>. Bound to Tailscale + LAN. Phase 1 acceptance: 100/100 × 2.</dd>
+          <dt>Triggered by</dt>
+          <dd>Render <code>CENA_GATEWAY_URL=http://100.73.38.82:9000</code> — every manager driver-reassign dropdown change.</dd>
+          <dt>Auth</dt>
+          <dd><code>X-Cena-Token</code> shared secret in <code>C:\Users\sam\ck-ezcater\cena_token.txt</code> (shared with ck failover, ACL-locked).</dd>
+        </dl>
+      </article>
+
+      <article class="ckauto-card">
+        <div class="head">
+          <span class="name">ck_gateway.py</span>
+          <span class="role">Mini_IT13 · port 8766</span>
+          <span class="status-chip live">Running · Failover</span>
+        </div>
+        <dl>
+          <dt>What it's for</dt>
+          <dd><b>Tier-3 failover gateway.</b> Same <code>/jobs/driver-assign</code> contract as pwck, runs in a separate Flask process so a pwck crash doesn't take both down. Same ck_assigner code path — only the supervisor differs.</dd>
           <dt>What runs it</dt>
           <dd>Flask service <code>C:\Users\sam\ck-ezcater\ck_gateway.py</code>, launched at logon by <code>run_ck_gateway.bat</code> in the Startup folder. Bound to Tailscale + LAN.</dd>
           <dt>Triggered by</dt>
-          <dd>Render's <code>CENA2_GATEWAY_URL</code> failover path — aick forwards the job to ck after two fresh-context retries fail. ck runs an independent Playwright + Chromium flow.</dd>
+          <dd>Render's <code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code> failover path — pwck forwards the job to ck after two fresh-context retries fail.</dd>
           <dt>Auth</dt>
-          <dd><code>X-Cena-Token</code> shared secret in <code>C:\Users\sam\ck-ezcater\cena_token.txt</code> (mirrored from aick, ACL-locked).</dd>
+          <dd><code>X-Cena-Token</code> shared secret in <code>C:\Users\sam\ck-ezcater\cena_token.txt</code> (same file pwck reads).</dd>
         </dl>
       </article>
 
@@ -696,21 +714,23 @@
         <div class="head">
           <span class="name">ezCater driver re-assignment</span>
           <span class="role">UI dropdown</span>
-          <span class="status-chip live">Live · 10/10 verified</span>
+          <span class="status-chip live">Live · pwck primary (2026-05-27)</span>
         </div>
         <dl>
           <dt>What it's for</dt>
           <dd>Manager picks a new driver from the per-order dropdown on the catering Ez Orders page. System unhooks ezCater's default driver and assigns the chosen one, then verifies the change via fresh page reload.</dd>
           <dt>Trigger</dt>
-          <dd><code>POST /&lt;store&gt;/catering/assign_driver</code> from the dropdown change → Render writes <code>DriverAssignmentJob</code> row (migration 39) → HTTP-pings the gateway via Tailscale SOCKS5 proxy.</dd>
+          <dd><code>POST /&lt;store&gt;/catering/assign_driver</code> from the dropdown change → Render writes <code>DriverAssignmentJob</code> row (migration 39) → HTTP-pings <code>CENA_GATEWAY_URL</code> via Tailscale SOCKS5 proxy.</dd>
           <dt>Execution (primary)</dt>
-          <dd><b>aick / Mini_IT12 · Selenium + Edge.</b> Cycle ~23–25s. Code: <code>app/services/ezcater_driver_assigner.py</code> + <code>/jobs/driver-assign</code> on <code>cena_gateway.py</code>.</dd>
-          <dt>Execution (backup)</dt>
-          <dd><b>ck / Mini_IT13 · Playwright + Chromium.</b> Cycle ~17s. Code: <code>C:/Users/sam/ck-ezcater/ck_assigner.py</code>; gateway at <code>ck_gateway.py</code> port 8766. Verifies via Apollo cache parse instead of DOM scrape. <b>Failover wired:</b> Render env <code>CENA2_GATEWAY_URL</code> set; after aick's primary fails twice with fresh contexts, aick forwards the job to ck and ck runs the same flow on its independent stack.</dd>
+          <dd><b>pwck / Mini_IT13:9000 · Playwright + Chromium.</b> Cycle ~17s. Code: <code>C:/Users/sam/pwck/pwck/server.py</code> wrapping <code>ck_assigner.run_one_assignment</code> (single-sourced). FastAPI service with SQLite selector-vault + failure-pattern library + $5/day + $0.50/job spend gate. Sam #1148/#1151/#1155.</dd>
+          <dt>Execution (failover)</dt>
+          <dd><b>ck / Mini_IT13:8766 · Playwright + Chromium.</b> Same code path, runs in a separate Flask process. <code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code>. After pwck fails twice with fresh contexts, Render swings the job to ck. Cycle ~17s.</dd>
+          <dt>Execution (dormant)</dt>
+          <dd><b>aick / Mini_IT12 · Selenium + Edge.</b> Removed from the live chain 2026-05-27 (Sam #1155). Code at <code>app/services/ezcater_driver_assigner.py</code> + <code>cena_gateway.py</code> preserved untouched for emergency revert — re-enable by re-pointing <code>CENA_GATEWAY_URL</code> back to <code>http://100.108.119.19:8765</code>.</dd>
           <dt>Auth</dt>
-          <dd>ezCater session cookies (~139 cookies) in <code>~/.openclaw/.secrets/ezcater_session.json</code> on both machines. <code>X-Cena-Token</code> shared secret on every HTTP hop between Render, aick, and ck.</dd>
+          <dd>ezCater session cookies (~139 cookies) in <code>~/.openclaw/.secrets/ezcater_session.json</code> on Mini_IT13 (shared by pwck + ck). <code>X-Cena-Token</code> shared secret on every HTTP hop, sourced from <code>C:/Users/sam/ck-ezcater/cena_token.txt</code>.</dd>
           <dt>Observability</dt>
-          <dd>Dev chat auto-posts on start / success / failure. Per-job rows in <code>driver_assignment_jobs</code> table for SQL audit. Full doc in the Tools tab of /sam/docs.</dd>
+          <dd>Dev chat auto-posts on start / success / failure. Per-job rows in <code>driver_assignment_jobs</code> table (<code>gateway_processed</code> is now <code>pwck</code> or <code>ck</code>; legacy <code>aick</code> rows pre-2026-05-27). Full doc in the Tools tab of /sam/docs.</dd>
         </dl>
       </article>
 

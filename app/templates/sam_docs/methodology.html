@@ -19,7 +19,8 @@
 
 <ol>
   <li><strong>Gate 1 — Local pytest</strong>: the full suite passes on the working tree. Catches schema mismatches, fixture drift, and obvious regressions before the change ever leaves the dev machine. Run from the repo's <code>.venv</code>: <code>.\.venv\Scripts\python.exe -m pytest -q</code> (or platform equivalent).</li>
-  <li><strong>Gate 2 — CI</strong>: the GitHub Actions <code>tests.yml</code> workflow lands <code>completed / success</code> for the SHA. CI's environment differs from local in subtle ways (no <code>.env</code>, hermetic fixtures); a green CI proves the change still passes in a clean room.</li>
+  <li><strong>Gate 2 — CI</strong>: the GitHub Actions <code>tests.yml</code> workflow lands <code>completed / success</code> for the SHA. CI's environment differs from local in subtle ways (no <code>.env</code>, hermetic fixtures); a green CI proves the change still passes in a clean room.
+    <br><strong class="meta" style="color:#FFB099">KNOWN-RED as of 2026-05-28:</strong> <code>tests.yml</code> is currently failing on <em>every</em> push to <code>main</code> (verified via the Actions API — the last several SHAs incl. <code>c03ece2</code>, <code>b9fb2ee</code>, <code>49d1f1e</code> all report <code>conclusion=failure</code>). Gate 2 is therefore a known-red gate; recent deploys have shipped on Gate 1 (local pytest) + Gate 3 (build-specific probe) only. Treat "Gate 2 green" as unattainable until the CI failure is root-caused and fixed — do not claim Gate 2 passed when it structurally cannot.</li>
   <li><strong>Gate 3 — Build-specific deploy probe</strong>: a probe that confirms the COMMIT is live — not just "the service is up". Per rule 2, the probe must check something BUILD-SPECIFIC: a new route, a new asset, a new string in a known route's body. A partner-gate 302 redirect proves the service is up, NOT which commit it is serving.</li>
 </ol>
 

@@ -80,9 +80,10 @@
   /* Tier ladder stepper (Phase 0 Block 4, 2026-05-13) — visualizes the
      4 tier stages with connecting lines, current tier highlighted. */
   .mp-ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
-               position: relative; margin: 18px 0 4px; }
+               position: relative; margin: 18px 0 4px;
+               background: #241610; border-radius: 10px; padding: 14px 0 12px; }
   .mp-ladder::before {
-    content: ''; position: absolute; top: 18px; left: 12.5%; right: 12.5%;
+    content: ''; position: absolute; top: 32px; left: 12.5%; right: 12.5%;
     height: 2px; background: rgba(255,255,255,0.10); z-index: 0;
   }
   .mp-step { display: flex; flex-direction: column; align-items: center;

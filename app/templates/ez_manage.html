@@ -35,9 +35,9 @@
                       letter-spacing: 0.1em; text-align: right; }
 
   .ezm-driver-row { display: flex; gap: 12px; align-items: center; padding: 10px;
-                    border-top: 0.5px solid rgba(255,255,255,0.06); }
+                    border-top: 0.5px solid rgba(255,255,255,0.06); position: relative; }
   .ezm-driver-row.recommended { background: rgba(228,179,64,0.08); border-radius: 8px;
-                                border-color: rgba(228,179,64,0.3); }
+                                border-color: rgba(228,179,64,0.3); padding-top: 28px; }
   .ezm-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(199,59,54,0.65);
                 color: #FFFAEC; display: flex; align-items: center; justify-content: center;
                 font-weight: 500; font-size: 13px; flex-shrink: 0; }
@@ -207,7 +207,7 @@
       {% for row in g.rows %}
       <div class="ezm-driver-row {% if row.get('recommended') %}recommended{% endif %}">
         {% if row.get('recommended') %}
-          <div style="position:absolute;margin-top:-32px;"><span class="ezm-recommended-tag">★ Recommended</span></div>
+          <div style="position:absolute;top:8px;left:12px;"><span class="ezm-recommended-tag">★ Recommended</span></div>
         {% endif %}
         {% set d = row.driver %}
         <div class="ezm-avatar">{{ (d.name or '?')[0:2].upper() }}</div>

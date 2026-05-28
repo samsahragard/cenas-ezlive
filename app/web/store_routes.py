@@ -686,7 +686,7 @@ def drivers_admin():
     Partner is additionally gated by the partner-auth before_request hook above.
     """
     from app.models import EzcaterKnownDriver
-    from app.services.ezcater_known_drivers_seed import normalize_phone
+    from app.services.ezcater_known_drivers_seed import normalize_phone, names_match
     # Tab filter — defaults to active. Intentional default-state change; see spec §3.
     status = request.args.get("status", "active")
     if status not in ("active", "inactive"):
@@ -724,27 +724,38 @@ def drivers_admin():
         # the green Active badge should reflect whether the driver's signup
         # phone matches an entry in our seeded ezCater roster, not the
         # manual on/off toggle alone. The toggle still exists as an override.
-        known_by_phone = {kd.phone_e164: kd for kd in
-                          db.query(EzcaterKnownDriver).all()}
+        known_all = db.query(EzcaterKnownDriver).all()
+        known_by_phone = {kd.phone_e164: kd for kd in known_all}
+
+        def _match_known(d):
+            # Phone match is authoritative (Sam 2026-05-10). Fall back to
+            # a fuzzy NAME match against the roster (Sam #1431) so a real
+            # ezCater driver still earns the badge when their signup phone
+            # is blank or differs from the number we have on the roster.
+            if d.phone:
+                kd = known_by_phone.get(normalize_phone(d.phone))
+                if kd:
+                    return kd
+            for kd in known_all:
+                if names_match(kd.name, d.name):
+                    return kd
+            return None
+
         verified_for = {}
         ezcater_name_for = {}
         for d in rows:
-            if d.phone:
-                norm = normalize_phone(d.phone)
-                kd = known_by_phone.get(norm)
-                verified_for[d.id] = kd is not None
-                # Per Sam #837 item 6c — show "CK #X · Kitchen" on the
-                # combined drivers page so managers see ezCater identity
-                # alongside the internal driver record.
-                if kd:
-                    if kd.ck_prefix == 1:
-                        ezcater_name_for[d.id] = "CK #1 · Copperfield"
-                    elif kd.ck_prefix == 2:
-                        ezcater_name_for[d.id] = "CK #2 · Tomball"
-                    else:
-                        ezcater_name_for[d.id] = kd.name
-            else:
-                verified_for[d.id] = False
+            kd = _match_known(d)
+            verified_for[d.id] = kd is not None
+            # Per Sam #837 item 6c — show "CK #X · Kitchen" on the
+            # combined drivers page so managers see ezCater identity
+            # alongside the internal driver record.
+            if kd:
+                if kd.ck_prefix == 1:
+                    ezcater_name_for[d.id] = "CK #1 · Copperfield"
+                elif kd.ck_prefix == 2:
+                    ezcater_name_for[d.id] = "CK #2 · Tomball"
+                else:
+                    ezcater_name_for[d.id] = kd.name
 
         return render_template(
             "driver_admin.html",

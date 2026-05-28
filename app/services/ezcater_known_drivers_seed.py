@@ -13,6 +13,9 @@ later via a future admin page.
 """
 from __future__ import annotations
 
+import re
+import unicodedata
+
 
 def _norm(raw_phone: str) -> str:
     """Phone in (XXX) XXX-XXXX → 'XXXXXXXXXX'. Used both at seed time and
@@ -82,3 +85,53 @@ def normalize_phone(raw: str) -> str:
     """Public helper used by login + admin matching to compare against
     seeded phone_e164 values. Matches the same normalization used at seed."""
     return _norm(raw)
+
+
+def fold_name(name: str) -> str:
+    """Normalize a driver name for fuzzy matching: strip accents
+    (Rodríguez -> rodriguez), drop punctuation, collapse whitespace,
+    lowercase. Used to compare ezCater-roster spellings against the
+    free-typed names in the local Driver table."""
+    s = unicodedata.normalize("NFKD", name or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+
+def _within_one_edit(a: str, b: str) -> bool:
+    """True if a and b differ by at most one single-character edit
+    (substitution, insertion, or deletion). Levenshtein <= 1."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if la == lb:
+        return sum(1 for x, y in zip(a, b) if x != y) == 1
+    if abs(la - lb) != 1:
+        return False
+    if la > lb:
+        a, b, la, lb = b, a, lb, la  # a is now the shorter one
+    i = j = 0
+    skipped = False
+    while i < la and j < lb:
+        if a[i] == b[j]:
+            i += 1
+            j += 1
+        else:
+            if skipped:
+                return False
+            skipped = True
+            j += 1  # consume the extra char in the longer string
+    return True
+
+
+def names_match(a: str, b: str) -> bool:
+    """True if two driver names are the same person modulo accents,
+    case, spacing/punctuation, and a single-character typo. Catches the
+    Buritica/Buritiga, Arvizy/Arvizu, Rodriguez/Rodríguez variants Sam
+    flagged (#1431). Conservative — only collapses a 1-edit difference,
+    not arbitrary fuzziness."""
+    fa, fb = fold_name(a), fold_name(b)
+    if not fa or not fb:
+        return False
+    return _within_one_edit(fa, fb)

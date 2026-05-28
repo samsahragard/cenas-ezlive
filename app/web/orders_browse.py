@@ -122,22 +122,27 @@ def _active_drivers_by_prefix(db) -> dict[int, list[str]]:
       2. Driver (the local drivers table) — entries added via the
          /<store>/drivers admin page. Active rows only. location maps:
          copperfield -> ck_prefix 1, tomball -> ck_prefix 2.
-    Names deduped per-prefix (case-insensitive) so an ezCater entry +
-    a local entry of the same driver don't double up. Sorted A-Z."""
+    Names deduped per-prefix with fuzzy matching (Sam #1431) so an
+    ezCater roster entry and a typo'd local entry of the same driver
+    collapse to ONE option — accent/case/spacing AND a single-character
+    typo are treated as the same person (Buritica/Buritiga,
+    Arvizy/Arvizu, Rodriguez/Rodríguez). The roster is processed first
+    so its canonical ezCater spelling is the one kept (that's the
+    spelling the assign-driver modal expects). Sorted A-Z."""
     from app.models import EzcaterKnownDriver, Driver
-    out: dict[int, set[str]] = {1: set(), 2: set()}
-    seen_lower: dict[int, set[str]] = {1: set(), 2: set()}
+    from app.services.ezcater_known_drivers_seed import names_match
+    out: dict[int, list[str]] = {1: [], 2: []}
 
     def _add(prefix: int, name: str) -> None:
         n = (name or "").strip()
         if not n:
             return
-        key = n.lower()
-        if key in seen_lower[prefix]:
-            return
-        seen_lower[prefix].add(key)
-        out[prefix].add(n)
+        for existing in out[prefix]:
+            if names_match(existing, n):
+                return  # same person already shown — keep the first (roster) spelling
+        out[prefix].append(n)
 
+    # Roster first → canonical ezCater spelling wins on a fuzzy collision.
     for kd in (db.query(EzcaterKnownDriver)
                  .filter(EzcaterKnownDriver.ck_prefix.in_((1, 2)))
                  .all()):

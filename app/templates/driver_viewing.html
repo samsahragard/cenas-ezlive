@@ -18,7 +18,7 @@
 
 {# ============== SHIFT TOGGLE + GPS STREAMING ============== #}
 <div id="shift-card" data-on-shift="{{ '1' if on_shift else '0' }}"
-     style="background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.10);border-radius:14px;
+     style="background:#241610;border:1px solid rgba(217,164,54,0.18);border-radius:14px;
             padding:16px 18px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
   <div style="flex:1;min-width:200px;">
     <div id="shift-state" style="font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
@@ -32,14 +32,19 @@
   <button id="shift-toggle" type="button"
           style="padding:10px 22px;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;
                  border:none;border-radius:10px;cursor:pointer;color:#fff;
-                 background:{{ '#c0392b' if on_shift else 'rgba(232,122,62,0.85)' }};">
+                 background:{{ '#c0392b' if on_shift else '#E87A3E' }};">
     {% if on_shift %}End shift{% else %}Start shift{% endif %}
   </button>
 </div>
 <div id="gps-status" style="font-size:12px;color:rgba(255,255,255,0.45);margin:-10px 0 18px 4px;"></div>
 
 {# ============== LOG TABLE ============== #}
-<div class="table-scroll">
+{# Solid fill (Sam #1432): the shared .table-scroll uses var(--glass) +
+   backdrop-blur, which let the restaurant-photo backdrop bleed through.
+   Pin it to the ribbon colour so the driver log table reads as a solid
+   panel. Scoped inline so only this page changes, not the 20+ other
+   tables that share .table-scroll. #}
+<div class="table-scroll" style="background:#241610;-webkit-backdrop-filter:none;backdrop-filter:none;">
   <table class="log-table log-table-view">
     <thead>
       <tr class="group-header">
@@ -132,7 +137,7 @@
       stateEl.textContent = 'Off shift';
       stateEl.style.color = 'rgba(255,255,255,0.55)';
       btn.textContent = 'Start shift';
-      btn.style.background = 'rgba(232,122,62,0.85)';
+      btn.style.background = '#E87A3E';
     }
     if (msg !== undefined) metaEl.textContent = msg;
   }

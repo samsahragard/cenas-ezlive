@@ -84,7 +84,7 @@ def driver_login():
     string is preserved (esp. ?_clear=1 from /driver/logout, which the
     driver_keypad_login.html JS reads to wipe the persisted phone)."""
     if session.get("driver_id"):
-        return redirect(url_for("driver.driver_logs"))
+        return redirect(url_for("driver_system.my_profile"))
     qs = request.query_string.decode("ascii") if request.query_string else ""
     target = url_for("keypad_auth.login")
     if qs:
@@ -99,7 +99,7 @@ def driver_login_legacy():
     /keypad-login is the canonical entry going forward. Not linked from
     any nav surface."""
     if session.get("driver_id"):
-        return redirect(url_for("driver.driver_logs"))
+        return redirect(url_for("driver_system.my_profile"))
     return render_template(
         "driver_keypad_login.html",
         next_url=request.args.get("next") or url_for("driver.driver_logs"),
@@ -282,7 +282,7 @@ def driver_signup_submit():
         session["driver_location"] = new_driver.location
         session["driver_session_version"] = new_driver.session_version
         session.permanent = True
-        return redirect(url_for("driver.driver_logs"))
+        return redirect(url_for("driver_system.my_profile"))
     finally:
         db.close()
 
@@ -347,7 +347,7 @@ def driver_change_passcode_submit():
         found.password_hash = None
         db.commit()
         session["driver_session_version"] = found.session_version
-        return redirect(url_for("driver.driver_logs"))
+        return redirect(url_for("driver_system.my_profile"))
     finally:
         db.close()
 

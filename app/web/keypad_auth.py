@@ -131,11 +131,11 @@ def login():
         if not nxt.startswith("/"):
             nxt = "/"
         return redirect(nxt)
-    # Driver session takes a driver to their portal, NOT this login page.
+    # Driver session takes a driver to their profile, NOT this login page.
     # Prevents the post-driver-logout symptom where the partner-keypad
     # rendered over an active driver session.
     if session.get("driver_id"):
-        return redirect("/driver/logs")
+        return redirect("/my-profile")
     return _no_store(render_template(
         "driver_keypad_login.html",
         next_url=request.args.get("next") or "/",
@@ -245,7 +245,7 @@ def login_submit():
                         "next": url_for("driver.driver_change_passcode"),
                     })
                 if nxt == "/":
-                    nxt = "/driver/logs"
+                    nxt = "/my-profile"
                 return jsonify({"ok": True, "next": nxt})
 
         # ===== Path 2: User lookup by phone (managers/partners with phone set) =====

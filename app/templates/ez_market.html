@@ -12,7 +12,7 @@
 <style>
   .em-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
   .em-stat {
-    background: rgba(40,22,14,0.55);
+    background: #241610;
     border: 0.5px solid rgba(217,164,54,0.18);
     border-radius: 12px;
     padding: 14px 16px;
@@ -22,7 +22,7 @@
   .em-stat-sub { font-size: 11px; color: rgba(236,227,208,0.5); margin-top: 2px; }
 
   .em-disclaimer {
-    background: rgba(40,22,14,0.30); border-left: 2px solid rgba(228,179,64,0.55);
+    background: #241610; border-left: 2px solid rgba(228,179,64,0.55);
     padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
     border-radius: 0 8px 8px 0; margin-bottom: 16px;
     display: flex; justify-content: space-between; align-items: center; gap: 12px;
@@ -37,7 +37,7 @@
     padding: 10px 16px; color: rgba(236,227,208,0.72); cursor: pointer;
     font-size: 13px; font-weight: 600; border-radius: 8px 8px 0 0; position: relative; top: 1px;
   }
-  .em-tab.active { color: #FFD970; background: rgba(0,0,0,0.55); border-bottom-color: #FFD970;
+  .em-tab.active { color: #FFD970; background: #241610; border-bottom-color: #FFD970;
     text-shadow: 0 0 10px rgba(255,200,80,0.45); }
   .em-tab .em-tab-count { font-size: 11px; opacity: 0.85; margin-left: 4px; color: #E4B340; }
 
@@ -71,7 +71,7 @@
 
   .em-cards { display: flex; flex-direction: column; gap: 12px; }
   .em-card {
-    background: rgba(40,22,14,0.55); border: 0.5px solid rgba(217,164,54,0.18);
+    background: #241610; border: 0.5px solid rgba(217,164,54,0.18);
     border-radius: 12px; padding: 14px 16px;
   }
   .em-card.urgent { border-color: rgba(226,100,92,0.5); }
@@ -123,7 +123,7 @@
   {% if flashes %}
   <div class="em-flash-stack" style="margin-bottom:14px;">
     {% for cat, msg in flashes %}
-    <div class="em-flash em-flash-{{ cat }}" style="background: rgba(40,22,14,0.55); border:0.5px solid {% if cat == 'error' %}rgba(220,80,80,0.5){% else %}rgba(217,164,54,0.45){% endif %}; border-left:3px solid {% if cat == 'error' %}#dc5050{% else %}#E4B340{% endif %}; border-radius:8px; padding:10px 12px; margin-bottom:8px; color:rgba(236,227,208,0.92); font-size:13px;">{{ msg }}</div>
+    <div class="em-flash em-flash-{{ cat }}" style="background: #241610; border:0.5px solid {% if cat == 'error' %}rgba(220,80,80,0.5){% else %}rgba(217,164,54,0.45){% endif %}; border-left:3px solid {% if cat == 'error' %}#dc5050{% else %}#E4B340{% endif %}; border-radius:8px; padding:10px 12px; margin-bottom:8px; color:rgba(236,227,208,0.92); font-size:13px;">{{ msg }}</div>
     {% endfor %}
   </div>
   {% endif %}
@@ -134,7 +134,7 @@
 {% if unread_notifications %}
 <div class="em-notif-stack" style="margin-bottom:14px;">
   {% for n in unread_notifications %}
-  <div class="em-notif" style="background: rgba(40,22,14,0.55); border:0.5px solid rgba(217,164,54,0.35); border-left:3px solid #E4B340; border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+  <div class="em-notif" style="background: #241610; border:0.5px solid rgba(217,164,54,0.35); border-left:3px solid #E4B340; border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
     <span style="color:rgba(236,227,208,0.92); font-size:13px;">{{ n.message }}</span>
     <form method="POST" action="{{ url_for('driver_system.ez_market_dismiss_notification', notif_id=n.id) }}" style="margin:0;">
       <button type="submit" style="background:transparent; border:0.5px solid rgba(217,164,54,0.45); color:#E4B340; padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Dismiss</button>

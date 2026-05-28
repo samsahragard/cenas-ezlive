@@ -329,6 +329,16 @@
     @media (max-width: 900px) {
       .ck-topbar { flex-direction: column; align-items: stretch; }
       .ck-topbar .topbar-right { width: 100%; }
+      /* Driver badge stays pinned top-right (see the :has() placement rule
+         below); tighten its inset and the header clearance for the smaller
+         phone-width badge so the title keeps as much room as possible. */
+      .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .topbar-right {
+        top: 12px;
+        right: 12px;
+      }
+      .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .ck-header {
+        padding-right: 120px;
+      }
     }
   </style>
   <style>
@@ -369,6 +379,15 @@
       box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
       flex-shrink: 0;
     }
+    /* Driver badge enlarged (Sam #1432) — drivers get a bigger top-right
+       ribbon badge than other roles. Scoped by src so only driver.jpg
+       grows; partner/other badges keep the shared 48px sizing. The 2:1
+       source means 70px height -> ~140px natural width, still well under
+       the cap, so height is the binding dimension. */
+    .dash-role-banner[src*="banners/driver"] {
+      height: 70px;
+      max-width: 360px;
+    }
     /* page-dashboard zeroes main.main's horizontal padding (dashboard.css),
        so on those pages nudge the badge off the hard right edge to match
        the topbar card's inset. */
@@ -379,6 +398,10 @@
       .dash-role-banner {
         height: 38px;
         max-width: 44vw;
+      }
+      .dash-role-banner[src*="banners/driver"] {
+        height: 52px;
+        max-width: 60vw;
       }
       .dash-role-badge-bar {
         margin-bottom: 12px;
@@ -398,6 +421,24 @@
        top so it reads as a top-right header badge, not a centered one. */
     .ck-topbar .topbar-right .dash-role-banner {
       align-self: flex-start;
+    }
+    /* Driver badge placement (Sam #1432) — pin the driver's topbar-right
+       (role badge + any sign-out control) to the ribbon's top-right corner
+       at ALL widths, mirroring the partner dashboard's absolutely-positioned
+       ribbon badge. Without this, the mobile `flex-direction: column` rule
+       (max-width:900px) drops .topbar-right below the title, left-aligned —
+       the "wrong area" Sam flagged. .ck-topbar is position:relative so this
+       anchors to it; the header reserves right padding so the title/brand
+       mark clear the badge instead of running under it. */
+    .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .topbar-right {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      width: auto;
+      z-index: 2;
+    }
+    .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .ck-header {
+      padding-right: 162px;
     }
   </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>

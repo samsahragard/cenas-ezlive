@@ -174,6 +174,16 @@
   }
   .tdydash .tdyd-brand-text .tdyd-module { color: var(--tdyd-accent); }
 
+  /* Title row — the hamburger menu box sits left of the title; the title
+     shifts right to make room. .menu-toggle (dashboard.css) is display:none
+     on desktop (the sidebar is a static column there) and display:flex on
+     mobile, so the box only appears on phones - exactly where Today was
+     missing it. Per Sam 2026-05-28. */
+  .tdydash .tdyd-titlerow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
   .tdydash .tdyd-title {
     font-family: 'Manrope', sans-serif;
     font-weight: 800;
@@ -182,7 +192,6 @@
     color: var(--tdyd-cream);
     letter-spacing: -0.02em;
     margin-bottom: 10px;
-    margin-right: 150px;
   }
   .tdydash .tdyd-rule {
     height: 1px;
@@ -331,7 +340,7 @@
     .tdydash .ribbon-role-badge { top: 16px; right: 14px; }
     .tdydash .tdyd-brand { margin-bottom: 8px; }
     .tdydash .tdyd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .tdydash .tdyd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
+    .tdydash .tdyd-title { font-size: 30px; margin-bottom: 6px; }
     .tdydash .tdyd-rule { width: 40px; margin-bottom: 8px; }
     .tdydash .tdyd-meta { font-size: 10px; gap: 6px; }
     .tdydash .tdyd-tabs { padding: 0 8px; }
@@ -371,8 +380,6 @@
 
 <div class="tdydash" id="tdydash">
 
-  <div class="tdyd-section-label">Today Dashboard</div>
-
   {# PAGE CARD — ribbon header plus tab strip. #}
   <div class="tdyd-card">
 
@@ -380,12 +387,12 @@
        suppressed). The role badge sits above this, rendered by
        base_dashboard.html outside the topbar block. #}
     <div class="tdyd-ribbon">
-      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
-      <div class="tdyd-brand">
-        <span class="tdyd-brand-dot"></span>
-        <span class="tdyd-brand-text">CENAS <span class="tdyd-div">&middot;</span> OPS <span class="tdyd-div">&middot;</span> <span class="tdyd-module">TODAY</span></span>
+      <div class="tdyd-titlerow">
+        <button class="menu-toggle tdyd-menu" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation">
+          <span class="menu-toggle-bars"><span></span><span></span><span></span></span>
+        </button>
+        <h1 class="tdyd-title">Today</h1>
       </div>
-      <h1 class="tdyd-title">Today</h1>
       <div class="tdyd-rule"></div>
       <div class="tdyd-meta">
         <span>{{ today_label }}</span>

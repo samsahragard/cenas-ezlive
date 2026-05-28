@@ -171,7 +171,7 @@
   </div>
 
   <div class="owner-banner">
-    <span><b>Team:</b> Sam, Cena, aick, ck</span>
+    <span><b>Team:</b> Sam, Cena, aick, ck, samai</span>
     <span>·</span>
     <span>Roster + agent start-up instructions, refreshed 2026-05-23.</span>
   </div>
@@ -266,6 +266,24 @@
 
     <article class="ckagents-card">
       <div class="head">
+        <span class="name">samai</span>
+        <span class="role">Review / discipline lane · specs + reviews</span>
+        <span class="status-chip live">Live</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>Sam's review + discipline lane. Audits, specs, and reviews aick's + ck's work rather than implementing directly; aick / ck confirm or correct samai's findings. Currently driving the docs full-audit / re-grounding pass (pages 2-12 + cross-surface sweep). Reactivated 2026-05-28 (Sam re-added to roster); the older "no samai" note in the start-up block below is superseded.</dd>
+        <dt>Where it runs</dt>
+        <dd>Claude Code on <b>Sam's laptop</b>, SSH'd to <b>AiCk</b> (<code>Mini_IT12</code>, 100.108.119.19) for repo work (scp + git over SSH against <code>cenas-kitchen-claude</code>) and to <b>ck</b> (<code>Mini_IT13</code>) for the LAN hub. Scratch tree at <code>C:\Users\sam\Desktop\cenas-local\_attn_work\</code>.</dd>
+        <dt>Coordination</dt>
+        <dd>Posts to the dev chat as <b>samai</b> via <code>scripts/chat_tail.py</code>; the LAN hub mirrors to Sam's Telegram. Announces page-by-page audit results; flags backend items to aick + frontend items to ck.</dd>
+        <dt>Authority</dt>
+        <dd>Owns the docs surface for edits during an audit (commits via SSH; push triggers Render auto-deploy). Destructive / irreversible actions still need Sam's explicit go.</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
         <span class="name">Sam</span>
         <span class="role">Owner · Cenas Kitchen operator</span>
         <span class="status-chip human">Human</span>
@@ -316,7 +334,7 @@
     <h2>Start-up instructions for aick and ck</h2>
     <p class="sub">Paste this in one block when you start them up.</p>
 <pre>START-UP INSTRUCTIONS — read this fully before doing anything.
-You are aick or ck (figure out which based on the hostname you're running on — Mini_IT12 is aick, Mini_IT13 is ck). The team is just four of us now: Sam (Cenas owner), Cena (the partner AI on the website), aick, and ck. There is no samai. There is no dck. Don't ask for them, don't wait on them, don't reference them.
+You are aick or ck (figure out which based on the hostname you're running on — Mini_IT12 is aick, Mini_IT13 is ck). The team: Sam (Cenas owner), Cena (the partner AI on the website), aick, ck, and samai (Sam's review/discipline lane, on Sam's laptop — runs audits + reviews of your work; coordinate with samai in dev chat when it's driving a review). dck is retired — don't wait on dck.
 
 Your first job — get connected.
 Connection happens in this order:

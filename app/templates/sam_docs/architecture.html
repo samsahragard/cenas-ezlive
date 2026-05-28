@@ -63,8 +63,9 @@
        │     │
        │   pwck (100.73.38.82:9000) — PRIMARY driver-assign
        │   (Playwright UI flow); aick:8765 is fallback.
-       │   (cena2 gateway :8766 exists in config but is NOT
-       │    currently running — Layer 4 active/active unbuilt.)
+       │   ck_gateway (100.73.38.82:8766) — driver-assign FAILOVER,
+       │   UP (netstat-verified 2026-05-28). The cena2 active/active
+       │   Layer-4 peer is a separate, still-unbuilt concept.
        │
        ├── docck (Render /docck/*) — multi-agent reliability
        │   monitor. Heartbeats IN from cena + pwck; self-tick
@@ -115,7 +116,7 @@
 <ul>
   <li><strong>Render web service</strong> — production app + cron runtime. SQLite lives on the Render persistent disk; restarting the service does NOT wipe data.</li>
   <li><strong>AiCk (Mini_IT12, 100.108.119.19)</strong> — internal host. Runs the Cena gateway (port 8765, exposed via Cloudflare Tunnel + reachable on the tailnet), the aick Selenium driver-assign worker (now FALLBACK behind pwck), the watchdog (port 8767, docck-callable), the CenaHeartbeatSender → docck, and the persistent /sam/chat ↔ Cena local chat (port 8770, Tailscale-only). All run as Windows Scheduled Tasks with auto-restart (CenaGateway, CenaChatWatcher, CenaHubRelay, CenaSamChat, CenaTaskPinger, CenaHeartbeatSender, ck-watchdog/CenaWatchdog).</li>
-  <li><strong>Mini_IT13 (ck's box, 100.73.38.82)</strong> — peer internal host. Runs the LAN team chat hub (port 8765, hub.py) + the Telegram bridge (bridge.py + run_bridge.py — see FLAG), <strong>pwck</strong> the PRIMARY driver-assign gateway (port 9000, Playwright), the ck watchdog (port 8767), and the PwckHeartbeatSender → docck. The cena2 gateway (:8766) is configured but NOT currently running (Layer 4 active/active is unbuilt).</li>
+  <li><strong>Mini_IT13 (ck's box, 100.73.38.82)</strong> — peer internal host. Runs the LAN team chat hub (port 8765, hub.py) + the Telegram bridge (bridge.py + run_bridge.py — see FLAG), <strong>pwck</strong> the PRIMARY driver-assign gateway (port 9000, Playwright), <strong>ck_gateway</strong> the driver-assign FAILOVER (port 8766 — UP, netstat-verified 2026-05-28), the ck watchdog (port 8767), and the PwckHeartbeatSender → docck. (A separate "cena2 active/active Layer-4 peer" concept is unbuilt — not to be confused with the :8766 failover, which IS running.)</li>
   <li><strong>Operator phone</strong> — Tailscale member; reads Telegram via @Cenasbot for dev-chat traffic (bridge mirrors hub ↔ Telegram).</li>
 </ul>
 
@@ -160,7 +161,7 @@
   <li><code>http://100.108.119.19:8765/jobs/driver-assign</code> — AiCk gateway, FALLBACK driver-assign (Selenium); identical contract.</li>
   <li><code>http://100.108.119.19:8765/cena/stream</code> + <code>/cena/wake-on-chat</code> + <code>/cena/wake-on-hub</code> — Cena runtime entry points.</li>
   <li><code>http://100.108.119.19:8767/control/*</code> + <code>http://100.73.38.82:8767/control/*</code> — per-machine watchdogs (restart_service / restart_services / reboot_machine), Bearer-gated, called by docck for auto-recovery.</li>
-  <li><code>http://100.73.38.82:8766/jobs/driver-assign</code> — cena2 failover gateway; configured but NOT currently running (Layer 4 unbuilt).</li>
+  <li><code>http://100.73.38.82:8766/jobs/driver-assign</code> — ck_gateway driver-assign FAILOVER; UP (netstat-verified 2026-05-28). pwck:9000 is primary; ck:8766 takes the job after pwck fails twice. (The separate "cena2 active/active Layer-4 peer" is unbuilt.)</li>
   <li><code>http://192.168.1.134:8765/partner/developer/chat/messages.json</code> — LAN team chat hub (Mini_IT13).</li>
 </ul>
 

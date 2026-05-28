@@ -368,7 +368,7 @@
             <td>X-Cena-Token at <span class="path">C:\Users\sam\cena\cena_token.txt</span> (AiCk) + <span class="tag envvar">Render CENA_GATEWAY_TOKEN</span></td></tr>
         <tr><td class="svc">cena2 gateway</td>
             <td><span class="path">http://100.73.38.82:8766</span> on Mini_IT13 (Tailscale-only)</td>
-            <td>Peer cena gateway on ck's box: message queue + worker + cross-gateway sync (Phase 2). Now ALSO the driver-assign failover target: POST /jobs/driver-assign (same contract as aick's gateway) — aick forwards here when its own Selenium fails. Env var: CENA2_GATEWAY_URL on aick gateway + on Render. <strong>NOTE (2026-05-28):</strong> cena2:8766 is currently DOWN; driver-assign primary is now pwck:9000 (see Architecture).</td>
+            <td>Peer cena gateway on ck's box: message queue + worker + cross-gateway sync (Phase 2). Now ALSO the driver-assign failover target: POST /jobs/driver-assign (same contract as aick's gateway) — aick forwards here when its own Selenium fails. Env var: CENA2_GATEWAY_URL on aick gateway + on Render. <strong>NOTE (2026-05-28):</strong> :8766 on Mini_IT13 runs <code>ck_gateway</code> (driver-assign FAILOVER, UP, netstat-verified); pwck:9000 is primary. The cena2 active/active Layer-4 peer is unbuilt (see Architecture).</td>
             <td>cena2 token at <span class="path">C:\Users\sam\cena2\cena2_token.txt</span> (Mini_IT13); shares X-Cena-Token with aick's gateway for failover hops</td></tr>
         <tr><td class="svc">WhatsApp (Cenas Kitchen business)</td>
             <td>Paired session on Mini_IT13: <span class="path">C:\Users\sam\cena2\whatsapp\auth_state\</span> (credential-equivalent)</td>

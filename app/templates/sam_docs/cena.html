@@ -11,7 +11,7 @@
   <thead><tr><th>Component</th><th>Location</th><th>Role</th></tr></thead>
   <tbody>
     <tr><td>Primary gateway</td><td>Internal host (Tailscale-bound); externally reachable via Cloudflare Tunnel.</td><td>The Cena runtime. Hosts the streaming endpoint, the tool catalogue, the audit log, and the wake-on-chat / wake-on-hub triggers.</td></tr>
-    <tr><td>Peer gateway</td><td>Secondary internal host (Tailscale-only).</td><td>Cross-host message queue + worker + sync. Provides resilient delivery if the primary is offline. <strong>NOTE:</strong> the <code>cena2:8766</code> peer is currently DOWN (see Architecture audit) — resilient-delivery failover is degraded until it is restored.</td></tr>
+    <tr><td>Peer gateway</td><td>Secondary internal host (Tailscale-only).</td><td>Cross-host message queue + worker + sync. Provides resilient delivery if the primary is offline. <strong>NOTE (samai 2026-05-28):</strong> the cena2 active/active Layer-4 peer (message-queue resilience) is unbuilt; port :8766 on Mini_IT13 currently runs <code>ck_gateway</code> (driver-assign failover, UP). See Architecture.</td></tr>
     <tr><td>Web entry point</td><td>Render web service.</td><td><code>/sam/chat</code> SSE-streams to the operator browser; calls the gateway for each turn.</td></tr>
     <tr><td>Persistent chat</td><td>Internal host port 8770 (Tailscale-only).</td><td>Sam ↔ Cena local chat that persists through operator disconnects.</td></tr>
   </tbody>

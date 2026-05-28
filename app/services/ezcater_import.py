@@ -8,8 +8,8 @@
    status: Tracked / Partially tracked / Untracked, plus the driver name
    as ezCater logged it, delivery start/complete times, and the
    On-time/Late result. Backs the per-driver payroll page; the
-   tracking_status field gates the $10 / $1.50/mile / $5 bonuses Sam
-   defined in 2026-05-10 spec.
+   tracking_status field gates the $10 / $2.00/mile / $5 bonuses Sam
+   defined in 2026-05-10 spec (mile rate raised $1.50->$2.00 on 2026-05-28).
 
 Both files come from the ezCater portal export UI; both are uploaded by
 Sam (or the manager) bi-weekly after each pay period.

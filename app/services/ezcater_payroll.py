@@ -3,9 +3,10 @@
 Sam's rules (2026-05-10):
     Base:       $25  per delivery (always)
     Bonus:      $10  per delivery (only if tracking_status == 'Tracked')
-    Extra mi:   $1.50 / mile over 20 (only if 'Tracked', one-way, kitchen
+    Extra mi:   $2.00 / mile over 20 (only if 'Tracked', one-way, kitchen
                 -> first drop-off; for multi-stop routes the 1st->2nd leg
-                rarely qualifies because miles reset to 0)
+                rarely qualifies because miles reset to 0). Rate raised
+                from $1.50 to $2.00 per Sam 2026-05-28.
     5-star:     $5   if the delivery got a 5-star review on ezCater AND
                 tracking_status == 'Tracked'. ezCater's API doesn't expose
                 reviews, so this comes from a manual flag for now.
@@ -29,7 +30,7 @@ CHECK_OFFSET_DAYS = 5               # period_end + 5 = check date
 
 BASE_PER_DELIVERY = 25.00
 BONUS_TRACKED = 10.00
-PER_MILE_OVER_20 = 1.50
+PER_MILE_OVER_20 = 2.00
 FIVE_STAR_BONUS = 5.00
 MILES_THRESHOLD = 20.0
 

@@ -1,8 +1,9 @@
 """One-way miles from kitchen (Copperfield / Tomball) to delivery address.
 
 Backs the payroll bonus rule Sam defined 2026-05-10: drivers earn an
-extra $1.50 per mile over 20 from the pickup kitchen to the first drop-off
-(only for tracked deliveries). Uses Google Routes API computeRouteMatrix —
+extra $2.00 per mile over 20 from the pickup kitchen to the first drop-off
+(only for tracked deliveries; rate raised from $1.50 per Sam 2026-05-28).
+Uses Google Routes API computeRouteMatrix —
 same endpoint as scripts/ezcater_distance.py but pulled in-process so we
 can batch-update orders without shelling out.
 """

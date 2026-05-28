@@ -140,10 +140,13 @@ def _project_payout(order: Order) -> float:
     potential_payout if it's already been snapshotted (open_for_bidding)."""
     if order.potential_payout is not None:
         return order.potential_payout
+    from app.services.ezcater_payroll import (
+        BASE_PER_DELIVERY, BONUS_TRACKED, PER_MILE_OVER_20, MILES_THRESHOLD,
+    )
     miles = order.pickup_miles or 0.0
-    extra_miles = max(0.0, miles - 20.0)
-    bonus_miles = round(extra_miles * 1.50, 2)
-    return round(25.00 + 10.00 + bonus_miles, 2)
+    extra_miles = max(0.0, miles - MILES_THRESHOLD)
+    bonus_miles = round(extra_miles * PER_MILE_OVER_20, 2)
+    return round(BASE_PER_DELIVERY + BONUS_TRACKED + bonus_miles, 2)
 
 
 # origin_store_id -> kitchen slug used by ezcater_miles.KITCHEN_ADDRESSES

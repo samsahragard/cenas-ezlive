@@ -18,10 +18,13 @@ WIRE IN:   app/__init__.py — after blueprint registration:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timedelta
 
@@ -33,6 +36,9 @@ from app.models import (
     DocckHeartbeat,
     DocckAlertSent,
     DocckTickLease,
+    DocckRestartSequence,
+    DocckRestartStep,
+    DocckCircuitBreaker,
 )
 
 log = logging.getLogger(__name__)
@@ -41,6 +47,20 @@ TICK_INTERVAL_SECONDS = 30
 LEASE_TTL_SECONDS = 90
 _WORKER_ID = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
 _LEASE_ROW_ID = 1
+
+# ---- v1.1 auto-recovery config ----
+# MASTER SAFETY FLAG. When OFF (default), the state machine runs in DRY-RUN:
+# it records what it WOULD do (sequence + steps) and alerts, but fires NO
+# watchdog calls and reboots nothing. Flip DOCCK_AUTORECOVER_ENABLED=1 on
+# Render to arm real auto-recovery. This is the blast-radius guard (Sam #1257).
+AUTORECOVER_ENABLED = (os.getenv("DOCCK_AUTORECOVER_ENABLED", "").strip().lower()
+                       in ("1", "true", "yes", "on"))
+CB_THRESHOLD = 3                 # failed sequences within the window trips the breaker
+CB_WINDOW_SECONDS = 3600         # 1 hour
+# Active-recovery threads, keyed by agent_id, so the 30s tick never spawns a
+# second sequence for an agent that's already recovering.
+_active_recoveries: dict[str, threading.Thread] = {}
+_active_lock = threading.Lock()
 
 _started = False
 _started_lock = threading.Lock()
@@ -149,6 +169,7 @@ def run_tick_evaluation() -> dict:
         agents = sess.execute(
             select(DocckAgent).where(DocckAgent.enabled == True)  # noqa: E712
         ).scalars().all()
+        recoveries: list[str] = []
         for agent in agents:
             state, secs = _agent_state(sess, agent)
             if state in ("missing", "never"):
@@ -166,14 +187,255 @@ def run_tick_evaluation() -> dict:
                 )
                 if posted:
                     fired.append(agent.id)
+                # v1.1: attempt auto-recovery. 'missing' only (not 'never' — a
+                # never-seen agent has no daemon to restart yet). Gated inside
+                # by circuit breaker + active-sequence + AUTORECOVER flag.
+                if state == "missing":
+                    status = _maybe_start_recovery(agent)
+                    if status == "recovery_started":
+                        recoveries.append(agent.id)
         sess.commit()
-        return {"ok": True, "agents_evaluated": len(agents), "alerts_fired": fired}
+        return {"ok": True, "agents_evaluated": len(agents),
+                "alerts_fired": fired, "recoveries_started": recoveries,
+                "autorecover_enabled": AUTORECOVER_ENABLED}
     except Exception:
         log.exception("docck.run_tick_evaluation failed")
         sess.rollback()
         return {"ok": False}
     finally:
         sess.close()
+
+
+# ============================================================
+# v1.1 — Auto-recovery state machine
+# ============================================================
+def _circuit_breaker_open(sess, agent_id: str) -> bool:
+    """True if the breaker is tripped: manually, or >= CB_THRESHOLD failed
+    sequences within CB_WINDOW_SECONDS."""
+    cb = sess.get(DocckCircuitBreaker, agent_id)
+    if cb is None:
+        return False
+    if cb.manually_tripped:
+        # manually_tripped doubles as a silence-until timestamp holder in some
+        # flows; treat as open if set.
+        return True
+    if cb.window_start and (datetime.utcnow() - cb.window_start).total_seconds() <= CB_WINDOW_SECONDS:
+        return cb.failed_sequence_count >= CB_THRESHOLD
+    return False
+
+
+def _increment_breaker(sess, agent_id: str) -> None:
+    cb = sess.get(DocckCircuitBreaker, agent_id)
+    now = datetime.utcnow()
+    if cb is None:
+        cb = DocckCircuitBreaker(agent_id=agent_id, window_start=now, failed_sequence_count=1)
+        sess.add(cb)
+    else:
+        # Reset the window if it's stale, else increment within it.
+        if cb.window_start is None or (now - cb.window_start).total_seconds() > CB_WINDOW_SECONDS:
+            cb.window_start = now
+            cb.failed_sequence_count = 1
+        else:
+            cb.failed_sequence_count += 1
+    sess.commit()
+
+
+def _watchdog_post(agent: DocckAgent, path: str, payload: dict, timeout: int = 25) -> tuple[bool, dict]:
+    """POST to the agent's watchdog /control/* endpoint with its bearer secret.
+    Returns (ok, response_dict). Never raises."""
+    secret = (os.getenv(agent.watchdog_secret_env_var) or "").strip()
+    if not secret:
+        return False, {"error": f"no secret in env {agent.watchdog_secret_env_var}"}
+    url = agent.watchdog_url.rstrip("/") + path
+    try:
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode(), method="POST",
+            headers={"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = r.read() or b"{}"
+            return True, json.loads(body)
+    except urllib.error.HTTPError as e:
+        try:
+            err = json.loads(e.read() or b"{}")
+        except Exception:
+            err = {"http_status": e.code}
+        return False, err
+    except Exception as e:  # noqa: BLE001
+        return False, {"error": str(e)[:200]}
+
+
+def _heartbeat_since(sess, agent_id: str, since: datetime) -> bool:
+    """True if any heartbeat for this agent arrived after `since` — i.e. the
+    agent recovered."""
+    row = sess.execute(
+        select(DocckHeartbeat).where(
+            DocckHeartbeat.agent_id == agent_id,
+            DocckHeartbeat.received_at > since,
+        ).limit(1)
+    ).scalar_one_or_none()
+    return row is not None
+
+
+def _reboot_is_safe(agent: DocckAgent) -> bool:
+    """Guard before issuing reboot_machine. For aick (cena's machine), skip
+    reboot if there's been recent ezCater webhook activity — a reboot mid-burst
+    can interrupt in-flight order writes (aick #1206). docck checks the orders
+    table for a webhook-ingested row in the last 90s. For other machines, allow."""
+    if agent.machine_label != "AiCk":
+        return True
+    try:
+        # Best-effort: any order updated in the last 90s suggests live webhook
+        # traffic. Conservative — if the query fails, DON'T block reboot (the
+        # circuit breaker + escalation already gate it).
+        from app.models import Order
+        cutoff = datetime.utcnow() - timedelta(seconds=90)
+        s2 = SessionLocal()
+        try:
+            recent = s2.execute(
+                select(Order).where(Order.updated_at > cutoff).limit(1)
+            ).scalar_one_or_none()
+            return recent is None
+        finally:
+            s2.close()
+    except Exception:
+        return True
+
+
+def _record_step(sess, seq_id: int, idx: int, action: str, status: str,
+                 payload: dict | None, resp: dict | None = None) -> None:
+    sess.add(DocckRestartStep(
+        sequence_id=seq_id, step_index=idx, action=action,
+        started_at=datetime.utcnow(), status=status,
+        payload=payload, watchdog_response=resp,
+    ))
+    sess.commit()
+
+
+def _do_step_action(agent: DocckAgent, step: dict) -> tuple[bool, dict]:
+    """Translate a restart-sequence step into a watchdog call."""
+    action = step.get("action")
+    if action == "restart_service":
+        return _watchdog_post(agent, "/control/restart_service",
+                              {"service_name": step.get("service_name")})
+    if action == "restart_services":
+        return _watchdog_post(agent, "/control/restart_services",
+                              {"service_names": step.get("service_names", []),
+                               "all_or_nothing": False})
+    if action == "reboot_machine":
+        if not _reboot_is_safe(agent):
+            return False, {"skipped": "reboot_unsafe_recent_webhook_activity"}
+        return _watchdog_post(agent, "/control/reboot_machine",
+                              {"reason": f"docck auto-recovery for {agent.id}"})
+    return False, {"error": f"unknown action {action!r}"}
+
+
+def _execute_restart_sequence(agent_id: str) -> None:
+    """Run an agent's restart sequence to completion (or recovery). Runs in its
+    own thread because steps have long waits (30-360s). Records every step.
+    Honors AUTORECOVER_ENABLED (dry-run when off)."""
+    sess = SessionLocal()
+    try:
+        agent = sess.get(DocckAgent, agent_id)
+        if agent is None:
+            return
+        seq = DocckRestartSequence(agent_id=agent_id, started_at=datetime.utcnow(),
+                                   triggered_by="auto")
+        sess.add(seq)
+        sess.commit()
+        seq_id = seq.id
+        steps = agent.restart_sequence_json or []
+        mode = "LIVE" if AUTORECOVER_ENABLED else "DRY-RUN"
+        _post_alert_deduped(
+            sess, agent_id, "warn", "dev_chat", f"{agent_id}_recovery_{seq_id}",
+            f"[docck] {agent.display_name} recovery sequence #{seq_id} starting "
+            f"({len(steps)} steps, {mode}).", dedupe_window_seconds=60,
+        )
+
+        for idx, step in enumerate(steps, start=1):
+            action = step.get("action")
+            wait_s = int(step.get("wait_seconds", 60))
+
+            if not AUTORECOVER_ENABLED:
+                # DRY-RUN: record intent, don't call the watchdog, don't wait long.
+                _record_step(sess, seq_id, idx, action, "dry_run", step,
+                             {"note": "AUTORECOVER disabled — no watchdog call made"})
+                log.warning("[docck DRY-RUN] would execute step %d/%d for %s: %s",
+                            idx, len(steps), agent_id, action)
+                continue
+
+            # LIVE execution
+            ok, resp = _do_step_action(agent, step)
+            _record_step(sess, seq_id, idx, action,
+                         "issued" if ok else "watchdog_failure", step, resp)
+            log.warning("[docck] %s step %d/%d %s -> ok=%s resp=%s",
+                        agent_id, idx, len(steps), action, ok, resp)
+            if not ok:
+                continue  # advance to next escalation step
+
+            mark = datetime.utcnow()
+            time.sleep(wait_s)
+            # Did the agent recover (fresh heartbeat after we acted)?
+            if _heartbeat_since(sess, agent_id, mark):
+                seq.ended_at = datetime.utcnow()
+                seq.outcome = "recovered"
+                seq.recovered_at_step = action
+                sess.commit()
+                _post_alert_deduped(
+                    sess, agent_id, "info", "dev_chat", f"{agent_id}_recovered_{seq_id}",
+                    f"[docck] {agent.display_name} RECOVERED after step {idx} ({action}), "
+                    f"sequence #{seq_id}.", dedupe_window_seconds=60,
+                )
+                return
+
+        # All steps exhausted without recovery → escalate
+        seq.ended_at = datetime.utcnow()
+        seq.outcome = "escalated"
+        sess.commit()
+        _increment_breaker(sess, agent_id)
+        _post_alert_deduped(
+            sess, agent_id, "urgent", "dev_chat", f"{agent_id}_escalated_{seq_id}",
+            f"[docck] {agent.display_name} AUTO-RECOVERY EXHAUSTED (sequence #{seq_id}, {mode}). "
+            f"All {len(steps)} steps ran, agent still not heartbeating. HUMAN NEEDED.",
+            dedupe_window_seconds=300,
+        )
+    except Exception:
+        log.exception("docck restart sequence for %s crashed", agent_id)
+        sess.rollback()
+    finally:
+        sess.close()
+        with _active_lock:
+            _active_recoveries.pop(agent_id, None)
+
+
+def _maybe_start_recovery(agent: DocckAgent) -> str:
+    """Decide whether to launch a recovery sequence for a missing agent.
+    Returns a short status string for logging. Gated by: circuit breaker,
+    no-active-sequence, and a live thread guard. Spawns a thread on go."""
+    sess = SessionLocal()
+    try:
+        if _circuit_breaker_open(sess, agent.id):
+            return "breaker_open"
+        # Already an unfinished sequence in the DB?
+        active = sess.execute(
+            select(DocckRestartSequence).where(
+                DocckRestartSequence.agent_id == agent.id,
+                DocckRestartSequence.ended_at.is_(None),
+            ).limit(1)
+        ).scalar_one_or_none()
+        if active is not None:
+            return "sequence_already_active"
+    finally:
+        sess.close()
+
+    with _active_lock:
+        if agent.id in _active_recoveries and _active_recoveries[agent.id].is_alive():
+            return "thread_already_running"
+        t = threading.Thread(target=_execute_restart_sequence, args=(agent.id,),
+                             name=f"docck-recover-{agent.id}", daemon=True)
+        _active_recoveries[agent.id] = t
+        t.start()
+    return "recovery_started"
 
 
 # ============================================================

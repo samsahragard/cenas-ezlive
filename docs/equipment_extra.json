@@ -196,5 +196,149 @@
     "status": "no_warranty",
     "source": "photo serial tag (TG 2026-05-28)",
     "flag": "warranty list has 360CPT40GLS variant; this 360CPT40 serial not matched"
+  },
+  {
+    "title": "Avantco 178UBB72SHCS — UBB-72S-HC 73 in Stainless Steel Back Bar Refrigerator",
+    "brand": "Avantco",
+    "model": "178UBB72SHCS",
+    "serial_number": "763025660",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under order 87357578 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Spaceman 6450-C (?) — Single Bowl Slushy / Granita Machine",
+    "brand": "Spaceman",
+    "model": "7156450CX?",
+    "serial_number": "2400665",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model plate prefix obscured (model id ...1030200, R448a); likely Spaceman 6450-C (7156450CX) on Safeware list order 100155558; serial not matched - reshoot model plate to confirm"
+  },
+  {
+    "title": "Solwave 180MW1000SS — Stainless Steel Commercial Microwave 1000W",
+    "brand": "Solwave",
+    "model": "180MW1000SS",
+    "serial_number": "250200936",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under orders 87327032 (serial 230400454) & 87205224; this unit's serial 250200936 not matched to a plan"
+  },
+  {
+    "title": "Avantco 177EG24N — EG24N 24 in Electric Countertop Griddle",
+    "brand": "Avantco",
+    "model": "177EG24N",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "serial blank on plate - reshoot; model on Safeware list under order 119263499"
+  },
+  {
+    "title": "Galaxy 177CRG4B — CRG-4 Countertop Display Refrigerated Merchandiser",
+    "brand": "Galaxy",
+    "model": "177CRG4B",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "2 photos (file_95, file_115/barcode 400013591807); serial plate blank/illegible - reshoot; model on Safeware list under order 87904862; possible 2nd identical unit - verify count"
+  },
+  {
+    "title": "Robot Coupe R2N CLR — Continuous Feed Food Processor",
+    "brand": "Robot Coupe",
+    "model": "R2NCLR",
+    "serial_number": "2476057103G-10",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "not on Safeware/warranty list (roster has Robot Coupe CL50/CL55, not R2N)"
+  },
+  {
+    "title": "Robot Coupe CL50 Ultra Series E — Continuous Feed Food Processor",
+    "brand": "Robot Coupe",
+    "model": "649CL50EULT",
+    "serial_number": "4520232003Q-10",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under order 95954573 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "DoughXpress 325TXM20 — TXM-20 16x20 in Dual-Heat Manual Clamshell Dough Press",
+    "brand": "DoughXpress",
+    "model": "325TXM20",
+    "serial_number": "864-2571A",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under orders 121896645 & 94091848 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Spaceman 6650-CL — 6650-C Single Bowl Countertop Slushy / Granita Machine",
+    "brand": "Spaceman",
+    "model": "7156650CX",
+    "serial_number": "2560195",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under order 116064640 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "ServIt 423EST2WS — EST-2WS 2-Pan Sealed Well Electric Steam Table (3rd unit)",
+    "brand": "ServIt",
+    "model": "423EST2WS",
+    "serial_number": "2023121446013",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under orders 105843706/101034334/87904862/87327032; this unit's serial not matched to a plan (3rd 423EST2WS in extra list)"
+  },
+  {
+    "title": "Avantco 177FFDS1 — FFDS-1 Freestanding French Fry Warmer / Dump Station",
+    "brand": "Avantco",
+    "model": "177FFDS1",
+    "serial_number": "CK-241129R-221",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under orders 110502688 & 103796329 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Cooking Performance Group 351ICOE50D — ICOE-50-D Countertop Impinger Conveyor Oven",
+    "brand": "Cooking Performance Group",
+    "model": "351ICOE50D",
+    "serial_number": "J0107080019241115031",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under order 108126083 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "ServIt 423EST3WS — EST-3WS 3-Pan Sealed Well Electric Steam Table",
+    "brand": "ServIt",
+    "model": "423EST3WS",
+    "serial_number": "2024030803002",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model on Safeware list under order 105843706 (no serial there); this unit's serial not matched to a plan"
+  },
+  {
+    "title": "ServIt 423TCW46 — TCW46 46 Gallon FIFO Chip Warmer",
+    "brand": "ServIt",
+    "model": "423TCW46",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "serial blank on plate - reshoot; model on Safeware list under orders 69718978 & 64931296"
+  },
+  {
+    "title": "Avantco 177FFDS1 — FFDS-1 Freestanding French Fry Warmer / Dump Station (2nd unit)",
+    "brand": "Avantco",
+    "model": "177FFDS1",
+    "serial_number": "CK-240638R-048",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "2nd 177FFDS1 unit; model on Safeware list under orders 110502688 & 103796329; this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Winco FW-S600 — Electric Food Cooker / Warmer 1500W",
+    "brand": "Winco",
+    "model": "FW-S600",
+    "serial_number": "FWS6004140001413",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "not on Safeware/warranty list"
   }
 ]

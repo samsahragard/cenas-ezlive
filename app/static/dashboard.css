@@ -132,7 +132,12 @@ aside.sidebar {
 
 /* ============ Main ============ */
 /* min-width:0 lets the 1fr grid track shrink — without it a wide child (table, chip strip) overflows the viewport */
-main.main { padding: 28px 32px 60px; min-width: 0; }
+/* Sam #1241 (2026-05-27): make every page extend left-to-right so the
+   dark cards sit close to the wallpaper edge. Drop horizontal padding
+   from 32px to 6px — wallpaper still peeks through as the page
+   background (intentional, Sam confirmed), but the cards are now
+   ~52px wider on each side. */
+main.main { padding: 28px 6px 60px; min-width: 0; }
 /* Dashboard content runs edge-to-edge L-R so every card spans the full
    width with no side gap (Sam #1384). Gaps between cards are untouched.
    Scoped to the dashboard via the body.page-dashboard class. */

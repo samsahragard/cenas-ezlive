@@ -133,5 +133,68 @@
     "status": "no_warranty",
     "source": "photo serial tag",
     "flag": "serial only, model not photographed"
+  },
+  {
+    "title": "CST-28-12-X — Commercial Equipment (PN 9142380048)",
+    "brand": "",
+    "model": "CST-28-12-X",
+    "serial_number": "6509 4238 2008 0402",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "not on Safeware/Webstaurant warranty list; brand not on plate"
+  },
+  {
+    "title": "ServIt 423EST2WS — 2-Pan Sealed Well Electric Steam Table",
+    "brand": "ServIt",
+    "model": "423EST2WS",
+    "serial_number": "2024052107024",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model has Safeware coverage under other orders; this unit's serial not matched to a plan"
+  },
+  {
+    "title": "ServIt 423EST2WS — 2-Pan Sealed Well Electric Steam Table (#2)",
+    "brand": "ServIt",
+    "model": "423EST2WS",
+    "serial_number": "2024030803019",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model has Safeware coverage under other orders; this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Avantco 178APT48HC — 48\" 2-Door Refrigerated Sandwich Prep Table",
+    "brand": "Avantco",
+    "model": "178APT48HC",
+    "serial_number": "746929895",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model has Safeware coverage under other orders; this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Avantco 178APT48HC — 48\" 2-Door Refrigerated Sandwich Prep Table (#2)",
+    "brand": "Avantco",
+    "model": "178APT48HC",
+    "serial_number": "001608108",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model has Safeware coverage under other orders; this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Avantco 178APT60MHC — 60\" 2-Door Mega Top Refrigerated Sandwich Prep Table",
+    "brand": "Avantco",
+    "model": "178APT60MHC",
+    "serial_number": "611454426",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "model has Safeware coverage under other orders; this unit's serial not matched to a plan"
+  },
+  {
+    "title": "Avantco 360CPT40 — 40\" Countertop Refrigerated Prep Rail",
+    "brand": "Avantco",
+    "model": "360CPT40",
+    "serial_number": "025522528",
+    "status": "no_warranty",
+    "source": "photo serial tag (TG 2026-05-28)",
+    "flag": "warranty list has 360CPT40GLS variant; this 360CPT40 serial not matched"
   }
 ]

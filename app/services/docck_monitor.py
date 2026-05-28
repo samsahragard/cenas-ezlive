@@ -119,16 +119,23 @@ def _post_alert_deduped(sess, agent_id, severity, channel, dedupe_key, body,
 
 
 def _post_to_dev_chat(body: str) -> None:
-    url = (os.getenv("DOCCK_DEV_CHAT_POST_URL") or "").strip()
-    if not url:
-        log.info("docck alert (no DOCCK_DEV_CHAT_POST_URL): %s", body)
-        return
-    import urllib.request
-    import urllib.parse
-    data = urllib.parse.urlencode({"author": "docck", "body": body}).encode()
-    req = urllib.request.Request(url, data=data, method="POST")
-    with urllib.request.urlopen(req, timeout=10) as r:
-        r.read()
+    """Insert a developer_chat row DIRECTLY. docck runs on Render with the same
+    DB, so this is more robust than HTTP-POSTing to /partner/developer/chat/post
+    (which is partner-auth-gated and would 302 an unauthenticated background
+    thread). ck's bridge.py mirrors developer_chat rows to the LAN hub + Telegram,
+    and samai's chat_tail reads the same Render table — so a direct insert shows
+    up on every surface. (Sam #1257 fix: previous HTTP-to-LAN-hub path failed with
+    auth/Tailscale errors; direct insert removes that dependency.)"""
+    from app.models import DeveloperChatMessage
+    sess = SessionLocal()
+    try:
+        sess.add(DeveloperChatMessage(author="docck", body=body[:4000]))
+        sess.commit()
+    except Exception:
+        sess.rollback()
+        raise
+    finally:
+        sess.close()
 
 
 def run_tick_evaluation() -> dict:
@@ -145,7 +152,11 @@ def run_tick_evaluation() -> dict:
         for agent in agents:
             state, secs = _agent_state(sess, agent)
             if state in ("missing", "never"):
-                _post_alert_deduped(
+                # Only count as "fired" if a NEW alert was actually posted
+                # (i.e. not suppressed by the 5-min dedupe window). Previously
+                # this appended unconditionally, which made every tick look like
+                # it re-alerted even when deduped (Sam #1257 diagnostic noise).
+                posted = _post_alert_deduped(
                     sess=sess, agent_id=agent.id, severity="urgent",
                     channel="dev_chat", dedupe_key=f"{agent.id}_{state}_v1",
                     body=f"[docck] {agent.display_name} {state.upper()} — "
@@ -153,7 +164,8 @@ def run_tick_evaluation() -> dict:
                          f"(machine {agent.machine_label})",
                     dedupe_window_seconds=300,
                 )
-                fired.append(agent.id)
+                if posted:
+                    fired.append(agent.id)
         sess.commit()
         return {"ok": True, "agents_evaluated": len(agents), "alerts_fired": fired}
     except Exception:

@@ -487,18 +487,19 @@
     <table class="wr-table" data-wr-save-url="{{ url_for('store.manager_warranty_detail_save') }}">
       <thead>
         <tr>
-          <th style="width:19%">Item</th>
-          <th style="width:7%">Model #</th>
+          <th style="width:8%">Type</th>
+          <th style="width:16%">Item</th>
+          <th style="width:6%">Model #</th>
           <th style="width:8%">Serial #</th>
-          <th style="width:9%">Plan #</th>
-          <th style="width:6%">Order #</th>
-          <th style="width:10%">Warranty Email</th>
-          <th style="width:9%">Warranty Claim</th>
-          <th style="width:9%">Claim Reason</th>
-          <th style="width:9%">Contact Email</th>
-          <th style="width:7%">Contact Phone</th>
+          <th style="width:8%">Plan #</th>
+          <th style="width:5%">Order #</th>
+          <th style="width:9%">Warranty Email</th>
+          <th style="width:8%">Warranty Claim</th>
+          <th style="width:8%">Claim Reason</th>
+          <th style="width:8%">Contact Email</th>
+          <th style="width:6%">Contact Phone</th>
           <th style="width:4%">Expires</th>
-          <th style="width:3%">Status</th>
+          <th style="width:4%">Status</th>
         </tr>
       </thead>
       <tbody id="wrTbody">
@@ -507,6 +508,7 @@
             data-expiring90d="{{ '1' if (w.expires_in_days is not none and 0 <= w.expires_in_days <= 90) else '0' }}"
             data-search="{{ w.search }}"
             data-wr-key="{{ w.user_key }}">
+          <td class="wr-type">{{ w.type }}</td>
           <td class="wr-title">
             {% if w.item_number %}
               <a href="https://www.webstaurantstore.com/search/{{ w.item_number|urlencode }}.html"
@@ -524,8 +526,15 @@
               {{ w.item_number }}
             {% endif %}
           </td>
-          <td><input type="text" class="wr-edit" data-field="serial_number"
-                     value="{{ w.serial_number }}" placeholder="—"></td>
+          <td>
+            {% if w.exploded %}
+              <span class="wr-serial-fixed"
+                    title="Unit {{ w.unit_index }} of {{ w.unit_count }} on this order — serial is per-unit, shown read-only">{{ w.serial_number }}</span>
+            {% else %}
+              <input type="text" class="wr-edit" data-field="serial_number"
+                     value="{{ w.serial_number }}" placeholder="—">
+            {% endif %}
+          </td>
           <td class="wr-plan-cell" title="Safeware plan / contract # — quote this to file a claim">{{ w.plan_number or '—' }}</td>
           <td>{{ w.order_number }}</td>
           <td><input type="email" class="wr-edit" data-field="warranty_email"

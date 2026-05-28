@@ -1841,6 +1841,88 @@ def _load_warranties() -> list[dict]:
     return _WARRANTY_JSON or []
 
 
+# Sam #1428: equipment-type categories for the warranty page's "Type"
+# column. Keyword-matched against the item title, MOST SPECIFIC FIRST
+# (first match wins), so e.g. "Commercial Microwave Oven" -> Microwave
+# (not Oven) and "Rice Cooker / Warmer" -> Rice Cooker (not Food Warmer).
+_EQUIP_TYPE_RULES = [
+    ("ice cream", "Ice Cream Machine"),
+    ("soft serve", "Soft Serve Machine"),
+    ("slushy", "Frozen Drink Machine"),
+    ("granita", "Frozen Drink Machine"),
+    ("frozen drink", "Frozen Drink Machine"),
+    ("ice machine", "Ice Maker"),
+    ("ice maker", "Ice Maker"),
+    ("rice cooker", "Rice Cooker"),
+    ("rice warmer", "Rice Cooker"),
+    ("griddle", "Griddle"),
+    ("charbroiler", "Grill"),
+    ("char broiler", "Grill"),
+    ("microwave", "Microwave"),
+    ("range", "Range"),
+    ("hot plate", "Range"),
+    ("conveyor oven", "Oven"),
+    ("impinger", "Oven"),
+    ("convection oven", "Oven"),
+    ("oven", "Oven"),
+    ("fryer", "Fryer"),
+    ("steam table", "Steam Table"),
+    ("steamer", "Steamer"),
+    ("tortilla", "Tortilla Press"),
+    ("dough press", "Tortilla Press"),
+    ("food processor", "Food Processor"),
+    ("immersion blender", "Blender"),
+    ("blender", "Blender"),
+    ("milkshake", "Drink Mixer"),
+    ("drink mixer", "Drink Mixer"),
+    ("meat tenderizer", "Meat Tenderizer"),
+    ("tenderizer", "Meat Tenderizer"),
+    ("planetary", "Mixer"),
+    ("mixer", "Mixer"),
+    ("grinder", "Mixer"),
+    ("slicer", "Slicer"),
+    ("scale", "Scale"),
+    ("iced tea", "Beverage"),
+    ("tea brewer", "Beverage"),
+    ("beverage dispenser", "Beverage"),
+    ("coffee", "Beverage"),
+    ("brewer", "Beverage"),
+    ("warmer", "Food Warmer"),
+    ("dump station", "Food Warmer"),
+    ("holding cabinet", "Holding Cabinet"),
+    ("proofer", "Holding Cabinet"),
+    ("water heater", "Water Heater"),
+    ("prep table", "Prep Table"),
+    ("prep rail", "Prep Table"),
+    ("sandwich", "Prep Table"),
+    ("chef base", "Refrigeration"),
+    ("back bar", "Refrigeration"),
+    ("refrigerator", "Refrigeration"),
+    ("refrigerated", "Refrigeration"),
+    ("froster", "Refrigeration"),
+    ("plate chiller", "Refrigeration"),
+    ("chiller", "Refrigeration"),
+    ("merchandiser", "Refrigeration"),
+    ("freezer", "Freezer"),
+    ("cooler", "Cooler"),
+    ("reach-in", "Refrigeration"),
+    ("ceiling fan", "Fan"),
+    ("nvr", "Security"),
+    ("dvr", "Security"),
+    ("camera", "Security"),
+    ("grill", "Grill"),
+]
+
+
+def _equip_type(title: str) -> str:
+    """Best-effort equipment category for the warranty page Type column."""
+    t = (title or "").lower()
+    for kw, cat in _EQUIP_TYPE_RULES:
+        if kw in t:
+            return cat
+    return "Other"
+
+
 def _warranty_for_template() -> tuple[list[dict], dict]:
     """Sort + label warranties for the maintenance page render. Returns
     (rows, kpis). Rows carry: title, item_number, order_number, status
@@ -1956,17 +2038,59 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
                     base_serial.lower()] if x),
             })
 
-    def _sort_key(x):
-        # active first; portal next; expired/no-warranty last; then by
-        # soonest expiry; then alphabetical.
-        bucket = (0 if x["status"] == "active"
-                  else 1 if x["status"] == "portal"
-                  else 3 if x["status"] == "no_warranty"
-                  else 2)
-        d = x["expires_in_days"]
-        d_sort = d if d is not None else 99999
-        return (bucket, d_sort, x["title"].lower())
-    out.sort(key=_sort_key)
+    # Sam #1428: tag each row with an equipment Type category.
+    for row in out:
+        row["type"] = _equip_type(row.get("title") or "")
+        row["search"] = (row.get("search", "") + " " + row["type"].lower()).strip()
+
+    # Sam #1428: one row per physical unit. When an order's serial field
+    # holds several comma-joined serials (a multi-unit purchase), render
+    # one row per serial instead of cramming them on a single line. This
+    # also collapses the roster's redundant duplicate lines for the same
+    # order (WebstaurantStore lists one line per unit, but every line
+    # carries the same comma-joined serial blob). Rows are grouped by the
+    # order's user_key; exploded rows share that key, so their serial is
+    # shown read-only (editing a shared key would clobber sibling units);
+    # the per-order fields (warranty email, claim, contact) stay editable.
+    from collections import OrderedDict as _OD
+    groups = _OD()
+    for row in out:
+        groups.setdefault(row.get("user_key", ""), []).append(row)
+    regrouped: list[dict] = []
+    for _key, members in groups.items():
+        base = members[0]
+        serials = [s.strip() for s in (base.get("serial_number") or "").split(",") if s.strip()]
+        plans = [p.strip() for p in (base.get("plan_number") or "").split(",") if p.strip()]
+        if len(serials) > 1:
+            # one row per serial; never drop units if the roster happened
+            # to list more lines than we have serials for.
+            n_units = max(len(serials), len(members))
+            for i in range(n_units):
+                nr = dict(base)
+                nr["serial_number"] = serials[i] if i < len(serials) else ""
+                if i < len(plans):
+                    nr["plan_number"] = plans[i]
+                elif len(plans) <= 1:
+                    nr["plan_number"] = base.get("plan_number", "")
+                else:
+                    nr["plan_number"] = ""
+                nr["exploded"] = True
+                nr["unit_index"] = i + 1
+                nr["unit_count"] = n_units
+                regrouped.append(nr)
+        else:
+            # 0 or 1 serial: leave the order's row(s) untouched (serial
+            # stays editable, duplicate roster lines preserved as-is).
+            for m in members:
+                m["exploded"] = False
+                regrouped.append(m)
+    out = regrouped
+
+    # Sam #1428: organize by Type (A-Z) then equipment name (A-Z),
+    # keeping a single order's exploded units in serial order.
+    out.sort(key=lambda x: (x.get("type", "").lower(),
+                            (x.get("title") or "").lower(),
+                            x.get("unit_index", 0)))
     return out, k
 
 

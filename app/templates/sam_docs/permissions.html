@@ -1,42 +1,50 @@
-{# Permissions — consolidated from: permission_system. Sam directive #240. #}
+{# Permissions — consolidated from: permission_system. Sam directive #240. Re-grounded against app/services/permissions.py + app/web/auth.py + app/web/sam_chat.py at HEAD (samai audit, 2026-05-28). #}
 <h1>Permissions</h1>
-<p class="meta">Role taxonomy and the audience-gate system that fronts every mutating action in the app.</p>
+<p class="meta">Role taxonomy and the audience-gate system that fronts every mutating action in the app. Source of truth: <code>app/services/permissions.py</code>.</p>
 
 <h2>Role taxonomy</h2>
-<p>Every authenticated session resolves to exactly one role. Role is the source of permission; permissions are NEVER granted individually outside the role-to-permission map.</p>
+<p>Every authenticated session resolves to exactly one role. Role is the source of permission; permissions are NEVER granted individually outside the role-to-permission map (<code>ROLE_PERMISSIONS</code> in <code>app/services/permissions.py</code>).</p>
 <table>
-  <thead><tr><th>Role</th><th>Audience</th><th>Login path</th></tr></thead>
+  <thead><tr><th>Role</th><th>Audience / scope</th><th>Login path</th></tr></thead>
   <tbody>
-    <tr><td><code>partner</code></td><td>Internal staff with partner-dashboard access.</td><td>Site password + Partner password gate.</td></tr>
-    <tr><td><code>corporate</code></td><td>Corporate / payroll role.</td><td>Site password + Corporate password gate.</td></tr>
-    <tr><td><code>gm</code></td><td>General manager (per store).</td><td>Manager keypad-login.</td></tr>
-    <tr><td><code>expo</code></td><td>Expo / kitchen line role.</td><td>Manager keypad-login.</td></tr>
-    <tr><td><code>driver</code></td><td>Delivery driver.</td><td>Driver login flow.</td></tr>
-    <tr><td><code>operator</code></td><td>System owner; <code>/sam/*</code> surfaces.</td><td>SAM_CHAT_USER_ID env match against the authenticated user.</td></tr>
+    <tr><td><code>partner</code></td><td>Owner tier — wildcard <code>{"*"}</code>: every permission, all stores.</td><td>Site password + Partner password gate.</td></tr>
+    <tr><td><code>corporate</code></td><td>Corporate / payroll — all-stores labor &amp; sales, plus <code>anomaly.admin</code>, <code>access.team_admin</code>, <code>team_reports.view_all_stores</code>.</td><td>Keypad-login.</td></tr>
+    <tr><td><code>gm</code></td><td>General manager — store-scoped management.</td><td>Keypad-login.</td></tr>
+    <tr><td><code>km</code></td><td>Kitchen manager — store-scoped (incl. <code>kds.edit_recipes</code>).</td><td>Keypad-login.</td></tr>
+    <tr><td><code>assistant_km</code></td><td>Assistant kitchen manager — store-scoped, read-mostly labor.</td><td>Keypad-login.</td></tr>
+    <tr><td><code>corporate_chef</code></td><td>Multi-store chef — all-stores scope.</td><td>Keypad-login.</td></tr>
+    <tr><td><code>prep_manager</code></td><td>Multi-store prep — produce receive/verify (no place-order).</td><td>Keypad-login.</td></tr>
+    <tr><td><code>foh_manager</code></td><td>Front-of-house manager — store-scoped, FOH labor/sales.</td><td>Keypad-login.</td></tr>
+    <tr><td><code>expo</code></td><td>Expo / kitchen line — orders + KDS, minimal tag set.</td><td>Keypad-login.</td></tr>
+    <tr><td><code>driver</code></td><td>Delivery driver — own bids / payout only (route-scoped).</td><td>Driver login flow.</td></tr>
+    <tr><td><code>cook</code> / <code>server</code> / <code>busser</code> / <code>host</code> / <code>bartender</code></td><td>Hourly roles (Phase 2 / Block 1 precondition) — minimal set: personal-AI + transcripts + <code>drivers.admin</code>. Operational tags are a deliberate follow-up once these roles have app surfaces.</td><td>Keypad-login.</td></tr>
   </tbody>
 </table>
+<p class="meta">Back-compat <code>User.permission_level</code> aliases (pre-taxonomy): <code>manager</code> → <code>gm</code>, <code>corporate-driver</code> → <code>driver</code>. <strong><code>operator</code> is NOT a <code>ROLE_PERMISSIONS</code> role</strong> — the <code>/sam/*</code> surfaces are gated by an env-var id match, not the role map (see "Operator-only" below).</p>
 
 <h2>How a request is gated</h2>
 <ol>
-  <li><strong>Site-password gate</strong> (EZLIVE_PASSWORD) — intercepts all paths that aren't on the exempt list (<code>/healthz</code>, the keypad-login itself, static assets). Returns a 302 to the gate if not present.</li>
-  <li><strong>Keypad-login gate</strong> — paths under <code>/partner/*</code>, <code>/&lt;store&gt;/*</code>, <code>/sam/*</code> require an authenticated user session. Unauthenticated requests redirect to <code>/keypad-login?next=&lt;path&gt;</code>.</li>
-  <li><strong>Per-route permission check</strong> — once authenticated, the route's <code>@requires_permission("&lt;cap&gt;")</code> decorator (or an inline gate) runs. A denial returns a 302 to <code>/access-denied?need=&lt;cap&gt;</code>.</li>
-  <li><strong>Per-row audience filter</strong> — for list views and reports, the rows themselves are filtered by the user's store / role scope. Cross-store reads never leak.</li>
+  <li><strong>Site gate (before_request)</strong> — one global gate in <code>app/web/auth.py</code> intercepts every path not on the <code>EXEMPT_PREFIXES</code> list. A request passes if it carries a keypad session (<code>session.user_id</code>) OR the legacy shared-password session (<code>session.auth_ok</code>, set by <code>/login</code> with <code>EZLIVE_PASSWORD</code>); otherwise it 302s to <code>/keypad-login?next=&lt;path&gt;</code>.</li>
+  <li><strong>Partner second-factor</strong> — <code>/partner/*</code> additionally requires <code>session.partner_auth_ok</code> (the <code>PARTNER_PASSWORD</code> gate at <code>/partner-login</code>), so co-managers can be in the site without seeing Partner data.</li>
+  <li><strong>Per-route permission check</strong> — the route's <code>@requires_permission("&lt;tag&gt;")</code> decorator runs <code>_user_has(g.current_user, tag, store_id)</code>. On denial it 302s to <code>/access-denied?need=&lt;tag&gt;&amp;next=&lt;path&gt;</code>. Enforcement is controlled by <code>PERMISSION_ENFORCE</code> — default <strong>ENFORCING</strong> since 2026-05-13; set <code>PERMISSION_ENFORCE=0</code> for the dark-launch log-and-permit fallback (used during role-schema migrations).</li>
+  <li><strong>Per-row store/scope filter</strong> — store-scoped roles are confined to their <code>User.store_scope</code> (CSV) at the query layer; multi-store roles (partner / corporate / corporate_chef / prep_manager / driver) have <code>store_scope = None</code> = all stores. Cross-store reads never leak.</li>
 </ol>
 
 <h2>Permission catalogue</h2>
-<p>Permissions are keyed strings of the form <code>&lt;area&gt;.&lt;action&gt;</code>. They map many-to-many to roles via <code>ROLE_PERMISSIONS</code>. Adding a new permission means adding the key in code + the role mappings; <strong>never inline grant by user-id</strong>.</p>
-<p>Indicative permission keys:</p>
+<p>Permissions are keyed strings of the form <code>&lt;area&gt;.&lt;action&gt;</code>, mapped many-to-many to roles via <code>ROLE_PERMISSIONS</code>. Adding a permission means adding the key + role mappings in code; <strong>never inline-grant by user-id</strong>. <code>partner</code> holds the wildcard <code>*</code> and short-circuits every check.</p>
+<p>Representative live keys (verbatim from <code>app/services/permissions.py</code>):</p>
 <ul>
-  <li><code>team_reports.view</code> — see the team-reports surface.</li>
-  <li><code>manager.daily_log.write</code> — log into the manager daily-log surface for a store.</li>
-  <li><code>vendor.recent_orders.view</code> — vendor recent-orders dashboard.</li>
-  <li><code>catering.dashboard.view</code> — catering dashboard.</li>
-  <li><code>operations.dashboard.view</code> — operations dashboard.</li>
-  <li><code>recipes.view</code> / <code>recipes.write</code> — recipe page R/W.</li>
-  <li><code>driver.live_tracking.view</code> — driver live-tracking map.</li>
+  <li><code>orders.assign_driver</code> / <code>orders.unassign_driver</code> / <code>orders.mark_delivered</code> — order &amp; driver actions.</li>
+  <li><code>drivers.admin</code> / <code>drivers.reset_passcode</code> / <code>drivers.view_roster</code> — driver administration (opened to all non-driver roles, Sam #1063).</li>
+  <li><code>manager_log.write</code> / <code>manager_log.read_own_store</code> / <code>manager_log.read_all_stores</code> — manager daily-log.</li>
+  <li><code>produce.order</code> / <code>produce.invoice_verify</code> — produce ordering &amp; receiving.</li>
+  <li><code>labor.view_store_summary</code> vs <code>labor.view_all_stores</code> — store-scope vs all-stores split.</li>
+  <li><code>team_reports.view</code> vs <code>team_reports.view_all_stores</code> — team-reports tab (gm store-scoped) vs cross-store (corporate+).</li>
+  <li><code>kds.view_kitchen_display</code> / <code>kds.edit_recipes</code> — kitchen display &amp; recipes.</li>
+  <li><code>anomaly.admin</code> / <code>access.team_admin</code> — partner/corporate-tier config surfaces.</li>
+  <li><code>ai.ask_claude</code> / <code>ai.ask_claude_personal</code> / <code>developer.view_chat</code> — AI &amp; dev-chat.</li>
 </ul>
-<p>The full live list is enumerated in <code>app/services/permissions.py</code> (the source of truth); the <strong>Operations</strong> tab covers day-to-day permission additions.</p>
+<p>The full live list is enumerated in <code>app/services/permissions.py</code> (the source of truth); the <strong>Operations</strong> tab covers day-to-day permission additions. <strong>Scheduling keys</strong> (<code>schedule.*</code> / <code>shift.*</code> / <code>time_off.*</code> / <code>availability.*</code> / <code>announcement.*</code> / <code>message.*</code>) are <strong>NOT yet present</strong> as of HEAD — pending the scheduling build.</p>
 
 <h2>Audience-eligibility-before-mutation</h2>
 <p>This is the strictest rule. Every mutating action must check audience BEFORE the database mutation:</p>
@@ -53,16 +61,17 @@
       with SessionLocal() as db:
           ...
 </pre>
-<p>A failure of step 1 must leave zero rows. Audience checks AFTER a mutation are treated as a vulnerability, not a style issue.</p>
+<p>A failure of step 1 must leave zero rows. Audience checks AFTER a mutation are treated as a vulnerability, not a style issue. (<code>has_permission()</code> is the in-handler check; <code>requires_permission()</code> is the decorator form — both in <code>app/services/permissions.py</code>.)</p>
 
 <h2>Operator-only (Sam) surfaces</h2>
-<p>The <code>/sam/*</code> family — <code>/sam/chat</code>, <code>/sam/combined</code>, <code>/sam/agents</code>, <code>/sam/pass</code>, <code>/sam/docs</code>, <code>/sam/automation</code>, <code>/sam/cena</code> — is gated on a direct match between the authenticated user's id and the <code>SAM_CHAT_USER_ID</code> env var, NOT via the role-to-permission map. This is intentional: the capability cannot be role-inherited; only the explicitly configured user id has access. When <code>SAM_CHAT_USER_ID</code> is unset, the surface is closed for everyone (safe-closed dormant). Masood gets the same gate via <code>SAM_CHAT_USER_ID_2</code> per §7A of the operational rules.</p>
+<p>The <code>/sam/*</code> family — <code>/sam/chat</code>, <code>/sam/combined</code>, <code>/sam/agents</code>, <code>/sam/pass</code>, <code>/sam/docs</code>, <code>/sam/automation</code>, <code>/sam/cena</code> — is gated by <code>is_sam_chat_user()</code> (<code>app/web/sam_chat.py</code>): a direct match between the authenticated user's id and the <strong>single</strong> <code>SAM_CHAT_USER_ID</code> env var, NOT via the role-to-permission map. The capability cannot be role-inherited; only the one configured user id has access, and when <code>SAM_CHAT_USER_ID</code> is unset the surface is closed for everyone (safe-closed dormant).</p>
+<p class="meta"><strong>Correction (samai 2026-05-28):</strong> there is <strong>no <code>SAM_CHAT_USER_ID_2</code></strong> in the code as of HEAD, and <code>is_sam_chat_user()</code> admits a single id only — so a second operator (Masood) is <strong>NOT</strong> currently granted <code>/sam/*</code> access by this gate, despite older comments (e.g. <code>sidebar.html</code>) implying "Sam + Masood." FLAG → Sam: if §7A requires Masood operator access, it is unimplemented (would need a multi-id gate).</p>
 
 <h2>Public / unauthenticated</h2>
-<p>Only the following paths bypass authentication:</p>
+<p>Only paths on <code>EXEMPT_PREFIXES</code> (<code>app/web/auth.py</code>) bypass the session gate — each carries its own auth where it mutates:</p>
 <ul>
-  <li><code>/healthz</code> — liveness probe.</li>
-  <li><code>/keypad-login</code>, <code>/access-denied</code> — the login + denial surfaces themselves.</li>
-  <li>Static assets (CSS, fonts, images).</li>
-  <li>Signed webhook endpoints (e.g. EZCater inbound), gated by signature verification instead of session auth.</li>
+  <li>Auth surfaces — <code>/login</code>, <code>/logout</code>, <code>/keypad-login</code>, <code>/keypad-logout</code>, <code>/change-passcode</code>, <code>/partner-login</code>. (<code>/access-denied</code> is NOT exempt — it requires a session.)</li>
+  <li><code>/produce/healthz</code> — public liveness probe (NOT <code>/healthz</code>).</li>
+  <li>Static &amp; public pages — <code>/static/</code>, <code>/favicon.ico</code>, <code>/install</code>, <code>/privacy</code>, <code>/driver/app.apk</code>, <code>/request-access</code>.</li>
+  <li>Signed / token-gated machine endpoints — <code>/ezcater/webhook</code> (HMAC), <code>/orders/ingest*</code> (token), <code>/cron/*</code> (CRON_TOKEN), <code>/sam/cena/*</code> (X-Cena-Token), <code>/docck/*</code> (bearer), <code>/produce/confirm|cancel/*</code> (random order-id), <code>/ez-manage/pending-count.json</code> (returns 401 JSON, not 302).</li>
 </ul>

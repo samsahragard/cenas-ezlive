@@ -379,6 +379,19 @@
       box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
       flex-shrink: 0;
     }
+    /* Standalone-strip badge enlarged (Sam: "make larger") — scoped to the
+       strip so ONLY pages that render the badge in .dash-role-badge-bar
+       (Today + self-header pages) get the bigger size. Specificity (0,0,2,0)
+       beats the base .dash-role-banner (0,0,1,0). Deliberately NOT touching
+       the base rule: that would also enlarge the in-header copy on Home and
+       the in-ribbon copy on the 6 tabbed dashboards (worsening their clip).
+       max-width 620px = 500 x 185/150, preserving the base's no-letterbox
+       headroom at the new height. Driver override below wins for driver.jpg
+       on the source-order tie, so drivers are unaffected here. */
+    .dash-role-badge-bar .dash-role-banner {
+      height: 185px;
+      max-width: 620px;
+    }
     /* Driver badge enlarged (Sam #1432) — drivers get a bigger top-right
        ribbon badge than other roles. Scoped by src so only driver.jpg
        grows; partner/other badges keep the shared 48px sizing. The 2:1
@@ -398,6 +411,10 @@
       .dash-role-banner {
         height: 84px;
         max-width: 64vw;
+      }
+      .dash-role-badge-bar .dash-role-banner {
+        height: 102px;
+        max-width: 80vw;
       }
       .dash-role-banner[src*="banners/driver"] {
         height: 52px;

@@ -249,25 +249,31 @@ def _increment_breaker(sess, agent_id: str) -> None:
 
 def _watchdog_post(agent: DocckAgent, path: str, payload: dict, timeout: int = 25) -> tuple[bool, dict]:
     """POST to the agent's watchdog /control/* endpoint with its bearer secret.
-    Returns (ok, response_dict). Never raises."""
+    Returns (ok, response_dict). Never raises.
+
+    Routes through the SOCKS5 proxy (CENA_PROXY=socks5h://localhost:1055) when set,
+    because docck runs on Render with USERSPACE Tailscale — outbound to a tailnet IP
+    (the watchdogs at 100.x:8767) only works via the SOCKS proxy, not plain sockets.
+    This is the same path sam_chat.py uses to reach the cena gateway. (Sam #1257:
+    the first armed test exhausted because urllib bypassed the proxy + timed out.)"""
     secret = (os.getenv(agent.watchdog_secret_env_var) or "").strip()
     if not secret:
         return False, {"error": f"no secret in env {agent.watchdog_secret_env_var}"}
     url = agent.watchdog_url.rstrip("/") + path
+    proxy = (os.getenv("CENA_PROXY") or "").strip() or None
     try:
-        req = urllib.request.Request(
-            url, data=json.dumps(payload).encode(), method="POST",
-            headers={"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            body = r.read() or b"{}"
-            return True, json.loads(body)
-    except urllib.error.HTTPError as e:
+        import httpx
+        client_kwargs: dict = {"timeout": timeout}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as c:
+            resp = c.post(url, json=payload,
+                          headers={"Authorization": f"Bearer {secret}"})
+        ok = (resp.status_code // 100 == 2)
         try:
-            err = json.loads(e.read() or b"{}")
+            return ok, resp.json()
         except Exception:
-            err = {"http_status": e.code}
-        return False, err
+            return ok, {"http_status": resp.status_code, "body": resp.text[:200]}
     except Exception as e:  # noqa: BLE001
         return False, {"error": str(e)[:200]}
 

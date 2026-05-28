@@ -144,7 +144,7 @@
   </div>
 
   <div class="owner-banner">
-    <span><b>As of 2026-05-23.</b></span>
+    <span><b>As of 2026-05-28.</b></span>
     <span>·</span>
     <span>Render crons + always-on services + Windows scheduled tasks + IMAP polling + gateway auto-mirrors + third-party API integrations.</span>
   </div>
@@ -588,7 +588,7 @@
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>Live ezCater order intake via email (fallback to the GraphQL API). PDFs and order confirmations land here and are parsed by the ezCater ingest pipeline.</dd>
+          <dd>Live ezCater order intake via email IMAP IDLE; PDFs + order confirmations land here and feed the ezCater ingest pipeline. <strong>NOTE (samai 2026-05-28):</strong> the Integrations tab documents the signature-verified webhook (<code>/ezcater/webhook</code>) as the ingest path — in reality BOTH exist (webhook + this IMAP-IDLE + the GraphQL API as backup). FLAG &rarr; @aick: confirm which is the authoritative primary so the two tabs agree.</dd>
           <dt>What runs it</dt>
           <dd><code>ezcater_idle.py</code> persistent IMAP IDLE on AiCk + Mini_IT13.</dd>
           <dt>Auth</dt>
@@ -919,7 +919,7 @@
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>Imports the weekly staff schedule from Sling into the platform's labor/scheduling tables.</dd>
+          <dd>Imports the weekly staff schedule from Sling into the platform's labor/scheduling tables. <strong>NOTE (samai 2026-05-28):</strong> Sling is being replaced (schedule view now Toast-shift-sourced — see Integrations / Phase 2); FLAG &rarr; @aick: is this Sling weekly import still active or superseded?</dd>
           <dt>Auth</dt>
           <dd><code>sling_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
         </dl>

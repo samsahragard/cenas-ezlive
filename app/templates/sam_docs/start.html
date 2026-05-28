@@ -3,7 +3,7 @@
 <p class="meta">Documentation for the Cenas Kitchen system. Project-level reference — operations, architecture, integrations, and engineering standards.</p>
 
 <h2>What this is</h2>
-<p>The Cenas Kitchen platform is the partner-facing dashboard and operations system for the restaurant. It runs at <code>app.cenaskitchen.com</code> and integrates with Toast (POS), Sling (scheduling), EZCater (catering intake), and several vendor channels. This Docs surface is the single index of how the system is built and how it operates.</p>
+<p>The Cenas Kitchen platform is the partner-facing dashboard and operations system for the restaurant. It runs at <code>app.cenaskitchen.com</code> and integrates with Toast (POS), EZCater (catering intake), and several vendor channels. Scheduling currently uses Sling, which is being replaced by an internal scheduling system (see Phase 2 Roadmap). This Docs surface is the single index of how the system is built and how it operates.</p>
 
 <h2>If you're new, read these six first</h2>
 <ol>
@@ -28,7 +28,8 @@
     <tr><td><strong>Cena Surface</strong></td><td>The Sam-only AI assistant: tunnel topology, tool surface, audit, escalation.</td><td>Active</td></tr>
     <tr><td><strong>Block 1 — Foundation</strong></td><td>Foundation features that shipped: role taxonomy, scheduled events, task system, ribbon component + router, sales insights, team tab, pay masking, ambient signal.</td><td>Shipped</td></tr>
     <tr><td><strong>Block 2 — Manager Tools</strong></td><td>Manager-facing tools (recipe page; more spec slots open as work begins).</td><td>Partial</td></tr>
-    <tr><td><strong>Integrations</strong></td><td>External-API specs: EZCater, Toast, anomaly engine, morning brief composer + calibration runbook.</td><td>Reference</td></tr>
+    <tr><td><strong>Integrations</strong></td><td>External-API specs: EZCater, Toast, Telegram bridge, Google Play, anomaly engine, morning brief, Sling (being replaced), Sentry.</td><td>Reference</td></tr>
+    <tr><td><strong>Tools</strong></td><td>Operator tool runbooks — the driver-assignment job pipeline, Play Console service-account setup, and other hands-on procedures.</td><td>Reference</td></tr>
   </tbody>
 </table>
 

@@ -33,16 +33,19 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "423EST2WS|105843706": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "2023022126008"
   },
   "178APT27MHC|105843706": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "743282536 7032 2401"
   },
   "177FFDS1|103796329": {
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "178APT71MHC|103758690": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "207649927"
   },
   "541FF50N|101232141": {
     "warranty_email": "atm@aguirrestexmex.com"
@@ -87,7 +90,8 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "325TXM15|87327032": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "862-2536A"
   },
   "351S36SUN|87327032": {
     "warranty_email": "atm@aguirrestexmex.com"
@@ -99,13 +103,15 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "178APT27HC|87205224": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "523274003"
   },
   "178CBE52HC|87205224": {
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "415KM901MAJV|86852658": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "N08528E"
   },
   "177MT64|86759266": {
     "warranty_email": "atm@aguirrestexmex.com"
@@ -160,7 +166,7 @@
   },
   "423TCW46|69718978": {
     "warranty_email": "atm@aguirrestexmex.com",
-    "serial_number": "20777094",
+    "serial_number": "202012-00040",
     "serial_alternatives": [
       "20481071Issue",
       "20777094Issue"
@@ -202,7 +208,8 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "180MW1000SS|87327032": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "230400454"
   },
   "177CAG24MG|87205224": {
     "warranty_email": "atm@aguirrestexmex.com"
@@ -217,7 +224,8 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "177MX30|85455875": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "43 0511 21"
   },
   "325TXM15|90101577": {
     "warranty_email": "atm@aguirrestexmex.com"
@@ -236,7 +244,7 @@
   },
   "177GRCS60|76313310": {
     "warranty_email": "atm@aguirrestexmex.com",
-    "serial_number": "21031388",
+    "serial_number": "210900028",
     "plan_number": "ESP 21031388-1",
     "safeware_expiration": "6/28/2024"
   },
@@ -263,7 +271,7 @@
   },
   "177MW1000PB|73122495": {
     "warranty_email": "atm@aguirrestexmex.com",
-    "serial_number": "20934455",
+    "serial_number": "210901808",
     "plan_number": "ESP 20934455-1",
     "safeware_expiration": "3/13/2024"
   },
@@ -313,5 +321,8 @@
   },
   "378D4B26|59763377": {
     "warranty_email": "atm@aguirrestexmex.com"
+  },
+  "178SSPT48MHC|60723925": {
+    "serial_number": "6601 4202 2009 0906"
   }
 }

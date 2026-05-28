@@ -1,0 +1,137 @@
+[
+  {
+    "title": "Waring WM030 — Commercial Microwave Oven",
+    "brand": "Waring",
+    "model": "WM030",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": "serial blurry - reshoot"
+  },
+  {
+    "title": "Eurodib M40A — Mixer and Grinder",
+    "brand": "Eurodib",
+    "model": "M40A",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": "no serial on plate - reshoot"
+  },
+  {
+    "title": "Lorex N883A3B-Z — 4K 32-ch NVR",
+    "brand": "Lorex",
+    "model": "N883A3B-Z",
+    "serial_number": "N0812208033269",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Hoshizaki KM-1601MRH — Ice Maker",
+    "brand": "Hoshizaki",
+    "model": "KM-1601MRH",
+    "serial_number": "S10449E",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Rheem-Ruud GN100-200 — Universal Commercial Gas Water Heater",
+    "brand": "Rheem-Ruud",
+    "model": "GN100-200",
+    "serial_number": "A141516703",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "FWE HLC-1826-4-CHP — Handy Line 18x26 Holding Cabinet",
+    "brand": "FWE",
+    "model": "HLC-1826-4-CHP",
+    "serial_number": "164657301",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Groen NTPX-4? — Gas equipment",
+    "brand": "Groen",
+    "model": "NTPX-4?",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": "plate corroded - illegible - reshoot"
+  },
+  {
+    "title": "(generic) 194MCF530A — Commercial Ice Maker R290",
+    "brand": "(generic)",
+    "model": "194MCF530A",
+    "serial_number": "194MCF530A-21110012",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "CPG 351ICOEB — Countertop Impinger Conveyor Oven (#1)",
+    "brand": "CPG",
+    "model": "351ICOEB",
+    "serial_number": "J0107080021240411009",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": "long serial - verify"
+  },
+  {
+    "title": "(generic) ICM-370 — Ice Cream Machine R410",
+    "brand": "(generic)",
+    "model": "ICM-370",
+    "serial_number": "20250528",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Avantco 177EG30N — Electric Griddle",
+    "brand": "Avantco",
+    "model": "177EG30N",
+    "serial_number": "",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": "serial field blank on plate"
+  },
+  {
+    "title": "Bunn TB3 — Iced Tea Brewer",
+    "brand": "Bunn",
+    "model": "TB3",
+    "serial_number": "TU00355506",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Hoshizaki KML-325MAJ — Ice Maker (3rd)",
+    "brand": "Hoshizaki",
+    "model": "KML-325MAJ",
+    "serial_number": "K05835A",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Taylor C713-33 — Soft Serve Machine",
+    "brand": "Taylor",
+    "model": "C713-33",
+    "serial_number": "K7096091",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": ""
+  },
+  {
+    "title": "Unlabeled equipment — unlabeled barcode sticker (model not in frame)",
+    "brand": "",
+    "model": "",
+    "serial_number": "540J092100733281400011",
+    "status": "no_warranty",
+    "source": "photo serial tag",
+    "flag": "serial only, model not photographed"
+  }
+]

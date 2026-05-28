@@ -449,6 +449,7 @@
     }
     .mr-page .wr-status-pill.ok { background: rgba(46,163,159,0.18); color: var(--ck-teal-bright); }
     .mr-page .wr-status-pill.alert { background: rgba(199,59,54,0.18); color: #FFB099; }
+    .mr-page .wr-status-pill.none { background: rgba(150,150,150,0.16); color: var(--ck-cream-faint); }
     .mr-page .wr-expiring-soon { color: var(--ck-gold-bright); font-weight: 700; }
     .mr-page .wr-empty {
       padding: 24px 12px; text-align: center;
@@ -469,6 +470,7 @@
       <span class="wr-stat alert"><strong>{{ warranty_kpis.expired }}</strong> expired</span>
       <span class="wr-stat warn"><strong>{{ warranty_kpis.expiring_30d }}</strong> expiring ≤30d</span>
       <span class="wr-stat warn"><strong>{{ warranty_kpis.expiring_90d }}</strong> expiring ≤90d</span>
+      <span class="wr-stat"><strong>{{ warranty_kpis.no_warranty }}</strong> no warranty</span>
     </div>
 
     <div class="wr-filters" id="wrFilters">
@@ -477,6 +479,7 @@
       <button type="button" class="wr-filter" data-wstatus="portal">Safeware Portal</button>
       <button type="button" class="wr-filter" data-wstatus="expired">Expired</button>
       <button type="button" class="wr-filter" data-wstatus="expiring_90d">Expiring ≤90d</button>
+      <button type="button" class="wr-filter" data-wstatus="no_warranty">No Warranty</button>
     </div>
 
     <input type="text" class="wr-search" id="wrSearch" placeholder="Search item / model / order #">

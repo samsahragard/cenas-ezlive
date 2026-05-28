@@ -1853,7 +1853,7 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
     out: list[dict] = []
     today = _dt.utcnow().date()
     k = {"total": 0, "active": 0, "expired": 0, "portal": 0,
-         "expiring_30d": 0, "expiring_90d": 0}
+         "expiring_30d": 0, "expiring_90d": 0, "no_warranty": 0}
     for r in raw:
         title = r.get("title") or ""
         item_no = r.get("item_number") or ""
@@ -1913,10 +1913,56 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
                 (user.get("contact_email") or "").lower()] if x),
         })
 
+    # Sam #1374: equipment photographed (serial tags) but NOT on the
+    # Safeware/WebstaurantStore warranty list — list it anyway with
+    # status "no warranty" so the full equipment inventory + serials
+    # live in one place. Source: docs/equipment_extra.json.
+    import json as _json
+    from pathlib import Path as _P2
+    extra_path = _P2(__file__).resolve().parents[2] / "docs" / "equipment_extra.json"
+    if extra_path.exists():
+        try:
+            extra_items = _json.loads(extra_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            extra_items = []
+        for e in extra_items or []:
+            model = e.get("model") or ""
+            base_serial = e.get("serial_number") or ""
+            ekey = f"extra|{model}|{base_serial}"
+            eu = user_all.get(ekey) or {}
+            k["total"] += 1
+            k["no_warranty"] += 1
+            out.append({
+                "title": e.get("title") or "(equipment)",
+                "item_number": model,
+                "order_number": "",
+                "status": "no_warranty",
+                "status_label": "No Warranty",
+                "status_class": "none",
+                "expiration_date": None,
+                "expires_in_days": None,
+                "portal_only": False,
+                "source": e.get("source") or "photo serial tag",
+                "user_key": ekey,
+                "serial_number": eu.get("serial_number") or base_serial,
+                "plan_number": eu.get("plan_number", ""),
+                "warranty_email": eu.get("warranty_email", ""),
+                "warranty_claim": eu.get("warranty_claim", ""),
+                "claim_reason": eu.get("claim_reason", ""),
+                "contact_email": eu.get("contact_email", ""),
+                "contact_phone": eu.get("contact_phone", ""),
+                "search": " ".join(x for x in [
+                    (e.get("title") or "").lower(), model.lower(),
+                    base_serial.lower()] if x),
+            })
+
     def _sort_key(x):
-        # expired last; portal items after active items; then by soonest
-        # expiry; then alphabetical.
-        bucket = 0 if x["status"] == "active" else (1 if x["status"] == "portal" else 2)
+        # active first; portal next; expired/no-warranty last; then by
+        # soonest expiry; then alphabetical.
+        bucket = (0 if x["status"] == "active"
+                  else 1 if x["status"] == "portal"
+                  else 3 if x["status"] == "no_warranty"
+                  else 2)
         d = x["expires_in_days"]
         d_sort = d if d is not None else 99999
         return (bucket, d_sort, x["title"].lower())

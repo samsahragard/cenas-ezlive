@@ -2809,3 +2809,131 @@ class FreshFoodOrderLine(Base):
     or_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
     sent_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+
+
+# === docck v1 - multi-agent reliability monitor (Sam #1191, samai #1208 contracts) ===
+
+class DocckAgent(Base):
+    """Registry of agents docck monitors. Data-driven — adding an agent
+    is an INSERT, not a code change. See Sam #1191 (multi-agent amendment).
+    """
+    __tablename__ = "docck_agents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # 'cena', 'pwck'
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    machine_label: Mapped[str] = mapped_column(String(64), nullable=False)  # 'AiCk', 'Mini_IT13'
+
+    # watchdog endpoint + auth
+    watchdog_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    watchdog_secret_env_var: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # heartbeat auth — stored as a custom-format hash (pbkdf2-sha256). Verify
+    # with docck.security.check_hash(token, stored_hash).
+    heartbeat_token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # service config — JSON object mapping role → service name.
+    # e.g. {"service": "cena_service", "gateway": "cena_gateway"}
+    services_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    # restart sequence — JSON array of step dicts.
+    # e.g. [{"action": "restart_service", "service_name": "cena_service", "wait_seconds": 30}, ...]
+    restart_sequence_json: Mapped[list] = mapped_column(JSON, nullable=False)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    alert_dev_chat: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    alert_telegram_threshold_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class DocckHeartbeat(Base):
+    """Every heartbeat from every agent. Append-only.
+
+    Insert-rate: 2 agents × 1 heartbeat / 30s = 4 inserts/min = ~5700/day.
+    Retention: aggressive — purge anything older than 30 days via a
+    nightly cron (TODO). For now, no purge.
+    """
+    __tablename__ = "docck_heartbeats"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    # payload echoes (denormalized for easy querying without JSON parsing)
+    agent_timestamp: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    agent_state: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 'healthy' | 'degraded' | 'stopping'
+    agent_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_active: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_anthropic_api_call_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    memory_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cpu_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    uptime_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    in_flight_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # full body for forensics / future schema additions without migration
+    extras: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index("ix_docck_hb_agent_received", "agent_id", "received_at"),
+    )
+
+
+class DocckRestartSequence(Base):
+    """One row per restart-sequence run. Records start, end, outcome,
+    which step recovered the agent (or 'escalated' if all exhausted).
+    """
+    __tablename__ = "docck_restart_sequences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 'recovered' | 'escalated' | 'canceled'
+    recovered_at_step: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    triggered_by: Mapped[str] = mapped_column(String(64), default="auto", nullable=False)  # 'auto' | 'admin'
+
+
+class DocckRestartStep(Base):
+    """One row per step within a restart sequence. Audit trail."""
+    __tablename__ = "docck_restart_steps"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey("docck_restart_sequences.id"), nullable=False, index=True)
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)  # 'restart_service' | 'restart_services' | 'reboot_machine'
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)  # 'started' | 'watchdog_failure' | 'no_heartbeat_after_wait' | 'recovered'
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    watchdog_response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class DocckAlertSent(Base):
+    """Every alert posted. Dedupe by (agent_id, dedupe_key) within a
+    sliding window so we don't spam dev chat / Telegram for the same
+    underlying condition.
+    """
+    __tablename__ = "docck_alerts_sent"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # null = docck-level
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)  # 'info' | 'warn' | 'urgent'
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)  # 'dev_chat' | 'telegram'
+    dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class DocckCircuitBreaker(Base):
+    """Per-agent circuit breaker. Tripped when too many failed recovery
+    sequences accumulate within a window. Manually resettable via
+    POST /docck/admin/<agent_id>/force_recovery.
+    """
+    __tablename__ = "docck_circuit_breaker"
+
+    agent_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    failed_sequence_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    manually_tripped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

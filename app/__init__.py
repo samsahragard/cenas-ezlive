@@ -144,6 +144,9 @@ def create_app():
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")
 
+    # docck v1 — /docck/* endpoints (Sam #1191 multi-agent reliability monitor)
+    from app.web.docck import bp as docck_bp
+    app.register_blueprint(docck_bp)
     # Install the shared-password gate AFTER all other blueprints so the
     # before_request hook sees their routes. Webhook + ingest endpoints
     # are exempted inside auth.install().
@@ -224,6 +227,13 @@ def create_app():
             logging.getLogger(__name__).info("Base.metadata.create_all completed")
     except Exception:
         logging.getLogger(__name__).exception("Base.metadata.create_all failed (non-fatal)")
+
+    # docck v1 - multi-agent reliability monitor seed (Sam #1191, samai #1208)
+    try:
+        from app.services.docck_seed import seed_docck_agents
+        seed_docck_agents()
+    except Exception:
+        logging.getLogger(__name__).exception("docck seed failed (non-fatal)")
 
     # Idempotent column backfill for the drivers table. Required because
     # alembic Pre-Deploy isn't wired on Render and create_all() doesn't ALTER

@@ -43,6 +43,7 @@ from app.models import (
     DocckRestartStep,
     DocckAlertSent,
     DocckCircuitBreaker,
+    DocckTickLease,
 )
 
 bp = Blueprint("docck", __name__, url_prefix="/docck")
@@ -230,45 +231,16 @@ def _check_tick_auth() -> bool:
 
 @bp.route("/tick", methods=["POST"])
 def tick():
-    """Render Cron fires this every 60s. Iterate enabled agents, evaluate,
-    fire restart sequences if needed. v1 ALERT-ONLY mode: posts alerts to
-    dev chat, does NOT yet fire restart sequences (those land in v1.1 after
-    aick + ck deploy watchdogs)."""
+    """Manual trigger for the monitoring evaluation. The PRIMARY driver is now
+    the self-tick background thread (docck_monitor.start_background_ticker),
+    which runs independently of any external scheduler. This endpoint stays for
+    manual/test triggering. Auth: DOCCK_TICK_TOKEN bearer."""
     if not _check_tick_auth():
         return jsonify({"error": "unauthorized"}), 401
+    from app.services.docck_monitor import run_tick_evaluation
+    summary = run_tick_evaluation()
+    return jsonify(summary)
 
-    sess = SessionLocal()
-    fired: list[str] = []
-    try:
-        agents = sess.execute(
-            select(DocckAgent).where(DocckAgent.enabled == True)
-        ).scalars().all()
-        for agent in agents:
-            status = _agent_status_dict(sess, agent)
-            seconds = status.get("seconds_since_heartbeat")
-            state = status.get("state")
-
-            # v1 alert-only: post to dev chat on missing / slow transitions,
-            # deduped by (agent_id, state) within 5min window.
-            if state in ("missing", "never") or (seconds is not None and seconds > agent.alert_telegram_threshold_seconds):
-                _post_alert_deduped(
-                    sess=sess,
-                    agent_id=agent.id,
-                    severity="warn" if state == "slow" else "urgent",
-                    channel="dev_chat",
-                    dedupe_key=f"{agent.id}_{state}_v1",
-                    body=f"[docck] {agent.display_name} {state.upper()} — {seconds}s since last heartbeat",
-                    dedupe_window_seconds=300,
-                )
-                fired.append(agent.id)
-        sess.commit()
-        return jsonify({"ok": True, "agents_evaluated": len(agents), "alerts_fired": fired})
-    except Exception:
-        log.exception("docck.tick failed")
-        sess.rollback()
-        return jsonify({"error": "internal"}), 500
-    finally:
-        sess.close()
 
 
 def _post_alert_deduped(sess, agent_id: str, severity: str, channel: str,

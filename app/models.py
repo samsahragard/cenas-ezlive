@@ -2937,3 +2937,15 @@ class DocckCircuitBreaker(Base):
     window_start: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     failed_sequence_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     manually_tripped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class DocckTickLease(Base):
+    """Singleton lease row (id=1) coordinating the self-tick background thread
+    across gunicorn workers. Exactly one worker holds the lease and runs the
+    monitoring evaluation; others stand by. Holder death -> lease expires (TTL
+    90s) -> another worker takes over. Replaces DocckTickFirer (Sam #1257)."""
+    __tablename__ = "docck_tick_lease"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # always 1
+    holder: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

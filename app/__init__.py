@@ -147,6 +147,14 @@ def create_app():
     # docck v1 — /docck/* endpoints (Sam #1191 multi-agent reliability monitor)
     from app.web.docck import bp as docck_bp
     app.register_blueprint(docck_bp)
+
+    # docck self-tick — background monitoring thread (Sam #1257: docck drives
+    # itself, no external trigger dependency on aick). Multi-worker safe via DB lease.
+    try:
+        from app.services.docck_monitor import start_background_ticker
+        start_background_ticker()
+    except Exception:
+        logging.getLogger(__name__).exception("docck background ticker failed to start (non-fatal)")
     # Install the shared-password gate AFTER all other blueprints so the
     # before_request hook sees their routes. Webhook + ingest endpoints
     # are exempted inside auth.install().

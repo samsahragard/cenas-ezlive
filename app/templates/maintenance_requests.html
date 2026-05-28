@@ -436,9 +436,10 @@
     .mr-page .wr-table .wr-edit.wr-error {
       border-color: #e85a4f;
     }
-    .mr-page .wr-table .wr-plan {
-      margin-top: 3px; font-size: 9px; letter-spacing: 0.04em;
-      color: var(--ck-cream-meta); font-family: 'JetBrains Mono', monospace;
+    .mr-page .wr-table .wr-plan-cell {
+      font-size: 10px; letter-spacing: 0.02em;
+      color: var(--ck-cream); font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
     }
     .mr-page .wr-status-pill {
       display: inline-block; padding: 2px 8px; border-radius: 3px;
@@ -483,17 +484,18 @@
     <table class="wr-table" data-wr-save-url="{{ url_for('store.manager_warranty_detail_save') }}">
       <thead>
         <tr>
-          <th style="width:22%">Item</th>
+          <th style="width:19%">Item</th>
           <th style="width:7%">Model #</th>
           <th style="width:8%">Serial #</th>
-          <th style="width:7%">Order #</th>
-          <th style="width:11%">Warranty Email</th>
-          <th style="width:10%">Warranty Claim</th>
-          <th style="width:10%">Claim Reason</th>
-          <th style="width:10%">Contact Email</th>
+          <th style="width:9%">Plan #</th>
+          <th style="width:6%">Order #</th>
+          <th style="width:10%">Warranty Email</th>
+          <th style="width:9%">Warranty Claim</th>
+          <th style="width:9%">Claim Reason</th>
+          <th style="width:9%">Contact Email</th>
           <th style="width:7%">Contact Phone</th>
           <th style="width:4%">Expires</th>
-          <th style="width:4%">Status</th>
+          <th style="width:3%">Status</th>
         </tr>
       </thead>
       <tbody id="wrTbody">
@@ -520,8 +522,8 @@
             {% endif %}
           </td>
           <td><input type="text" class="wr-edit" data-field="serial_number"
-                     value="{{ w.serial_number }}" placeholder="—">
-            {% if w.plan_number %}<div class="wr-plan" title="Safeware plan / contract # — quote this to file a claim">{{ w.plan_number }}</div>{% endif %}</td>
+                     value="{{ w.serial_number }}" placeholder="—"></td>
+          <td class="wr-plan-cell" title="Safeware plan / contract # — quote this to file a claim">{{ w.plan_number or '—' }}</td>
           <td>{{ w.order_number }}</td>
           <td><input type="email" class="wr-edit" data-field="warranty_email"
                      value="{{ w.warranty_email }}" placeholder="—"></td>

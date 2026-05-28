@@ -3,15 +3,15 @@
 <p class="meta">High-level system design + the operational map of every account, machine, and data source.</p>
 
 <h2>System at a glance</h2>
-<p>The platform is a Flask application served from a Render web service, sitting behind a Cloudflare-fronted partner gate, with a Postgres database, scheduled cron services for background work, and several outbound integrations.</p>
+<p>The platform is a Flask application served from a Render web service, sitting behind a Cloudflare-fronted partner gate, with a SQLite database on a persistent disk, scheduled cron services for background work, and several outbound integrations.</p>
 <ul>
   <li><strong>Web app</strong> — <code>app.cenaskitchen.com</code>, Render-hosted Flask + Jinja templates.</li>
   <li><strong>Database</strong> — SQLite on Render's persistent disk at <code>/var/data/cenas_kitchen.db</code>; SQLAlchemy ORM + boot-time <code>create_all</code> for migrations (Alembic not wired on Render).</li>
   <li><strong>Background jobs</strong> — Render cron jobs (Toast refreshes, anomaly briefs, calendar rolls, event-traffic refresh, sales insights, etc.).</li>
-  <li><strong>External integrations</strong> — Toast (POS + analytics), Sling (scheduling), EZCater (catering intake; webhook + IMAP + Selenium UI flow), vendor email channels, Sentry (error monitoring).</li>
+  <li><strong>External integrations</strong> — Toast (POS + analytics; also the NEW scheduling source via /labor/v1/shifts), Sling (scheduling — BEING REPLACED by Toast scheduling per Sam #1010, cutover in progress), EZCater (catering intake; webhook + IMAP + Playwright UI flow), vendor email channels, Sentry (error monitoring).</li>
   <li><strong>AI surface</strong> — Cena gateway (HTTP + Tailscale) on AiCk; <code>/sam/chat</code> talks to it for the Sam-facing assistant. Anthropic + Gemini are the model providers.</li>
   <li><strong>Mobile shell</strong> — Capacitor WebView app <code>com.cenaskitchen.app</code> ("Cenas Kitchen Employee", Play Console internal testing) that loads <code>app.cenaskitchen.com</code> directly; built + signed in GitHub Actions, uploaded via the Android Publisher API.</li>
-  <li><strong>Driver-assignment Selenium flow</strong> — webhook auto-assigns + manager dropdown re-assigns drive the partnerportal.ezcater.com UI via Selenium (aick) / Playwright (ck failover) on internal hosts. Render only creates job rows + POSTs wakes; never touches Chrome itself.</li>
+  <li><strong>Driver-assignment UI flow</strong> — webhook auto-assigns + manager dropdown re-assigns drive the partnerportal.ezcater.com UI on internal hosts. As of 2026-05-27 (Sam #1153) the PRIMARY is <strong>pwck</strong> (Mini_IT13:9000, Playwright); aick's Selenium gateway is fallback. Render only creates job rows + POSTs wakes; never touches Chrome itself. (Render env: <code>CENA_GATEWAY_URL</code>=pwck primary, <code>PWCK_PRIMARY_URL</code> split out so it no longer collides with the Cena-chat gateway.)</li>
 </ul>
 
 <h2>Tech stack</h2>
@@ -22,8 +22,8 @@
     <tr><td>ORM</td><td>SQLAlchemy 2.x (declarative)</td></tr>
     <tr><td>Database</td><td>SQLite on Render persistent disk (/var/data/cenas_kitchen.db)</td></tr>
     <tr><td>Mobile shell</td><td>Capacitor 7 (WebView wrapper of the Flask site); Play Console internal testing</td></tr>
-    <tr><td>Browser automation</td><td>Selenium (aick, Chrome) + Playwright (ck, Chromium) for partnerportal.ezcater.com UI flow</td></tr>
-    <tr><td>Hosting</td><td>Render (web service + crons + Postgres)</td></tr>
+    <tr><td>Browser automation</td><td>pwck (Mini_IT13, Playwright/Chromium) — PRIMARY driver-assign as of 2026-05-27; aick Selenium/Chrome + ck Playwright as fallback. All drive partnerportal.ezcater.com.</td></tr>
+    <tr><td>Hosting</td><td>Render (web service + crons; SQLite on a persistent disk — no managed DB)</td></tr>
     <tr><td>DNS / CDN</td><td>Cloudflare (proxied; Tunnel exposes internal services)</td></tr>
     <tr><td>VPN mesh</td><td>Tailscale (private; internal services and operator runtime)</td></tr>
     <tr><td>Error monitoring</td><td>Sentry</td></tr>
@@ -61,9 +61,15 @@
        │   AiCk gateway (100.108.119.19:8765) — Cena runtime +
        │   /jobs/driver-assign (Selenium UI flow against ezCater)
        │     │
-       │     ▼ (on Selenium failure)
-       │   Mini_IT13 gateway (100.73.38.82:8766) — cena2 +
-       │   /jobs/driver-assign failover (Playwright UI flow)
+       │   pwck (100.73.38.82:9000) — PRIMARY driver-assign
+       │   (Playwright UI flow); aick:8765 is fallback.
+       │   (cena2 gateway :8766 exists in config but is NOT
+       │    currently running — Layer 4 active/active unbuilt.)
+       │
+       ├── docck (Render /docck/*) — multi-agent reliability
+       │   monitor. Heartbeats IN from cena + pwck; self-tick
+       │   thread; auto-recovery calls the per-machine watchdogs
+       │   (AiCk :8767, Mini_IT13 :8767) via the SOCKS proxy.
        │
        ├── Operator chat surface
        │     - /sam/chat (Anthropic + Gemini)
@@ -92,14 +98,14 @@
 <h2>Operational inventory</h2>
 <h3>Accounts (top-level)</h3>
 <ul>
-  <li>Render — hosts the web service + crons + Postgres.</li>
+  <li>Render — hosts the web service + crons; data is SQLite on the persistent disk (no managed database).</li>
   <li>Cloudflare — DNS + Tunnel for internal-service exposure.</li>
   <li>Tailscale — VPN mesh across machines.</li>
   <li>GitHub — source control; SSH deploy key authorizes pushes.</li>
   <li>Anthropic — API key; primary AI provider.</li>
   <li>Google — Gemini API + Workspace.</li>
   <li>Toast — POS account + Analytics OAuth app.</li>
-  <li>Sling — scheduling.</li>
+  <li>Sling — scheduling (BEING REPLACED by Toast scheduling API; key slated for removal post-cutover).</li>
   <li>EZCater — catering intake.</li>
   <li>Sentry — errors.</li>
   <li>1Password — canonical credential vault (CLI integration available).</li>
@@ -108,9 +114,9 @@
 <h3>Machines</h3>
 <ul>
   <li><strong>Render web service</strong> — production app + cron runtime. SQLite lives on the Render persistent disk; restarting the service does NOT wipe data.</li>
-  <li><strong>AiCk (Mini_IT12, 100.108.119.19)</strong> — primary internal host. Runs the Cena gateway (port 8765, exposed via Cloudflare Tunnel), the Selenium driver-assignment worker, the LAN-hub Telegram bridge, and the persistent /sam/chat ↔ Cena local chat (port 8770, Tailscale-only).</li>
-  <li><strong>Mini_IT13 (ck's box, 100.73.38.82)</strong> — peer internal host. Runs the LAN team chat hub (port 8765, hub.py), the cena2 gateway (port 8766) with the Playwright failover for /jobs/driver-assign, and cross-gateway message queue sync.</li>
-  <li><strong>Operator phone</strong> — Tailscale member; reads Telegram via @Cenasbot for dev-chat traffic.</li>
+  <li><strong>AiCk (Mini_IT12, 100.108.119.19)</strong> — internal host. Runs the Cena gateway (port 8765, exposed via Cloudflare Tunnel + reachable on the tailnet), the aick Selenium driver-assign worker (now FALLBACK behind pwck), the watchdog (port 8767, docck-callable), the CenaHeartbeatSender → docck, and the persistent /sam/chat ↔ Cena local chat (port 8770, Tailscale-only). All run as Windows Scheduled Tasks with auto-restart (CenaGateway, CenaChatWatcher, CenaHubRelay, CenaSamChat, CenaTaskPinger, CenaHeartbeatSender, ck-watchdog/CenaWatchdog).</li>
+  <li><strong>Mini_IT13 (ck's box, 100.73.38.82)</strong> — peer internal host. Runs the LAN team chat hub (port 8765, hub.py) + the Telegram bridge (bridge.py + run_bridge.py — see FLAG), <strong>pwck</strong> the PRIMARY driver-assign gateway (port 9000, Playwright), the ck watchdog (port 8767), and the PwckHeartbeatSender → docck. The cena2 gateway (:8766) is configured but NOT currently running (Layer 4 active/active is unbuilt).</li>
+  <li><strong>Operator phone</strong> — Tailscale member; reads Telegram via @Cenasbot for dev-chat traffic (bridge mirrors hub ↔ Telegram).</li>
 </ul>
 
 <h3>Credential locations</h3>
@@ -127,7 +133,7 @@
   <thead><tr><th>Data class</th><th>Primary store</th><th>Origin</th></tr></thead>
   <tbody>
     <tr><td>Sales / labor / menu</td><td>SQLite (Toast-derived tables)</td><td>Toast Analytics API; refreshed by cron.</td></tr>
-    <tr><td>Shifts / roster</td><td>SQLite (Sling-derived)</td><td>Sling API + manual rosters.</td></tr>
+    <tr><td>Shifts / roster</td><td>SQLite</td><td>Migrating from Sling API → Toast /labor/v1/shifts (Sam #1010); manual rosters supplement.</td></tr>
     <tr><td>Catering orders</td><td>SQLite (catering tables)</td><td>EZCater webhook + IMAP backup ingest.</td></tr>
     <tr><td>Driver-assignment jobs</td><td>SQLite (driver_assignment_jobs)</td><td>Webhook auto-assign + manager dropdown POSTs; gateway callbacks flip status.</td></tr>
     <tr><td>Tasks / events</td><td>SQLite (Block 1 tables)</td><td>App-authored.</td></tr>
@@ -139,7 +145,7 @@
 
 <h2>External-facing endpoints</h2>
 <ul>
-  <li><code>app.cenaskitchen.com/healthz</code> — liveness probe.</li>
+  <li><code>app.cenaskitchen.com/produce/healthz</code> — public liveness probe (in EXEMPT_PREFIXES). Note: bare <code>/healthz</code> is NOT exempt and 302s to login.</li>
   <li><code>app.cenaskitchen.com/ezcater/webhook</code> — EZCater inbound order webhook (signature-verified). Auto-creates a DriverAssignmentJob row + POSTs a wake to the AiCk gateway.</li>
   <li><code>app.cenaskitchen.com/&lt;store&gt;/catering/assign_driver</code> + <code>/status</code> — manager dropdown re-assign + polling endpoint (per-store-scoped).</li>
   <li><code>app.cenaskitchen.com/catering/assign_driver/result</code> — gateway callback (flat route, EXEMPT_PREFIXES'd, X-Cena-Token gated).</li>
@@ -150,9 +156,11 @@
 
 <h3>Internal-facing endpoints (Tailscale)</h3>
 <ul>
-  <li><code>http://100.108.119.19:8765/jobs/driver-assign</code> — AiCk gateway, X-Cena-Token, accepts {job_id, order_id, new_driver, current_driver?, callback_url}; returns 202 + async runs Selenium UI flow.</li>
-  <li><code>http://100.108.119.19:8765/cena/stream</code> + <code>/cena/wake-on-chat</code> — Cena runtime entry points from /sam/chat.</li>
-  <li><code>http://100.73.38.82:8766/jobs/driver-assign</code> — Mini_IT13 (ck) failover; identical contract to AiCk gateway.</li>
+  <li><code>http://100.73.38.82:9000/jobs/driver-assign</code> — <strong>pwck, PRIMARY</strong> driver-assign (Playwright UI flow) as of 2026-05-27. X-Cena-Token, accepts {job_id, order_id, new_driver, current_driver?, callback_url}; returns 202 + async.</li>
+  <li><code>http://100.108.119.19:8765/jobs/driver-assign</code> — AiCk gateway, FALLBACK driver-assign (Selenium); identical contract.</li>
+  <li><code>http://100.108.119.19:8765/cena/stream</code> + <code>/cena/wake-on-chat</code> + <code>/cena/wake-on-hub</code> — Cena runtime entry points.</li>
+  <li><code>http://100.108.119.19:8767/control/*</code> + <code>http://100.73.38.82:8767/control/*</code> — per-machine watchdogs (restart_service / restart_services / reboot_machine), Bearer-gated, called by docck for auto-recovery.</li>
+  <li><code>http://100.73.38.82:8766/jobs/driver-assign</code> — cena2 failover gateway; configured but NOT currently running (Layer 4 unbuilt).</li>
   <li><code>http://192.168.1.134:8765/partner/developer/chat/messages.json</code> — LAN team chat hub (Mini_IT13).</li>
 </ul>
 

@@ -123,22 +123,40 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "178APT27HC|81179838": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21208494",
+    "plan_number": "ESP 21208494-1",
+    "safeware_expiration": "12/10/2027"
   },
   "177STE2S|81179838": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21208493",
+    "plan_number": "ESP 21208493-1",
+    "safeware_expiration": "12/10/2027"
   },
   "178GF36HC|79556784": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21153651",
+    "plan_number": "ESP 21153651-1",
+    "safeware_expiration": "10/15/2027"
   },
   "649CL55END|78458080": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21125278",
+    "plan_number": "ESP 21125278-1",
+    "safeware_expiration": "9/8/2027"
   },
   "541FF100N|72002424": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20891681",
+    "plan_number": "ESP 20891681-1",
+    "safeware_expiration": "1/30/2027"
   },
   "541FF100N|70867415": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20844021",
+    "plan_number": "ESP 20844021-1",
+    "safeware_expiration": "12/7/2026"
   },
   "423TCW46|69718978": {
     "warranty_email": "atm@aguirrestexmex.com",
@@ -146,10 +164,15 @@
     "serial_alternatives": [
       "20481071Issue",
       "20777094Issue"
-    ]
+    ],
+    "plan_number": "ESP 20777094-1",
+    "safeware_expiration": "10/21/2026"
   },
   "325TXM15|65611996": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20540829",
+    "plan_number": "ESP 20540829-1",
+    "safeware_expiration": "5/10/2026"
   },
   "423EST3WS|105843706": {
     "warranty_email": "atm@aguirrestexmex.com"
@@ -200,43 +223,79 @@
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "177CAGR212|81360317": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21211772",
+    "plan_number": "ESP 21211772-1",
+    "safeware_expiration": "12/16/2025"
   },
   "41037560R|81319762": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21211400, 21211401, 21211402, 21211403",
+    "plan_number": "ESP 21211400-1, ESP 21211401-1, ESP 21211402-1, ESP 21211403-1",
+    "safeware_expiration": "12/15/2024"
   },
   "177GRCS60|76313310": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21031388",
+    "plan_number": "ESP 21031388-1",
+    "safeware_expiration": "6/28/2024"
   },
   "334PCOS20|76261918": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21030668, 21030669",
+    "plan_number": "ESP 21030668-1, ESP 21030669-1",
+    "safeware_expiration": "6/27/2024"
   },
   "325TXM15|76099452": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "21029974",
+    "plan_number": "ESP 21029974-1",
+    "safeware_expiration": "6/21/2025"
   },
   "177EG30N|74343058": {
     "warranty_email": "atm@aguirrestexmex.com"
   },
   "41065120|74012563": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20962515",
+    "plan_number": "ESP 20962515-1",
+    "safeware_expiration": "4/12/2024"
   },
   "177MW1000PB|73122495": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20934455",
+    "plan_number": "ESP 20934455-1",
+    "safeware_expiration": "3/13/2024"
   },
   "177MW1000PB|70870670": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20844007",
+    "plan_number": "ESP 20844007-1",
+    "safeware_expiration": "12/7/2023"
   },
   "177GRCS60|69770618": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20777609, 20777610",
+    "plan_number": "ESP 20777609-1, ESP 20777610-1",
+    "safeware_expiration": "10/24/2023"
   },
   "177GRCS60|69494213": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20758745",
+    "plan_number": "ESP 20758745-1",
+    "safeware_expiration": "10/13/2023"
   },
   "177RCSA60|67594897": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20652416, 20652417",
+    "plan_number": "ESP 20652416-1, ESP 20652417-1",
+    "safeware_expiration": "7/30/2023"
   },
   "178APT48HC|65611996": {
-    "warranty_email": "atm@aguirrestexmex.com"
+    "warranty_email": "atm@aguirrestexmex.com",
+    "serial_number": "20516466",
+    "plan_number": "ESP 20516466-1",
+    "safeware_expiration": "5/10/2026"
   },
   "177RC60|65531572": {
     "warranty_email": "atm@aguirrestexmex.com"

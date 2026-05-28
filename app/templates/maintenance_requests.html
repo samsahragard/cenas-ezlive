@@ -436,6 +436,10 @@
     .mr-page .wr-table .wr-edit.wr-error {
       border-color: #e85a4f;
     }
+    .mr-page .wr-table .wr-plan {
+      margin-top: 3px; font-size: 9px; letter-spacing: 0.04em;
+      color: var(--ck-cream-meta); font-family: 'JetBrains Mono', monospace;
+    }
     .mr-page .wr-status-pill {
       display: inline-block; padding: 2px 8px; border-radius: 3px;
       font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
@@ -516,7 +520,8 @@
             {% endif %}
           </td>
           <td><input type="text" class="wr-edit" data-field="serial_number"
-                     value="{{ w.serial_number }}" placeholder="—"></td>
+                     value="{{ w.serial_number }}" placeholder="—">
+            {% if w.plan_number %}<div class="wr-plan" title="Safeware plan / contract # — quote this to file a claim">{{ w.plan_number }}</div>{% endif %}</td>
           <td>{{ w.order_number }}</td>
           <td><input type="email" class="wr-edit" data-field="warranty_email"
                      value="{{ w.warranty_email }}" placeholder="—"></td>

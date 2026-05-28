@@ -1858,8 +1858,15 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
         title = r.get("title") or ""
         item_no = r.get("item_number") or ""
         order_no = r.get("order_number") or ""
+        user_key = f"{item_no}|{order_no}"
+        user = user_all.get(user_key) or {}
         raw_status = (r.get("status") or "").strip().lower()
         exp_str = r.get("expiration_date")
+        # Safeware-portal rows carry no expiration in the WebstaurantStore
+        # source; backfill from the declaration PDF (Sam #1329) so the
+        # Expires column + expiring-soon highlight work for them too.
+        if not exp_str and user.get("safeware_expiration"):
+            exp_str = user["safeware_expiration"]
         portal_only = bool(r.get("portal_only"))
         exp_dt = None
         if exp_str:
@@ -1880,8 +1887,6 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
             k["expiring_30d"] += 1
         if days_left is not None and 0 <= days_left <= 90:
             k["expiring_90d"] += 1
-        user_key = f"{item_no}|{order_no}"
-        user = user_all.get(user_key) or {}
         out.append({
             "title": title,
             "item_number": item_no,
@@ -1895,6 +1900,7 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
             "source": r.get("source") or "",
             "user_key": user_key,
             "serial_number": user.get("serial_number", ""),
+            "plan_number": user.get("plan_number", ""),
             "warranty_email": user.get("warranty_email", ""),
             "warranty_claim": user.get("warranty_claim", ""),
             "claim_reason": user.get("claim_reason", ""),

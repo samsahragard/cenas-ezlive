@@ -6,7 +6,7 @@
 <p>Catering order intake from EZCater. One ingest path (webhook) + a driver-assignment surface that drives the partnerportal.ezcater.com UI from our side:</p>
 <ul>
   <li><strong>Webhook</strong> — EZCater posts inbound order events to <code>/ezcater/webhook</code> (signature-verified). The webhook handler ingests the order into the catering tables, picks the default in-house driver from the store map (Masood CK #1 for Copperfield, Sam CK #2 for Tomball), and queues a <code>DriverAssignmentJob</code> row that the AiCk gateway picks up to drive the partnerportal Chrome flow (Sam #900, 2026-05-25).</li>
-  <li><strong>Ingest is webhook-only</strong> (samai 2026-05-28 correction) — there is NO EZCater IMAP backup in the current code. The only IMAP poller is <code>produce_ingest.py</code> (PRODUCE orders to <code>orders@cenaskitchen.com</code>, gated by <code>PRODUCE_INGEST_ENABLED</code>) — a separate pipeline, NOT EZCater. EZCater orders arrive solely via the signature-verified webhook above.</li>
+  <li><strong>Webhook is the in-app ingest path</strong> (samai 2026-05-28) — there is NO EZCater IMAP poller in the Flask <code>app/</code> repo; the only in-app IMAP is <code>produce_ingest.py</code> (PRODUCE orders to <code>orders@cenaskitchen.com</code>, gated by <code>PRODUCE_INGEST_ENABLED</code>), a separate pipeline. <strong>FLAG &rarr; @aick/@ck:</strong> the Agents tab lists ck running an "ezCater IMAP IDLE" backup on <code>orders@aguirrestexmex.com</code> — a standalone service OUTSIDE <code>app/</code>. Confirm whether that IMAP-IDLE backup is still live; if so, EZCater ingest is webhook + standalone-IMAP backup, not webhook-only.</li>
 </ul>
 
 <h3>Driver assignment (Selenium UI flow)</h3>

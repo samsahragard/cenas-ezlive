@@ -22,6 +22,12 @@ TZ = timezone(timedelta(hours=-5))  # CDT for our date range; avoids Windows tzd
 
 SERVICE_JOB_TITLES = {"server", "server trainee", "bartender", "host"}
 
+# Sam #1500/#1504 (2026-05-28): salaried managers report $0 hourlyWage in Toast,
+# which understates labor %. Normalize every management position to a flat rate
+# (no OT premium) so labor % is accurate WITHOUT exposing any individual's real
+# pay. Applies to all permission sets (partners included) — see is_management_position.
+MANAGEMENT_LABOR_RATE = 17.25
+
 # Role filter sub-sets for the per-role Performance pages (Sidebar > Insights > Performance)
 PERF_ROLE_TITLES = {
     "server":     {"server", "server trainee", "lead server"},
@@ -110,6 +116,11 @@ def labor_report(start: datetime, end: datetime,
     in-store-context net-sales denominator is unchanged), then filtered rows
     are removed at render time.
 
+    Management labor cost is always normalized to a flat MANAGEMENT_LABOR_RATE
+    per hour (Sam #1500/#1504) — salaried managers report $0 hourlyWage in Toast
+    which understated labor %. This applies to every permission set so the labor
+    % is accurate while no individual manager's real pay is ever read or shown.
+
     redact_management: when True, management positions (Kitchen Manager,
     Floor Manager, etc. — see role_classifier.is_management_position) only
     show their % Net Sales — people count, hours, dollar amounts, and the
@@ -192,8 +203,14 @@ def labor_report(start: datetime, end: datetime,
             person = all_employees.get(emp_guid) or emp_guid[:8]
             reg = float(e.get("regularHours") or 0)
             ot = float(e.get("overtimeHours") or 0)
-            wage = float(e.get("hourlyWage") or 0)
-            cost = reg * wage + ot * wage * 1.5
+            if is_management_position(title):
+                # Management normalized to a flat rate (Sam #1500/#1504). Real
+                # hourlyWage is never read for managers, so no individual's pay
+                # is exposed; flat rate, no OT premium.
+                cost = (reg + ot) * MANAGEMENT_LABOR_RATE
+            else:
+                wage = float(e.get("hourlyWage") or 0)
+                cost = reg * wage + ot * wage * 1.5
 
             slot = by_job[title]
             slot["regular_hours"] += reg

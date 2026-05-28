@@ -51,14 +51,26 @@
   <li><span class="status-chip shipped">Shipped</span> <strong>Cena page tab suite</strong>: Cena + Dev / Agents / Page Info / Pass / Docs (this surface) / Automation — all live under <code>/sam/*</code>.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>Catering driver-assignment via Selenium UI flow</strong>: webhook auto-assigns + manager dropdown re-assigns drive partnerportal.ezcater.com from the AiCk gateway (Sam #669 + #900, 2026-05-24..2026-05-25). Replaces the courierAssign GraphQL API path; gateway callback writes back to Render.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>ck failover gateway</strong>: Mini_IT13 (100.73.38.82:8766) accepts forwarded driver-assign jobs when aick's Selenium fails (CENA2_GATEWAY_URL). Proven end-to-end in production 2026-05-25.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>pwck driver-assign service (now primary)</strong>: per the Architecture audit, the driver-assign primary is now <code>pwck</code> (Mini_IT13 <code>:9000</code>, <code>/pwck/run</code>); aick Selenium + ck are fallback, and the older <code>cena2:8766</code> peer is currently DOWN. See Architecture / Integrations for the live topology.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>Mobile shell (Capacitor)</strong>: <code>com.cenaskitchen.app</code> Capacitor 7 WebView wrapping the live Flask site. Built + signed in GitHub Actions; uploaded to Play Console internal testing via the Android Publisher API service account.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>Bidirectional Telegram bridge</strong>: <code>@Cenasbot</code> on AiCk forwards Sam ↔ dev-chat both directions. Auth via allow-list of Telegram user ids.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>Cross-host message queue</strong>: cena2 peer on Mini_IT13 syncs every 30s with the AiCk gateway via the Phase 2 message layer.</li>
 </ul>
+
+<h2>Scheduling system (Sling replacement) — in flight</h2>
+<p>The internal scheduling system that will <strong>replace Sling</strong> is in early build. Verified state as of HEAD (samai 2026-05-28):</p>
+<ul>
+  <li><span class="status-chip shipped">Precondition shipped</span> Hourly-role taxonomy — <code>cook / server / busser / host / bartender</code> added to <code>ROLE_PERMISSIONS</code> (<code>permissions.py:288</code>) for the task-assignment hierarchy + counseling cascade.</li>
+  <li><span class="status-chip shipped">Live</span> Schedule <em>view</em> — <code>/&lt;store&gt;/schedule</code> (+ <code>/schedule/weekly</code>, <code>store_routes.py:4302</code>), currently <strong>Toast-shift-sourced</strong> (Sling-compatible labels); zero shifts until Toast Scheduling is enabled per store.</li>
+  <li><span class="status-chip draft">Pending</span> Full internal system — shift offers, time-off, availability, announcements, in-app messaging, and the Sling cutover. <strong>Not shipped</strong>: the <code>schedule.* / shift.* / time_off.* / availability.* / announcement.* / message.*</code> permission keys are NOT yet in <code>permissions.py</code>, and no <code>shift_offer</code> / <code>time_off</code> routes exist.</li>
+</ul>
+<p class="meta">FLAG &rarr; @aick/@sam: confirm the scheduling build's block structure + current phase so this section reflects the build plan exactly.</p>
 
 <h2>Open work — current focus</h2>
 <ul>
   <li>Vendor email-parse pipeline: ingest WebstaurantStore equipment and warranty emails.</li>
   <li>Anomaly engine extensions: additional rules for the daily / weekly brief.</li>
   <li>Play Console legal declarations + 14-day closed-test gate before prod-access app submission.</li>
+  <li><strong>EZCater order ingest</strong>: live path is the signature-verified webhook (<code>/ezcater/webhook</code>, HMAC, <code>ezcater_webhook.py</code>); confirm whether any IMAP-poll fallback is still active (see Integrations / Automation).</li>
+  <li><strong>OpenClaw</strong>: still the on-disk secret home (<code>~/.openclaw/.secrets/</code>, referenced by auth + chat tooling) — NOT removed. FLAG &rarr; Sam: is an OpenClaw removal/cutover planned? If so it is not yet reflected in code.</li>
 </ul>

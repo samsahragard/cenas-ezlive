@@ -1754,6 +1754,72 @@ def _time_since(dt):
 
 _WARRANTY_JSON = None
 _WARRANTY_JSON_MTIME = 0.0
+_WARRANTY_USER_JSON = None
+_WARRANTY_USER_JSON_MTIME = 0.0
+
+# Sam #1185/#1193/#1203 — user-editable fields on the warranties table.
+# Stored as a sidecar JSON keyed by "<item_number>|<order_number>" so
+# edits survive deploys (Render's disk persists docs/) and the
+# WebstaurantStore-derived equipment_warranties.json can be refreshed
+# without touching the user-input data.
+_WARRANTY_USER_FIELDS = (
+    "serial_number",
+    "warranty_email",
+    "warranty_claim",
+    "claim_reason",
+    "contact_email",
+    "contact_phone",
+)
+
+
+def _warranty_user_path():
+    from pathlib import Path as _P
+    return _P(__file__).resolve().parents[2] / "docs" / "equipment_warranty_user.json"
+
+
+def _load_warranty_user() -> dict:
+    """Load + cache user-editable warranty fields keyed by
+    "<item_number>|<order_number>". Reloads when the JSON file changes
+    on disk."""
+    import json
+    global _WARRANTY_USER_JSON, _WARRANTY_USER_JSON_MTIME
+    p = _warranty_user_path()
+    if not p.exists():
+        return {}
+    mt = p.stat().st_mtime
+    if _WARRANTY_USER_JSON is None or mt != _WARRANTY_USER_JSON_MTIME:
+        try:
+            _WARRANTY_USER_JSON = json.loads(p.read_text(encoding="utf-8")) or {}
+        except (json.JSONDecodeError, OSError):
+            _WARRANTY_USER_JSON = {}
+        _WARRANTY_USER_JSON_MTIME = mt
+    return _WARRANTY_USER_JSON
+
+
+def _save_warranty_user(key: str, fields: dict) -> dict:
+    """Merge + persist user fields for one warranty row. Atomic rename
+    so a partial write can't corrupt the JSON. Returns the resulting
+    row record."""
+    import json
+    global _WARRANTY_USER_JSON, _WARRANTY_USER_JSON_MTIME
+    p = _warranty_user_path()
+    data = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8")) or {}
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    row = dict(data.get(key) or {})
+    for f in _WARRANTY_USER_FIELDS:
+        if f in fields:
+            row[f] = (fields.get(f) or "").strip()
+    data[key] = row
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(p)
+    _WARRANTY_USER_JSON = data
+    _WARRANTY_USER_JSON_MTIME = p.stat().st_mtime
+    return row
 
 
 def _load_warranties() -> list[dict]:
@@ -1783,6 +1849,7 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
     last, then by soonest expiry first, then alphabetically."""
     from datetime import datetime as _dt
     raw = _load_warranties()
+    user_all = _load_warranty_user()
     out: list[dict] = []
     today = _dt.utcnow().date()
     k = {"total": 0, "active": 0, "expired": 0, "portal": 0,
@@ -1813,6 +1880,8 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
             k["expiring_30d"] += 1
         if days_left is not None and 0 <= days_left <= 90:
             k["expiring_90d"] += 1
+        user_key = f"{item_no}|{order_no}"
+        user = user_all.get(user_key) or {}
         out.append({
             "title": title,
             "item_number": item_no,
@@ -1824,8 +1893,18 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
             "expires_in_days": days_left,
             "portal_only": portal_only,
             "source": r.get("source") or "",
+            "user_key": user_key,
+            "serial_number": user.get("serial_number", ""),
+            "warranty_email": user.get("warranty_email", ""),
+            "warranty_claim": user.get("warranty_claim", ""),
+            "claim_reason": user.get("claim_reason", ""),
+            "contact_email": user.get("contact_email", ""),
+            "contact_phone": user.get("contact_phone", ""),
             "search": " ".join(x for x in [
-                title.lower(), item_no.lower(), order_no.lower()] if x),
+                title.lower(), item_no.lower(), order_no.lower(),
+                (user.get("serial_number") or "").lower(),
+                (user.get("warranty_email") or "").lower(),
+                (user.get("contact_email") or "").lower()] if x),
         })
 
     def _sort_key(x):
@@ -1837,6 +1916,28 @@ def _warranty_for_template() -> tuple[list[dict], dict]:
         return (bucket, d_sort, x["title"].lower())
     out.sort(key=_sort_key)
     return out, k
+
+
+@store_bp.route("/manager/maintenance/warranty-detail/save",
+                methods=["POST"])
+def manager_warranty_detail_save():
+    """Persist user-edited warranty fields (serial #, warranty email,
+    warranty claim, claim reason, contact email/phone) for one row of
+    the Equipment Warranties table. Keyed by "<item_number>|<order_number>"
+    composite so duplicate webstaurantstore rows share user data (Sam
+    #1185/#1193/#1203). JSON body or form-encoded both accepted.
+    Returns the merged row record."""
+    from flask import jsonify, request
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = request.form
+    key = (payload.get("key") or "").strip()
+    if not key or "|" not in key:
+        return jsonify({"ok": False,
+                        "error": "missing or invalid key"}), 400
+    fields = {f: (payload.get(f) or "") for f in _WARRANTY_USER_FIELDS}
+    saved = _save_warranty_user(key, fields)
+    return jsonify({"ok": True, "key": key, "row": saved})
 
 
 def _render_maintenance_v3(db, label, active_key):

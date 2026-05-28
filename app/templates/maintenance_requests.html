@@ -415,6 +415,27 @@
     }
     .mr-page .wr-table tr.wr-row.hidden { display: none; }
     .mr-page .wr-table .wr-title { color: var(--ck-cream); font-weight: 600; }
+    .mr-page .wr-table .wr-edit {
+      width: 100%; box-sizing: border-box;
+      padding: 4px 6px; border-radius: 3px;
+      background: var(--ck-bg-input);
+      border: 0.5px solid var(--ck-border-subtle);
+      color: var(--ck-cream); font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mr-page .wr-table .wr-edit:focus {
+      outline: none; border-color: var(--ck-gold-bright);
+      background: rgba(228,179,64,0.08);
+    }
+    .mr-page .wr-table .wr-edit.wr-saving {
+      border-color: var(--ck-gold-bright);
+    }
+    .mr-page .wr-table .wr-edit.wr-saved {
+      border-color: var(--ck-teal-bright);
+    }
+    .mr-page .wr-table .wr-edit.wr-error {
+      border-color: #e85a4f;
+    }
     .mr-page .wr-status-pill {
       display: inline-block; padding: 2px 8px; border-radius: 3px;
       font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
@@ -455,21 +476,28 @@
 
     <input type="text" class="wr-search" id="wrSearch" placeholder="Search item / model / order #">
 
-    <table class="wr-table">
+    <table class="wr-table" data-wr-save-url="{{ url_for('store.manager_warranty_detail_save') }}">
       <thead>
         <tr>
-          <th style="width:46%">Item</th>
-          <th style="width:13%">Model #</th>
-          <th style="width:13%">Order #</th>
-          <th style="width:14%">Expires</th>
-          <th style="width:14%">Status</th>
+          <th style="width:22%">Item</th>
+          <th style="width:7%">Model #</th>
+          <th style="width:8%">Serial #</th>
+          <th style="width:7%">Order #</th>
+          <th style="width:11%">Warranty Email</th>
+          <th style="width:10%">Warranty Claim</th>
+          <th style="width:10%">Claim Reason</th>
+          <th style="width:10%">Contact Email</th>
+          <th style="width:7%">Contact Phone</th>
+          <th style="width:4%">Expires</th>
+          <th style="width:4%">Status</th>
         </tr>
       </thead>
       <tbody id="wrTbody">
         {% for w in warranties %}
         <tr class="wr-row" data-wstatus="{{ w.status }}"
             data-expiring90d="{{ '1' if (w.expires_in_days is not none and 0 <= w.expires_in_days <= 90) else '0' }}"
-            data-search="{{ w.search }}">
+            data-search="{{ w.search }}"
+            data-wr-key="{{ w.user_key }}">
           <td class="wr-title">
             {% if w.item_number %}
               <a href="https://www.webstaurantstore.com/search/{{ w.item_number|urlencode }}.html"
@@ -487,7 +515,19 @@
               {{ w.item_number }}
             {% endif %}
           </td>
+          <td><input type="text" class="wr-edit" data-field="serial_number"
+                     value="{{ w.serial_number }}" placeholder="—"></td>
           <td>{{ w.order_number }}</td>
+          <td><input type="email" class="wr-edit" data-field="warranty_email"
+                     value="{{ w.warranty_email }}" placeholder="—"></td>
+          <td><input type="text" class="wr-edit" data-field="warranty_claim"
+                     value="{{ w.warranty_claim }}" placeholder="—"></td>
+          <td><input type="text" class="wr-edit" data-field="claim_reason"
+                     value="{{ w.claim_reason }}" placeholder="—"></td>
+          <td><input type="email" class="wr-edit" data-field="contact_email"
+                     value="{{ w.contact_email }}" placeholder="—"></td>
+          <td><input type="tel" class="wr-edit" data-field="contact_phone"
+                     value="{{ w.contact_phone }}" placeholder="—"></td>
           <td>
             {% if w.expiration_date %}
               <span{% if w.expires_in_days is not none and 0 <= w.expires_in_days <= 90 %} class="wr-expiring-soon"{% endif %}>
@@ -612,6 +652,42 @@
       wrApply();
     });
     wrApply();
+
+    /* Sam #1185/#1193/#1203 — inline save of user-editable warranty
+       fields. Event delegated at the table; fires on input "change"
+       (blur or Enter) and POSTs the whole row's 6 fields. */
+    var wrTable = document.querySelector(".wr-table");
+    if (wrTable && wrTable.dataset.wrSaveUrl) {
+      wrTable.addEventListener("change", function (e) {
+        var input = e.target.closest && e.target.closest(".wr-edit");
+        if (!input) return;
+        var row = input.closest("tr.wr-row");
+        if (!row) return;
+        var key = row.dataset.wrKey || "";
+        if (!key || key.indexOf("|") < 0) return;
+        var payload = { key: key };
+        row.querySelectorAll(".wr-edit").forEach(function (i) {
+          payload[i.dataset.field] = i.value;
+        });
+        input.classList.remove("wr-saved", "wr-error");
+        input.classList.add("wr-saving");
+        fetch(wrTable.dataset.wrSaveUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        }).then(function (r) {
+          input.classList.remove("wr-saving");
+          input.classList.add(r.ok ? "wr-saved" : "wr-error");
+          setTimeout(function () {
+            input.classList.remove("wr-saved", "wr-error");
+          }, 1500);
+        }).catch(function () {
+          input.classList.remove("wr-saving");
+          input.classList.add("wr-error");
+        });
+      });
+    }
   }
 })();
 </script>

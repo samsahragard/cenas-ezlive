@@ -14,16 +14,16 @@
 <table>
   <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
   <tbody>
-    <tr><td><code>/&lt;store&gt;/manager/recipes</code></td><td>Recipe catalogue (list + search + open).</td></tr>
-    <tr><td><code>/&lt;store&gt;/manager/recipes/&lt;id&gt;</code></td><td>Recipe detail page.</td></tr>
-    <tr><td><code>/&lt;store&gt;/manager/recipes/seed</code></td><td>Bulk-seed (admin only).</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes</code></td><td>Recipe catalogue (GET list/search; POST create) — <code>store_routes.py:3266</code>.</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes/new</code></td><td>New-recipe form (<code>store_routes.py:3303</code>).</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes/&lt;id&gt;</code> (+ <code>/edit</code>)</td><td>Recipe detail + edit (<code>store_routes.py:3348</code> / <code>3384</code>).</td></tr>
   </tbody>
 </table>
 
 <h3>Permission gate</h3>
 <ul>
-  <li><code>recipes.view</code> — read access (manager + GM + corporate).</li>
-  <li><code>recipes.write</code> — edit / create access (manager + corporate; not GM by default).</li>
+  <li>The real permission key is <code>kds.edit_recipes</code> (<code>permissions.py:82/182/226</code>) — held by <code>km</code>, <code>corporate_chef</code>, <code>corporate</code> (and <code>partner</code> via wildcard). <strong>Correction:</strong> the previously-documented <code>recipes.view</code> / <code>recipes.write</code> keys do NOT exist in <code>ROLE_PERMISSIONS</code>.</li>
+  <li>FLAG &rarr; @aick: the <code>/&lt;store&gt;/recipes*</code> routes (<code>store_routes.py:3266-3421</code>) show no explicit <code>@requires_permission</code> — confirm edit is gated by <code>kds.edit_recipes</code> at the route, or only in-template + store scope.</li>
 </ul>
 
 <h3>Data model</h3>

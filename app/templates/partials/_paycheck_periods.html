@@ -1,0 +1,167 @@
+{# Shared per-delivery paycheck breakdown — one <section> per pay period.
+   Used by the manager paycheck view (driver_paycheck.html) and the driver's
+   own login pay page (pay_history.html) so the two surfaces never drift.
+   Expects `history` (list of PaycheckPeriod). Set `link_orders` to false to
+   render order numbers as plain text — the driver portal has no /orders/view
+   access. Columns are Sam #1492/#1503:
+   Date | Order | E/D/V miles (all "extra over 20") | $25 | $10 | Notes | $5 | Total.
+
+   Set `manager_edit` to true on the Ez Drivers paycheck page to render the
+   manager-input columns (V-Miles, D-Miles, $10, Notes, 5★) as a form that
+   POSTs to store.driver_payroll_save. Editing additionally requires the
+   drivers.admin permission, and only orders that are payroll-ready (>= 2h
+   past delivery, Sam #1492) get inputs — the rest show a "pending" badge. #}
+{% set link_orders = link_orders if link_orders is defined else true %}
+{% set manager_edit = manager_edit if manager_edit is defined else false %}
+{% set can_edit = manager_edit and has_permission('drivers.admin') %}
+{% for period in history %}
+<section style="margin-bottom:32px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;
+              padding:10px 14px;background:rgba(255,255,255,0.04);
+              border:1px solid var(--glass-border);border-radius:8px;margin-bottom:10px;">
+    <div>
+      <h3 style="margin:0;font-size:15px;color:#fff;">
+        Pay period {{ period.period_start.strftime('%a %m/%d/%Y') }} → {{ period.period_end.strftime('%a %m/%d/%Y') }}
+      </h3>
+      <div style="font-size:12px;color:var(--text-3);margin-top:2px;">
+        Check date <strong>{{ period.check_date.strftime('%a %m/%d/%Y') }}</strong>
+        · {{ period.deliveries|length }} delivery{{ '' if period.deliveries|length == 1 else 'ies' }}
+      </div>
+    </div>
+    <div style="font-size:22px;font-weight:700;color:var(--accent-soft);">
+      ${{ '%.2f'|format(period.grand_total) }}
+    </div>
+  </div>
+
+  {% if period.deliveries %}
+  {% if can_edit %}
+  {# Collect the payroll-ready order ids so the save endpoint knows the full
+     set being submitted — an unchecked checkbox sends nothing, so the server
+     needs the id list to resolve $10 / 5★ to False. Not-ready rows are left
+     out (and re-checked server-side). #}
+  {% set ns = namespace(ids=[]) %}
+  {% for d in period.deliveries %}{% if d.order_id and d.ready %}{% set ns.ids = ns.ids + [d.order_id|string] %}{% endif %}{% endfor %}
+  <form method="post" action="{{ url_for('store.driver_payroll_save') }}" style="margin:0;">
+  <input type="hidden" name="rowids" value="{{ ns.ids|join(',') }}">
+  <input type="hidden" name="return_to" value="{{ request.path }}">
+  {% endif %}
+  <div class="table-scroll">
+    <table class="log-table log-table-view">
+      <thead>
+        <tr class="group-header">
+          <th>Date</th>
+          <th>Order #</th>
+          <th style="text-align:right;" title="Expected extra miles over 20, from the route">E-Miles</th>
+          <th style="text-align:right;" title="Driven extra miles over 20 (manager-entered)">D-Miles</th>
+          <th style="text-align:right;" title="Verified extra miles a manager signs off — this is what pays">V-Miles</th>
+          <th style="text-align:right;">Per order</th>
+          <th style="text-align:right;">$10</th>
+          <th>Notes</th>
+          <th style="text-align:right;">$5 ★</th>
+          <th style="text-align:right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in period.deliveries %}
+        {% set row_edit = can_edit and d.order_id and d.ready %}
+        <tr{% if can_edit and not d.ready %} style="opacity:0.75;"{% endif %}>
+          <td>{{ d.delivery_date or '—' }}</td>
+          <td>
+            {% if d.order_number and d.order_number != '?' %}
+              {% if link_orders %}
+              <a href="/orders/view/{{ d.order_number }}"
+                 style="color:var(--accent-soft);font-weight:600;text-decoration:none;">{{ d.order_number }}</a>
+              {% else %}
+              <span style="color:var(--accent-soft);font-weight:600;">{{ d.order_number }}</span>
+              {% endif %}
+            {% else %}{{ d.order_number }}{% endif %}
+          </td>
+          <td style="text-align:right;{% if d.expected_miles == 0 %}opacity:0.4;{% endif %}">{{ '%.1f'|format(d.expected_miles) }}</td>
+          <td style="text-align:right;{% if not row_edit %}opacity:0.4;{% endif %}" title="Manager-entered; no automatic source yet">
+            {% if row_edit %}
+              <input type="number" step="0.1" min="0" name="dmiles_{{ d.order_id }}"
+                     value="{% if d.driven_miles is not none %}{{ '%.1f'|format(d.driven_miles) }}{% endif %}"
+                     style="width:62px;text-align:right;padding:3px 5px;font-size:12px;
+                            background:rgba(255,255,255,0.06);border:1px solid var(--glass-border);
+                            border-radius:5px;color:var(--text-1);">
+            {% elif d.driven_miles is not none %}{{ '%.1f'|format(d.driven_miles) }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;{% if not row_edit and d.verified_miles == 0 %}opacity:0.4;{% elif not row_edit %}font-weight:600;{% endif %}"
+              title="Verified miles a manager signs off — this is what pays">
+            {% if row_edit %}
+              <input type="number" step="0.1" min="0" name="vmiles_{{ d.order_id }}"
+                     value="{{ '%.1f'|format(d.verified_miles) }}"
+                     style="width:62px;text-align:right;padding:3px 5px;font-size:12px;font-weight:600;
+                            background:rgba(123,184,123,0.10);border:1px solid rgba(123,184,123,0.40);
+                            border-radius:5px;color:var(--text-1);">
+            {% else %}{{ '%.1f'|format(d.verified_miles) }}{% endif %}
+          </td>
+          <td style="text-align:right;">${{ '%.2f'|format(d.base) }}</td>
+          <td style="text-align:{% if row_edit %}center{% else %}right{% endif %};{% if not row_edit and d.bonus_tracked == 0 %}opacity:0.4;{% endif %}"
+              title="$10 tracked bonus">
+            {% if row_edit %}
+              <input type="checkbox" name="bonus_{{ d.order_id }}" value="1"
+                     {% if d.bonus_tracked > 0 %}checked{% endif %}
+                     style="width:16px;height:16px;cursor:pointer;accent-color:#7bb87b;">
+            {% else %}${{ '%.2f'|format(d.bonus_tracked) }}{% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--text-2);">
+            {% if row_edit %}
+              <input type="text" name="notes_{{ d.order_id }}" value="{{ d.notes_input }}"
+                     maxlength="500" placeholder="notes…"
+                     style="width:150px;padding:3px 6px;font-size:12px;
+                            background:rgba(255,255,255,0.06);border:1px solid var(--glass-border);
+                            border-radius:5px;color:var(--text-1);">
+            {% elif can_edit and not d.ready %}
+              <span style="font-size:11px;color:var(--text-3);white-space:nowrap;"
+                    title="Orders flow into payroll 2h after delivery (Sam #1492)">
+                ⏳ pending{% if d.ready_at_ct %} · ready {{ d.ready_at_ct }}{% endif %}
+              </span>
+            {% elif d.notes %}{{ d.notes }}{% else %}<span style="opacity:0.4;">—</span>{% endif %}
+          </td>
+          <td style="text-align:{% if row_edit %}center{% else %}right{% endif %};{% if not row_edit and d.bonus_five_star == 0 %}opacity:0.4;{% endif %}"
+              title="$5 five-star bonus">
+            {% if row_edit %}
+              <input type="checkbox" name="fivestar_{{ d.order_id }}" value="1"
+                     {% if d.bonus_five_star > 0 %}checked{% endif %}
+                     style="width:16px;height:16px;cursor:pointer;accent-color:#f4b48a;">
+            {% else %}${{ '%.2f'|format(d.bonus_five_star) }}{% endif %}
+          </td>
+          <td style="text-align:right;font-weight:700;">${{ '%.2f'|format(d.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:rgba(255,255,255,0.04);">
+          <td colspan="9" style="text-align:right;font-weight:600;">Period total</td>
+          <td style="text-align:right;font-weight:700;color:var(--accent-soft);">${{ '%.2f'|format(period.grand_total) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% if can_edit %}
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:10px;">
+    <span style="font-size:11px;color:var(--text-3);">Verify miles, $10, notes and the 5★, then save — pay updates on the driver's page.</span>
+    <button type="submit"
+            style="padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer;
+                   background:var(--accent-soft);color:#1a1a1a;border:none;border-radius:7px;">
+      Save this period
+    </button>
+  </div>
+  </form>
+  {% endif %}
+  {% else %}
+  <p style="margin:6px 0 0 4px;font-size:13px;color:var(--text-3);">No tracked deliveries in this period.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
+<p style="margin-top:8px;font-size:12px;color:var(--text-3);">
+  Rules: $25 per delivery (always) · $10 tracked bonus + $2.00 per verified mile over 20 + $5 for a 5★,
+  all gated on tracking_status='Tracked'.
+  The three miles columns are all "extra over 20", one-way from the home kitchen to the first drop-off (Google Routes API):
+  <strong>E-Miles</strong> is expected (from the route), <strong>D-Miles</strong> is what the driver actually drove
+  (manager-entered), and <strong>V-Miles</strong> is what a manager verifies on the Ez Drivers page — V-Miles is what pays.
+  Until a manager verifies an order, V-Miles defaults to the expected miles, so pay is unchanged.
+  $10, Notes, and the 5★ bonus are manager inputs from the Ez Drivers page.
+</p>

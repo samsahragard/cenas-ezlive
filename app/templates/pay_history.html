@@ -39,6 +39,15 @@
   Verified paychecks. Estimates from your active deliveries become final on Friday after the period closes.
 </div>
 
+{# Per-delivery breakdown for the current + recent periods (Sam #1492/#1503).
+   Same table the office sees on the Ez Drivers page; order numbers are not
+   linked here because the driver portal has no order-detail view. #}
+{% if history %}
+  {% set link_orders = false %}
+  {% include "partials/_paycheck_periods.html" %}
+{% endif %}
+
+<h3 style="margin:24px 0 10px;font-size:15px;color:#fff;">Closed paychecks</h3>
 {% if checks %}
   {% for c in checks %}
     <div class="ph-check">

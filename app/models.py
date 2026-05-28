@@ -139,6 +139,20 @@ class Order(Base):
     en_route_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delivered_actual_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # ---- Manager payroll inputs (Sam #1492/#1503, 2026-05-28) ----
+    # Written from the Ez Drivers payroll-entry surface; read by compute_one(),
+    # which prefers a set value and otherwise falls back to the auto-derived
+    # estimate. All nullable — NULL means "not yet verified", so estimates keep
+    # showing until a manager confirms. Only pay_verified_miles changes pay
+    # (extra miles over 20 at $2.00/mi); pay_driven_miles is display-only.
+    pay_verified_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pay_driven_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pay_bonus_tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    pay_five_star: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    pay_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    pay_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pay_verified_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order",
         cascade="all, delete-orphan",

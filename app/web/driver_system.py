@@ -804,6 +804,7 @@ def pay_history():
     driver = _current_driver()
     if not driver:
         return redirect(url_for("driver.driver_login"))
+    from app.services.ezcater_payroll import paycheck_history
     db = SessionLocal()
     try:
         checks = (
@@ -813,10 +814,14 @@ def pay_history():
             .limit(24)
             .all()
         )
+        # Per-delivery breakdown for the current + recent periods (Sam #1492):
+        # the same E/D/V-miles table the office sees, on the driver's own login.
+        history = paycheck_history(driver.name, periods=6)
         return render_template("pay_history.html",
                                active="pay_history",
                                driver=driver,
-                               checks=checks)
+                               checks=checks,
+                               history=history)
     finally:
         db.close()
 

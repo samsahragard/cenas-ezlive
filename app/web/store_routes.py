@@ -629,6 +629,7 @@ def driver_paycheck_by_driver(driver_id: int):
             page_title=f"Paycheck — {d.name}",
             driver=d,
             history=history,
+            manager_edit=True,
         )
     finally:
         db.close()
@@ -664,9 +665,87 @@ def driver_paycheck(known_id: int):
             page_title=f"Paycheck — {kd.name}",
             driver=kd,
             history=history,
+            manager_edit=True,
         )
     finally:
         db.close()
+
+
+def _parse_payroll_float(raw):
+    """Parse a manager miles input. Blank/garbage -> None (= 'not verified
+    yet', so the auto estimate keeps paying). '0' -> 0.0 (an explicit zero).
+    Negative values clamp to 0."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    return round(max(0.0, v), 2)
+
+
+def _safe_return_path(raw: str | None, fallback: str) -> str:
+    """Only allow a same-site relative redirect (block open-redirects)."""
+    if raw and raw.startswith("/") and not raw.startswith("//"):
+        return raw
+    return fallback
+
+
+@store_bp.route("/driver-payroll/save", methods=["POST"])
+@requires_permission("drivers.admin")
+def driver_payroll_save():
+    """Manager payroll input (Sam #1492/#1503, 2026-05-28). Writes the
+    per-order pay_* columns for each payroll-ready order id posted from the
+    Ez Drivers paycheck page. The 2h-after-delivery readiness gate is
+    re-enforced server-side (never trust the client). On success we redirect
+    back to the same paycheck page with a ?saved= banner; the saved verified
+    miles / $10 / 5★ / notes then feed both this view and the driver's own
+    pay page."""
+    from app.models import Order
+    from app.services.ezcater_payroll import payroll_ready
+
+    rowids = [x.strip() for x in (request.form.get("rowids", "") or "").split(",")
+              if x.strip().isdigit()]
+    user = getattr(g, "current_user", None)
+    saved_by = (getattr(user, "full_name", None)
+                or getattr(user, "email", None) or "manager")
+    now = datetime.utcnow()
+
+    db = next(get_db())
+    saved = 0
+    skipped = 0
+    try:
+        for rid in rowids:
+            o = db.get(Order, int(rid))
+            if o is None:
+                continue
+            ready, _ = payroll_ready(o)
+            if not ready:
+                skipped += 1
+                continue
+            o.pay_verified_miles = _parse_payroll_float(request.form.get(f"vmiles_{rid}"))
+            o.pay_driven_miles = _parse_payroll_float(request.form.get(f"dmiles_{rid}"))
+            o.pay_bonus_tracked = request.form.get(f"bonus_{rid}") is not None
+            o.pay_five_star = request.form.get(f"fivestar_{rid}") is not None
+            note = (request.form.get(f"notes_{rid}") or "").strip()
+            o.pay_notes = note[:500] or None
+            o.pay_verified_at = now
+            o.pay_verified_by = str(saved_by)[:80]
+            saved += 1
+        db.commit()
+    finally:
+        db.close()
+
+    dest = _safe_return_path(request.form.get("return_to"),
+                             url_for("store.driver_tracking"))
+    sep = "&" if "?" in dest else "?"
+    dest = f"{dest}{sep}saved={saved}"
+    if skipped:
+        dest = f"{dest}&pending={skipped}"
+    return redirect(dest)
 
 
 @store_bp.route("/driver-portal")

@@ -34,6 +34,10 @@ PER_MILE_OVER_20 = 2.00
 FIVE_STAR_BONUS = 5.00
 MILES_THRESHOLD = 20.0
 
+# Sam #1492 (2026-05-28): an order only flows into payroll 2h after its
+# delivery time has passed — that's when a manager should verify + pay it.
+READY_DELAY_HOURS = 2
+
 
 # ---- pay period math ----
 
@@ -88,11 +92,28 @@ class DeliveryPay:
     five_star: bool
     base: float
     bonus_tracked: float
-    extra_miles: float
+    # Three miles columns, all "extra over 20" (Sam #1492/#1503):
+    #   E-Miles = expected, derived from the route distance (display-only)
+    #   D-Miles = driven, manager-entered, no automatic source (display-only)
+    #   V-Miles = verified by a manager on the Ez Drivers page -> THIS pays
+    expected_miles: float
+    driven_miles: float | None
+    verified_miles: float
+    extra_miles: float          # legacy alias == verified_miles (the paying miles)
     bonus_miles: float
     bonus_five_star: float
     total: float
     notes: str = ""
+    # Raw manager-entered note (no auto "Untracked" fallback) — what the edit
+    # form pre-fills, so saving doesn't persist the display-only fallback text.
+    notes_input: str = ""
+    # Order primary key, so the manager edit form can post payroll input back
+    # to the exact row (None for non-Order inputs / synthetic rows).
+    order_id: int | None = None
+    # Payroll-readiness gate (Sam #1492): True once it's been >= 2h since the
+    # delivery time. ready_at_ct is a CT display string for the "pending" badge.
+    ready: bool = True
+    ready_at_ct: str = ""
 
 
 def _is_tracked(tracking_status: str | None) -> bool:
@@ -101,27 +122,104 @@ def _is_tracked(tracking_status: str | None) -> bool:
     return tracking_status.strip().lower() == "tracked"
 
 
+def payroll_ready(order) -> tuple[bool, datetime | None]:
+    """Sam #1492: an order is payroll-ready 2h after its delivery time.
+
+    Returns (ready, ready_at) where ready_at is the naive-UTC moment it
+    becomes editable. Delivery timestamps are stored naive-UTC; prefer the
+    actual delivered time, fall back to the booked window end. If neither is
+    known we can't gate it, so treat it as ready (don't block a manager on a
+    historical row that simply lacks a timestamp). getattr keeps this safe for
+    non-Order inputs."""
+    stamp = (getattr(order, "delivered_actual_at", None)
+             or getattr(order, "delivery_window_end", None))
+    if stamp is None:
+        return True, None
+    ready_at = stamp + timedelta(hours=READY_DELAY_HOURS)
+    return (datetime.utcnow() >= ready_at), ready_at
+
+
+def _ready_at_ct(ready_at: datetime | None) -> str:
+    """Format a naive-UTC instant as a short America/Chicago string for the
+    'pending — ready <when>' badge. Best-effort; falls back to UTC."""
+    if ready_at is None:
+        return ""
+    try:
+        from zoneinfo import ZoneInfo
+        return (ready_at.replace(tzinfo=ZoneInfo("UTC"))
+                        .astimezone(ZoneInfo("America/Chicago"))
+                        .strftime("%a %m/%d %I:%M %p"))
+    except Exception:
+        return ready_at.strftime("%a %m/%d %H:%M UTC")
+
+
 def compute_one(order: Order, five_star: bool = False) -> DeliveryPay:
     tracked = _is_tracked(order.tracking_status)
     miles = order.pickup_miles or 0.0
-    extra_miles = max(0.0, miles - MILES_THRESHOLD) if tracked else 0.0
-    bonus_miles = round(extra_miles * PER_MILE_OVER_20, 2)
-    bonus_tracked_v = BONUS_TRACKED if tracked else 0.0
-    bonus_five_star = FIVE_STAR_BONUS if (tracked and five_star) else 0.0
+    # Keep the paying calc on the UNROUNDED miles so the total stays
+    # byte-identical to the pre-redesign formula; round only for display.
+    expected_raw = max(0.0, miles - MILES_THRESHOLD)
+
+    # Auto (estimate) values — what the formula paid before manager input
+    # existed. Each is overridden per-field below; when no manager value is set
+    # the result is byte-identical to the old calc (total AND display fields).
+    auto_verified_raw = expected_raw if tracked else 0.0
+    auto_bonus_on = tracked
+    auto_five_pay = tracked and five_star
+
+    # Manager payroll inputs (Sam #1492/#1503). getattr keeps this safe for
+    # rows predating the column backfill and for non-Order inputs. A set value
+    # wins; None means "not verified yet" -> fall back to the auto estimate.
+    mgr_verified = getattr(order, "pay_verified_miles", None)
+    mgr_bonus = getattr(order, "pay_bonus_tracked", None)
+    mgr_five = getattr(order, "pay_five_star", None)
+    mgr_driven = getattr(order, "pay_driven_miles", None)
+    mgr_notes = getattr(order, "pay_notes", None)
+
+    verified_raw = mgr_verified if mgr_verified is not None else auto_verified_raw
+    bonus_on = mgr_bonus if mgr_bonus is not None else auto_bonus_on
+    # Whether $5 pays vs whether the star flag shows. Splitting them keeps the
+    # displayed flag byte-identical to the old raw `five_star` when unset, while
+    # a manager 5-star explicitly pays $5 (manager override wins over tracking).
+    five_pay = mgr_five if mgr_five is not None else auto_five_pay
+    five_flag = mgr_five if mgr_five is not None else five_star
+
+    bonus_miles = round(verified_raw * PER_MILE_OVER_20, 2)
+
+    # E-Miles: expected extra miles over 20, from the route distance. Shown
+    # whether or not the order tracked (it's "what the address says we'd owe").
+    expected_miles = round(expected_raw, 2)
+    # V-Miles display value (what pays, rounded for the column).
+    verified_miles = round(verified_raw, 2)
+    # D-Miles: extra miles actually driven. No automatic source, so it's blank
+    # until a manager enters it; display-only, never pays.
+    driven_miles = round(mgr_driven, 2) if mgr_driven is not None else None
+
+    bonus_tracked_v = BONUS_TRACKED if bonus_on else 0.0
+    bonus_five_star = FIVE_STAR_BONUS if five_pay else 0.0
     total = round(BASE_PER_DELIVERY + bonus_tracked_v + bonus_miles + bonus_five_star, 2)
+
+    ready, ready_at = payroll_ready(order)
     return DeliveryPay(
         order_number=order.external_order_id or "?",
         delivery_date=order.delivery_date,
         tracking_status=order.tracking_status,
         pickup_miles=order.pickup_miles,
-        five_star=five_star,
+        five_star=five_flag,
         base=BASE_PER_DELIVERY,
         bonus_tracked=bonus_tracked_v,
-        extra_miles=round(extra_miles, 2),
+        expected_miles=expected_miles,
+        driven_miles=driven_miles,
+        verified_miles=verified_miles,
+        extra_miles=verified_miles,
         bonus_miles=bonus_miles,
         bonus_five_star=bonus_five_star,
         total=total,
-        notes=(order.tracking_status or "—") if not tracked else "",
+        notes=mgr_notes if mgr_notes else ((order.tracking_status or "—") if not tracked else ""),
+        notes_input=mgr_notes or "",
+        order_id=getattr(order, "id", None),
+        ready=ready,
+        ready_at_ct=_ready_at_ct(ready_at) if not ready else "",
     )
 
 

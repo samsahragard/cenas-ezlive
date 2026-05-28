@@ -386,6 +386,38 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("driver-system column backfill failed (non-fatal)")
 
+    # Idempotent column backfill for the manager payroll-input columns
+    # (Sam #1492/#1503, 2026-05-28 — migration 41). alembic isn't wired on
+    # Render, so these gated-absence ALTERs are how the columns reach prod.
+    # Managers fill verified miles / $10 bonus / 5-star / notes from the Ez
+    # Drivers page; compute_one() prefers them over the auto estimate.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_pi, text as _sa_text_pi
+        from app.db import engine as _eng_pi
+        if _eng_pi is not None:
+            insp = _sa_inspect_pi(_eng_pi)
+            if "orders" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("orders")}
+                payroll_input_cols = [
+                    ("pay_verified_miles", "FLOAT"),
+                    ("pay_driven_miles",   "FLOAT"),
+                    ("pay_bonus_tracked",  "BOOLEAN"),
+                    ("pay_five_star",      "BOOLEAN"),
+                    ("pay_notes",          "VARCHAR(500)"),
+                    ("pay_verified_at",    "TIMESTAMP"),
+                    ("pay_verified_by",    "VARCHAR(80)"),
+                ]
+                added = []
+                with _eng_pi.begin() as conn:
+                    for col_name, col_def in payroll_input_cols:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_pi(f"ALTER TABLE orders ADD COLUMN {col_name} {col_def}"))
+                            added.append(col_name)
+                if added:
+                    logging.getLogger(__name__).info("orders table: backfilled payroll-input columns %s", added)
+    except Exception:
+        logging.getLogger(__name__).exception("payroll-input column backfill failed (non-fatal)")
+
     # Idempotent column backfill for sam_chat_messages cache-token columns
     # (migration 25, Sam #1895 caching SECONDARY per samai #2058 amendment).
     # Captures cache_creation_input_tokens + cache_read_input_tokens from

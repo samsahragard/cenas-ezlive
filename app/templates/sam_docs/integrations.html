@@ -3,10 +3,10 @@
 <p class="meta">External-API integrations and internal pipelines that feed the dashboards.</p>
 
 <h2>EZCater</h2>
-<p>Catering order intake from EZCater. Two ingest paths + a Selenium-driven driver-assignment surface that drives the partnerportal.ezcater.com UI from our side:</p>
+<p>Catering order intake from EZCater. One ingest path (webhook) + a driver-assignment surface that drives the partnerportal.ezcater.com UI from our side:</p>
 <ul>
   <li><strong>Webhook</strong> — EZCater posts inbound order events to <code>/ezcater/webhook</code> (signature-verified). The webhook handler ingests the order into the catering tables, picks the default in-house driver from the store map (Masood CK #1 for Copperfield, Sam CK #2 for Tomball), and queues a <code>DriverAssignmentJob</code> row that the AiCk gateway picks up to drive the partnerportal Chrome flow (Sam #900, 2026-05-25).</li>
-  <li><strong>IMAP backup</strong> — EZCater also emails order confirmations to the vendor mailbox. An IMAP ingest periodically scans the mailbox for any orders missed by the webhook (defense in depth).</li>
+  <li><strong>Ingest is webhook-only</strong> (samai 2026-05-28 correction) — there is NO EZCater IMAP backup in the current code. The only IMAP poller is <code>produce_ingest.py</code> (PRODUCE orders to <code>orders@cenaskitchen.com</code>, gated by <code>PRODUCE_INGEST_ENABLED</code>) — a separate pipeline, NOT EZCater. EZCater orders arrive solely via the signature-verified webhook above.</li>
 </ul>
 
 <h3>Driver assignment (Selenium UI flow)</h3>
@@ -17,6 +17,7 @@
   <li>The gateway POSTs the result back to Render's <code>/catering/assign_driver/result</code> callback (X-Cena-Token gated). On status='completed', Render writes the new driver name into <code>Order.ezcater_driver_name</code>; on '__no_driver__' unhook, it clears the field.</li>
   <li><strong>Failover hop (Sam #900, 2026-05-25)</strong> — if aick's Selenium fails (auth, popup-stuck, RuntimeError, etc., but NOT verification_mismatch which is an ezCater-side state rejection), the gateway forwards the same job payload to <code>CENA2_GATEWAY_URL=http://100.73.38.82:8766</code> on Mini_IT13. ck's Playwright gateway runs the same flow + posts the callback with <code>gateway_processed='ck'</code> instead of <code>'aick'</code>. End-to-end proven in production 2026-05-25 (8 consecutive failovers caught cleanly during a stale-module-cache outage on aick).</li>
 </ol>
+<p class="meta"><strong>NOTE (samai 2026-05-28):</strong> per the Architecture audit, the driver-assign PRIMARY is now <code>pwck</code> (Mini_IT13 <code>:9000</code>, <code>/pwck/run</code>); aick Selenium + ck Playwright are now fallback, and the <code>cena2:8766</code> peer referenced above is currently DOWN. The flow described here is aick's (now-fallback) mechanism — see Architecture / Tools for the live topology.</p>
 
 <h3>EZCater rules</h3>
 <ul>
@@ -41,7 +42,7 @@
 <ul>
   <li>Higher-resolution analytics: sales, labor, menu mix.</li>
   <li>Separate OAuth credentials from the standard API (analytics has its own client_id + client_secret).</li>
-  <li>Pre-aggregated rollups land in the Postgres analytics tables for fast dashboard reads.</li>
+  <li>Pre-aggregated rollups land in the SQLite analytics tables (the app DB is SQLite at <code>/var/data/cenas_kitchen.db</code>, NOT Postgres — see Architecture) for fast dashboard reads.</li>
 </ul>
 
 <h3>Toast rules</h3>
@@ -53,7 +54,7 @@
 </ul>
 
 <h2>Telegram bridge</h2>
-<p>Bidirectional Sam ↔ agents channel (live 2026-05-24). <span class="path">cena/telegram_dev_chat_bridge.py</span> on AiCk runs two daemon threads:</p>
+<p>Bidirectional Sam ↔ agents channel (live 2026-05-24). <strong>Correction (samai 2026-05-28):</strong> the LIVE bridge + hub run on <strong>CK / Mini_IT13</strong> as <span class="path">cenas-chat-hub\run_bridge.py</span> + <span class="path">bridge.py</span> + <span class="path">hub.py</span> (confirmed running). The older <span class="path">cena/telegram_dev_chat_bridge.py</span> on AiCk still exists on disk — FLAG &rarr; @aick: confirm which is canonical. The live bridge runs two daemon threads:</p>
 <ul>
   <li><strong>tg → hub</strong> — long-polls Telegram getUpdates, accepts messages from authorized user-ids (allow-list at <span class="path">cena/.secrets/telegram_authorized_user_ids.txt</span>), posts them to the LAN hub as author <code>sam-tg</code> (text + image attachments via JSON + base64).</li>
   <li><strong>hub → tg</strong> — polls the LAN hub for new messages, forwards every non-<code>sam-tg</code> author to Sam's private chat (chat_id at <span class="path">cena/.secrets/telegram_chat_id.txt</span>). Daemon-thread death has happened once silently (no log, but cursor file kept advancing) — if outbound stops, restart the bridge.</li>
@@ -94,8 +95,8 @@
   <li><strong>Baseline windows</strong> — adjust the rolling baseline window for trend rules; defaults to 30 days.</li>
 </ul>
 
-<h2>Sling</h2>
-<p>Scheduling + shift management. Sling drives the team-tab roster + the per-store schedule view. API-pulled rosters are cached in the team table; manual overrides land in the same table with a provenance flag.</p>
+<h2>Sling <span class="status-chip draft">Being replaced</span></h2>
+<p><strong>Status (samai 2026-05-28):</strong> Sling is being REPLACED by the internal scheduling system (see Phase 2 Roadmap). The per-store schedule view is now <strong>Toast-shift-sourced</strong> (<code>toast_reports.py</code> builds <code>/reports/schedule</code> from Toast shifts with Sling-compatible labels), NOT Sling-driven. Historically Sling drove the team-tab roster + schedule view (API-pulled rosters cached in the team table; manual overrides with a provenance flag); that path is winding down. Once the internal cutover completes, this section will describe the internal system, not Sling.</p>
 
 <h2>Sentry</h2>
 <p>Error monitoring for the Flask app. Configured via <code>SENTRY_DSN</code> env var; integration is automatic for Flask + SQLAlchemy + the cron entry points. Critical anomalies in the anomaly engine optionally trigger a Sentry message for visibility.</p>

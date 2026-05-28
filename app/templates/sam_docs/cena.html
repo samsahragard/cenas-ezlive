@@ -3,14 +3,15 @@
 <p class="meta">The operator-only AI assistant. The surface, the tools, and the escalation policy.</p>
 
 <h2>What it is</h2>
-<p>Cena is the operator-facing AI assistant: an Anthropic-backed runtime that runs on an internal host, exposes a chat surface on the web app at <code>/sam/chat</code>, and operates the system on the operator's behalf with a defined tool catalogue and audit log.</p>
+<p>Cena is the operator-facing AI assistant: a runtime on an internal host (<code>cena_gateway.py</code> on AiCk) that exposes a chat surface on the web app at <code>/sam/chat</code>, and operates the system on the operator's behalf with a defined tool catalogue and audit log. <strong>Model:</strong> the gateway defaults to <code>claude-sonnet-4-6</code> (<code>cena_gateway.py:113</code>) and also exposes a picker for <code>claude-opus-4-7</code> + <code>gemini-2.5-flash</code> / <code>gemini-3.5-flash</code>.</p>
+<p class="meta">FLAG &rarr; @aick (model/tool policy): the gateway comment at <code>cena_gateway.py:91-92</code> states Gemini can run the FULL Cena including "system prompt, context files, tools" — so tool conversations are NOT strictly Claude-only in code. Confirm whether the Gemini-exclusion-on-tool-turns fix is actually in effect; if so, point to the enforcement so this page can state it precisely.</p>
 
 <h2>Where it runs</h2>
 <table>
   <thead><tr><th>Component</th><th>Location</th><th>Role</th></tr></thead>
   <tbody>
     <tr><td>Primary gateway</td><td>Internal host (Tailscale-bound); externally reachable via Cloudflare Tunnel.</td><td>The Cena runtime. Hosts the streaming endpoint, the tool catalogue, the audit log, and the wake-on-chat / wake-on-hub triggers.</td></tr>
-    <tr><td>Peer gateway</td><td>Secondary internal host (Tailscale-only).</td><td>Cross-host message queue + worker + sync. Provides resilient delivery if the primary is offline.</td></tr>
+    <tr><td>Peer gateway</td><td>Secondary internal host (Tailscale-only).</td><td>Cross-host message queue + worker + sync. Provides resilient delivery if the primary is offline. <strong>NOTE:</strong> the <code>cena2:8766</code> peer is currently DOWN (see Architecture audit) — resilient-delivery failover is degraded until it is restored.</td></tr>
     <tr><td>Web entry point</td><td>Render web service.</td><td><code>/sam/chat</code> SSE-streams to the operator browser; calls the gateway for each turn.</td></tr>
     <tr><td>Persistent chat</td><td>Internal host port 8770 (Tailscale-only).</td><td>Sam ↔ Cena local chat that persists through operator disconnects.</td></tr>
   </tbody>

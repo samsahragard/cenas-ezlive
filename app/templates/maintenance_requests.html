@@ -470,8 +470,23 @@
         <tr class="wr-row" data-wstatus="{{ w.status }}"
             data-expiring90d="{{ '1' if (w.expires_in_days is not none and 0 <= w.expires_in_days <= 90) else '0' }}"
             data-search="{{ w.search }}">
-          <td class="wr-title">{{ w.title }}</td>
-          <td>{{ w.item_number }}</td>
+          <td class="wr-title">
+            {% if w.item_number %}
+              <a href="https://www.webstaurantstore.com/search/{{ w.item_number|urlencode }}.html"
+                 target="_blank" rel="noopener noreferrer"
+                 title="Open this item on WebstaurantStore">{{ w.title }}</a>
+            {% else %}
+              {{ w.title }}
+            {% endif %}
+          </td>
+          <td>
+            {% if w.item_number %}
+              <a href="https://www.webstaurantstore.com/search/{{ w.item_number|urlencode }}.html"
+                 target="_blank" rel="noopener noreferrer">{{ w.item_number }}</a>
+            {% else %}
+              {{ w.item_number }}
+            {% endif %}
+          </td>
           <td>{{ w.order_number }}</td>
           <td>
             {% if w.expiration_date %}

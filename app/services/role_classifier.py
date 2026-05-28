@@ -88,3 +88,18 @@ def is_management_position(position_name: str | None) -> bool:
     if "manager" in name or "owner" in name or "corporate" in name:
         return True
     return False
+
+
+def is_owner_position(position_name: str | None) -> bool:
+    """True for owner / partner job titles (Sam #1516, 2026-05-28).
+
+    Owners never clock in and must NEVER show any labor info — they are
+    excluded from the labor report ENTIRELY (no row, cost, %, or per-person
+    detail), not merely redacted. This is kept as its own predicate and is NOT
+    folded into is_management_position on purpose: 'owner' must stay in
+    is_management_position (so it remains redacted anywhere it could surface),
+    while labor_report filters owner entries out upstream — before the
+    cost/redact branches run — so the two concerns never move together."""
+    if not position_name:
+        return False
+    return "owner" in position_name.strip().lower()

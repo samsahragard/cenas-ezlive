@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.services.toast_client import ToastClient, restaurant_guids
-from app.services.role_classifier import classify_role, is_management_position
+from app.services.role_classifier import classify_role, is_management_position, is_owner_position
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +121,12 @@ def labor_report(start: datetime, end: datetime,
     which understated labor %. This applies to every permission set so the labor
     % is accurate while no individual manager's real pay is ever read or shown.
 
+    Owner / partner titles (role_classifier.is_owner_position) are excluded from
+    the report ENTIRELY (Sam #1516) — owners never clock in and must show no
+    labor info at all, so their time entries are filtered out before aggregation
+    in every view. ('owner' still matches is_management_position so it stays
+    redacted anywhere else it could surface; only labor_report drops it.)
+
     redact_management: when True, management positions (Kitchen Manager,
     Floor Manager, etc. — see role_classifier.is_management_position) only
     show their % Net Sales — people count, hours, dollar amounts, and the
@@ -200,6 +206,12 @@ def labor_report(start: datetime, end: datetime,
             if not job_guid or not emp_guid:
                 continue
             title = all_jobs.get(job_guid, {}).get("title") or "(unknown job)"
+            if is_owner_position(title):
+                # Sam #1516 (2026-05-28): owners never clock in and must never
+                # have any labor info shown. Exclude owner entries entirely —
+                # before cost/aggregation — so there is no owner row, cost, %,
+                # or per-person detail in ANY permission view.
+                continue
             person = all_employees.get(emp_guid) or emp_guid[:8]
             reg = float(e.get("regularHours") or 0)
             ot = float(e.get("overtimeHours") or 0)

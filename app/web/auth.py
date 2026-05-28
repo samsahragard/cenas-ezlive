@@ -51,6 +51,7 @@ EXEMPT_PREFIXES = (
     "/sam/cena/sam-chat-attachment/",  # binary attachment download for dev-team vision parity per Sam #837 item 5 — own X-Cena-Token check inside
     "/sam/cena/telegram-test-fire",  # Cena gateway Track 2 test-fire trigger — own X-Cena-Token check inside
     "/sam/cena/run-",                # Cena gateway one-shot script triggers (run-seed-test-drivers, run-flip-buildplan-approval) — own X-Cena-Token check inside
+    "/docck/",                      # docck v1 multi-agent monitor — heartbeat/status/tick/admin all have own bearer-token auth inside
     "/sam/chat/todos/current",       # Cena gateway top-of-list TODO read (no-skip rule) — dual-gated: Sam session OR X-Cena-Token header
     "/ez-manage/pending-count.json",  # XHR poll endpoint — own MANAGER_ROLES check inside, returns 401 JSON on unauth (not 302) so the sidebar badge fetcher renders cleanly + samai's stateless gate-3 probe sees the canonical 401 JSON signal (Cena #1820 + samai #1787)
     "/catering/assign_driver/result",  # aick gateway callback after running driver re-assign — own X-Cena-Token check inside

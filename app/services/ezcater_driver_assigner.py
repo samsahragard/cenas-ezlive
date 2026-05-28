@@ -133,12 +133,22 @@ def dispatch_assignment_job(job_id: str, order_id: str, current_driver: Optional
     CENA_PROXY is unset (e.g. local dev with the gateway on
     localhost).
     """
-    gateway = (os.environ.get("CENA_GATEWAY_URL") or "").strip().rstrip("/")
+    # 2026-05-27 (Sam #1155 fix from samai's #1198): PWCK_PRIMARY_URL
+    # is the new dispatch target for driver-assign. CENA_GATEWAY_URL is
+    # reserved for /sam/chat -> Cena routing in sam_chat.py — the two
+    # env vars collided earlier today when CENA_GATEWAY_URL was swung
+    # to pwck:9000 (pwck has no /cena/stream, so Cena chat went dark).
+    # New precedence: PWCK_PRIMARY_URL wins; CENA_GATEWAY_URL is the
+    # legacy fallback to aick's Selenium gateway for emergency revert.
+    gateway = (os.environ.get("PWCK_PRIMARY_URL")
+               or os.environ.get("CENA_GATEWAY_URL")
+               or "").strip().rstrip("/")
+    gateway_src = "PWCK_PRIMARY_URL" if os.environ.get("PWCK_PRIMARY_URL") else "CENA_GATEWAY_URL"
     token = os.environ.get("CENA_GATEWAY_TOKEN", "").strip()
     callback = (os.environ.get("CENA_RENDER_ORIGIN") or "https://app.cenaskitchen.com").strip().rstrip("/")
     proxy = (os.environ.get("CENA_PROXY") or "").strip() or None
     if not gateway:
-        logger.info("dispatch_assignment_job: CENA_GATEWAY_URL unset — job %s queued without wake", job_id)
+        logger.info("dispatch_assignment_job: PWCK_PRIMARY_URL + CENA_GATEWAY_URL both unset — job %s queued without wake", job_id)
         return
     body = {
         "job_id": job_id,
@@ -156,8 +166,8 @@ def dispatch_assignment_job(job_id: str, order_id: str, current_driver: Optional
         with httpx.Client(**client_kwargs) as hx:
             r = hx.post(f"{gateway}/jobs/driver-assign", json=body, headers=headers)
             logger.info(
-                "dispatch_assignment_job: aick gateway responded %s for job %s (proxy=%s)",
-                r.status_code, job_id, bool(proxy),
+                "dispatch_assignment_job: gateway responded %s for job %s (src=%s, url=%s, proxy=%s)",
+                r.status_code, job_id, gateway_src, gateway, bool(proxy),
             )
             if r.status_code >= 300:
                 logger.warning("dispatch body: %s", r.text[:200])

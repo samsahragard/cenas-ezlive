@@ -55,6 +55,13 @@ _LEASE_ROW_ID = 1
 # Render to arm real auto-recovery. This is the blast-radius guard (Sam #1257).
 AUTORECOVER_ENABLED = (os.getenv("DOCCK_AUTORECOVER_ENABLED", "").strip().lower()
                        in ("1", "true", "yes", "on"))
+# SEPARATE, stricter gate for machine reboots. Arming AUTORECOVER enables low-blast
+# SERVICE restarts; rebooting a live business machine is high-blast and stays OFF
+# until the state machine has a track record (Sam #1257 blast-radius posture).
+# When off, a reboot_machine step is skipped + the sequence escalates to a human
+# alert instead. Flip DOCCK_ALLOW_REBOOT=1 to enable auto-reboot as a last resort.
+ALLOW_REBOOT = (os.getenv("DOCCK_ALLOW_REBOOT", "").strip().lower()
+                in ("1", "true", "yes", "on"))
 CB_THRESHOLD = 3                 # failed sequences within the window trips the breaker
 CB_WINDOW_SECONDS = 3600         # 1 hour
 # Active-recovery threads, keyed by agent_id, so the 30s tick never spawns a
@@ -323,6 +330,8 @@ def _do_step_action(agent: DocckAgent, step: dict) -> tuple[bool, dict]:
                               {"service_names": step.get("service_names", []),
                                "all_or_nothing": False})
     if action == "reboot_machine":
+        if not ALLOW_REBOOT:
+            return False, {"skipped": "reboot_gated_off (DOCCK_ALLOW_REBOOT not set) — service-restart-only mode"}
         if not _reboot_is_safe(agent):
             return False, {"skipped": "reboot_unsafe_recent_webhook_activity"}
         return _watchdog_post(agent, "/control/reboot_machine",

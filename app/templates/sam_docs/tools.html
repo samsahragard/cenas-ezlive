@@ -152,7 +152,7 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
   <li><code>pwck/server.py</code> FastAPI app running on port 9000, bound to Tailscale + LAN</li>
   <li>Token file at <code>C:/Users/sam/ck-ezcater/cena_token.txt</code> matching Render's <code>CENA_GATEWAY_TOKEN</code></li>
   <li>Imports <code>ck_assigner.run_one_assignment</code> from <code>C:/Users/sam/ck-ezcater/</code> (single-sourced — does not duplicate the Playwright code)</li>
-  <li>Shares ck's authed ezCater cookie jar at <code>C:/Users/sam/.openclaw/.secrets/ezcater_session.json</code></li>
+  <li>Shares ck's authed ezCater cookie jar at <code>C:\Users\sam\cena-secrets\ezcater_session.json</code></li>
   <li>Chromium installed (via Playwright's <code>playwright install chromium</code>)</li>
   <li>SQLite at <code>C:/Users/sam/pwck/pwck.db</code> — selector vault + failure-pattern library + run log</li>
   <li>Endpoint <code>POST /jobs/driver-assign</code> registered (mirrors aick's legacy contract — drop-in)</li>
@@ -162,7 +162,7 @@ Frontend polling sees the update -&gt; flashes check or X</pre>
 <ul>
   <li><code>ck_gateway.py</code> Flask service running on port 8766, bound to Tailscale + LAN</li>
   <li>Token file at <code>C:/Users/sam/ck-ezcater/cena_token.txt</code> (same file pwck reads)</li>
-  <li>Same authed ezCater cookie jar at <code>~/.openclaw/.secrets/ezcater_session.json</code></li>
+  <li>Same authed ezCater cookie jar at <code>C:\Users\sam\cena-secrets\ezcater_session.json</code></li>
   <li>Chromium + Playwright installed in ck's venv</li>
   <li><code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> deployed (this is the file pwck imports)</li>
   <li>Endpoint <code>POST /jobs/driver-assign</code> registered (same contract as pwck)</li>
@@ -287,7 +287,7 @@ AND started_at &lt; datetime('now', '-5 minutes');</pre>
   <li><code>C:/Users/sam/pwck/pwck/jobs.py</code>, <code>db.py</code>, <code>chat.py</code> (orchestration, selector vault, dev-chat post helper)</li>
   <li><code>C:/Users/sam/pwck/pwck.db</code> (SQLite — selector vault, failure-pattern library, run log)</li>
   <li><code>C:/Users/sam/ck-ezcater/cena_token.txt</code> (shared secret — also read by ck failover)</li>
-  <li><code>~/.openclaw/.secrets/ezcater_session.json</code> (cookie jar — shared with ck)</li>
+  <li><code>C:\Users\sam\cena-secrets\ezcater_session.json</code> (cookie jar — shared with ck)</li>
 </ul>
 
 <h4>On ck (Mini_IT13 — failover, port 8766)</h4>
@@ -295,7 +295,7 @@ AND started_at &lt; datetime('now', '-5 minutes');</pre>
   <li><code>C:/Users/sam/ck-ezcater/ck_gateway.py</code> (Flask app + <code>/jobs/driver-assign</code> handler)</li>
   <li><code>C:/Users/sam/ck-ezcater/ck_assigner.py</code> (Playwright implementation — pwck imports this verbatim)</li>
   <li><code>C:/Users/sam/ck-ezcater/cena_token.txt</code> (same shared secret as pwck)</li>
-  <li><code>~/.openclaw/.secrets/ezcater_session.json</code> (cookie jar — shared with pwck)</li>
+  <li><code>C:\Users\sam\cena-secrets\ezcater_session.json</code> (cookie jar — shared with pwck)</li>
   <li>ck_gateway stdout log</li>
 </ul>
 
@@ -357,7 +357,7 @@ Play Store -&gt; com.cenaskitchen.app (native Android shell)
   <tbody>
   <tr><td><code>--aab PATH</code></td><td>(required)</td><td>Path to the signed <code>.aab</code>.</td></tr>
   <tr><td><code>--track NAME</code></td><td><code>internal</code></td><td>One of <code>internal</code> / <code>alpha</code> / <code>beta</code> / <code>production</code>.</td></tr>
-  <tr><td><code>--creds PATH</code></td><td>auto-resolved</td><td>Service-account JSON. Falls back to <code>GOOGLE_PLAY_PUBLISHER_JSON_PATH</code> env, then <code>~/.openclaw/.secrets/play_publisher.json</code>.</td></tr>
+  <tr><td><code>--creds PATH</code></td><td>auto-resolved</td><td>Service-account JSON. Falls back to <code>GOOGLE_PLAY_PUBLISHER_JSON_PATH</code> env, then <code>C:\Users\sam\cena-secrets\play_publisher.json</code>.</td></tr>
   <tr><td><code>--release-notes T</code></td><td>none</td><td>One-line release notes (en-US, truncated at 500 chars).</td></tr>
   <tr><td><code>--package PKG</code></td><td><code>com.cenaskitchen.app</code></td><td>Android package name.</td></tr>
   <tr><td><code>--status STATUS</code></td><td><code>completed</code></td><td><code>draft</code> / <code>completed</code> / <code>inProgress</code> / <code>halted</code>. <code>completed</code> pushes live on the track immediately.</td></tr>
@@ -378,7 +378,7 @@ Play Store -&gt; com.cenaskitchen.app (native Android shell)
 <p>Personal Play Console accounts don't expose the <em>API Access</em> UI (that's an Enterprise / Org-tier feature). The workaround:</p>
 <ol>
   <li>Create the service account in Google Cloud Console (<code>favorable-valor-493419-r9</code>).</li>
-  <li>Download its JSON key, drop it at <code>~/.openclaw/.secrets/play_publisher.json</code>, ACL-lock the file.</li>
+  <li>Download its JSON key, drop it at <code>C:\Users\sam\cena-secrets\play_publisher.json</code>, ACL-lock the file.</li>
   <li>Enable the Android Publisher API in the same Cloud project.</li>
   <li>In Play Console → <b>Users and permissions</b>, invite <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code> as a user.</li>
   <li>Grant App-level permissions on <code>com.cenaskitchen.app</code> — needs at minimum "Release apps to testing tracks" (currently granted 13 permissions including release management).</li>
@@ -397,7 +397,7 @@ Play Store -&gt; com.cenaskitchen.app (native Android shell)
 
 <h4>Local secrets (Mini_IT13)</h4>
 <ul>
-  <li><code>~/.openclaw/.secrets/play_publisher.json</code> — service account JSON, ACL-locked</li>
+  <li><code>C:\Users\sam\cena-secrets\play_publisher.json</code> — service account JSON, ACL-locked</li>
   <li>GitHub repo secret <code>GOOGLE_PLAY_PUBLISHER_JSON</code> — same JSON contents for CI runs</li>
   <li>GitHub repo secrets for keystore + keystore password (aick set these)</li>
 </ul>

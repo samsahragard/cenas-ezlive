@@ -168,7 +168,7 @@
           <dt>Trigger</dt>
           <dd>Render cron resource hits the endpoint on schedule.</dd>
           <dt>Auth</dt>
-          <dd><code>CRON_TOKEN</code> env var (Render). Source-of-truth in <code>~/.openclaw/.secrets/cron_token.txt</code>.</dd>
+          <dd><code>CRON_TOKEN</code> env var (Render). Source-of-truth in <code>C:\Users\sam\cena-secrets\cron_token.txt</code>.</dd>
         </dl>
       </article>
 
@@ -474,7 +474,7 @@
           <dt>What runs it</dt>
           <dd>Bridge script under <code>C:\Users\sam\cenas-chat-hub\</code>, supervised the same way as the dev-chat bridge.</dd>
           <dt>Auth</dt>
-          <dd><code>ck_telegram_bot_token.txt</code> in <code>~/.openclaw/.secrets/</code> + Sam's chat-id allowlist.</dd>
+          <dd><code>ck_telegram_bot_token.txt</code> in <code>C:\Users\sam\cena\.secrets\</code> + Sam's chat-id allowlist.</dd>
         </dl>
       </article>
 
@@ -513,9 +513,9 @@
           <dt>What it's for</dt>
           <dd>Persistent IMAP IDLE connection to <code>orders@aguirrestexmex.com</code>. New ezCater order emails get picked up the instant they land and feed the order-ingest pipeline.</dd>
           <dt>What runs it</dt>
-          <dd><code>C:\Users\sam\.openclaw\scripts\ezcater_idle.py</code> on AiCk. Also live on Mini_IT13 (PID 10552) as a backup mirror.</dd>
+          <dd><code>ezcater_idle.py</code> - ARCHIVED 2026-05-27 (moved to the openclaw_archive); the standalone IMAP-IDLE mirror is orphaned, NOT live. Live ezCater intake is the signature-verified <code>/ezcater/webhook</code> + the in-app pipeline (see Integrations).</dd>
           <dt>Auth</dt>
-          <dd><code>orders_imap_pwd.txt</code> + <code>ezcater_imap_pwd.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>orders_imap_pwd.txt</code> + <code>ezcater_imap_pwd.txt</code> in <code>C:\Users\sam\cena-secrets\</code>.</dd>
         </dl>
       </article>
 
@@ -592,7 +592,7 @@
           <dt>What runs it</dt>
           <dd><code>ezcater_idle.py</code> persistent IMAP IDLE on AiCk + Mini_IT13.</dd>
           <dt>Auth</dt>
-          <dd><code>orders_imap_pwd.txt</code> + <code>orders_smtp_pwd.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>orders_imap_pwd.txt</code> + <code>orders_smtp_pwd.txt</code> in <code>C:\Users\sam\cena-secrets\</code>.</dd>
         </dl>
       </article>
 
@@ -608,7 +608,7 @@
           <dt>What runs it</dt>
           <dd><code>scripts/ingest_vendor_emails.py</code> + <code>scripts/scan_vendor_inbox.py</code>.</dd>
           <dt>Auth (pending)</dt>
-          <dd><code>sams_imap_pwd.txt</code>, <code>atm_imap_pwd.txt</code>, <code>ck_cenaskitchen_imap_pwd.txt</code> in <code>~/.openclaw/.secrets/</code> — these credentials are still open asks to Sam.</dd>
+          <dd><code>sams_imap_pwd.txt</code>, <code>atm_imap_pwd.txt</code>, <code>ck_cenaskitchen_imap_pwd.txt</code> in <code>C:\Users\sam\cena-secrets\</code> — these credentials are still open asks to Sam.</dd>
         </dl>
       </article>
 
@@ -728,7 +728,7 @@
           <dt>Execution (dormant)</dt>
           <dd><b>aick / Mini_IT12 · Selenium + Edge.</b> Removed from the live chain 2026-05-27 (Sam #1155). Code at <code>app/services/ezcater_driver_assigner.py</code> + <code>cena_gateway.py</code> preserved untouched for emergency revert — re-enable by re-pointing <code>CENA_GATEWAY_URL</code> back to <code>http://100.108.119.19:8765</code>.</dd>
           <dt>Auth</dt>
-          <dd>ezCater session cookies (~139 cookies) in <code>~/.openclaw/.secrets/ezcater_session.json</code> on Mini_IT13 (shared by pwck + ck). <code>X-Cena-Token</code> shared secret on every HTTP hop, sourced from <code>C:/Users/sam/ck-ezcater/cena_token.txt</code>.</dd>
+          <dd>ezCater session cookies (~139 cookies) in <code>C:\Users\sam\cena-secrets\ezcater_session.json</code> on Mini_IT13 (shared by pwck + ck). <code>X-Cena-Token</code> shared secret on every HTTP hop, sourced from <code>C:/Users/sam/ck-ezcater/cena_token.txt</code>.</dd>
           <dt>Observability</dt>
           <dd>Dev chat auto-posts on start / success / failure. Per-job rows in <code>driver_assignment_jobs</code> table (<code>gateway_processed</code> is now <code>pwck</code> or <code>ck</code>; legacy <code>aick</code> rows pre-2026-05-27). Full doc in the Tools tab of /sam/docs.</dd>
         </dl>
@@ -778,7 +778,7 @@
           <dt>Trigger</dt>
           <dd>Called by <code>mobile-android.yml</code> after gradle assembleRelease, or manually for one-off uploads.</dd>
           <dt>Auth</dt>
-          <dd>Service-account JSON. Default path: <code>~/.openclaw/.secrets/play_publisher.json</code> (ACL-locked). Env override: <code>GOOGLE_PLAY_PUBLISHER_JSON_PATH</code> or <code>GOOGLE_PLAY_PUBLISHER_JSON</code> (raw JSON for CI).</dd>
+          <dd>Service-account JSON. Default path: <code>C:\Users\sam\cena-secrets\play_publisher.json</code> (ACL-locked). Env override: <code>GOOGLE_PLAY_PUBLISHER_JSON_PATH</code> or <code>GOOGLE_PLAY_PUBLISHER_JSON</code> (raw JSON for CI).</dd>
           <dt>Exit codes</dt>
           <dd><code>0</code> success · <code>1</code> bad input · <code>2</code> auth failure · <code>3</code> upload failed · <code>4</code> commit failed.</dd>
         </dl>
@@ -821,7 +821,7 @@
           <dt>Trigger</dt>
           <dd>Gateway endpoints (<code>/cena/stream</code>, <code>/cena/wake-on-*</code>) and the Render-side <code>/sam/chat</code> path.</dd>
           <dt>Auth</dt>
-          <dd><code>anthropic_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>; <code>cena2_anthropic_key.txt</code> for the peer gateway.</dd>
+          <dd><code>anthropic_api_key.txt</code> in <code>C:\Users\sam\cena-secrets\</code>; <code>cena2_anthropic_key.txt</code> for the peer gateway.</dd>
         </dl>
       </article>
 
@@ -833,7 +833,7 @@
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>Gemini 2.5 Flash + 3.5 Flash in the <code>/sam/chat</code> model picker. Routes through the gateway's tool-bridge so Gemini gets the same tool surface as Claude.</dd>
+          <dd>Gemini 2.5 Flash + 3.5 Flash in the <code>/sam/chat</code> model picker. Gemini routes DIRECT to the Google API, BYPASSING the gateway + its tool schema (sam_chat.py) - so Gemini turns get NO tools (plain-chat only); tool conversations are Claude-only.</dd>
           <dt>Trigger</dt>
           <dd>User picks Gemini in the dropdown.</dd>
           <dt>Auth</dt>
@@ -851,7 +851,7 @@
           <dt>What it's for</dt>
           <dd>Cena's <code>render_env_get</code> / <code>render_env_set</code> / <code>render_deploy</code> tools. Triggered by Cena on Sam's instruction.</dd>
           <dt>Auth</dt>
-          <dd><code>cena_render_api_key.txt</code> (primary) + <code>render_api_key.txt</code> (legacy fallback) in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>cena_render_api_key.txt</code> (primary) + <code>render_api_key.txt</code> (legacy fallback) in <code>C:\Users\sam\cena\.secrets\</code>.</dd>
         </dl>
       </article>
 
@@ -879,7 +879,7 @@
           <dt>What it's for</dt>
           <dd>Structured ezCater order data ingest (<code>scripts/ezcater_api_ingest.py</code>). Backup path when the IMAP route is unhealthy.</dd>
           <dt>Auth</dt>
-          <dd><code>ezcater_api_token.txt</code> in <code>~/.openclaw/.secrets/</code> (Partner API bearer).</dd>
+          <dd><code>ezcater_api_token.txt</code> in <code>C:\Users\sam\cena-secrets\</code> (Partner API bearer).</dd>
         </dl>
       </article>
 
@@ -893,7 +893,7 @@
           <dt>What it's for</dt>
           <dd>PDF order downloads + portal scraping. Cookie-jar session, not the API token (different surface).</dd>
           <dt>Auth</dt>
-          <dd><code>ezcater_session.json</code> in <code>~/.openclaw/.secrets/</code> + <code>~/cena/.secrets/</code>. Captured via browser_cookie3 from Sam's Edge session; refreshed when cookies expire.</dd>
+          <dd><code>ezcater_session.json</code> in <code>C:\Users\sam\cena-secrets\</code> + <code>C:\Users\sam\cena\.secrets\</code>. Captured via browser_cookie3 from Sam's Edge session; refreshed when cookies expire.</dd>
         </dl>
       </article>
 
@@ -907,7 +907,7 @@
           <dt>What it's for</dt>
           <dd>Pulls per-store sales and labor metrics into the daily-log + sales-insights pipelines.</dd>
           <dt>Auth</dt>
-          <dd><code>toast_analytics_client_id.txt</code> + <code>toast_analytics_client_secret.txt</code> in <code>~/.openclaw/.secrets/</code>; Render env block in <code>toast_render_env.txt</code>.</dd>
+          <dd><code>toast_analytics_client_id.txt</code> + <code>toast_analytics_client_secret.txt</code> in <code>C:\Users\sam\cena\.secrets\</code>; Render env block in <code>toast_render_env.txt</code>.</dd>
         </dl>
       </article>
 
@@ -921,7 +921,7 @@
           <dt>What it's for</dt>
           <dd>Imports the weekly staff schedule from Sling into the platform's labor/scheduling tables. <strong>NOTE (samai 2026-05-28):</strong> Sling is being replaced (schedule view now Toast-shift-sourced — see Integrations / Phase 2); Resolved (aick 2026-05-29): SUPERSEDED. Sling is being replaced — the schedule view is now Toast-shift-sourced (toast_reports.py) and the internal Schedules V2 build is underway. The Sling weekly import is winding down, not the live path.</dd>
           <dt>Auth</dt>
-          <dd><code>sling_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>sling_api_key.txt</code> in <code>C:\Users\sam\cena-secrets\</code>.</dd>
         </dl>
       </article>
 
@@ -935,7 +935,7 @@
           <dt>What it's for</dt>
           <dd>Driver live map, delivery routing, address geocoding.</dd>
           <dt>Auth</dt>
-          <dd><code>google_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>google_api_key.txt</code> in <code>C:\Users\sam\cena-secrets\</code>.</dd>
         </dl>
       </article>
 
@@ -949,7 +949,7 @@
           <dt>What it's for</dt>
           <dd>Maintains the Cloudflare tunnel that exposes Cena's gateway externally; DNS edits via Cena's <code>fetch_url</code> tool when needed.</dd>
           <dt>Auth</dt>
-          <dd><code>cloudflare_api_token.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
+          <dd><code>cloudflare_api_token.txt</code> in <code>C:\Users\sam\cena-secrets\</code>.</dd>
         </dl>
       </article>
 
@@ -963,7 +963,7 @@
           <dt>What it's for</dt>
           <dd>Reachability from Render → AiCk (Cena gateway) and Mini_IT13 (LAN hub). Render runs a userspace <code>tailscaled</code> wired with this key.</dd>
           <dt>Auth</dt>
-          <dd><code>tailscale_render_authkey.txt</code> in <code>~/.openclaw/.secrets/</code>. Currently the 24h ephemeral form — the 90-day reusable swap is an open ask to Sam.</dd>
+          <dd><code>tailscale_render_authkey.txt</code> in <code>C:\Users\sam\cena-secrets\</code>. Both a 90-day reusable AND a 24h ephemeral key exist (Tailscale keys console).</dd>
         </dl>
       </article>
 
@@ -979,7 +979,7 @@
           <dt>Where it runs</dt>
           <dd>Telegram bridge in <code>cenas-chat-hub/</code> on Mini_IT13, same supervision pattern as the dev-chat bridge.</dd>
           <dt>Auth</dt>
-          <dd><code>ck_telegram_bot_token.txt</code> in <code>~/.openclaw/.secrets/</code> + Sam's chat-id allowlist.</dd>
+          <dd><code>ck_telegram_bot_token.txt</code> in <code>C:\Users\sam\cena\.secrets\</code> + Sam's chat-id allowlist.</dd>
         </dl>
       </article>
 
@@ -995,7 +995,7 @@
           <dt>Trigger</dt>
           <dd><code>scripts/upload_aab.py</code> called by GitHub Actions <code>mobile-android.yml</code> (or manually for one-off uploads).</dd>
           <dt>Auth</dt>
-          <dd>Service account <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code>. JSON key at <code>~/.openclaw/.secrets/play_publisher.json</code> (local, ACL-locked) and as the <code>GOOGLE_PLAY_PUBLISHER_JSON</code> GitHub secret (CI). Granted App permissions on <code>com.cenaskitchen.app</code> via Play Console user-invite (Personal accounts don't expose API access UI — invite-user is the workaround).</dd>
+          <dd>Service account <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code>. JSON key at <code>C:\Users\sam\cena-secrets\play_publisher.json</code> (local, ACL-locked) and as the <code>GOOGLE_PLAY_PUBLISHER_JSON</code> GitHub secret (CI). Granted App permissions on <code>com.cenaskitchen.app</code> via Play Console user-invite (Personal accounts don't expose API access UI — invite-user is the workaround).</dd>
         </dl>
       </article>
 
@@ -1023,7 +1023,7 @@
           <dt>What it's for</dt>
           <dd>Captures unhandled exceptions on the Render app for post-incident triage.</dd>
           <dt>Auth</dt>
-          <dd><code>sentry_dsn.txt</code> in <code>~/.openclaw/.secrets/</code>; <code>SENTRY_DSN</code> Render env.</dd>
+          <dd><code>sentry_dsn.txt</code> in <code>C:\Users\sam\cena-secrets\</code>; <code>SENTRY_DSN</code> Render env.</dd>
         </dl>
       </article>
 

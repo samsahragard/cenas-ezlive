@@ -65,38 +65,37 @@
 <p>Programmatic .aab upload for the <code>com.cenaskitchen.app</code> Capacitor mobile shell. Service account <code>ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com</code> (Cloud project favorable-valor-493419-r9) holds the Release Manager grant on the app. JSON key at <span class="path">C:\Users\sam\.openclaw\.secrets\play_publisher.json</span> (AiCk) + ACL-locked copy on Mini_IT13. The upload pipeline (GitHub Actions <code>.github/workflows/mobile-android.yml</code> builds + signs the .aab; <code>scripts/upload_aab.py</code> uploads to internal testing) replaces the manual Sam-uploads-each-build gate. Service-account creation walkthrough in <code>/sam/docs</code> Tools tab.</p>
 
 <h2>Anomaly engine</h2>
-<p>A rules-driven engine that compares incoming Toast-derived metrics against expected baselines and emits anomaly events.</p>
+<p>A rules-driven engine (<code>app/services/anomaly_engine.py</code>) that runs registered rules against the live DB and emits <code>Signal</code> rows for the dashboards + morning brief. <strong>Correction (ckai 2026-05-28):</strong> the page previously described a class-based <code>evaluate(window, baseline)</code> engine comparing Toast metrics to baselines — that is not the implementation.</p>
 
 <h3>Anomaly service</h3>
 <ul>
-  <li>Runs as a cron job at configurable cadence (daily + weekly anomaly briefs).</li>
-  <li>Loads the rule registry on startup; each rule is a typed Python class with <code>evaluate(window, baseline) -> [AnomalyEvent]</code>.</li>
-  <li>Emits anomaly events to the anomaly table; downstream the morning-brief composer reads them.</li>
+  <li><strong>Rules are functions, not classes</strong> — each is a function decorated with <code>@anomaly_rule(name=, bucket=, severity=, surfaces=, audience_roles=, action_text=, llm_route=)</code> taking <code>(db: Session)</code> and returning <code>list[SignalDraft]</code>. The decorator registers it into <code>REGISTRY</code> (<code>name -&gt; RuleSpec</code>) at import; <code>app/__init__.py</code> imports the rule modules so the registry is populated on boot.</li>
+  <li><strong>Cadence is bucket-driven</strong> — each rule declares a <code>bucket</code>: <code>every_5m</code> / <code>every_15m</code> / <code>hourly</code> / <code>daily</code> / <code>weekly</code> / <code>on_write</code>. The entrypoint <code>run_bucket(bucket)</code> is invoked by the cron route <code>/cron/anomaly-eval</code> and runs every rule in that bucket in one transaction.</li>
+  <li><strong>Emits to the <code>Signal</code> table</strong> (not an "anomaly table"). <code>_upsert_signal</code> dedupes open rows on (rule_name, subject_id, store_id); reversible rules (<code>REVERSIBLE_RULES</code>) auto-clear via <code>_auto_clear</code> when the condition stops firing. A new alert-severity Signal fires a Telegram alert (<code>_maybe_telegram_alert</code>).</li>
 </ul>
 
 <h3>Anomaly rules</h3>
-<p>The rule registry contains rules covering revenue, labor, menu mix, catering pipeline, vendor status, and outages. Rule classes:</p>
+<p>~32 rules are registered (so the <code>/partner/anomalies/rules</code> admin + the brief see the full set), grouped by domain in <code>app/services/anomaly_rules.py</code>: orders/delivery, vendor/produce, sales, labor, attendance, server-perf, kitchen, customer, system. <strong>Most are stubs</strong> returning <code>[]</code> pending their data source (Toast Analytics, KDS, vendor-quotes, Sling, Google Reviews) — the docstring tags each Implemented vs Stub.</p>
 <ul>
-  <li>Threshold rules — metric outside an absolute band.</li>
-  <li>Trend rules — metric outside its trailing rolling baseline.</li>
-  <li>Composite rules — multiple metrics together (e.g. revenue down + labor up = margin compression).</li>
-  <li>Absence rules — expected event missing (e.g. catering rollup didn't run).</li>
+  <li><strong>Live rules (~5):</strong> <code>orders.no_driver_30min_before</code>, <code>orders.late_delivery</code>, <code>orders.driver_no_show</code>, <code>orders.ezcater_rejection_rate</code>, <code>orders.high_pickup_lag</code>. <code>system.deploy_failed</code> is coded but no-ops without <code>RENDER_API_KEY</code>.</li>
+  <li><strong>Stubs</strong> occupy a REGISTRY slot (so admin + brief treat them as known) and go live by swapping the body for a real query — no engine/cron/admin change needed.</li>
 </ul>
-<p>Rules are added by writing the class + registering it in the rule registry. Each rule has a unique key, a severity, and a description that surfaces in the brief.</p>
+<p>Per-rule attributes: a unique <code>name</code> (key), a default <code>severity</code> (<code>info</code>/<code>warn</code>/<code>alert</code>), target <code>surfaces</code>, <code>audience_roles</code>, an <code>action_text</code> (what surfaces in the brief), and an <code>llm_route</code> (<code>sql</code>/<code>haiku</code>/<code>opus</code>).</p>
 
 <h2>Morning brief composer</h2>
-<p>The composer reads the most recent anomaly batch, renders a per-store summary, and emits the daily morning brief. The brief lands in the dashboard's notifications surface and (when enabled) goes out via email to the on-call recipient.</p>
+<p>The composer (<code>app/services/brief_composer.py</code>) builds one brief <em>per role-audience</em> (partner / gm / km / foh_manager / corporate / corporate_chef / prep_manager), not just per-store. <code>compose_brief</code> gathers yesterday's open <code>Signal</code> rows (permission-filtered to the audience) + wins + lookahead + calibration, then <strong>composes with Anthropic <code>claude-opus-4-5</code></strong> (cached system prompt) and <strong>falls back to a deterministic template</strong> (<code>fallback_used=True</code>) if the LLM is unavailable or returns bad JSON. Each brief persists as a <code>MorningBrief</code> row. The cron route <code>POST /cron/anomaly-brief</code> runs <code>compose_all_briefs</code> once daily and dispatches by email — <strong>dry-run unless <code>BRIEF_EMAIL_DISPATCH=1</code></strong>.</p>
 
 <h3>Brief calibration</h3>
-<p>A calibration runbook covers how to tune the anomaly rules without bouncing the production engine:</p>
+<p>Rules are tuned <strong>without a deploy</strong> via the <code>RuleOverride</code> table (set at <code>/partner/anomalies/rules</code>), which the engine consults at run start:</p>
 <ul>
-  <li><strong>Dry-run mode</strong> — run a rule against historical windows and inspect the output without writing the anomaly table.</li>
-  <li><strong>Per-rule enable/disable</strong> — env-driven; flip a noisy rule off without a deploy.</li>
-  <li><strong>Baseline windows</strong> — adjust the rolling baseline window for trend rules; defaults to 30 days.</li>
+  <li><strong>Severity override</strong> — <code>RuleOverride.severity_override</code> (store-scoped wins over global) re-grades a rule's output; downgrading to <code>info</code> is how a noisy rule is effectively quieted. There is no separate enable/disable flag.</li>
+  <li><strong>Threshold edits</strong> — <code>RuleOverride.threshold</code> (JSON) holds per-rule threshold params.</li>
+  <li><strong>Calibration surfacing</strong> — the brief's partner-only calibration section flags noisy rules (&gt;6 fires/day) and rules silent &gt;14d (<code>gather_calibration</code>).</li>
 </ul>
+<p class="meta"><strong>Correction (ckai 2026-05-28):</strong> the prior "dry-run mode / env-driven enable-disable / 30-day trend baseline" bullets were aspirational — tuning is DB-driven via <code>RuleOverride</code>, and no trend/baseline rules are live yet.</p>
 
 <h2>Sling <span class="status-chip draft">Being replaced</span></h2>
-<p><strong>Status (samai 2026-05-28):</strong> Sling is being REPLACED by the internal scheduling system (see Phase 2 Roadmap). The per-store schedule view is now <strong>Toast-shift-sourced</strong> (<code>toast_reports.py</code> builds <code>/reports/schedule</code> from Toast shifts with Sling-compatible labels), NOT Sling-driven. Historically Sling drove the team-tab roster + schedule view (API-pulled rosters cached in the team table; manual overrides with a provenance flag); that path is winding down. Once the internal cutover completes, this section will describe the internal system, not Sling.</p>
+<p><strong>Status (samai 2026-05-28):</strong> Sling is being REPLACED by the internal scheduling system (see Phase 2 Roadmap). The per-store schedule view is now <strong>Toast-shift-sourced</strong> (<code>toast_reports.py</code> builds <code>/reports/schedule</code> from Toast shifts with Sling-compatible labels), NOT Sling-driven. <strong>(ckai verified 2026-05-28: <code>toast_reports.schedule_report</code> reads Toast <code>/labor/v1/shifts</code>, Sam #1018.)</strong> Historically Sling drove the team-tab roster + schedule view (API-pulled rosters cached in the team table; manual overrides with a provenance flag); that path is winding down. Once the internal cutover completes, this section will describe the internal system, not Sling.</p>
 
 <h2>Sentry</h2>
-<p>Error monitoring for the Flask app. Configured via <code>SENTRY_DSN</code> env var; integration is automatic for Flask + SQLAlchemy + the cron entry points. Critical anomalies in the anomaly engine optionally trigger a Sentry message for visibility.</p>
+<p>Error monitoring for the Flask app, initialized in <code>app/__init__.py</code> <code>_init_sentry()</code> <strong>before</strong> Flask init (so startup exceptions are captured). Gated on <code>SENTRY_DSN</code> — a no-op locally / in chat tools when unset. <strong>Correction (ckai 2026-05-28):</strong> only <code>FlaskIntegration()</code> is wired — NOT a SQLAlchemy or cron integration. <code>environment</code> is <code>production</code> under Render else <code>FLASK_ENV</code>; <code>traces_sample_rate</code> defaults to <code>0.0</code> (env-tunable); <code>send_default_pii=False</code>; <code>release</code> = <code>RENDER_GIT_COMMIT</code>. The prior claim that "critical anomalies trigger a Sentry message" is incorrect — alert-severity Signals fire a <strong>Telegram</strong> alert (<code>_maybe_telegram_alert</code>), not Sentry.</p>

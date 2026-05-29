@@ -10,7 +10,9 @@ CONTRACT (per ck #1679 + aick #1680):
   per-permission: id, key, category{num,name}, label, notes, maps_to{route, blueprint_or_fn},
                   status: 'live'|'reserved', default_roles[]
   top-level: ROLES[]{key,label,wildcard}, STORES[]{key,label}
-  save payload (frontend->backend): {user_id, stores[], role, overrides:{<key>: allow|deny|inherit}}
+  save payload (frontend->backend): {user_id, stores[], role,
+      overrides:{<store_key>:{<perm_key>: allow|deny|inherit}}}   # PER-STORE (ck #1686)
+  Each perm also carries sensitive:bool (authoritative - drives the lock-icon UX).
 
 maps_to marked 'verify:' = best-effort route pending a grep-pass against app/web.
 status 'reserved' = toggle persists now, enforces once that surface ships.
@@ -429,6 +431,33 @@ CATALOG = [
     "maps_to":{"route":"verify:mileage approve","blueprint_or_fn":"ezcater_payroll.py"},"notes":"Sign off driver expense submissions. GM-and-above."},
  ]},
 ]
+
+# ---- Authoritative 'sensitive' flag (money / PII / legal / permission-control).
+# Stamped onto every perm so the frontend (ck) renders the lock-icon from this,
+# not a client-side heuristic. ----
+SENSITIVE_KEYS = {
+    # wages + tax IDs + direct deposit
+    "emp.view_wages", "emp.edit_wages",
+    "emp.view_tax_masked", "emp.view_tax_full", "emp.edit_tax",
+    "emp.view_dd", "emp.edit_dd",
+    # all financial
+    "fin.view_accounts", "fin.config_accounts", "fin.view_deposits",
+    "fin.view_payroll", "fin.edit_payroll", "fin.view_ap", "fin.edit_ap",
+    "fin.approve_expense", "fin.view_pnl", "fin.config_sales_cat",
+    "fin.view_tips", "fin.config_tips", "fin.view_instant_deposit",
+    # legal: insurance + official notices (garnishments/court orders)
+    "legal.view_insurance", "legal.edit_insurance",
+    "legal.view_notices", "legal.manage_notices",
+    # vendor payout
+    "vendors.pay",
+    # permission-control meta (the most sensitive - changing who can do what)
+    "perms.view", "perms.assign", "perms.create_role", "perms.edit_role",
+    "perms.delete_role", "perms.assign_role", "perms.override",
+}
+for _cat in CATALOG:
+    for _p in _cat["perms"]:
+        _p["sensitive"] = _p["key"] in SENSITIVE_KEYS
+
 
 # ---- Convenience accessors (frontend serializes CATALOG/ROLES/STORES to JSON) ----
 def all_permission_keys():

@@ -161,6 +161,188 @@ def chat_page():
     )
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Permissions page (Sam #1676) — Partner-only. FRONTEND SHELL (ck lane).
+#
+# Renders the Toast-style permission-assignment UI: pick an employee +
+# role template, select store(s), then set each permission to
+# Inherit | Override(Allow/Deny). 100% our platform, no Toast link.
+# ezCater driver permissions are SEPARATE + coded-not-to-change — NOT
+# represented here (Sam #1676).
+#
+# The catalog below is a PLACEHOLDER stub so the UI is exercisable
+# offline. aick owns the authoritative catalog (real maps_to + default
+# roles derived from ROLE_PERMISSIONS) + the assign/save API; this view
+# swaps to his provider once the permissions-page branch lands. Contract
+# locked w/ aick (hub #1680): each permission = id + stable key
+# ("<area>.<action>") + category{num,name} + label + notes +
+# maps_to{route,blueprint_or_fn} + status(live|reserved) + default_roles[];
+# roles[] {key,label,wildcard}; stores[] {key,label}. Save payload:
+# {user_id, stores[], role, overrides:{<KEY>: allow|deny|inherit}}.
+# ──────────────────────────────────────────────────────────────────────
+def _placeholder_permissions_catalog():
+    """Stub catalog — replaced by aick's provider at bind time. Shape
+    matches the locked contract so the swap is a one-liner."""
+    roles = [
+        {"key": "partner", "label": "Partner", "wildcard": True},
+        {"key": "corporate", "label": "Corporate", "wildcard": False},
+        {"key": "corporate_chef", "label": "Corporate Chef", "wildcard": False},
+        {"key": "gm", "label": "General Manager", "wildcard": False},
+        {"key": "km", "label": "Kitchen Manager", "wildcard": False},
+        {"key": "foh_manager", "label": "FOH Manager", "wildcard": False},
+        {"key": "assistant_km", "label": "Assistant Kitchen Manager", "wildcard": False},
+        {"key": "prep_manager", "label": "Prep Manager", "wildcard": False},
+        {"key": "expo", "label": "Expo", "wildcard": False},
+        {"key": "bartender", "label": "Bartender", "wildcard": False},
+        {"key": "server", "label": "Server", "wildcard": False},
+        {"key": "cashier", "label": "Cashier", "wildcard": False},
+        {"key": "busser", "label": "Busser", "wildcard": False},
+        {"key": "host", "label": "Host", "wildcard": False},
+        {"key": "corporate_driver", "label": "Corporate Driver", "wildcard": False},
+        {"key": "driver", "label": "Driver", "wildcard": False},
+        {"key": "cook", "label": "Cook", "wildcard": False},
+    ]
+    stores = [
+        {"key": "copperfield", "label": "Copperfield"},
+        {"key": "tomball", "label": "Tomball"},
+    ]
+
+    def p(pid, key, cnum, cname, label, notes, route, fn, status, defaults, sensitive=False):
+        return {
+            "id": pid, "key": key,
+            "category": {"num": cnum, "name": cname},
+            "label": label, "notes": notes,
+            "maps_to": {"route": route, "blueprint_or_fn": fn},
+            "status": status, "default_roles": defaults,
+            "sensitive": sensitive,
+        }
+
+    permissions = [
+        # 1 — Dashboard Access
+        p("1.1", "dashboard.view_today", 1, "Dashboard Access", "Today Dashboard",
+          "Store landing dashboard.", "/<store>/today", "store_routes.today",
+          "live", ["corporate", "gm", "km", "foh_manager", "assistant_km"]),
+        p("1.2", "dashboard.view_manager", 1, "Dashboard Access", "Manager Dashboard",
+          "Tabbed manager operating surface.", "/<store>/manager", "store_routes.manager_dashboard",
+          "live", ["gm", "km", "foh_manager", "assistant_km"]),
+        p("1.9", "dashboard.view_dev_chat", 1, "Dashboard Access", "Developer Chat",
+          "Partner-only agent coordination thread.", "/partner/developer/chat", "developer_chat.chat_page",
+          "live", []),
+        # 2 — Time & Attendance
+        p("2.2", "time.clock_in_out", 2, "Time & Attendance", "Clock In / Out",
+          "Punch for own shift.", "/<store>/clock", "store_routes.clock",
+          "live", ["gm", "km", "foh_manager", "assistant_km", "expo", "bartender",
+                   "server", "cashier", "busser", "host", "cook", "prep_manager"]),
+        p("2.8", "time.view_team_timesheets", 2, "Time & Attendance", "View Team Timesheets",
+          "See punches for all staff at the store.", "/<store>/manager/attendance", "store_routes.manager_page_list",
+          "live", ["gm", "km", "foh_manager"]),
+        p("2.11", "time.edit_punches", 2, "Time & Attendance", "Edit Punches",
+          "Correct a teammate's clock entry.", "/<store>/manager/attendance", "store_routes.manager_page_list",
+          "live", ["gm", "km"]),
+        # 4 — Manager Powers
+        p("4.1", "manager.daily_log", 4, "Manager Powers", "Daily Manager Log",
+          "Shift log entries.", "/<store>/manager/daily-log", "store_routes.manager_page_list",
+          "live", ["gm", "km", "foh_manager", "assistant_km"]),
+        p("4.3", "manager.incidents", 4, "Manager Powers", "Incident Reports",
+          "File + review incident reports.", "/<store>/manager/incident-reports", "store_routes.manager_page_list",
+          "live", ["gm", "km", "foh_manager", "assistant_km"]),
+        # 7 — Employee Management (sensitive rows)
+        p("7.1", "employee.view_roster", 7, "Employee Management", "View Employee Roster",
+          "Names + roles of store staff.", "/<store>/manager/employees", "store_routes.manager_page_list",
+          "live", ["gm", "km", "foh_manager"]),
+        p("7.6", "employee.view_wages", 7, "Employee Management", "View Wages",
+          "Hourly / salary figures.", "/<store>/manager/employees", "store_routes.manager_page_list",
+          "live", ["gm"], sensitive=True),
+        p("7.8", "employee.view_ssn_full", 7, "Employee Management", "View Full SSN",
+          "Unmasked SSN. Defines the gate only — never surfaces the value here.",
+          "/<store>/manager/employees", "store_routes.manager_page_list",
+          "live", [], sensitive=True),
+        p("7.9", "employee.view_direct_deposit", 7, "Employee Management", "View Direct Deposit",
+          "Bank routing on file. Gate-definition only.", "/<store>/manager/employees", "store_routes.manager_page_list",
+          "live", [], sensitive=True),
+        # 12 — Financial
+        p("12.1", "financial.view_sales", 12, "Financial", "View Sales Reports",
+          "Store sales totals.", "/<store>/reports/sales", "store_routes.sales_report",
+          "live", ["corporate", "gm"]),
+        p("12.5", "financial.run_payroll", 12, "Financial", "Run Payroll",
+          "Submit payroll for the period.", "/<store>/driver-payroll/save", "store_routes.driver_payroll_save",
+          "live", ["corporate"], sensitive=True),
+        # 13 — User Permissions (meta)
+        p("13.1", "access.team_admin", 13, "User Permissions", "Manage User Permissions",
+          "Open this page + assign roles. Partner-held.", "/partner/developer/permissions", "developer_chat.permissions_page",
+          "live", []),
+        p("13.3", "access.create_role_template", 13, "User Permissions", "Create Role Templates",
+          "Define a reusable permission template.", "/partner/developer/permissions", "developer_chat.permissions_page",
+          "reserved", []),
+    ]
+    return {"roles": roles, "stores": stores, "permissions": permissions, "is_placeholder": True}
+
+
+def _build_permissions_catalog():
+    """Bind the page to aick's real catalog (app/services/permission_catalog.py).
+    Flattens its category-grouped CATALOG into the flat permissions[] the
+    template consumes, lifting category -> {num,name} from the group. ROLES,
+    STORES, and the authoritative per-perm `sensitive` flag pass through as the
+    locked contract. Falls back to the placeholder stub if the module isn't
+    importable yet (page never 500s on a half-landed backend)."""
+    try:
+        from app.services import permission_catalog as pc
+    except Exception:
+        stub = _placeholder_permissions_catalog()
+        stub["catalog_source"] = "placeholder-fallback"
+        return stub
+
+    permissions = []
+    for group in pc.CATALOG:
+        cat = {"num": group.get("id"), "name": group.get("name")}
+        for perm in group.get("perms", []):
+            permissions.append({
+                "id": perm.get("id"),
+                "key": perm.get("key"),
+                "category": cat,
+                "label": perm.get("label"),
+                "notes": perm.get("notes", ""),
+                "maps_to": perm.get("maps_to", {}),
+                "status": perm.get("status", "live"),
+                "default_roles": list(perm.get("default_roles", [])),
+                "sensitive": bool(perm.get("sensitive")),
+            })
+
+    return {
+        "roles": [dict(r) for r in pc.ROLES],
+        "stores": [dict(s) for s in pc.STORES],
+        "permissions": permissions,
+        "is_placeholder": False,
+        "catalog_source": "permission_catalog",
+    }
+
+
+@dev_chat.route("/partner/developer/permissions", methods=["GET"])
+@requires_permission("developer.manage_permissions")
+def permissions_page():
+    # PARTNER-ONLY (Sam #1694: "only for PARTNERS ... not available for
+    # anyone else"). Gated on developer.manage_permissions — a tag held by
+    # NO explicit role set, so only partner clears it (via the {"*"}
+    # wildcard, permissions.py:401, or the partner Tier-2 session path,
+    # :394). Corporate holds developer.view_chat (which still gates Chat)
+    # but NOT this tag, so corporate/GM/KM/etc. are denied here. The
+    # partner second-factor check below is the belt-and-suspenders layer.
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    # Synthesize per-store sidebar context (same as chat_page — this URL
+    # doesn't pass through the <store> prefix preprocessor).
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    return render_template(
+        "developer_permissions.html",
+        active="dev_permissions",
+        page_title="Permissions",
+        catalog=_build_permissions_catalog(),
+    )
+
+
 @dev_chat.route("/partner/developer/chat/post", methods=["POST"])
 @requires_permission("developer.view_chat")
 def post_message():

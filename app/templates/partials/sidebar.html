@@ -148,6 +148,16 @@
       </button>
       <div class="ck-sb-section-body"><div class="ck-sb-section-inner">
 
+        {# Partner-only (Sam #1694). developer.manage_permissions is held by
+           no explicit role set, so only partner clears it (via the {"*"}
+           wildcard / Tier-2 session) — corporate sees Chat below but not
+           this link. Mirrors the route gate in developer_chat.py. #}
+        {% if has_permission('developer.manage_permissions') %}
+        <a href="/partner/developer/permissions" class="ck-sb-item{% if active == 'dev_permissions' %} active{% endif %}">
+          <i class="ti ti-shield-lock ck-sb-item-icon" aria-hidden="true"></i>
+          <span class="ck-sb-item-label">Permissions</span>
+        </a>
+        {% endif %}
         <a href="/partner/developer/chat" class="ck-sb-item{% if active == 'dev_chat' %} active{% endif %}">
           <i class="ti ti-messages ck-sb-item-icon" aria-hidden="true"></i>
           <span class="ck-sb-item-label">Chat</span>

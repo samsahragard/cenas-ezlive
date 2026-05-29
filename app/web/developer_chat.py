@@ -330,6 +330,15 @@ def permissions_page():
     gate = _enforce_partner()
     if gate is not None:
         return gate
+    # Mirror permissions_admin._require_partner (aick #1714): a password-only
+    # Tier-2 session clears the manage_permissions tag (permissions.py:394)
+    # but the roster/load/save APIs require a real partner User row, so the
+    # grid would render and then every AJAX call 403s. Deny cleanly here.
+    u = getattr(g, "current_user", None)
+    if not (u is not None and getattr(u, "permission_level", None) == "partner"):
+        return redirect(url_for("auth.access_denied",
+                                need="developer.manage_permissions",
+                                next=request.path))
     # Synthesize per-store sidebar context (same as chat_page — this URL
     # doesn't pass through the <store> prefix preprocessor).
     g.current_store = "partner"

@@ -56,7 +56,7 @@ def _stores_to_scope(stores):
 
 
 @permissions_admin.route("/partner/developer/permissions/roster", methods=["GET"])
-@requires_permission("perms.view")
+@requires_permission("developer.manage_permissions")
 def roster():
     _require_partner()
     db = SessionLocal()
@@ -73,7 +73,7 @@ def roster():
 
 
 @permissions_admin.route("/partner/developer/permissions/user/<int:user_id>", methods=["GET"])
-@requires_permission("perms.view")
+@requires_permission("developer.manage_permissions")
 def load_user(user_id):
     _require_partner()
     db = SessionLocal()
@@ -94,7 +94,7 @@ def load_user(user_id):
 
 
 @permissions_admin.route("/partner/developer/permissions/save", methods=["POST"])
-@requires_permission("perms.assign")
+@requires_permission("developer.manage_permissions")
 def save():
     _require_partner()
     data = request.get_json(silent=True) or {}

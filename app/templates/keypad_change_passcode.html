@@ -85,25 +85,16 @@
     color: var(--red); font-size:14px; font-weight:800; letter-spacing:4px;
     text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
   }
-  .dots{ display:flex; gap:20px; }
-  .dot{
-    width:26px; height:26px; border-radius:50%;
-    background: radial-gradient(circle at 30% 25%, #d4bfa0 0%, #b89b78 70%, #95764f 100%);
-    box-shadow: inset 0 2px 3px rgba(80,50,30,0.65), inset 0 -1px 1px rgba(255,255,255,0.4), 0 1px 0 rgba(255,255,255,0.5);
-    transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  /* Entered passcode shown as numbers (matches the driver login, Sam #1529),
+     not masked dots — same recipe as driver_keypad_login.html's pin-strip. */
+  .pin-strip{
+    display:flex; gap:16px; align-items:center; justify-content:center;
+    font-size:30px; font-weight:700; letter-spacing:1px;
+    color: var(--blue-deep); min-height:28px;
   }
-  .dot.filled{
-    background: radial-gradient(circle at 30% 25%, #8a9ddf 0%, #4a5db8 35%, var(--blue-bright) 75%, var(--blue-deep) 100%);
-    box-shadow:
-      inset 0 1px 2px rgba(180,200,255,0.7),
-      inset 0 -1px 2px rgba(10,20,60,0.6),
-      0 0 0 1px var(--blue-deep),
-      0 0 12px rgba(74,93,184,0.7),
-      0 0 4px rgba(138,157,223,0.6),
-      0 1px 2px rgba(0,0,0,0.5);
-    transform: scale(1.08);
-  }
-  .dots.error .dot{ animation: shake 0.4s ease; }
+  .pin-strip .pin-digit{ min-width:20px; text-align:center; }
+  .pin-strip .ph-empty{ color: rgba(20,32,92,0.25); }
+  .pin-strip.error{ animation: shake 0.4s ease; }
   @keyframes shake{
     0%, 100%{ transform: translateX(0); }
     20%, 60%{ transform: translateX(-6px); }
@@ -118,7 +109,7 @@
 
   .pad{
     --gap:14px; --key:78px;
-    display:grid; grid-template-columns: repeat(5, var(--key)); grid-auto-rows: var(--key);
+    display:grid; grid-template-columns: repeat(3, var(--key)); grid-auto-rows: var(--key);
     gap: var(--gap); padding: 0; background: transparent; border-radius: 0;
     box-shadow: none; position:relative; margin:22px;
   }
@@ -213,8 +204,6 @@
     text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
     font-weight:800;
   }
-  .key.wide{ grid-column: span 3; }
-  .key.wide .label{ font-size:32px; }
   .key svg{
     width:28px; height:28px; fill:none; stroke: var(--red); stroke-width:2.2;
     stroke-linecap:round; stroke-linejoin:round;
@@ -235,38 +224,35 @@
   <div class="welcome">{% if forced %}WELCOME, <strong>{{ user.full_name|upper }}</strong> &mdash; SET YOUR PASSCODE{% else %}CHANGE PASSCODE FOR <strong>{{ user.full_name|upper }}</strong>{% endif %}</div>
   <div class="passcode-header">
     <div class="passcode-label" id="prompt">SET NEW PASSCODE</div>
-    <div class="dots" id="dots">
-      {% for _ in range(passcode_len) %}<div class="dot"></div>{% endfor %}
-    </div>
+    <div class="pin-strip" id="strip" aria-live="polite"></div>
   </div>
 
+  {# Numeric 3-column pad — matches driver_keypad_login.html (Sam #1741):
+     1-9 then BACK / 0 / ENTER. No special-character keys, since the driver
+     login pad is digits-only and a symbol passcode can't be typed there. #}
   <div class="pad" id="pad">
-    <div class="key special" data-val="*"><span class="label">*</span></div>
     <div class="key" data-val="1"><span class="label">1</span></div>
     <div class="key" data-val="2"><span class="label">2</span></div>
     <div class="key" data-val="3"><span class="label">3</span></div>
-    <div class="key special" data-val="#"><span class="label">#</span></div>
 
-    <div class="key special" data-val="@"><span class="label">@</span></div>
     <div class="key" data-val="4"><span class="label">4</span></div>
     <div class="key" data-val="5"><span class="label">5</span></div>
     <div class="key" data-val="6"><span class="label">6</span></div>
-    <div class="key special" data-val="+"><span class="label">+</span></div>
 
-    <div class="key special" data-val="%"><span class="label">%</span></div>
     <div class="key" data-val="7"><span class="label">7</span></div>
     <div class="key" data-val="8"><span class="label">8</span></div>
     <div class="key" data-val="9"><span class="label">9</span></div>
-    <div class="key special" data-val="-"><span class="label">-</span></div>
 
-    <div class="key special" data-val="$"><span class="label">$</span></div>
-    <div class="key wide" data-val="0"><span class="label">0</span></div>
     <div class="key special" data-val="BACK" aria-label="backspace">
       <svg viewBox="0 0 24 24">
         <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
         <line x1="11" y1="9" x2="17" y2="15"/>
         <line x1="17" y1="9" x2="11" y2="15"/>
       </svg>
+    </div>
+    <div class="key" data-val="0"><span class="label">0</span></div>
+    <div class="key special" data-val="ENTER" aria-label="enter">
+      <span class="label" style="font-size: 14px; letter-spacing: 2px;">ENTER</span>
     </div>
   </div>
 
@@ -281,19 +267,30 @@
   let stage = 'set';
   let buffer = '';
   let chosen = '';
-  const dotsContainer = document.getElementById('dots');
-  const dots = dotsContainer.querySelectorAll('.dot');
+  let busy = false;
+  const strip = document.getElementById('strip');
   const prompt = document.getElementById('prompt');
   const toast = document.getElementById('toast');
 
-  function renderDots(){ dots.forEach((d, i) => d.classList.toggle('filled', i < buffer.length)); }
+  // Shows the entered passcode as numbers (matches the driver login, Sam #1529).
+  function formatPin(p){
+    let out = '';
+    for (let i = 0; i < PASSCODE_LENGTH; i++){
+      out += i < p.length
+        ? `<span class="pin-digit">${p[i]}</span>`
+        : '<span class="pin-digit ph-empty">_</span>';
+    }
+    return out;
+  }
+  function renderStrip(){ strip.innerHTML = formatPin(buffer); }
   function showError(msg, resetStage = false){
-    dotsContainer.classList.add('error');
-    setTimeout(() => dotsContainer.classList.remove('error'), 450);
+    busy = false;
+    strip.classList.add('error');
+    setTimeout(() => strip.classList.remove('error'), 450);
     toast.textContent = msg; toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2000);
     if (resetStage){ stage = 'set'; chosen = ''; prompt.textContent = 'SET NEW PASSCODE'; }
-    buffer = ''; renderDots();
+    buffer = ''; renderStrip();
   }
   function showInfo(msg){
     toast.textContent = msg; toast.classList.add('show');
@@ -320,31 +317,29 @@
     }
   }
 
+  function advance(){
+    if (busy) return;
+    if (buffer.length !== PASSCODE_LENGTH){ showInfo(`Enter all ${PASSCODE_LENGTH} digits.`); return; }
+    if (stage === 'set'){
+      chosen = buffer; buffer = ''; stage = 'confirm';
+      prompt.textContent = 'CONFIRM NEW PASSCODE';
+      setTimeout(renderStrip, 200);
+    } else if (buffer === chosen){
+      busy = true; submitNew();
+    } else {
+      showError("Didn't match - start over.", true);
+    }
+  }
+
   document.querySelectorAll('.key').forEach(key => {
     key.addEventListener('click', () => {
       const v = key.dataset.val;
-      if (v === 'BACK'){
-        buffer = buffer.slice(0, -1);
-      } else if (buffer.length < PASSCODE_LENGTH && /^[\d*#@+%\-$]$/.test(v || '')){
-        buffer += v;
-      } else { return; }
-      renderDots();
-      if (buffer.length === PASSCODE_LENGTH){
-        if (stage === 'set'){
-          chosen = buffer;
-          buffer = '';
-          stage = 'confirm';
-          prompt.textContent = 'CONFIRM NEW PASSCODE';
-          setTimeout(renderDots, 200);
-        } else {
-          if (buffer === chosen){
-            chosen = buffer;
-            submitNew();
-          } else {
-            showError("Didn't match — start over.", true);
-          }
-        }
-      }
+      if (v === 'BACK'){ buffer = buffer.slice(0, -1); renderStrip(); return; }
+      if (v === 'ENTER'){ advance(); return; }
+      if (buffer.length < PASSCODE_LENGTH && /^[0-9]$/.test(v || '')){ buffer += v; }
+      else { return; }
+      renderStrip();
+      if (buffer.length === PASSCODE_LENGTH){ setTimeout(advance, 180); }
     });
   });
 
@@ -357,8 +352,15 @@
       const k = document.querySelector('.key[data-val="BACK"]');
       if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
       e.preventDefault();
+    } else if (e.key === 'Enter'){
+      const k = document.querySelector('.key[data-val="ENTER"]');
+      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
+      e.preventDefault();
     }
   });
+
+  // Initial render — show the empty 5-slot strip.
+  renderStrip();
 </script>
 </body>
 </html>

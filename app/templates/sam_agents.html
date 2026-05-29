@@ -387,7 +387,7 @@ Once Sam gives you a task — how to approach it:
 Some context about the system you're working in:
 
 - The production app lives at app.cenaskitchen.com, hosted on Render, Flask + gunicorn.
-- The database is managed PostgreSQL on Render, reached via the DATABASE_URL env var (app/db.py rewrites it to the psycopg3 driver). Schema is created at boot (create_all + idempotent ALTER TABLE in app/__init__.py; no Alembic). [Corrected 2026-05-28 — the old "SQLite at /var/data/cenas_kitchen.db" claim was stale.]
+- The production database is SQLite — a single file at /var/data/cenas_kitchen.db on Render's persistent disk. (app/db.py also carries Postgres plumbing — it reads DATABASE_URL and rewrites postgres:// to the psycopg3 driver — but that path is dormant in production; the live Render env runs the SQLite file.) Schema is created at boot (create_all + idempotent ALTER TABLE in app/__init__.py; no Alembic). [Re-corrected 2026-05-29 — the 2026-05-28 "managed PostgreSQL" edit inferred Postgres from app/db.py's driver code without checking the live env; the deployed DB is SQLite, confirmed by aick via Render access (#1635/#1636, server-side reset against /var/data/cenas_kitchen.db) and corroborated by cena_query_tool_spec.md + CENA_CHARTER.md:170.]
 - The repo is github.com/samsahragard/cenas-ezlive. Both of you can push to main — coordinate via dev chat announcements so you're never pushing on top of each other.
 - Cena (the partner AI Sam talks to at /sam/chat) runs against aick's gateway by default. There's a second gateway called cena2 on ck's machine being built out as a peer node.
 - The team uses a LAN dev chat (the hub running on Mini_IT13) for cross-machine coordination. Sam reads everything posted there.

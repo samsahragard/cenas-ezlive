@@ -38,25 +38,25 @@
 </table>
 
 <h2>Recurring cron jobs</h2>
-<p>All recurring crons are POST endpoints under <code>/cron/*</code> (defined in <code>app/web/driver_system.py</code>, each gated by a <code>CRON_TOKEN</code> header). <strong>Cadence is configured in the Render dashboard, not in code</strong> — the values below are indicative; the Render dashboard is authoritative and this table MUST agree with the <strong>Automation</strong> tab.</p>
+<p>All recurring crons are POST endpoints under <code>/cron/*</code> (defined in <code>app/web/driver_system.py</code>, each gated by a <code>CRON_TOKEN</code> header). <strong>Cadence is configured in the Render dashboard, not in code</strong> — the cadences below were read from the Render API by @aick (#1618, all jobs <code>not_suspended</code>/ACTIVE) and agree with the <strong>Automation</strong> tab (P11, authoritative).</p>
 <table>
-  <thead><tr><th>Cron (/cron/&lt;name&gt;)</th><th>Cadence (Render — indicative)</th><th>What it does</th></tr></thead>
+  <thead><tr><th>Cron (/cron/&lt;name&gt;)</th><th>Cadence (Render — verified)</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>no-show-sweep</code></td><td>frequent (see Render)</td><td>Sweep for no-show driver bids / unclaimed assignments.</td></tr>
-    <tr><td><code>recompute-scores</code></td><td>periodic</td><td>Recompute driver reliability scores.</td></tr>
-    <tr><td><code>anomaly-eval</code></td><td>~5 min</td><td>Anomaly-engine evaluation pass (the "anomaly-5m" cron).</td></tr>
-    <tr><td><code>anomaly-brief</code></td><td>daily / weekly</td><td>Compose the anomaly brief from anomaly-engine output.</td></tr>
-    <tr><td><code>task-escalation</code></td><td>hourly</td><td>Escalate overdue tasks per the escalation policy.</td></tr>
-    <tr><td><code>sales-insights</code></td><td>~30 min</td><td>Pull recent Toast sales windows for the dashboards.</td></tr>
-    <tr><td><code>refresh-traffic</code></td><td>15 min</td><td>Refresh order-traffic rollups.</td></tr>
-    <tr><td><code>refresh-vendor-status</code></td><td>hourly</td><td>Roll up vendor-order state.</td></tr>
-    <tr><td><code>refresh-catering-pipeline</code></td><td>hourly</td><td>Roll up catering pipeline.</td></tr>
-    <tr><td><code>refresh-outages</code></td><td>hourly</td><td>Outage rollup.</td></tr>
-    <tr><td><code>refresh-events</code></td><td>daily</td><td>Roll the events calendar forward.</td></tr>
-    <tr><td><code>refresh-weather</code></td><td>hourly</td><td>Weather context refresh.</td></tr>
+    <tr><td><code>no-show-sweep</code></td><td><code>*/5</code> (every 5 min)</td><td>Sweep for no-show driver bids / unclaimed assignments.</td></tr>
+    <tr><td><code>recompute-scores</code></td><td><code>0 9</code> (daily 09:00)</td><td>Recompute driver reliability scores.</td></tr>
+    <tr><td><code>anomaly-eval</code></td><td>5 bucketed Render jobs: <code>*/5</code>, <code>*/15</code>, <code>0 *</code> (hourly), <code>0 13</code> (daily), <code>0 13 * * 1</code> (Mon)</td><td>Anomaly-engine eval; each job passes a bucket to <code>run_bucket()</code> (<code>driver_system.py:900-926</code>, ckai #1619).</td></tr>
+    <tr><td><code>anomaly-brief</code></td><td><code>30 12</code> (daily 12:30)</td><td>Compose the anomaly brief from anomaly-engine output.</td></tr>
+    <tr><td><code>task-escalation</code></td><td><code>*/5</code> (every 5 min)</td><td>Escalate overdue tasks per the escalation policy.</td></tr>
+    <tr><td><code>sales-insights</code></td><td><code>0 10</code> (daily 10:00)</td><td>Pull recent Toast sales windows for the dashboards.</td></tr>
+    <tr><td><code>refresh-traffic</code></td><td><code>0 13,15,17,19,21,23</code></td><td>Refresh order-traffic rollups.</td></tr>
+    <tr><td><code>refresh-vendor-status</code></td><td><code>0 12,20</code></td><td>Roll up vendor-order state.</td></tr>
+    <tr><td><code>refresh-catering-pipeline</code></td><td><code>0 13,19</code></td><td>Roll up catering pipeline.</td></tr>
+    <tr><td><code>refresh-outages</code></td><td><code>*/15</code> (every 15 min)</td><td>Outage rollup.</td></tr>
+    <tr><td><code>refresh-events</code></td><td><code>0 1,17,21</code></td><td>Roll the events calendar forward.</td></tr>
+    <tr><td><code>refresh-weather</code></td><td><code>0 1,11,13,15,17,19,21,23</code></td><td>Weather context refresh.</td></tr>
   </tbody>
 </table>
-<p class="meta"><strong>Cron drift (FLAG &rarr; Sam/aick, Render dashboard):</strong> <code>task-escalation</code>, <code>anomaly-eval</code> (anomaly-5m), and <code>no-show-sweep</code> have shown transient post-deploy failures (cron container restart racing a fresh deploy). Confirm current run state in the Render dashboard; the deploy-restart-transient explanation holds only if failures clear on the next scheduled run.</p>
+<p class="meta"><strong>Cron run-state (was a drift FLAG; resolved by @aick #1618):</strong> a Render-API query shows all crons <code>not_suspended</code>/ACTIVE &mdash; no persistent drift. The transient post-deploy failures previously seen on <code>task-escalation</code>, <code>anomaly-eval</code>, and <code>no-show-sweep</code> are deploy-restart-transients: crons share the web image, so a fresh deploy bounces them and they self-heal on the next scheduled run.</p>
 
 <h2>Common procedures</h2>
 <h3>Adding a manager / GM to a store</h3>

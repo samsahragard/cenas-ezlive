@@ -704,6 +704,29 @@ class PermissionDenial(Base):
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
+class UserPermissionOverride(Base):
+    """Per-user, per-store permission override for the PERMISSIONS admin page
+    (Sam #1676, PARTNER-ONLY). A row = an explicit 'allow'/'deny' for
+    (user, store, perm_key) that overrides the role-template default; 'inherit'
+    = no row. Managed via /partner/developer/permissions. NOT for ezCater
+    driver perms (those are coded-locked, separate)."""
+    __tablename__ = "user_permission_override"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False)   # 'copperfield' | 'tomball'
+    perm_key: Mapped[str] = mapped_column(String(80), nullable=False)    # permission_catalog key
+    mode: Mapped[str] = mapped_column(String(10), nullable=False)        # 'allow' | 'deny'
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False,
+    )
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
 class UserAuditLog(Base):
     """Append-only audit trail for Team admin (User table) mutations.
     Every create / edit / role_change / activate / deactivate / passcode_reset

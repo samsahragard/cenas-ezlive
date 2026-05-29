@@ -25,6 +25,7 @@ from app.web.driver_system import driver_system_bp
 from app.web.briefs import briefs_bp
 from app.web.tasks import tasks_bp
 from app.web.team_reports import team_reports_bp
+from app.web.permissions_admin import permissions_admin as perms_admin_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import anomaly_routes as ezanomaly
@@ -115,6 +116,7 @@ def create_app():
     app.register_blueprint(reports_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(dev_chat_bp)
+    app.register_blueprint(perms_admin_bp)  # PERMISSIONS admin page (partner-only, Sam #1676)
     # Interview Tracker (Sam #5:48) — partner-only candidate hiring
     # pipeline. Routes registered at /partner/interview-tracker
     # directly (not under store_bp), so not auto-partner-gated; each

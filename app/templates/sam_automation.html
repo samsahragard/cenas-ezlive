@@ -590,7 +590,7 @@
           <dt>What it's for</dt>
           <dd>Live ezCater order intake via email IMAP IDLE; PDFs + order confirmations land here and feed the ezCater ingest pipeline. <strong>NOTE (samai 2026-05-28):</strong> the Integrations tab documents the signature-verified webhook (<code>/ezcater/webhook</code>) as the ingest path — in reality BOTH exist (webhook + this IMAP-IDLE + the GraphQL API as backup). Resolved (aick 2026-05-29): the signature-verified webhook (<code>/ezcater/webhook</code>) is the authoritative PRIMARY; this IMAP-IDLE service is a gap-closing FALLBACK (catches orders the webhook misses, per cena.py:1332); GraphQL is a deeper backup.</dd>
           <dt>What runs it</dt>
-          <dd><code>ezcater_idle.py</code> persistent IMAP IDLE on AiCk + Mini_IT13.</dd>
+          <dd><code>ezcater_idle.py</code> - ARCHIVED 2026-05-27 (openclaw_archive), orphaned / NOT live (see the corrected entry above); the live ezCater intake is the signature-verified webhook (see Integrations).</dd>
           <dt>Auth</dt>
           <dd><code>orders_imap_pwd.txt</code> + <code>orders_smtp_pwd.txt</code> in <code>C:\Users\sam\cena-secrets\</code>.</dd>
         </dl>

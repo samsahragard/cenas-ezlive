@@ -30,7 +30,7 @@ from app.web.permissions import LEVELS, STORE_SCOPED_LEVELS, require_level
 
 team_bp = Blueprint("team", __name__)
 
-PASSCODE_RE = re.compile(r"^[\d*#@+%\-$]{5}$")
+PASSCODE_RE = re.compile(r"^\d{5}$")
 
 # 9 canonical user-creatable roles (driver excluded — drivers live in
 # the separate `drivers` table; see Issue 4 spec, samai #1511, 2026-05-15).

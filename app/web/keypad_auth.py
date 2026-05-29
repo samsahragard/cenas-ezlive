@@ -53,7 +53,7 @@ keypad_auth = Blueprint("keypad_auth", __name__)
 
 PASSCODE_LEN = 5
 # Digits + the special keys on the pad: * # @ + % - $
-PASSCODE_RE = re.compile(rf"^[\d*#@+%\-$]{{{PASSCODE_LEN}}}$")
+PASSCODE_RE = re.compile(rf"^\d{{{PASSCODE_LEN}}}$")
 MAX_FAILED_ATTEMPTS = 6
 LOCKOUT_MINUTES = 10
 

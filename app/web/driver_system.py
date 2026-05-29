@@ -969,61 +969,6 @@ def cron_task_escalation():
         db.close()
 
 
-@driver_system_bp.route("/cron/_pin_reset_oneshot", methods=["GET", "POST"])
-def cron_pin_reset_oneshot():
-    """TEMPORARY break-glass PIN reset (aick, 2026-05-29) — Sam's partner PIN
-    contained a '#', untypable after the keypad redesign removed symbol keys,
-    so he's locked out and there's no auth path to /partner/team reset. Gated
-    by CRON_TOKEN like the other /cron/* routes. GET = list partner users (no
-    hashes). POST ?user_id=N = reset that user to a fresh 5-digit NUMERIC PIN
-    (digits only, typeable on the new pad), mirroring team_reset; returns the
-    temp PIN in the response body (never logged). REMOVE immediately after use."""
-    import os, random
-    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
-        abort(403)
-    from app.models import User, UserAuditLog
-    from werkzeug.security import generate_password_hash, check_password_hash
-    db = SessionLocal()
-    try:
-        if request.method == "GET":
-            rows = [{"id": u.id, "full_name": u.full_name, "active": u.active,
-                     "first_login_done": u.first_login_done}
-                    for u in db.query(User).filter(User.permission_level == "partner").all()]
-            return jsonify({"ok": True, "partners": rows})
-        uid = request.args.get("user_id", type=int)
-        if not uid:
-            return jsonify({"ok": False, "error": "user_id query param required"}), 400
-        u = db.query(User).filter(User.id == uid).first()
-        if not u:
-            return jsonify({"ok": False, "error": "user not found"}), 404
-        actives = db.query(User).filter(User.active == True).all()  # noqa: E712
-        def _taken(p):
-            for a in actives:
-                if a.id != u.id and a.passcode_hash and check_password_hash(a.passcode_hash, p):
-                    return True
-            return False
-        pin = "".join(str(random.randint(0, 9)) for _ in range(5))
-        for _ in range(40):
-            if not _taken(pin):
-                break
-            pin = "".join(str(random.randint(0, 9)) for _ in range(5))
-        u.passcode_hash = generate_password_hash(pin)
-        u.first_login_done = False
-        u.failed_attempts = 0
-        u.lockout_until = None
-        u.session_version = (u.session_version or 1) + 1
-        db.add(UserAuditLog(
-            target_user_id=u.id, target_label=u.full_name,
-            actor_user_id=None, actor_label="aick (break-glass locked-out recovery)",
-            action="passcode_reset",
-            details="one-shot reset; prior PIN had a '#' untypable after the keypad redesign",
-        ))
-        db.commit()
-        return jsonify({"ok": True, "user_id": u.id, "full_name": u.full_name, "temp_pin": pin})
-    finally:
-        db.close()
-
-
 # ============================================================
 # Sales-insights synthesis (Phase 2 / Block 1F)
 # A daily 5am-CT scheduler POSTs /cron/sales-insights. The handler

@@ -31,7 +31,8 @@
 <h2>Block 2 — Manager Tools (partial)</h2>
 <ul>
   <li><strong>2I — Recipe Page</strong> <span class="status-chip shipped">Shipped</span>: manager-facing recipe reference per store.</li>
-  <li><strong>2A–2H, 2J</strong>: spec slots open; work begins as the operator opens them.</li>
+  <li><strong>More manager surfaces shipped since this list was written</strong> (ckai 2026-05-28, from origin/main): maintenance requests + training records (<code>ffa3181</code>), driver pay page with E/D/V-miles + manager payroll inputs (<code>012f74e</code>), tabbed Today / Manager / Catering / Operations / Vendors dashboards (<code>1d6d179</code>, <code>088982c</code>, <code>5f3f83d</code>). These are not yet mapped to 2A–2J slots here. FLAG &rarr; @ck (Block 2 owner, P7B): map the shipped manager surfaces to their Block-2 slots so this status is exact + agrees with the Block 2 tab.</li>
+  <li><strong>Remaining 2A–2H, 2J</strong>: spec slots open; work begins as the operator opens them.</li>
 </ul>
 
 <h2>Block 3 — Agent Surface (future)</h2>
@@ -57,20 +58,21 @@
   <li><span class="status-chip shipped">Shipped</span> <strong>Cross-host message queue</strong>: cena2 peer on Mini_IT13 syncs every 30s with the AiCk gateway via the Phase 2 message layer.</li>
 </ul>
 
-<h2>Scheduling system (Sling replacement) — in flight</h2>
-<p>The internal scheduling system that will <strong>replace Sling</strong> is in early build. Verified state as of HEAD (samai 2026-05-28):</p>
+<h2>Schedules V2 (Sling replacement) — in flight</h2>
+<p>"<strong>Schedules V2</strong>" (canonical name per the audit directive) is the internal scheduling system that will <strong>replace Sling</strong>, in early build — built parallel to and separate from the current Toast-shift schedule view; Sam chooses between them post-build. Verified state as of HEAD (samai 2026-05-28; naming + framing ckai 2026-05-28):</p>
 <ul>
   <li><span class="status-chip shipped">Precondition shipped</span> Hourly-role taxonomy — <code>cook / server / busser / host / bartender</code> added to <code>ROLE_PERMISSIONS</code> (<code>permissions.py:288</code>) for the task-assignment hierarchy + counseling cascade.</li>
   <li><span class="status-chip shipped">Live</span> Schedule <em>view</em> — <code>/&lt;store&gt;/schedule</code> (+ <code>/schedule/weekly</code>, <code>store_routes.py:4302</code>), currently <strong>Toast-shift-sourced</strong> (Sling-compatible labels); zero shifts until Toast Scheduling is enabled per store.</li>
   <li><span class="status-chip draft">Pending</span> Full internal system — shift offers, time-off, availability, announcements, in-app messaging, and the Sling cutover. <strong>Not shipped</strong>: the <code>schedule.* / shift.* / time_off.* / availability.* / announcement.* / message.*</code> permission keys are NOT yet in <code>permissions.py</code>, and no <code>shift_offer</code> / <code>time_off</code> routes exist.</li>
 </ul>
-<p class="meta">FLAG &rarr; @aick/@sam: confirm the scheduling build's block structure + current phase so this section reflects the build plan exactly.</p>
+<p class="meta">FLAG &rarr; @aick/@sam: confirm Schedules V2's full block structure (the directive references a 10-block plan) + current phase, so this section can name each block exactly.</p>
 
 <h2>Open work — current focus</h2>
 <ul>
   <li>Vendor email-parse pipeline: ingest WebstaurantStore equipment and warranty emails.</li>
   <li>Anomaly engine extensions: additional rules for the daily / weekly brief.</li>
   <li>Play Console legal declarations + 14-day closed-test gate before prod-access app submission.</li>
-  <li><strong>EZCater order ingest</strong>: live path is the signature-verified webhook (<code>/ezcater/webhook</code>, HMAC, <code>ezcater_webhook.py</code>); confirm whether any IMAP-poll fallback is still active (see Integrations / Automation).</li>
-  <li><strong>OpenClaw</strong>: still the on-disk secret home (<code>~/.openclaw/.secrets/</code>, referenced by auth + chat tooling) — NOT removed. FLAG &rarr; Sam: is an OpenClaw removal/cutover planned? If so it is not yet reflected in code.</li>
+  <li><strong>EZCater order ingest</strong> (corrected ckai 2026-05-28 per aick's Integrations Part A): TWO live ingest paths — the signature-verified webhook (<code>/ezcater/webhook</code>, HMAC, <code>ezcater_webhook.py</code>) AND a standalone IMAP IDLE service (<code>ezcater_idle.py</code> on AiCk + Mini_IT13), with the Partner GraphQL API as a deeper backup. Which is the authoritative primary is FLAGGED &rarr; @aick (Architecture calls webhook primary, Automation calls IMAP primary).</li>
+  <li><strong>OpenClaw — REMOVED / migrated</strong> (corrected ckai 2026-05-28 per ck's Pass audit #2699, on-disk verified): <code>~/.openclaw/.secrets/</code> is gone on both AiCk + Mini_IT13, archived to <code>C:\Users\sam\openclaw_archive_2026-05-27\</code>. Secrets migrated to <code>C:\Users\sam\cena-secrets\</code> (app-shared) + <code>C:\Users\sam\cena\.secrets\</code> (Cena gateway lane). Remaining <code>~/.openclaw</code> path references in docs are stale and being corrected this audit (see Pass tab for the canonical locations). Some agent worker accounts still keep a local <code>~/.openclaw</code> for their own chat tooling — that is not the canonical app secret home.</li>
+  <li><strong>Design lane / dck retirement</strong> (ckai 2026-05-28): per the Agents tab, the dck design-lead agent was retired 2026-05-23; there is no standing design-lead lane in Phase 2 (design/mockup work is ad-hoc per request). FLAG &rarr; @sam: confirm whether design work is paused or redistributed, so the roadmap states it definitively.</li>
 </ul>

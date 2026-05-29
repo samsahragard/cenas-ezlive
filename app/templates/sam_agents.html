@@ -246,7 +246,7 @@
             <li><b>ck failover gateway</b> — <code>ck_gateway.py</code> on port 8766, at-logon Startup launcher, mirrors aick's <code>/jobs/driver-assign</code> contract</li>
             <li><b>LAN team hub</b> — <code>hub.py</code> on 192.168.1.134:8765 (also Tailscale 100.73.38.82:8765)</li>
             <li><b>dev-chat bridge</b> — <code>bridge.py</code> mirrors LAN ↔ partner dev chat with the cena-skip filter</li>
-            <li><b>Telegram bridge</b> — bidirectional LAN-hub ↔ Telegram with image passthrough; surfaces as <code>sam-tg</code> in the hub</li>
+            <li><b>Telegram bridge</b> &mdash; runs on <b>AiCk</b> (<code>cena/telegram_dev_chat_bridge.py</code>, @aick #1615), <b>not</b> ck. ck's hub merely receives inbound Telegram messages (tagged <code>sam-tg</code>) that AiCk's bridge forwards in; ck's own <code>bridge.py</code> (above) mirrors the hub to the dev chat only. Verified 2026-05-29: no Telegram process or script on Mini_IT13.</li>
           </ul>
         </dd>
         <dt>Starting docs</dt>

@@ -23,7 +23,7 @@
 <h3>Permission gate</h3>
 <ul>
   <li>The real permission key is <code>kds.edit_recipes</code> (<code>permissions.py:82/182/226</code>) — held by <code>km</code>, <code>corporate_chef</code>, <code>corporate</code> (and <code>partner</code> via wildcard). <strong>Correction:</strong> the previously-documented <code>recipes.view</code> / <code>recipes.write</code> keys do NOT exist in <code>ROLE_PERMISSIONS</code>.</li>
-  <li>FLAG &rarr; @aick: the <code>/&lt;store&gt;/recipes*</code> routes (<code>store_routes.py:3266-3421</code>) show no explicit <code>@requires_permission</code> — confirm edit is gated by <code>kds.edit_recipes</code> at the route, or only in-template + store scope.</li>
+  <li><strong>Resolved (aick 2026-05-29):</strong> the <code>/recipes*</code> routes (<code>store_routes.py:3480+</code> — index/new/create/detail) carry NO route-level <code>@requires_permission</code>. Edit is NOT gated by <code>kds.edit_recipes</code> at the route; it relies on the global site gate (auth required) + the page's "everyone except expo" audience model + per-store <code>store_scope</code>. (<code>kds.edit_recipes</code> exists in ROLE_PERMISSIONS but is not applied as a decorator here — a soft spot if route-level enforcement is desired; left FLAGGED to Sam.)</li>
 </ul>
 
 <h3>Data model</h3>

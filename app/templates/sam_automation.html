@@ -588,7 +588,7 @@
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>Live ezCater order intake via email IMAP IDLE; PDFs + order confirmations land here and feed the ezCater ingest pipeline. <strong>NOTE (samai 2026-05-28):</strong> the Integrations tab documents the signature-verified webhook (<code>/ezcater/webhook</code>) as the ingest path — in reality BOTH exist (webhook + this IMAP-IDLE + the GraphQL API as backup). FLAG &rarr; @aick: confirm which is the authoritative primary so the two tabs agree.</dd>
+          <dd>Live ezCater order intake via email IMAP IDLE; PDFs + order confirmations land here and feed the ezCater ingest pipeline. <strong>NOTE (samai 2026-05-28):</strong> the Integrations tab documents the signature-verified webhook (<code>/ezcater/webhook</code>) as the ingest path — in reality BOTH exist (webhook + this IMAP-IDLE + the GraphQL API as backup). Resolved (aick 2026-05-29): the signature-verified webhook (<code>/ezcater/webhook</code>) is the authoritative PRIMARY; this IMAP-IDLE service is a gap-closing FALLBACK (catches orders the webhook misses, per cena.py:1332); GraphQL is a deeper backup.</dd>
           <dt>What runs it</dt>
           <dd><code>ezcater_idle.py</code> persistent IMAP IDLE on AiCk + Mini_IT13.</dd>
           <dt>Auth</dt>
@@ -919,7 +919,7 @@
         </div>
         <dl>
           <dt>What it's for</dt>
-          <dd>Imports the weekly staff schedule from Sling into the platform's labor/scheduling tables. <strong>NOTE (samai 2026-05-28):</strong> Sling is being replaced (schedule view now Toast-shift-sourced — see Integrations / Phase 2); FLAG &rarr; @aick: is this Sling weekly import still active or superseded?</dd>
+          <dd>Imports the weekly staff schedule from Sling into the platform's labor/scheduling tables. <strong>NOTE (samai 2026-05-28):</strong> Sling is being replaced (schedule view now Toast-shift-sourced — see Integrations / Phase 2); Resolved (aick 2026-05-29): SUPERSEDED. Sling is being replaced — the schedule view is now Toast-shift-sourced (toast_reports.py) and the internal Schedules V2 build is underway. The Sling weekly import is winding down, not the live path.</dd>
           <dt>Auth</dt>
           <dd><code>sling_api_key.txt</code> in <code>~/.openclaw/.secrets/</code>.</dd>
         </dl>

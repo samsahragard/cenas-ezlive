@@ -9,8 +9,8 @@
   <li><strong>Database</strong> — SQLite on Render's persistent disk at <code>/var/data/cenas_kitchen.db</code>; SQLAlchemy ORM + boot-time <code>create_all</code> for migrations (Alembic not wired on Render).</li>
   <li><strong>Background jobs</strong> — Render cron jobs (Toast refreshes, anomaly briefs, calendar rolls, event-traffic refresh, sales insights, etc.).</li>
   <li><strong>External integrations</strong> — Toast (POS + analytics; also the NEW scheduling source via /labor/v1/shifts), Sling (scheduling — BEING REPLACED by Toast scheduling per Sam #1010, cutover in progress), EZCater (catering intake; webhook + IMAP + Playwright UI flow), vendor email channels, Sentry (error monitoring).</li>
-  <li><strong>AI surface</strong> — Cena gateway (HTTP + Tailscale) on AiCk; <code>/sam/chat</code> talks to it for the Sam-facing assistant. Anthropic + Gemini are the model providers.</li>
-  <li><strong>Mobile shell</strong> — Capacitor WebView app <code>com.cenaskitchen.app</code> ("Cenas Kitchen Employee", Play Console internal testing) that loads <code>app.cenaskitchen.com</code> directly; built + signed in GitHub Actions, uploaded via the Android Publisher API.</li>
+  <li><strong>AI surface</strong> — Cena gateway (HTTP + Tailscale) on AiCk; <code>/sam/chat</code> talks to it for the Sam-facing assistant. Anthropic Claude (Opus/Sonnet) is the tool-enabled provider via the Cena gateway; Google Gemini (Flash) is plain-chat only and routes directly to Google, bypassing the gateway and its tool schema (sam_chat.py). Active model is Sam-selected (cena_active_model.txt).</li>
+  <li><strong>Mobile shell</strong> — Capacitor WebView app <code>com.cenaskitchen.app</code> ("Cenas Kitchen Employee", Play Console internal testing) that loads <code>app.cenaskitchen.com</code> directly; built + signed in GitHub Actions (upload keystore via GitHub Secrets). The signed AAB is produced as a CI artifact and uploaded to Play Console <strong>manually</strong> — there is no Android Publisher API step. A debug APK is auto-published to a GitHub release for driver sideloading (<code>/driver/app.apk</code>).</li>
   <li><strong>Driver-assignment UI flow</strong> — webhook auto-assigns + manager dropdown re-assigns drive the partnerportal.ezcater.com UI on internal hosts. As of 2026-05-27 (Sam #1153) the PRIMARY is <strong>pwck</strong> (Mini_IT13:9000, Playwright); aick's Selenium gateway is fallback. Render only creates job rows + POSTs wakes; never touches Chrome itself. (Render env: <code>CENA_GATEWAY_URL</code>=pwck primary, <code>PWCK_PRIMARY_URL</code> split out so it no longer collides with the Cena-chat gateway.)</li>
 </ul>
 
@@ -28,7 +28,7 @@
     <tr><td>VPN mesh</td><td>Tailscale (private; internal services and operator runtime)</td></tr>
     <tr><td>Error monitoring</td><td>Sentry</td></tr>
     <tr><td>Auth (web)</td><td>Site-password gate + keypad-login + role permissions</td></tr>
-    <tr><td>AI providers</td><td>Anthropic Claude (Opus, Sonnet); Google Gemini (Flash)</td></tr>
+    <tr><td>AI providers</td><td>Anthropic Claude (claude-opus-4-7, claude-sonnet-4-6) tool-enabled via the Cena gateway; Google Gemini (gemini-2.5-flash, gemini-3.5-flash) plain chat only, bypasses the gateway/tools. Default claude-sonnet-4-6; Sam-selectable.</td></tr>
     <tr><td>Source control</td><td>GitHub; push triggers Render auto-deploy</td></tr>
   </tbody>
 </table>
@@ -80,7 +80,8 @@
        └── Mobile (Play Console com.cenaskitchen.app)
              - Capacitor 7 WebView loads app.cenaskitchen.com
              - GitHub Actions builds + signs .aab
-             - Android Publisher API uploads to internal testing
+             - Signed .aab uploaded to Play Console MANUALLY (no Android Publisher API step)
+             - Debug APK auto-published to a GitHub release (/driver/app.apk sideload)
 </pre>
 
 <h2>Audience surfaces</h2>
@@ -109,14 +110,14 @@
   <li>Sling — scheduling (BEING REPLACED by Toast scheduling API; key slated for removal post-cutover).</li>
   <li>EZCater — catering intake.</li>
   <li>Sentry — errors.</li>
-  <li>1Password — canonical credential vault (CLI integration available).</li>
+  <li>1Password — RETIRED 2026-05-28 (Sam directive). Credential master index is the samai desktop file (credential_inventory_2026-05-27.md); operational secrets live in two on-disk lanes on AiCk (app/runtime + Cena gateway) with the legacy openclaw store archived. See the Pass tab for exact locations.</li>
 </ul>
 
 <h3>Machines</h3>
 <ul>
   <li><strong>Render web service</strong> — production app + cron runtime. SQLite lives on the Render persistent disk; restarting the service does NOT wipe data.</li>
   <li><strong>AiCk (Mini_IT12, 100.108.119.19)</strong> — internal host. Runs the Cena gateway (port 8765, exposed via Cloudflare Tunnel + reachable on the tailnet), the aick Selenium driver-assign worker (now FALLBACK behind pwck), the watchdog (port 8767, docck-callable), the CenaHeartbeatSender → docck, and the persistent /sam/chat ↔ Cena local chat (port 8770, Tailscale-only). All run as Windows Scheduled Tasks with auto-restart (CenaGateway, CenaChatWatcher, CenaHubRelay, CenaSamChat, CenaTaskPinger, CenaHeartbeatSender, ck-watchdog/CenaWatchdog).</li>
-  <li><strong>Mini_IT13 (ck's box, 100.73.38.82)</strong> — peer internal host. Runs the LAN team chat hub (port 8765, hub.py) + the Telegram bridge (bridge.py + run_bridge.py — see FLAG), <strong>pwck</strong> the PRIMARY driver-assign gateway (port 9000, Playwright), <strong>ck_gateway</strong> the driver-assign FAILOVER (port 8766 — UP, netstat-verified 2026-05-28), the ck watchdog (port 8767), and the PwckHeartbeatSender → docck. (A separate "cena2 active/active Layer-4 peer" concept is unbuilt — not to be confused with the :8766 failover, which IS running.)</li>
+  <li><strong>Mini_IT13 (ck's box, 100.73.38.82)</strong> — peer internal host. Runs the LAN team chat hub (port 8765, hub.py) + the online-dev-chat&harr;hub bridge (bridge.py under run_bridge.py; the separate Telegram&harr;hub bridge runs on AiCk, see Integrations), <strong>pwck</strong> the PRIMARY driver-assign gateway (port 9000, Playwright), <strong>ck_gateway</strong> the driver-assign FAILOVER (port 8766 — UP, netstat-verified 2026-05-28), the ck watchdog (port 8767), and the PwckHeartbeatSender → docck. (A separate "cena2 active/active Layer-4 peer" concept is unbuilt — not to be confused with the :8766 failover, which IS running.)</li>
   <li><strong>Operator phone</strong> — Tailscale member; reads Telegram via @Cenasbot for dev-chat traffic (bridge mirrors hub ↔ Telegram).</li>
 </ul>
 
@@ -124,8 +125,8 @@
 <p>The Pass tab is the source of truth for credential locations. This page records the categories only; never the values.</p>
 <ul>
   <li>Render env vars — every prod secret used by the Flask app + crons.</li>
-  <li>1Password — canonical store for human-typeable credentials (logins, master passwords).</li>
-  <li>Internal-host on-disk secrets — local files at well-known paths for service runtime (mirrored to Render env where needed).</li>
+  <li>1Password — RETIRED 2026-05-28. Human-typeable credentials are now recorded in the samai desktop index file (credential_inventory_2026-05-27.md).</li>
+  <li>Internal-host on-disk secrets — two lanes on each internal host (app/runtime + Cena gateway), migrated off the now-archived openclaw store; mirrored to Render env where needed. Exact paths: see the Pass tab.</li>
 </ul>
 
 <h2>Where the data lives</h2>

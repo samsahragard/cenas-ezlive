@@ -4,7 +4,7 @@
 
 <h2>What it is</h2>
 <p>Cena is the operator-facing AI assistant: a runtime on an internal host (<code>cena_gateway.py</code> on AiCk) that exposes a chat surface on the web app at <code>/sam/chat</code>, and operates the system on the operator's behalf with a defined tool catalogue and audit log. <strong>Model:</strong> the gateway defaults to <code>claude-sonnet-4-6</code> (<code>cena_gateway.py:113</code>) and also exposes a picker for <code>claude-opus-4-7</code> + <code>gemini-2.5-flash</code> / <code>gemini-3.5-flash</code>.</p>
-<p class="meta">FLAG &rarr; @aick (model/tool policy): the gateway comment at <code>cena_gateway.py:91-92</code> states Gemini can run the FULL Cena including "system prompt, context files, tools" — so tool conversations are NOT strictly Claude-only in code. Confirm whether the Gemini-exclusion-on-tool-turns fix is actually in effect; if so, point to the enforcement so this page can state it precisely.</p>
+<p class="meta">Tool/model policy (RESOLVED by aick): the gateway (<code>cena_gateway.py:91-92</code>) CAN technically run the full Cena including "system prompt, context files, tools" — BUT the <code>/sam/chat</code> surface never routes Gemini through the gateway: <code>sam_chat.py:825-831</code> sends Gemini models DIRECT to the Google API (bypassing the gateway and its Anthropic tool-use schema), so Gemini turns receive NO tools. Net: Cena tool conversations ARE Claude-only (Sonnet/Opus via the gateway); Gemini is offered as a plain-chat model only.</p>
 
 <h2>Where it runs</h2>
 <table>
@@ -18,10 +18,10 @@
 </table>
 
 <h2>Audience gate</h2>
-<p>The Cena chat surface is gated to a single user: the operator whose user id matches the <code>SAM_CHAT_USER_ID</code> env var. The capability is NOT role-inherited — even a partner / admin role does not unlock it without the explicit user-id match. When the env var is unset, the surface is dormant and inaccessible to everyone.</p>
+<p>The Cena chat surface is gated to a single user: the operator whose user id matches the <code>SAM_CHAT_USER_ID</code> env var. The capability is NOT role-inherited — even a partner / admin role does not unlock it without the explicit user-id match. When the env var is unset, the surface is dormant and inaccessible to everyone. (Verified: this is a SINGLE-user gate - there is no <code>SAM_CHAT_USER_ID_2</code> / second Cena user in the code; Masood's elevated access is the <code>partner</code> ROLE on <code>/partner/*</code> surfaces, NOT the Cena chat.)</p>
 
 <h2>Tool catalogue</h2>
-<p>Cena operates the system via a defined tool surface. Tools are written as JSON-schema-typed endpoints on the gateway; each call is logged to the audit table. Tool categories:</p>
+<p>Cena operates the system via a defined tool surface of <strong>22 tools</strong> (counted in <code>cena_gateway.py</code>), written as JSON-schema-typed endpoints on the gateway; each call is logged to the audit table. Tool categories:</p>
 <ul>
   <li><strong>Read tools</strong> — DB probes, account lookups, vendor / catering / order reads.</li>
   <li><strong>Action tools</strong> — vendor-order operations, task creates, status updates.</li>

@@ -1,6 +1,6 @@
 {# Permissions — consolidated from: permission_system. Sam directive #240. Re-grounded against app/services/permissions.py + app/web/auth.py + app/web/sam_chat.py at HEAD (samai audit, 2026-05-28). #}
 <h1>Permissions</h1>
-<p class="meta">Role taxonomy and the audience-gate system that fronts every mutating action in the app. Source of truth: <code>app/services/permissions.py</code>.</p>
+<p class="meta">Role taxonomy and the audience-gate system that fronts every mutating action in the app. Source of truth: <code>app/services/permissions.py</code>. <em>Last audited 2026-05-28 (samai, docs full-audit pass).</em></p>
 
 <h2>Role taxonomy</h2>
 <p>Every authenticated session resolves to exactly one role. Role is the source of permission; permissions are NEVER granted individually outside the role-to-permission map (<code>ROLE_PERMISSIONS</code> in <code>app/services/permissions.py</code>).</p>
@@ -22,6 +22,18 @@
 </table>
 <p class="meta">Back-compat <code>User.permission_level</code> aliases (pre-taxonomy): <code>manager</code> → <code>gm</code>, <code>corporate-driver</code> → <code>driver</code>. <strong><code>operator</code> is NOT a <code>ROLE_PERMISSIONS</code> role</strong> — the <code>/sam/*</code> surfaces are gated by an env-var id match, not the role map (see "Operator-only" below).</p>
 
+<h2>Trust hierarchy (top-down visibility)</h2>
+<p>Roles sit in a top-down trust model (Sam-confirmed, directive #1546). Visibility flows <em>downward</em>: a tier sees its own surfaces and everything below it, never above — lower tiers cannot see upper-tier surfaces even to know they exist.</p>
+<ol>
+  <li><strong>partner</strong> — owner tier, wildcard <code>*</code>.</li>
+  <li><strong>corporate</strong> + <strong>corporate_chef</strong> — all-stores corporate tier.</li>
+  <li><strong>gm</strong>, <strong>km</strong>, <strong>assistant_km</strong>, <strong>foh_manager</strong> — store-management tier (same access level as one another, store-scoped).</li>
+  <li><strong>expo</strong> — kitchen line / orders + KDS.</li>
+  <li><strong>driver</strong> — route-scoped, own bids / payout only.</li>
+  <li><strong>floor staff</strong> — cook / server / busser / host / bartender (minimal set).</li>
+</ol>
+<p class="meta"><strong>FLAG &rarr; Sam:</strong> <code>prep_manager</code> is not placed in the confirmed chain above (multi-store produce receive/verify — plausibly between corporate and store-management, but unconfirmed). The 5 floor-staff roles are shown at the bottom, but their explicit tier placement is likewise pending Sam's confirmation. (Directive "PLACE-ME ROLES.")</p>
+
 <h2>How a request is gated</h2>
 <ol>
   <li><strong>Site gate (before_request)</strong> — one global gate in <code>app/web/auth.py</code> intercepts every path not on the <code>EXEMPT_PREFIXES</code> list. A request passes if it carries a keypad session (<code>session.user_id</code>) OR the legacy shared-password session (<code>session.auth_ok</code>, set by <code>/login</code> with <code>EZLIVE_PASSWORD</code>); otherwise it 302s to <code>/keypad-login?next=&lt;path&gt;</code>.</li>
@@ -29,6 +41,12 @@
   <li><strong>Per-route permission check</strong> — the route's <code>@requires_permission("&lt;tag&gt;")</code> decorator runs <code>_user_has(g.current_user, tag, store_id)</code>. On denial it 302s to <code>/access-denied?need=&lt;tag&gt;&amp;next=&lt;path&gt;</code>. Enforcement is controlled by <code>PERMISSION_ENFORCE</code> — default <strong>ENFORCING</strong> since 2026-05-13; set <code>PERMISSION_ENFORCE=0</code> for the dark-launch log-and-permit fallback (used during role-schema migrations).</li>
   <li><strong>Per-row store/scope filter</strong> — store-scoped roles are confined to their <code>User.store_scope</code> (CSV) at the query layer; multi-store roles (partner / corporate / corporate_chef / prep_manager / driver) have <code>store_scope = None</code> = all stores. Cross-store reads never leak.</li>
 </ol>
+<p class="meta"><strong>Boundary verification (spot-checked at HEAD 012f74e, samai 2026-05-28):</strong> the per-route gate genuinely 302s lower tiers to <code>/access-denied</code> (not just a hidden menu) — confirmed against <code>ROLE_PERMISSIONS</code>:</p>
+<ul>
+  <li><code>anomaly.admin</code> — required by the rules-admin route (<code>anomaly_routes.py:227</code>); granted only in the <code>corporate</code> set (<code>permissions.py:100</code>) + the <code>partner</code> wildcard. So <code>gm</code>/<code>expo</code>/<code>driver</code> hitting it 302 to <code>/access-denied?need=anomaly.admin</code>.</li>
+  <li><code>developer.view_chat</code> — required by the dev-chat routes (<code>developer_chat.py:129</code> et al.); granted in <code>corporate</code> (<code>permissions.py:83</code>) + <code>partner</code> only. Store-tier and below are blocked at the route, not merely in nav.</li>
+  <li><code>labor.view_all_stores</code> vs <code>labor.view_store_summary</code> — the all-stores key sits in <code>corporate</code> (<code>permissions.py:66</code>) + <code>corporate_chef</code> (<code>permissions.py:210</code>); store-scoped roles get only the summary key, enforcing the cross-store read boundary at the query layer.</li>
+</ul>
 
 <h2>Permission catalogue</h2>
 <p>Permissions are keyed strings of the form <code>&lt;area&gt;.&lt;action&gt;</code>, mapped many-to-many to roles via <code>ROLE_PERMISSIONS</code>. Adding a permission means adding the key + role mappings in code; <strong>never inline-grant by user-id</strong>. <code>partner</code> holds the wildcard <code>*</code> and short-circuits every check.</p>
@@ -73,5 +91,5 @@
   <li>Auth surfaces — <code>/login</code>, <code>/logout</code>, <code>/keypad-login</code>, <code>/keypad-logout</code>, <code>/change-passcode</code>, <code>/partner-login</code>. (<code>/access-denied</code> is NOT exempt — it requires a session.)</li>
   <li><code>/produce/healthz</code> — public liveness probe (NOT <code>/healthz</code>).</li>
   <li>Static &amp; public pages — <code>/static/</code>, <code>/favicon.ico</code>, <code>/install</code>, <code>/privacy</code>, <code>/driver/app.apk</code>, <code>/request-access</code>.</li>
-  <li>Signed / token-gated machine endpoints — <code>/ezcater/webhook</code> (HMAC), <code>/orders/ingest*</code> (token), <code>/cron/*</code> (CRON_TOKEN), <code>/sam/cena/*</code> (X-Cena-Token), <code>/docck/*</code> (bearer), <code>/produce/confirm|cancel/*</code> (random order-id), <code>/ez-manage/pending-count.json</code> (returns 401 JSON, not 302).</li>
+  <li>Signed / token-gated machine endpoints — <code>/ezcater/webhook</code> (HMAC), <code>/orders/ingest*</code> (token), <code>/cron/*</code> (CRON_TOKEN), <code>/sam/cena/*</code> (X-Cena-Token), <code>/docck/*</code> (bearer), <code>/produce/admin/*</code> (bearer), <code>/produce/confirm|cancel/*</code> (random order-id), <code>/ez-manage/pending-count.json</code> (returns 401 JSON, not 302).</li>
 </ul>

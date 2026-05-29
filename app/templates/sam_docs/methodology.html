@@ -1,6 +1,6 @@
 {# Methodology — consolidated from: methodology_rules + deployment. Sam directive #240. #}
 <h1>Methodology</h1>
-<p class="meta">Engineering standards for the Cenas Kitchen codebase. The rules below are non-negotiable gates before a change ships.</p>
+<p class="meta">Engineering standards for the Cenas Kitchen codebase. The rules below are non-negotiable gates before a change ships. <em>Last audited 2026-05-28 (samai, docs full-audit pass).</em></p>
 
 <h2>The six standing rules</h2>
 <p>Every commit that touches user-facing state, a database mutation, or a partner doc must pass each rule that applies. These are not guidelines — they are the gate.</p>
@@ -20,7 +20,7 @@
 <ol>
   <li><strong>Gate 1 — Local pytest</strong>: the full suite passes on the working tree. Catches schema mismatches, fixture drift, and obvious regressions before the change ever leaves the dev machine. Run from the repo's <code>.venv</code>: <code>.\.venv\Scripts\python.exe -m pytest -q</code> (or platform equivalent).</li>
   <li><strong>Gate 2 — CI</strong>: the GitHub Actions <code>tests.yml</code> workflow lands <code>completed / success</code> for the SHA. CI's environment differs from local in subtle ways (no <code>.env</code>, hermetic fixtures); a green CI proves the change still passes in a clean room.
-    <br><strong class="meta" style="color:#FFB099">KNOWN-RED as of 2026-05-28:</strong> <code>tests.yml</code> is currently failing on <em>every</em> push to <code>main</code> (verified via the Actions API — the last several SHAs incl. <code>c03ece2</code>, <code>b9fb2ee</code>, <code>49d1f1e</code> all report <code>conclusion=failure</code>). Gate 2 is therefore a known-red gate; recent deploys have shipped on Gate 1 (local pytest) + Gate 3 (build-specific probe) only. Treat "Gate 2 green" as unattainable until the CI failure is root-caused and fixed — do not claim Gate 2 passed when it structurally cannot.</li>
+    <br><strong class="meta" style="color:#FFB099">STRUCTURALLY RED — by design (verified via aick, 2026-05-28):</strong> <code>tests.yml</code> (lines 26-39) runs <code>pytest -q tests/</code> with <code>DATABASE_URL</code> deliberately ABSENT. <code>app/db.py</code> builds <code>SessionLocal</code> at import from <code>DATABASE_URL</code>, so under CI <code>SessionLocal</code> is <code>None</code> and any non-hermetic test (one that hits a real-DB path without patching) fails BY DESIGN — the workflow is intended to surface non-hermetic tests. CI is therefore red whenever such a test exists: a stable structural pattern, not flakiness. <strong>Stale-citation correction:</strong> an earlier note cited failing SHAs <code>c03ece2/b9fb2ee/49d1f1e</code>; those are older non-CI ancestors (and <code>tests.yml</code> is unchanged since <code>3259946</code>, 2026-05-14, so they were never the trigger) — citation removed. <strong>FLAGGED:</strong> the live pass/fail conclusion for the current HEAD can't be read from any agent's environment (no <code>gh</code> auth, no <code>GH_TOKEN</code>, no GitHub token in AiCk <code>.secrets</code>; SSH-only remote) — the real Actions conclusion needs <span class="meta">@sam</span> (GitHub Actions tab). Pending that, deploys ship on Gate 1 (local pytest) + Gate 3 (build-specific probe); Gate 2 is treated as known-structurally-red with the live-SHA conclusion unconfirmed.</li>
   <li><strong>Gate 3 — Build-specific deploy probe</strong>: a probe that confirms the COMMIT is live — not just "the service is up". Per rule 2, the probe must check something BUILD-SPECIFIC: a new route, a new asset, a new string in a known route's body. A partner-gate 302 redirect proves the service is up, NOT which commit it is serving.</li>
 </ol>
 
@@ -28,8 +28,13 @@
 <ol>
   <li><strong>Push</strong> the commit to <code>origin/main</code>.</li>
   <li><strong>Wait</strong> for Render's auto-deploy. Typical: 2–3 minutes from push to live.</li>
-  <li><strong>Poll the Render API</strong> for the deploy id matching the SHA; wait for <code>status == "live"</code>.</li>
-  <li><strong>Hit the build-specific probe</strong>. For a new route: <code>curl -sI https://app.cenaskitchen.com/&lt;new-route&gt;</code> — expect a 302 to <code>/keypad-login?next=/&lt;new-route&gt;</code> if the route is gated (which proves the route exists). A 302 to the global site-password gate also returns for unknown paths, so prefer probes that hit content (after authenticating) or signed-route patterns.</li>
+  <li><strong>Confirm the deploy is live</strong> — two methods, by key access:
+    <ul>
+      <li><strong>Render-API status-poll (authoritative; key-holders)</strong> — poll <code>GET https://api.render.com/v1/services/&lt;service-id&gt;/deploys?limit=5</code>, match the deploy whose <code>commit.id == </code> target SHA, wait until <code>status == "live"</code> (terminal set also incl. <code>build_failed</code>/<code>update_failed</code>/<code>canceled</code>/<code>pre_deploy_failed</code>/<code>deactivated</code>). aick runs this as the Render key-holder on Mini_IT12 (script <code>cena/_deploy_watch_&lt;sha&gt;.py</code>); observed this session: bb5f636 live in 216s, 465a7b0 153s, d50574f 153s. (Whether a Render API key is in the canonical agent secret-set is being reconciled on the Pass page — aick has one on Mini_IT12; ckai/samai do not, hence the URL-poll fallback.)</li>
+      <li><strong>URL-poll (key-less fallback; agents without the Render key)</strong> — the swap is silent: <code>curl -sI https://app.cenaskitchen.com/login</code> serves the old build (and brief 502s) until the new build goes live. Poll until non-502 and the swap settles. Used by samai (badge deploys this session).</li>
+    </ul>
+  </li>
+  <li><strong>Hit the build-specific probe</strong> — a 200/302 alone is NOT enough: the old build serves 200s right up to the swap. Fetch a route whose body carries content unique to the new commit and assert that exact markup. For a gated route, authenticate first (site + partner password) then fetch the page and check the new string; a bare <code>curl -sI</code> 302 to <code>/keypad-login</code> only proves the route exists, not which build serves it.</li>
   <li><strong>Three-gate report</strong>: explicitly call out Gate 1 / Gate 2 / Gate 3 status when reporting "deploy verified".</li>
 </ol>
 
@@ -41,6 +46,13 @@
   <li><strong>Hash protection on user-typed secrets</strong> — passwords (keypad PINs, partner gate, manager pins) are stored hashed, never plaintext. Migrations that touch hash columns must remain idempotent.</li>
 </ul>
 
+<h2>Build-lane variations (multi-agent lanes)</h2>
+<p>The three-gate rubric above governs a <strong>single agent shipping a change solo</strong>. Some build lanes run a different gate model — documented here so methodology reflects reality:</p>
+<ul>
+  <li><strong>Peer cross-review + Sam single sign-off</strong> — for multi-agent coordinated efforts (e.g. the docs full-audit pass, the Schedules&nbsp;V2 build), each agent's work is cross-reviewed by a named peer (read the diff + spot-check one claim against cited evidence) <em>instead of</em> samai gating every page. The reviewer posts "cross-review PASS — &lt;unit&gt;" or flags an issue; Sam is pulled in once at the end to review the consolidated FLAGGED list, not per unit.</li>
+  <li><strong>Flag-and-proceed</strong> — in a parallel lane, a claim that can't be verified from the owning agent's access is posted as a cross-domain ask to the right peer; the agent keeps working and folds the answer in when it lands. No answer in ~15 min → leave it FLAGGED and move on. A flagged-honest artifact beats a stalled one.</li>
+</ul>
+
 <h2>Adding a documented surface</h2>
 <ol>
   <li>Write the page (template under <code>app/templates/&lt;area&gt;/</code>).</li>
@@ -49,3 +61,4 @@
   <li>Gate the surface (audience eligibility per rule 1).</li>
   <li>Verify the URL renders 200 with the expected content (rule 5).</li>
 </ol>
+<p class="meta">Current operator-docs surface: <code>/sam/docs</code> renders its pages as Jinja includes from <code>app/templates/sam_docs/</code> (see <code>sam_chat.py &rarr; sam_docs_page</code>); for a docs page, "register the nav entry" means wiring it into that surface's index/tab strip.</p>

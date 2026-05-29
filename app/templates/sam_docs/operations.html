@@ -9,7 +9,7 @@
   <li><strong>Origin/main HEAD</strong>: confirm you are at the latest <code>origin/main</code> SHA. Pull-rebase if not.</li>
   <li><strong>Render web service</strong>: hit <code>/produce/healthz</code> — expect a 200 (the public liveness probe; on the auth exempt-list in <code>app/web/auth.py</code>). NOTE: bare <code>/healthz</code> is NOT exempt and 302s to keypad-login — use <code>/produce/healthz</code>.</li>
   <li><strong>Render cron health</strong>: glance at the Render dashboard for any failing cron. A red cron usually indicates a Toast / Sling / EZCater API outage or a credential rotation.</li>
-  <li><strong>External vendors</strong>: if a flow is reported broken, confirm vendor side first (Toast Analytics status, EZCater; Sling is being replaced by the internal scheduling build — see Phase 2 Roadmap).</li>
+  <li><strong>External vendors</strong>: if a flow is reported broken, confirm vendor side first (Toast Analytics status, EZCater; Sling is being replaced by Schedules V2 &mdash; see Phase 2 Roadmap).</li>
   <li><strong>Outstanding tasks</strong>: review the working punch list before introducing new work.</li>
 </ol>
 
@@ -28,35 +28,35 @@
   <thead><tr><th>Surface</th><th>Purpose</th></tr></thead>
   <tbody>
     <tr><td><code>/&lt;store&gt;/manager/daily-log</code></td><td>Manager daily log — opening/closing checks, notes, anomalies.</td></tr>
-    <tr><td><code>/&lt;store&gt;/manager/recipes</code></td><td>Recipe reference (Block 2I).</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes</code></td><td>Recipe reference (Block 2I).</td></tr>
     <tr><td><code>/&lt;store&gt;/today</code></td><td>Today dashboard — sales, notifications, task reports.</td></tr>
     <tr><td><code>/&lt;store&gt;/catering</code></td><td>Catering dashboard — EZCater orders + delivery roster.</td></tr>
     <tr><td><code>/&lt;store&gt;/operations</code></td><td>Operations dashboard — vendor, produce, outages.</td></tr>
     <tr><td><code>/&lt;store&gt;/vendors</code></td><td>Vendor dashboard — produce ordering + recent orders.</td></tr>
-    <tr><td><code>/&lt;store&gt;/schedule</code> (+ <code>/schedule/weekly</code>)</td><td>Schedule view — currently Toast-shift-sourced (<code>store_routes.py</code>). The full internal scheduling system (Sling replacement) is NOT yet shipped — see Phase 2 Roadmap.</td></tr>
+    <tr><td><code>/&lt;store&gt;/schedule</code> (+ <code>/schedule/weekly</code>)</td><td>Schedule view &mdash; currently Toast-shift-sourced (<code>store_routes.py</code>, routes at lines 4516/4310). <strong>Schedules V2</strong> (the internal scheduling build, separate from this Toast-sourced view) is NOT yet shipped &mdash; see Phase 2 Roadmap. (FLAGGED &rarr; @aick: confirm Schedules V2 ship state + its eventual <code>/&lt;store&gt;/scheduling/*</code> URL.)</td></tr>
   </tbody>
 </table>
 
 <h2>Recurring cron jobs</h2>
-<p>All recurring crons are POST endpoints under <code>/cron/*</code> (defined in <code>app/web/driver_system.py</code>, each gated by a <code>CRON_TOKEN</code> header). <strong>Cadence is configured in the Render dashboard, not in code</strong> — the values below are indicative; the Render dashboard is authoritative and this table MUST agree with the <strong>Automation</strong> tab.</p>
+<p>All recurring crons are POST endpoints under <code>/cron/*</code> (defined in <code>app/web/driver_system.py</code>, each gated by a <code>CRON_TOKEN</code> header). <strong>Cadence is configured in the Render dashboard, not in code</strong> — the cadences below were read from the Render API by @aick (#1618, all jobs <code>not_suspended</code>/ACTIVE) and agree with the <strong>Automation</strong> tab (P11, authoritative).</p>
 <table>
-  <thead><tr><th>Cron (/cron/&lt;name&gt;)</th><th>Cadence (Render — indicative)</th><th>What it does</th></tr></thead>
+  <thead><tr><th>Cron (/cron/&lt;name&gt;)</th><th>Cadence (Render — verified)</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>no-show-sweep</code></td><td>frequent (see Render)</td><td>Sweep for no-show driver bids / unclaimed assignments.</td></tr>
-    <tr><td><code>recompute-scores</code></td><td>periodic</td><td>Recompute driver reliability scores.</td></tr>
-    <tr><td><code>anomaly-eval</code></td><td>~5 min</td><td>Anomaly-engine evaluation pass (the "anomaly-5m" cron).</td></tr>
-    <tr><td><code>anomaly-brief</code></td><td>daily / weekly</td><td>Compose the anomaly brief from anomaly-engine output.</td></tr>
-    <tr><td><code>task-escalation</code></td><td>hourly</td><td>Escalate overdue tasks per the escalation policy.</td></tr>
-    <tr><td><code>sales-insights</code></td><td>~30 min</td><td>Pull recent Toast sales windows for the dashboards.</td></tr>
-    <tr><td><code>refresh-traffic</code></td><td>15 min</td><td>Refresh order-traffic rollups.</td></tr>
-    <tr><td><code>refresh-vendor-status</code></td><td>hourly</td><td>Roll up vendor-order state.</td></tr>
-    <tr><td><code>refresh-catering-pipeline</code></td><td>hourly</td><td>Roll up catering pipeline.</td></tr>
-    <tr><td><code>refresh-outages</code></td><td>hourly</td><td>Outage rollup.</td></tr>
-    <tr><td><code>refresh-events</code></td><td>daily</td><td>Roll the events calendar forward.</td></tr>
-    <tr><td><code>refresh-weather</code></td><td>hourly</td><td>Weather context refresh.</td></tr>
+    <tr><td><code>no-show-sweep</code></td><td><code>*/5</code> (every 5 min)</td><td>Sweep for no-show driver bids / unclaimed assignments.</td></tr>
+    <tr><td><code>recompute-scores</code></td><td><code>0 9</code> (daily 09:00)</td><td>Recompute driver reliability scores.</td></tr>
+    <tr><td><code>anomaly-eval</code></td><td>5 bucketed Render jobs: <code>*/5</code>, <code>*/15</code>, <code>0 *</code> (hourly), <code>0 13</code> (daily), <code>0 13 * * 1</code> (Mon)</td><td>Anomaly-engine eval; each job passes a bucket to <code>run_bucket()</code> (<code>driver_system.py:900-926</code>, ckai #1619).</td></tr>
+    <tr><td><code>anomaly-brief</code></td><td><code>30 12</code> (daily 12:30)</td><td>Compose the anomaly brief from anomaly-engine output.</td></tr>
+    <tr><td><code>task-escalation</code></td><td><code>*/5</code> (every 5 min)</td><td>Escalate overdue tasks per the escalation policy.</td></tr>
+    <tr><td><code>sales-insights</code></td><td><code>0 10</code> (daily 10:00)</td><td>Pull recent Toast sales windows for the dashboards.</td></tr>
+    <tr><td><code>refresh-traffic</code></td><td><code>0 13,15,17,19,21,23</code></td><td>Refresh order-traffic rollups.</td></tr>
+    <tr><td><code>refresh-vendor-status</code></td><td><code>0 12,20</code></td><td>Roll up vendor-order state.</td></tr>
+    <tr><td><code>refresh-catering-pipeline</code></td><td><code>0 13,19</code></td><td>Roll up catering pipeline.</td></tr>
+    <tr><td><code>refresh-outages</code></td><td><code>*/15</code> (every 15 min)</td><td>Outage rollup.</td></tr>
+    <tr><td><code>refresh-events</code></td><td><code>0 1,17,21</code></td><td>Roll the events calendar forward.</td></tr>
+    <tr><td><code>refresh-weather</code></td><td><code>0 1,11,13,15,17,19,21,23</code></td><td>Weather context refresh.</td></tr>
   </tbody>
 </table>
-<p class="meta"><strong>Cron drift (FLAG &rarr; Sam/aick, Render dashboard):</strong> <code>task-escalation</code>, <code>anomaly-eval</code> (anomaly-5m), and <code>no-show-sweep</code> have shown transient post-deploy failures (cron container restart racing a fresh deploy). Confirm current run state in the Render dashboard; the deploy-restart-transient explanation holds only if failures clear on the next scheduled run.</p>
+<p class="meta"><strong>Cron run-state (was a drift FLAG; resolved by @aick #1618):</strong> a Render-API query shows all crons <code>not_suspended</code>/ACTIVE &mdash; no persistent drift. The transient post-deploy failures previously seen on <code>task-escalation</code>, <code>anomaly-eval</code>, and <code>no-show-sweep</code> are deploy-restart-transients: crons share the web image, so a fresh deploy bounces them and they self-heal on the next scheduled run.</p>
 
 <h2>Common procedures</h2>
 <h3>Adding a manager / GM to a store</h3>
@@ -68,7 +68,7 @@
 
 <h3>Rotating a vendor / API credential</h3>
 <ol>
-  <li>Update the secret at its source (Render env var, on-disk secret file, or 1Password).</li>
+  <li>Update the secret at its source: the Render env var and/or the on-disk secret file (app/runtime lane <code>C:\Users\sam\cena-secrets\</code> or Cena gateway lane <code>C:\Users\sam\cena\.secrets\</code> on AiCk; mirror to Mini_IT13 if it is used there too). Then record the change in samai's canonical credential index on his Desktop. NOTE: 1Password is RETIRED (Sam, 2026-05-28) &mdash; it is no longer a credential source; see the Pass tab.</li>
   <li>If Render env: trigger a redeploy to pick up the new value.</li>
   <li>Hit a cron that consumes the credential to confirm the rotation worked.</li>
 </ol>
@@ -92,7 +92,7 @@
   <li>Look up the job in the DB: <code>SELECT * FROM driver_assignment_jobs WHERE order_id=&lt;X&gt; ORDER BY created_at DESC LIMIT 5</code>.</li>
   <li>If <code>status='pending'</code> for &gt;2 min: the AiCk gateway probably isn't running or the Render→AiCk Tailscale hop is broken (check that Render outbound uses <code>CENA_PROXY=socks5h://localhost:1055</code> with <strong>httpx</strong> — plain urllib silently bypasses the proxy + never arrives).</li>
   <li>If <code>status='failed'</code> with <code>error_message</code> starting <code>verification_mismatch</code>: ezCater rejected on its side (same-driver re-pick or driver doesn't match the order's store). Not a bug — surfaces back to the manager via the dropdown's error chip.</li>
-  <li>If <code>error_message</code> starts <code>auth_expired</code>: ezCater session cookies dead. Sam logs in to partnerportal.ezcater.com via Cenas Edge; aick re-extracts cookies via DPAPI into <code>~/.openclaw/.secrets/ezcater_session.json</code>.</li>
+  <li>If <code>error_message</code> starts <code>auth_expired</code>: ezCater session cookies dead. Sam logs in to partnerportal.ezcater.com via Cenas Edge; aick re-extracts cookies via DPAPI into <code>C:\Users\sam\cena-secrets\ezcater_session.json</code> (the old <code>~/.openclaw/.secrets/</code> lane is archived/gone &mdash; see Pass tab).</li>
   <li>If <code>gateway_processed='ck'</code>: aick selenium failed + ck's Playwright took over via the failover hop. Expected behavior; no action unless ck also reports failure.</li>
   <li>Repeat-failure storm with no modal-match log lines on aick: likely the stale-module-cache bug (Chrome import returned None at gateway-startup). Bounce <code>cena_gateway.py</code> on AiCk to force a fresh import.</li>
 </ol>
@@ -100,10 +100,12 @@
 <h3>Releasing a new mobile (Capacitor) build</h3>
 <ol>
   <li>Edit anything under <code>mobile/</code> (typically <code>mobile/package.json</code> for a plugin/version bump, or root <code>app/templates/</code> changes for WebView UX).</li>
-  <li>Commit + push. GitHub Actions <code>.github/workflows/mobile-android.yml</code> builds the .aab + signs it with the upload keystore from secrets.</li>
-  <li>The workflow's last step calls <code>scripts/upload_aab.py</code> which uploads to Play Console internal testing via the Android Publisher API (service account <code>ck-play-publisher</code>).</li>
-  <li>Sam updates the app on his phone via the Play Store internal-testing flow; verify the new build behaves as expected.</li>
-  <li>Promote to production track in Play Console when stable. PWA cache is not relevant — Capacitor doesn't cache server.url content the way browsers cache PWAs.</li>
+  <li>Commit + push to <code>main</code> (or run the workflow manually via <code>workflow_dispatch</code>). GitHub Actions <code>.github/workflows/mobile-android.yml</code> runs two jobs.</li>
+  <li><strong>build</strong> job: builds the debug APK, uploads it as a workflow artifact, and (on push to <code>main</code>) publishes it to the <code>android-debug-latest</code> GitHub release so <code>/driver/app.apk</code> has a stable no-login sideload URL for drivers.</li>
+  <li><strong>release-aab</strong> job (push to <code>main</code> or manual dispatch, only when the keystore secrets are configured): builds the <em>signed</em> AAB, signing with the GitHub Secrets keystore (<code>ANDROID_UPLOAD_KEYSTORE_B64</code> + <code>ANDROID_KEYSTORE_PASSWORD</code> / <code>ANDROID_KEY_ALIAS</code> / <code>ANDROID_KEY_PASSWORD</code>), targets SDK 35, bumps <code>versionCode</code> to the Actions run number, and uploads the signed AAB as a workflow artifact (60-day retention). There is NO Android Publisher API step.</li>
+  <li><strong>Play Console upload is currently MANUAL</strong>: download the signed AAB artifact from the Actions run and upload it to the Play Console internal-testing track. (<code>scripts/upload_aab.py</code> + the <code>play_publisher.json</code> service account exist but are NOT wired into CI &mdash; confirmed @aick #1567; see Pass tab.)</li>
+  <li>Sam updates the app on his phone via the Play Store internal-testing flow once the AAB is uploaded; verify the new build behaves as expected.</li>
+  <li>Promote to production track in Play Console when stable. PWA cache is not relevant &mdash; Capacitor doesn't cache server.url content the way browsers cache PWAs.</li>
 </ol>
 
 <h3>Toast nested-modifier &gt;15 (Uber Eats rejection)</h3>

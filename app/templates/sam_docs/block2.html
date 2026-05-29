@@ -1,6 +1,6 @@
 {# Block 2 — Manager Tools — derived from block_2i_recipe_page_spec. Sam directive #240. #}
 <h1>Block 2 — Manager Tools <span class="status-chip">Partial</span></h1>
-<p class="meta">Manager-facing surfaces. Recipe Page (2I) shipped; the remaining 2A–2H, 2J slots open as work begins.</p>
+<p class="meta">Manager-facing operating surfaces. <strong>Shipped:</strong> the tabbed Manager dashboard (Daily Log, Incidents, Attendance, Training, Maintenance, Counseling, Interview), the Recipe Page (2I), and the driver-pay / payroll surface. Scheduling (Schedules V2) is in progress. The 2A&ndash;2J letter-slots were placeholder labels, never individually specced; several are now filled by the shipped surfaces below &mdash; see the slot-mapping flag. Verified against <code>origin/main</code> 2026-05-29.</p>
 
 <h2>Block 2 in one sentence</h2>
 <p>Block 2 turns the Manager dashboard from a reporting surface into an operating surface — the tools managers use during a shift, not just to review one.</p>
@@ -14,16 +14,17 @@
 <table>
   <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
   <tbody>
-    <tr><td><code>/&lt;store&gt;/recipes</code></td><td>Recipe catalogue (GET list/search; POST create) — <code>store_routes.py:3266</code>.</td></tr>
-    <tr><td><code>/&lt;store&gt;/recipes/new</code></td><td>New-recipe form (<code>store_routes.py:3303</code>).</td></tr>
-    <tr><td><code>/&lt;store&gt;/recipes/&lt;id&gt;</code> (+ <code>/edit</code>)</td><td>Recipe detail + edit (<code>store_routes.py:3348</code> / <code>3384</code>).</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes</code></td><td>Recipe catalogue (GET list/search <code>store_routes.py:3480</code>; POST create <code>:3528</code>).</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes/new</code></td><td>New-recipe form (<code>store_routes.py:3517</code>).</td></tr>
+    <tr><td><code>/&lt;store&gt;/recipes/&lt;id&gt;</code> (+ <code>/edit</code>)</td><td>Recipe detail <code>store_routes.py:3562</code>; edit form <code>:3598</code>; POST update <code>:3634</code>.</td></tr>
   </tbody>
 </table>
 
 <h3>Permission gate</h3>
 <ul>
-  <li>The real permission key is <code>kds.edit_recipes</code> (<code>permissions.py:82/182/226</code>) — held by <code>km</code>, <code>corporate_chef</code>, <code>corporate</code> (and <code>partner</code> via wildcard). <strong>Correction:</strong> the previously-documented <code>recipes.view</code> / <code>recipes.write</code> keys do NOT exist in <code>ROLE_PERMISSIONS</code>.</li>
-  <li><strong>Resolved (aick 2026-05-29):</strong> the <code>/recipes*</code> routes (<code>store_routes.py:3480+</code> — index/new/create/detail) carry NO route-level <code>@requires_permission</code>. Edit is NOT gated by <code>kds.edit_recipes</code> at the route; it relies on the global site gate (auth required) + the page's "everyone except expo" audience model + per-store <code>store_scope</code>. (<code>kds.edit_recipes</code> exists in ROLE_PERMISSIONS but is not applied as a decorator here — a soft spot if route-level enforcement is desired; left FLAGGED to Sam.)</li>
+  <li><strong>Route gate (verified):</strong> all <code>/&lt;store&gt;/recipes*</code> routes (<code>store_routes.py:3480</code>/<code>3517</code>/<code>3528</code>/<code>3562</code>/<code>3598</code>/<code>3634</code>) gate on <code>_manager_role_ok()</code> (<code>abort(403)</code> at <code>:3482</code>/<code>3519</code>/<code>3530</code>&hellip;) &mdash; a role <em>denylist</em> (<code>_MANAGER_ROLES_DENIED</code>, <code>:1214</code>), so every role except <code>driver</code>, <code>corporate-driver</code>, and <code>expo</code> may view AND create/edit recipes. There is no <code>@requires_permission</code> decorator on these routes.</li>
+  <li>The KDS permission key <code>kds.edit_recipes</code> (<code>permissions.py:82/182/226</code>, held by <code>km</code> / <code>corporate_chef</code> / <code>corporate</code> + <code>partner</code> via wildcard) exists but does <strong>not</strong> gate these routes &mdash; it governs the KDS surface. The previously-documented <code>recipes.view</code> / <code>recipes.write</code> keys do NOT exist in <code>ROLE_PERMISSIONS</code>.</li>
+  <li><strong>aick assessment (2026-05-29):</strong> CONFIRMED the broad gate is current behavior - recipe create/edit is gated by <code>_manager_role_ok()</code> (the <code>_MANAGER_ROLES_DENIED</code> denylist), so every role except <code>driver</code> / <code>corporate-driver</code> / <code>expo</code> may edit recipes; the 4-role <code>kds.edit_recipes</code> model is NOT enforced at these routes. Whether to TIGHTEN recipe editing to <code>kds.edit_recipes</code> holders is a product/security decision &rarr; <strong>FLAG &rarr; Sam</strong>.</li>
 </ul>
 
 <h3>Data model</h3>
@@ -36,17 +37,27 @@
 <h3>Seed</h3>
 <p>Initial recipe set seeds on first deploy via the seed entry point. Bulk-insert is supported for migrating an external recipe list; per-store seeds preserve the store scope.</p>
 
-<h2>Block 2 open slots</h2>
-<p>The following are spec slots awaiting authoring. They open as the operator decides to start work on each:</p>
-<ul>
-  <li>2A — TBD (manager surface yet to be specced).</li>
-  <li>2B — TBD.</li>
-  <li>2C — TBD.</li>
-  <li>2D — TBD.</li>
-  <li>2E — TBD.</li>
-  <li>2F — TBD.</li>
-  <li>2G — TBD.</li>
-  <li>2H — TBD.</li>
-  <li>2J — TBD.</li>
-</ul>
-<p>The spec format is consistent across Block 2: surface, audience gate, data model, seed (if any), three-gate verification probe.</p>
+<h2>Manager dashboard <span class="status-chip shipped">Shipped</span></h2>
+<p>The tabbed Manager dashboard at <code>/&lt;store&gt;/manager</code> (<code>store_routes.py:3202</code>) is the manager operating surface. It defaults to the Daily Log tab; <code>?tab=&lt;key&gt;</code> deep-links another tab. Six tabs embed store-scoped <code>/&lt;store&gt;/manager/&lt;slug&gt;</code> pages (served by <code>manager_page_list</code>, <code>store_routes.py:3242</code>, with v3 list views) and one is the flat Interview Tracker.</p>
+<table>
+  <thead><tr><th>Tab</th><th>Route</th><th>Model</th></tr></thead>
+  <tbody>
+    <tr><td>Daily Log</td><td><code>/&lt;store&gt;/manager/daily-log</code></td><td><code>DailyManagerLog</code></td></tr>
+    <tr><td>Incidents</td><td><code>/&lt;store&gt;/manager/incident-reports</code></td><td><code>IncidentReport</code></td></tr>
+    <tr><td>Attendance</td><td><code>/&lt;store&gt;/manager/attendance</code></td><td><code>AttendanceTracking</code></td></tr>
+    <tr><td>Training</td><td><code>/&lt;store&gt;/manager/training</code></td><td><code>TrainingRecord</code></td></tr>
+    <tr><td>Maintenance</td><td><code>/&lt;store&gt;/manager/maintenance</code></td><td><code>MaintenanceRequest</code></td></tr>
+    <tr><td>Counseling</td><td><code>/&lt;store&gt;/manager/counseling</code></td><td><code>EmployeeCounseling</code></td></tr>
+    <tr><td>Interview</td><td><code>/partner/interview-tracker</code> (flat)</td><td>&mdash;</td></tr>
+  </tbody>
+</table>
+<p>Each section shares the generic CRUD routes: list <code>:3242</code>, new-form <code>:3289</code>, create <code>:3316</code>, detail <code>:3367</code>, edit-form <code>:3398</code>, update <code>:3437</code>. Labels + models are registered in <code>_MANAGER_PAGE_LABELS</code> / <code>_manager_model_for_slug</code> (<code>store_routes.py:1108</code>+). Audience gate: <code>_manager_role_ok()</code> (<code>store_routes.py:1217</code>) &mdash; a role denylist (<code>_MANAGER_ROLES_DENIED</code>, <code>:1214</code>), so every role except <code>driver</code>, <code>corporate-driver</code>, and <code>expo</code> may open it.</p>
+
+<h2>Driver pay / payroll <span class="status-chip shipped">Shipped</span></h2>
+<p>Manager-facing driver pay: the per-driver paycheck view <code>/&lt;store&gt;/driver-paycheck/by-driver/&lt;id&gt;</code> (<code>store_routes.py:600</code>) and the payroll-input save <code>/&lt;store&gt;/driver-payroll/save</code> (<code>:697</code>). The E/D/V-mile model + manager payroll inputs shipped on <code>origin/main</code> (<code>012f74e</code>, Sam #1492/#1503).</p>
+
+<h2>Scheduling — Schedules V2 <span class="status-chip">In progress</span></h2>
+<p>Manager-facing scheduling lives at <code>/&lt;store&gt;/schedule</code> (<code>store_routes.py:4516</code>), <code>/schedule/weekly</code> (<code>:4310</code>) and <code>/roster</code> (<code>:4531</code>). The new build is <strong>Schedules V2</strong> (the Sling replacement); Sling is being superseded by Toast <code>/labor/v1/shifts</code> (confirmed @aick #1573, @ckai #1561). The hourly "employee" role and the Block 0/1 scheduling foundation are <strong>not yet shipped</strong> &mdash; there is no <code>employee</code> role in <code>permissions.py</code> (@aick #1573). Schedules V2's full 10-block structure + current phase is tracked on the Phase 2 Roadmap (P5, ckai).</p>
+
+<h2>Slot mapping (2A&ndash;2J)</h2>
+<p>The 2A&ndash;2J letters were placeholder labels and were never individually specced, so the shipped surfaces above do not carry letters. <strong>FLAGGED &rarr; @sam:</strong> assigning 2A&ndash;2J letters to the shipped Manager-dashboard sections + Recipe + driver-pay is a product/spec decision only Sam can make. The Phase 2 Roadmap (P5, ckai) and this tab already agree &mdash; both list the shipped surfaces by name without forcing letters (coordinated with @ckai, hub #1583). Until Sam assigns letters, status is tracked by surface name, not by letter.</p>

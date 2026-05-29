@@ -173,7 +173,7 @@
   <div class="owner-banner">
     <span><b>Team:</b> Sam, Cena, aick, ck, samai</span>
     <span>·</span>
-    <span>Roster + agent start-up instructions, refreshed 2026-05-23.</span>
+    <span>Roster + agent start-up instructions, refreshed 2026-05-28.</span>
   </div>
 
   <div class="ckagents-grid">
@@ -188,13 +188,13 @@
         <dt>Role</dt>
         <dd>Sam's chief-of-staff and the live agentic runtime that owns the cross-team work queue. Drives the Sam ↔ Cena private chat, sees the team hub (FEED / TOGGLE / PING), pings on new messages, and pursues work through Sam's disconnects.</dd>
         <dt>Where it runs</dt>
-        <dd>Primary: <code>cena_gateway.py</code> on <b>AiCk</b> (Tailscale: <code>100.108.119.19:8765</code>) + Cloudflare-tunneled externally. Peer: <code>cena2_gateway.py</code> on <b>Mini_IT13</b> (Tailscale-only). Phase 2 cross-gateway sync wires the two together.</dd>
+        <dd>Primary: <code>cena_gateway.py</code> on <b>AiCk</b> (Tailscale <code>100.108.119.19:8765</code>, netstat-confirmed @aick #1573) + Cloudflare-tunneled externally; the <code>/sam/chat</code> persistent chat server runs alongside on <code>:8770</code> (AiCk). Peer: <code>cena2_gateway.py</code> on <b>Mini_IT13</b> (<code>C:\Users\sam\cena2\cena2_gateway.py</code>, Tailscale-only). Phase 2 cross-gateway sync wires the two together.</dd>
         <dt>Backbone</dt>
-        <dd>Anthropic API (Opus/Sonnet) with the 21-tool catalogue, 10-round tool-use loop, ephemeral cache (1h TTL). Multimodal — image + document + text blocks.</dd>
+        <dd>Anthropic Claude (<code>claude-opus-4-7</code> / <code>claude-sonnet-4-6</code>; default Sonnet, Sam-switchable via <code>cena_active_model.txt</code>) with the 22-tool catalogue, 10-round tool-use loop, ephemeral cache (1h TTL). Multimodal — image + document + text blocks. Cena tool-conversations are Claude-only; Gemini is plain-chat only and bypasses the gateway + tool schema (confirmed @aick #1573). The catalogue is <strong>22 tools</strong> in <code>cena_gateway.py</code>, enumerated + verified by @aick (Cena Surface, P6 #1611). Old&rarr;new: the prior "21" predates the <code>ezcater_get_order_full_details</code> tool (verified &mdash; my 2026-05-23 gateway copy had 21; that tool brings it to 22); the briefly-flagged "24" was a miscount. <code>agent_restart</code> (1 of the 22) is orphaned &mdash; see below.</dd>
         <dt>Starting docs</dt>
         <dd>
           <ul class="docs">
-            <li><code>C:\Users\sam\cena\cena_tool.md</code> — full tool catalogue (21 tools; <code>agent_restart</code> orphaned 2026-05-23 with the dck retirement)</li>
+            <li>Tool catalogue is defined inline in <code>cena_gateway.py</code> &mdash; there is no standalone <code>cena_tool.md</code> file as of 2026-05-28 (where-search on AiCk: not found). <code>agent_restart</code> was orphaned 2026-05-23 with the dck retirement.</li>
             <li><code>C:\Users\sam\cena\cena_gateway.py</code> — runtime, /cena/stream, /cena/wake-on-* endpoints</li>
             <li><code>C:\Users\sam\cena\cena_sam_chat.py</code> — private Sam ↔ Cena chat server, persists through disconnects</li>
             <li>Phase 2 cross-gateway spec — message queue + worker + sync</li>
@@ -232,12 +232,12 @@
     <article class="ckagents-card">
       <div class="head">
         <span class="name">ck</span>
-        <span class="role">Frontend, pages, cross-machine glue, Tier-3 backup</span>
+        <span class="role">Frontend, pages, cross-machine glue, driver-assign failover</span>
         <span class="status-chip live">Live</span>
       </div>
       <dl>
         <dt>Role</dt>
-        <dd>Works on frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, Telegram bridge), Sam-facing tabs on the Cena page (Pass, Agents, Automation, Tools), and the mobile (Capacitor) deploy pipeline. Also runs the <b>Tier-3 backup gateway</b> for manager-triggered job pipelines — when aick's primary fails twice with fresh contexts, jobs forward to ck and ck runs the same flow on an independent stack.</dd>
+        <dd>Works on frontend / chat-server / relay / Playwright surfaces, cross-machine plumbing (LAN hub, dev-chat bridge, Telegram bridge), Sam-facing tabs on the Cena page (Pass, Agents, Automation, Tools), and the mobile (Capacitor) deploy pipeline. Also runs the <b>failover driver-assign gateway</b> for manager-triggered job pipelines. The current chain (Sam #1153, confirmed @aick #1573) is: pwck Playwright gateway (<code>:9000</code>, Mini_IT13) PRIMARY &rarr; aick Selenium (<code>:8765</code>, AiCk) FALLBACK &rarr; ck (<code>ck_gateway.py</code>, <code>:8766</code>, Mini_IT13) failover. When the chain reaches ck, it runs the same flow on an independent stack.</dd>
         <dt>Where it runs</dt>
         <dd>Anthropic Console + Claude Code on <b>Mini_IT13</b>. SSH alias <code>ssh aick</code> available. Working trees in <code>C:\Users\sam\cenas-ezlive\</code>, <code>C:\Users\sam\cenas-chat-hub\</code>, and <code>C:\Users\sam\ck-ezcater\</code>.</dd>
         <dt>Running services on ck</dt>
@@ -246,8 +246,7 @@
             <li><b>ck failover gateway</b> — <code>ck_gateway.py</code> on port 8766, at-logon Startup launcher, mirrors aick's <code>/jobs/driver-assign</code> contract</li>
             <li><b>LAN team hub</b> — <code>hub.py</code> on 192.168.1.134:8765 (also Tailscale 100.73.38.82:8765)</li>
             <li><b>dev-chat bridge</b> — <code>bridge.py</code> mirrors LAN ↔ partner dev chat with the cena-skip filter</li>
-            <li><b>Telegram bridge</b> — bidirectional LAN-hub ↔ Telegram with image passthrough; surfaces as <code>sam-tg</code> in the hub</li>
-            <li><b>ezCater IMAP IDLE</b> — backup mirror of aick's persistent IDLE on <code>orders@aguirrestexmex.com</code></li>
+            <li><b>Telegram bridge</b> &mdash; runs on <b>AiCk</b> (<code>cena/telegram_dev_chat_bridge.py</code>, @aick #1615), <b>not</b> ck. ck's hub merely receives inbound Telegram messages (tagged <code>sam-tg</code>) that AiCk's bridge forwards in; ck's own <code>bridge.py</code> (above) mirrors the hub to the dev chat only. Verified 2026-05-29: no Telegram process or script on Mini_IT13.</li>
           </ul>
         </dd>
         <dt>Starting docs</dt>
@@ -256,11 +255,11 @@
             <li><code>~/.claude/projects/C--/memory/MEMORY.md</code> on Mini_IT13 — operating memory</li>
             <li>ck-side ezCater backup: <code>C:\Users\sam\ck-ezcater\ck_assigner.py</code> (Playwright + Chromium), <code>ck_gateway.py</code> (Flask)</li>
             <li>Standing feedback memos under <code>~/.claude/projects/C--/memory/feedback_*.md</code></li>
-            <li>Play Console upload pipeline: <code>scripts/upload_aab.py</code> + service account at <code>~/.openclaw/.secrets/play_publisher.json</code></li>
+            <li>Mobile release: CI (<code>.github/workflows/mobile-android.yml</code>) signs the release AAB with the GitHub-Secrets keystore and uploads it only as a workflow artifact &mdash; the Play Console upload is MANUAL. The <code>scripts/upload_aab.py</code> + <code>play_publisher.json</code> (Android Publisher API) path is DORMANT, not wired into CI; <code>play_publisher.json</code> lives at <code>C:\Users\sam\cena-secrets\play_publisher.json</code> (Mini_IT13 only). Verified @aick hub #1567.</li>
           </ul>
         </dd>
         <dt>Push authority</dt>
-        <dd>Two paths — SSH deploy key when on AiCk, HTTPS PAT (<code>~/.openclaw/.secrets/github_pat_ck.txt</code>) when on Mini_IT13. Announces every push in dev chat. Holds pushes during another agent's active live test.</dd>
+        <dd>Two paths — SSH deploy key when on AiCk, HTTPS PAT (<code>C:\Users\sam\cena-secrets\github_pat_ck.txt</code>) when on Mini_IT13. Announces every push in dev chat. Holds pushes during another agent's active live test.</dd>
       </dl>
     </article>
 
@@ -279,6 +278,22 @@
         <dd>Posts to the dev chat as <b>samai</b> via <code>scripts/chat_tail.py</code>; the LAN hub mirrors to Sam's Telegram. Announces page-by-page audit results; flags backend items to aick + frontend items to ck.</dd>
         <dt>Authority</dt>
         <dd>Owns the docs surface for edits during an audit (commits via SSH; push triggers Render auto-deploy). Destructive / irreversible actions still need Sam's explicit go.</dd>
+      </dl>
+    </article>
+
+    <article class="ckagents-card">
+      <div class="head">
+        <span class="name">ckai</span>
+        <span class="role">General-purpose helper · verification, docs, audits</span>
+        <span class="status-chip live">Live</span>
+      </div>
+      <dl>
+        <dt>Role</dt>
+        <dd>General-purpose helper &mdash; does what's asked (like samai): code/route verification, docs, audits, whatever the task is. <b>Not</b> a design lead (the old dck design-lane framing is retired) and not backend-only. A <b>distinct agent from ck</b> &mdash; not a nickname or alias; it keeps its own message stream and arrives on the team hub tagged <code>«remote»</code> (bridged in). During the 2026-05-28 docs full-audit it owns the Phase 2 Roadmap (P5), Block 1 (P7A), and Integrations Part B (P8B) pages.</dd>
+        <dt>Where it runs</dt>
+        <dd>Claude Code on <b>Mini_IT12</b> (AiCk's box) under the separate <code>Design aick</code> Windows account (<code>mini_it12\design aick</code>) &mdash; same physical machine as aick (<code>sam@Mini_IT12</code>), different user. Primary clone at <code>C:\Users\Design aick\cenas-kitchen-claude</code>; the docs-audit work is on a temporary worktree <code>C:\Users\Design aick\cenas-audit</code> (branch <code>ckai-docs-audit</code>).</dd>
+        <dt>Coordination &amp; services</dt>
+        <dd>Reachable on the LAN hub as <b>ckai</b> (bridged / tagged remote). Runs <code>ckai_conncheck.py</code> (in <code>cenas-chat-hub</code>) &mdash; a connectivity heartbeat plus a ckai-mention monitor &mdash; and reads/posts dev chat via the chat tail. <b>Not</b> a gateway host (no always-on gateway or cron, unlike aick / ck / pwck). No push credential &mdash; aick lands ckai's commits (audit commits sit on <code>ckai-docs-audit</code> for aick's rebase). Bootstraps from the project auto-memory (<code>MEMORY.md</code> index) on the Design-aick account. Confirmed by @ckai, hub #1574.</dd>
       </dl>
     </article>
 
@@ -346,7 +361,7 @@ Connection happens in this order:
 2. Connect to the LAN dev chat.
    Both of you reach the dev chat through chat_tail.py in the cenas-ezlive repo's scripts folder. Run it as a background process so every new message reaches you while you work.
    To post: chat_tail.py --author aick --post "your message"  (or --author ck).
-   Auth: the Partner password lives in PARTNER_PASSWORD env var or in ~/.openclaw/.secrets/partner_password.txt. If Sam needs to give it to you, he'll give it to you directly — don't post it in dev chat.
+   Auth: the Partner password lives in PARTNER_PASSWORD env var or in C:\Users\sam\cena-secrets\partner_password.txt (the old ~/.openclaw/.secrets path was archived/removed 2026-05-27). If Sam needs to give it to you, he'll give it to you directly — don't post it in dev chat.
 
 3. Verify two-way.
    Post one short line in dev chat announcing you're alive (e.g. "ck — online and listening").
@@ -372,7 +387,7 @@ Once Sam gives you a task — how to approach it:
 Some context about the system you're working in:
 
 - The production app lives at app.cenaskitchen.com, hosted on Render, Flask + gunicorn.
-- The database is SQLite at /var/data/cenas_kitchen.db (production) or local equivalents on dev.
+- The production database is SQLite — a single file at /var/data/cenas_kitchen.db on Render's persistent disk. (app/db.py also carries Postgres plumbing — it rewrites postgres:// to the psycopg3 driver — but that branch only fires when DATABASE_URL is a postgres:// URL, and the live Render env sets DATABASE_URL = sqlite:////var/data/cenas_kitchen.db, so it stays dormant.) Schema is created at boot (create_all + idempotent ALTER TABLE in app/__init__.py; no Alembic). [Re-corrected 2026-05-29 — the 2026-05-28 "managed PostgreSQL" edit inferred Postgres from app/db.py's driver code (and from render_database_url.txt) without checking the live env. The deployed DB is SQLite, confirmed by aick via Render access (#1635/#1636/#1641, live env DATABASE_URL=sqlite:////var/data/cenas_kitchen.db) and corroborated by cena_query_tool_spec.md + CENA_CHARTER.md:170. Red herring: render_database_url.txt in cena-secrets is a STALE/unused Postgres URL (its DB has no users table), NOT the live DB — it is what triggered the bad Postgres broadcast.]
 - The repo is github.com/samsahragard/cenas-ezlive. Both of you can push to main — coordinate via dev chat announcements so you're never pushing on top of each other.
 - Cena (the partner AI Sam talks to at /sam/chat) runs against aick's gateway by default. There's a second gateway called cena2 on ck's machine being built out as a peer node.
 - The team uses a LAN dev chat (the hub running on Mini_IT13) for cross-machine coordination. Sam reads everything posted there.

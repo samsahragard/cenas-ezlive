@@ -12,10 +12,12 @@
    destination page also enforces is_sam_chat_user via the same
    _require_sam_page() helper.
 
-   Inventory folds aick #42 (25 files in LOCATION 1) + aick #204
-   (the LOCATION 2 sweep, 6 unique on top) + the standing
-   1Password-as-canonical migration target. Every TBD row is a place
-   to fill in once aick / Sam confirm.
+   Inventory verified 2026-05-28 (ck docs audit) by directory listing
+   on both machines: AiCk cena-secrets\ (32 files) + cena\.secrets\
+   (35 files); the old .openclaw\.secrets\ lane is archived/gone.
+   1Password is RETIRED (Sam #1555); canonical human index =
+   credential_inventory_2026-05-27.md on samai's Desktop (samai #1560).
+   TBD/FLAGGED rows await @aick / @sam confirmation.
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'sam_pass' %}
@@ -156,17 +158,18 @@
 
     <p class="intro">
       Tag legend:
-      <span class="tag onepw">1Password</span> = stored in Sam's 1Password vault (the canonical store going forward, via the 1Password CLI — op_account + op_secret_key on AiCk).
+      <span class="tag onepw">samai-file</span> = recorded in samai's consolidated Desktop credentials file (the canonical human index per Sam, 2026-05-28; replaces the now-retired 1Password vault).
       <span class="tag envvar">env</span> = Render environment variable.
-      <span class="tag tbd">TBD</span> = we have it but the location is not documented yet.
+      <span class="tag tbd">TBD</span> / <span class="tag tbd">FLAGGED</span> = location not yet confirmed.
       Plain monospace paths (cyan) = local file on the machine listed.
       <b>Never put the actual password / key value in this table.</b>
     </p>
     <p class="intro">
-      <b>On-disk credential stores (AiCk):</b>
-      <span class="path">~/.openclaw/.secrets/</span> = LOCATION 1, legacy, 25 files, will disappear when OpenClaw uninstall (Track 5) closes.
-      <span class="path">C:\Users\sam\cena\.secrets\</span> = LOCATION 2, the cena gateway lane, current; 31 files (all 25 from L1 + 6 unique: gemini_api_key, cena2_anthropic_key, op_account, op_secret_key, peers.json, 1Password Emergency Kit PDF).
-      Migration target = LOCATION 2 + 1Password via op-cli; LOCATION 1 deprecates.
+      <b>On-disk credential stores (verified 2026-05-28 by directory listing):</b>
+      The old <span class="path">C:\Users\sam\.openclaw\.secrets\</span> store is <b>GONE</b> &mdash; OpenClaw uninstall (Track 5) has closed; it is archived to <span class="path">C:\Users\sam\openclaw_archive_2026-05-27\</span>. Two live stores remain on AiCk:
+      <span class="path">C:\Users\sam\cena-secrets\</span> (32 files) = where the former .openclaw set landed (IMAP/SMTP passwords, ezcater_session.json, per-store Toast, render_database_url, Sling, Cloudflare, Tailscale, Sentry, ingest/cron, Android keystore, Anthropic, Google), and
+      <span class="path">C:\Users\sam\cena\.secrets\</span> (35 files) = the Cena gateway lane (adds the legacy/now-retired 1Password kit + op-cli account, gemini_api_key, cena2_anthropic_key, peers.json, telegram bridge files, cena_heartbeat, watchdog). 25 files overlap; neither is a superset.
+      <b>Per Sam (2026-05-28): 1Password is RETIRED.</b> The canonical human credential + API index is now <span class="path">C:\Users\sam\Desktop\credential_inventory_2026-05-27.md</span> on samai's laptop Desktop (confirmed by @samai, hub #1560 &mdash; location only, no values); the two on-disk .secrets dirs above stay as the operational lanes the apps + gateway read from &mdash; <span class="path">cena-secrets\</span> is the app/runtime + migrated-.openclaw lane, <span class="path">cena\.secrets\</span> is the Cena-gateway/agent lane (confirmed with @aick, hub #1557; Architecture mirrors this page). <span class="tag tbd">FLAGGED @sam</span>: whether to consolidate the two lanes into one canonical dir. The directive spelling <span class="path">C:\Users\sam\cena.secrets</span> (dot) does not exist &mdash; typo for <span class="path">cena\.secrets</span>.
     </p>
 
     <section>
@@ -179,31 +182,31 @@
         <tr><td class="svc">WebstaurantStore</td>
             <td>Restaurant equipment + supplies vendor; orders, warranty registration, invoices.</td>
             <td>orders@cenaskitchen.com</td>
-            <td><span class="tag onepw">1Password</span> <span class="tag tbd">TBD if not</span></td></tr>
+            <td><span class="tag onepw">samai-file</span> <span class="tag tbd">TBD if not</span></td></tr>
         <tr><td class="svc">Toast</td>
             <td>POS + reporting (sales / labor / menu).</td>
             <td>TBD</td>
-            <td><span class="tag onepw">1Password</span> + client secret at <span class="path">~/.openclaw/.secrets/toast_client_secret.txt</span> (AiCk)</td></tr>
+            <td><span class="tag onepw">samai-file</span> + OAuth client secret(s) &mdash; see the "Toast Analytics" row under APIs &amp; Tokens for the exact per-store files</td></tr>
         <tr><td class="svc">Sling</td>
             <td>Scheduling + shift management.</td>
             <td>TBD</td>
-            <td><span class="tag onepw">1Password</span></td></tr>
+            <td><span class="tag onepw">samai-file</span></td></tr>
         <tr><td class="svc">EZCater</td>
             <td>Catering order intake; webhooks + API ingest.</td>
             <td>TBD</td>
-            <td><span class="tag onepw">1Password</span> + API key at <span class="path">~/.openclaw/.secrets/ezcater_api_key.txt</span> (AiCk, TBD if path differs)</td></tr>
+            <td><span class="tag onepw">samai-file</span> + API key at <span class="path">C:\Users\sam\cena-secrets\ezcater_api_token.txt</span> (AiCk, TBD if path differs)</td></tr>
         <tr><td class="svc">Render</td>
             <td>Hosts the cenas-ezlive Flask app (app.cenaskitchen.com).</td>
             <td>Sam's account</td>
-            <td><span class="tag onepw">1Password</span></td></tr>
+            <td><span class="tag onepw">samai-file</span></td></tr>
         <tr><td class="svc">Cloudflare</td>
             <td>DNS for cenaskitchen.com + the Tunnel that exposes AiCk's Cena gateway.</td>
             <td>Sam's account</td>
-            <td><span class="tag onepw">1Password</span> + API token at <span class="path">~/.openclaw/.secrets/cloudflare_api_token.txt</span> (AiCk, confirm name)</td></tr>
+            <td><span class="tag onepw">samai-file</span> + API token at <span class="path">C:\Users\sam\cena-secrets\cloudflare_api_token.txt</span> (AiCk, confirm name)</td></tr>
         <tr><td class="svc">Tailscale</td>
             <td>Private mesh VPN (AiCk + Mini_IT13 + Sam's phone + Render tailscaled).</td>
             <td>Sam's account</td>
-            <td><span class="tag onepw">1Password</span> + Render authkey at <span class="path">~/.openclaw/.secrets/tailscale_render_authkey.txt</span> (AiCk, confirm name)</td></tr>
+            <td><span class="tag onepw">samai-file</span> + Render authkey at <span class="path">C:\Users\sam\cena-secrets\tailscale_render_authkey.txt</span> (AiCk, confirm name)</td></tr>
         <tr><td class="svc">GitHub (samsahragard/cenas-ezlive)</td>
             <td>Source control; push triggers Render auto-deploy.</td>
             <td>n/a (SSH deploy key)</td>
@@ -211,15 +214,15 @@
         <tr><td class="svc">Anthropic Console</td>
             <td>API key management + usage billing.</td>
             <td>Sam's account</td>
-            <td><span class="tag onepw">1Password</span> + active key at <span class="path">~/.openclaw/.secrets/anthropic_api_key.txt</span> (Mini_IT13 + AiCk) + <span class="tag envvar">Render ANTHROPIC_API_KEY</span></td></tr>
+            <td><span class="tag onepw">samai-file</span> + active key at <span class="path">C:\Users\sam\cena-secrets\anthropic_api_key.txt</span> (Mini_IT13 + AiCk) + <span class="tag envvar">Render ANTHROPIC_API_KEY</span></td></tr>
         <tr><td class="svc">Google Workspace</td>
             <td>Email + Drive (TBD which workspace and which accounts; samai parses some email surfaces).</td>
             <td>TBD</td>
-            <td><span class="tag onepw">1Password</span></td></tr>
+            <td><span class="tag onepw">samai-file</span></td></tr>
         <tr><td class="svc">Sentry</td>
             <td>Error monitoring (cenas-ezlive Flask app).</td>
             <td>Sam's account</td>
-            <td>DSN at <span class="path">~/.openclaw/.secrets/sentry_dsn.txt</span> (AiCk, confirm name) + <span class="tag envvar">Render SENTRY_DSN</span></td></tr>
+            <td>DSN at <span class="path">C:\Users\sam\cena-secrets\sentry_dsn.txt</span> (AiCk, confirm name) + <span class="tag envvar">Render SENTRY_DSN</span></td></tr>
         <tr><td class="svc">Performance Foodservice (PFG)</td>
             <td>Wholesale food vendor; email-only operations (no web login surface in use).</td>
             <td>orders@cenaskitchen.com</td>
@@ -235,7 +238,7 @@
         <tr><td class="svc">app.cenaskitchen.com (site itself)</td>
             <td>Our partner-facing dashboard (Render-hosted).</td>
             <td>Sam (keypad-authed for /sam/chat; Partner-password gate for /partner/*)</td>
-            <td>Site password EZLIVE_PASSWORD at <span class="tag envvar">Render</span>; Partner password rotates — <span class="path">~/.openclaw/.secrets/partner_password.txt</span> on AiCk + Mini_IT13</td></tr>
+            <td>Site password EZLIVE_PASSWORD at <span class="tag envvar">Render</span>; Partner password rotates — <span class="path">C:\Users\sam\cena-secrets\partner_password.txt</span> on AiCk + Mini_IT13</td></tr>
       </tbody>
     </table>
     </section>
@@ -249,64 +252,64 @@
       <tbody>
         <tr><td class="svc">ANTHROPIC_API_KEY</td>
             <td>Powers Cena (Opus/Sonnet) + sam_chat + cena_gateway worker.</td>
-            <td><span class="path">~/.openclaw/.secrets/anthropic_api_key.txt</span> (AiCk + Mini_IT13) + <span class="tag envvar">Render ANTHROPIC_API_KEY</span></td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\anthropic_api_key.txt</span> (AiCk + Mini_IT13) + <span class="tag envvar">Render ANTHROPIC_API_KEY</span></td></tr>
         <tr><td class="svc">GOOGLE_API_KEY</td>
             <td>Gemini direct calls from /sam/chat when Sam picks Gemini.</td>
-            <td><span class="path">~/.openclaw/.secrets/google_api_key.txt</span> (AiCk + Mini_IT13) + <span class="tag envvar">Render GEMINI_API_KEY</span></td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\google_api_key.txt</span> (AiCk + Mini_IT13) + <span class="tag envvar">Render GEMINI_API_KEY</span></td></tr>
         <tr><td class="svc">Toast Analytics (client_id + client_secret + render env)</td>
             <td>Sales / labor / menu reports pulled into Operations dashboards via the Toast Analytics OAuth API.</td>
-            <td>Three files on AiCk LOCATION 2: <span class="path">C:\Users\sam\cena\.secrets\toast_analytics_client_id.txt</span> + <span class="path">toast_analytics_client_secret.txt</span> + <span class="path">toast_render_env.txt</span> (pre-formatted env block for Render). Same files in LOCATION 1. Also <span class="tag envvar">Render TOAST_CLIENT_ID / TOAST_CLIENT_SECRET</span>.</td></tr>
+            <td>On AiCk in the Cena gateway lane (<span class="path">C:\Users\sam\cena\.secrets\</span>): <span class="path">toast_analytics_client_id.txt</span> + <span class="path">toast_analytics_client_secret.txt</span> + <span class="path">toast_render_env.txt</span> (pre-formatted env block for Render). The app/runtime lane (<span class="path">cena-secrets\</span>) holds those same three plus per-store <span class="path">toast_copperfield_client_id.txt</span> + <span class="path">toast_copperfield_client_secret.txt</span>. Also <span class="tag envvar">Render TOAST_CLIENT_ID / TOAST_CLIENT_SECRET</span>.</td></tr>
         <tr><td class="svc">Cloudflare API token</td>
             <td>DNS + Tunnel management for the Cena gateway exposure.</td>
-            <td><span class="path">~/.openclaw/.secrets/cloudflare_api_token.txt</span> (AiCk, confirm name)</td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\cloudflare_api_token.txt</span> (AiCk, confirm name)</td></tr>
         <tr><td class="svc">EZCater API key</td>
             <td>Catering order webhooks + history ingest.</td>
-            <td><span class="path">~/.openclaw/.secrets/ezcater_api_key.txt</span> (AiCk, confirm name) + IMAP password at <span class="path">~/.openclaw/.secrets/ezcater_imap_pwd.txt</span> (AiCk)</td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\ezcater_api_token.txt</span> (AiCk, confirm name). The <span class="path">ezcater_imap_pwd.txt</span> IMAP credential (AiCk) is <strong>orphaned</strong> &mdash; its only consumer was the OpenClaw <code>ezcater_idle.py</code> IMAP-IDLE, archived to <span class="path">openclaw_archive_2026-05-27\</span> on 2026-05-27. EZCater ingest is webhook + GraphQL; there is no live EZCater IMAP path (only a stale comment at <code>cena.py:1332</code> still references it &mdash; @aick is correcting that in P8A). <strong>FLAGGED &rarr; @aick (P8A) / @sam:</strong> confirm whether to retire <code>ezcater_imap_pwd.txt</code>.</td></tr>
         <tr><td class="svc">EZCater partner portal session</td>
             <td>139 browser cookies for partnerportal.ezcater.com. Drives the Selenium UI flow that auto-assigns Masood/Sam on new orders + handles manager dropdown re-assigns. Re-extract via Edge cookie decrypt when the session expires (Sam logs in fresh on Cenas Edge, then aick reads the cookies via DPAPI).</td>
-            <td><span class="path">~/.openclaw/.secrets/ezcater_session.json</span> (AiCk) — Selenium-driver lane only; same file used by ck's Playwright failover</td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\ezcater_session.json</span> (AiCk) — Selenium-driver lane only; same file used by ck's Playwright failover</td></tr>
         <tr><td class="svc">Google Play Console publisher (service-account JSON)</td>
-            <td>Programmatic .aab upload to Play Console internal testing. Auth = service account ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com (granted Release Manager on com.cenaskitchen.app). Generated 2026-05-25 to break the Sam-manual-upload gate.</td>
-            <td><span class="path">C:\Users\sam\.openclaw\.secrets\play_publisher.json</span> (AiCk) + same file at <span class="path">C:\Users\sam\.openclaw\.secrets\play_publisher.json</span> (Mini_IT13, ACL-locked to ck + SYSTEM + Administrators). Used by <span class="path">scripts/upload_aab.py</span>.</td></tr>
+            <td>Service account ck-play-publisher@favorable-valor-493419-r9.iam.gserviceaccount.com (granted Release Manager on com.cenaskitchen.app), generated 2026-05-25 to enable programmatic .aab upload to Play Console internal testing. <b>NOTE (verified @aick #1567, 2026-05-28): NOT wired into CI.</b> mobile-android.yml signs the AAB with the GitHub-Secrets keystore and uploads it only as a workflow artifact; the Play Console upload is currently MANUAL. The Android Publisher API path is dormant.</td>
+            <td><span class="path">C:\Users\sam\cena-secrets\play_publisher.json</span> (Mini_IT13 only, verified 2026-05-28, ACL-locked to ck + SYSTEM + Administrators). Confirmed @aick #1567: ABSENT on AiCk (not in cena-secrets\, cena\.secrets\, or the repo) &mdash; expected, since CI does not use it. Referenced by <span class="path">scripts/upload_aab.py</span>, which is itself dormant (not called by CI).</td></tr>
         <tr><td class="svc">Sling API <span class="tag tbd">being replaced</span></td>
             <td>Scheduling + shift API for the labor pipeline. Sling is being replaced by the internal scheduling system (see Phase 2 Roadmap); this key is slated for removal post-cutover.</td>
-            <td><span class="path">~/.openclaw/.secrets/sling_api_key.txt</span> (AiCk, confirm name)</td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\sling_api_key.txt</span> (AiCk, confirm name)</td></tr>
         <tr><td class="svc">Sentry DSN</td>
             <td>Error reporting endpoint for the Flask app.</td>
-            <td><span class="path">~/.openclaw/.secrets/sentry_dsn.txt</span> (AiCk, confirm name) + <span class="tag envvar">Render SENTRY_DSN</span></td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\sentry_dsn.txt</span> (AiCk, confirm name) + <span class="tag envvar">Render SENTRY_DSN</span></td></tr>
         <tr><td class="svc">Tailscale Render authkey</td>
             <td>Render's userspace tailscaled connects to the Cena gateway over Tailscale.</td>
-            <td><span class="path">~/.openclaw/.secrets/tailscale_render_authkey.txt</span> (AiCk, confirm name)</td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\tailscale_render_authkey.txt</span> (AiCk, confirm name)</td></tr>
         <tr><td class="svc">Render API key (cena_render_api_key.txt + render_api_key.txt)</td>
             <td>Cena's render_env_get / render_env_set / render_deploy tools. Two keys: a Cena-dedicated key (primary) and aick's legacy key (fallback).</td>
-            <td><span class="path">C:\Users\sam\cena\.secrets\cena_render_api_key.txt</span> (primary, Cena lane) + <span class="path">render_api_key.txt</span> (legacy fallback). Same in LOCATION 1.</td></tr>
+            <td><span class="path">C:\Users\sam\cena\.secrets\cena_render_api_key.txt</span> (primary, Cena gateway lane) + <span class="path">render_api_key.txt</span> (legacy fallback). Both also in the app/runtime lane <span class="path">cena-secrets\</span>.</td></tr>
         <tr><td class="svc">GEMINI_API_KEY</td>
             <td>Google Gemini model option in /sam/chat (when Sam picks Gemini in the model picker the gateway is bypassed and the API is called directly).</td>
-            <td><span class="path">C:\Users\sam\cena\.secrets\gemini_api_key.txt</span> (AiCk LOCATION 2 unique) + <span class="path">google_api_key.txt</span> for Maps + <span class="tag envvar">Render GEMINI_API_KEY</span></td></tr>
+            <td><span class="path">C:\Users\sam\cena\.secrets\gemini_api_key.txt</span> (AiCk, cena\.secrets gateway lane) + <span class="path">google_api_key.txt</span> for Maps + <span class="tag envvar">Render GEMINI_API_KEY</span></td></tr>
         <tr><td class="svc">cena2_anthropic_key</td>
             <td>Dedicated Anthropic key for the cena2 peer gateway (on Mini_IT13). Keeps the peer's spend separate from the main Cena gateway.</td>
-            <td><span class="path">C:\Users\sam\cena\.secrets\cena2_anthropic_key.txt</span> (AiCk LOCATION 2 unique) + same file at <span class="path">C:\Users\sam\cena2\.secrets\anthropic_key.txt</span> on Mini_IT13 (cena2's own copy)</td></tr>
-        <tr><td class="svc">1Password CLI account (op_account + op_secret_key)</td>
-            <td><b>The CANONICAL credential store going forward.</b> op_account.txt is the 1Password CLI account config; op_secret_key.txt is the secret key for op-cli authentication. Migration target: LOCATION 1 (.openclaw/.secrets/) disappears once OpenClaw uninstall (Track 5) closes; LOCATION 2 + 1Password via op-cli is the durable home.</td>
-            <td><span class="path">C:\Users\sam\cena\.secrets\op_account.txt</span> + <span class="path">op_secret_key.txt</span> (AiCk LOCATION 2 unique)</td></tr>
-        <tr><td class="svc"><span style="color:var(--ck-red-bright);">1Password Emergency Kit (HIGHLY SENSITIVE)</span></td>
-            <td><b>Sam's 1Password recovery document.</b> Holds the master password + secret key needed to recover access if Sam loses his account. If this leaks, the entire credential store is compromised.</td>
-            <td><span class="path">C:\Users\sam\cena\.secrets\1Password Emergency Kit A3-A2ZBHH-my.pdf</span> (AiCk LOCATION 2 unique). Should also be in a physical safe + a non-AiCk offline backup; <span class="tag tbd">confirm offline backup</span>.</td></tr>
+            <td><span class="path">C:\Users\sam\cena\.secrets\cena2_anthropic_key.txt</span> (AiCk, cena\.secrets gateway lane) + same file at <span class="path">C:\Users\sam\cena2\.secrets\anthropic_key.txt</span> on Mini_IT13 (cena2's own copy)</td></tr>
+        <tr><td class="svc">1Password CLI account (op_account + op_secret_key) <span class="tag tbd">RETIRED</span></td>
+            <td><b>1Password is retired (Sam, 2026-05-28) &mdash; no longer the credential store.</b> These op-cli files are legacy artifacts still on disk; safe to remove (Sam's call). Canonical human index is now samai's Desktop creds file.</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\op_account.txt</span> + <span class="path">op_secret_key.txt</span> (AiCk; legacy, removable)</td></tr>
+        <tr><td class="svc"><span style="color:var(--ck-red-bright);">1Password Emergency Kit</span> <span class="tag tbd">RETIRED / LEGACY</span></td>
+            <td><b>Legacy 1Password recovery PDF for the now-retired vault (Sam, 2026-05-28).</b> Recommend removing from disk &mdash; the on-disk filename embeds a fragment of the old Secret Key (flagged to Sam, hub #1553).</td>
+            <td><span class="path">C:\Users\sam\cena\.secrets\1Password Emergency Kit A3-______-my.pdf</span> (AiCk; filename fragment redacted &mdash; contains a partial Secret Key)</td></tr>
         <tr><td class="svc">cena2 + aick peer registry</td>
             <td>Not a secret per se — the peer-SDK auth wiring config that lists the cena2 ↔ aick gateway peers + their tokens. Sensitive because it contains the per-peer auth tokens.</td>
-            <td><span class="path">C:\Users\sam\cena\.secrets\peers.json</span> (AiCk LOCATION 2 unique) + similar config at <span class="path">C:\Users\sam\cena2\cena2_config.json</span> on Mini_IT13</td></tr>
+            <td><span class="path">C:\Users\sam\cena\.secrets\peers.json</span> (AiCk, cena\.secrets gateway lane) + similar config at <span class="path">C:\Users\sam\cena2\cena2_config.json</span> on Mini_IT13</td></tr>
         <tr><td class="svc">Twilio SID + auth token</td>
             <td>SMS notification surface (planned).</td>
-            <td><span class="tag tbd">TBD</span> (1Password TBD per aick #42 audit; not yet provisioned)</td></tr>
+            <td><span class="tag tbd">TBD</span> (samai-file index TBD; not yet provisioned)</td></tr>
         <tr><td class="svc">OpenWeatherMap API key</td>
             <td>Weather context (planned).</td>
-            <td><span class="tag tbd">TBD</span> (1Password TBD per aick #42 audit; not yet provisioned)</td></tr>
+            <td><span class="tag tbd">TBD</span> (samai-file index TBD; not yet provisioned)</td></tr>
         <tr><td class="svc">ck Telegram bot token</td>
             <td>Sam ↔ ck Telegram bridge (ck side).</td>
-            <td><span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> (Mini_IT13)</td></tr>
-        <tr><td class="svc">dck Telegram bot token</td>
-            <td>Sam ↔ dck Telegram bridge (dck side, when wired).</td>
-            <td><span class="tag tbd">TBD</span></td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\ck_telegram_bot_token.txt</span> (AiCk + Mini_IT13; also in the AiCk Cena gateway lane <span class="path">cena\.secrets\</span>)</td></tr>
+        <tr><td class="svc">dck Telegram bot token <span class="tag tbd">RETIRED</span></td>
+            <td>dck was removed from the team (Sam, 2026-05-23). This bridge was never wired and will not be; row kept only to record that no token was ever provisioned.</td>
+            <td>n/a (dck retired)</td></tr>
         <tr><td class="svc">CENA_GATEWAY_TOKEN (X-Cena-Token)</td>
             <td>Auth between /sam/chat ↔ cena_gateway and other gateway endpoints.</td>
             <td><span class="path">C:\Users\sam\cena\cena_token.txt</span> (AiCk) + <span class="tag envvar">Render CENA_GATEWAY_TOKEN</span></td></tr>
@@ -318,19 +321,19 @@
             <td><span class="path">C:\Users\sam\cena2\cena2_token.txt</span> (Mini_IT13)</td></tr>
         <tr><td class="svc">SECRET_KEY (Flask session)</td>
             <td>Flask session-cookie signing key on cenas-ezlive.</td>
-            <td><span class="tag envvar">Render SECRET_KEY</span> — also <span class="tag tbd">1Password TBD</span> per aick #42</td></tr>
+            <td><span class="tag envvar">Render SECRET_KEY</span> — also <span class="tag tbd">samai-file index TBD</span></td></tr>
         <tr><td class="svc">MANAGER_PASSWORD_COPPERFIELD / _TOMBALL</td>
             <td>Manager keypad-login pins for the two stores.</td>
-            <td><span class="tag envvar">Render MANAGER_PASSWORD_*</span> — <span class="tag tbd">1Password TBD</span> per aick #42</td></tr>
+            <td><span class="tag envvar">Render MANAGER_PASSWORD_*</span> — <span class="tag tbd">samai-file index TBD</span></td></tr>
         <tr><td class="svc">CORPORATE_PASSWORD + CORPORATE_DB_URL</td>
             <td>Corporate / payroll connection (DB URL is the connection string; password is the keypad-login for the corporate role).</td>
-            <td><span class="tag envvar">Render</span> — <span class="tag tbd">1Password TBD</span> per aick #42</td></tr>
+            <td><span class="tag envvar">Render</span> — <span class="tag tbd">samai-file index TBD</span></td></tr>
         <tr><td class="svc">Android signing keystore + passwords</td>
             <td>Signs the Cenas mobile (driver) APK uploaded to the Play Store.</td>
-            <td>Five files on AiCk (LOCATION 2 — cena lane): <span class="path">C:\Users\sam\cena\.secrets\android_upload_keystore.jks</span> (the keystore binary) + <span class="path">android_key_alias.txt</span> + <span class="path">android_key_password.txt</span> (password to the key INSIDE the keystore) + <span class="path">android_keystore_password.txt</span> (password to the keystore FILE itself) + <span class="path">android_keystore_b64.txt</span> (base64 of the keystore for CI). Same files also in LOCATION 1 (legacy ~/.openclaw/.secrets/).</td></tr>
+            <td>Five files on AiCk in the Cena gateway lane (<span class="path">C:\Users\sam\cena\.secrets\</span>): <span class="path">android_upload_keystore.jks</span> (the keystore binary) + <span class="path">android_key_alias.txt</span> + <span class="path">android_key_password.txt</span> (password to the key INSIDE the keystore) + <span class="path">android_keystore_password.txt</span> (password to the keystore FILE itself) + <span class="path">android_keystore_b64.txt</span> (base64 of the keystore for CI). Same five also in the app/runtime lane <span class="path">cena-secrets\</span>.</td></tr>
         <tr><td class="svc">ingest_token + cron_token + site_review_creds</td>
             <td>Internal tokens for the ingest pipelines + scheduled jobs + site-review automation.</td>
-            <td><span class="path">~/.openclaw/.secrets/ingest_token.txt + cron_token.txt + site_review_creds.txt</span> (AiCk + Mini_IT13 has site_review_creds locally too)</td></tr>
+            <td><span class="path">C:\Users\sam\cena-secrets\ingest_token.txt + cron_token.txt + site_review_creds.txt</span> (AiCk + Mini_IT13 has site_review_creds locally too)</td></tr>
       </tbody>
     </table>
     </section>
@@ -349,7 +352,7 @@
         <tr><td class="svc">Online dev chat</td>
             <td><span class="path">https://app.cenaskitchen.com/partner/developer/chat</span></td>
             <td>Sam + Masood + samai (roaming) read + post; bridge.py mirrors to/from the LAN hub.</td>
-            <td>Site password (EZLIVE_PASSWORD) + Partner password (rotating; <span class="path">~/.openclaw/.secrets/partner_password.txt</span>)</td></tr>
+            <td>Site password (EZLIVE_PASSWORD) + Partner password (rotating; <span class="path">C:\Users\sam\cena-secrets\partner_password.txt</span>)</td></tr>
         <tr><td class="svc">/sam/chat (Sam ↔ Cena online)</td>
             <td><span class="path">https://app.cenaskitchen.com/sam/chat</span></td>
             <td>Sam's private chat with Cena on the live site (multi-session, attachments, model picker).</td>
@@ -375,30 +378,30 @@
             <td>Outbound business notifications (planned send layer; receive is silent-observer per Sam standing rule).</td>
             <td>The auth_state directory IS the credential (Baileys WhatsApp Web multi-device session).</td></tr>
         <tr><td class="svc">Telegram bot (@Cenasbot)</td>
-            <td>Bot account on Telegram; token at <span class="path">~/.openclaw/.secrets/ck_telegram_bot_token.txt</span> (AiCk + Mini_IT13).</td>
+            <td>Bot account on Telegram; token at <span class="path">C:\Users\sam\cena-secrets\ck_telegram_bot_token.txt</span> (AiCk + Mini_IT13).</td>
             <td>Bidirectional Sam ↔ agents channel (live since 2026-05-24). <span class="path">cena/telegram_dev_chat_bridge.py</span> runs on AiCk: forwards Sam's TG messages into the LAN hub (as author 'sam-tg') and forwards every hub message OUT to Sam's private chat (chat_id at <span class="path">cena/.secrets/telegram_chat_id.txt</span>). Restart the bridge if outbound goes silent (daemon-thread death has happened once).</td>
             <td>Bot token (above) + authorized user-id allow-list at <span class="path">cena/.secrets/telegram_authorized_user_ids.txt</span></td></tr>
         <tr><td class="svc">Email: orders@cenaskitchen.com</td>
             <td>cPanel mailbox (server: <span class="path">mail.cenaskitchen.com</span>)</td>
             <td>Vendor channel (Webstaurant, PFG, Restaurant Depot, Spec's, EZcater receipts).</td>
-            <td>IMAP password at <span class="path">~/.openclaw/.secrets/orders_imap_pwd.txt</span> + SMTP at <span class="path">~/.openclaw/.secrets/orders_smtp_pwd.txt</span> (AiCk + Mini_IT13)</td></tr>
+            <td>IMAP password at <span class="path">C:\Users\sam\cena-secrets\orders_imap_pwd.txt</span> + SMTP at <span class="path">C:\Users\sam\cena-secrets\orders_smtp_pwd.txt</span> (AiCk + Mini_IT13)</td></tr>
         <tr><td class="svc">Email: sams@aguirrestexmex.com</td>
             <td>cPanel mailbox (server: <span class="path">mail.aguirrestexmex.com</span>)</td>
             <td>Sam's personal/operational mailbox; samai parses for WebstaurantStore equipment + warranty.</td>
-            <td>IMAP password <span class="tag tbd">TBD on file</span> — intended location <span class="path">~/.openclaw/.secrets/sams_imap_pwd.txt</span> (AiCk; samai #65 spec)</td></tr>
+            <td>IMAP password on file (verified 2026-05-28) at <span class="path">C:\Users\sam\cena-secrets\sams_imap_pwd.txt</span> (AiCk; samai #65 spec)</td></tr>
         <tr><td class="svc">Email: atm@aguirrestexmex.com</td>
             <td>Same cPanel as sams@</td>
             <td>Secondary mailbox; samai parses if WebstaurantStore receipts landed there.</td>
-            <td>IMAP password <span class="tag tbd">TBD on file</span> — intended location <span class="path">~/.openclaw/.secrets/atm_imap_pwd.txt</span> (AiCk)</td></tr>
+            <td>IMAP password on file (verified 2026-05-28) at <span class="path">C:\Users\sam\cena-secrets\atm_imap_pwd.txt</span> (AiCk)</td></tr>
         <tr><td class="svc">Email: ck@cenaskitchen.com</td>
             <td>Same cPanel as orders@</td>
             <td>ck-addressable mailbox (some vendor traffic lands here).</td>
-            <td>IMAP password <span class="tag tbd">TBD on file</span> — intended location <span class="path">~/.openclaw/.secrets/ck_cenaskitchen_imap_pwd.txt</span> (AiCk)</td></tr>
+            <td>IMAP password on file (verified 2026-05-28) at <span class="path">C:\Users\sam\cena-secrets\ck_cenaskitchen_imap_pwd.txt</span> (AiCk)</td></tr>
       </tbody>
     </table>
     </section>
 
-    <p class="note">Inventory drawn from: ck-side .openclaw/.secrets/ (8 files, hub #43) + aick-side .openclaw/.secrets/ (25 files, aick #42) + aick #204 LOCATION 2 sweep (6 unique on top) + the standing 1Password-as-canonical-store per aick #42. Anything tagged TBD: aick or Sam to confirm path / 1Password status. This document is LOCATIONS-only by design — no key value appears anywhere in this page.</p>
+    <p class="note"><b>Verified 2026-05-28 (ck, docs audit).</b> The old <span class="path">.openclaw\.secrets\</span> lane is GONE on both machines (archived to <span class="path">C:\Users\sam\openclaw_archive_2026-05-27\</span>). Live AiCk lanes: <span class="path">cena-secrets\</span> (32 files &mdash; app/runtime + migrated set) and <span class="path">cena\.secrets\</span> (35 files &mdash; Cena gateway/agent lane); 25 overlap, neither is a superset (confirmed with @aick, hub #1557). <b>1Password is RETIRED</b> (Sam, 2026-05-28); the canonical human credential index is the consolidated file on samai's laptop Desktop at <span class="path">C:\Users\sam\Desktop\credential_inventory_2026-05-27.md</span> (confirmed by @samai, hub #1560 &mdash; location only, no values). Rows tagged <span class="tag onepw">samai-file</span> are recorded there. Anything tagged TBD/FLAGGED: @aick or @sam to confirm. This document is LOCATIONS-only by design &mdash; no key value appears anywhere in this page.</p>
 
   </div>
 

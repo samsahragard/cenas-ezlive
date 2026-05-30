@@ -1,0 +1,185 @@
+{# ============================================================
+   schedules_v2_marketplace.html - Schedules V2 / Block 9
+   Manager MARKETPLACE APPROVAL QUEUE: offers a teammate took + proposed swaps
+   awaiting manager approval. Approve moves the shift(s); deny rejects.
+
+   FRONTEND-ONLY (ck). Client-rendered: the page route hands a config blob
+   (store label + endpoint URLs); JS fetches the lists + posts approve/deny.
+   Contract (ckai B9, rich rows #1998/#1999):
+     GET <offers_list>[?status] -> {ok, offers:[{id,status,restricted,expires_at,
+            offered_by:{id,name}, taken_by:{id,name}|null,
+            shift:{id,start_at,end_at,position_name,store}}]}
+     GET <swaps_list>[?status]  -> {ok, swaps:[{id,status,expires_at,
+            from_employee:{id,name}, to_employee:{id,name},
+            from_shift:{..shift..}, to_shift:{..shift..}}]}
+     POST <offer_action>/<id>/approve|deny ; POST <swap_action>/<id>/approve|deny
+   MANAGER-GATED page (require_level foh_manager); a cross-store gm -> 302/403 ->
+   friendly access notice, never a broken list.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'schedules_v2' %}
+
+{% block title %}Marketplace - Cenas Kitchen{% endblock %}
+{% block page_module %}SCHEDULES{% endblock %}
+{% block page_title %}Marketplace{% endblock %}
+{% block page_subtitle %}{{ store_label }} - approve shift offers &amp; swaps (V2){% endblock %}
+
+{% block content %}
+<style>
+  .sv2-mk{
+    --sk-red:#c8302a; --sk-red-deep:#8a1d18; --sk-blue:#15205c; --sk-blue-deep:#0a1340;
+    --sk-cream:#f4e7d0; --sk-ink:#14205c; --sk-ok:#2f8f57; --sk-ok-deep:#1f6b3e; --sk-amber:#b8801f; --sk-grey:#6b7280;
+    position:relative; color:var(--sk-ink); font-family:'Manrope','Segoe UI',Arial,sans-serif;
+    background:#fbf4e7; border-radius:14px; padding:18px; max-width:820px;
+    box-shadow:0 0 0 1px rgba(20,32,92,0.10), 0 8px 22px rgba(0,0,0,0.10);
+  }
+  .sv2-mk *{ box-sizing:border-box; }
+  .sv2-mk .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .sv2-mk .filters{ display:inline-flex; gap:6px; background:rgba(20,32,92,0.06); border-radius:11px; padding:4px; }
+  .sv2-mk .filt{ border:none; background:transparent; color:rgba(20,32,92,0.6); font:inherit; font-weight:700; font-size:13px; padding:7px 15px; border-radius:9px; cursor:pointer; }
+  .sv2-mk .filt.active{ background:#fff; color:var(--sk-blue-deep); box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+
+  .sv2-mk .sec{ font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:var(--sk-blue-deep); margin:16px 2px 10px; }
+  .sv2-mk .sec:first-of-type{ margin-top:4px; }
+  .sv2-mk .sec .n{ color:var(--sk-red-deep); }
+
+  .sv2-mk .item{ background:#fff; border-radius:12px; padding:13px 15px; margin-bottom:11px; border-left:5px solid #5BCAC5;
+    box-shadow:0 0 0 1px rgba(20,32,92,0.08), 0 3px 9px rgba(0,0,0,0.07); }
+  .sv2-mk .item.swap{ border-left-color:#C98BDB; }
+  .sv2-mk .ihead{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .sv2-mk .when{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
+  .sv2-mk .pos{ font-size:13px; font-weight:700; color:var(--sk-blue); margin-top:3px; }
+  .sv2-mk .meta{ font-size:13px; color:rgba(20,32,92,0.78); margin-top:6px; line-height:1.45; }
+  .sv2-mk .meta b{ color:var(--sk-blue-deep); }
+  .sv2-mk .arrow{ color:var(--sk-red); font-weight:800; margin:0 6px; }
+  .sv2-mk .badge{ flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; padding:4px 10px; border-radius:999px; border:1.5px solid; }
+  .sv2-mk .badge.pending,.sv2-mk .badge.taken{ color:var(--sk-amber); background:rgba(184,128,31,0.12); border-color:rgba(184,128,31,0.4); }
+  .sv2-mk .badge.approved{ color:var(--sk-ok-deep); background:rgba(47,143,87,0.14); border-color:rgba(47,143,87,0.45); }
+  .sv2-mk .badge.denied,.sv2-mk .badge.cancelled,.sv2-mk .badge.expired{ color:var(--sk-grey); background:rgba(107,114,128,0.12); border-color:rgba(107,114,128,0.4); }
+  .sv2-mk .exp{ font-size:11px; color:rgba(20,32,92,0.5); margin-top:6px; }
+  .sv2-mk .acts{ display:flex; gap:9px; margin-top:11px; padding-top:11px; border-top:1px solid rgba(20,32,92,0.10); }
+  .sv2-mk .btn{ flex:1 1 0; border:none; border-radius:10px; padding:10px 12px; font:inherit; font-weight:800; font-size:13.5px; cursor:pointer; transition:filter 120ms, transform 80ms; }
+  .sv2-mk .btn:active{ transform:translateY(1px); } .sv2-mk .btn:disabled{ opacity:0.55; cursor:default; }
+  .sv2-mk .btn-ok{ background:var(--sk-ok); color:#fff; box-shadow:0 2px 0 var(--sk-ok-deep); }
+  .sv2-mk .btn-ok:hover{ filter:brightness(1.07); }
+  .sv2-mk .btn-no{ background:rgba(200,48,42,0.10); color:var(--sk-red-deep); border:1.5px solid rgba(200,48,42,0.45); }
+  .sv2-mk .btn-no:hover{ background:rgba(200,48,42,0.18); }
+  .sv2-mk .none{ font-size:13px; color:rgba(20,32,92,0.5); padding:2px 2px 6px; }
+
+  .sv2-mk .state{ text-align:center; padding:28px 18px; color:rgba(20,32,92,0.7); }
+  .sv2-mk .state[hidden]{ display:none; }
+  .sv2-mk .state .s-title{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
+  .sv2-mk .state .s-body{ font-size:13.5px; margin-top:7px; line-height:1.5; }
+  .sv2-mk .loading{ text-align:center; padding:28px; font-weight:700; letter-spacing:1px; color:rgba(20,32,92,0.6); }
+  .sv2-mk .loading[hidden]{ display:none; }
+  .sv2-mk #mk-body[hidden]{ display:none; }
+
+  .sv2-mk .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:60; max-width:440px; width:calc(100% - 36px);
+    background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px; padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center;
+    box-shadow:0 10px 26px rgba(0,0,0,0.5); opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
+  .sv2-mk .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .sv2-mk .toast.err{ background:var(--sk-red-deep); }
+</style>
+
+<div class="sv2-mk" id="sv2-mk-root">
+  <div class="toolbar">
+    <div class="filters">
+      <button class="filt active" data-status="pending" type="button">Pending</button>
+      <button class="filt" data-status="all" type="button">All</button>
+    </div>
+  </div>
+
+  <div class="loading" id="mk-loading">Loading marketplace&hellip;</div>
+  <div class="state" id="mk-access" hidden>
+    <div class="s-title">No access to this store</div>
+    <div class="s-body">You can only review marketplace activity for your own store.</div>
+  </div>
+
+  <div id="mk-body" hidden>
+    <div class="sec">Shift offers <span class="n" id="off-count"></span></div>
+    <div id="off-list"></div>
+    <div class="sec">Swaps <span class="n" id="swp-count"></span></div>
+    <div id="swp-list"></div>
+  </div>
+
+  <div class="toast" id="mk-toast"></div>
+</div>
+
+<script type="application/json" id="sv2-mk-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-mk-config").textContent);
+  var $ = function(id){ return document.getElementById(id); };
+  var state = { status:"pending", busy:false };
+
+  function show(el){ el.hidden=false; } function hide(el){ el.hidden=true; }
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function isoToDate(s){ if(!s) return null; var d=String(s).split("T")[0].split("-"); if(d.length<3) return null; return new Date(+d[0],(+d[1])-1,+d[2]); }
+  function hm(iso){ var t=String(iso||"").split("T")[1]||"00:00"; var p=t.split(":"); return {h:+p[0]||0,m:+p[1]||0}; }
+  function fmtT(iso){ var x=hm(iso),h=x.h; var ap=h>=12?"p":"a"; var hh=h%12; if(hh===0)hh=12; return x.m?(hh+":"+(x.m<10?"0"+x.m:x.m)+ap):(hh+ap); }
+  function shiftLine(sh){ if(!sh) return ""; var d=isoToDate(sh.start_at); var day=d?(DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()):""; return day+" "+fmtT(sh.start_at)+"-"+fmtT(sh.end_at); }
+  function nm(p){ return (p&&p.name)?p.name:(p&&p.id?("#"+p.id):"someone"); }
+  var toastTimer=null;
+  function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); if(toastTimer)clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove("show");},3400); }
+  function jsonHeaders(){ return {"Content-Type":"application/json","Accept":"application/json"}; }
+  function parseJsonOrThrow(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e1=new Error("non-json"); e1.status=(r.status===200?403:r.status); throw e1; } return r.json().then(function(j){ if(!r.ok||(j&&j.ok===false)){ var e2=new Error("bad"); e2.status=r.status; e2.error=(j&&j.error)?j.error:null; throw e2; } return j; }); }
+  function showAccess(){ hide($("mk-loading")); hide($("mk-body")); show($("mk-access")); }
+
+  function actionable(st){ return st==="pending" || st==="taken"; }
+
+  function offerHtml(o){
+    var sh=o.shift||{}; var st=(o.status||"").toLowerCase();
+    var p=[]; p.push('<div class="item" data-offer="'+(+o.id)+'">');
+    p.push('<div class="ihead"><div class="when">'+esc(shiftLine(sh))+'</div><span class="badge '+esc(st)+'">'+esc(st)+'</span></div>');
+    if(sh.position_name) p.push('<div class="pos">'+esc(sh.position_name)+(sh.store?' &middot; '+esc(sh.store):'')+'</div>');
+    p.push('<div class="meta"><b>'+esc(nm(o.offered_by))+'</b> offered'+(o.taken_by?(' &middot; <b>'+esc(nm(o.taken_by))+'</b> wants it'):' &middot; not taken yet')+(o.restricted?' &middot; same store+role':'')+'</div>');
+    if(o.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:o.expires_at}))+'</div>');
+    if(actionable(st) && o.taken_by){ p.push('<div class="acts"><button class="btn btn-ok" data-act="approve">Approve</button><button class="btn btn-no" data-act="deny">Deny</button></div>'); }
+    p.push('</div>'); return p.join("");
+  }
+  function swapHtml(s){
+    var st=(s.status||"").toLowerCase();
+    var p=[]; p.push('<div class="item swap" data-swap="'+(+s.id)+'">');
+    p.push('<div class="ihead"><div class="when">Swap</div><span class="badge '+esc(st)+'">'+esc(st)+'</span></div>');
+    p.push('<div class="meta"><b>'+esc(nm(s.from_employee))+'</b> '+esc(shiftLine(s.from_shift))+'<span class="arrow">&#8644;</span><b>'+esc(nm(s.to_employee))+'</b> '+esc(shiftLine(s.to_shift))+'</div>');
+    if(s.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:s.expires_at}))+'</div>');
+    if(actionable(st)){ p.push('<div class="acts"><button class="btn btn-ok" data-act="approve">Approve</button><button class="btn btn-no" data-act="deny">Deny</button></div>'); }
+    p.push('</div>'); return p.join("");
+  }
+
+  function load(){
+    show($("mk-loading")); hide($("mk-access"));
+    var q = state.status==="all" ? "?status=all" : "?status=pending";
+    var pOff = fetch(CFG.offersListUrl+q,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow);
+    var pSwp = fetch(CFG.swapsListUrl+q,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow);
+    Promise.all([pOff,pSwp]).then(function(res){
+      hide($("mk-loading")); show($("mk-body"));
+      var offers=(res[0]&&res[0].offers)||[]; var swaps=(res[1]&&res[1].swaps)||[];
+      $("off-count").textContent = offers.length ? "("+offers.length+")" : "";
+      $("swp-count").textContent = swaps.length ? "("+swaps.length+")" : "";
+      $("off-list").innerHTML = offers.length ? offers.map(offerHtml).join("") : '<div class="none">No offers'+(state.status==="pending"?" awaiting approval":"")+'.</div>';
+      $("swp-list").innerHTML = swaps.length ? swaps.map(swapHtml).join("") : '<div class="none">No swaps'+(state.status==="pending"?" awaiting approval":"")+'.</div>';
+    }).catch(function(e){ if(e&&(e.status===401||e.status===403)){ showAccess(); return; } hide($("mk-loading")); show($("mk-body")); toast("Could not load the marketplace. Try again.", true); });
+  }
+
+  function review(kind, id, act, btns){
+    if(state.busy) return; state.busy=true;
+    for(var i=0;i<btns.length;i++) btns[i].disabled=true;
+    var base = kind==="offer" ? CFG.offerActionBase : CFG.swapActionBase;
+    fetch(base+"/"+id+"/"+act,{method:"POST",headers:jsonHeaders(),credentials:"same-origin",body:"{}"}).then(parseJsonOrThrow).then(function(){
+      state.busy=false; toast((kind==="offer"?"Offer ":"Swap ")+(act==="approve"?"approved.":"denied.")); load();
+    }).catch(function(e){ state.busy=false; for(var i=0;i<btns.length;i++) btns[i].disabled=false; if(e&&(e.status===401||e.status===403)){ showAccess(); return; } toast((e&&e.error)?e.error:"Could not save. Try again.", true); });
+  }
+
+  // ---- wire ----
+  var filtBtns=document.querySelectorAll(".sv2-mk .filt");
+  for(var i=0;i<filtBtns.length;i++){ filtBtns[i].addEventListener("click", function(ev){ var b=ev.currentTarget; if(b.classList.contains("active")) return; for(var k=0;k<filtBtns.length;k++) filtBtns[k].classList.remove("active"); b.classList.add("active"); state.status=b.getAttribute("data-status"); load(); }); }
+  $("off-list").addEventListener("click", function(ev){ var btn=ev.target.closest("[data-act]"); if(!btn) return; var c=ev.target.closest("[data-offer]"); if(!c) return; review("offer", +c.getAttribute("data-offer"), btn.getAttribute("data-act"), c.querySelectorAll(".btn")); });
+  $("swp-list").addEventListener("click", function(ev){ var btn=ev.target.closest("[data-act]"); if(!btn) return; var c=ev.target.closest("[data-swap]"); if(!c) return; review("swap", +c.getAttribute("data-swap"), btn.getAttribute("data-act"), c.querySelectorAll(".btn")); });
+
+  load();
+})();
+</script>
+{% endblock %}

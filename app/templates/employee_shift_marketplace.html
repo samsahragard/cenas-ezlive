@@ -1,0 +1,344 @@
+{# Employee shift marketplace (Schedules V2, B9). Logged-in employee: take an open
+   shift (offer), give up one of their own shifts (post an offer), propose a swap,
+   and manage their own offers/swaps. Manager approves the move (B9 manager queue).
+
+   ck owns this template + the GET /employee/shift-marketplace page route.
+   ckai owns the data + action endpoints (locked #1996/#1998, B7-style split).
+   LIST rows are rich (embed shift detail + names):
+     offer = {id,status,restricted,expires_at,offered_by:{id,name},
+              taken_by:{id,name}|null, shift:{id,start_at,end_at,position_name,store}}
+     swap  = {id,status,expires_at,from_employee:{id,name},to_employee:{id,name},
+              from_shift:{..shift..}, to_shift:{..shift..}}
+   Endpoints (via config):
+     GET  openListUrl   /employee/shift-marketplace/list -> {ok, offers:[offer]}   (take-able)
+     GET  myOffersUrl   /employee/shift-offers/list      -> {ok, offers:[offer]}   (mine)
+     POST offerBase     /employee/shift-offers           {shift_id,expires_at?,unrestricted?}
+     POST offerBase/<id>/take | /cancel
+     GET  swapsUrl      /employee/shift-swaps/list        -> {ok, swaps:[swap]}
+     POST swapBase/propose {from_shift_id,to_shift_id,expires_at?}
+     POST swapBase/<id>/accept | /cancel
+     GET  candidatesUrl /employee/shift-swaps/candidates?from_shift_id=<mine>
+            -> {ok, candidates:[{shift_id,start_at,end_at,position_name,employee:{id,name}}]}
+     GET  myShiftsUrl   /employee/my-schedule/shifts (B5) -> {ok, shifts:[{id,start_at,end_at,position_name,response,...}]}
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shift Marketplace &mdash; Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:#15205c; --blue-bright:#1d2a70; --blue-deep:#0a1340;
+    --red:#c8302a; --red-bright:#e54a3f; --red-deep:#8a1d18;
+    --cream:#f4e7d0; --cream-soft:#ebd9bc; --ink:#14205c;
+    --ok:#2f8f57; --ok-deep:#1f6b3e; --amber:#b8801f; --grey:#6b7280;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{ width:100%; min-height:100vh; background:#0a0604;
+    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif; position:relative; color:var(--ink); }
+  body::before{ content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter:blur(6px) brightness(0.55) saturate(1.05); }
+  body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%); }
+  .wrap{ position:relative; z-index:1; max-width:520px; margin:0 auto; padding:20px 18px 36px;
+    display:flex; flex-direction:column; min-height:100vh; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .topbar img{ width:auto; height:34px; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+  .backlink{ display:inline-flex; align-items:center; gap:5px; background:rgba(244,231,208,0.12);
+    color:var(--cream); border:1px solid rgba(244,231,208,0.30); border-radius:10px; padding:8px 13px;
+    font-size:13px; font-weight:600; letter-spacing:0.4px; text-decoration:none; }
+  .backlink:hover{ background:rgba(244,231,208,0.22); }
+  .backlink .chev{ font-size:16px; line-height:1; margin-top:-1px; }
+
+  .pagehead{ background:radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 45%, var(--cream-soft) 100%);
+    border-radius:16px; padding:16px 20px; margin-bottom:14px;
+    box-shadow:0 0 0 2px var(--blue-bright), 0 2px 0 2px var(--blue-deep), 0 0 0 5px var(--red), 0 10px 22px rgba(0,0,0,0.5); }
+  .pagehead .eyebrow{ font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--red); }
+  .pagehead .name{ font-size:23px; font-weight:800; color:var(--blue-deep); line-height:1.15; margin-top:2px; }
+
+  /* Tabs */
+  .tabs{ display:flex; gap:6px; background:rgba(244,231,208,0.12); border-radius:12px; padding:5px; margin-bottom:16px; }
+  .tab{ flex:1 1 0; border:none; background:transparent; color:rgba(244,231,208,0.7);
+    font:inherit; font-weight:700; font-size:12.5px; letter-spacing:0.3px; padding:9px 6px; border-radius:9px; cursor:pointer; transition:background 120ms,color 120ms; }
+  .tab.active{ background:var(--cream); color:var(--blue-deep); box-shadow:0 1px 4px rgba(0,0,0,0.3); }
+
+  .panel[hidden]{ display:none; }
+  .seclabel{ font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:rgba(244,231,208,0.78); margin:6px 2px 10px; }
+  .seclabel:not(:first-child){ margin-top:20px; }
+
+  /* Cards */
+  .card{ background:rgba(244,231,208,0.97); border-radius:13px; padding:13px 15px; margin-bottom:11px;
+    border-left:5px solid #5BCAC5; box-shadow:0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4); }
+  .card.swap{ border-left-color:#C98BDB; }
+  .card .who{ font-size:12px; font-weight:700; letter-spacing:0.4px; color:rgba(20,32,92,0.6); text-transform:uppercase; }
+  .card .when{ font-size:18px; font-weight:800; color:var(--blue-deep); line-height:1.15; margin-top:2px; }
+  .card .pos{ font-size:13.5px; font-weight:700; color:var(--blue); margin-top:4px; }
+  .card .swapline{ font-size:13px; color:rgba(20,32,92,0.8); margin-top:6px; line-height:1.4; }
+  .card .swapline b{ color:var(--blue-deep); }
+  .card .arrow{ color:var(--red); font-weight:800; margin:0 6px; }
+  .badge{ display:inline-block; font-size:10px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase;
+    padding:3px 9px; border-radius:999px; border:1.5px solid; margin-top:8px; }
+  .badge.restricted{ color:var(--amber); background:rgba(184,128,31,0.12); border-color:rgba(184,128,31,0.4); }
+  .badge.open{ color:var(--ok-deep); background:rgba(47,143,87,0.14); border-color:rgba(47,143,87,0.45); }
+  .badge.pending{ color:var(--amber); background:rgba(184,128,31,0.12); border-color:rgba(184,128,31,0.4); }
+  .badge.approved{ color:var(--ok-deep); background:rgba(47,143,87,0.14); border-color:rgba(47,143,87,0.45); }
+  .badge.denied,.badge.cancelled,.badge.expired{ color:var(--grey); background:rgba(107,114,128,0.12); border-color:rgba(107,114,128,0.4); }
+  .badge.taken{ color:var(--blue); background:rgba(29,42,112,0.10); border-color:rgba(29,42,112,0.4); }
+  .exp{ font-size:11px; color:rgba(20,32,92,0.5); margin-top:7px; }
+
+  .cardactions{ display:flex; gap:9px; margin-top:11px; }
+  .btn{ flex:1 1 0; border:none; border-radius:10px; padding:10px 12px; font:inherit; font-weight:800; font-size:13.5px; letter-spacing:0.3px; cursor:pointer; transition:filter 120ms, transform 80ms; }
+  .btn:active{ transform:translateY(1px); } .btn:disabled{ opacity:0.55; cursor:default; }
+  .btn-primary{ background:var(--ok); color:#fff; box-shadow:0 2px 0 var(--ok-deep); }
+  .btn-primary:hover{ filter:brightness(1.07); }
+  .btn-ghost{ background:rgba(200,48,42,0.10); color:var(--red-deep); border:1.5px solid rgba(200,48,42,0.45); }
+  .btn-ghost:hover{ background:rgba(200,48,42,0.18); }
+
+  /* Forms (offer / swap builders) */
+  .builder{ background:rgba(244,231,208,0.97); border-radius:13px; padding:14px 15px; box-shadow:0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4); }
+  .builder label{ display:block; font-size:11px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:rgba(20,32,92,0.6); margin:0 0 5px; }
+  .builder select, .builder input[type="datetime-local"]{ width:100%; border:1.5px solid rgba(20,32,92,0.25); border-radius:10px; padding:10px 11px; font-family:inherit; font-size:14px; color:var(--ink); background:#fff; margin-bottom:11px; }
+  .builder select:focus, .builder input:focus{ outline:none; border-color:var(--red); }
+  .chk{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--blue-deep); margin-bottom:12px; cursor:pointer; }
+  .chk input{ width:18px; height:18px; }
+  .btn-block{ width:100%; border:none; border-radius:11px; padding:12px; background:var(--red); color:#fff; font-size:14.5px; font-weight:800; cursor:pointer; box-shadow:0 2px 0 var(--red-deep); }
+  .btn-block:hover{ filter:brightness(1.06); } .btn-block:disabled{ opacity:0.6; cursor:default; }
+  .candidates[hidden]{ display:none; }
+  .candidates .seclabel{ margin-top:14px; }
+
+  .statecard{ background:rgba(244,231,208,0.96); border-radius:13px; padding:22px; text-align:center; box-shadow:0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4); }
+  .statecard[hidden]{ display:none; }
+  .statecard .s-title{ font-size:15px; font-weight:800; color:var(--blue-deep); }
+  .statecard .s-body{ font-size:13px; color:rgba(20,32,92,0.7); margin-top:7px; line-height:1.5; }
+  .statecard .s-cta{ display:inline-block; margin-top:14px; background:var(--red); color:#fff; border-radius:11px; padding:10px 20px; font-size:14px; font-weight:800; text-decoration:none; box-shadow:0 2px 0 var(--red-deep); }
+  .loading{ font-size:14px; font-weight:700; letter-spacing:1px; color:rgba(244,231,208,0.8); text-align:center; padding:24px 0; }
+  .loading[hidden]{ display:none; }
+
+  .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); z-index:50; max-width:440px; width:calc(100% - 36px);
+    background:var(--blue-deep); color:var(--cream); border:1px solid rgba(244,231,208,0.25); border-radius:12px; padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center;
+    box-shadow:0 10px 26px rgba(0,0,0,0.55); opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err{ background:var(--red-deep); border-color:rgba(244,231,208,0.30); }
+  .footnote{ margin-top:auto; padding-top:22px; text-align:center; font-size:11px; color:rgba(244,231,208,0.45); letter-spacing:0.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="backlink" href="{{ dashboard_url|default('/employee/dashboard') }}"><span class="chev">&lsaquo;</span> Dashboard</a>
+  </div>
+  <div class="pagehead">
+    <div class="eyebrow">Shift Marketplace</div>
+    <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'Swap & cover')) }}</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="open" type="button">Open shifts</button>
+    <button class="tab" data-tab="give" type="button">Offer / Swap</button>
+    <button class="tab" data-tab="mine" type="button">My activity</button>
+  </div>
+
+  <div class="statecard" id="mk-access" hidden>
+    <div class="s-title">Please sign in again</div>
+    <div class="s-body">Your session has expired. Sign back in to use the marketplace.</div>
+    <a class="s-cta" href="{{ login_url|default('/employee/login') }}">Go to login</a>
+  </div>
+
+  <!-- TAB: Open shifts (take-able offers) -->
+  <div class="panel" id="panel-open">
+    <div class="loading" id="open-loading">Loading open shifts&hellip;</div>
+    <div class="statecard" id="open-empty" hidden><div class="s-title">No open shifts right now</div><div class="s-body">When a teammate offers up a shift you can pick up, it shows here.</div></div>
+    <div id="open-list"></div>
+  </div>
+
+  <!-- TAB: Offer / Swap builders -->
+  <div class="panel" id="panel-give" hidden>
+    <div class="seclabel">Give up a shift</div>
+    <div class="builder">
+      <label for="off-shift">Which of your shifts?</label>
+      <select id="off-shift"><option value="">Select a shift&hellip;</option></select>
+      <label class="chk"><input type="checkbox" id="off-unrestricted" /> Open to anyone (not just same store + position)</label>
+      <button class="btn-block" id="off-post" type="button">Post offer</button>
+    </div>
+
+    <div class="seclabel">Propose a swap</div>
+    <div class="builder">
+      <label for="swp-from">Your shift to give</label>
+      <select id="swp-from"><option value="">Select your shift&hellip;</option></select>
+      <div class="candidates" id="swp-candidates" hidden>
+        <div class="seclabel">Pick a shift to swap for</div>
+        <div class="loading" id="cand-loading" hidden>Finding shifts&hellip;</div>
+        <div class="statecard" id="cand-empty" hidden><div class="s-title">No swap candidates</div><div class="s-body">No other assigned shifts are available to swap for that day.</div></div>
+        <div id="cand-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: My activity (my offers + my swaps) -->
+  <div class="panel" id="panel-mine" hidden>
+    <div class="loading" id="mine-loading">Loading your activity&hellip;</div>
+    <div class="seclabel">My offers</div>
+    <div id="my-offers"></div>
+    <div class="seclabel">My swaps</div>
+    <div id="my-swaps"></div>
+  </div>
+
+  <div class="footnote">Schedules V2 &middot; marketplace</div>
+</div>
+
+<div class="toast" id="mk-toast"></div>
+
+<script type="application/json" id="sv2-mk-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-mk-config").textContent);
+  var $ = function(id){ return document.getElementById(id); };
+  var busy = false;
+  var loaded = { open:false, give:false, mine:false };
+
+  function show(el){ el.hidden=false; } function hide(el){ el.hidden=true; }
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function isoToDate(s){ if(!s) return null; var d=String(s).split("T")[0].split("-"); if(d.length<3) return null; return new Date(+d[0],(+d[1])-1,+d[2]); }
+  function hm(iso){ var t=String(iso||"").split("T")[1]||"00:00"; var p=t.split(":"); return {h:+p[0]||0,m:+p[1]||0}; }
+  function fmtT(iso){ var x=hm(iso),h=x.h; var ap=h>=12?"p":"a"; var hh=h%12; if(hh===0)hh=12; return x.m?(hh+":"+(x.m<10?"0"+x.m:x.m)+ap):(hh+ap); }
+  function shiftLine(sh){ if(!sh) return ""; var d=isoToDate(sh.start_at); var day=d?(DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()):""; return day+"  "+fmtT(sh.start_at)+"-"+fmtT(sh.end_at); }
+  function nm(p){ return (p && p.name) ? p.name : (p && p.id ? ("#"+p.id) : ""); }
+
+  var toastTimer=null;
+  function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); if(toastTimer)clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove("show");},3400); }
+  function jsonHeaders(){ return {"Content-Type":"application/json","Accept":"application/json"}; }
+  function parseJsonOrThrow(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e1=new Error("non-json"); e1.status=(r.status===200?401:r.status); throw e1; } return r.json().then(function(j){ if(!r.ok||(j&&j.ok===false)){ var e2=new Error("bad"); e2.status=r.status; e2.error=(j&&j.error)?j.error:null; throw e2; } return j; }); }
+  function showAccess(){ ["panel-open","panel-give","panel-mine"].forEach(function(id){ hide($(id)); }); show($("mk-access")); }
+  function handleErr(e, what){ if(e&&e.status===401){ showAccess(); return; } toast((e&&e.error)?e.error:("Could not "+what+". Try again."), true); }
+
+  function offerCardHtml(o, mine){
+    var sh=o.shift||{}; var st=(o.status||"open").toLowerCase();
+    var p=[]; p.push('<div class="card" data-offer="'+(+o.id)+'">');
+    p.push('<div class="who">'+ (mine ? "Your shift" : esc(nm(o.offered_by))) +'</div>');
+    p.push('<div class="when">'+esc(shiftLine(sh))+'</div>');
+    if(sh.position_name) p.push('<div class="pos">'+esc(sh.position_name)+(sh.store?' &middot; '+esc(sh.store):'')+'</div>');
+    var badges='<span class="badge '+esc(st)+'">'+esc(st)+'</span>';
+    if(o.restricted) badges+=' <span class="badge restricted">same store+role</span>';
+    p.push(badges);
+    if(o.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:o.expires_at}))+'</div>');
+    if(!mine && st==="open"){ p.push('<div class="cardactions"><button class="btn btn-primary" data-act="take">Take this shift</button></div>'); }
+    if(mine && st==="open"){ p.push('<div class="cardactions"><button class="btn btn-ghost" data-act="cancel-offer">Cancel offer</button></div>'); }
+    p.push('</div>'); return p.join("");
+  }
+  function swapCardHtml(s){
+    var st=(s.status||"pending").toLowerCase();
+    var p=[]; p.push('<div class="card swap" data-swap="'+(+s.id)+'">');
+    p.push('<div class="who">Swap</div>');
+    p.push('<div class="swapline"><b>'+esc(nm(s.from_employee))+'</b> '+esc(shiftLine(s.from_shift))+'<span class="arrow">&#8644;</span><b>'+esc(nm(s.to_employee))+'</b> '+esc(shiftLine(s.to_shift))+'</div>');
+    p.push('<span class="badge '+esc(st)+'">'+esc(st)+'</span>');
+    // incoming pending (someone proposed to take MY shift) -> Accept; any pending -> Cancel
+    if(st==="pending"){ p.push('<div class="cardactions"><button class="btn btn-primary" data-act="accept-swap">Accept</button><button class="btn btn-ghost" data-act="cancel-swap">Cancel</button></div>'); }
+    p.push('</div>'); return p.join("");
+  }
+
+  // ---- loaders ----
+  function loadOpen(){
+    fetch(CFG.openListUrl,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow).then(function(j){
+      hide($("open-loading")); var offers=(j&&j.offers)||[];
+      if(!offers.length){ show($("open-empty")); $("open-list").innerHTML=""; return; }
+      hide($("open-empty")); $("open-list").innerHTML=offers.map(function(o){return offerCardHtml(o,false);}).join("");
+      loaded.open=true;
+    }).catch(function(e){ hide($("open-loading")); if(e&&e.status===401){showAccess();return;} show($("open-empty")); toast("Could not load open shifts.",true); });
+  }
+  function fillShiftSelect(sel, shifts){
+    var opts=['<option value="">'+sel.getAttribute("data-ph")+'</option>'];
+    (shifts||[]).forEach(function(sh){ opts.push('<option value="'+(+sh.id)+'">'+esc(shiftLine(sh)+(sh.position_name?("  "+sh.position_name):""))+'</option>'); });
+    sel.innerHTML=opts.join("");
+  }
+  function loadGive(){
+    fetch(CFG.myShiftsUrl,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow).then(function(j){
+      var shifts=(j&&j.shifts)||[];
+      var offSel=$("off-shift"); offSel.setAttribute("data-ph","Select a shift..."); fillShiftSelect(offSel, shifts);
+      var swpSel=$("swp-from"); swpSel.setAttribute("data-ph","Select your shift..."); fillShiftSelect(swpSel, shifts);
+      loaded.give=true;
+    }).catch(function(e){ handleErr(e,"load your shifts"); });
+  }
+  function loadMine(){
+    hide($("mine-loading"));
+    fetch(CFG.myOffersUrl,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow).then(function(j){
+      var offers=(j&&j.offers)||[];
+      $("my-offers").innerHTML = offers.length ? offers.map(function(o){return offerCardHtml(o,true);}).join("") : '<div class="exp" style="padding:2px 2px 4px">You have no active offers.</div>';
+    }).catch(function(e){ if(e&&e.status===401){showAccess();return;} $("my-offers").innerHTML='<div class="exp">Could not load.</div>'; });
+    fetch(CFG.swapsUrl,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow).then(function(j){
+      var swaps=(j&&j.swaps)||[];
+      $("my-swaps").innerHTML = swaps.length ? swaps.map(swapCardHtml).join("") : '<div class="exp" style="padding:2px 2px 4px">You have no swaps.</div>';
+      loaded.mine=true;
+    }).catch(function(e){ if(e&&e.status===401){showAccess();return;} $("my-swaps").innerHTML='<div class="exp">Could not load.</div>'; });
+  }
+
+  // ---- actions ----
+  function postAction(url, okMsg, what){
+    if(busy) return; busy=true;
+    fetch(url,{method:"POST",headers:jsonHeaders(),credentials:"same-origin",body:"{}"}).then(parseJsonOrThrow).then(function(){
+      busy=false; toast(okMsg); loaded.open=loaded.mine=false; loadOpen(); if(!$("panel-mine").hidden) loadMine();
+    }).catch(function(e){ busy=false; handleErr(e,what); });
+  }
+  function postOffer(){
+    if(busy) return; var sid=$("off-shift").value; if(!sid){ toast("Pick a shift to offer.",true); return; }
+    busy=true; $("off-post").disabled=true;
+    var body={shift_id:+sid, unrestricted:$("off-unrestricted").checked};
+    fetch(CFG.offerBase,{method:"POST",headers:jsonHeaders(),credentials:"same-origin",body:JSON.stringify(body)}).then(parseJsonOrThrow).then(function(){
+      busy=false; $("off-post").disabled=false; $("off-shift").value=""; $("off-unrestricted").checked=false;
+      toast("Shift offered."); loaded.open=loaded.mine=false;
+    }).catch(function(e){ busy=false; $("off-post").disabled=false; handleErr(e,"post the offer"); });
+  }
+  function loadCandidates(fromId){
+    var box=$("swp-candidates"); show(box); show($("cand-loading")); hide($("cand-empty")); $("cand-list").innerHTML="";
+    fetch(CFG.candidatesUrl+"?from_shift_id="+encodeURIComponent(fromId),{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow).then(function(j){
+      hide($("cand-loading")); var cs=(j&&j.candidates)||[];
+      if(!cs.length){ show($("cand-empty")); return; }
+      $("cand-list").innerHTML=cs.map(function(c){
+        return '<div class="card" data-cand="'+(+c.id)+'"><div class="who">'+esc(nm(c.employee))+'</div><div class="when">'+esc(shiftLine(c))+'</div>'+
+          (c.position_name?'<div class="pos">'+esc(c.position_name)+(c.store?' &middot; '+esc(c.store):'')+'</div>':'')+
+          '<div class="cardactions"><button class="btn btn-primary" data-act="swap-for" data-from="'+(+fromId)+'" data-to="'+(+c.id)+'">Swap for this</button></div></div>';
+      }).join("");
+    }).catch(function(e){ hide($("cand-loading")); handleErr(e,"find swap candidates"); });
+  }
+  function proposeSwap(fromId, toId, btn){
+    if(busy) return; busy=true; if(btn) btn.disabled=true;
+    fetch(CFG.swapBase+"/propose",{method:"POST",headers:jsonHeaders(),credentials:"same-origin",body:JSON.stringify({from_shift_id:+fromId,to_shift_id:+toId})}).then(parseJsonOrThrow).then(function(){
+      busy=false; toast("Swap proposed."); $("swp-from").value=""; hide($("swp-candidates")); loaded.mine=false;
+    }).catch(function(e){ busy=false; if(btn) btn.disabled=false; handleErr(e,"propose the swap"); });
+  }
+
+  // ---- tabs ----
+  function activate(tab){
+    ["open","give","mine"].forEach(function(t){ $("panel-"+t).hidden = (t!==tab); });
+    var btns=document.querySelectorAll(".tab"); for(var i=0;i<btns.length;i++){ btns[i].classList.toggle("active", btns[i].getAttribute("data-tab")===tab); }
+    if(tab==="open" && !loaded.open){ show($("open-loading")); loadOpen(); }
+    if(tab==="give" && !loaded.give){ loadGive(); }
+    if(tab==="mine"){ show($("mine-loading")); loadMine(); }
+  }
+
+  // ---- wire ----
+  var tabBtns=document.querySelectorAll(".tab");
+  for(var i=0;i<tabBtns.length;i++){ tabBtns[i].addEventListener("click", function(ev){ activate(ev.currentTarget.getAttribute("data-tab")); }); }
+  $("off-post").addEventListener("click", postOffer);
+  $("swp-from").addEventListener("change", function(){ var v=$("swp-from").value; if(v) loadCandidates(v); else hide($("swp-candidates")); });
+  $("open-list").addEventListener("click", function(ev){ var b=ev.target.closest("[data-act='take']"); if(!b) return; var c=ev.target.closest("[data-offer]"); if(c) postAction(CFG.offerBase+"/"+(+c.getAttribute("data-offer"))+"/take","Shift taken - pending manager approval.","take the shift"); });
+  $("my-offers").addEventListener("click", function(ev){ var b=ev.target.closest("[data-act='cancel-offer']"); if(!b) return; var c=ev.target.closest("[data-offer]"); if(c) postAction(CFG.offerBase+"/"+(+c.getAttribute("data-offer"))+"/cancel","Offer cancelled.","cancel the offer"); });
+  $("my-swaps").addEventListener("click", function(ev){
+    var c=ev.target.closest("[data-swap]"); if(!c) return; var id=+c.getAttribute("data-swap");
+    if(ev.target.closest("[data-act='accept-swap']")) postAction(CFG.swapBase+"/"+id+"/accept","Swap accepted - pending manager approval.","accept the swap");
+    else if(ev.target.closest("[data-act='cancel-swap']")) postAction(CFG.swapBase+"/"+id+"/cancel","Swap cancelled.","cancel the swap");
+  });
+  $("cand-list").addEventListener("click", function(ev){ var b=ev.target.closest("[data-act='swap-for']"); if(!b) return; proposeSwap(b.getAttribute("data-from"), b.getAttribute("data-to"), b); });
+
+  // start on Open shifts
+  activate("open");
+})();
+</script>
+</body>
+</html>

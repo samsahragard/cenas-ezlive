@@ -13,6 +13,7 @@ from app.web.ezcater_webhook import webhook as ezwh
 from app.web.produce_order import produce_order as produce
 from app.web.reports import reports as reports_bp
 from app.web.store_routes import store_bp
+from app.web import schedules_v2  # noqa: F401  B4: attaches schedule/shift routes to store_bp (must precede register_blueprint)
 from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web.interview import interview as interview_bp
 from app.web.corporate_order import corp_order as corp_order_bp

@@ -2963,3 +2963,152 @@ class DocckTickLease(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)  # always 1
     holder: Mapped[str | None] = mapped_column(String(64), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+# ============================================================
+# Schedules V2 - Block 2 (Sam #1742). Employee scheduling identity +
+# phone/SMS auth + position/tag taxonomy. Models owned by aick in one hand;
+# ckai builds the auth endpoints (app/web/employee_auth.py) against this
+# schema. Held on the schedules-v2-b2 branch until the B2 cross-review +
+# samai gate, then merged to main (create_all materializes the tables).
+# Employees are DISTINCT from the User/keypad-PIN auth system: they log in
+# by phone + one-time SMS code, never a PIN, and never reach /partner/*.
+# ============================================================
+
+
+class Employee(Base):
+    """A scheduling employee (the Sling-style workforce). Phone+SMS login."""
+
+    __tablename__ = "employees"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # B3 migration map back to Sling; null for app-created employees
+    sling_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True, index=True
+    )
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    # E.164-ish; the SMS login identity (one employee per phone)
+    phone: Mapped[str] = mapped_column(
+        String(32), unique=True, nullable=False, index=True
+    )
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class EmployeePhone(Base):
+    """Secondary phone numbers for an employee. The primary login phone is
+    Employee.phone; this supports additional / historical numbers."""
+
+    __tablename__ = "employee_phones"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class EmployeeStoreAssignment(Base):
+    """Which store(s) an employee works at. Each employee has >=1 (B3)."""
+
+    __tablename__ = "employee_store_assignments"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "store_key", name="uq_emp_store"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 'tomball' | 'copperfield'
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class Position(Base):
+    """A job position (cook, server, ...) - the Sling position taxonomy."""
+
+    __tablename__ = "positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sling_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # null = applies to all stores
+    store_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class EmployeePosition(Base):
+    """Which positions an employee holds (many-to-many)."""
+
+    __tablename__ = "employee_positions"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "position_id", name="uq_emp_position"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position_id: Mapped[int] = mapped_column(
+        ForeignKey("positions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class Tag(Base):
+    """Shift / employee tags - the Sling tag taxonomy."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sling_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class EmployeeSmsCode(Base):
+    """One-time SMS login codes (B2 phone+SMS auth). Codes are HASHED
+    (generate_password_hash on request-code, check_password_hash on verify) -
+    never stored in plaintext. 10-minute expiry, single-use, 5-attempt lock."""
+
+    __tablename__ = "employee_sms_codes"
+    __table_args__ = (
+        Index("ix_sms_emp_active", "employee_id", "used", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    # created_at + 10 minutes (set by the endpoint)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

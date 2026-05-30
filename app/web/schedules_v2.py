@@ -31,7 +31,7 @@ from app.models import (
     ShiftTag,
     Tag,
 )
-from app.services import scheduling_availability, scheduling_timeoff
+from app.services import scheduling_alarms, scheduling_availability, scheduling_timeoff
 from app.web.permissions import current_user_id, require_level
 from app.web.store_routes import store_bp
 
@@ -263,5 +263,34 @@ def sv2_shift_bulk_copy():
             n += 1
         db.commit()
         return jsonify({"ok": True, "copied": n, "to_schedule_id": dst_id}), 201
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/schedule/<int:schedule_id>/publish", methods=["POST"])
+@require_level(_MGR)
+def sv2_schedule_publish(schedule_id):
+    """B5: publish a draft -> its shifts become visible to the assigned employees
+    (who can accept/decline). Idempotent (re-publish stays published). After the
+    status flip, fire the B6 alarm hook. Manager-gated + store-scoped."""
+    db = SessionLocal()
+    try:
+        sched = db.query(Schedule).filter_by(id=schedule_id, store_key=_store()).first()
+        if sched is None:
+            return jsonify({"ok": False, "error": "schedule not found in this store"}), 404
+        now = datetime.utcnow()
+        sched.status = "published"
+        if sched.published_at is None:
+            sched.published_at = now
+        sched.updated_at = now
+        db.commit()
+        # B6 hook (ckai #1912): create pending shift_alarms AFTER the status flip.
+        # No-op stub today; wrapped so a future B6 error can never fail the publish.
+        try:
+            scheduling_alarms.create_for_schedule(sched.id)
+        except Exception:  # noqa: BLE001
+            pass
+        return jsonify({"ok": True, "id": sched.id, "status": sched.status,
+                        "published_at": sched.published_at.isoformat()}), 200
     finally:
         db.close()

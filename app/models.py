@@ -3158,6 +3158,9 @@ class Shift(Base):
     __table_args__ = (
         Index("ix_shifts_schedule", "schedule_id"),
         Index("ix_shifts_employee", "employee_id"),
+        # B5 my-schedule: employee_date index (directive 367) so GET /employee/
+        # my-schedule/shifts (employee_id + start_at range) rides an index, no scan.
+        Index("ix_shifts_emp_start", "employee_id", "start_at"),
         # partial index for OPEN shifts (directive 3.8) - fast open-shift lookups (B5/B9)
         Index("ix_shifts_open", "schedule_id", sqlite_where=text("status = 'open'")),
     )
@@ -3200,3 +3203,28 @@ class ShiftTag(Base):
         ForeignKey("tags.id", ondelete="CASCADE"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ShiftAcceptance(Base):
+    """Employee accept/decline of an assigned shift (Schedules V2 B5). One row per
+    (shift, employee); a decline carries a required reason that surfaces to the
+    assigning manager. No row = 'pending'."""
+
+    __tablename__ = "shift_acceptances"
+    __table_args__ = (
+        UniqueConstraint("shift_id", "employee_id", name="uq_shift_acceptance"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shift_id: Mapped[int] = mapped_column(
+        ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    response: Mapped[str] = mapped_column(String(20), nullable=False)  # 'accepted' | 'declined'
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)    # required on decline
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

@@ -1,0 +1,425 @@
+{# Employee notification preferences (Schedules V2, B6). Logged-in employee sets
+   how they're reminded before each shift: SMS and/or email, how long before, and
+   an optional second reminder.
+
+   ck owns this template + the GET /employee/profile page route.
+   ckai owns the employee_alarm_preferences model + the prefs endpoint:
+     GET  {{ prefs_url }}  -> {ok, preferences:{sms_enabled, email_enabled,
+                                                minutes_before, second_minutes_before}}
+     POST {{ prefs_url }}  {sms_enabled, email_enabled, minutes_before,
+                            second_minutes_before}  -> {ok, preferences}
+   No prefs row yet -> backend default (sms on, 60 min). second_minutes_before is
+   nullable (null = no second reminder). The client sends ints (minutes) + bools.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notifications &mdash; Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:        #15205c;
+    --blue-bright: #1d2a70;
+    --blue-deep:   #0a1340;
+    --red:         #c8302a;
+    --red-bright:  #e54a3f;
+    --red-deep:    #8a1d18;
+    --cream:       #f4e7d0;
+    --cream-soft:  #ebd9bc;
+    --ink:         #14205c;
+    --ok:          #2f8f57;
+    --ok-deep:     #1f6b3e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh; background:#0a0604;
+    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+    position:relative; color: var(--ink);
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter: blur(6px) brightness(0.55) saturate(1.05);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
+  }
+  .wrap{
+    position:relative; z-index:1;
+    max-width:520px; margin:0 auto; padding:20px 18px 36px;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+
+  /* Top bar: logo + back to dashboard */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:18px;
+  }
+  .topbar img{ width:auto; height:34px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+  .backlink{
+    display:inline-flex; align-items:center; gap:5px;
+    background: rgba(244,231,208,0.12); color: var(--cream);
+    border:1px solid rgba(244,231,208,0.30); border-radius:10px; padding:8px 13px;
+    font-size:13px; font-weight:600; letter-spacing:0.4px; text-decoration:none;
+    transition: background 120ms ease;
+  }
+  .backlink:hover{ background: rgba(244,231,208,0.22); }
+  .backlink .chev{ font-size:16px; line-height:1; margin-top:-1px; }
+
+  /* Page head card */
+  .pagehead{
+    background:
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 45%, var(--cream-soft) 100%);
+    border-radius:16px; padding:18px 20px; margin-bottom:18px;
+    box-shadow:
+      0 0 0 2px var(--blue-bright),
+      0 2px 0 2px var(--blue-deep),
+      0 0 0 5px var(--red),
+      0 10px 22px rgba(0,0,0,0.5);
+  }
+  .pagehead .eyebrow{
+    font-size:13px; font-weight:700; letter-spacing:3px;
+    text-transform:uppercase; color: var(--red);
+  }
+  .pagehead .name{
+    font-size:24px; font-weight:800; color: var(--blue-deep); line-height:1.15; margin-top:2px;
+  }
+  .pagehead .meta{ font-size:13px; color: rgba(20,32,92,0.72); margin-top:7px; font-weight:600; }
+
+  /* Settings card */
+  .card-label{
+    font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color: rgba(244,231,208,0.78); margin:18px 2px 11px;
+  }
+  .card-label:first-of-type{ margin-top:2px; }
+  .setcard{
+    background: rgba(244,231,208,0.97); border-radius:14px; padding:6px 16px;
+    box-shadow: 0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4);
+  }
+  .setrow{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding:15px 0; border-bottom:1px solid rgba(20,32,92,0.12);
+  }
+  .setrow:last-child{ border-bottom:none; }
+  .setrow .rtext{ flex:1 1 auto; min-width:0; }
+  .setrow .rtitle{ font-size:15px; font-weight:700; color: var(--blue-deep); }
+  .setrow .rsub{ font-size:12.5px; color: rgba(20,32,92,0.62); margin-top:3px; line-height:1.35; }
+  .setrow .rctrl{ flex:0 0 auto; }
+
+  /* Toggle switch */
+  .switch{ position:relative; display:inline-block; width:50px; height:30px; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .slider{
+    position:absolute; cursor:pointer; inset:0;
+    background: rgba(20,32,92,0.22); border-radius:999px; transition: background 160ms ease;
+  }
+  .slider:before{
+    content:''; position:absolute; height:24px; width:24px; left:3px; top:3px;
+    background:#fff; border-radius:50%; transition: transform 160ms ease;
+    box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .switch input:checked + .slider{ background: var(--ok); }
+  .switch input:checked + .slider:before{ transform: translateX(20px); }
+  .switch input:focus-visible + .slider{ box-shadow: 0 0 0 3px rgba(47,143,87,0.4); }
+
+  /* Select control */
+  .selctrl{
+    appearance:none; -webkit-appearance:none;
+    background:#fff; color: var(--blue-deep);
+    border:1.5px solid rgba(20,32,92,0.25); border-radius:10px;
+    padding:9px 34px 9px 12px; font-family:inherit; font-size:14px; font-weight:700;
+    cursor:pointer; min-width:150px;
+    background-image:
+      linear-gradient(45deg, transparent 50%, rgba(20,32,92,0.55) 50%),
+      linear-gradient(135deg, rgba(20,32,92,0.55) 50%, transparent 50%);
+    background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+    background-size: 5px 5px, 5px 5px; background-repeat:no-repeat;
+  }
+  .selctrl:focus{ outline:none; border-color: var(--red); }
+  .selctrl:disabled{ opacity:0.5; cursor:default; }
+
+  .hint{
+    font-size:12px; color: rgba(244,231,208,0.7); margin:10px 4px 0; line-height:1.4;
+  }
+  .hint.warn{ color: #f0c267; font-weight:700; }
+  .hint[hidden]{ display:none; }
+
+  /* Save button */
+  .btn-save{
+    margin-top:22px; width:100%; border:none; border-radius:13px; padding:15px 16px;
+    background: var(--red); color:#fff; font-size:16px; font-weight:800; letter-spacing:0.5px;
+    cursor:pointer; box-shadow: 0 3px 0 var(--red-deep), 0 8px 18px rgba(0,0,0,0.4);
+    transition: filter 120ms ease, transform 80ms ease;
+  }
+  .btn-save:hover{ filter:brightness(1.06); }
+  .btn-save:active{ transform: translateY(1px); }
+  .btn-save:disabled{ opacity:0.6; cursor:default; }
+
+  /* States: loading / access */
+  .statecard{
+    background: rgba(244,231,208,0.96); border-radius:14px; padding:26px 22px; text-align:center;
+    box-shadow: 0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4); margin-top:4px;
+  }
+  .statecard[hidden]{ display:none; }
+  .statecard .s-title{ font-size:16px; font-weight:800; color: var(--blue-deep); }
+  .statecard .s-body{ font-size:13.5px; color: rgba(20,32,92,0.72); margin-top:8px; line-height:1.5; }
+  .statecard .s-cta{
+    display:inline-block; margin-top:16px; background: var(--red); color:#fff;
+    border-radius:11px; padding:11px 22px; font-size:14px; font-weight:800;
+    text-decoration:none; box-shadow: 0 2px 0 var(--red-deep);
+  }
+  .loading-dots{ font-size:14px; font-weight:700; letter-spacing:1px; color: rgba(244,231,208,0.8); text-align:center; padding:30px 0; }
+
+  #prefs-form[hidden]{ display:none; }
+
+  /* Toast */
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
+    z-index:50; max-width:440px; width:calc(100% - 36px);
+    background: var(--blue-deep); color: var(--cream);
+    border:1px solid rgba(244,231,208,0.25); border-radius:12px; padding:12px 16px;
+    font-size:13.5px; font-weight:600; text-align:center;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.55); opacity:0; pointer-events:none;
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err{ background: var(--red-deep); border-color: rgba(244,231,208,0.30); }
+
+  .footnote{
+    margin-top:auto; padding-top:24px; text-align:center;
+    font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="backlink" href="{{ dashboard_url|default('/employee/dashboard') }}"><span class="chev">&lsaquo;</span> Dashboard</a>
+  </div>
+
+  <div class="pagehead">
+    <div class="eyebrow">Notifications</div>
+    <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'My settings')) }}</div>
+    <div class="meta">Shift reminders &amp; how you hear from us</div>
+  </div>
+
+  <div class="loading-dots" id="prefs-loading">Loading your settings&hellip;</div>
+
+  <div class="statecard" id="prefs-access" hidden>
+    <div class="s-title">Please sign in again</div>
+    <div class="s-body">Your session has expired. Sign back in to manage your notifications.</div>
+    <a class="s-cta" href="{{ login_url|default('/employee/login') }}">Go to login</a>
+  </div>
+
+  <form id="prefs-form" hidden autocomplete="off" onsubmit="return false;">
+
+    <div class="card-label">How to reach me</div>
+    <div class="setcard">
+      <div class="setrow">
+        <div class="rtext">
+          <div class="rtitle">Text message (SMS)</div>
+          <div class="rsub">A text to your phone before each shift.</div>
+        </div>
+        <div class="rctrl">
+          <label class="switch"><input type="checkbox" id="pref-sms" /><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="setrow">
+        <div class="rtext">
+          <div class="rtitle">Email</div>
+          <div class="rsub">An email reminder (if we have your address on file).</div>
+        </div>
+        <div class="rctrl">
+          <label class="switch"><input type="checkbox" id="pref-email" /><span class="slider"></span></label>
+        </div>
+      </div>
+    </div>
+    <div class="hint warn" id="channel-hint" hidden>Turn on at least one channel to receive shift reminders.</div>
+
+    <div class="card-label">When to remind me</div>
+    <div class="setcard">
+      <div class="setrow">
+        <div class="rtext">
+          <div class="rtitle">First reminder</div>
+          <div class="rsub">How far ahead of the shift start.</div>
+        </div>
+        <div class="rctrl">
+          <select class="selctrl" id="pref-first">
+            <option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="120">2 hours before</option>
+            <option value="240">4 hours before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </div>
+      </div>
+      <div class="setrow">
+        <div class="rtext">
+          <div class="rtitle">Second reminder</div>
+          <div class="rsub">Optional - a follow-up at a different time.</div>
+        </div>
+        <div class="rctrl">
+          <select class="selctrl" id="pref-second">
+            <option value="">Off</option>
+            <option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="120">2 hours before</option>
+            <option value="240">4 hours before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-save" id="prefs-save" type="button">Save settings</button>
+  </form>
+
+  <div class="footnote">Schedules V2 &middot; you control how we remind you</div>
+</div>
+
+<div class="toast" id="prefs-toast"></div>
+
+<script type="application/json" id="sv2-prefs-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-prefs-config").textContent);
+
+  var elLoading = document.getElementById("prefs-loading");
+  var elAccess  = document.getElementById("prefs-access");
+  var elForm    = document.getElementById("prefs-form");
+  var elToast   = document.getElementById("prefs-toast");
+  var elSms     = document.getElementById("pref-sms");
+  var elEmail   = document.getElementById("pref-email");
+  var elFirst   = document.getElementById("pref-first");
+  var elSecond  = document.getElementById("pref-second");
+  var elSave    = document.getElementById("prefs-save");
+  var elHint    = document.getElementById("channel-hint");
+
+  var busy = false;
+
+  // ---- helpers --------------------------------------------------------------
+  function show(el){ el.hidden = false; }
+  function hide(el){ el.hidden = true; }
+
+  var toastTimer = null;
+  function toast(msg, isErr){
+    elToast.textContent = msg;
+    elToast.classList.toggle("err", !!isErr);
+    elToast.classList.add("show");
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ elToast.classList.remove("show"); }, 3200);
+  }
+
+  function jsonHeaders(){
+    return { "Content-Type": "application/json", "Accept": "application/json" };
+  }
+
+  // Parse a JSON response; throw an error carrying .status/.error otherwise.
+  // A session that expired mid-use makes the gate 302 -> /employee/login, which
+  // fetch follows to an HTML 200 - we treat any non-JSON body as an auth lapse.
+  function parseJsonOrThrow(r){
+    var ct = r.headers.get("content-type") || "";
+    if(ct.indexOf("application/json") === -1){
+      var e1 = new Error("non-json");
+      e1.status = (r.status === 200 ? 401 : r.status);
+      throw e1;
+    }
+    return r.json().then(function(j){
+      if(!r.ok || (j && j.ok === false)){
+        var e2 = new Error("bad-response");
+        e2.status = r.status;
+        e2.error = (j && j.error) ? j.error : null;
+        throw e2;
+      }
+      return j;
+    });
+  }
+
+  function showAccess(){
+    hide(elLoading); hide(elForm); show(elAccess);
+  }
+
+  function refreshHint(){
+    if(!elSms.checked && !elEmail.checked){ show(elHint); } else { hide(elHint); }
+  }
+
+  // ---- state <-> controls ---------------------------------------------------
+  function setControls(p){
+    p = p || {};
+    // Backend default when no row exists: sms on, 60 min. Treat a missing
+    // sms_enabled as ON (the documented default), everything else as OFF/empty.
+    elSms.checked   = (p.sms_enabled !== false);
+    elEmail.checked = (p.email_enabled === true);
+    elFirst.value   = String(p.minutes_before || 60);
+    elSecond.value  = (p.second_minutes_before == null ? "" : String(p.second_minutes_before));
+    refreshHint();
+  }
+
+  function load(){
+    fetch(CFG.prefsUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){
+        setControls(j && j.preferences);
+        hide(elLoading); show(elForm);
+      })
+      .catch(function(e){
+        if(e && e.status === 401){ showAccess(); return; }
+        // Endpoint not up yet / transient: render the form on documented defaults
+        // so the page is still usable, and say so.
+        setControls(null);
+        hide(elLoading); show(elForm);
+        toast("Could not load your saved settings - showing defaults.", true);
+      });
+  }
+
+  function save(){
+    if(busy) return;
+    var first = parseInt(elFirst.value, 10) || 60;
+    var secRaw = elSecond.value;
+    var second = (secRaw === "" ? null : (parseInt(secRaw, 10) || null));
+    if(second !== null && second === first){
+      toast("Pick a different time for the second reminder.", true);
+      return;
+    }
+    var body = {
+      sms_enabled: elSms.checked,
+      email_enabled: elEmail.checked,
+      minutes_before: first,
+      second_minutes_before: second
+    };
+    busy = true; elSave.disabled = true; elSave.textContent = "Saving...";
+    fetch(CFG.prefsUrl, {
+      method: "POST", headers: jsonHeaders(), credentials: "same-origin",
+      body: JSON.stringify(body)
+    })
+      .then(parseJsonOrThrow)
+      .then(function(j){
+        busy = false; elSave.disabled = false; elSave.textContent = "Save settings";
+        if(j && j.preferences) setControls(j.preferences);
+        toast("Settings saved.");
+      })
+      .catch(function(e){
+        busy = false; elSave.disabled = false; elSave.textContent = "Save settings";
+        if(e && e.status === 401){ showAccess(); return; }
+        toast((e && e.error) ? e.error : "Could not save. Try again.", true);
+      });
+  }
+
+  // ---- wire ------------------------------------------------------------------
+  elSms.addEventListener("change", refreshHint);
+  elEmail.addEventListener("change", refreshHint);
+  elSave.addEventListener("click", save);
+
+  load();
+})();
+</script>
+</body>
+</html>

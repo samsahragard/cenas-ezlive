@@ -31,7 +31,13 @@ _MGR = "foh_manager"  # lowest manager level allowed to manage schedules
 
 
 def _store() -> str | None:
-    return getattr(g, "current_store", None)
+    """The store_key stored on schedules/shifts is the LOCATION
+    ('tomball'/'copperfield'), NOT the URL slug ('dos'/'uno') - so it joins with
+    employee_store_assignments.store_key + User.store_scope, which are
+    location-keyed (B2 contract + B3 migration). The audience GATE still keys off
+    the slug via store_bp._per_store_gate; only storage/filtering uses location.
+    (ckai #1887 cross-block fix.)"""
+    return getattr(g, "current_location", None)
 
 
 def _dt(s):

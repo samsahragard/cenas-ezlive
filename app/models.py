@@ -3228,3 +3228,58 @@ class ShiftAcceptance(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class ShiftAlarm(Base):
+    """Schedules V2 B6: one pending/sent shift reminder for (shift, employee,
+    fire-time, channel). Created on publish (scheduling_alarms.create_for_schedule);
+    the per-minute cron sends due pending rows. UNIQUE(shift_id, employee_id,
+    alarm_time, channel) makes re-publish idempotent (no double-create). The
+    partial index on status='pending' keeps the per-minute cron O(small)."""
+
+    __tablename__ = "shift_alarms"
+    __table_args__ = (
+        UniqueConstraint("shift_id", "employee_id", "alarm_time", "channel",
+                         name="uq_shift_alarm"),
+        # the per-minute cron only ever scans pending rows
+        Index("ix_shift_alarms_pending", "alarm_time",
+              sqlite_where=text("status = 'pending'")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shift_id: Mapped[int] = mapped_column(
+        ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # when to fire = shift.start_at - employee's minutes_before
+    alarm_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    channel: Mapped[str] = mapped_column(String(10), nullable=False)   # 'sms' | 'email'
+    status: Mapped[str] = mapped_column(String(10), default="pending", nullable=False)  # pending|sent|failed
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EmployeeAlarmPreference(Base):
+    """Schedules V2 B6: an employee's shift-reminder preferences. One row per
+    employee (UNIQUE). No row = the default (SMS on, email off, 60 min before)."""
+
+    __tablename__ = "employee_alarm_preferences"
+    __table_args__ = (
+        UniqueConstraint("employee_id", name="uq_employee_alarm_pref"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sms_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    minutes_before: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    second_minutes_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

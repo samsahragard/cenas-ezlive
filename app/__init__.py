@@ -24,6 +24,7 @@ from app.web.team_routes import team_bp
 from app.web.legal_routes import legal as legal_bp
 from app.web.access_request_routes import access_req as access_req_bp
 from app.web.driver_system import driver_system_bp
+from app.web.scheduling_cron import scheduling_cron_bp  # B6: shift-alarm send cron (ckai)
 from app.web.briefs import briefs_bp
 from app.web.tasks import tasks_bp
 from app.web.team_reports import team_reports_bp
@@ -32,6 +33,7 @@ from app.web import keypad_auth as ezkeypad
 from app.web import employee_auth as ezempauth
 from app.web import employee_schedule_page  # noqa: F401  B5: attaches GET /employee/my-schedule to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import schedules_v2_employee  # noqa: F401  B5: attaches the employee schedule DATA + accept/decline endpoints to the employee_auth blueprint (aick; must import before ezempauth.install)
+from app.web import employee_alarm_prefs  # noqa: F401  B6: attaches GET/POST /employee/alarm-preferences to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications
@@ -132,6 +134,7 @@ def create_app():
     app.register_blueprint(legal_bp)
     app.register_blueprint(access_req_bp)
     app.register_blueprint(driver_system_bp)
+    app.register_blueprint(scheduling_cron_bp)  # B6: POST /internal/scheduling/cron/process-shift-alarms (ckai)
     app.register_blueprint(briefs_bp)
     # Phase 2 / Block 1A — task create + reassign routes
     # (/partner/tasks/*). Registered directly (not under store_bp), so

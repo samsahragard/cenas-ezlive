@@ -1,0 +1,151 @@
+{# ============================================================
+   schedules_v2_availability.html - Schedules V2 / Block 8
+   Manager AVAILABILITY ROSTER (read-only): each employee's recurring weekly
+   available windows + their one-off unavailability blocks. Helps the manager
+   build the schedule around stated availability (the soft warning() in the
+   week-view is the at-assignment counterpart).
+
+   FRONTEND-ONLY (ck). Client-rendered: the page route hands this template a
+   config blob (store label + the list URL) and the JS fetches; the template
+   never touches models (ckai's lane). Contract (ckai B8, #1986):
+
+     GET <list_url>[?employee_id] ->
+        { ok, availability:[{employee_id, employee_name,
+                             recurring:[{id,day_of_week,start_time,end_time}],
+                             blocks:[{id,start_at,end_at,reason}]}] }
+   day_of_week: 0=Mon .. 6=Sun. MANAGER-GATED page (require_level foh_manager);
+   a cross-store gm gets a 302/403 -> a friendly access notice, never a broken list.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'schedules_v2' %}
+
+{% block title %}Availability - Cenas Kitchen{% endblock %}
+
+{% block page_module %}SCHEDULES{% endblock %}
+{% block page_title %}Availability{% endblock %}
+{% block page_subtitle %}{{ store_label }} - who can work when (V2){% endblock %}
+
+{% block content %}
+<style>
+  .sv2-av{
+    --sk-red:#c8302a; --sk-red-deep:#8a1d18; --sk-blue:#15205c; --sk-blue-deep:#0a1340;
+    --sk-cream:#f4e7d0; --sk-ink:#14205c; --sk-ok:#2f8f57; --sk-ok-deep:#1f6b3e; --sk-grey:#6b7280;
+    position:relative; color:var(--sk-ink); font-family:'Manrope','Segoe UI',Arial,sans-serif;
+    background:#fbf4e7; border-radius:14px; padding:18px; max-width:820px;
+    box-shadow:0 0 0 1px rgba(20,32,92,0.10), 0 8px 22px rgba(0,0,0,0.10);
+  }
+  .sv2-av *{ box-sizing:border-box; }
+  .sv2-av .count{ font-size:13px; font-weight:700; color:rgba(20,32,92,0.6); margin-bottom:14px; }
+
+  .sv2-av .emp{ background:#fff; border-radius:12px; padding:14px 15px; margin-bottom:12px;
+    border-left:5px solid var(--sk-blue); box-shadow:0 0 0 1px rgba(20,32,92,0.08), 0 3px 9px rgba(0,0,0,0.07); }
+  .sv2-av .emp-name{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); margin-bottom:10px; }
+
+  .sv2-av .week{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .sv2-av .daycol{ background:rgba(20,32,92,0.035); border-radius:9px; padding:7px 5px; min-height:62px; text-align:center; }
+  .sv2-av .daycol.off{ opacity:0.6; }
+  .sv2-av .dlabel{ font-size:10px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; color:rgba(20,32,92,0.55); margin-bottom:5px; }
+  .sv2-av .winm{ font-size:10.5px; font-weight:700; color:var(--sk-ok-deep); background:rgba(47,143,87,0.12);
+    border-radius:6px; padding:2px 3px; margin-bottom:3px; line-height:1.25; }
+  .sv2-av .offm{ font-size:10.5px; color:rgba(20,32,92,0.4); font-style:italic; padding-top:6px; }
+
+  .sv2-av .blocks{ margin-top:11px; padding-top:10px; border-top:1px solid rgba(20,32,92,0.10); }
+  .sv2-av .blabel{ font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; color:var(--sk-red-deep); margin-bottom:6px; }
+  .sv2-av .blk{ font-size:12.5px; color:rgba(20,32,92,0.8); padding:3px 0; }
+  .sv2-av .blk .rsn{ color:rgba(20,32,92,0.55); }
+  .sv2-av .noblk{ font-size:12px; color:rgba(20,32,92,0.45); }
+
+  .sv2-av .state{ text-align:center; padding:30px 18px; color:rgba(20,32,92,0.7); }
+  .sv2-av .state[hidden]{ display:none; }
+  .sv2-av .state .s-title{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
+  .sv2-av .state .s-body{ font-size:13.5px; margin-top:7px; line-height:1.5; }
+  .sv2-av .loading{ text-align:center; padding:30px; font-weight:700; letter-spacing:1px; color:rgba(20,32,92,0.6); }
+  .sv2-av .loading[hidden]{ display:none; }
+
+  .sv2-av .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:60;
+    max-width:440px; width:calc(100% - 36px); background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px;
+    padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.5);
+    opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
+  .sv2-av .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .sv2-av .toast.err{ background:var(--sk-red-deep); }
+</style>
+
+<div class="sv2-av" id="sv2-av-root">
+  <div class="count" id="av-count"></div>
+  <div class="loading" id="av-loading">Loading availability&hellip;</div>
+
+  <div class="state" id="av-access" hidden>
+    <div class="s-title">No access to this store</div>
+    <div class="s-body">You can only view availability for your own store. Switch to your store to continue.</div>
+  </div>
+  <div class="state" id="av-empty" hidden>
+    <div class="s-title">No availability set yet</div>
+    <div class="s-body">Employees set their availability from their phone; it shows here as they do.</div>
+  </div>
+
+  <div id="av-list"></div>
+  <div class="toast" id="av-toast"></div>
+</div>
+
+<script type="application/json" id="sv2-av-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-av-config").textContent);
+  var elLoading=document.getElementById("av-loading"), elAccess=document.getElementById("av-access"),
+      elEmpty=document.getElementById("av-empty"), elList=document.getElementById("av-list"),
+      elCount=document.getElementById("av-count"), elToast=document.getElementById("av-toast");
+
+  function show(el){ el.hidden=false; } function hide(el){ el.hidden=true; }
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  var DAY_ABBR=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmt12(hhmm){ var p=String(hhmm||"").split(":"); var h=+p[0]||0,m=+p[1]||0; var ap=h>=12?"p":"a"; var hh=h%12; if(hh===0) hh=12; return m?(hh+":"+(m<10?"0"+m:m)+ap):(hh+ap); }
+  function fmtDT(iso){ if(!iso) return ""; var pr=String(iso).split("T"); var d=pr[0].split("-"); if(d.length<3) return esc(iso); var t=(pr[1]||"").slice(0,5); return MON[(+d[1])-1]+" "+(+d[2])+(t?", "+fmt12(t):""); }
+  var toastTimer=null;
+  function toast(msg,isErr){ elToast.textContent=msg; elToast.classList.toggle("err",!!isErr); elToast.classList.add("show"); if(toastTimer) clearTimeout(toastTimer); toastTimer=setTimeout(function(){ elToast.classList.remove("show"); },3400); }
+  function parseJsonOrThrow(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e1=new Error("non-json"); e1.status=(r.status===200?403:r.status); throw e1; } return r.json().then(function(j){ if(!r.ok||(j&&j.ok===false)){ var e2=new Error("bad"); e2.status=r.status; e2.error=(j&&j.error)?j.error:null; throw e2; } return j; }); }
+  function showAccess(){ hide(elLoading); hide(elEmpty); elList.innerHTML=""; elCount.textContent=""; show(elAccess); }
+
+  function empHtml(e){
+    var byDay=[[],[],[],[],[],[],[]];
+    (e.recurring||[]).forEach(function(w){ var d=+w.day_of_week; if(d>=0&&d<=6) byDay[d].push(w); });
+    var p=[];
+    p.push('<div class="emp">');
+    p.push('<div class="emp-name">' + esc(e.employee_name || ("Employee #"+(+e.employee_id))) + '</div>');
+    p.push('<div class="week">');
+    for(var d=0; d<7; d++){
+      var wins=byDay[d].sort(function(a,b){ return String(a.start_time).localeCompare(String(b.start_time)); });
+      p.push('<div class="daycol' + (wins.length?'':' off') + '"><div class="dlabel">' + DAY_ABBR[d] + '</div>');
+      if(!wins.length){ p.push('<div class="offm">off</div>'); }
+      else { wins.forEach(function(w){ p.push('<div class="winm">' + esc(fmt12(w.start_time)) + '-' + esc(fmt12(w.end_time)) + '</div>'); }); }
+      p.push('</div>');
+    }
+    p.push('</div>');
+    var blocks=(e.blocks||[]).slice().sort(function(a,b){ return String(a.start_at).localeCompare(String(b.start_at)); });
+    p.push('<div class="blocks"><div class="blabel">Unavailable</div>');
+    if(!blocks.length){ p.push('<div class="noblk">No one-off blocks.</div>'); }
+    else { blocks.forEach(function(b){ p.push('<div class="blk">' + esc(fmtDT(b.start_at)) + ' &ndash; ' + esc(fmtDT(b.end_at)) + (b.reason?' <span class="rsn">(' + esc(b.reason) + ')</span>':'') + '</div>'); }); }
+    p.push('</div></div>');
+    return p.join("");
+  }
+
+  function render(list){
+    hide(elLoading); hide(elAccess);
+    if(!list || !list.length){ elList.innerHTML=""; elCount.textContent=""; show(elEmpty); return; }
+    hide(elEmpty);
+    list.sort(function(a,b){ return String(a.employee_name||"").localeCompare(String(b.employee_name||"")); });
+    elCount.innerHTML = list.length + (list.length===1?" employee":" employees");
+    elList.innerHTML = list.map(empHtml).join("");
+  }
+
+  function load(){
+    fetch(CFG.listUrl, { credentials:"same-origin", headers:{ "Accept":"application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){ render((j && j.availability) || []); })
+      .catch(function(e){ if(e&&(e.status===401||e.status===403)){ showAccess(); return; } hide(elLoading); show(elEmpty); toast("Could not load availability. Try again.", true); });
+  }
+
+  load();
+})();
+</script>
+{% endblock %}

@@ -38,6 +38,7 @@ from app.web import employee_alarm_prefs  # noqa: F401  B6: attaches GET/POST /e
 from app.web import employee_profile_page  # noqa: F401  B6: attaches GET /employee/profile (alarm-preferences UI) to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import employee_time_off  # noqa: F401  B7: attaches the employee time-off endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import employee_time_off_page  # noqa: F401  B7: attaches GET /employee/time-off (time-off request UI) to the employee_auth blueprint (ck; must import before ezempauth.install)
+from app.web import employee_availability_page  # noqa: F401  B8: attaches GET /employee/availability (availability editor) to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications

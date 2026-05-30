@@ -226,26 +226,6 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "kds.view_alerts", "kds.view_kitchen_display", "kds.edit_recipes",
     },
 
-    "prep_manager": {
-        # multi-store; produce receive (not order)
-        "labor.view_own_wage", "labor.view_own_hours",
-        "labor.view_others_hours",  # direct reports only (decorator-enforced)
-        "labor.view_all_stores",
-        "orders.view", "orders.view_history",
-        "orders.mark_picked_up", "orders.mark_delivered",
-        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
-        "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
-        "produce.invoice_verify",  # receive + verify, no place-order
-        "produce.view_quotes", "produce.view_vendor_list",
-        "produce.upload_invoice",
-        "manager_log.write", "manager_log.read_own_store",
-        "manager_log.read_all_stores",
-        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
-        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
-        "transcripts.search", "transcripts.read",
-        "kds.view_alerts", "kds.view_kitchen_display",
-    },
-
     "foh_manager": {
         "labor.view_own_wage", "labor.view_own_hours",
         "labor.view_others_hours",  # FOH staff only
@@ -318,6 +298,25 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     "bartender": {"ai.ask_claude_personal", "ai.view_transcripts",
                   "transcripts.search", "transcripts.read",
                   "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
+
+    # Schedules V2 / Block 1 (Sam #1742). The employee scheduling identity
+    # (Tier-5). V2 scope tags are forward-declared here; the V2 routes get
+    # gated with them as B2-B10 build each surface.
+    "employee": {"ai.ask_claude_personal", "ai.view_transcripts",
+                 "transcripts.search", "transcripts.read",
+                 "schedule.view_own", "schedule.accept_decline",
+                 "shift.offer", "shift.swap_propose",
+                 "timeoff.request", "availability.set",
+                 "announcement.view", "message.reply"},
+    # In-house corporate driver - a DISTINCT role from the ezCater 'driver'
+    # role (which stays hardcoded/untouched). Same driver scope; managed via
+    # the Permissions admin page.
+    "corporate_driver": {"labor.view_own_wage", "labor.view_own_hours",
+                         "orders.view", "orders.mark_picked_up",
+                         "orders.mark_delivered", "orders.view_payout",
+                         "drivers.bid", "drivers.view_own_history",
+                         "ai.ask_claude_personal", "ai.view_transcripts",
+                         "transcripts.search", "transcripts.read"},
 }
 
 
@@ -408,8 +407,7 @@ def _user_has(user, tag: str, store_id: str | None = None) -> bool:
         return False
     # Store-scope check — only enforced when the caller explicitly
     # passes store_id AND the user has a store_scope restriction.
-    # Multi-store roles (partner / corporate / corporate_chef /
-    # prep_manager / driver) have store_scope = None = all stores.
+    # Multi-store roles (partner / corporate / corporate_chef / driver) have store_scope = None = all stores.
     if store_id is not None:
         scope = (getattr(user, "store_scope", None) or "").strip()
         if scope:

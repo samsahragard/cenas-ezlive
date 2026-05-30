@@ -29,7 +29,7 @@ from app.services.permissions import _LEGACY_ALIASES
 # ---- ROLE_TIER — every role, every tier ----
 # Tiers from the Phase 2 directive's §2C hierarchy line:
 #   partner > corporate > gm > km/asst_km/manager/foh_manager > hourly
-# corporate_chef at tier 4 + prep_manager at tier 3 are the 1A-spec §11 Q3
+# corporate_chef at tier 4 is the 1A-spec §11 Q3
 # provisional placements (defensible defaults; Sam to confirm — precond
 # spec §6 Q2). The five hourly roles (cook/server/busser/host/bartender)
 # are the §5.3 Path A additions; everything else is an existing canonical
@@ -40,9 +40,8 @@ ROLE_TIER: dict[str, int] = {
     # tier 4 — corporate (corporate + the multi-store corporate_chef)
     "corporate":      4,
     "corporate_chef": 4,
-    # tier 3 — gm + the multi-store prep_manager
+    # tier 3 — gm
     "gm":             3,
-    "prep_manager":   3,
     # tier 2 — manager tier
     "km":             2,
     "assistant_km":   2,
@@ -55,6 +54,11 @@ ROLE_TIER: dict[str, int] = {
     "busser":         1,   # NEW
     "host":           1,   # NEW
     "bartender":      1,   # NEW
+    # Schedules V2 (Sam #1742): floor cashier + the employee scheduling
+    # identity + the in-house corporate_driver - bottom working tier.
+    "cashier":        1,
+    "employee":       1,
+    "corporate_driver": 1,
 }
 
 
@@ -71,7 +75,6 @@ _ROLE_DOMAIN: dict[str, str] = {
     "corporate":      "both",
     "gm":             "both",
     "corporate_chef": "kitchen",
-    "prep_manager":   "kitchen",
     "km":             "kitchen",
     "assistant_km":   "kitchen",
     "foh_manager":    "foh",
@@ -82,6 +85,9 @@ _ROLE_DOMAIN: dict[str, str] = {
     "bartender":      "foh",       # NEW
     "expo":           "foh",
     "driver":         "foh",
+    "cashier":        "foh",
+    "employee":       "foh",
+    "corporate_driver": "foh",
 }
 
 
@@ -125,7 +131,7 @@ def role_domain(role: str | None) -> str:
 # they have authority across both stores. Everyone else (gm and below)
 # is store-scoped and may only assign to a target in their store.
 _STORE_UNSCOPED_ROLES = frozenset({
-    "partner", "corporate", "corporate_chef", "prep_manager",
+    "partner", "corporate", "corporate_chef",
 })
 
 # A store_scope value → the set of physical stores it covers. None /
@@ -194,8 +200,7 @@ def can_assign_to(actor, target) -> bool:
             return False
 
     # 5. Store constraint — store-scoped actors (everyone except the
-    #    store-unscoped partner / corporate / corporate_chef /
-    #    prep_manager) may only assign to a target whose store scope
+    #    store-unscoped partner / corporate / corporate_chef) may only assign to a target whose store scope
     #    intersects their own.
     if _resolve(actor_role) not in _STORE_UNSCOPED_ROLES:
         if not _store_scopes_intersect(
@@ -228,7 +233,7 @@ def immediate_manager(user, db):
       - candidate.tier must be strictly > user.tier
       - candidate must be active
       - candidate's authority must cover user's store: a store-unscoped
-        candidate (partner / corporate / corporate_chef / prep_manager)
+        candidate (partner / corporate / corporate_chef)
         covers everyone; a store-scoped candidate's store_scope must
         intersect user's store_scope
       - among the qualifying candidates, the LOWEST tier wins (closest

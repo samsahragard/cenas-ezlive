@@ -30,6 +30,7 @@ from app.web.team_reports import team_reports_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import employee_auth as ezempauth
+from app.web import employee_schedule_page  # noqa: F401  B5: attaches GET /employee/my-schedule to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications

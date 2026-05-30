@@ -191,6 +191,26 @@
   .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
   .sv2-chip-pos { font-size: 11px; color: var(--sk-cream-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sv2-chip-open-tag { font-size: 10px; letter-spacing:.1em; text-transform:uppercase; color: var(--open); font-weight:700; }
+  /* B5 acceptance state on a manager chip (lights up once the board JSON carries `response`). */
+  .sv2-chip.declined { border-left-color: var(--sk-red-bright) !important; background: rgba(232,88,82,.14); box-shadow: inset 0 0 0 1px rgba(232,88,82,.45); }
+  .sv2-chip.declined .sv2-chip-time { color: var(--sk-red-bright); }
+  .sv2-chip.accepted { box-shadow: inset 0 0 0 1px rgba(91,202,197,.4); }
+  .sv2-chip-resp-tag { font-size: 9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:800; margin-top:1px; }
+  .sv2-chip-resp-tag.declined { color: var(--sk-red-bright); }
+  .sv2-chip-resp-tag.accepted { color: var(--sk-teal-bright); font-weight:700; }
+  .sv2-btn.warn { color: var(--sk-red-bright); border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.08); }
+  .sv2-btn.warn:hover { background: rgba(232,88,82,.16); border-color: rgba(232,88,82,.7); }
+  .sv2-btn.warn.toggled { background: rgba(232,88,82,.22); border-color: var(--sk-red-bright); }
+  .sv2-toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(16px);
+    z-index: 60; max-width: 460px; background: #1b0f08; color: var(--sk-cream);
+    border: 1px solid var(--sk-border-active); border-radius: 10px; padding: 11px 18px;
+    font-family: 'Manrope', sans-serif; font-size: 13.5px; font-weight: 600; text-align: center;
+    box-shadow: 0 12px 30px rgba(0,0,0,.6); opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s;
+  }
+  .sv2-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .sv2-toast.err { border-color: rgba(232,88,82,.6); color: var(--sk-red-bright); }
 
   /* ---- states ---- */
   .sv2-state { padding: 40px 20px; text-align: center; color: var(--sk-cream-dim); }
@@ -257,12 +277,14 @@
       <button class="sv2-arrow" id="sv2-next" title="Next week" aria-label="Next week">&rsaquo;</button>
     </div>
     <span class="sv2-pill none" id="sv2-status">No schedule</span>
+    <button class="sv2-btn warn sv2-hidden" id="sv2-declined" title="Show only declined shifts that need reassigning" aria-pressed="false"></button>
     <div class="sv2-spacer"></div>
     <select class="sv2-filter" id="sv2-posfilter" aria-label="Filter by position">
       <option value="">All positions</option>
     </select>
     <button class="sv2-btn" id="sv2-today">This week</button>
     <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
+    <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
   </div>
 
   <!-- grid / states -->
@@ -270,7 +292,7 @@
 
   <div id="sv2-nodraft" class="sv2-state sv2-hidden">
     <h3>No draft for this week</h3>
-    <p>Create a draft schedule to start adding shifts. Drafts stay private to managers until you publish (B5).</p>
+    <p>Create a draft schedule to start adding shifts. Drafts stay private to managers until you publish.</p>
     <button class="sv2-btn primary" id="sv2-createdraft2">+ Create draft schedule</button>
   </div>
 
@@ -340,6 +362,8 @@
     </div>
   </div>
 
+  <div class="sv2-toast" id="sv2-toast" role="status" aria-live="polite"></div>
+
 </div>
 {% endblock %}
 
@@ -348,7 +372,8 @@
 (function () {
   "use strict";
   var CFG = JSON.parse(document.getElementById("sv2-config").textContent);
-  // CFG: { storeLabel, boardUrl, scheduleNewUrl, shiftNewUrl, shiftUrlBase }
+  // CFG: { storeLabel, boardUrl, scheduleNewUrl, scheduleUrlBase, shiftNewUrl, shiftUrlBase }
+  // B5 publish URL = CFG.scheduleUrlBase + "/" + <schedule_id> + "/publish"
 
   var DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -361,6 +386,7 @@
     cellEmp: null,        // employee_id (or null=open) for a new shift
     cellDate: null,       // ISO date string for a new shift
     selTags: {},          // tag_id -> true while modal open
+    declinedOnly: false,  // B5: manager filter to isolate declined shifts for reassignment
     busy: false
   };
 
@@ -391,7 +417,8 @@
       elLoading = $("sv2-loading"), elGrid = $("sv2-gridwrap"),
       elNoDraft = $("sv2-nodraft"), elAccess = $("sv2-access"),
       elStatus = $("sv2-status"), elWeekLabel = $("sv2-weeklabel"),
-      elPosFilter = $("sv2-posfilter"), elCreate = $("sv2-createdraft");
+      elPosFilter = $("sv2-posfilter"), elCreate = $("sv2-createdraft"),
+      elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast");
 
   // ---- weekly board load ----
   function show(el) { el.classList.remove("sv2-hidden"); }
@@ -402,6 +429,48 @@
     elStatus.className = "sv2-pill " + (sch ? sch.status : "none");
     elStatus.textContent = sch ? (sch.status === "published" ? "Published" : "Draft") : "No schedule";
     if (sch) hide(elCreate); else show(elCreate);
+    // Publish button: only with a schedule. Draft -> primary "Publish"; already
+    // published -> a quieter "Re-publish" so post-edit changes can go out again.
+    if (!sch) {
+      hide(elPublish);
+    } else {
+      show(elPublish);
+      var pub = (sch.status === "published");
+      elPublish.textContent = pub ? "Re-publish" : "Publish";
+      elPublish.classList.toggle("primary", !pub);
+      elPublish.disabled = false;
+    }
+    updateDeclinedToggle();
+  }
+
+  // B5: count + surface DECLINED shifts so a manager can reassign them. Stays
+  // hidden (and the filter resets) until aick's board JSON carries `response`.
+  function countDeclined() {
+    var sh = (state.board && state.board.shifts) || [], n = 0;
+    for (var i = 0; i < sh.length; i++) if ((sh[i].response || "") === "declined") n++;
+    return n;
+  }
+  function updateDeclinedToggle() {
+    var n = countDeclined();
+    if (!n) {
+      state.declinedOnly = false;
+      elDeclined.classList.remove("toggled");
+      elDeclined.setAttribute("aria-pressed", "false");
+      hide(elDeclined);
+      return;
+    }
+    show(elDeclined);
+    elDeclined.textContent = "\u26A0 " + n + " declined";
+    elDeclined.classList.toggle("toggled", state.declinedOnly);
+    elDeclined.setAttribute("aria-pressed", state.declinedOnly ? "true" : "false");
+  }
+
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    elToast.textContent = msg;
+    elToast.className = "sv2-toast show" + (isErr ? " err" : "");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { elToast.className = "sv2-toast" + (isErr ? " err" : ""); }, 3400);
   }
 
   function renderWeekLabel() {
@@ -499,6 +568,7 @@
       var matchEmp = empId === null ? (s.employee_id == null) : (String(s.employee_id) === String(empId));
       if (!matchEmp) continue;
       if (state.posFilter && String(s.position_id) !== String(state.posFilter)) continue;
+      if (state.declinedOnly && String(s.response || "") !== "declined") continue;
       var sd = parseISO(s.start_at);
       if (!sd) continue;
       if (isoDate(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate())) === isoDay) out.push(s);
@@ -512,12 +582,19 @@
     var t = (sd ? fmtTime(sd) : "?") + "-" + (ed ? fmtTime(ed) : "?");
     var p = posById(s.position_id);
     var open = (s.employee_id == null);
-    var cls = "sv2-chip" + (open ? " open" : "");
+    // B5: only ASSIGNED shifts carry an acceptance response (pending|accepted|declined);
+    // `response` is absent until aick's board JSON includes it, so this is a no-op until then.
+    var resp = open ? "" : String(s.response || "").toLowerCase();
+    var cls = "sv2-chip" + (open ? " open" : "") +
+              (resp === "declined" ? " declined" : (resp === "accepted" ? " accepted" : ""));
     var style = open ? "" : ' style="border-left-color:' + posColor(s.position_id) + '"';
     var posLine = open ? '<div class="sv2-chip-open-tag">Open</div>'
                        : '<div class="sv2-chip-pos">' + (p ? esc(p.name) : "&mdash;") + '</div>';
+    var respTag = resp === "declined" ? '<div class="sv2-chip-resp-tag declined">Declined</div>'
+                : resp === "accepted" ? '<div class="sv2-chip-resp-tag accepted">&#10003; Accepted</div>'
+                : "";
     return '<div class="' + cls + '" data-shift="' + s.id + '"' + style + '>' +
-             '<div class="sv2-chip-time">' + t + '</div>' + posLine + '</div>';
+             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + '</div>';
   }
 
   function renderGrid() {
@@ -719,6 +796,33 @@
     });
   }
 
+  // B5: POST <scheduleUrlBase>/<id>/publish (aick). Draft -> published makes the
+  // week visible to employees (who then accept/decline). Confirm first; the
+  // status flip + any re-publish notify/alarm side effects are aick's endpoint.
+  function doPublish() {
+    if (state.busy) return;
+    var sch = state.board && state.board.schedule;
+    if (!sch) return;
+    var pub = (sch.status === "published");
+    var msg = pub
+      ? "Re-publish this week's schedule? Employees will see the latest version of their shifts."
+      : "Publish this week's schedule? Employees will be able to see and accept or decline their shifts.";
+    if (!window.confirm(msg)) return;
+    state.busy = true;
+    elPublish.disabled = true;
+    fetch(CFG.scheduleUrlBase + "/" + sch.id + "/publish", {
+      method: "POST", headers: jsonHeaders(), credentials: "same-origin", body: "{}"
+    }).then(parseJsonOrThrow).then(function (j) {
+      state.busy = false;
+      if (j && j.status) sch.status = j.status;
+      toast(pub ? "Schedule re-published." : "Schedule published \u2014 employees can now respond.");
+      loadBoard();
+    }).catch(function (e) {
+      state.busy = false; elPublish.disabled = false;
+      toast((e && e.error) ? e.error : "Could not publish the schedule. Try again.", true);
+    });
+  }
+
   // ---- fetch helpers ----
   function jsonHeaders() { return { "Content-Type": "application/json", "Accept": "application/json" }; }
   function toNum(v) { var n = +v; return isNaN(n) ? v : n; }
@@ -736,6 +840,12 @@
   elPosFilter.onchange = function () { state.posFilter = elPosFilter.value; if (state.board) renderGrid(); };
   $("sv2-createdraft").onclick = createDraft;
   $("sv2-createdraft2").onclick = createDraft;
+  elPublish.onclick = doPublish;
+  elDeclined.onclick = function () {
+    state.declinedOnly = !state.declinedOnly;
+    updateDeclinedToggle();
+    if (state.board) renderGrid();
+  };
   $("sv2-m-cancel").onclick = closeModal;
   $("sv2-m-save").onclick = saveShift;
   $("sv2-m-delete").onclick = deleteShift;

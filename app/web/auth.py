@@ -38,6 +38,7 @@ EXEMPT_PREFIXES = (
     "/keypad-logout",
     "/employee/login",           # Schedules V2 B2: employee SMS-login flow (request-code/verify-code) — fresh employees have no session yet
     "/employee/dashboard",       # Schedules V2 B2: the employee dashboard route checks session["employee_id"] itself and 302s to /employee/login when absent (not the staff keypad); a logged-in employee passes via auth_ok anyway
+    "/employee/my-schedule",     # Schedules V2 B5: same as dashboard — the my_schedule_page route self-guards on session["employee_id"] and 302s to /employee/login (not the keypad). Prefix also covers aick's /employee/my-schedule/shifts data endpoint, which has its OWN employee_id guard (401/403); employee isolation is enforced there, not by this site gate, so the exemption only swaps the unauth response from a keypad redirect to a JSON 401
     "/change-passcode",          # post-keypad-login, before main app
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
     "/driver/app.apk",           # public APK download redirect — drivers need this BEFORE having an account

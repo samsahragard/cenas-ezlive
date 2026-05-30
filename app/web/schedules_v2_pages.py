@@ -46,6 +46,7 @@ def sv2_week_page():
         "storeLabel": g.store_label,
         "boardUrl": f"{base}/board",
         "scheduleNewUrl": f"{base}/schedule/new",
+        "scheduleUrlBase": f"{base}/schedule",   # B5: <base>/schedule/<id>/publish (aick's publish endpoint)
         "shiftNewUrl": f"{base}/shifts/new",
         "shiftUrlBase": f"{base}/shifts",
     }

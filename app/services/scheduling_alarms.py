@@ -4,31 +4,28 @@ Two halves:
 
   create_for_schedule(schedule_id)  - called by the B5 publish endpoint right
       after a schedule flips to "published" (wrapped there so it can never fail
-      publish). It (re)computes the PENDING shift_alarms rows for the schedule:
-      one per ASSIGNED shift x the employee's enabled channels x their alarm
-      offsets (minutes_before [+ second_minutes_before]). It is a DELETE-then-
-      INSERT recompute, NOT an append: it first drops the schedule's PENDING
-      (unsent) alarms, then re-inserts from the current shift times. That makes
-      re-publish idempotent AND correct after an edit - if a manager moves a
-      shift's start_at and re-publishes, the old pending alarm (old time) is
-      dropped instead of surviving to fire spuriously (aick's B6 catch). Rows
-      already 'sent'/'failed' are kept as history. Open (unassigned) shifts and
-      already-started shifts get no alarm. Fast: pure inserts, publish stays <2s.
+      publish). DELETE-then-reinsert recompute of the PENDING shift_alarms (one
+      per ASSIGNED shift x channel x offset); keeps sent/failed as history;
+      pre-seeds the dedup set with surviving sent/failed rows so a re-publish-
+      after-send can't collide on the UNIQUE (B6 finding #1). Fast: pure inserts.
 
-  process_due_alarms(limit)  - called every minute by the CRON_TOKEN-gated
-      endpoint (app/web/scheduling_cron.py). Sends every pending alarm whose
-      alarm_time has arrived, marking each 'sent' (+sent_at) or 'failed'
-      (+error_message). No infinite retry: a failed alarm stays failed.
+  process_due_alarms(limit)  - the per-minute CRON_TOKEN-gated send worker. Sends
+      every pending alarm whose alarm_time has arrived, marking each sent/failed.
+      CONCURRENCY-SAFE: each alarm is claimed by a compare-and-swap on its status,
+      so the Render cron + the in-process ticker can never double-send one. No
+      infinite retry: a failed alarm stays failed.
 
-SMS is a mock-log STUB until Sam confirms Twilio creds; email is a mock-log STUB
-too (secondary channel, default-off). Both _send_* log and return; swap in the
-real Twilio / brief_email SMTP send when each is green-lit. The send is the only
-thing stubbed - the full pending->due->send->mark pipeline is real and testable.
+SMS send is CREDS-GATED Twilio - a real SMS when TWILIO_ACCOUNT_SID/AUTH_TOKEN/
+FROM_NUMBER are set on the web service, otherwise a mock-log stub (the safe
+default until Sam provisions Twilio; secret VALUES live only in the env, never in
+code or chat). Email stays a mock-log stub (secondary channel, default-off).
+Reminder times render in store-local time (America/Chicago), not UTC.
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 
 from app.db import SessionLocal
 from app.models import (
@@ -40,6 +37,15 @@ from app.models import (
 )
 
 log = logging.getLogger(__name__)
+
+# Reminder text renders in store-local time (Cenas = Houston / US Central): naive
+# UTC start_at -> America/Chicago. Falls back to UTC if tzdata is unavailable
+# (e.g. a bare Windows test box without the tzdata package).
+try:
+    from zoneinfo import ZoneInfo
+    _STORE_TZ = ZoneInfo("America/Chicago")
+except Exception:  # pragma: no cover
+    _STORE_TZ = None
 
 # Defaults when an employee has no employee_alarm_preferences row.
 _DEFAULT_SMS = True
@@ -107,14 +113,8 @@ def create_for_schedule(schedule_id) -> None:
         now = datetime.utcnow()
         seen = set()  # (shift_id, emp_id, alarm_time, channel) guard within this pass
         # Pre-seed `seen` with the alarms that SURVIVED the delete (only sent/failed
-        # remain - the delete removed pending). This (a) avoids a UNIQUE collision on a
-        # re-publish-AFTER-send (the surviving sent row would collide with a reinsert at
-        # the same key -> IntegrityError that the publish-wrapper swallows, silently
-        # rolling back the WHOLE recompute), and (b) never recreates an already-sent
-        # alarm as fresh pending (its alarm_time is now past -> the next cron would
-        # double-remind). Still-pending alarms were deleted above so they recompute
-        # normally; an edited start_at yields a NEW key not in `seen` -> inserts cleanly
-        # while the sent row is kept as history.
+        # remain). Avoids a UNIQUE collision on a re-publish-AFTER-send + never
+        # recreates an already-sent alarm as fresh pending (B6 finding #1).
         for ex in (db.query(ShiftAlarm)
                      .filter(ShiftAlarm.shift_id.in_(shift_ids),
                              ShiftAlarm.status != "pending").all()):
@@ -152,22 +152,76 @@ def create_for_schedule(schedule_id) -> None:
 # Send worker (per-minute cron)
 # --------------------------------------------------------------------------
 def _build_message(emp, sh) -> str:
-    """The reminder text. Portable strftime (no %-codes - this runs on Windows
-    in tests + Linux in prod)."""
+    """The reminder text. start_at is naive UTC -> render in store-local time
+    (America/Chicago) so the employee sees their actual shift time, not UTC.
+    Portable strftime (no %-codes); UTC fallback if tzdata is absent."""
     first = ((emp.full_name or "").split(" ")[0] or "there") if emp else "there"
-    when = sh.start_at.strftime("%a %b %d, %I:%M %p") if sh and sh.start_at else "soon"
+    if sh and sh.start_at:
+        if _STORE_TZ is not None:
+            local = sh.start_at.replace(tzinfo=timezone.utc).astimezone(_STORE_TZ)
+            when = local.strftime("%a %b %d, %I:%M %p")
+        else:
+            when = sh.start_at.strftime("%a %b %d, %I:%M %p") + " UTC"
+    else:
+        when = "soon"
     return (f"Hi {first}, reminder: you have a Cenas shift starting {when}. "
             f"See your schedule in the app.")
 
 
+def _to_e164(phone) -> str:
+    """A US 10/11-digit number -> +1XXXXXXXXXX (Twilio needs E.164)."""
+    s = str(phone).strip()
+    if s.startswith("+"):
+        return s
+    return "+1" + "".join(c for c in s if c.isdigit())[-10:]
+
+
 def _send_sms(to_phone, body) -> None:
-    """STUB: Twilio is Sam-gated. Until creds are confirmed this only logs (a
-    mock send). When creds land, send via Twilio here (env TWILIO_*). Raising
-    surfaces as a 'failed' alarm with the reason - so a missing phone is a real
-    failure, not a silent skip."""
+    """CREDS-GATED Twilio send. With TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER all
+    set in the env, send a real SMS; otherwise log a mock-stub (the safe default
+    until Sam provisions Twilio - secret VALUES live only in the web-service env,
+    never in code or chat). Raising surfaces as a 'failed' alarm with the reason
+    (a missing phone is a real failure, not a silent skip)."""
     if not to_phone:
         raise ValueError("no phone on file")
-    log.info("[shift-alarm][SMS-STUB] to=%s :: %s", to_phone, body)
+    sid = os.getenv("TWILIO_ACCOUNT_SID")
+    token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_num = os.getenv("TWILIO_FROM_NUMBER")
+    msid = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # prod-friendly alt to a From number
+    if not (sid and token and (from_num or msid)):
+        log.info("[shift-alarm][SMS-STUB] to=%s :: %s", to_phone, body)
+        return
+    _twilio_send(sid, token, from_num, msid, to_phone, body)
+
+
+def _twilio_send(sid, token, from_num, msid, to_phone, body) -> None:
+    """Raw HTTPS POST to the Twilio Messages API (no extra dependency). Uses a
+    Messaging Service SID if set (prod-friendly: pooled numbers, compliance), else
+    a From number. Raises on a non-2xx so the caller marks the alarm 'failed'."""
+    import base64
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    params = {"To": _to_e164(to_phone), "Body": body}
+    if msid:
+        params["MessagingServiceSid"] = msid
+    else:
+        params["From"] = from_num
+    url = "https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json" % sid
+    data = urllib.parse.urlencode(params).encode()
+    auth = base64.b64encode(("%s:%s" % (sid, token)).encode()).decode()
+    req = urllib.request.Request(
+        url, data=data,
+        headers={"Authorization": "Basic " + auth,
+                 "User-Agent": "cenas-shift-alarms/1"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            if r.status >= 300:
+                raise RuntimeError("twilio HTTP %s" % r.status)
+    except urllib.error.HTTPError as e:  # surface Twilio's error body (truncated)
+        detail = e.read()[:200].decode("utf-8", "replace") if hasattr(e, "read") else ""
+        raise RuntimeError("twilio HTTP %s: %s" % (e.code, detail))
 
 
 def _send_email(to_email, subject, body) -> None:
@@ -192,9 +246,15 @@ def _dispatch(alarm, emp, sh) -> None:
 
 def process_due_alarms(limit: int = 500) -> dict:
     """Send every pending alarm whose alarm_time has arrived (alarm_time <= now),
-    oldest first, up to `limit`. Marks each 'sent' (+sent_at) or 'failed'
-    (+error_message). Commits per-alarm so a mid-batch error never loses prior
-    sends. Returns {processed, sent, failed} for the cron response."""
+    oldest first, up to `limit`. Returns {processed, sent, failed}.
+
+    CONCURRENCY-SAFE claim: each alarm is grabbed by a compare-and-swap UPDATE
+    (status pending -> sent) guarded on status='pending'; only ONE runner wins a
+    row, so the Render cron + the in-process ticker can't both send it. We mark
+    'sent' optimistically as the claim, then send; if the send throws we correct
+    the row to 'failed'. A crash between claim and send => a MISSED reminder
+    (under-send), the safe failure mode vs a duplicate text. No infinite retry:
+    once 'sent'/'failed' a row is never re-selected."""
     db = SessionLocal()
     processed = sent = failed = 0
     try:
@@ -206,6 +266,13 @@ def process_due_alarms(limit: int = 500) -> dict:
                  .limit(limit)
                  .all())
         for al in due:
+            won = (db.query(ShiftAlarm)
+                     .filter(ShiftAlarm.id == al.id, ShiftAlarm.status == "pending")
+                     .update({"status": "sent", "sent_at": datetime.utcnow(),
+                              "error_message": None}, synchronize_session=False))
+            db.commit()
+            if not won:
+                continue  # another runner already claimed this alarm
             processed += 1
             try:
                 sh = db.query(Shift).filter_by(id=al.shift_id).first()
@@ -213,15 +280,14 @@ def process_due_alarms(limit: int = 500) -> dict:
                 if sh is None or emp is None:
                     raise ValueError("shift or employee no longer exists")
                 _dispatch(al, emp, sh)
-                al.status = "sent"
-                al.sent_at = datetime.utcnow()
-                al.error_message = None
                 sent += 1
             except Exception as e:  # noqa: BLE001 - a bad alarm must not stall the batch
-                al.status = "failed"
-                al.error_message = (str(e) or e.__class__.__name__)[:500]
+                (db.query(ShiftAlarm).filter_by(id=al.id)
+                   .update({"status": "failed", "sent_at": None,
+                            "error_message": (str(e) or e.__class__.__name__)[:500]},
+                           synchronize_session=False))
+                db.commit()
                 failed += 1
-            db.commit()
         if processed:
             log.info("[shift-alarm] cron processed=%d sent=%d failed=%d",
                      processed, sent, failed)

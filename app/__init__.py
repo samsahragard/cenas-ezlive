@@ -16,6 +16,7 @@ from app.web.store_routes import store_bp
 from app.web import schedules_v2  # noqa: F401  B4: attaches schedule/shift routes to store_bp (must precede register_blueprint)
 from app.web import schedules_v2_pages  # noqa: F401  B4: attaches the manager week-view PAGE route to store_bp (ck; must precede register_blueprint)
 from app.web import schedules_v2_timeoff  # noqa: F401  B7: attaches the manager time-off review routes to store_bp (ckai; must precede register_blueprint)
+from app.web import schedules_v2_availability  # noqa: F401  B8: attaches the manager availability view to store_bp (ckai; must precede register_blueprint)
 from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web.interview import interview as interview_bp
 from app.web.corporate_order import corp_order as corp_order_bp
@@ -38,6 +39,7 @@ from app.web import employee_alarm_prefs  # noqa: F401  B6: attaches GET/POST /e
 from app.web import employee_profile_page  # noqa: F401  B6: attaches GET /employee/profile (alarm-preferences UI) to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import employee_time_off  # noqa: F401  B7: attaches the employee time-off endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import employee_time_off_page  # noqa: F401  B7: attaches GET /employee/time-off (time-off request UI) to the employee_auth blueprint (ck; must import before ezempauth.install)
+from app.web import employee_availability  # noqa: F401  B8: attaches the employee availability endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications

@@ -3314,3 +3314,46 @@ class TimeOffRequest(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class EmployeeAvailability(Base):
+    """Schedules V2 B8: an employee's recurring weekly AVAILABLE window (they
+    declare when they CAN work). One employee has many (per weekday + window).
+    Times are minutes-since-midnight (0..1439) - portable + a trivial int compare
+    in warning(); the API exchanges 'HH:MM'. day_of_week 0=Mon..6=Sun. Distinct
+    from B7 time_off_requests (approval-gated, HARD block) - availability is
+    informational + drives only a SOFT warning."""
+
+    __tablename__ = "employee_availability"
+    __table_args__ = (
+        Index("ix_avail_emp_dow", "employee_id", "day_of_week"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)    # 0=Mon .. 6=Sun
+    start_minute: Mapped[int] = mapped_column(Integer, nullable=False)   # minutes since midnight
+    end_minute: Mapped[int] = mapped_column(Integer, nullable=False)     # > start_minute
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EmployeeUnavailabilityBlock(Base):
+    """Schedules V2 B8: a date-specific span the employee CANNOT work (a one-off
+    exception, distinct from recurring availability + from B7 time-off). warning()
+    flags a shift whose start falls inside a block."""
+
+    __tablename__ = "employee_unavailability_blocks"
+    __table_args__ = (
+        Index("ix_unavail_emp_start", "employee_id", "start_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)   # > start_at
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

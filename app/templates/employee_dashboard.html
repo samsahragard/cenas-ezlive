@@ -1,0 +1,196 @@
+{# Employee dashboard (Schedules V2, B2) - SKELETON. Landing page after a
+   logged-in employee signs in via /employee/login. For B2 it shows the
+   employee name + a logout, plus placeholder tiles for the surfaces that
+   later blocks fill in (schedule B5, time-off B7, availability B8,
+   marketplace B9, announcements + messages B10). Tiles are marked
+   "Coming soon" until their block ships - they do NOT link anywhere yet.
+
+   ck owns this template + the GET /employee/dashboard route.
+   aick owns POST {{ logout_url }} (clears the session).
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Dashboard &mdash; Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:        #15205c;
+    --blue-bright: #1d2a70;
+    --blue-deep:   #0a1340;
+    --red:         #c8302a;
+    --red-bright:  #e54a3f;
+    --red-deep:    #8a1d18;
+    --cream:       #f4e7d0;
+    --cream-soft:  #ebd9bc;
+    --ink:         #14205c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh; background:#0a0604;
+    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+    position:relative; color: var(--ink);
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter: blur(6px) brightness(0.55) saturate(1.05);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
+  }
+  .wrap{
+    position:relative; z-index:1;
+    max-width:520px; margin:0 auto; padding:20px 18px 36px;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+
+  /* Top bar: logo + logout */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:18px;
+  }
+  .topbar img{
+    width:auto; height:34px;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+  }
+  .logout-btn{
+    background: rgba(244,231,208,0.12);
+    color: var(--cream);
+    border:1px solid rgba(244,231,208,0.30);
+    border-radius:10px; padding:8px 14px;
+    font-size:13px; font-weight:600; letter-spacing:0.4px;
+    cursor:pointer; transition: background 120ms ease;
+  }
+  .logout-btn:hover{ background: rgba(244,231,208,0.22); }
+
+  /* Greeting card */
+  .greeting{
+    background:
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 45%, var(--cream-soft) 100%);
+    border-radius:16px; padding:18px 20px; margin-bottom:18px;
+    box-shadow:
+      0 0 0 2px var(--blue-bright),
+      0 2px 0 2px var(--blue-deep),
+      0 0 0 5px var(--red),
+      0 10px 22px rgba(0,0,0,0.5);
+  }
+  .greeting .hi{
+    font-size:13px; font-weight:700; letter-spacing:3px;
+    text-transform:uppercase; color: var(--red);
+  }
+  .greeting .name{
+    font-size:26px; font-weight:800; color: var(--blue-deep); line-height:1.15;
+    margin-top:2px;
+  }
+  .greeting .meta{
+    font-size:13px; color: rgba(20,32,92,0.7); margin-top:6px;
+  }
+
+  /* Feature tiles */
+  .section-label{
+    font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color: rgba(244,231,208,0.7); margin:4px 2px 12px;
+  }
+  .tiles{
+    display:grid; grid-template-columns: repeat(2, 1fr); gap:14px;
+  }
+  .tile{
+    position:relative; background: rgba(244,231,208,0.96);
+    border-radius:14px; padding:16px 14px 18px;
+    box-shadow: 0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4);
+    display:flex; flex-direction:column; gap:10px; min-height:108px;
+  }
+  .tile.soon{ opacity:0.62; }
+  .tile .icon{
+    width:34px; height:34px; fill:none; stroke: var(--red);
+    stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
+  }
+  .tile .t-title{ font-size:15px; font-weight:700; color: var(--blue-deep); }
+  .tile .t-badge{
+    position:absolute; top:10px; right:10px;
+    font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+    color: var(--red-deep); background: rgba(200,48,42,0.14);
+    border:1px solid rgba(200,48,42,0.30); border-radius:999px; padding:2px 8px;
+  }
+
+  .footnote{
+    margin-top:auto; padding-top:22px; text-align:center;
+    font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <button class="logout-btn" id="logout-btn">Log out</button>
+  </div>
+
+  <div class="greeting">
+    <div class="hi">Welcome</div>
+    <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'Team Member')) }}</div>
+    {% if employee and employee.store_name %}<div class="meta">{{ employee.store_name }}</div>{% endif %}
+  </div>
+
+  <div class="section-label">My tools</div>
+  <div class="tiles">
+
+    <div class="tile soon">
+      <span class="t-badge">Soon</span>
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+      <div class="t-title">My Schedule</div>
+    </div>
+
+    <div class="tile soon">
+      <span class="t-badge">Soon</span>
+      <svg class="icon" viewBox="0 0 24 24"><path d="M5 21 V8 a2 2 0 0 1 2 -2 h10 a2 2 0 0 1 2 2 v13"/><path d="M9 13 l2 2 l4 -4"/></svg>
+      <div class="t-title">Time Off</div>
+    </div>
+
+    <div class="tile soon">
+      <span class="t-badge">Soon</span>
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
+      <div class="t-title">Availability</div>
+    </div>
+
+    <div class="tile soon">
+      <span class="t-badge">Soon</span>
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 7 h18 l-2 12 H5 Z"/><path d="M8 7 a4 4 0 0 1 8 0"/></svg>
+      <div class="t-title">Shift Marketplace</div>
+    </div>
+
+    <div class="tile soon">
+      <span class="t-badge">Soon</span>
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 11 l18 -7 v16 Z"/><line x1="3" y1="11" x2="3" y2="17"/></svg>
+      <div class="t-title">Announcements</div>
+    </div>
+
+    <div class="tile soon">
+      <span class="t-badge">Soon</span>
+      <svg class="icon" viewBox="0 0 24 24"><path d="M21 15 a2 2 0 0 1 -2 2 H7 l-4 4 V5 a2 2 0 0 1 2 -2 h14 a2 2 0 0 1 2 2 Z"/></svg>
+      <div class="t-title">Messages</div>
+    </div>
+
+  </div>
+
+  <div class="footnote">Schedules V2 &middot; more tools arriving block by block</div>
+</div>
+
+<script>
+  const LOGOUT_URL = {{ (logout_url|default('/employee/logout'))|tojson }};
+  const LOGIN_URL  = {{ (login_url|default('/employee/login'))|tojson }};
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    try{
+      await fetch(LOGOUT_URL, { method:'POST', credentials:'same-origin' });
+    } catch(_){}
+    // Clear the remembered phone too, then back to login.
+    window.location.replace(LOGIN_URL + '?_clear=1');
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,549 @@
+{# Employee two-step login (Schedules V2, B2). Screen 1 = phone-number
+   entry (same numeric pad as the driver login). Screen 2 = the SMS code
+   the server texts to that phone. The code pad is ALL-NUMERIC (no symbol
+   keys) - SMS codes are digits, and a symbol pad would be untypable
+   (same lesson as the #1741 set-passcode fix). The typed code shows as
+   visible digits, not masked dots.
+
+   ck owns this template + the GET /employee/login page route. aick owns
+   the POST endpoints this page calls:
+     POST {{ request_code_url }}  body {phone}        -> sends SMS
+     POST {{ verify_code_url }}   body {phone, code}  -> session + {ok,next}
+   Field/response shapes assumed below; confirm in B2 cross-review.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Employee Sign In &mdash; Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:           #15205c;
+    --blue-bright:    #1d2a70;
+    --blue-deep:      #0a1340;
+    --red:            #c8302a;
+    --red-bright:     #e54a3f;
+    --red-deep:       #8a1d18;
+    --red-shadow:     #3d0a08;
+    --cream:          #f4e7d0;
+    --cream-soft:     #ebd9bc;
+    --num-color:      #f4e7d0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh;
+    background: #0a0604;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    padding:24px; position:relative;
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter: blur(5px) brightness(0.82) saturate(1.10);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.10), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.08), transparent 50%),
+      linear-gradient(180deg, rgba(10,6,4,0.20) 0%, rgba(10,6,4,0.30) 100%);
+  }
+  .wrap{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; }
+
+  /* Header capsule */
+  .header-cap{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    margin: 22px 22px 22px; padding: 10px 36px; border-radius:14px;
+    background-image:
+      radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 32% 68%, rgba(138,29,24,0.35) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 86% 80%, rgba(138,29,24,0.3) 0.7px, transparent 1.5px),
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 40%, var(--cream-soft) 100%);
+    background-size: 20px 20px, 26px 26px, 17px 17px, 30px 30px, 100% 100%;
+    background-position: 2px 1px, 7px 9px, 13px 4px, 4px 15px, 0 0;
+    box-shadow:
+      inset 0 2px 1px rgba(255,255,255,0.9),
+      inset 0 -3px 6px rgba(150,110,70,0.3),
+      0 0 0 2px var(--cream),
+      0 0 0 2.5px rgba(255,255,255,0.7),
+      0 0 0 7.5px var(--blue-bright),
+      0 2px 0 7.5px var(--blue-deep),
+      0 0 0 10.5px var(--red),
+      0 3px 0 10.5px var(--red-shadow),
+      0 14px 28px rgba(0,0,0,0.65),
+      0 6px 12px rgba(0,0,0,0.5);
+  }
+  .header-label{
+    color: var(--red); font-size:14px; font-weight:800; letter-spacing:4px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
+    text-transform: uppercase;
+  }
+  .header-sub{
+    color: var(--blue-deep); font-size:12px; font-weight:600; letter-spacing:0.5px;
+    opacity:0.75; margin-top:-2px;
+  }
+
+  /* Phone display strip - formatted (XXX) XXX-XXXX */
+  .phone-strip{
+    display:flex; gap:8px; align-items:center; justify-content:center;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 22px; font-weight: 600;
+    color: var(--blue-deep);
+    letter-spacing: 1.5px;
+    min-height: 28px;
+  }
+  .phone-strip .ph-sep { color: rgba(20,32,92,0.4); margin: 0 2px; }
+  .phone-strip .ph-empty { color: rgba(20,32,92,0.25); }
+  .phone-strip.error{ animation: shake 0.4s ease; }
+
+  /* Code display strip - visible digits (not masked), matches the
+     set-passcode page pin-strip recipe. */
+  .pin-strip{
+    display:flex; gap:14px; align-items:center; justify-content:center;
+    font-size:30px; font-weight:700; letter-spacing:1px;
+    color: var(--blue-deep); min-height:28px;
+  }
+  .pin-strip .pin-digit{ min-width:18px; text-align:center; }
+  .pin-strip .ph-empty{ color: rgba(20,32,92,0.25); }
+  .pin-strip.error{ animation: shake 0.4s ease; }
+
+  @keyframes shake{
+    0%, 100%{ transform: translateX(0); }
+    20%, 60%{ transform: translateX(-6px); }
+    40%, 80%{ transform: translateX(6px); }
+  }
+
+  /* The two screens - only one visible at a time. */
+  .screen{ display:none; flex-direction:column; align-items:center; }
+  .screen.active{ display:flex; }
+
+  /* Subtle links (back-to-phone, resend) */
+  .link-row{
+    margin-top: 14px; display:flex; flex-direction:column; align-items:center; gap:8px;
+    color: rgba(244,231,208,0.55); font-size: 13px;
+  }
+  .link-row a{
+    color: rgba(244,231,208,0.78); text-decoration: underline;
+    cursor:pointer; padding: 4px 8px;
+  }
+  .link-row a:hover{ color: var(--cream); }
+  .link-row a.disabled{ opacity:0.4; pointer-events:none; text-decoration:none; }
+
+  .brand-logo{
+    display:block; width:100%; max-width:460px; height:auto;
+    margin: 9px auto 0;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+
+  /* Numeric keypad - 3-column, all-numeric (1-9 / BACK,0,ENTER). */
+  .pad{
+    --gap:14px; --key:78px;
+    display:grid; grid-template-columns: repeat(3, var(--key)); grid-auto-rows: var(--key);
+    gap: var(--gap); padding: 0; background: transparent; border-radius: 0;
+    box-shadow: none; position:relative; margin:22px;
+  }
+  .key{
+    position:relative; border-radius:14px;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(244,231,208,0.55) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 78% 32%, rgba(244,231,208,0.4) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 35% 65%, rgba(244,231,208,0.5) 0.5px, transparent 1.2px),
+      radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 40%, var(--red-deep) 100%);
+    background-size: 22px 22px, 28px 28px, 18px 18px, 100% 100%;
+    background-position: 0 0, 5px 8px, 12px 3px, 0 0;
+    border: 3px solid var(--blue-bright);
+    box-shadow:
+      inset 0 2px 1px rgba(255,210,200,0.55),
+      inset 2px 3px 6px rgba(255,180,160,0.15),
+      inset 0 -4px 8px rgba(40,5,3,0.7),
+      inset -3px -2px 5px rgba(40,5,3,0.55),
+      0 0 0 0.5px rgba(120,150,230,0.6),
+      0 0 6px rgba(90,108,200,0.35),
+      0 6px 10px rgba(0,0,0,0.6),
+      0 2px 3px rgba(0,0,0,0.7);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  .key:hover{ filter: brightness(1.08); }
+  .key:active, .key.pressed{
+    transform: translateY(2px) scale(0.985);
+    box-shadow:
+      inset 0 3px 6px rgba(40,5,3,0.85),
+      inset 0 -1px 0 rgba(255,200,180,0.15),
+      inset 2px 2px 4px rgba(40,5,3,0.6),
+      0 0 0 0.5px rgba(120,150,230,0.6),
+      0 0 4px rgba(90,108,200,0.25),
+      0 1px 2px rgba(0,0,0,0.5);
+  }
+  .key.special{
+    background-image:
+      radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 32% 68%, rgba(138,29,24,0.35) 0.5px, transparent 1.2px),
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 40%, var(--cream-soft) 100%);
+    background-size: 20px 20px, 26px 26px, 17px 17px, 100% 100%;
+    background-position: 2px 1px, 7px 9px, 13px 4px, 0 0;
+    border: 3px solid var(--blue-bright);
+    box-shadow:
+      inset 0 2px 1px rgba(255,255,255,0.9),
+      inset 2px 3px 6px rgba(255,255,255,0.4),
+      inset 0 -4px 8px rgba(150,110,70,0.4),
+      inset -3px -2px 5px rgba(150,110,70,0.3),
+      0 0 0 0.5px rgba(120,150,230,0.6),
+      0 0 6px rgba(90,108,200,0.35),
+      0 6px 10px rgba(0,0,0,0.6),
+      0 2px 3px rgba(0,0,0,0.7);
+  }
+  .key .label{
+    font-size:30px; font-weight:700; letter-spacing:0.3px; color: var(--num-color);
+    text-shadow: 0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,200,180,0.15);
+    line-height:1; pointer-events:none;
+  }
+  .key.special .label{
+    color: var(--red);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
+    font-weight:800;
+  }
+  .key svg{
+    width:28px; height:28px; fill:none; stroke: var(--red); stroke-width:2.2;
+    stroke-linecap:round; stroke-linejoin:round;
+    filter: drop-shadow(0 1px 0 rgba(255,255,255,0.8));
+    pointer-events:none;
+  }
+
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background: rgba(20,8,8,0.92); color:#fff; padding:10px 18px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.12); font-size:13px; letter-spacing:0.5px;
+    opacity:0; transition: opacity 0.2s ease; pointer-events:none; z-index:10;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  {# ============== SCREEN 1 - Phone number ============== #}
+  <div class="screen active" id="screen-phone">
+    <div class="header-cap">
+      <div class="header-label">PHONE</div>
+      <div class="phone-strip" id="phone-strip" aria-live="polite"></div>
+    </div>
+
+    <div class="pad" id="pad-phone">
+      <div class="key" data-val="1"><span class="label">1</span></div>
+      <div class="key" data-val="2"><span class="label">2</span></div>
+      <div class="key" data-val="3"><span class="label">3</span></div>
+
+      <div class="key" data-val="4"><span class="label">4</span></div>
+      <div class="key" data-val="5"><span class="label">5</span></div>
+      <div class="key" data-val="6"><span class="label">6</span></div>
+
+      <div class="key" data-val="7"><span class="label">7</span></div>
+      <div class="key" data-val="8"><span class="label">8</span></div>
+      <div class="key" data-val="9"><span class="label">9</span></div>
+
+      <div class="key special" data-val="BACK" aria-label="backspace">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
+          <line x1="11" y1="9" x2="17" y2="15"/>
+          <line x1="17" y1="9" x2="11" y2="15"/>
+        </svg>
+      </div>
+      <div class="key" data-val="0"><span class="label">0</span></div>
+      <div class="key special" data-val="NEXT" id="next-btn" aria-label="next">
+        <span class="label" style="font-size: 14px; letter-spacing: 2px;">NEXT</span>
+      </div>
+    </div>
+
+    <div class="link-row">
+      <a id="not-me-link" style="display:none;">Not you? Tap to clear</a>
+    </div>
+  </div>
+
+  {# ============== SCREEN 2 - SMS code ============== #}
+  <div class="screen" id="screen-code">
+    <div class="header-cap">
+      <div class="header-label">ENTER CODE</div>
+      <div class="header-sub" id="code-sub">sent to your phone</div>
+      <div class="pin-strip" id="code-strip" aria-live="polite"></div>
+    </div>
+
+    <div class="pad" id="pad-code">
+      <div class="key" data-val="1"><span class="label">1</span></div>
+      <div class="key" data-val="2"><span class="label">2</span></div>
+      <div class="key" data-val="3"><span class="label">3</span></div>
+
+      <div class="key" data-val="4"><span class="label">4</span></div>
+      <div class="key" data-val="5"><span class="label">5</span></div>
+      <div class="key" data-val="6"><span class="label">6</span></div>
+
+      <div class="key" data-val="7"><span class="label">7</span></div>
+      <div class="key" data-val="8"><span class="label">8</span></div>
+      <div class="key" data-val="9"><span class="label">9</span></div>
+
+      <div class="key special" data-val="BACK" aria-label="backspace">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
+          <line x1="11" y1="9" x2="17" y2="15"/>
+          <line x1="17" y1="9" x2="11" y2="15"/>
+        </svg>
+      </div>
+      <div class="key" data-val="0"><span class="label">0</span></div>
+      <div class="key special" data-val="ENTER" aria-label="enter">
+        <span class="label" style="font-size: 14px; letter-spacing: 2px;">ENTER</span>
+      </div>
+    </div>
+
+    <div class="link-row">
+      <a id="resend-link">Resend code</a>
+      <a id="back-to-phone">&larr; back to phone</a>
+    </div>
+  </div>
+
+  <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
+       alt="Cenas Kitchen" class="brand-logo" />
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const CODE_LENGTH = {{ code_len|default(6) }};
+  const REQUEST_CODE_URL = {{ (request_code_url|default('/employee/login/request-code'))|tojson }};
+  const VERIFY_CODE_URL  = {{ (verify_code_url|default('/employee/login/verify-code'))|tojson }};
+  const DASHBOARD_URL    = {{ (dashboard_url|default('/employee/dashboard'))|tojson }};
+  const PREFILL_PHONE    = {{ (prefill_phone|default(''))|tojson }};
+
+  // Remember the phone (identifier) on this device, never the code.
+  // Same banking-app pattern as the driver login.
+  const STORAGE_KEY = 'ck-employee-phone-v1';
+  const MAX_AGE_DAYS = 14;
+  function readPersistedPhone(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return '';
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.phone) return '';
+      const ageDays = (Date.now() - (obj.lastUsedTs || 0)) / (1000*60*60*24);
+      if (ageDays > MAX_AGE_DAYS){ localStorage.removeItem(STORAGE_KEY); return ''; }
+      return String(obj.phone).replace(/\D/g,'').slice(0,10);
+    } catch(_){ return ''; }
+  }
+  function writePersistedPhone(phone){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        phone: String(phone).replace(/\D/g,'').slice(0,10),
+        lastUsedTs: Date.now(),
+      }));
+    } catch(_){}
+  }
+  function clearPersistedPhone(){
+    try{ localStorage.removeItem(STORAGE_KEY); } catch(_){}
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('_clear') === '1'){
+    clearPersistedPhone();
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  let phoneDigits = (PREFILL_PHONE || '').replace(/\D/g,'').slice(0,10);
+  let fromStorage = false;
+  if (!phoneDigits){
+    const stored = readPersistedPhone();
+    if (stored.length === 10){ phoneDigits = stored; fromStorage = true; }
+  }
+  let code = '';
+  let busy = false;
+
+  const phoneStrip = document.getElementById('phone-strip');
+  const codeStrip  = document.getElementById('code-strip');
+  const codeSub    = document.getElementById('code-sub');
+  const toast      = document.getElementById('toast');
+  const screenPhone = document.getElementById('screen-phone');
+  const screenCode  = document.getElementById('screen-code');
+  const resendLink  = document.getElementById('resend-link');
+
+  function formatPhone(d){
+    if (!d) return '<span class="ph-empty">(___) ___-____</span>';
+    const a = d.slice(0,3).padEnd(3,'_');
+    const b = d.slice(3,6).padEnd(3,'_');
+    const c = d.slice(6,10).padEnd(4,'_');
+    return `(${a})<span class="ph-sep">&nbsp;</span>${b}<span class="ph-sep">-</span>${c}`;
+  }
+  function prettyPhone(d){
+    return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6,10)}`;
+  }
+  function formatCode(c){
+    let out = '';
+    for (let i=0;i<CODE_LENGTH;i++){
+      out += i < c.length
+        ? `<span class="pin-digit">${c[i]}</span>`
+        : '<span class="pin-digit ph-empty">_</span>';
+    }
+    return out;
+  }
+  function renderPhone(){ phoneStrip.innerHTML = formatPhone(phoneDigits); }
+  function renderCode(){ codeStrip.innerHTML = formatCode(code); }
+
+  function flashToast(msg){
+    toast.textContent = msg; toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+  function showError(msg, where){
+    busy = false;
+    if (where === 'phone'){
+      phoneStrip.classList.add('error');
+      setTimeout(() => phoneStrip.classList.remove('error'), 450);
+    } else {
+      codeStrip.classList.add('error');
+      setTimeout(() => codeStrip.classList.remove('error'), 450);
+      code = ''; renderCode();
+    }
+    flashToast(msg);
+  }
+
+  function goToCode(){
+    code = ''; renderCode();
+    codeSub.textContent = 'sent to ' + prettyPhone(phoneDigits);
+    screenPhone.classList.remove('active');
+    screenCode.classList.add('active');
+  }
+  function goToPhone(){
+    code = ''; renderCode();
+    screenCode.classList.remove('active');
+    screenPhone.classList.add('active');
+  }
+
+  async function requestCode(isResend){
+    if (busy) return;
+    if (phoneDigits.length !== 10){ showError('Enter a 10-digit phone number.', 'phone'); return; }
+    busy = true;
+    try{
+      const r = await fetch(REQUEST_CODE_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({phone: phoneDigits}),
+      });
+      let data = {};
+      try{ data = await r.json(); } catch(_){}
+      if (r.status === 429){
+        showError(data.error || 'Too many requests - wait a moment.', isResend ? 'code' : 'phone');
+        return;
+      }
+      if (!r.ok || data.ok === false){
+        showError(data.error || `Could not send code (${r.status}).`, isResend ? 'code' : 'phone');
+        return;
+      }
+      busy = false;
+      writePersistedPhone(phoneDigits);
+      if (isResend){ flashToast('Code sent.'); }
+      else { goToCode(); }
+    } catch(e){
+      showError('Network error - try again.', isResend ? 'code' : 'phone');
+    }
+  }
+
+  async function verifyCode(){
+    if (busy) return;
+    if (code.length !== CODE_LENGTH){ flashToast(`Enter all ${CODE_LENGTH} digits.`); return; }
+    busy = true;
+    try{
+      const r = await fetch(VERIFY_CODE_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({phone: phoneDigits, code}),
+      });
+      let data = {};
+      try{ data = await r.json(); } catch(_){}
+      if (!r.ok || data.ok === false){
+        showError(data.error || `Wrong code (${r.status}).`, 'code');
+        return;
+      }
+      window.location.replace(data.next || DASHBOARD_URL);
+    } catch(e){
+      showError('Network error - try again.', 'code');
+    }
+  }
+
+  // "Not you? Tap to clear" - only shown when prefilled from storage.
+  const notMeLink = document.getElementById('not-me-link');
+  if (fromStorage && notMeLink){
+    notMeLink.style.display = '';
+    notMeLink.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      clearPersistedPhone();
+      phoneDigits = ''; fromStorage = false;
+      notMeLink.style.display = 'none';
+      renderPhone();
+    });
+  }
+
+  // Phone pad
+  document.querySelectorAll('#pad-phone .key').forEach(key => {
+    key.addEventListener('click', () => {
+      const v = key.dataset.val;
+      if (v === 'BACK'){
+        phoneDigits = phoneDigits.slice(0,-1);
+      } else if (v === 'NEXT'){
+        requestCode(false);
+        return;
+      } else if (/^[0-9]$/.test(v) && phoneDigits.length < 10){
+        phoneDigits += v;
+      } else { return; }
+      renderPhone();
+      if (phoneDigits.length === 10){ setTimeout(() => requestCode(false), 200); }
+    });
+  });
+
+  // Code pad
+  document.querySelectorAll('#pad-code .key').forEach(key => {
+    key.addEventListener('click', () => {
+      const v = key.dataset.val;
+      if (v === 'BACK'){
+        code = code.slice(0,-1);
+      } else if (v === 'ENTER'){
+        verifyCode();
+        return;
+      } else if (/^[0-9]$/.test(v) && code.length < CODE_LENGTH){
+        code += v;
+      } else { return; }
+      renderCode();
+      if (code.length === CODE_LENGTH){ setTimeout(verifyCode, 180); }
+    });
+  });
+
+  document.getElementById('back-to-phone').addEventListener('click', goToPhone);
+  resendLink.addEventListener('click', () => requestCode(true));
+
+  // Keyboard input - works on both screens
+  document.addEventListener('keydown', e => {
+    const onPhone = screenPhone.classList.contains('active');
+    const padId = onPhone ? 'pad-phone' : 'pad-code';
+    if (/^[0-9]$/.test(e.key)){
+      const k = document.querySelector(`#${padId} .key[data-val="${e.key}"]`);
+      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
+      e.preventDefault();
+    } else if (e.key === 'Backspace'){
+      const k = document.querySelector(`#${padId} .key[data-val="BACK"]`);
+      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
+      e.preventDefault();
+    } else if (e.key === 'Enter'){
+      if (onPhone){ requestCode(false); }
+      else { verifyCode(); }
+      e.preventDefault();
+    }
+  });
+
+  // Initial render
+  renderPhone();
+  renderCode();
+</script>
+</body>
+</html>

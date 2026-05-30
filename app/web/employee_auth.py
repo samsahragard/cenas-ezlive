@@ -44,12 +44,14 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
-from flask import Blueprint, abort, jsonify, request, session
+from flask import (Blueprint, abort, jsonify, redirect, render_template,
+                   request, session)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import Employee, EmployeeSmsCode
+from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment
 from app.services.ezcater_known_drivers_seed import normalize_phone
 
 log = logging.getLogger(__name__)
@@ -215,6 +217,77 @@ def logout():
     for k in ("employee_id", "employee_session_version", "auth_ok"):
         session.pop(k, None)
     return jsonify({"ok": True}), 200
+
+
+# --------------------------------------------------------------------------
+# Frontend pages (ck) — GET /employee/login + GET /employee/dashboard.
+# The JSON auth endpoints above (ckai) are the API these two pages call.
+# Per this file's header: ckai owns the auth endpoints, ck owns these pages.
+# --------------------------------------------------------------------------
+_STORE_LABELS = {"tomball": "Tomball", "copperfield": "Copperfield"}
+
+
+@employee_auth.route("/employee/login", methods=["GET"])
+def login_page():
+    """Phone -> SMS-code login screen (mobile, branded). Anonymous-reachable:
+    the site gate exempts /employee/login (auth.py). The page POSTs to
+    request_code / verify_code above; on success its JS redirects to
+    dashboard_url. code_len mirrors the backend OTP length (CODE_LEN)."""
+    return render_template(
+        "employee_login.html",
+        code_len=CODE_LEN,
+        request_code_url="/employee/login/request-code",
+        verify_code_url="/employee/login/verify-code",
+        dashboard_url="/employee/dashboard",
+        login_url="/employee/login",
+        prefill_phone="",
+    )
+
+
+@employee_auth.route("/employee/dashboard", methods=["GET"])
+def dashboard_page():
+    """Landing after login. Requires an employee session; with none we send
+    them to /employee/login (NOT the staff keypad) — auth.py exempts
+    /employee/dashboard from the site gate so this route owns the no-session
+    redirect target. Every query is scoped to session['employee_id']: zero
+    cross-employee or partner data (the frontend half of the B2 isolation
+    guarantee)."""
+    emp_id = session.get("employee_id")
+    if not emp_id:
+        return redirect("/employee/login")
+
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter(Employee.id == emp_id).first()
+        if emp is None:
+            # Stale/cleared employee — drop the session keys + bounce to login.
+            for k in ("employee_id", "employee_session_version", "auth_ok"):
+                session.pop(k, None)
+            return redirect("/employee/login")
+
+        stores = (db.query(EmployeeStoreAssignment)
+                    .filter(EmployeeStoreAssignment.employee_id == emp.id)
+                    .all())
+        store_name = ", ".join(
+            _STORE_LABELS.get(s.store_key, (s.store_key or "").title())
+            for s in stores
+        ) or None
+        full_name = (emp.full_name or "").strip()
+        first_name = full_name.split(" ")[0] if full_name else None
+
+        view = SimpleNamespace(
+            first_name=first_name,
+            full_name=full_name or None,
+            store_name=store_name,
+        )
+        return render_template(
+            "employee_dashboard.html",
+            employee=view,
+            logout_url="/employee/logout",
+            login_url="/employee/login",
+        )
+    finally:
+        db.close()
 
 
 @employee_auth.route("/partner/schedules-v2/migration/run", methods=["POST"])

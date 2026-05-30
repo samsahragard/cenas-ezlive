@@ -37,6 +37,7 @@ EXEMPT_PREFIXES = (
     "/keypad-login",             # 2026-05-11 keypad auth (migration 13)
     "/keypad-logout",
     "/employee/login",           # Schedules V2 B2: employee SMS-login flow (request-code/verify-code) — fresh employees have no session yet
+    "/employee/dashboard",       # Schedules V2 B2: the employee dashboard route checks session["employee_id"] itself and 302s to /employee/login when absent (not the staff keypad); a logged-in employee passes via auth_ok anyway
     "/change-passcode",          # post-keypad-login, before main app
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
     "/driver/app.apk",           # public APK download redirect — drivers need this BEFORE having an account

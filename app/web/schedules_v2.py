@@ -22,7 +22,15 @@ from datetime import date as _date, datetime
 from flask import g, jsonify, request
 
 from app.db import SessionLocal
-from app.models import Schedule, Shift, ShiftTag
+from app.models import (
+    Employee,
+    EmployeeStoreAssignment,
+    Position,
+    Schedule,
+    Shift,
+    ShiftTag,
+    Tag,
+)
 from app.services import scheduling_availability, scheduling_timeoff
 from app.web.permissions import current_user_id, require_level
 from app.web.store_routes import store_bp
@@ -86,6 +94,57 @@ def sv2_schedule_list():
                 "published_at": s.published_at.isoformat() if s.published_at else None}
                for s in q.order_by(Schedule.week_start.desc()).all()]
         return jsonify({"ok": True, "store": _store(), "schedules": out}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/board", methods=["GET"])
+@require_level(_MGR)
+def sv2_board():
+    """Single round-trip for the week-view grid (ck #1893): the week's schedule +
+    its shifts + the store roster + positions + tags. No schedule for the week ->
+    schedule:null + shifts:[] (UI shows a create-draft CTA)."""
+    wk = (request.args.get("week") or "").strip()
+    try:
+        week_start = _date.fromisoformat(wk)
+    except Exception:
+        return jsonify({"ok": False, "error": "week required (YYYY-MM-DD)"}), 400
+    store = _store()  # location ("tomball"/"copperfield")
+    db = SessionLocal()
+    try:
+        sched = db.query(Schedule).filter_by(store_key=store, week_start=week_start).first()
+        shifts = []
+        if sched:
+            for sh in db.query(Shift).filter_by(schedule_id=sched.id).all():
+                tag_ids = [st.tag_id for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all()]
+                shifts.append({
+                    "id": sh.id, "employee_id": sh.employee_id, "position_id": sh.position_id,
+                    "start_at": sh.start_at.isoformat() if sh.start_at else None,
+                    "end_at": sh.end_at.isoformat() if sh.end_at else None,
+                    "break_minutes": sh.break_minutes, "status": sh.status,
+                    "notes": sh.notes, "tag_ids": tag_ids,
+                })
+        # roster = employees assigned to THIS store (location-keyed)
+        emp_ids = [a.employee_id for a in
+                   db.query(EmployeeStoreAssignment).filter_by(store_key=store).all()]
+        roster = []
+        if emp_ids:
+            for e in (db.query(Employee).filter(Employee.id.in_(emp_ids))
+                        .order_by(Employee.full_name).all()):
+                roster.append({"id": e.id, "full_name": e.full_name, "active": e.active})
+        # positions (B1/Sling taxonomy; store_key null = all-store). NB: no "area"
+        # column exists - store_key is the only grouping field. Flag to ck.
+        positions = [{"id": p.id, "name": p.name, "store_key": p.store_key}
+                     for p in db.query(Position).order_by(Position.name).all()]
+        tags = [{"id": t.id, "name": t.name} for t in db.query(Tag).order_by(Tag.name).all()]
+        return jsonify({
+            "ok": True, "store": store,
+            "schedule": ({"id": sched.id, "week_start": sched.week_start.isoformat(),
+                          "status": sched.status,
+                          "published_at": sched.published_at.isoformat() if sched.published_at else None}
+                         if sched else None),
+            "shifts": shifts, "roster": roster, "positions": positions, "tags": tags,
+        }), 200
     finally:
         db.close()
 

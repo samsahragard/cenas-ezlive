@@ -63,7 +63,9 @@ STORE_MAP = {
 POSITION_CANON = {
     "window": "Window",
     "kitchen manager tomball": "Kitchen Manager",
-    "well": "Bar Well",  # samai #1839: "Well" + "Bar Well" are the same bar station
+    # NOTE: "Well" + "Bar Well" kept SEPARATE (29 distinct) per the locked canon
+    # rules (only the 2 typo-merges above). Whether they're the same bar station
+    # is Sam's domain call (samai #1845) - add {"well": "Bar Well"} here -> 28 if so.
 }
 ACTIVE_STATUSES = {"joined"}
 MODEL_NAMES = ("Employee", "Position", "EmployeePosition", "EmployeeStoreAssignment")

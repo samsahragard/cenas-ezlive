@@ -55,3 +55,25 @@ def sv2_week_page():
         store_label=g.store_label,
         config_json=json.dumps(config),
     )
+
+
+@store_bp.route("/schedules-v2/time-off", methods=["GET"])
+@require_level(_MGR)
+def sv2_timeoff_page():
+    """Render the client-side manager time-off review (B7). All data comes from
+    ckai's time-off endpoints via fetch(); this view only assembles the config
+    blob. Same gates as the week-view (store gate + per-store + foh_manager), so
+    a cross-store gm gets a 302/403 the client renders as a friendly notice. The
+    page owns the parent path; ckai's list is at <base>/time-off/list (#1976)."""
+    slug = g.current_store
+    base = f"/{slug}/schedules-v2"
+    config = {
+        "storeLabel": g.store_label,
+        "listUrl": f"{base}/time-off/list",   # ckai (B7): GET[?status=pending|all] -> {ok, requests:[...]}
+        "actionBase": f"{base}/time-off",      # ckai (B7): POST <base>/<id>/approve | <base>/<id>/deny
+    }
+    return render_template(
+        "schedules_v2_timeoff.html",
+        store_label=g.store_label,
+        config_json=json.dumps(config),
+    )

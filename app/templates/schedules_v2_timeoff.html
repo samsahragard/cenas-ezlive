@@ -1,0 +1,326 @@
+{# ============================================================
+   schedules_v2_timeoff.html - Schedules V2 / Block 7
+   Manager TIME-OFF REVIEW: list employee time-off requests (filter by
+   status), approve or deny each with an optional note to the employee.
+
+   FRONTEND-ONLY (ck). Client-rendered: the page route hands this template
+   a config blob (store label + endpoint URLs) and the JS fetches the list
+   + posts approve/deny, so the template never touches models (ckai's lane).
+   Contract it binds to (ckai B7 backend):
+
+     GET  <list_url>[?status=pending|all] ->
+        { ok, requests:[{id, employee_id, employee_name, start_date, end_date,
+                         reason, status, manager_notes, reviewed_by, reviewed_at}] }
+     POST <action_base>/<id>/approve  {manager_notes?} -> {ok,...}
+     POST <action_base>/<id>/deny     {manager_notes?} -> {ok,...}
+
+   MANAGER-GATED page (require_level foh_manager on the route); employees never
+   reach it. Any non-200 from the gated endpoints is handled gracefully (a
+   cross-store gm gets a 302/403 -> a friendly access notice, never a broken list).
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'schedules_v2' %}
+
+{% block title %}Time Off - Cenas Kitchen{% endblock %}
+
+{% block page_module %}SCHEDULES{% endblock %}
+{% block page_title %}Time Off{% endblock %}
+{% block page_subtitle %}{{ store_label }} - review &amp; approve requests (V2){% endblock %}
+
+{% block content %}
+<style>
+  /* Scoped under .sv2-to so the warm palette never leaks to the global sheet.
+     Opaque surface first so base_dashboard's bg never bleeds through. */
+  .sv2-to{
+    --sk-red:#c8302a; --sk-red-deep:#8a1d18;
+    --sk-blue:#15205c; --sk-blue-deep:#0a1340;
+    --sk-cream:#f4e7d0; --sk-ink:#14205c;
+    --sk-ok:#2f8f57; --sk-ok-deep:#1f6b3e;
+    --sk-amber:#b8801f; --sk-grey:#6b7280;
+    position:relative; color:var(--sk-ink);
+    font-family:'Manrope','Segoe UI',Arial,sans-serif;
+    background:#fbf4e7; border-radius:14px; padding:18px 18px 24px;
+    box-shadow:0 0 0 1px rgba(20,32,92,0.10), 0 8px 22px rgba(0,0,0,0.10);
+    max-width:780px;
+  }
+  .sv2-to *{ box-sizing:border-box; }
+
+  .sv2-to .toolbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap; margin-bottom:16px;
+  }
+  .sv2-to .filters{ display:inline-flex; gap:6px; background:rgba(20,32,92,0.06); border-radius:11px; padding:4px; }
+  .sv2-to .filt{
+    border:none; background:transparent; color:rgba(20,32,92,0.6);
+    font:inherit; font-weight:700; font-size:13px; letter-spacing:0.3px;
+    padding:7px 15px; border-radius:9px; cursor:pointer; transition:background 120ms,color 120ms;
+  }
+  .sv2-to .filt.active{ background:#fff; color:var(--sk-blue-deep); box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+  .sv2-to .count{ font-size:13px; font-weight:700; color:rgba(20,32,92,0.6); }
+  .sv2-to .count b{ color:var(--sk-red-deep); }
+
+  .sv2-to .req{
+    background:#fff; border-radius:12px; padding:14px 15px; margin-bottom:12px;
+    border-left:5px solid var(--sk-grey);
+    box-shadow:0 0 0 1px rgba(20,32,92,0.08), 0 3px 9px rgba(0,0,0,0.07);
+  }
+  .sv2-to .req.pending{ border-left-color:#e7b54a; }
+  .sv2-to .req.approved{ border-left-color:var(--sk-ok); }
+  .sv2-to .req.denied{ border-left-color:var(--sk-red); }
+  .sv2-to .req.cancelled{ border-left-color:var(--sk-grey); opacity:0.72; }
+  .sv2-to .req-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .sv2-to .who{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
+  .sv2-to .when{ font-size:13.5px; font-weight:700; color:rgba(20,32,92,0.7); margin-top:2px; }
+  .sv2-to .when .days{ color:rgba(20,32,92,0.5); font-weight:600; }
+  .sv2-to .badge{
+    flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase;
+    padding:4px 10px; border-radius:999px; border:1.5px solid;
+  }
+  .sv2-to .badge.pending{ color:var(--sk-amber); background:rgba(184,128,31,0.12); border-color:rgba(184,128,31,0.4); }
+  .sv2-to .badge.approved{ color:var(--sk-ok-deep); background:rgba(47,143,87,0.14); border-color:rgba(47,143,87,0.45); }
+  .sv2-to .badge.denied{ color:var(--sk-red-deep); background:rgba(200,48,42,0.12); border-color:rgba(200,48,42,0.4); }
+  .sv2-to .badge.cancelled{ color:var(--sk-grey); background:rgba(107,114,128,0.12); border-color:rgba(107,114,128,0.4); }
+  .sv2-to .reason{
+    font-size:13px; color:rgba(20,32,92,0.82); margin-top:9px; line-height:1.4;
+    background:rgba(20,32,92,0.04); border-radius:8px; padding:8px 10px;
+  }
+  .sv2-to .mnotes{ font-size:12.5px; color:var(--sk-blue); margin-top:9px; border-left:3px solid rgba(20,32,92,0.3); padding-left:9px; }
+  .sv2-to .mnotes b{ color:var(--sk-blue-deep); }
+  .sv2-to .rev{ font-size:11.5px; color:rgba(20,32,92,0.5); margin-top:9px; }
+
+  .sv2-to .actions{ margin-top:12px; padding-top:12px; border-top:1px solid rgba(20,32,92,0.10); }
+  .sv2-to .note-in{
+    width:100%; border:1.5px solid rgba(20,32,92,0.22); border-radius:9px; padding:8px 10px;
+    font:inherit; font-size:13px; color:var(--sk-ink); background:#fff; margin-bottom:9px;
+  }
+  .sv2-to .note-in:focus{ outline:none; border-color:var(--sk-blue); }
+  .sv2-to .btns{ display:flex; gap:9px; }
+  .sv2-to .btn{
+    flex:1 1 0; border:none; border-radius:10px; padding:10px 12px;
+    font:inherit; font-weight:800; font-size:13.5px; letter-spacing:0.3px; cursor:pointer;
+    transition:filter 120ms,transform 80ms;
+  }
+  .sv2-to .btn:active{ transform:translateY(1px); }
+  .sv2-to .btn:disabled{ opacity:0.55; cursor:default; }
+  .sv2-to .btn-approve{ background:var(--sk-ok); color:#fff; box-shadow:0 2px 0 var(--sk-ok-deep); }
+  .sv2-to .btn-approve:hover{ filter:brightness(1.07); }
+  .sv2-to .btn-deny{ background:rgba(200,48,42,0.10); color:var(--sk-red-deep); border:1.5px solid rgba(200,48,42,0.45); }
+  .sv2-to .btn-deny:hover{ background:rgba(200,48,42,0.18); }
+
+  .sv2-to .state{ text-align:center; padding:30px 18px; color:rgba(20,32,92,0.7); }
+  .sv2-to .state[hidden]{ display:none; }
+  .sv2-to .state .s-title{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
+  .sv2-to .state .s-body{ font-size:13.5px; margin-top:7px; line-height:1.5; }
+  .sv2-to .loading{ text-align:center; padding:30px; font-weight:700; letter-spacing:1px; color:rgba(20,32,92,0.6); }
+  .sv2-to .loading[hidden]{ display:none; }
+
+  .sv2-to .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+    z-index:60; max-width:440px; width:calc(100% - 36px);
+    background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px; padding:12px 16px;
+    font-size:13.5px; font-weight:600; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.5);
+    opacity:0; pointer-events:none; transition:opacity 180ms,transform 180ms;
+  }
+  .sv2-to .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .sv2-to .toast.err{ background:var(--sk-red-deep); }
+</style>
+
+<div class="sv2-to" id="sv2-to-root">
+  <div class="toolbar">
+    <div class="filters">
+      <button class="filt active" data-status="pending" type="button">Pending</button>
+      <button class="filt" data-status="all" type="button">All</button>
+    </div>
+    <div class="count" id="to-count"></div>
+  </div>
+
+  <div class="loading" id="to-loading">Loading requests&hellip;</div>
+
+  <div class="state" id="to-access" hidden>
+    <div class="s-title">No access to this store</div>
+    <div class="s-body">You can only review time-off for your own store. Switch to your store to continue.</div>
+  </div>
+
+  <div class="state" id="to-empty" hidden>
+    <div class="s-title">Nothing to review</div>
+    <div class="s-body">No time-off requests match this filter.</div>
+  </div>
+
+  <div id="to-list"></div>
+
+  <div class="toast" id="to-toast"></div>
+</div>
+
+<script type="application/json" id="sv2-to-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-to-config").textContent);
+
+  var elLoading = document.getElementById("to-loading");
+  var elAccess  = document.getElementById("to-access");
+  var elEmpty   = document.getElementById("to-empty");
+  var elList    = document.getElementById("to-list");
+  var elCount   = document.getElementById("to-count");
+  var elToast   = document.getElementById("to-toast");
+  var filtBtns  = document.querySelectorAll(".sv2-to .filt");
+
+  var state = { status: "pending", busy: false };
+
+  function show(el){ el.hidden = false; }
+  function hide(el){ el.hidden = true; }
+  function esc(s){
+    return String(s == null ? "" : s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+
+  var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function isoToDate(s){
+    if(!s) return null;
+    var d = String(s).split("T")[0].split("-");
+    if(d.length < 3) return null;
+    return new Date(+d[0], (+d[1]) - 1, +d[2]);
+  }
+  function fmtDay(s){ var d = isoToDate(s); return d ? (DOW[d.getDay()] + " " + MON[d.getMonth()] + " " + d.getDate()) : esc(s); }
+  function fmtRange(a,b){
+    var da = isoToDate(a), db = isoToDate(b);
+    if(!da) return esc(a);
+    if(!db || a === b) return fmtDay(a);
+    if(da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth()){
+      return DOW[da.getDay()] + " " + MON[da.getMonth()] + " " + da.getDate() + " - " + DOW[db.getDay()] + " " + db.getDate();
+    }
+    return fmtDay(a) + " - " + fmtDay(b);
+  }
+  function dayCount(a,b){ var da = isoToDate(a), db = isoToDate(b); return (da && db) ? Math.round((db-da)/86400000)+1 : 0; }
+
+  var toastTimer = null;
+  function toast(msg, isErr){
+    elToast.textContent = msg;
+    elToast.classList.toggle("err", !!isErr);
+    elToast.classList.add("show");
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ elToast.classList.remove("show"); }, 3400);
+  }
+  function jsonHeaders(){ return { "Content-Type":"application/json", "Accept":"application/json" }; }
+  function parseJsonOrThrow(r){
+    var ct = r.headers.get("content-type") || "";
+    if(ct.indexOf("application/json") === -1){ var e1 = new Error("non-json"); e1.status = (r.status===200?403:r.status); throw e1; }
+    return r.json().then(function(j){
+      if(!r.ok || (j && j.ok === false)){ var e2 = new Error("bad"); e2.status = r.status; e2.error = (j && j.error)?j.error:null; throw e2; }
+      return j;
+    });
+  }
+  function showAccess(){ hide(elLoading); hide(elEmpty); elList.innerHTML = ""; elCount.textContent = ""; show(elAccess); }
+
+  var STATUS = { pending:"Pending", approved:"Approved", denied:"Denied", cancelled:"Cancelled" };
+
+  function cardHtml(r){
+    var st = (r.status || "pending").toLowerCase();
+    if(!STATUS[st]) st = "pending";
+    var n = dayCount(r.start_date, r.end_date);
+    var p = [];
+    p.push('<div class="req ' + st + '" data-id="' + (+r.id) + '">');
+    p.push('<div class="req-head"><div>');
+    p.push('<div class="who">' + esc(r.employee_name || ("Employee #" + (+r.employee_id))) + '</div>');
+    p.push('<div class="when">' + esc(fmtRange(r.start_date, r.end_date)) + ' <span class="days">(' + n + (n===1?" day":" days") + ')</span></div>');
+    p.push('</div><span class="badge ' + st + '">' + esc(STATUS[st]) + '</span></div>');
+    if(r.reason) p.push('<div class="reason">' + esc(r.reason) + '</div>');
+    if(r.manager_notes) p.push('<div class="mnotes"><b>Note:</b> ' + esc(r.manager_notes) + '</div>');
+    if((st === "approved" || st === "denied")){
+      var by = r.reviewed_by ? (" by " + esc(r.reviewed_by)) : "";
+      var at = r.reviewed_at ? (" " + esc(fmtDay(r.reviewed_at))) : "";
+      p.push('<div class="rev">' + STATUS[st] + by + at + '</div>');
+    }
+    if(st === "pending"){
+      p.push('<div class="actions">');
+      p.push('<input class="note-in" data-note maxlength="500" placeholder="Optional note to the employee" />');
+      p.push('<div class="btns">');
+      p.push('<button class="btn btn-approve" data-act="approve" type="button">Approve</button>');
+      p.push('<button class="btn btn-deny" data-act="deny" type="button">Deny</button>');
+      p.push('</div></div>');
+    }
+    p.push('</div>');
+    return p.join("");
+  }
+
+  function render(requests){
+    hide(elLoading); hide(elAccess);
+    var list = requests || [];
+    var pendingN = list.filter(function(r){ return (r.status||"").toLowerCase() === "pending"; }).length;
+    elCount.innerHTML = (state.status === "pending")
+      ? (list.length ? '<b>' + list.length + '</b> awaiting review' : '')
+      : (pendingN ? '<b>' + pendingN + '</b> pending of ' + list.length : list.length + ' total');
+    if(!list.length){ elList.innerHTML = ""; show(elEmpty); return; }
+    hide(elEmpty);
+    list.sort(function(a,b){
+      var ap = (a.status||"")==="pending", bp = (b.status||"")==="pending";
+      if(ap !== bp) return ap ? -1 : 1;          // pending first
+      return String(a.start_date).localeCompare(String(b.start_date));
+    });
+    elList.innerHTML = list.map(cardHtml).join("");
+  }
+
+  function load(){
+    show(elLoading); hide(elEmpty); hide(elAccess);
+    var url = CFG.listUrl + (state.status === "all" ? "?status=all" : "?status=pending");
+    fetch(url, { credentials:"same-origin", headers:{ "Accept":"application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){ render((j && j.requests) || []); })
+      .catch(function(e){
+        if(e && (e.status === 401 || e.status === 403)){ showAccess(); return; }
+        hide(elLoading); show(elEmpty);
+        toast("Could not load requests. Try again.", true);
+      });
+  }
+
+  function review(id, act, btn, card){
+    if(state.busy) return;
+    var noteEl = card ? card.querySelector("[data-note]") : null;
+    var notes = noteEl ? (noteEl.value || "").trim() : "";
+    var body = {};
+    if(notes) body.manager_notes = notes;
+    state.busy = true;
+    var btns = card ? card.querySelectorAll(".btn") : [];
+    for(var i=0;i<btns.length;i++) btns[i].disabled = true;
+    fetch(CFG.actionBase + "/" + id + "/" + act, {
+      method:"POST", headers: jsonHeaders(), credentials:"same-origin", body: JSON.stringify(body)
+    })
+      .then(parseJsonOrThrow)
+      .then(function(){
+        state.busy = false;
+        toast(act === "approve" ? "Request approved." : "Request denied.");
+        load();
+      })
+      .catch(function(e){
+        state.busy = false;
+        for(var i=0;i<btns.length;i++) btns[i].disabled = false;
+        if(e && (e.status === 401 || e.status === 403)){ showAccess(); return; }
+        toast((e && e.error) ? e.error : "Could not save. Try again.", true);
+      });
+  }
+
+  // ---- wire ----
+  for(var i=0;i<filtBtns.length;i++){
+    filtBtns[i].addEventListener("click", function(ev){
+      var b = ev.currentTarget;
+      if(b.classList.contains("active")) return;
+      for(var k=0;k<filtBtns.length;k++) filtBtns[k].classList.remove("active");
+      b.classList.add("active");
+      state.status = b.getAttribute("data-status");
+      load();
+    });
+  }
+  elList.addEventListener("click", function(ev){
+    var btn = ev.target.closest("button[data-act]");
+    if(!btn) return;
+    var card = ev.target.closest(".req");
+    if(!card) return;
+    review(+card.getAttribute("data-id"), btn.getAttribute("data-act"), btn, card);
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

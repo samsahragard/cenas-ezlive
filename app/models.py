@@ -2987,9 +2987,12 @@ class Employee(Base):
         String(64), unique=True, nullable=True, index=True
     )
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
-    # E.164-ish; the SMS login identity (one employee per phone)
-    phone: Mapped[str] = mapped_column(
-        String(32), unique=True, nullable=False, index=True
+    # E.164-ish; the SMS login identity. NULLABLE (B3, samai #1812): a Sling
+    # employee may have no / blank / duplicate phone -> stored NULL (UNIQUE
+    # permits multiple NULLs in SQLite), imported inactive + punch-listed; no
+    # SMS login until a phone is set via the admin page.
+    phone: Mapped[str | None] = mapped_column(
+        String(32), unique=True, nullable=True, index=True
     )
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

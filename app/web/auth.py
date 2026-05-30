@@ -28,6 +28,7 @@ EXEMPT_PREFIXES = (
     "/produce/cancel/",          # Sam's tap-from-Telegram links (random order_id is the auth)
     "/produce/healthz",          # public liveness check
     "/produce/admin/",           # ingest-state diagnostic (Bearer-token gated inside)
+    "/partner/schedules-v2/migration/run",  # B3 Sling import trigger - partner_auth_ok OR INGEST_TOKEN bearer gated inside the view (employee firewall still 403s employee sessions)
     "/static/",                  # static assets
     "/favicon.ico",
     "/login",

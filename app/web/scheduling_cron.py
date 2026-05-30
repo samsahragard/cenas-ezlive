@@ -25,6 +25,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 from app.services.scheduling_alarms import process_due_alarms
+from app.services.scheduling_offers import expire_due  # B9: expire stale offers/swaps
 
 scheduling_cron_bp = Blueprint("scheduling_cron", __name__)
 
@@ -49,4 +50,18 @@ def process_shift_alarms():
         # 403 with no detail - never confirm whether CRON_TOKEN is set.
         return jsonify({"ok": False, "error": "forbidden"}), 403
     summary = process_due_alarms()
+    return jsonify({"ok": True, **summary}), 200
+
+
+@scheduling_cron_bp.route(
+    "/internal/scheduling/cron/expire-shift-offers", methods=["POST"]
+)
+def expire_shift_offers():
+    """B9: expire stale shift offers + swaps past their expires_at. Token-gated
+    (same CRON_TOKEN + fail-closed pattern as process-shift-alarms; covered by the
+    same /internal/scheduling/cron/ EXEMPT prefix)."""
+    expected = os.getenv("CRON_TOKEN")
+    if not expected or _presented_token() != expected:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+    summary = expire_due()
     return jsonify({"ok": True, **summary}), 200

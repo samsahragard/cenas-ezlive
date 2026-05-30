@@ -3357,3 +3357,71 @@ class EmployeeUnavailabilityBlock(Base):
     end_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)   # > start_at
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ShiftOffer(Base):
+    """Schedules V2 B9: an employee offers up their assigned shift; an eligible
+    employee takes it; a manager approves -> the shift's employee_id moves to the
+    taker. status open->taken->approved|denied, plus cancelled (by the offerer) /
+    expired (the cron, past expires_at). restricted=True -> the taker must share
+    the shift's store + position (unless the offer is unrestricted)."""
+
+    __tablename__ = "shift_offers"
+    __table_args__ = (
+        Index("ix_shift_offers_status_exp", "status", "expires_at"),  # powers the expiry cron
+        Index("ix_shift_offers_shift", "shift_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shift_id: Mapped[int] = mapped_column(
+        ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False
+    )
+    offered_by_employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    taken_by_employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(12), default="open", nullable=False)  # open|taken|approved|denied|cancelled|expired
+    restricted: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)  # taker must match store+position
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)  # manager User.id
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class ShiftSwap(Base):
+    """Schedules V2 B9: employee A proposes trading their shift (from_shift) for
+    employee B's shift (to_shift); B accepts; a manager approves -> the two shifts'
+    employee_ids swap. status proposed->accepted->approved|denied, plus cancelled
+    (by the proposer) / expired (cron)."""
+
+    __tablename__ = "shift_swaps"
+    __table_args__ = (
+        Index("ix_shift_swaps_status_exp", "status", "expires_at"),  # powers the expiry cron
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_shift_id: Mapped[int] = mapped_column(
+        ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    to_shift_id: Mapped[int] = mapped_column(
+        ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    from_employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
+    )
+    to_employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(12), default="proposed", nullable=False)  # proposed|accepted|approved|denied|cancelled|expired
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

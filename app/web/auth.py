@@ -43,6 +43,9 @@ EXEMPT_PREFIXES = (
     "/employee/profile",         # Schedules V2 B6: same pattern as my-schedule - the employee_profile_page route self-guards on session["employee_id"] and 302s to /employee/login (not the keypad). (ckai's prefs endpoint is /employee/alarm-preferences, EXEMPT-prefixed separately by ckai and returning its own 401 JSON; this prefix is only for the page.)
     "/employee/time-off",        # Schedules V2 B7: one prefix covers ck's PAGE GET /employee/time-off (HTML; self-guards employee_id -> 302 /employee/login) AND ckai's DATA /employee/time-off/list + /request + DELETE /<id> (each self-guards employee_id -> 401 JSON). Same treatment as /employee/my-schedule.
     "/employee/availability",    # Schedules V2 B8: one prefix covers ck's PAGE GET /employee/availability (HTML; self-guards employee_id -> 302 /employee/login) AND ckai's DATA /employee/availability/list + /recurring + /block (each self-guards employee_id -> 401 JSON). Same treatment as /employee/my-schedule.
+    "/employee/shift-offers",    # Schedules V2 B9: ckai's offer API (create/take/cancel + /list) - self-guards employee_id (401 JSON); a ck HTML page can own a bare child path under it.
+    "/employee/shift-marketplace",  # Schedules V2 B9: ckai's marketplace DATA (/list) + ck's PAGE - self-guards employee_id (401 JSON).
+    "/employee/shift-swaps",     # Schedules V2 B9: ckai's swap API (propose/accept/cancel + /list) - self-guards employee_id (401 JSON).
     "/change-passcode",          # post-keypad-login, before main app
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
     "/driver/app.apk",           # public APK download redirect — drivers need this BEFORE having an account

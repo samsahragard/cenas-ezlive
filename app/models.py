@@ -15,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     JSON,
     Index,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -3115,3 +3116,87 @@ class EmployeeSmsCode(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+# ============================================================
+# Schedules V2 - Block 4 (Sam #1742): manager DRAFT schedule creation.
+# aick owns these 3 tables; ck builds the week-view UI against them; the CRUD
+# endpoints + the store-audience gate live in app/web/schedules_v2.py. B6-B9
+# hooks baked in per ckai #1864: shifts.employee_id NULLABLE + reassignable
+# (B9 swaps rewrite it); shifts.start_at/end_at are datetimes (B6 alarms key
+# off start_at). ckai owns the later-block tables (shift_alarms,
+# time_off_requests, availability, offers/swaps) as he builds B6-B9.
+# ============================================================
+
+
+class Schedule(Base):
+    """A weekly schedule for one store. status 'draft' until B5 publish."""
+
+    __tablename__ = "schedules"
+    __table_args__ = (
+        UniqueConstraint("store_key", "week_start", name="uq_schedule_store_week"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 'tomball' | 'copperfield' - the audience scope (the store-gate keys off this)
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)  # Monday of the week
+    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)  # draft | published
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # set on B5 publish
+    created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)  # manager user_id
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class Shift(Base):
+    """A single shift. employee_id NULL = OPEN shift (B4) + reassignable (B9).
+    start_at/end_at are full datetimes (B6 alarms key off start_at)."""
+
+    __tablename__ = "shifts"
+    __table_args__ = (
+        Index("ix_shifts_schedule", "schedule_id"),
+        Index("ix_shifts_employee", "employee_id"),
+        # partial index for OPEN shifts (directive 3.8) - fast open-shift lookups (B5/B9)
+        Index("ix_shifts_open", "schedule_id", sqlite_where=text("status = 'open'")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    schedule_id: Mapped[int] = mapped_column(
+        ForeignKey("schedules.id", ondelete="CASCADE"), nullable=False
+    )
+    # NULL = open shift; rewritten on assign / B9 swap-approval (ckai #1864)
+    employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
+    position_id: Mapped[int | None] = mapped_column(
+        ForeignKey("positions.id", ondelete="SET NULL"), nullable=True
+    )
+    start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # B6 alarm key
+    end_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    break_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="assigned", nullable=False)  # assigned | open
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class ShiftTag(Base):
+    """Tags on a shift (M2M shifts <-> the B2 Tag taxonomy)."""
+
+    __tablename__ = "shift_tags"
+    __table_args__ = (
+        UniqueConstraint("shift_id", "tag_id", name="uq_shift_tag"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shift_id: Mapped[int] = mapped_column(
+        ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tags.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

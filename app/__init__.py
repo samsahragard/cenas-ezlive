@@ -27,6 +27,7 @@ from app.web.tasks import tasks_bp
 from app.web.team_reports import team_reports_bp
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
+from app.web import employee_auth as ezempauth
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications
@@ -164,6 +165,10 @@ def create_app():
     # before_request that stashes g.current_user. Must come after ezauth so
     # its EXEMPT_PREFIXES updates win the path-match race for /keypad-login.
     ezkeypad.install(app)
+    # Schedules V2 B2 (ckai): employee SMS-login endpoints + the employee->
+    # /partner firewall. After ezauth/ezkeypad so the global gate is
+    # registered first; the firewall 403s any employee session on /partner/*.
+    ezempauth.install(app)
     # Role dashboard badge (Sam 2026-05-21). The marquee badge in
     # base_dashboard.html shows on EVERY page, so the role-matched banner
     # stem must be resolvable app-wide. register_dashboard_banner installs

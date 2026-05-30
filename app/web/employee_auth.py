@@ -224,11 +224,66 @@ def migration_run_placeholder():
     global firewall + this check both keep employees out.
 
     TODO(B3): confirm the partner+operator gate + wire scripts/sling_migrate.py."""
-    if not session.get("partner_auth_ok"):
+    import os
+    import base64
+    import csv as _csv
+    import io
+    from sqlalchemy import text as _text
+
+    raw = (request.headers.get("Authorization", "") or "").strip()
+    tok = raw[7:].strip() if raw.lower().startswith("bearer ") else ""
+    expected = (os.getenv("INGEST_TOKEN") or "").strip()
+    if not session.get("partner_auth_ok") and not (expected and tok == expected):
         abort(403)
-    return jsonify({"ok": False,
-                    "error": "Migration runner not yet implemented (B3).",
-                    "block": "B3"}), 501
+
+    data = request.get_json(silent=True) or {}
+    b64 = data.get("csv_b64")
+    if not b64:
+        return jsonify({"ok": False, "error": "csv_b64 (base64 of the CSV) required"}), 400
+    try:
+        text_csv = base64.b64decode(b64).decode("utf-8-sig")
+        rows = list(_csv.DictReader(io.StringIO(text_csv)))
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": "bad csv_b64: %s" % e}), 400
+    if not rows:
+        return jsonify({"ok": False, "error": "CSV parsed to 0 rows"}), 400
+
+    from app import models as _m
+    from scripts.sling_migrate import run_migration, MODEL_NAMES
+
+    probe = SessionLocal()
+    try:
+        empty = probe.query(Employee).count() == 0
+        eng = probe.get_bind()
+    finally:
+        probe.close()
+
+    recreated = False
+    if empty:
+        # GUARDED: only when employees is EMPTY -> apply the B3 nullable-phone
+        # schema. SQLite can't ALTER DROP NOT NULL, so drop + recreate the empty
+        # V2 tables (FK order). Never runs against populated data.
+        with eng.begin() as conn:
+            for t in ("employee_sms_codes", "employee_positions",
+                      "employee_store_assignments", "employee_phones", "employees"):
+                conn.execute(_text("DROP TABLE IF EXISTS %s" % t))
+        _m.Base.metadata.create_all(eng)
+        recreated = True
+
+    db = SessionLocal()
+    try:
+        models = {n: getattr(_m, n) for n in MODEL_NAMES}
+        rep, flags, info = run_migration(rows, db, models, commit=True, log=lambda *a: None)
+        return jsonify({"ok": True, "recreated_schema": recreated,
+                        "report": rep, "flags": flags,
+                        "merged": len(info["merged_sling_ids"]),
+                        "csv_rows": info["csv_rows"]}), 200
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        log.exception("B3 migration_run failed")
+        return jsonify({"ok": False, "error": "%s: %s" % (type(e).__name__, e)}), 500
+    finally:
+        db.close()
 
 
 # --------------------------------------------------------------------------

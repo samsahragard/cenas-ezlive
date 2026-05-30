@@ -98,3 +98,27 @@ def sv2_availability_page():
         store_label=g.store_label,
         config_json=json.dumps(config),
     )
+
+
+@store_bp.route("/schedules-v2/marketplace", methods=["GET"])
+@require_level(_MGR)
+def sv2_marketplace_page():
+    """Render the client-side manager marketplace-approval queue (B9): offers a
+    teammate took + proposed swaps awaiting manager approval; approve moves the
+    shift(s). Data via fetch() from ckai's endpoints; same gates as the week-view
+    (a cross-store gm gets 302/403 -> friendly notice). Page owns a distinct path;
+    ckai's lists are at <base>/offers/list + <base>/swaps/list (#1996)."""
+    slug = g.current_store
+    base = f"/{slug}/schedules-v2"
+    config = {
+        "storeLabel": g.store_label,
+        "offersListUrl": f"{base}/offers/list",   # ckai (B9): GET[?status] -> {ok, offers:[offer]}
+        "swapsListUrl": f"{base}/swaps/list",      # ckai (B9): GET[?status] -> {ok, swaps:[swap]}
+        "offerActionBase": f"{base}/offers",       # ckai (B9): POST <base>/<id>/approve | <base>/<id>/deny
+        "swapActionBase": f"{base}/swaps",         # ckai (B9): POST <base>/<id>/approve | <base>/<id>/deny
+    }
+    return render_template(
+        "schedules_v2_marketplace.html",
+        store_label=g.store_label,
+        config_json=json.dumps(config),
+    )

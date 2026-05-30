@@ -43,6 +43,7 @@ from app.web import employee_time_off_page  # noqa: F401  B7: attaches GET /empl
 from app.web import employee_availability  # noqa: F401  B8: attaches the employee availability endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import employee_availability_page  # noqa: F401  B8: attaches GET /employee/availability (availability editor) to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import employee_shift_market  # noqa: F401  B9: attaches the employee offer/swap/marketplace endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
+from app.web import employee_shift_marketplace_page  # noqa: F401  B9: attaches GET /employee/shift-marketplace to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications

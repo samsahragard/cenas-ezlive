@@ -214,6 +214,14 @@ def sv2_shift_update(shift_id):
         if "employee_id" in data:
             sh.employee_id = data["employee_id"]
             sh.status = "assigned" if data["employee_id"] else "open"
+        # B7: an update that leaves the shift ASSIGNED must respect approved
+        # time-off on the (possibly new) employee + (possibly new) date - the same
+        # guard sv2_shift_new applies on create. Nothing is committed yet, so a 409
+        # here leaves the shift untouched (ckai flagged this PUT-reassign gap #1974).
+        if sh.employee_id and sh.start_at:
+            blocker = scheduling_timeoff.conflict(sh.employee_id, sh.start_at.date())
+            if blocker:
+                return jsonify({"ok": False, "error": blocker}), 409
         sh.updated_at = datetime.utcnow()
         db.commit()
         return jsonify({"ok": True, "id": sh.id, "status": sh.status}), 200
@@ -255,14 +263,25 @@ def sv2_shift_bulk_copy():
         offset = dst.week_start - src.week_start  # timedelta (week delta)
         now = datetime.utcnow()
         n = 0
+        opened_for_timeoff = 0
         for sh in db.query(Shift).filter_by(schedule_id=src.id).all():
-            db.add(Shift(schedule_id=dst.id, employee_id=sh.employee_id, position_id=sh.position_id,
-                         start_at=sh.start_at + offset, end_at=sh.end_at + offset,
-                         break_minutes=sh.break_minutes, status=sh.status, notes=sh.notes,
+            new_start = sh.start_at + offset
+            emp_id, status = sh.employee_id, sh.status
+            # B7: don't template an assignment onto the employee's approved time-off.
+            # Rather than 409 the whole copy for one conflict (bad UX), bring that
+            # slot over as OPEN (coverage preserved) + report the count so the
+            # manager can re-fill it. (ckai flagged this bulk-copy gap #1974.)
+            if emp_id and scheduling_timeoff.conflict(emp_id, new_start.date()):
+                emp_id, status = None, "open"
+                opened_for_timeoff += 1
+            db.add(Shift(schedule_id=dst.id, employee_id=emp_id, position_id=sh.position_id,
+                         start_at=new_start, end_at=sh.end_at + offset,
+                         break_minutes=sh.break_minutes, status=status, notes=sh.notes,
                          created_at=now, updated_at=now))
             n += 1
         db.commit()
-        return jsonify({"ok": True, "copied": n, "to_schedule_id": dst_id}), 201
+        return jsonify({"ok": True, "copied": n, "to_schedule_id": dst_id,
+                        "opened_for_timeoff": opened_for_timeoff}), 201
     finally:
         db.close()
 

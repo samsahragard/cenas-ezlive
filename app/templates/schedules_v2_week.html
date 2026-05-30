@@ -1,0 +1,765 @@
+{# ============================================================
+   schedules_v2_week.html - Schedules V2 / Block 4
+   Manager DRAFT week-view: rows = employees (roster) x cols = the
+   7 days of a week; cells hold shift chips. Build/edit shifts via a
+   modal (position / time / break / tags / notes / open-vs-assigned),
+   filter by position, page through weeks.
+
+   FRONTEND-ONLY (ck). Client-rendered: the page route hands this
+   template a config blob (store label + the endpoint URLs) and the
+   JS fetches everything from the board endpoint, so the template
+   never touches models (aick's lane). Contract it binds to:
+
+     GET  <board_url>?week=YYYY-MM-DD ->
+        { ok, store, schedule:{id,week_start,status,published_at}|null,
+          shifts:[{id,employee_id,position_id,start_at,end_at,
+                   break_minutes,status,notes,tag_ids}],
+          roster:[{id,full_name,active}], positions:[{id,name,store_key}],
+          tags:[{id,name}] }
+        schedule:null + shifts:[] => no draft yet (Create-draft CTA).
+     POST <schedule_new_url>  {week_start}            -> {ok,id,...}
+     POST <shift_new_url>     {schedule_id,employee_id?,position_id?,
+                               start_at,end_at,break_minutes,notes,tag_ids}
+     PUT  <shift_url_base>/<id>  (partial)            -> {ok,...}
+     DELETE <shift_url_base>/<id>                     -> {ok,...}
+
+   DRAFTS ARE INVISIBLE TO EMPLOYEES - this is a manager-gated page
+   (require_level foh_manager on the route); employees never reach it.
+   Any non-200 from the gated endpoints is handled gracefully (a
+   cross-store gm gets a 302/403 -> we show a friendly access notice,
+   never a broken grid).
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'schedules_v2' %}
+
+{% block title %}Schedules V2 - Cenas Kitchen{% endblock %}
+
+{% block page_module %}SCHEDULES{% endblock %}
+{% block page_title %}Week Builder{% endblock %}
+{% block page_subtitle %}{{ store_label }} - draft &amp; assign shifts (V2){% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  /* All scoped under .sv2-sched so the warm palette never leaks into
+     the global sheet. Opaque surface first so base_dashboard's
+     bg-tequila.jpg (body::before) never bleeds through. */
+  .sv2-sched {
+    --sk-red: #C73B36;
+    --sk-red-deep: #9B2A26;
+    --sk-red-bright: #E85852;
+    --sk-gold: #E4B340;
+    --sk-gold-bright: #FFD970;
+    --sk-teal: #2EA39F;
+    --sk-teal-bright: #5BCAC5;
+    --sk-cream: #FAF6EC;
+    --sk-cream-dim: rgba(250, 246, 236, 0.82);
+    --sk-cream-faint: rgba(250, 246, 236, 0.52);
+    --sk-cream-meta: rgba(250, 246, 236, 0.34);
+    --sk-bg-card: rgba(40, 22, 14, 0.65);
+    --sk-bg-card-hi: rgba(50, 28, 18, 0.9);
+    --sk-bg-input: rgba(0, 0, 0, 0.28);
+    --sk-border-subtle: rgba(217, 164, 54, 0.18);
+    --sk-border-active: rgba(228, 179, 64, 0.5);
+    --sk-radius-sm: 8px;
+    --sk-radius-md: 12px;
+    --sk-radius-lg: 16px;
+    --foh: #5BCAC5;
+    --boh: #E89B40;
+    --open: #9A8FE0;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--sk-cream);
+    position: relative;
+    isolation: isolate;
+    background-color: #1a0d08;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 59, 54, 0.14), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228, 179, 64, 0.08), transparent),
+      linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
+    border: 0.5px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-lg);
+    padding: 18px 18px 32px;
+    margin-bottom: 40px;
+    overflow: hidden;
+  }
+  .sv2-sched *, .sv2-sched *::before, .sv2-sched *::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sv2-sched h1, .sv2-sched h2, .sv2-sched h3, .sv2-sched p { margin: 0; }
+
+  /* ---- controls bar ---- */
+  .sv2-controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    margin-bottom: 16px;
+  }
+  .sv2-weeknav { display: flex; align-items: center; gap: 8px; }
+  .sv2-arrow {
+    width: 36px; height: 36px; border-radius: var(--sk-radius-sm);
+    border: 1px solid var(--sk-border-subtle); background: var(--sk-bg-card);
+    color: var(--sk-cream); font-size: 18px; cursor: pointer; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .15s, border-color .15s;
+  }
+  .sv2-arrow:hover { background: var(--sk-bg-card-hi); border-color: var(--sk-border-active); }
+  .sv2-weeklabel {
+    font-family: 'Instrument Serif', serif; font-size: 22px; letter-spacing: .2px;
+    min-width: 210px; text-align: center; color: var(--sk-cream);
+  }
+  .sv2-weeklabel small { display:block; font-family:'Manrope',sans-serif; font-size:11px;
+    letter-spacing:.14em; text-transform:uppercase; color: var(--sk-cream-meta); }
+  .sv2-pill {
+    font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .sv2-pill.draft   { color: var(--sk-gold-bright); border-color: rgba(228,179,64,.4); background: rgba(228,179,64,.1); }
+  .sv2-pill.published { color: var(--sk-teal-bright); border-color: rgba(91,202,197,.4); background: rgba(91,202,197,.1); }
+  .sv2-pill.none    { color: var(--sk-cream-faint); border-color: var(--sk-border-subtle); background: rgba(0,0,0,.2); }
+  .sv2-spacer { flex: 1 1 auto; }
+  .sv2-btn {
+    font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600;
+    padding: 8px 14px; border-radius: var(--sk-radius-sm); cursor: pointer;
+    border: 1px solid var(--sk-border-subtle); background: var(--sk-bg-card); color: var(--sk-cream);
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  .sv2-btn:hover { background: var(--sk-bg-card-hi); border-color: var(--sk-border-active); }
+  .sv2-btn:active { transform: translateY(1px); }
+  .sv2-btn.primary { background: var(--sk-red); border-color: var(--sk-red-bright); color: #fff; }
+  .sv2-btn.primary:hover { background: var(--sk-red-bright); }
+  .sv2-btn.danger { color: var(--sk-red-bright); border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.08); }
+  .sv2-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .sv2-filter {
+    font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--sk-cream);
+    background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-sm); padding: 7px 10px; min-width: 150px;
+  }
+
+  /* ---- grid ---- */
+  .sv2-gridwrap {
+    overflow-x: auto; border: 1px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-md); background: rgba(0,0,0,.18);
+  }
+  .sv2-grid { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; }
+  .sv2-grid th, .sv2-grid td {
+    border-bottom: 1px solid rgba(217,164,54,.1);
+    border-right: 1px solid rgba(217,164,54,.07);
+    vertical-align: top;
+  }
+  .sv2-grid thead th {
+    position: sticky; top: 0; z-index: 3;
+    background: #241309; padding: 9px 8px; text-align: center;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--sk-cream-dim);
+    font-weight: 600;
+  }
+  .sv2-grid thead th .dom { display:block; font-family:'Instrument Serif',serif; font-size:18px;
+    text-transform:none; letter-spacing:0; color: var(--sk-cream); }
+  .sv2-grid thead th.is-today { color: var(--sk-gold-bright); }
+  .sv2-grid thead th.is-today .dom { color: var(--sk-gold-bright); }
+  .sv2-namecol {
+    position: sticky; left: 0; z-index: 2; background: #241309;
+    min-width: 150px; max-width: 180px; padding: 10px 12px; text-align: left;
+  }
+  .sv2-grid thead th.sv2-namecol { z-index: 4; }
+  .sv2-emp-name { font-weight: 700; font-size: 13.5px; color: var(--sk-cream); }
+  .sv2-emp-sub { font-size: 11px; color: var(--sk-cream-meta); margin-top: 2px; }
+  .sv2-row.open .sv2-namecol { background: #2a1410; }
+  .sv2-row.open .sv2-emp-name { color: var(--open); letter-spacing:.04em; }
+  .sv2-cell { padding: 5px; min-width: 88px; height: 62px; cursor: pointer; transition: background .12s; }
+  .sv2-cell:hover { background: rgba(228,179,64,.06); }
+  .sv2-cell.is-today { background: rgba(228,179,64,.04); }
+  .sv2-addhint { color: var(--sk-cream-meta); font-size: 18px; text-align: center;
+    line-height: 52px; opacity: 0; transition: opacity .12s; }
+  .sv2-cell:hover .sv2-addhint { opacity: 1; }
+
+  .sv2-chip {
+    display: block; border-radius: 7px; padding: 5px 7px; margin-bottom: 4px;
+    background: var(--sk-bg-card-hi); border-left: 3px solid var(--foh);
+    cursor: pointer; transition: transform .05s, background .12s;
+  }
+  .sv2-chip:hover { background: rgba(60,34,22,1); }
+  .sv2-chip:active { transform: scale(.985); }
+  .sv2-chip.boh { border-left-color: var(--boh); }
+  .sv2-chip.foh { border-left-color: var(--foh); }
+  .sv2-chip.open { border-left-color: var(--open); border-style: dashed; }
+  .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
+  .sv2-chip-pos { font-size: 11px; color: var(--sk-cream-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sv2-chip-open-tag { font-size: 10px; letter-spacing:.1em; text-transform:uppercase; color: var(--open); font-weight:700; }
+
+  /* ---- states ---- */
+  .sv2-state { padding: 40px 20px; text-align: center; color: var(--sk-cream-dim); }
+  .sv2-state h3 { font-family:'Instrument Serif',serif; font-size: 24px; margin-bottom: 8px; color: var(--sk-cream); }
+  .sv2-state p { color: var(--sk-cream-faint); margin-bottom: 16px; }
+  .sv2-hidden { display: none !important; }
+
+  /* ---- modal ---- */
+  .sv2-modal-back {
+    position: fixed; inset: 0; background: rgba(0,0,0,.62); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    opacity: 0; pointer-events: none; transition: opacity .15s;
+  }
+  .sv2-modal-back.show { opacity: 1; pointer-events: auto; }
+  .sv2-modal {
+    width: 100%; max-width: 440px; max-height: 92vh; overflow-y: auto;
+    background: linear-gradient(180deg,#2a160d 0%,#1c0f08 100%);
+    border: 1px solid var(--sk-border-active); border-radius: var(--sk-radius-lg);
+    padding: 20px; box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    transform: translateY(10px) scale(.99); transition: transform .15s;
+  }
+  .sv2-modal-back.show .sv2-modal { transform: none; }
+  .sv2-modal h2 { font-family:'Instrument Serif',serif; font-size: 24px; margin-bottom: 2px; }
+  .sv2-modal .sub { font-size: 12px; color: var(--sk-cream-meta); margin-bottom: 16px; }
+  .sv2-field { margin-bottom: 13px; }
+  .sv2-field label { display:block; font-size: 11px; letter-spacing:.1em; text-transform:uppercase;
+    color: var(--sk-cream-faint); margin-bottom: 5px; }
+  .sv2-input, .sv2-select, .sv2-textarea {
+    width: 100%; font-family:'Manrope',sans-serif; font-size: 14px; color: var(--sk-cream);
+    background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-sm); padding: 9px 11px;
+  }
+  .sv2-input:focus, .sv2-select:focus, .sv2-textarea:focus { outline: none; border-color: var(--sk-border-active); }
+  .sv2-textarea { resize: vertical; min-height: 56px; }
+  .sv2-row2 { display: flex; gap: 10px; }
+  .sv2-row2 > * { flex: 1; }
+  .sv2-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sv2-tag {
+    font-size: 12px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--sk-border-subtle); background: var(--sk-bg-input); color: var(--sk-cream-dim);
+    user-select: none;
+  }
+  .sv2-tag.on { background: rgba(228,179,64,.16); border-color: var(--sk-border-active); color: var(--sk-gold-bright); }
+  .sv2-modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .sv2-modal-actions .sv2-spacer { flex: 1; }
+  .sv2-err { color: var(--sk-red-bright); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+
+  @media (max-width: 600px) {
+    .sv2-weeklabel { font-size: 18px; min-width: 150px; }
+    .sv2-controls { gap: 8px 10px; }
+    .sv2-filter { min-width: 120px; }
+  }
+</style>
+
+<script type="application/json" id="sv2-config">{{ config_json | safe }}</script>
+
+<div class="sv2-sched">
+
+  <!-- controls -->
+  <div class="sv2-controls">
+    <div class="sv2-weeknav">
+      <button class="sv2-arrow" id="sv2-prev" title="Previous week" aria-label="Previous week">&lsaquo;</button>
+      <div class="sv2-weeklabel"><small>Week of</small><span id="sv2-weeklabel">&hellip;</span></div>
+      <button class="sv2-arrow" id="sv2-next" title="Next week" aria-label="Next week">&rsaquo;</button>
+    </div>
+    <span class="sv2-pill none" id="sv2-status">No schedule</span>
+    <div class="sv2-spacer"></div>
+    <select class="sv2-filter" id="sv2-posfilter" aria-label="Filter by position">
+      <option value="">All positions</option>
+    </select>
+    <button class="sv2-btn" id="sv2-today">This week</button>
+    <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
+  </div>
+
+  <!-- grid / states -->
+  <div id="sv2-loading" class="sv2-state">Loading week&hellip;</div>
+
+  <div id="sv2-nodraft" class="sv2-state sv2-hidden">
+    <h3>No draft for this week</h3>
+    <p>Create a draft schedule to start adding shifts. Drafts stay private to managers until you publish (B5).</p>
+    <button class="sv2-btn primary" id="sv2-createdraft2">+ Create draft schedule</button>
+  </div>
+
+  <div id="sv2-access" class="sv2-state sv2-hidden">
+    <h3>Not available here</h3>
+    <p id="sv2-access-msg">This schedule belongs to another store.</p>
+  </div>
+
+  <div id="sv2-gridwrap" class="sv2-gridwrap sv2-hidden">
+    <table class="sv2-grid">
+      <thead><tr id="sv2-head"></tr></thead>
+      <tbody id="sv2-body"></tbody>
+    </table>
+  </div>
+
+  <!-- shift modal -->
+  <div class="sv2-modal-back" id="sv2-modalback">
+    <div class="sv2-modal" role="dialog" aria-modal="true" aria-labelledby="sv2-mtitle">
+      <h2 id="sv2-mtitle">New shift</h2>
+      <div class="sub" id="sv2-msub"></div>
+
+      <div class="sv2-field">
+        <label for="sv2-m-emp">Assign to</label>
+        <select class="sv2-select" id="sv2-m-emp">
+          <option value="">Open shift (unassigned)</option>
+        </select>
+      </div>
+
+      <div class="sv2-field">
+        <label for="sv2-m-pos">Position</label>
+        <select class="sv2-select" id="sv2-m-pos"><option value="">No position</option></select>
+      </div>
+
+      <div class="sv2-row2">
+        <div class="sv2-field">
+          <label for="sv2-m-start">Start</label>
+          <input class="sv2-input" type="time" id="sv2-m-start" step="300">
+        </div>
+        <div class="sv2-field">
+          <label for="sv2-m-end">End</label>
+          <input class="sv2-input" type="time" id="sv2-m-end" step="300">
+        </div>
+        <div class="sv2-field" style="max-width:90px">
+          <label for="sv2-m-break">Break</label>
+          <input class="sv2-input" type="number" id="sv2-m-break" min="0" step="5" value="0">
+        </div>
+      </div>
+
+      <div class="sv2-field" id="sv2-tagfield">
+        <label>Tags</label>
+        <div class="sv2-tags" id="sv2-m-tags"></div>
+      </div>
+
+      <div class="sv2-field">
+        <label for="sv2-m-notes">Notes</label>
+        <textarea class="sv2-textarea" id="sv2-m-notes" placeholder="Optional"></textarea>
+      </div>
+
+      <div class="sv2-err" id="sv2-m-err"></div>
+
+      <div class="sv2-modal-actions">
+        <button class="sv2-btn danger sv2-hidden" id="sv2-m-delete">Delete</button>
+        <div class="sv2-spacer"></div>
+        <button class="sv2-btn" id="sv2-m-cancel">Cancel</button>
+        <button class="sv2-btn primary" id="sv2-m-save">Save shift</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-config").textContent);
+  // CFG: { storeLabel, boardUrl, scheduleNewUrl, shiftNewUrl, shiftUrlBase }
+
+  var DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  var state = {
+    weekStart: mondayOf(new Date()),  // Date (local midnight, Monday)
+    board: null,
+    posFilter: "",
+    editing: null,        // shift object when editing, else null
+    cellEmp: null,        // employee_id (or null=open) for a new shift
+    cellDate: null,       // ISO date string for a new shift
+    selTags: {},          // tag_id -> true while modal open
+    busy: false
+  };
+
+  // ---- date helpers (all local-time; dates are calendar days) ----
+  function mondayOf(d) {
+    var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var dow = (x.getDay() + 6) % 7;  // 0=Mon
+    x.setDate(x.getDate() - dow);
+    return x;
+  }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function isoDate(d) {
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function sameDay(a, b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+  function parseISO(s) { return s ? new Date(s) : null; }
+  function hhmm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function fmtTime(d) {
+    var h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? "a" : "p";
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + (m ? ":" + pad(m) : "") + ap;
+  }
+
+  // ---- DOM refs ----
+  function $(id) { return document.getElementById(id); }
+  var elHead = $("sv2-head"), elBody = $("sv2-body"),
+      elLoading = $("sv2-loading"), elGrid = $("sv2-gridwrap"),
+      elNoDraft = $("sv2-nodraft"), elAccess = $("sv2-access"),
+      elStatus = $("sv2-status"), elWeekLabel = $("sv2-weeklabel"),
+      elPosFilter = $("sv2-posfilter"), elCreate = $("sv2-createdraft");
+
+  // ---- weekly board load ----
+  function show(el) { el.classList.remove("sv2-hidden"); }
+  function hide(el) { el.classList.add("sv2-hidden"); }
+
+  function setStatus() {
+    var sch = state.board && state.board.schedule;
+    elStatus.className = "sv2-pill " + (sch ? sch.status : "none");
+    elStatus.textContent = sch ? (sch.status === "published" ? "Published" : "Draft") : "No schedule";
+    if (sch) hide(elCreate); else show(elCreate);
+  }
+
+  function renderWeekLabel() {
+    var a = state.weekStart, b = addDays(a, 6);
+    var lab = MON[a.getMonth()] + " " + a.getDate() + " - " + MON[b.getMonth()] + " " + b.getDate() + ", " + b.getFullYear();
+    elWeekLabel.textContent = lab;
+  }
+
+  function loadBoard() {
+    state.busy = true;
+    hide(elGrid); hide(elNoDraft); hide(elAccess); show(elLoading);
+    renderWeekLabel();
+    var url = CFG.boardUrl + (CFG.boardUrl.indexOf("?") >= 0 ? "&" : "?") + "week=" + isoDate(state.weekStart);
+    fetch(url, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (r) {
+        if (r.status === 302 || r.status === 403 || r.status === 401) { throw { access: true, code: r.status }; }
+        if (!r.ok) { throw { code: r.status }; }
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data || data.ok === false) { throw { code: "bad" }; }
+        state.board = data;
+        hide(elLoading);
+        buildPosFilter();
+        setStatus();
+        if (!data.schedule) { renderGrid(); show(elNoDraft); }
+        else { renderGrid(); show(elGrid); }
+        state.busy = false;
+      })
+      .catch(function (e) {
+        hide(elLoading);
+        state.busy = false;
+        if (e && e.access) {
+          $("sv2-access-msg").textContent =
+            "This schedule belongs to another store, or your session cannot manage it.";
+          show(elAccess);
+        } else {
+          // backend not ready yet / transient: show the empty grid shell
+          state.board = state.board || { schedule: null, shifts: [], roster: [], positions: [], tags: [] };
+          setStatus(); renderGrid();
+          $("sv2-access-msg").textContent = "Could not load this week (the schedule service may still be deploying). Try again shortly.";
+          show(elAccess);
+        }
+      });
+  }
+
+  function buildPosFilter() {
+    var positions = (state.board.positions || []);
+    var cur = elPosFilter.value;
+    elPosFilter.innerHTML = '<option value="">All positions</option>';
+    positions.forEach(function (p) {
+      var o = document.createElement("option");
+      o.value = String(p.id); o.textContent = p.name;
+      elPosFilter.appendChild(o);
+    });
+    elPosFilter.value = cur;
+  }
+
+  // ---- grid render ----
+  function posById(id) {
+    var ps = (state.board.positions || []);
+    for (var i = 0; i < ps.length; i++) if (String(ps[i].id) === String(id)) return ps[i];
+    return null;
+  }
+  // Positions carry no kitchen-area field (the board returns {id,name,store_key}),
+  // so colour each chip by a stable hash of its position name: same position ->
+  // same colour every render. Open shifts ignore this and use the dashed .open style.
+  var POS_PALETTE = ["#5BCAC5", "#E89B40", "#E4B340", "#6FB1E0",
+                     "#C98BDB", "#7FD18A", "#E8857F", "#D2A24A"];
+  function posColor(posId) {
+    var p = posById(posId);
+    if (!p) return "#5BCAC5";
+    var key = String(p.name || p.id), h = 0;
+    for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 1000003;
+    return POS_PALETTE[h % POS_PALETTE.length];
+  }
+
+  function renderHead() {
+    var today = new Date();
+    var html = '<th class="sv2-namecol">Team</th>';
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(state.weekStart, i);
+      var isT = sameDay(d, today);
+      html += '<th class="' + (isT ? "is-today" : "") + '">' + DOW[i] +
+              '<span class="dom">' + d.getDate() + '</span></th>';
+    }
+    elHead.innerHTML = html;
+  }
+
+  function shiftsFor(empId, isoDay) {
+    var out = [];
+    var shifts = (state.board.shifts || []);
+    for (var i = 0; i < shifts.length; i++) {
+      var s = shifts[i];
+      var matchEmp = empId === null ? (s.employee_id == null) : (String(s.employee_id) === String(empId));
+      if (!matchEmp) continue;
+      if (state.posFilter && String(s.position_id) !== String(state.posFilter)) continue;
+      var sd = parseISO(s.start_at);
+      if (!sd) continue;
+      if (isoDate(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate())) === isoDay) out.push(s);
+    }
+    out.sort(function (a, b) { return (a.start_at || "").localeCompare(b.start_at || ""); });
+    return out;
+  }
+
+  function chipHtml(s) {
+    var sd = parseISO(s.start_at), ed = parseISO(s.end_at);
+    var t = (sd ? fmtTime(sd) : "?") + "-" + (ed ? fmtTime(ed) : "?");
+    var p = posById(s.position_id);
+    var open = (s.employee_id == null);
+    var cls = "sv2-chip" + (open ? " open" : "");
+    var style = open ? "" : ' style="border-left-color:' + posColor(s.position_id) + '"';
+    var posLine = open ? '<div class="sv2-chip-open-tag">Open</div>'
+                       : '<div class="sv2-chip-pos">' + (p ? esc(p.name) : "&mdash;") + '</div>';
+    return '<div class="' + cls + '" data-shift="' + s.id + '"' + style + '>' +
+             '<div class="sv2-chip-time">' + t + '</div>' + posLine + '</div>';
+  }
+
+  function renderGrid() {
+    renderHead();
+    var roster = (state.board.roster || []).slice();
+    var rows = "";
+    // Open-shifts row first
+    rows += rowHtml({ id: null, full_name: "Open shifts" }, true);
+    roster.forEach(function (emp) { rows += rowHtml(emp, false); });
+    elBody.innerHTML = rows;
+    if (!roster.length) {
+      // still allow open-shift row; hint that roster is empty
+    }
+  }
+
+  function rowHtml(emp, isOpen) {
+    var today = new Date();
+    var tds = '<td class="sv2-namecol">' +
+                '<div class="sv2-emp-name">' + esc(emp.full_name || "Team member") + '</div>' +
+                (isOpen ? '<div class="sv2-emp-sub">unassigned</div>' : "") +
+              '</td>';
+    var hasDraft = !!(state.board && state.board.schedule);
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(state.weekStart, i);
+      var iso = isoDate(d);
+      var isT = sameDay(d, today);
+      var chips = shiftsFor(emp.id, iso).map(chipHtml).join("");
+      var addable = hasDraft ? '<div class="sv2-addhint">+</div>' : "";
+      tds += '<td class="sv2-cell ' + (isT ? "is-today" : "") + '" data-emp="' +
+             (emp.id == null ? "" : emp.id) + '" data-date="' + iso + '">' +
+             chips + (chips ? "" : addable) + '</td>';
+    }
+    return '<tr class="sv2-row ' + (isOpen ? "open" : "") + '">' + tds + '</tr>';
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---- modal ----
+  var mb = $("sv2-modalback");
+  function openModal(opts) {
+    // opts: { shift } to edit, or { empId, dateISO } to create
+    state.editing = opts.shift || null;
+    state.selTags = {};
+    var emp = $("sv2-m-emp"), pos = $("sv2-m-pos"), start = $("sv2-m-start"),
+        end = $("sv2-m-end"), brk = $("sv2-m-break"), notes = $("sv2-m-notes"),
+        del = $("sv2-m-delete"), err = $("sv2-m-err"), title = $("sv2-mtitle"), sub = $("sv2-msub");
+    err.textContent = "";
+
+    // populate employee + position selects from board
+    fillSelect(emp, state.board.roster || [], "id", "full_name", "Open shift (unassigned)");
+    fillSelect(pos, state.board.positions || [], "id", "name", "No position");
+    fillTags(state.board.tags || []);
+
+    if (state.editing) {
+      var s = state.editing;
+      title.textContent = "Edit shift";
+      var sd = parseISO(s.start_at);
+      sub.textContent = dayLabel(sd);
+      state.cellEmp = s.employee_id != null ? s.employee_id : null;
+      state.cellDate = sd ? isoDate(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate())) : null;
+      emp.value = s.employee_id != null ? String(s.employee_id) : "";
+      pos.value = s.position_id != null ? String(s.position_id) : "";
+      start.value = sd ? hhmm(sd) : "";
+      var ed = parseISO(s.end_at); end.value = ed ? hhmm(ed) : "";
+      brk.value = s.break_minutes || 0;
+      notes.value = s.notes || "";
+      (s.tag_ids || []).forEach(function (t) { state.selTags[t] = true; });
+      paintTags();
+      show(del);
+    } else {
+      title.textContent = "New shift";
+      state.cellEmp = opts.empId != null && opts.empId !== "" ? opts.empId : null;
+      state.cellDate = opts.dateISO;
+      sub.textContent = dayLabel(new Date(opts.dateISO + "T00:00:00"));
+      emp.value = state.cellEmp != null ? String(state.cellEmp) : "";
+      pos.value = ""; start.value = "09:00"; end.value = "17:00"; brk.value = 0; notes.value = "";
+      hide(del);
+    }
+    mb.classList.add("show");
+    setTimeout(function () { start.focus(); }, 60);
+  }
+  function dayLabel(d) {
+    if (!d) return "";
+    return DOW[(d.getDay() + 6) % 7] + " " + MON[d.getMonth()] + " " + d.getDate();
+  }
+  function closeModal() { mb.classList.remove("show"); state.editing = null; }
+
+  function fillSelect(sel, items, vkey, lkey, zeroLabel) {
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">' + esc(zeroLabel) + "</option>";
+    items.forEach(function (it) {
+      var o = document.createElement("option");
+      o.value = String(it[vkey]);
+      o.textContent = it[lkey];
+      sel.appendChild(o);
+    });
+    sel.value = cur;
+  }
+  function fillTags(tags) {
+    var wrap = $("sv2-m-tags"), tf = $("sv2-tagfield");
+    if (!tags.length) { tf.classList.add("sv2-hidden"); wrap.innerHTML = ""; return; }
+    tf.classList.remove("sv2-hidden");
+    wrap.innerHTML = "";
+    tags.forEach(function (t) {
+      var b = document.createElement("span");
+      b.className = "sv2-tag"; b.setAttribute("data-tag", t.id); b.textContent = t.name;
+      b.onclick = function () {
+        if (state.selTags[t.id]) delete state.selTags[t.id]; else state.selTags[t.id] = true;
+        paintTags();
+      };
+      wrap.appendChild(b);
+    });
+  }
+  function paintTags() {
+    var nodes = document.querySelectorAll("#sv2-m-tags .sv2-tag");
+    nodes.forEach(function (n) {
+      var id = n.getAttribute("data-tag");
+      if (state.selTags[id]) n.classList.add("on"); else n.classList.remove("on");
+    });
+  }
+
+  function combineDateTime(dateISO, hm) {
+    if (!dateISO || !hm) return null;
+    return dateISO + "T" + hm + ":00";
+  }
+
+  function saveShift() {
+    if (state.busy) return;
+    var err = $("sv2-m-err"); err.textContent = "";
+    var sched = state.board && state.board.schedule;
+    if (!sched) { err.textContent = "Create a draft schedule first."; return; }
+    var empVal = $("sv2-m-emp").value;
+    var posVal = $("sv2-m-pos").value;
+    var startHm = $("sv2-m-start").value, endHm = $("sv2-m-end").value;
+    if (!startHm || !endHm) { err.textContent = "Start and end time are required."; return; }
+    var start_at = combineDateTime(state.cellDate, startHm);
+    var end_at = combineDateTime(state.cellDate, endHm);
+    var tag_ids = Object.keys(state.selTags).map(function (x) { return isNaN(+x) ? x : +x; });
+    var body = {
+      employee_id: empVal ? toNum(empVal) : null,
+      position_id: posVal ? toNum(posVal) : null,
+      start_at: start_at, end_at: end_at,
+      break_minutes: toNum($("sv2-m-break").value) || 0,
+      notes: $("sv2-m-notes").value || null,
+      tag_ids: tag_ids
+    };
+    state.busy = true; $("sv2-m-save").disabled = true;
+    var req;
+    if (state.editing) {
+      req = fetch(CFG.shiftUrlBase + "/" + state.editing.id, {
+        method: "PUT", headers: jsonHeaders(), credentials: "same-origin", body: JSON.stringify(body)
+      });
+    } else {
+      body.schedule_id = sched.id;
+      req = fetch(CFG.shiftNewUrl, {
+        method: "POST", headers: jsonHeaders(), credentials: "same-origin", body: JSON.stringify(body)
+      });
+    }
+    req.then(parseJsonOrThrow).then(function (data) {
+      state.busy = false; $("sv2-m-save").disabled = false;
+      closeModal(); loadBoard();
+    }).catch(function (e) {
+      state.busy = false; $("sv2-m-save").disabled = false;
+      err.textContent = (e && e.error) ? e.error : "Could not save the shift. Please try again.";
+    });
+  }
+
+  function deleteShift() {
+    if (!state.editing || state.busy) return;
+    var err = $("sv2-m-err"); err.textContent = "";
+    state.busy = true; $("sv2-m-delete").disabled = true;
+    fetch(CFG.shiftUrlBase + "/" + state.editing.id, {
+      method: "DELETE", headers: jsonHeaders(), credentials: "same-origin"
+    }).then(parseJsonOrThrow).then(function () {
+      state.busy = false; $("sv2-m-delete").disabled = false;
+      closeModal(); loadBoard();
+    }).catch(function (e) {
+      state.busy = false; $("sv2-m-delete").disabled = false;
+      err.textContent = (e && e.error) ? e.error : "Could not delete the shift.";
+    });
+  }
+
+  function createDraft() {
+    if (state.busy) return;
+    state.busy = true;
+    fetch(CFG.scheduleNewUrl, {
+      method: "POST", headers: jsonHeaders(), credentials: "same-origin",
+      body: JSON.stringify({ week_start: isoDate(state.weekStart) })
+    }).then(parseJsonOrThrow).then(function () {
+      state.busy = false; loadBoard();
+    }).catch(function (e) {
+      state.busy = false;
+      // 409 = already exists -> just reload to pick it up
+      loadBoard();
+    });
+  }
+
+  // ---- fetch helpers ----
+  function jsonHeaders() { return { "Content-Type": "application/json", "Accept": "application/json" }; }
+  function toNum(v) { var n = +v; return isNaN(n) ? v : n; }
+  function parseJsonOrThrow(r) {
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      if (!r.ok || (j && j.ok === false)) { throw j || { code: r.status }; }
+      return j;
+    });
+  }
+
+  // ---- events ----
+  $("sv2-prev").onclick = function () { state.weekStart = addDays(state.weekStart, -7); loadBoard(); };
+  $("sv2-next").onclick = function () { state.weekStart = addDays(state.weekStart, 7); loadBoard(); };
+  $("sv2-today").onclick = function () { state.weekStart = mondayOf(new Date()); loadBoard(); };
+  elPosFilter.onchange = function () { state.posFilter = elPosFilter.value; if (state.board) renderGrid(); };
+  $("sv2-createdraft").onclick = createDraft;
+  $("sv2-createdraft2").onclick = createDraft;
+  $("sv2-m-cancel").onclick = closeModal;
+  $("sv2-m-save").onclick = saveShift;
+  $("sv2-m-delete").onclick = deleteShift;
+  mb.onclick = function (e) { if (e.target === mb) closeModal(); };
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && mb.classList.contains("show")) closeModal(); });
+
+  // grid click delegation: chip -> edit, empty cell -> new
+  elBody.onclick = function (e) {
+    var chip = e.target.closest ? e.target.closest(".sv2-chip") : null;
+    if (chip) {
+      var sid = chip.getAttribute("data-shift");
+      var shifts = (state.board.shifts || []);
+      for (var i = 0; i < shifts.length; i++) if (String(shifts[i].id) === String(sid)) { openModal({ shift: shifts[i] }); return; }
+      return;
+    }
+    var cell = e.target.closest ? e.target.closest(".sv2-cell") : null;
+    if (cell) {
+      if (!state.board || !state.board.schedule) return;  // no draft -> no add
+      openModal({ empId: cell.getAttribute("data-emp"), dateISO: cell.getAttribute("data-date") });
+    }
+  };
+
+  // go
+  loadBoard();
+})();
+</script>
+{% endblock %}

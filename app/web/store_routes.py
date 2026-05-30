@@ -228,9 +228,18 @@ def _schedule_subnav_cards(store_slug: str) -> list[dict]:
         {"label": "All Roster", "icon": "👥", "href": f"/{store_slug}/roster/all",
          "active": ["all_roster"],
          "sub": "Combined roster across BOH + FOH."},
-        {"label": "Weekly Schedule", "icon": "📅", "href": f"/{store_slug}/schedule/weekly",
-         "active": ["weekly_schedule"],
-         "sub": "Sling-sourced schedule for the week."},
+        {"label": "Weekly Schedule", "icon": "📅", "href": f"/{store_slug}/schedules-v2/",
+         "active": ["schedules_v2", "weekly_schedule"],
+         "sub": "Build, publish & assign shifts."},
+        {"label": "Time Off", "icon": "🌴", "href": f"/{store_slug}/schedules-v2/time-off",
+         "active": ["schedules_v2_timeoff"],
+         "sub": "Review & approve time-off requests."},
+        {"label": "Availability", "icon": "🕒", "href": f"/{store_slug}/schedules-v2/availability",
+         "active": ["schedules_v2_availability"],
+         "sub": "Who can work, when."},
+        {"label": "Marketplace", "icon": "🔁", "href": f"/{store_slug}/schedules-v2/marketplace",
+         "active": ["schedules_v2_marketplace"],
+         "sub": "Approve shift offers & swaps."},
     ]
 
 
@@ -337,6 +346,10 @@ _ACTIVE_TO_CATEGORY = {
     "foh_roster":        "schedule",
     "all_roster":        "schedule",
     "weekly_schedule":   "schedule",
+    "schedules_v2":             "schedule",   # B-cutover: V2 week-view is the primary schedule surface
+    "schedules_v2_timeoff":     "schedule",
+    "schedules_v2_availability":"schedule",
+    "schedules_v2_marketplace": "schedule",
     # Performance (matches perf_open)
     "perf_landing":     "performance",
     "perf_server":      "performance",

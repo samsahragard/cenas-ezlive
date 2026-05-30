@@ -222,9 +222,16 @@ def sv2_shift_update(shift_id):
             blocker = scheduling_timeoff.conflict(sh.employee_id, sh.start_at.date())
             if blocker:
                 return jsonify({"ok": False, "error": blocker}), 409
+        # B8: availability is a SOFT advisory - surface it in the response, never
+        # block (mirrors sv2_shift_new). ckai filled warning() in B8; I wire the PUT
+        # call-site here per his recommendation, so create + PUT both return
+        # "warning". (bulk-copy intentionally skipped: a soft per-shift advisory
+        # doesn't fit a bulk op and the employee CAN still work - ckai #1984.)
+        warn = (scheduling_availability.warning(sh.employee_id, sh.start_at)
+                if (sh.employee_id and sh.start_at) else None)
         sh.updated_at = datetime.utcnow()
         db.commit()
-        return jsonify({"ok": True, "id": sh.id, "status": sh.status}), 200
+        return jsonify({"ok": True, "id": sh.id, "status": sh.status, "warning": warn}), 200
     finally:
         db.close()
 

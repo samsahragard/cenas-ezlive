@@ -3283,3 +3283,34 @@ class EmployeeAlarmPreference(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class TimeOffRequest(Base):
+    """Schedules V2 B7: an employee's time-off request for a date range. status is
+    'pending' until a manager approves/denies; only an 'approved' request blocks
+    shift-create (scheduling_timeoff.conflict). A cancel is a soft status flip
+    (kept as history). One employee can have many; overlap with an existing
+    pending/approved request is rejected in the endpoint (a date-range overlap
+    can't be a simple UNIQUE), not by a DB constraint."""
+
+    __tablename__ = "time_off_requests"
+    __table_args__ = (
+        # powers conflict() (employee_id + status='approved' + date range) + the employee list
+        Index("ix_timeoff_emp_status", "employee_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)   # inclusive; >= start_date
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default="pending", nullable=False)  # pending|approved|denied|cancelled
+    manager_notes: Mapped[str | None] = mapped_column(Text, nullable=True)  # set on deny (optional on approve)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)  # manager User.id
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

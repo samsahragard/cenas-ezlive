@@ -1,0 +1,345 @@
+{# Employee availability (Schedules V2, B8). Logged-in employee declares when they
+   CAN work (recurring weekly windows) and adds one-off CANNOT-work spans (blocks).
+
+   ck owns this template + the GET /employee/availability page route.
+   ckai owns the data + action endpoints (locked #1986, B7-style split):
+     GET    {{ list_url }} -> {ok, recurring:[{id,day_of_week,start_time,end_time}],
+                                   blocks:[{id,start_at,end_at,reason}]}
+     POST   /employee/availability/recurring  {day_of_week 0-6 (0=Mon), start_time "HH:MM", end_time "HH:MM"}
+     DELETE /employee/availability/recurring/<id>
+     POST   /employee/availability/block      {start_at, end_at, reason?}
+     DELETE /employee/availability/block/<id>
+   day_of_week: 0=Mon .. 6=Sun (ckai's convention; NOT JS getDay). 400 -> {error}; 401 no session.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Availability &mdash; Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:#15205c; --blue-bright:#1d2a70; --blue-deep:#0a1340;
+    --red:#c8302a; --red-bright:#e54a3f; --red-deep:#8a1d18;
+    --cream:#f4e7d0; --cream-soft:#ebd9bc; --ink:#14205c;
+    --ok:#2f8f57; --ok-deep:#1f6b3e; --grey:#6b7280;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{ width:100%; min-height:100vh; background:#0a0604;
+    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif; position:relative; color:var(--ink); }
+  body::before{ content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter:blur(6px) brightness(0.55) saturate(1.05); }
+  body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%); }
+  .wrap{ position:relative; z-index:1; max-width:520px; margin:0 auto; padding:20px 18px 36px;
+    display:flex; flex-direction:column; min-height:100vh; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .topbar img{ width:auto; height:34px; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+  .backlink{ display:inline-flex; align-items:center; gap:5px; background:rgba(244,231,208,0.12);
+    color:var(--cream); border:1px solid rgba(244,231,208,0.30); border-radius:10px; padding:8px 13px;
+    font-size:13px; font-weight:600; letter-spacing:0.4px; text-decoration:none; transition:background 120ms; }
+  .backlink:hover{ background:rgba(244,231,208,0.22); }
+  .backlink .chev{ font-size:16px; line-height:1; margin-top:-1px; }
+
+  .pagehead{ background:radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 45%, var(--cream-soft) 100%);
+    border-radius:16px; padding:18px 20px; margin-bottom:18px;
+    box-shadow:0 0 0 2px var(--blue-bright), 0 2px 0 2px var(--blue-deep), 0 0 0 5px var(--red), 0 10px 22px rgba(0,0,0,0.5); }
+  .pagehead .eyebrow{ font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--red); }
+  .pagehead .name{ font-size:24px; font-weight:800; color:var(--blue-deep); line-height:1.15; margin-top:2px; }
+  .pagehead .meta{ font-size:13px; color:rgba(20,32,92,0.72); margin-top:7px; font-weight:600; }
+
+  .seclabel{ font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color:rgba(244,231,208,0.78); margin:18px 2px 11px; }
+  .seclabel:first-of-type{ margin-top:2px; }
+  .seclabel .sub{ display:block; font-size:11px; font-weight:600; letter-spacing:0.3px; text-transform:none;
+    color:rgba(244,231,208,0.55); margin-top:3px; }
+
+  .card{ background:rgba(244,231,208,0.97); border-radius:14px; padding:14px 16px;
+    box-shadow:0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4); }
+
+  /* Recurring: per-day rows */
+  .dayrow{ display:flex; align-items:flex-start; gap:11px; padding:11px 0; border-bottom:1px solid rgba(20,32,92,0.12); }
+  .dayrow:last-child{ border-bottom:none; }
+  .dayname{ flex:0 0 42px; font-size:13px; font-weight:800; color:var(--blue-deep); padding-top:4px; }
+  .windows{ flex:1 1 auto; display:flex; flex-wrap:wrap; gap:6px; min-height:28px; align-items:center; }
+  .win{ display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700; color:var(--ok-deep);
+    background:rgba(47,143,87,0.12); border:1.5px solid rgba(47,143,87,0.4); border-radius:999px; padding:4px 6px 4px 11px; }
+  .win .x{ cursor:pointer; width:18px; height:18px; border-radius:50%; border:none; background:rgba(20,32,92,0.12);
+    color:var(--blue-deep); font-size:13px; font-weight:800; line-height:1; display:inline-flex; align-items:center; justify-content:center; }
+  .win .x:hover{ background:rgba(200,48,42,0.2); color:var(--red-deep); }
+  .nowin{ font-size:12px; color:rgba(20,32,92,0.45); font-style:italic; padding-top:5px; }
+
+  .addrow{ display:flex; gap:8px; align-items:flex-end; margin-top:14px; flex-wrap:wrap; }
+  .addrow .fld{ display:flex; flex-direction:column; gap:4px; }
+  .addrow .fld.day{ flex:1 1 96px; } .addrow .fld.tm{ flex:1 1 84px; }
+  .addrow label{ font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:rgba(20,32,92,0.55); }
+  .addrow select, .addrow input{ border:1.5px solid rgba(20,32,92,0.25); border-radius:9px; padding:8px 9px;
+    font-family:inherit; font-size:13px; color:var(--ink); background:#fff; width:100%; }
+  .addrow select:focus, .addrow input:focus{ outline:none; border-color:var(--red); }
+  .addrow input.invalid{ border-color:var(--red); background:rgba(200,48,42,0.05); }
+  .btn-add{ flex:0 0 auto; border:none; border-radius:9px; padding:9px 15px; background:var(--blue);
+    color:#fff; font-size:13px; font-weight:800; cursor:pointer; box-shadow:0 2px 0 var(--blue-deep); }
+  .btn-add:hover{ filter:brightness(1.1); } .btn-add:disabled{ opacity:0.55; cursor:default; }
+
+  /* Blocks list */
+  .block{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+    padding:11px 0; border-bottom:1px solid rgba(20,32,92,0.12); }
+  .block:last-child{ border-bottom:none; }
+  .block .bwhen{ font-size:14px; font-weight:800; color:var(--blue-deep); }
+  .block .breason{ font-size:12.5px; color:rgba(20,32,92,0.7); margin-top:3px; }
+  .btn-del{ flex:0 0 auto; background:rgba(200,48,42,0.10); color:var(--red-deep); border:1.5px solid rgba(200,48,42,0.4);
+    border-radius:9px; padding:6px 11px; font-size:12px; font-weight:800; cursor:pointer; }
+  .btn-del:hover{ background:rgba(200,48,42,0.18); } .btn-del:disabled{ opacity:0.5; cursor:default; }
+  .noblocks{ font-size:13px; color:rgba(20,32,92,0.5); text-align:center; padding:8px 0; }
+  .blockform{ display:flex; gap:8px; align-items:flex-end; margin-top:14px; flex-wrap:wrap; }
+  .blockform .fld{ display:flex; flex-direction:column; gap:4px; }
+  .blockform .fld.dt{ flex:1 1 150px; } .blockform .fld.rsn{ flex:1 1 100%; }
+  .blockform label{ font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:rgba(20,32,92,0.55); }
+  .blockform input{ border:1.5px solid rgba(20,32,92,0.25); border-radius:9px; padding:8px 9px;
+    font-family:inherit; font-size:13px; color:var(--ink); background:#fff; width:100%; }
+  .blockform input:focus{ outline:none; border-color:var(--red); }
+  .blockform input.invalid{ border-color:var(--red); background:rgba(200,48,42,0.05); }
+
+  .statecard{ background:rgba(244,231,208,0.96); border-radius:14px; padding:24px 22px; text-align:center;
+    box-shadow:0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4); margin-top:2px; }
+  .statecard[hidden]{ display:none; }
+  .statecard .s-title{ font-size:16px; font-weight:800; color:var(--blue-deep); }
+  .statecard .s-body{ font-size:13.5px; color:rgba(20,32,92,0.72); margin-top:8px; line-height:1.5; }
+  .statecard .s-cta{ display:inline-block; margin-top:16px; background:var(--red); color:#fff; border-radius:11px;
+    padding:11px 22px; font-size:14px; font-weight:800; text-decoration:none; box-shadow:0 2px 0 var(--red-deep); }
+  .loading-dots{ font-size:14px; font-weight:700; letter-spacing:1px; color:rgba(244,231,208,0.8); text-align:center; padding:26px 0; }
+  #avail-body[hidden]{ display:none; }
+
+  .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); z-index:50;
+    max-width:440px; width:calc(100% - 36px); background:var(--blue-deep); color:var(--cream);
+    border:1px solid rgba(244,231,208,0.25); border-radius:12px; padding:12px 16px; font-size:13.5px; font-weight:600;
+    text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.55); opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err{ background:var(--red-deep); border-color:rgba(244,231,208,0.30); }
+
+  .footnote{ margin-top:auto; padding-top:24px; text-align:center; font-size:11px; color:rgba(244,231,208,0.45); letter-spacing:0.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="backlink" href="{{ dashboard_url|default('/employee/dashboard') }}"><span class="chev">&lsaquo;</span> Dashboard</a>
+  </div>
+
+  <div class="pagehead">
+    <div class="eyebrow">Availability</div>
+    <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'My availability')) }}</div>
+    <div class="meta">Tell your manager when you can &amp; can't work</div>
+  </div>
+
+  <div class="loading-dots" id="avail-loading">Loading your availability&hellip;</div>
+
+  <div class="statecard" id="avail-access" hidden>
+    <div class="s-title">Please sign in again</div>
+    <div class="s-body">Your session has expired. Sign back in to manage your availability.</div>
+    <a class="s-cta" href="{{ login_url|default('/employee/login') }}">Go to login</a>
+  </div>
+
+  <div id="avail-body" hidden>
+    <div class="seclabel">Weekly availability<span class="sub">The hours you can normally work each week.</span></div>
+    <div class="card" id="recurring-card"></div>
+    <div class="addrow">
+      <div class="fld day">
+        <label for="rec-day">Day</label>
+        <select id="rec-day">
+          <option value="0">Monday</option><option value="1">Tuesday</option>
+          <option value="2">Wednesday</option><option value="3">Thursday</option>
+          <option value="4">Friday</option><option value="5">Saturday</option>
+          <option value="6">Sunday</option>
+        </select>
+      </div>
+      <div class="fld tm"><label for="rec-start">From</label><input type="time" id="rec-start" /></div>
+      <div class="fld tm"><label for="rec-end">To</label><input type="time" id="rec-end" /></div>
+      <button class="btn-add" id="rec-add" type="button">Add</button>
+    </div>
+
+    <div class="seclabel">Time I can't work<span class="sub">One-off days or spans you're unavailable (overrides weekly).</span></div>
+    <div class="card" id="blocks-card"></div>
+    <div class="blockform">
+      <div class="fld dt"><label for="blk-start">Unavailable from</label><input type="datetime-local" id="blk-start" /></div>
+      <div class="fld dt"><label for="blk-end">Until</label><input type="datetime-local" id="blk-end" /></div>
+      <div class="fld rsn"><label for="blk-reason">Reason (optional)</label><input type="text" id="blk-reason" maxlength="200" placeholder="e.g. out of town" /></div>
+      <button class="btn-add" id="blk-add" type="button">Add block</button>
+    </div>
+  </div>
+
+  <div class="footnote">Schedules V2 &middot; availability</div>
+</div>
+
+<div class="toast" id="avail-toast"></div>
+
+<script type="application/json" id="sv2-avail-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-avail-config").textContent);
+
+  var elLoading = document.getElementById("avail-loading");
+  var elAccess  = document.getElementById("avail-access");
+  var elBody    = document.getElementById("avail-body");
+  var elRec     = document.getElementById("recurring-card");
+  var elBlocks  = document.getElementById("blocks-card");
+  var elToast   = document.getElementById("avail-toast");
+  var recDay    = document.getElementById("rec-day");
+  var recStart  = document.getElementById("rec-start");
+  var recEnd    = document.getElementById("rec-end");
+  var recAdd    = document.getElementById("rec-add");
+  var blkStart  = document.getElementById("blk-start");
+  var blkEnd    = document.getElementById("blk-end");
+  var blkReason = document.getElementById("blk-reason");
+  var blkAdd    = document.getElementById("blk-add");
+
+  var busy = false;
+  // ckai convention: day_of_week 0 = Monday
+  var DAY_FULL = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+  var DAY_ABBR = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  function show(el){ el.hidden = false; } function hide(el){ el.hidden = true; }
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+
+  function fmt12(hhmm){
+    var p = String(hhmm||"").split(":"); var h=+p[0]||0, m=+p[1]||0;
+    var ap = h>=12 ? "PM":"AM"; var hh=h%12; if(hh===0) hh=12;
+    return hh + ":" + (m<10?"0"+m:m) + " " + ap;
+  }
+  var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtDT(iso){
+    if(!iso) return "";
+    var parts = String(iso).split("T"); var d = parts[0].split("-");
+    if(d.length<3) return esc(iso);
+    var t = (parts[1]||"").slice(0,5);
+    var base = MON[(+d[1])-1] + " " + (+d[2]);
+    return base + (t ? ", " + fmt12(t) : "");
+  }
+
+  var toastTimer=null;
+  function toast(msg, isErr){
+    elToast.textContent=msg; elToast.classList.toggle("err", !!isErr); elToast.classList.add("show");
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){ elToast.classList.remove("show"); }, 3400);
+  }
+  function jsonHeaders(){ return { "Content-Type":"application/json", "Accept":"application/json" }; }
+  function parseJsonOrThrow(r){
+    var ct=r.headers.get("content-type")||"";
+    if(ct.indexOf("application/json")===-1){ var e1=new Error("non-json"); e1.status=(r.status===200?401:r.status); throw e1; }
+    return r.json().then(function(j){
+      if(!r.ok || (j && j.ok===false)){ var e2=new Error("bad"); e2.status=r.status; e2.error=(j&&j.error)?j.error:null; throw e2; }
+      return j;
+    });
+  }
+  function showAccess(){ hide(elLoading); hide(elBody); show(elAccess); }
+
+  function renderRecurring(recurring){
+    var byDay = [[],[],[],[],[],[],[]];
+    (recurring||[]).forEach(function(w){
+      var d = +w.day_of_week; if(d>=0 && d<=6) byDay[d].push(w);
+    });
+    var html = "";
+    for(var d=0; d<7; d++){
+      var wins = byDay[d].sort(function(a,b){ return String(a.start_time).localeCompare(String(b.start_time)); });
+      html += '<div class="dayrow"><div class="dayname">' + DAY_ABBR[d] + '</div><div class="windows">';
+      if(!wins.length){ html += '<span class="nowin">Unavailable</span>'; }
+      else { wins.forEach(function(w){
+        html += '<span class="win">' + esc(fmt12(w.start_time)) + ' - ' + esc(fmt12(w.end_time)) +
+                '<button class="x" data-del-rec="' + (+w.id) + '" title="Remove" type="button">&times;</button></span>';
+      }); }
+      html += '</div></div>';
+    }
+    elRec.innerHTML = html;
+  }
+
+  function renderBlocks(blocks){
+    if(!blocks || !blocks.length){ elBlocks.innerHTML = '<div class="noblocks">No time-off blocks set.</div>'; return; }
+    blocks.sort(function(a,b){ return String(a.start_at).localeCompare(String(b.start_at)); });
+    elBlocks.innerHTML = blocks.map(function(b){
+      return '<div class="block"><div><div class="bwhen">' + esc(fmtDT(b.start_at)) + ' &ndash; ' + esc(fmtDT(b.end_at)) + '</div>' +
+        (b.reason ? '<div class="breason">' + esc(b.reason) + '</div>' : '') +
+        '</div><button class="btn-del" data-del-blk="' + (+b.id) + '" type="button">Remove</button></div>';
+    }).join("");
+  }
+
+  function load(){
+    fetch(CFG.listUrl, { credentials:"same-origin", headers:{ "Accept":"application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){ renderRecurring(j.recurring); renderBlocks(j.blocks); hide(elLoading); show(elBody); })
+      .catch(function(e){ if(e&&e.status===401){ showAccess(); return; } hide(elLoading); show(elBody); toast("Could not load your availability. Try again.", true); });
+  }
+
+  function addRecurring(){
+    if(busy) return;
+    recStart.classList.remove("invalid"); recEnd.classList.remove("invalid");
+    var s=recStart.value, e=recEnd.value;
+    if(!s){ recStart.classList.add("invalid"); toast("Pick a start time.", true); return; }
+    if(!e){ recEnd.classList.add("invalid"); toast("Pick an end time.", true); return; }
+    if(e<=s){ recEnd.classList.add("invalid"); toast("End time must be after the start time.", true); return; }
+    busy=true; recAdd.disabled=true;
+    fetch(CFG.recurringBase, { method:"POST", headers:jsonHeaders(), credentials:"same-origin",
+      body: JSON.stringify({ day_of_week: +recDay.value, start_time: s, end_time: e }) })
+      .then(parseJsonOrThrow)
+      .then(function(){ busy=false; recAdd.disabled=false; recStart.value=""; recEnd.value=""; toast("Availability added."); load(); })
+      .catch(function(err){ busy=false; recAdd.disabled=false; if(err&&err.status===401){ showAccess(); return; }
+        toast((err&&err.error)?err.error:"Could not add. Try again.", true); });
+  }
+
+  function delRecurring(id, btn){
+    if(busy) return; busy=true; if(btn) btn.disabled=true;
+    fetch(CFG.recurringBase + "/" + id, { method:"DELETE", headers:{ "Accept":"application/json" }, credentials:"same-origin" })
+      .then(parseJsonOrThrow)
+      .then(function(){ busy=false; toast("Availability removed."); load(); })
+      .catch(function(err){ busy=false; if(btn) btn.disabled=false; if(err&&err.status===401){ showAccess(); return; }
+        toast((err&&err.error)?err.error:"Could not remove. Try again.", true); });
+  }
+
+  function addBlock(){
+    if(busy) return;
+    blkStart.classList.remove("invalid"); blkEnd.classList.remove("invalid");
+    var s=blkStart.value, e=blkEnd.value;
+    if(!s){ blkStart.classList.add("invalid"); toast("Pick a start date/time.", true); return; }
+    if(!e){ blkEnd.classList.add("invalid"); toast("Pick an end date/time.", true); return; }
+    if(e<=s){ blkEnd.classList.add("invalid"); toast("End must be after the start.", true); return; }
+    var body={ start_at:s, end_at:e }; var rsn=(blkReason.value||"").trim(); if(rsn) body.reason=rsn;
+    busy=true; blkAdd.disabled=true; blkAdd.textContent="Adding...";
+    fetch(CFG.blockBase, { method:"POST", headers:jsonHeaders(), credentials:"same-origin", body: JSON.stringify(body) })
+      .then(parseJsonOrThrow)
+      .then(function(){ busy=false; blkAdd.disabled=false; blkAdd.textContent="Add block";
+        blkStart.value=""; blkEnd.value=""; blkReason.value=""; toast("Block added."); load(); })
+      .catch(function(err){ busy=false; blkAdd.disabled=false; blkAdd.textContent="Add block"; if(err&&err.status===401){ showAccess(); return; }
+        toast((err&&err.error)?err.error:"Could not add the block. Try again.", true); });
+  }
+
+  function delBlock(id, btn){
+    if(busy) return; busy=true; if(btn){ btn.disabled=true; btn.textContent="..."; }
+    fetch(CFG.blockBase + "/" + id, { method:"DELETE", headers:{ "Accept":"application/json" }, credentials:"same-origin" })
+      .then(parseJsonOrThrow)
+      .then(function(){ busy=false; toast("Block removed."); load(); })
+      .catch(function(err){ busy=false; if(btn){ btn.disabled=false; btn.textContent="Remove"; } if(err&&err.status===401){ showAccess(); return; }
+        toast((err&&err.error)?err.error:"Could not remove. Try again.", true); });
+  }
+
+  // ---- wire ----
+  recAdd.addEventListener("click", addRecurring);
+  blkAdd.addEventListener("click", addBlock);
+  elRec.addEventListener("click", function(ev){
+    var b = ev.target.closest("[data-del-rec]"); if(!b) return;
+    delRecurring(+b.getAttribute("data-del-rec"), b);
+  });
+  elBlocks.addEventListener("click", function(ev){
+    var b = ev.target.closest("[data-del-blk]"); if(!b) return;
+    delBlock(+b.getAttribute("data-del-blk"), b);
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

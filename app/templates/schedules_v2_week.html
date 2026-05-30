@@ -760,6 +760,8 @@
     req.then(parseJsonOrThrow).then(function (data) {
       state.busy = false; $("sv2-m-save").disabled = false;
       closeModal(); loadBoard();
+      // B8: soft availability heads-up from ckai's warning() (shift still saved; never a 409)
+      if (data && data.warning) toast("Heads up: " + data.warning);
     }).catch(function (e) {
       state.busy = false; $("sv2-m-save").disabled = false;
       err.textContent = (e && e.error) ? e.error : "Could not save the shift. Please try again.";

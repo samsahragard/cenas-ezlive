@@ -77,3 +77,24 @@ def sv2_timeoff_page():
         store_label=g.store_label,
         config_json=json.dumps(config),
     )
+
+
+@store_bp.route("/schedules-v2/availability", methods=["GET"])
+@require_level(_MGR)
+def sv2_availability_page():
+    """Render the client-side manager availability roster (B8, read-only). Data
+    comes from ckai's availability list via fetch(); this view only assembles the
+    config blob. Same gates as the week-view; a cross-store gm gets a 302/403 the
+    client renders as a friendly notice. Page owns the parent; ckai's list is at
+    <base>/availability/list (#1986)."""
+    slug = g.current_store
+    base = f"/{slug}/schedules-v2"
+    config = {
+        "storeLabel": g.store_label,
+        "listUrl": f"{base}/availability/list",   # ckai (B8): GET[?employee_id] -> {ok, availability:[...]}
+    }
+    return render_template(
+        "schedules_v2_availability.html",
+        store_label=g.store_label,
+        config_json=json.dumps(config),
+    )

@@ -105,6 +105,9 @@
     display:flex; flex-direction:column; gap:10px; min-height:108px;
   }
   .tile.soon{ opacity:0.62; }
+  a.tile{ text-decoration:none; transition: transform 100ms ease, filter 100ms ease; }
+  a.tile:hover{ transform: translateY(-1px); filter: brightness(1.03); }
+  a.tile:active{ transform: translateY(0); }
   .tile .icon{
     width:34px; height:34px; fill:none; stroke: var(--red);
     stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
@@ -140,29 +143,30 @@
   <div class="section-label">My tools</div>
   <div class="tiles">
 
-    <div class="tile soon">
-      <span class="t-badge">Soon</span>
+    <a class="tile" href="/employee/my-schedule">
       <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
       <div class="t-title">My Schedule</div>
-    </div>
+    </a>
 
-    <div class="tile soon">
-      <span class="t-badge">Soon</span>
+    <a class="tile" href="/employee/time-off">
       <svg class="icon" viewBox="0 0 24 24"><path d="M5 21 V8 a2 2 0 0 1 2 -2 h10 a2 2 0 0 1 2 2 v13"/><path d="M9 13 l2 2 l4 -4"/></svg>
       <div class="t-title">Time Off</div>
-    </div>
+    </a>
 
-    <div class="tile soon">
-      <span class="t-badge">Soon</span>
+    <a class="tile" href="/employee/availability">
       <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
       <div class="t-title">Availability</div>
-    </div>
+    </a>
 
-    <div class="tile soon">
-      <span class="t-badge">Soon</span>
+    <a class="tile" href="/employee/shift-marketplace">
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7 h18 l-2 12 H5 Z"/><path d="M8 7 a4 4 0 0 1 8 0"/></svg>
       <div class="t-title">Shift Marketplace</div>
-    </div>
+    </a>
+
+    <a class="tile" href="/employee/profile">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M18 8 a6 6 0 0 0 -12 0 c0 7 -3 9 -3 9 h18 s-3 -2 -3 -9"/><path d="M13.7 21 a2 2 0 0 1 -3.4 0"/></svg>
+      <div class="t-title">Notifications</div>
+    </a>
 
     <div class="tile soon">
       <span class="t-badge">Soon</span>

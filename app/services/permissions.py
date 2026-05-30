@@ -307,7 +307,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
                  "schedule.view_own", "schedule.accept_decline",
                  "shift.offer", "shift.swap_propose",
                  "timeoff.request", "availability.set",
-                 "announcement.view", "message.reply"},
+                 "announcement.view", "message.view", "message.reply"},
     # In-house corporate driver - a DISTINCT role from the ezCater 'driver'
     # role (which stays hardcoded/untouched). Same driver scope; managed via
     # the Permissions admin page.

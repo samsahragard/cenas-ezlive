@@ -1358,3 +1358,77 @@ def dev_chat_todos_delete(tid: int):
         return jsonify({"ok": True})
     finally:
         db.close()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Permissions page (Sam #1676) - PARTNER-ONLY page shell + catalog provider.
+# The roster / load / save API lives in app/web/permissions_admin.py. Binds
+# to the authoritative catalog in app/services/permission_catalog.py. ezCater
+# driver perms are coded-locked + NOT represented here (Sam #1676).
+# ──────────────────────────────────────────────────────────────────────
+def _build_permissions_catalog():
+    """Flatten the category-grouped CATALOG (app/services/permission_catalog.py)
+    into the flat permissions[] the template consumes, lifting category ->
+    {num,name}. ROLES, STORES + the per-perm `sensitive` flag pass through as
+    the locked contract (ck #1680). Never 500s: returns an explicit empty
+    error catalog (no fake data) if the module fails to import."""
+    try:
+        from app.services import permission_catalog as pc
+    except Exception:
+        logging.getLogger(__name__).exception("permission_catalog import failed")
+        return {"roles": [], "stores": [], "permissions": [],
+                "is_placeholder": True, "catalog_source": "error"}
+
+    permissions = []
+    for group in pc.CATALOG:
+        cat = {"num": group.get("id"), "name": group.get("name")}
+        for perm in group.get("perms", []):
+            permissions.append({
+                "id": perm.get("id"),
+                "key": perm.get("key"),
+                "category": cat,
+                "label": perm.get("label"),
+                "notes": perm.get("notes", ""),
+                "maps_to": perm.get("maps_to", {}),
+                "status": perm.get("status", "live"),
+                "default_roles": list(perm.get("default_roles", [])),
+                "sensitive": bool(perm.get("sensitive")),
+            })
+
+    return {
+        "roles": [dict(r) for r in pc.ROLES],
+        "stores": [dict(s) for s in pc.STORES],
+        "permissions": permissions,
+        "is_placeholder": False,
+        "catalog_source": "permission_catalog",
+    }
+
+
+@dev_chat.route("/partner/developer/permissions", methods=["GET"])
+@requires_permission("developer.manage_permissions")
+def permissions_page():
+    # PARTNER-ONLY (Sam #1694). developer.manage_permissions is held by NO
+    # explicit role set, so only partner clears it (the {"*"} wildcard). The
+    # partner-User checks below are belt-and-suspenders.
+    gate = _enforce_partner()
+    if gate is not None:
+        return gate
+    # A password-only Tier-2 session clears the tag, but the roster/load/save
+    # APIs require a real partner User row - deny cleanly so the grid never
+    # renders then 403s on every AJAX call.
+    u = getattr(g, "current_user", None)
+    if not (u is not None and getattr(u, "permission_level", None) == "partner"):
+        return redirect(url_for("auth.access_denied",
+                                need="developer.manage_permissions",
+                                next=request.path))
+    # Synthesize per-store sidebar context (this URL doesn't pass through the
+    # <store> prefix preprocessor).
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    return render_template(
+        "developer_permissions.html",
+        active="dev_permissions",
+        page_title="Permissions",
+        catalog=_build_permissions_catalog(),
+    )

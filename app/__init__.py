@@ -20,6 +20,7 @@ from app.web import schedules_v2_availability  # noqa: F401  B8: attaches the ma
 from app.web import schedules_v2_market  # noqa: F401  B9: attaches the manager offer/swap approval routes to store_bp (ckai; must precede register_blueprint)
 from app.web import schedules_v2_roster  # noqa: F401  email-pivot: attaches the manager roster-assignment write route (POST /<store>/schedules-v2/roster) to store_bp (ckai; must precede register_blueprint)
 from app.web.developer_chat import dev_chat as dev_chat_bp
+from app.web.permissions_admin import permissions_admin as perms_admin_bp  # PERMISSIONS admin page (partner-only, Sam #1676)
 from app.web.interview import interview as interview_bp
 from app.web.corporate_order import corp_order as corp_order_bp
 from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
@@ -135,6 +136,7 @@ def create_app():
     app.register_blueprint(reports_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(dev_chat_bp)
+    app.register_blueprint(perms_admin_bp)  # PERMISSIONS admin page (partner-only, Sam #1676)
     # Interview Tracker (Sam #5:48) — partner-only candidate hiring
     # pipeline. Routes registered at /partner/interview-tracker
     # directly (not under store_bp), so not auto-partner-gated; each

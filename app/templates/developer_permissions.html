@@ -1,0 +1,660 @@
+{% extends "base_dashboard.html" %}
+{% set active = active|default('dev_permissions') %}
+{% block title %}Permissions — Cenas Kitchen{% endblock %}
+{% block page_title %}Permissions{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Assign what each role can do, per store. 100% our platform &mdash; no Toast/POS link. ezCater driver permissions are separate and locked.</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .perm-wrap { max-width: 1040px; }
+
+  /* Assignment context bar */
+  .perm-assign {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 14px;
+    align-items: end;
+    background: rgba(40,22,14,0.55);
+    border: 0.5px solid rgba(217,164,54,0.35);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .perm-field { display: flex; flex-direction: column; gap: 6px; }
+  .perm-field label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .perm-field select {
+    background: rgba(20,11,7,0.6);
+    border: 0.5px solid rgba(217,164,54,0.35);
+    color: var(--text-1);
+    border-radius: 8px; padding: 9px 11px; font-size: 13px;
+    width: 100%;
+  }
+  .perm-btn {
+    background: rgba(217,164,54,0.16);
+    border: 0.5px solid rgba(217,164,54,0.55);
+    color: var(--ck-gold);
+    border-radius: 8px; padding: 10px 14px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.04em; cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .perm-btn:hover { background: rgba(217,164,54,0.26); }
+  .perm-btn-primary {
+    background: var(--ck-gold); color: #2a1708; border-color: var(--ck-gold);
+  }
+  .perm-btn-primary:hover { filter: brightness(1.08); }
+  .perm-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .perm-store-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .perm-chip {
+    font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    background: rgba(217,164,54,0.14); color: var(--ck-gold);
+    border: 0.5px solid rgba(217,164,54,0.45);
+  }
+
+  /* Placeholder + empty states */
+  .perm-banner {
+    font-size: 11px; color: var(--text-3); line-height: 1.5;
+    background: rgba(217,164,54,0.06);
+    border: 0.5px dashed rgba(217,164,54,0.3);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 16px;
+  }
+  .perm-empty {
+    color: var(--text-3); font-size: 13px; padding: 40px 0; text-align: center;
+    border: 0.5px dashed rgba(217,164,54,0.25); border-radius: 12px;
+  }
+
+  /* Store section (collapsible) */
+  .perm-store {
+    border: 0.5px solid rgba(217,164,54,0.35);
+    border-radius: 12px; margin-bottom: 14px; overflow: hidden;
+    background: rgba(40,22,14,0.4);
+  }
+  .perm-store-head {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    background: rgba(40,22,14,0.7); border: 0; cursor: pointer;
+    padding: 13px 16px; color: var(--text-1); text-align: left;
+  }
+  .perm-store-head h3 {
+    margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+    flex: 1;
+  }
+  .perm-store-head .ti { color: var(--ck-gold); }
+  .perm-store-body { padding: 6px 10px 12px; }
+  .perm-store.collapsed .perm-store-body { display: none; }
+  .perm-chev { transition: transform 0.15s; }
+  .perm-store.collapsed .perm-chev { transform: rotate(-90deg); }
+
+  /* Category group */
+  .perm-cat { margin-top: 10px; }
+  .perm-cat-head {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    background: transparent; border: 0; cursor: pointer;
+    padding: 7px 6px; color: var(--ck-gold); text-align: left;
+    border-bottom: 0.5px solid rgba(217,164,54,0.22);
+  }
+  .perm-cat-head .num {
+    font-variant-numeric: tabular-nums; opacity: 0.7; min-width: 18px;
+  }
+  .perm-cat-head .label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; flex: 1;
+  }
+  .perm-cat.collapsed .perm-cat-rows { display: none; }
+  .perm-cat.collapsed .perm-chev { transform: rotate(-90deg); }
+
+  /* Column header */
+  .perm-colhead {
+    display: grid; grid-template-columns: 1fr 184px 64px;
+    gap: 10px; padding: 6px 8px 4px 30px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .perm-colhead .c-allow { text-align: center; }
+
+  /* Permission row */
+  .perm-row {
+    display: grid; grid-template-columns: 1fr 184px 64px;
+    gap: 10px; align-items: center;
+    padding: 8px 8px 8px 30px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.10);
+  }
+  .perm-row:hover { background: rgba(217,164,54,0.04); }
+  .perm-row .p-main { min-width: 0; }
+  .perm-row .p-label {
+    font-size: 13px; color: var(--text-1); display: flex; align-items: center; gap: 7px;
+  }
+  .perm-row .p-id {
+    font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums;
+  }
+  .perm-row .p-maps {
+    font-size: 10px; color: var(--text-3); font-family: ui-monospace, monospace;
+    margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .perm-row .p-notes { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+  .p-pill {
+    font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .p-pill-reserved {
+    background: rgba(236,227,208,0.08); color: var(--text-3);
+    border: 0.5px solid rgba(236,227,208,0.20);
+  }
+  .p-sensitive { color: #E2A45C; }
+  .p-sensitive .ti { font-size: 13px; }
+
+  /* Inherit | Override segmented control */
+  .p-seg {
+    display: inline-flex; border-radius: 7px; overflow: hidden;
+    border: 0.5px solid rgba(217,164,54,0.35);
+  }
+  .p-seg button {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--text-3); font-size: 11px; font-weight: 700;
+    padding: 5px 10px; letter-spacing: 0.03em;
+  }
+  .p-seg button.on {
+    background: rgba(217,164,54,0.22); color: var(--ck-gold);
+  }
+  .p-seg button:first-child { border-right: 0.5px solid rgba(217,164,54,0.3); }
+
+  /* Allow checkbox */
+  .p-allow { display: flex; justify-content: center; }
+  .p-allow input { width: 17px; height: 17px; accent-color: var(--ck-gold); cursor: pointer; }
+  .p-allow input:disabled { cursor: not-allowed; opacity: 0.6; }
+
+  /* Save bar */
+  .perm-savebar {
+    position: sticky; bottom: 0; margin-top: 18px;
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(20,11,7,0.92);
+    border: 0.5px solid rgba(217,164,54,0.35);
+    border-radius: 12px; padding: 13px 16px;
+    backdrop-filter: blur(4px);
+  }
+  .perm-savebar .spacer { flex: 1; }
+  .perm-save-status { font-size: 12px; color: var(--text-3); }
+
+  /* Modal */
+  .perm-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center; z-index: 60;
+  }
+  .perm-modal-backdrop.open { display: flex; }
+  .perm-modal {
+    width: 420px; max-width: calc(100vw - 32px);
+    background: #2a1708; border: 0.5px solid rgba(217,164,54,0.5);
+    border-radius: 14px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .perm-modal h3 {
+    margin: 0 0 4px; font-size: 15px; color: var(--text-1); font-weight: 700;
+  }
+  .perm-modal p.sub { margin: 0 0 14px; font-size: 12px; color: var(--text-3); }
+  .perm-loc {
+    display: flex; align-items: center; gap: 10px; padding: 11px 12px;
+    border: 0.5px solid rgba(217,164,54,0.3); border-radius: 9px; margin-bottom: 8px;
+    cursor: pointer; color: var(--text-1); font-size: 13px;
+  }
+  .perm-loc:hover { background: rgba(217,164,54,0.06); }
+  .perm-loc input { width: 16px; height: 16px; accent-color: var(--ck-gold); }
+  .perm-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+</style>
+
+<div class="perm-wrap">
+
+  <div id="perm-placeholder-banner" class="perm-banner" hidden>
+    <strong>Preview data.</strong> The permission catalog shown here is a placeholder stub for UI review.
+    The authoritative catalog (real app links + role defaults) and the save API are wired separately.
+  </div>
+
+  <!-- Assignment context -->
+  <div class="perm-assign">
+    <div class="perm-field">
+      <label for="perm-employee">Employee</label>
+      <select id="perm-employee">
+        <option value="">Select employee&hellip;</option>
+      </select>
+    </div>
+    <div class="perm-field">
+      <label for="perm-role">Role template</label>
+      <select id="perm-role">
+        <option value="">Select role&hellip;</option>
+      </select>
+    </div>
+    <div class="perm-field">
+      <label>Stores</label>
+      <button type="button" class="perm-btn" id="perm-open-locations">
+        <i class="ti ti-map-pin" aria-hidden="true"></i> Select locations
+      </button>
+      <div class="perm-store-chips" id="perm-store-chips"></div>
+    </div>
+  </div>
+
+  <!-- Per-store permission trees -->
+  <div id="perm-stores"></div>
+  <div class="perm-empty" id="perm-empty">
+    Pick a role and at least one store to assign permissions.
+  </div>
+
+  <!-- Save bar -->
+  <div class="perm-savebar">
+    <span class="perm-save-status" id="perm-save-status">No changes yet.</span>
+    <span class="spacer"></span>
+    <button type="button" class="perm-btn" id="perm-reset">Reset overrides</button>
+    <button type="button" class="perm-btn perm-btn-primary" id="perm-save" disabled>
+      <i class="ti ti-device-floppy" aria-hidden="true"></i> Save permissions
+    </button>
+  </div>
+</div>
+
+<!-- Store-select modal -->
+<div class="perm-modal-backdrop" id="perm-loc-modal">
+  <div class="perm-modal">
+    <h3>Select locations</h3>
+    <p class="sub">Choose the store(s) this assignment applies to.</p>
+    <div id="perm-loc-list"></div>
+    <div class="perm-modal-actions">
+      <button type="button" class="perm-btn" id="perm-loc-cancel">Cancel</button>
+      <button type="button" class="perm-btn perm-btn-primary" id="perm-loc-save">Add selected and save</button>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="perm-catalog">{{ catalog|tojson }}</script>
+<script>
+(function () {
+  "use strict";
+  var CATALOG = JSON.parse(document.getElementById("perm-catalog").textContent);
+  var roles = CATALOG.roles || [];
+  var stores = CATALOG.stores || [];
+  var perms = CATALOG.permissions || [];
+
+  if (CATALOG.is_placeholder) {
+    var b = document.getElementById("perm-placeholder-banner");
+    if (b) b.hidden = false;
+  }
+
+  // State. overrides keyed by STORE then permission KEY (per the Toast
+  // per-store screenshots). mode in {inherit, allow, deny}; default inherit.
+  var state = {
+    employee: "",
+    role: "",
+    stores: [],          // selected store keys
+    overrides: {}        // { storeKey: { permKey: mode } }
+  };
+  // Snapshot of the overrides loaded for the current employee (server baseline).
+  // Lets buildPayload emit an explicit "inherit" to delete a row the user
+  // cleared, since allow/deny->inherit otherwise just drops the key locally.
+  var loadedOverrides = {};
+
+  // --- helpers ---
+  function roleByKey(k) { for (var i=0;i<roles.length;i++){ if (roles[i].key===k) return roles[i]; } return null; }
+  function inheritedAllow(perm) {
+    var r = roleByKey(state.role);
+    if (!r) return false;
+    if (r.wildcard) return true;
+    return (perm.default_roles || []).indexOf(r.key) !== -1;
+  }
+  function modeFor(storeKey, perm) {
+    var s = state.overrides[storeKey] || {};
+    return s[perm.key] || "inherit";
+  }
+  function setMode(storeKey, permKey, mode) {
+    if (!state.overrides[storeKey]) state.overrides[storeKey] = {};
+    if (mode === "inherit") { delete state.overrides[storeKey][permKey]; }
+    else { state.overrides[storeKey][permKey] = mode; }
+  }
+  function effectiveAllow(storeKey, perm) {
+    var m = modeFor(storeKey, perm);
+    if (m === "allow") return true;
+    if (m === "deny") return false;
+    return inheritedAllow(perm);
+  }
+  function overrideCount() {
+    var n = 0;
+    for (var s in state.overrides) { for (var k in state.overrides[s]) n++; }
+    return n;
+  }
+
+  // --- populate role select ---
+  (function () {
+    var sel = document.getElementById("perm-role");
+    roles.forEach(function (r) {
+      var o = document.createElement("option");
+      o.value = r.key;
+      o.textContent = r.label + (r.wildcard ? " (all access)" : "");
+      sel.appendChild(o);
+    });
+  })();
+
+  // --- store modal ---
+  function renderLocList() {
+    var list = document.getElementById("perm-loc-list");
+    list.innerHTML = "";
+    stores.forEach(function (st) {
+      var lab = document.createElement("label");
+      lab.className = "perm-loc";
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = st.key;
+      cb.checked = state.stores.indexOf(st.key) !== -1;
+      lab.appendChild(cb);
+      var span = document.createElement("span");
+      span.textContent = st.label;
+      lab.appendChild(span);
+      list.appendChild(lab);
+    });
+  }
+  function openModal() { renderLocList(); document.getElementById("perm-loc-modal").classList.add("open"); }
+  function closeModal() { document.getElementById("perm-loc-modal").classList.remove("open"); }
+  document.getElementById("perm-open-locations").addEventListener("click", openModal);
+  document.getElementById("perm-loc-cancel").addEventListener("click", closeModal);
+  document.getElementById("perm-loc-modal").addEventListener("click", function (e) {
+    if (e.target === this) closeModal();
+  });
+  document.getElementById("perm-loc-save").addEventListener("click", function () {
+    var picked = [];
+    document.querySelectorAll("#perm-loc-list input:checked").forEach(function (cb) { picked.push(cb.value); });
+    state.stores = picked;
+    // drop overrides for de-selected stores
+    Object.keys(state.overrides).forEach(function (s) { if (picked.indexOf(s) === -1) delete state.overrides[s]; });
+    closeModal();
+    renderChips();
+    renderStores();
+    updateSave();
+  });
+
+  function renderChips() {
+    var wrap = document.getElementById("perm-store-chips");
+    wrap.innerHTML = "";
+    state.stores.forEach(function (k) {
+      var st = null; stores.forEach(function (s){ if (s.key===k) st=s; });
+      if (!st) return;
+      var c = document.createElement("span");
+      c.className = "perm-chip";
+      c.textContent = st.label;
+      wrap.appendChild(c);
+    });
+  }
+
+  // --- category grouping (preserve catalog order) ---
+  function groupByCategory() {
+    var order = [], byNum = {};
+    perms.forEach(function (p) {
+      var num = p.category.num;
+      if (!(num in byNum)) { byNum[num] = { num: num, name: p.category.name, items: [] }; order.push(num); }
+      byNum[num].items.push(p);
+    });
+    return order.map(function (n) { return byNum[n]; });
+  }
+
+  // --- render per-store trees ---
+  function renderStores() {
+    var host = document.getElementById("perm-stores");
+    var empty = document.getElementById("perm-empty");
+    host.innerHTML = "";
+    var ready = state.role && state.stores.length;
+    empty.hidden = !!ready;
+    empty.textContent = !state.role
+      ? "Pick a role and at least one store to assign permissions."
+      : (state.stores.length ? "" : "Select at least one store – use “Select locations” above.");
+    if (!ready) return;
+
+    var groups = groupByCategory();
+    state.stores.forEach(function (storeKey) {
+      var st = null; stores.forEach(function (s){ if (s.key===storeKey) st=s; });
+      if (!st) return;
+
+      var sec = document.createElement("div");
+      sec.className = "perm-store";
+
+      var head = document.createElement("button");
+      head.className = "perm-store-head";
+      head.innerHTML = '<i class="ti ti-building-store" aria-hidden="true"></i>' +
+        '<h3>' + esc(st.label) + '</h3>' +
+        '<i class="ti ti-chevron-down perm-chev" aria-hidden="true"></i>';
+      head.addEventListener("click", function () { sec.classList.toggle("collapsed"); });
+      sec.appendChild(head);
+
+      var body = document.createElement("div");
+      body.className = "perm-store-body";
+
+      groups.forEach(function (g) {
+        var cat = document.createElement("div");
+        cat.className = "perm-cat";
+
+        var ch = document.createElement("button");
+        ch.className = "perm-cat-head";
+        ch.innerHTML = '<span class="num">' + g.num + '</span>' +
+          '<span class="label">' + esc(g.name) + '</span>' +
+          '<i class="ti ti-chevron-down perm-chev" aria-hidden="true"></i>';
+        ch.addEventListener("click", function () { cat.classList.toggle("collapsed"); });
+        cat.appendChild(ch);
+
+        var colhead = document.createElement("div");
+        colhead.className = "perm-colhead";
+        colhead.innerHTML = '<span>Permission</span><span>Override?</span><span class="c-allow">Allow</span>';
+        cat.appendChild(colhead);
+
+        var rows = document.createElement("div");
+        rows.className = "perm-cat-rows";
+        g.items.forEach(function (p) { rows.appendChild(renderRow(storeKey, p)); });
+        cat.appendChild(rows);
+
+        body.appendChild(cat);
+      });
+
+      sec.appendChild(body);
+      host.appendChild(sec);
+    });
+  }
+
+  function renderRow(storeKey, perm) {
+    var row = document.createElement("div");
+    row.className = "perm-row";
+
+    // main
+    var main = document.createElement("div");
+    main.className = "p-main";
+    var label = document.createElement("div");
+    label.className = "p-label";
+    var lblHtml = '<span class="p-id">' + esc(perm.id) + '</span> ' + esc(perm.label);
+    if (perm.sensitive) lblHtml = '<span class="p-sensitive"><i class="ti ti-lock"></i></span>' + lblHtml;
+    if (perm.status === "reserved") lblHtml += ' <span class="p-pill p-pill-reserved">Reserved</span>';
+    label.innerHTML = lblHtml;
+    main.appendChild(label);
+    if (perm.notes) {
+      var notes = document.createElement("div");
+      notes.className = "p-notes"; notes.textContent = perm.notes;
+      main.appendChild(notes);
+    }
+    if (perm.maps_to && perm.maps_to.route) {
+      var maps = document.createElement("div");
+      maps.className = "p-maps";
+      maps.textContent = perm.maps_to.route;
+      maps.title = perm.maps_to.blueprint_or_fn || "";
+      main.appendChild(maps);
+    }
+    row.appendChild(main);
+
+    // override segmented
+    var seg = document.createElement("div");
+    seg.className = "p-seg";
+    var bInherit = document.createElement("button");
+    bInherit.type = "button"; bInherit.textContent = "Inherit";
+    var bOverride = document.createElement("button");
+    bOverride.type = "button"; bOverride.textContent = "Override";
+    seg.appendChild(bInherit); seg.appendChild(bOverride);
+    row.appendChild(seg);
+
+    // allow checkbox
+    var allowWrap = document.createElement("div");
+    allowWrap.className = "p-allow";
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.setAttribute("aria-label", "Allow " + perm.label);
+    allowWrap.appendChild(cb);
+    row.appendChild(allowWrap);
+
+    function paint() {
+      var m = modeFor(storeKey, perm);
+      var isOverride = (m === "allow" || m === "deny");
+      bInherit.classList.toggle("on", !isOverride);
+      bOverride.classList.toggle("on", isOverride);
+      cb.disabled = !isOverride;
+      cb.checked = effectiveAllow(storeKey, perm);
+    }
+
+    bInherit.addEventListener("click", function () { setMode(storeKey, perm.key, "inherit"); paint(); updateSave(); });
+    bOverride.addEventListener("click", function () {
+      setMode(storeKey, perm.key, effectiveAllow(storeKey, perm) ? "allow" : "deny");
+      paint(); updateSave();
+    });
+    cb.addEventListener("change", function () {
+      setMode(storeKey, perm.key, cb.checked ? "allow" : "deny");
+      paint(); updateSave();
+    });
+
+    paint();
+    return row;
+  }
+
+  // --- save bar ---
+  function buildPayload() {
+    // overrides keyed per store -> per permission KEY (stable id).
+    var overrides = {};
+    function bucket(s) { if (!overrides[s]) overrides[s] = {}; return overrides[s]; }
+    // current explicit allow/deny
+    Object.keys(state.overrides).forEach(function (s) {
+      Object.keys(state.overrides[s]).forEach(function (k) { bucket(s)[k] = state.overrides[s][k]; });
+    });
+    // overrides that existed at load but were reset -> explicit "inherit" so
+    // the server deletes the persisted row (per the save contract).
+    Object.keys(loadedOverrides).forEach(function (s) {
+      Object.keys(loadedOverrides[s]).forEach(function (k) {
+        var cur = (state.overrides[s] || {})[k];
+        if (cur !== "allow" && cur !== "deny") { bucket(s)[k] = "inherit"; }
+      });
+    });
+    Object.keys(overrides).forEach(function (s) { if (!Object.keys(overrides[s]).length) delete overrides[s]; });
+    return { user_id: state.employee || null, role: state.role || null, stores: state.stores.slice(), overrides: overrides };
+  }
+  function snapshotBaseline() {
+    loadedOverrides = {};
+    Object.keys(state.overrides).forEach(function (s) {
+      loadedOverrides[s] = {};
+      Object.keys(state.overrides[s]).forEach(function (k) { loadedOverrides[s][k] = state.overrides[s][k]; });
+    });
+  }
+  function updateSave() {
+    var status = document.getElementById("perm-save-status");
+    var save = document.getElementById("perm-save");
+    var n = overrideCount();
+    var ready = state.role && state.stores.length;
+    save.disabled = !ready;
+    if (!ready) { status.textContent = "No changes yet."; return; }
+    var who = state.employee ? "" : " (no employee selected)";
+    status.textContent = n
+      ? (n + " override" + (n===1?"":"s") + " across " + state.stores.length + " store" + (state.stores.length===1?"":"s") + who)
+      : ("Role baseline, no overrides" + who);
+  }
+
+  function applyLoaded(data) {
+    state.role = (data && data.role) || "";
+    state.stores = (data && data.stores ? data.stores.slice() : []);
+    state.overrides = {};
+    var ov = (data && data.overrides) || {};
+    Object.keys(ov).forEach(function (s) {
+      Object.keys(ov[s]).forEach(function (k) {
+        var m = ov[s][k];
+        if (m === "allow" || m === "deny") {
+          if (!state.overrides[s]) state.overrides[s] = {};
+          state.overrides[s][k] = m;
+        }
+      });
+    });
+    snapshotBaseline();
+    document.getElementById("perm-role").value = state.role;
+    renderChips();
+    renderStores();
+    updateSave();
+  }
+  document.getElementById("perm-employee").addEventListener("change", function () {
+    state.employee = this.value;
+    if (!state.employee) { loadedOverrides = {}; updateSave(); return; }
+    var status = document.getElementById("perm-save-status");
+    status.textContent = "Loading saved permissions...";
+    fetch("/partner/developer/permissions/user/" + encodeURIComponent(state.employee), { headers: { "Accept": "application/json" } })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) { applyLoaded(data); })
+      .catch(function (err) { status.textContent = "Could not load saved permissions (" + err.message + ")."; });
+  });
+  document.getElementById("perm-role").addEventListener("change", function () {
+    state.role = this.value;
+    renderStores();   // inherited values depend on role
+    updateSave();
+  });
+  document.getElementById("perm-reset").addEventListener("click", function () {
+    state.overrides = {}; renderStores(); updateSave();
+  });
+  document.getElementById("perm-save").addEventListener("click", function () {
+    var save = this;
+    var status = document.getElementById("perm-save-status");
+    var payload = buildPayload();
+    save.disabled = true;
+    status.textContent = "Saving...";
+    fetch("/partner/developer/permissions/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.body && res.body.ok) {
+          var n = res.body.saved;
+          status.textContent = "Saved" + (typeof n === "number" ? " (" + n + " override" + (n === 1 ? "" : "s") + ")" : "") + ".";
+          snapshotBaseline();   // future edits diff against what's now persisted
+        } else {
+          var msg = (res.body && res.body.error) ? res.body.error : ("HTTP error");
+          status.textContent = "Save failed: " + msg;
+        }
+      })
+      .catch(function (err) {
+        status.textContent = "Save failed: " + err.message + " (is the save endpoint deployed?)";
+      })
+      .finally(function () { save.disabled = !(state.role && state.stores.length); });
+  });
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]; }); }
+
+  // populate the employee picker from the roster endpoint (graceful if the
+  // endpoint isn't deployed yet -- the picker just stays at its placeholder).
+  (function loadRoster() {
+    var sel = document.getElementById("perm-employee");
+    fetch("/partner/developer/permissions/roster", { headers: { "Accept": "application/json" } })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) {
+        // authoritative: rebuild from just the placeholder, then add real users
+        for (var i = sel.options.length - 1; i >= 1; i--) { sel.remove(i); }
+        (data.users || []).forEach(function (u) {
+          var o = document.createElement("option");
+          o.value = u.user_id;
+          o.textContent = u.name + (u.role ? " (" + u.role + ")" : "");
+          sel.appendChild(o);
+        });
+      })
+      .catch(function () { /* roster not live yet; picker stays at its placeholder */ });
+  })();
+
+  // initial paint
+  renderChips();
+  renderStores();
+  updateSave();
+})();
+</script>
+{% endblock %}

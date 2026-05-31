@@ -23,6 +23,7 @@ from flask import g, jsonify, request
 
 from app.db import SessionLocal
 from app.models import (
+    CANONICAL_POSITIONS,
     Employee,
     EmployeeStoreAssignment,
     Position,
@@ -36,6 +37,16 @@ from app.web.permissions import current_user_id, require_level
 from app.web.store_routes import store_bp
 
 _MGR = "foh_manager"  # lowest manager level allowed to manage schedules
+
+# Normalized lookup for CANONICAL_POSITIONS (Sam #2227): case/space-insensitive
+# match so the board's position dropdown shows ONLY the 14 canonical jobs (13
+# FOH + Cook) and hides Sling-import junk. Read-side filter only - never deletes
+# a Position row (EmployeePosition.position_id is ondelete=CASCADE).
+_CANONICAL_NORM = {name.lower(): name for name in CANONICAL_POSITIONS}
+
+
+def _is_canonical_position(name: "str | None") -> bool:
+    return (name or "").strip().lower() in _CANONICAL_NORM
 
 
 def _store() -> str | None:
@@ -182,10 +193,14 @@ def sv2_board():
             for e in (db.query(Employee).filter(Employee.id.in_(emp_ids))
                         .order_by(Employee.full_name).all()):
                 roster.append({"id": e.id, "full_name": e.full_name, "active": e.active})
-        # positions (B1/Sling taxonomy; store_key null = all-store). NB: no "area"
-        # column exists - store_key is the only grouping field. Flag to ck.
+        # positions: filtered to the CANONICAL 14 (Sam #2227 - 13 FOH + Cook);
+        # Sling-import junk (C-Grill, C-Prep, Chba, Dish, ...) is hidden. store_key
+        # null = all-store. NON-DESTRUCTIVE read filter - never deletes a row
+        # (EmployeePosition cascade). Missing canonical names are seeded at boot
+        # (app/__init__.py), so the dropdown always offers the full 14.
         positions = [{"id": p.id, "name": p.name, "store_key": p.store_key}
-                     for p in db.query(Position).order_by(Position.name).all()]
+                     for p in db.query(Position).order_by(Position.name).all()
+                     if _is_canonical_position(p.name)]
         tags = [{"id": t.id, "name": t.name} for t in db.query(Tag).order_by(Tag.name).all()]
         return jsonify({
             "ok": True, "store": store,

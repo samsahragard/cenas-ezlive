@@ -333,6 +333,37 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("employees column backfill failed (non-fatal)")
 
+    # Idempotent seed of the canonical schedule positions (Sam 2026-05-31): the
+    # 14 jobs that must appear in the manager schedule dropdowns (13 FOH roles +
+    # Cook). The management roles (Partner, Corporate, GM, KM, ...) are User
+    # permission levels, not Sling-imported Position rows, so they may be absent;
+    # create any missing canonical name as an all-store row (store_key=NULL).
+    # Runs at single-threaded startup (no worker race) and is gated on name
+    # absence, so it is safe + idempotent on every boot. NON-DESTRUCTIVE: only
+    # inserts missing names; never edits/deletes a Position row (the board READ
+    # is filtered to these 14 - see schedules_v2.CANONICAL_POSITIONS).
+    try:
+        from sqlalchemy import inspect as _sa_inspect_pos
+        from app.db import SessionLocal as _SL_pos, engine as _eng_pos
+        if _eng_pos is not None and "positions" in _sa_inspect_pos(_eng_pos).get_table_names():
+            from app.models import CANONICAL_POSITIONS as _CANON_POS, Position as _Position
+            _db_pos = _SL_pos()
+            try:
+                _have = {(p.name or "").strip().lower() for p in _db_pos.query(_Position).all()}
+                _seeded = []
+                for _disp in _CANON_POS:
+                    if _disp.lower() not in _have:
+                        _db_pos.add(_Position(name=_disp, store_key=None))
+                        _seeded.append(_disp)
+                if _seeded:
+                    _db_pos.commit()
+                    logging.getLogger(__name__).info(
+                        "positions table: seeded canonical jobs %s", _seeded)
+            finally:
+                _db_pos.close()
+    except Exception:
+        logging.getLogger(__name__).exception("canonical positions seed failed (non-fatal)")
+
     # Idempotent column backfill for orders.total_amount (migration 10) AND
     # the payroll backfill columns from migration 11. Same self-healing
     # pattern as the drivers backfill above — each ALTER is gated on column

@@ -3092,6 +3092,24 @@ class Position(Base):
     )
 
 
+# The canonical schedule-position catalog (Sam 2026-05-31): the ONLY jobs that
+# may appear in the manager schedule dropdowns - 13 front-of-house roles + Cook
+# = 14. Everything else in the positions table is Sling-import residue (C-Grill,
+# C-Prep, Chba, Chip, Cenas Togo, Dish, ...) and is filtered OUT of the board's
+# position list (see app.web.schedules_v2). The management roles (Partner,
+# Corporate, GM, KM, ...) are User permission levels, not Sling positions, so
+# they may be absent from this table; app.create_app() seeds any missing
+# canonical name as an all-store row (store_key=NULL). Finer kitchen roles
+# ("tags") are deferred. The filter is NON-DESTRUCTIVE - read-side only:
+# EmployeePosition.position_id is ondelete=CASCADE, so deleting a Position row
+# would silently wipe migrated employees' assignments; we never delete here.
+CANONICAL_POSITIONS = [
+    "Partner", "Corporate", "Corporate Chef", "GM", "KM", "Assistant KM",
+    "FOH Manager", "Busser", "Hostess", "Cashier", "Server", "Well",
+    "Bartender", "Cook",
+]
+
+
 class EmployeePosition(Base):
     """Which positions an employee holds (many-to-many)."""
 

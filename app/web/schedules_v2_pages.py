@@ -142,6 +142,7 @@ def sv2_employees_page():
     config = {
         "storeLabel": g.store_label,
         "addUrl": f"{base}/employees/add",   # aick (B11 #2108): POST {full_name, email} -> 200 {ok, employee_id, message} | 4xx {ok:false, error}
+        "rosterUrl": f"{base}/roster",       # ckai (B11 #2116): POST {employee_id, position_ids?} -> 201 created / 200 idempotent. v1 auto-chains this on add-success (samai #2120) so the hire is schedulable instantly.
     }
     return render_template(
         "schedules_v2_employees.html",

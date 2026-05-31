@@ -60,6 +60,15 @@ def load_position(position_key, store_key):
                 .filter(PositionPermission.position_key == position_key,
                         PositionPermission.store_key == store_key).all())
         on_perms = sorted({r[0] for r in rows if r[0] in _VALID_PERM_KEYS})
+        if not on_perms:
+            # LOCKOUT FIX (ckbro #2475 / ckai #2476): an UNSAVED (position, store)
+            # returns the ROLE-DEFAULT on-set, NOT [] - so the page pre-fills
+            # today's real perms, the partner edits from there, and a wholesale
+            # save PRESERVES them. "what Sam sees == what's enforced" from the
+            # first open, matching the per-position enforcement fallback.
+            from app.services.permission_catalog import default_role_map
+            on_perms = sorted({k for k in default_role_map().get(position_key, set())
+                               if k in _VALID_PERM_KEYS})
     finally:
         db.close()
     return jsonify({"ok": True, "position_key": position_key,

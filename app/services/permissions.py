@@ -320,6 +320,30 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 }
 
 
+# ============================================================
+# CATALOG_TO_TAGS — the catalog-key -> route-tag bridge (perms-rework Piece A).
+# ============================================================
+# This is the AUDITABLE boundary: ONLY the route tags named here can be
+# REVOKED by an OFF catalog toggle. Every OTHER route tag stays role-only
+# (the role baseline always passes through, never revocable by the catalog).
+#
+# The catalog (permission_catalog.py) and the route @requires_permission tags
+# (ROLE_PERMISSIONS, above) are two DIFFERENT vocabularies. This dict wires the
+# handful of catalog keys that map 1:1 onto a real route tag. Confident 1:1
+# bindings ONLY — ambiguous catalog keys and route tags with no catalog key are
+# DELIBERATELY excluded; they remain on the role baseline. Expandable in later
+# passes as more bindings are verified.
+CATALOG_TO_TAGS: dict[str, set[str]] = {
+    "emp.reset_passcode": {"drivers.reset_passcode"},
+    "legal.upload_docs": {"legal.upload_document"},
+    "dash.dev_chat": {"developer.view_chat"},
+    "legal.view_insurance": {"legal.view_insurance"},
+}
+# The set of route tags under catalog authority. A tag in here is
+# catalog-controlled (OFF revokes); a tag NOT in here is role-only.
+MANAGED_TAGS: set[str] = set().union(*CATALOG_TO_TAGS.values()) if CATALOG_TO_TAGS else set()
+
+
 # Back-compat aliases for legacy User.permission_level values that
 # pre-date the spec's taxonomy. During dark-launch these keep existing
 # users from being denied everywhere; after the migration the User
@@ -386,12 +410,18 @@ def _effective_perms(user) -> set[str]:
         fallback and is returned whenever the active store is unset OR
         the person has no Employee OR no positions at that store — never
         an empty-deny;
-      * when the person has positions at the active store we ADD (union)
-        their positions' catalog perms (per position: the SAVED config,
-        else that position-role's catalog default) ON TOP of the role
-        baseline - additive, never a replace, so a positioned manager
-        keeps all current route access (the route @requires_permission
-        tags are a DIFFERENT vocabulary from the catalog keys; see below).
+      * when the person has positions at the active store we resolve their
+        positions' catalog perms (per position: the SAVED config, else that
+        position-role's catalog default) and apply the SUBTRACTIVE-within-
+        MANAGED model (perms-rework Piece A): route tags bound in
+        CATALOG_TO_TAGS (the MANAGED_TAGS set) become catalog-authoritative —
+        an OFF toggle on a bound key now REVOKES the tag — while every UNbound
+        route tag still passes through from the role baseline, so a positioned
+        manager keeps all non-managed route access. The route
+        @requires_permission tags are a DIFFERENT vocabulary from the catalog
+        keys; CATALOG_TO_TAGS is the only bridge (see below). This is reached
+        ONLY for a positioned user at their active store; the belt branches
+        below stay on the full role baseline (lockout-safe).
 
     Cached per-request on flask.g keyed by user id (the decorator + the
     Jinja helper both call through here on the same request). Manages its
@@ -460,19 +490,32 @@ def _effective_perms(user) -> set[str]:
                                 union |= saved
                             else:
                                 union |= drm.get(pk, set())
-                        # Path B / additive (perms-rework merge-safety): the
-                        # position catalog-union ADDS to the role baseline, it
-                        # does NOT replace it. The route @requires_permission
-                        # tags are a DIFFERENT vocabulary (SS3.1 / ROLE_PERMISSIONS:
-                        # team_reports.view, briefs.view_own, drivers.admin ...)
-                        # than the catalog keys (dash.*, reports.*, emp.* ...) -
-                        # disjoint but for ~1 tag. REPLACING role-perms with the
-                        # catalog-union would strip a positioned manager of their
-                        # real route access (a regression). Unioning preserves all
-                        # current access + lets the toggles ADD catalog perms.
-                        # Full catalog-key -> route-tag wiring (so OFF can also
-                        # REVOKE a role-granted route) is a separate scoped pass.
-                        result = set(role_perms) | union
+                        # Subtractive-within-MANAGED (perms-rework Piece A): the
+                        # catalog is now AUTHORITATIVE for the route tags it is
+                        # explicitly bound to (CATALOG_TO_TAGS / MANAGED_TAGS) — an
+                        # OFF toggle on a bound catalog key now REVOKES the route
+                        # tag, closing the additive-only gap. Every UNbound route
+                        # tag still passes through from the role baseline (no
+                        # lockout). Breakdown:
+                        #   (role_perms - MANAGED_TAGS) = the role tags pass
+                        #     through EXCEPT the managed ones (those are now
+                        #     catalog-authoritative, so the role no longer grants
+                        #     them unilaterally);
+                        #   granted_catalog_tags = the managed route tags the
+                        #     catalog GRANTS for this user's positions (a bound key
+                        #     ON re-adds its tag; OFF omits it = REVOKED);
+                        #   | union keeps the catalog keys themselves in the set
+                        #     for compat — existing checks/templates AND the
+                        #     enforce probe read catalog keys (dash.*, reports.*,
+                        #     emp.* ...) directly out of this set.
+                        # The route @requires_permission tags (ROLE_PERMISSIONS)
+                        # and the catalog keys (permission_catalog.py) remain two
+                        # DIFFERENT vocabularies; CATALOG_TO_TAGS is the only wire
+                        # between them.
+                        granted_catalog_tags = set()
+                        for _ck in union:
+                            granted_catalog_tags |= CATALOG_TO_TAGS.get(_ck, set())
+                        result = (set(role_perms) - MANAGED_TAGS) | granted_catalog_tags | union
             finally:
                 db.close()
     except Exception:

@@ -52,6 +52,56 @@ def _dt(s):
     return datetime.fromisoformat(s) if s else None
 
 
+@store_bp.route("/schedules-v2/employees/add", methods=["POST"])
+@require_level(_MGR)
+def sv2_employee_add():
+    """B11 email-onboarding (#1, aick): a manager admin-adds an employee with
+    NAME + EMAIL only ("basic info", Sam #2088 / samai #2097). Creates the
+    Employee (active; no passcode, no phone) and fires the email setup invite
+    (ckai's employee_setup.send_setup_invite -> mints a one-time token + emails
+    the /employee/setup/<token> link via the orders@ SMTP). The employee then
+    self-completes their profile + sets a 5-digit passcode at that link.
+
+    Deliberately does NOT set store/position here: those are MANAGER-set via a
+    separate route (samai's privilege boundary #2097 - an employee self-assigning
+    store/position would self-grant scheduling reach). A new hire onboards fully
+    (setup -> passcode -> login) and simply sees an empty schedule until a manager
+    assigns them. Email is the login IDENTITY, so duplicates are rejected."""
+    data = request.get_json(silent=True) or {}
+    full_name = (data.get("full_name") or "").strip()
+    email = (data.get("email") or "").strip()
+    if not full_name:
+        return jsonify({"ok": False, "error": "Name is required."}), 400
+    # basic email sanity (real validation is delivery): one @, a dotted domain
+    parts = email.split("@")
+    if len(parts) != 2 or not parts[0] or "." not in parts[1] or parts[1].endswith("."):
+        return jsonify({"ok": False, "error": "A valid email is required."}), 400
+
+    db = SessionLocal()
+    try:
+        # Email is the login identity (login + invite key off it), so it must be
+        # unique. No DB UNIQUE on employees.email, so guard here (case-insensitive,
+        # small-table scan like _find_employee_by_identifier).
+        el = email.lower()
+        if any((e.email or "").lower() == el for e in db.query(Employee).all()):
+            return jsonify({"ok": False,
+                            "error": "An employee with that email already exists."}), 409
+        emp = Employee(full_name=full_name, email=email, active=True)
+        db.add(emp)
+        db.commit()
+        emp_id = emp.id
+    finally:
+        db.close()
+
+    # Fire the invite AFTER our session closes (send_setup_invite opens its own).
+    # It never raises into us (logs the link on SMTP failure), so the add still
+    # succeeds + a re-add/re-invite just issues a fresh token.
+    from app.web.employee_setup import send_setup_invite
+    send_setup_invite(emp_id)
+    return jsonify({"ok": True, "employee_id": emp_id,
+                    "message": "Invitation emailed to %s." % email}), 200
+
+
 @store_bp.route("/schedules-v2/schedule/new", methods=["POST"])
 @require_level(_MGR)
 def sv2_schedule_new():

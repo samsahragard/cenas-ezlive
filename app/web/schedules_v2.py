@@ -100,6 +100,27 @@ def sv2_employee_add():
             pass
     store_keys = [str(s).strip().lower() for s in _as_list(data.get("store_keys")) if str(s).strip()]
 
+    # Per-store position assignment (Sam #2435/#2457): the FE sends explicit
+    # (position, store) pairs as `assignments` -- one person can be Manager @
+    # Tomball + Server @ Copperfield on one login. Back-compat: with no
+    # `assignments`, the old position_ids[] x store_keys[] is the cartesian
+    # (every picked position at every picked store). Either way EmployeePosition
+    # now carries store_key.
+    pairs = []
+    for a in _as_list(data.get("assignments")):
+        if not isinstance(a, dict):
+            continue
+        try:
+            apid = int(a.get("position_id"))
+        except (TypeError, ValueError):
+            continue
+        ask = str(a.get("store_key") or "").strip().lower()
+        if ask:
+            pairs.append((apid, ask))
+    if pairs:
+        position_ids = list(dict.fromkeys([p for p, _ in pairs]))
+        store_keys = list(dict.fromkeys([s for _, s in pairs] + store_keys))
+
     if not full_name:
         return jsonify({"ok": False, "error": "Name is required."}), 400
     parts = email.split("@")
@@ -156,8 +177,13 @@ def sv2_employee_add():
             db.flush()
             for sk in dict.fromkeys(store_keys):       # multi-store (Sam #2315), de-duped
                 db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
-            for pid in dict.fromkeys(valid_pids):       # multi-position (M2M), de-duped
-                db.add(EmployeePosition(employee_id=emp.id, position_id=pid))
+            # EmployeePosition now carries store_key (per-store positions, Sam
+            # #2435). Write the explicit valid (position, store) pairs; else (old
+            # cartesian path) every valid position at every picked store.
+            _ep_pairs = ([(p, s) for (p, s) in pairs if p in valid_pids] if pairs
+                         else [(p, s) for p in valid_pids for s in store_keys])
+            for (pid, sk) in dict.fromkeys(_ep_pairs):
+                db.add(EmployeePosition(employee_id=emp.id, position_id=pid, store_key=sk))
             db.commit()
         except Exception:
             db.rollback()

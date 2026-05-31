@@ -4828,11 +4828,24 @@ def team_workspace():
     label = g.store_label or "Cenas Kitchen"
     _t = date.today()
     today_label = f"{_t:%a, %b} {_t.day}"
+    # +Add dropdown is gated to the positions THIS manager may add -- sourced
+    # from addable_positions_for(), the SAME addable_roles()/position_role() the
+    # 403 add-gate uses, so the FE can never drift from enforcement
+    # (aick #2413; Sam #2381/#2404). Unknown/floor role -> [] -> "can't add".
+    from app.db import SessionLocal
+    from app.services.team_roster import addable_positions_for
+    _role = (getattr(getattr(g, "current_user", None), "permission_level", None) or "")
+    _db = SessionLocal()
+    try:
+        addable_positions = addable_positions_for(_role, _db)
+    finally:
+        _db.close()
     return render_template(
         "team_workspace.html",
         active="partner_team",
         store_label=label,
         today_label=today_label,
+        addable_positions=addable_positions,
     )
 
 

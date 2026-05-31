@@ -1,15 +1,15 @@
-{# Employee two-step login (Schedules V2, B2). Screen 1 = phone-number
-   entry (same numeric pad as the driver login). Screen 2 = the SMS code
-   the server texts to that phone. The code pad is ALL-NUMERIC (no symbol
-   keys) - SMS codes are digits, and a symbol pad would be untypable
-   (same lesson as the #1741 set-passcode fix). The typed code shows as
-   visible digits, not masked dots.
+{# Employee passcode login (Schedules V2, B11 email-onboarding swap).
+   Replaces the retired phone -> SMS-code flow (SMS fully parked, email-first
+   pivot, Sam 2026-05-30). Single screen:
+     - identifier: email OR phone (text; backend detects '@' -> email else phone)
+     - passcode:   4-8 digit numeric PIN the employee set at /employee/setup
 
-   ck owns this template + the GET /employee/login page route. aick owns
-   the POST endpoints this page calls:
-     POST {{ request_code_url }}  body {phone}        -> sends SMS
-     POST {{ verify_code_url }}   body {phone, code}  -> session + {ok,next}
-   Field/response shapes assumed below; confirm in B2 cross-review.
+   ck owns this template + the GET /employee/login page route. ckai owns the
+   POST endpoint this page calls:
+     POST {{ submit_url }}  body {identifier, passcode}
+        -> 200 {ok, next?}  (sets session[employee_id]; B5-B9 unchanged)
+        -> 401 wrong  |  429 locked (5-attempt lockout)
+   No SMS / consent on this page anymore (email-first).
 #}
 <!DOCTYPE html>
 <html lang="en">
@@ -28,7 +28,6 @@
     --red-shadow:     #3d0a08;
     --cream:          #f4e7d0;
     --cream-soft:     #ebd9bc;
-    --num-color:      #f4e7d0;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   html,body{
@@ -51,12 +50,12 @@
       radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.08), transparent 50%),
       linear-gradient(180deg, rgba(10,6,4,0.20) 0%, rgba(10,6,4,0.30) 100%);
   }
-  .wrap{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; }
+  .wrap{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; width:100%; }
 
-  /* Header capsule */
+  /* Header capsule - same recipe as the driver/employee keypad logins. */
   .header-cap{
-    display:flex; flex-direction:column; align-items:center; gap:8px;
-    margin: 22px 22px 22px; padding: 10px 36px; border-radius:14px;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    margin: 22px 22px 24px; padding: 10px 40px; border-radius:14px;
     background-image:
       radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
       radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
@@ -84,32 +83,42 @@
   }
   .header-sub{
     color: var(--blue-deep); font-size:12px; font-weight:600; letter-spacing:0.5px;
-    opacity:0.75; margin-top:-2px;
+    opacity:0.75;
   }
 
-  /* Phone display strip - formatted (XXX) XXX-XXXX */
-  .phone-strip{
-    display:flex; gap:8px; align-items:center; justify-content:center;
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 22px; font-weight: 600;
+  /* Sign-in card. */
+  .card{ width:100%; max-width:340px; display:flex; flex-direction:column; gap:15px; margin:2px 0 4px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{
+    font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color: rgba(244,231,208,0.7); padding-left:3px;
+  }
+  .field input{
+    width:100%; padding:13px 15px; border-radius:12px;
+    font-size:17px; font-family:inherit; font-weight:600;
     color: var(--blue-deep);
-    letter-spacing: 1.5px;
-    min-height: 28px;
+    background: linear-gradient(180deg, #fffaf0 0%, var(--cream) 55%, var(--cream-soft) 100%);
+    border: 2px solid rgba(20,32,92,0.25);
+    box-shadow: inset 0 2px 3px rgba(150,110,70,0.25), 0 4px 10px rgba(0,0,0,0.4);
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
   }
-  .phone-strip .ph-sep { color: rgba(20,32,92,0.4); margin: 0 2px; }
-  .phone-strip .ph-empty { color: rgba(20,32,92,0.25); }
-  .phone-strip.error{ animation: shake 0.4s ease; }
+  .field input:focus{
+    border-color: var(--blue-bright);
+    box-shadow: inset 0 2px 3px rgba(150,110,70,0.2), 0 0 0 3px rgba(29,42,112,0.35), 0 4px 12px rgba(0,0,0,0.45);
+  }
+  .field input::placeholder{ color: rgba(20,32,92,0.38); font-weight:500; }
+  .field input.bad{ border-color: var(--red); box-shadow: 0 0 0 3px rgba(200,48,42,0.3); animation: shake 0.4s ease; }
 
-  /* Code display strip - visible digits (not masked), matches the
-     set-passcode page pin-strip recipe. */
-  .pin-strip{
-    display:flex; gap:14px; align-items:center; justify-content:center;
-    font-size:30px; font-weight:700; letter-spacing:1px;
-    color: var(--blue-deep); min-height:28px;
+  .passcode-row{ position:relative; }
+  .passcode-row input{ padding-right:62px; letter-spacing:2px; }
+  .toggle-pass{
+    position:absolute; right:8px; top:50%; transform:translateY(-50%);
+    font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+    color: rgba(20,32,92,0.6); cursor:pointer; user-select:none;
+    padding:6px 9px; border-radius:8px;
   }
-  .pin-strip .pin-digit{ min-width:18px; text-align:center; }
-  .pin-strip .ph-empty{ color: rgba(20,32,92,0.25); }
-  .pin-strip.error{ animation: shake 0.4s ease; }
+  .toggle-pass:hover{ color: var(--blue-deep); background: rgba(20,32,92,0.07); }
 
   @keyframes shake{
     0%, 100%{ transform: translateX(0); }
@@ -117,103 +126,41 @@
     40%, 80%{ transform: translateX(6px); }
   }
 
-  /* The two screens - only one visible at a time. */
-  .screen{ display:none; flex-direction:column; align-items:center; }
-  .screen.active{ display:flex; }
+  .btn-signin{
+    margin-top:6px; width:100%; padding:15px; border-radius:12px;
+    font-size:15px; font-weight:800; letter-spacing:2px; text-transform:uppercase;
+    color: var(--cream); cursor:pointer; border:3px solid var(--blue-bright);
+    background-image: radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 45%, var(--red-deep) 100%);
+    text-shadow: 0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.5);
+    box-shadow:
+      inset 0 2px 1px rgba(255,210,200,0.5),
+      inset 0 -4px 8px rgba(40,5,3,0.6),
+      0 6px 12px rgba(0,0,0,0.55),
+      0 2px 4px rgba(0,0,0,0.6);
+    transition: transform 80ms ease, box-shadow 80ms ease, filter 80ms ease;
+  }
+  .btn-signin:hover{ filter:brightness(1.06); }
+  .btn-signin:active{
+    transform: translateY(2px) scale(0.99);
+    box-shadow: inset 0 3px 6px rgba(40,5,3,0.8), 0 1px 2px rgba(0,0,0,0.5);
+  }
+  .btn-signin[disabled]{ opacity:0.65; pointer-events:none; }
 
-  /* Subtle links (back-to-phone, resend) */
   .link-row{
-    margin-top: 14px; display:flex; flex-direction:column; align-items:center; gap:8px;
-    color: rgba(244,231,208,0.55); font-size: 13px;
+    margin-top: 12px; display:flex; flex-direction:column; align-items:center; gap:8px;
+    color: rgba(244,231,208,0.55); font-size: 13px; text-align:center;
   }
   .link-row a{
     color: rgba(244,231,208,0.78); text-decoration: underline;
     cursor:pointer; padding: 4px 8px;
   }
   .link-row a:hover{ color: var(--cream); }
-  .link-row a.disabled{ opacity:0.4; pointer-events:none; text-decoration:none; }
+  .help-note{ color: rgba(244,231,208,0.45); font-size:12px; }
 
   .brand-logo{
     display:block; width:100%; max-width:460px; height:auto;
-    margin: 9px auto 0;
+    margin: 16px auto 0;
     filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-  }
-
-  /* Numeric keypad - 3-column, all-numeric (1-9 / BACK,0,ENTER). */
-  .pad{
-    --gap:14px; --key:78px;
-    display:grid; grid-template-columns: repeat(3, var(--key)); grid-auto-rows: var(--key);
-    gap: var(--gap); padding: 0; background: transparent; border-radius: 0;
-    box-shadow: none; position:relative; margin:22px;
-  }
-  .key{
-    position:relative; border-radius:14px;
-    background-image:
-      radial-gradient(circle at 12% 18%, rgba(244,231,208,0.55) 0.6px, transparent 1.4px),
-      radial-gradient(circle at 78% 32%, rgba(244,231,208,0.4) 0.8px, transparent 1.6px),
-      radial-gradient(circle at 35% 65%, rgba(244,231,208,0.5) 0.5px, transparent 1.2px),
-      radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 40%, var(--red-deep) 100%);
-    background-size: 22px 22px, 28px 28px, 18px 18px, 100% 100%;
-    background-position: 0 0, 5px 8px, 12px 3px, 0 0;
-    border: 3px solid var(--blue-bright);
-    box-shadow:
-      inset 0 2px 1px rgba(255,210,200,0.55),
-      inset 2px 3px 6px rgba(255,180,160,0.15),
-      inset 0 -4px 8px rgba(40,5,3,0.7),
-      inset -3px -2px 5px rgba(40,5,3,0.55),
-      0 0 0 0.5px rgba(120,150,230,0.6),
-      0 0 6px rgba(90,108,200,0.35),
-      0 6px 10px rgba(0,0,0,0.6),
-      0 2px 3px rgba(0,0,0,0.7);
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer; user-select:none;
-    transition: transform 80ms ease, box-shadow 80ms ease;
-  }
-  .key:hover{ filter: brightness(1.08); }
-  .key:active, .key.pressed{
-    transform: translateY(2px) scale(0.985);
-    box-shadow:
-      inset 0 3px 6px rgba(40,5,3,0.85),
-      inset 0 -1px 0 rgba(255,200,180,0.15),
-      inset 2px 2px 4px rgba(40,5,3,0.6),
-      0 0 0 0.5px rgba(120,150,230,0.6),
-      0 0 4px rgba(90,108,200,0.25),
-      0 1px 2px rgba(0,0,0,0.5);
-  }
-  .key.special{
-    background-image:
-      radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
-      radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
-      radial-gradient(circle at 32% 68%, rgba(138,29,24,0.35) 0.5px, transparent 1.2px),
-      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 40%, var(--cream-soft) 100%);
-    background-size: 20px 20px, 26px 26px, 17px 17px, 100% 100%;
-    background-position: 2px 1px, 7px 9px, 13px 4px, 0 0;
-    border: 3px solid var(--blue-bright);
-    box-shadow:
-      inset 0 2px 1px rgba(255,255,255,0.9),
-      inset 2px 3px 6px rgba(255,255,255,0.4),
-      inset 0 -4px 8px rgba(150,110,70,0.4),
-      inset -3px -2px 5px rgba(150,110,70,0.3),
-      0 0 0 0.5px rgba(120,150,230,0.6),
-      0 0 6px rgba(90,108,200,0.35),
-      0 6px 10px rgba(0,0,0,0.6),
-      0 2px 3px rgba(0,0,0,0.7);
-  }
-  .key .label{
-    font-size:30px; font-weight:700; letter-spacing:0.3px; color: var(--num-color);
-    text-shadow: 0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,200,180,0.15);
-    line-height:1; pointer-events:none;
-  }
-  .key.special .label{
-    color: var(--red);
-    text-shadow: 0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
-    font-weight:800;
-  }
-  .key svg{
-    width:28px; height:28px; fill:none; stroke: var(--red); stroke-width:2.2;
-    stroke-linecap:round; stroke-linejoin:round;
-    filter: drop-shadow(0 1px 0 rgba(255,255,255,0.8));
-    pointer-events:none;
   }
 
   .toast{
@@ -221,6 +168,7 @@
     background: rgba(20,8,8,0.92); color:#fff; padding:10px 18px; border-radius:10px;
     border:1px solid rgba(255,255,255,0.12); font-size:13px; letter-spacing:0.5px;
     opacity:0; transition: opacity 0.2s ease; pointer-events:none; z-index:10;
+    max-width: calc(100% - 36px); text-align:center;
   }
   .toast.show{ opacity:1; }
 </style>
@@ -228,83 +176,36 @@
 <body>
 <div class="wrap">
 
-  {# ============== SCREEN 1 - Phone number ============== #}
-  <div class="screen active" id="screen-phone">
-    <div class="header-cap">
-      <div class="header-label">PHONE</div>
-      <div class="phone-strip" id="phone-strip" aria-live="polite"></div>
+  <div class="header-cap">
+    <div class="header-label">SIGN IN</div>
+    <div class="header-sub">Cenas Kitchen team</div>
+  </div>
+
+  <form class="card" id="signin-form" novalidate>
+    <div class="field">
+      <label for="identifier">Email or phone</label>
+      <input id="identifier" name="identifier" type="text" inputmode="email"
+             autocomplete="username" autocapitalize="none" autocorrect="off"
+             spellcheck="false" placeholder="you@example.com or phone" />
     </div>
 
-    <div class="pad" id="pad-phone">
-      <div class="key" data-val="1"><span class="label">1</span></div>
-      <div class="key" data-val="2"><span class="label">2</span></div>
-      <div class="key" data-val="3"><span class="label">3</span></div>
-
-      <div class="key" data-val="4"><span class="label">4</span></div>
-      <div class="key" data-val="5"><span class="label">5</span></div>
-      <div class="key" data-val="6"><span class="label">6</span></div>
-
-      <div class="key" data-val="7"><span class="label">7</span></div>
-      <div class="key" data-val="8"><span class="label">8</span></div>
-      <div class="key" data-val="9"><span class="label">9</span></div>
-
-      <div class="key special" data-val="BACK" aria-label="backspace">
-        <svg viewBox="0 0 24 24">
-          <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
-          <line x1="11" y1="9" x2="17" y2="15"/>
-          <line x1="17" y1="9" x2="11" y2="15"/>
-        </svg>
-      </div>
-      <div class="key" data-val="0"><span class="label">0</span></div>
-      <div class="key special" data-val="NEXT" id="next-btn" aria-label="next">
-        <span class="label" style="font-size: 14px; letter-spacing: 2px;">NEXT</span>
+    <div class="field">
+      <label for="passcode">Passcode</label>
+      <div class="passcode-row">
+        <input id="passcode" name="passcode" type="password" inputmode="numeric"
+               autocomplete="current-password" maxlength="5" pattern="[0-9]*"
+               placeholder="5-digit PIN" />
+        <span class="toggle-pass" id="toggle-pass" role="button" tabindex="0" aria-label="Show passcode">Show</span>
       </div>
     </div>
+
+    <button type="submit" class="btn-signin" id="signin-btn">Sign in</button>
 
     <div class="link-row">
       <a id="not-me-link" style="display:none;">Not you? Tap to clear</a>
+      <span class="help-note">Trouble signing in? Ask your manager.</span>
     </div>
-  </div>
-
-  {# ============== SCREEN 2 - SMS code ============== #}
-  <div class="screen" id="screen-code">
-    <div class="header-cap">
-      <div class="header-label">ENTER CODE</div>
-      <div class="header-sub" id="code-sub">sent to your phone</div>
-      <div class="pin-strip" id="code-strip" aria-live="polite"></div>
-    </div>
-
-    <div class="pad" id="pad-code">
-      <div class="key" data-val="1"><span class="label">1</span></div>
-      <div class="key" data-val="2"><span class="label">2</span></div>
-      <div class="key" data-val="3"><span class="label">3</span></div>
-
-      <div class="key" data-val="4"><span class="label">4</span></div>
-      <div class="key" data-val="5"><span class="label">5</span></div>
-      <div class="key" data-val="6"><span class="label">6</span></div>
-
-      <div class="key" data-val="7"><span class="label">7</span></div>
-      <div class="key" data-val="8"><span class="label">8</span></div>
-      <div class="key" data-val="9"><span class="label">9</span></div>
-
-      <div class="key special" data-val="BACK" aria-label="backspace">
-        <svg viewBox="0 0 24 24">
-          <path d="M9 5 L3 12 L9 19 L21 19 L21 5 Z"/>
-          <line x1="11" y1="9" x2="17" y2="15"/>
-          <line x1="17" y1="9" x2="11" y2="15"/>
-        </svg>
-      </div>
-      <div class="key" data-val="0"><span class="label">0</span></div>
-      <div class="key special" data-val="ENTER" aria-label="enter">
-        <span class="label" style="font-size: 14px; letter-spacing: 2px;">ENTER</span>
-      </div>
-    </div>
-
-    <div class="link-row">
-      <a id="resend-link">Resend code</a>
-      <a id="back-to-phone">&larr; back to phone</a>
-    </div>
-  </div>
+  </form>
 
   <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
        alt="Cenas Kitchen" class="brand-logo" />
@@ -312,238 +213,131 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  const CODE_LENGTH = {{ code_len|default(6) }};
-  const REQUEST_CODE_URL = {{ (request_code_url|default('/employee/login/request-code'))|tojson }};
-  const VERIFY_CODE_URL  = {{ (verify_code_url|default('/employee/login/verify-code'))|tojson }};
-  const DASHBOARD_URL    = {{ (dashboard_url|default('/employee/dashboard'))|tojson }};
-  const PREFILL_PHONE    = {{ (prefill_phone|default(''))|tojson }};
+  "use strict";
+  var SUBMIT_URL    = {{ (submit_url|default('/employee/login/passcode'))|tojson }};
+  var DASHBOARD_URL = {{ (dashboard_url|default('/employee/dashboard'))|tojson }};
+  var PASSCODE_LEN  = {{ passcode_len|default(5) }};
+  var PREFILL_ID    = {{ (prefill_identifier|default(''))|tojson }};
 
-  // Remember the phone (identifier) on this device, never the code.
-  // Same banking-app pattern as the driver login.
-  const STORAGE_KEY = 'ck-employee-phone-v1';
-  const MAX_AGE_DAYS = 14;
-  function readPersistedPhone(){
+  // Remember the identifier (email or phone) on this device, never the
+  // passcode. Same banking-app pattern as the driver login: identifier
+  // persists, the secret never does.
+  var STORAGE_KEY = 'ck-employee-id-v1';
+  var MAX_AGE_DAYS = 14;
+  function readPersistedId(){
     try{
-      const raw = localStorage.getItem(STORAGE_KEY);
+      var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return '';
-      const obj = JSON.parse(raw);
-      if (!obj || !obj.phone) return '';
-      const ageDays = (Date.now() - (obj.lastUsedTs || 0)) / (1000*60*60*24);
+      var obj = JSON.parse(raw);
+      if (!obj || !obj.id) return '';
+      var ageDays = (Date.now() - (obj.lastUsedTs || 0)) / (1000*60*60*24);
       if (ageDays > MAX_AGE_DAYS){ localStorage.removeItem(STORAGE_KEY); return ''; }
-      return String(obj.phone).replace(/\D/g,'').slice(0,10);
-    } catch(_){ return ''; }
+      return String(obj.id);
+    } catch(e){ return ''; }
   }
-  function writePersistedPhone(phone){
-    try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        phone: String(phone).replace(/\D/g,'').slice(0,10),
-        lastUsedTs: Date.now(),
-      }));
-    } catch(_){}
+  function writePersistedId(id){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: String(id), lastUsedTs: Date.now() })); } catch(e){}
   }
-  function clearPersistedPhone(){
-    try{ localStorage.removeItem(STORAGE_KEY); } catch(_){}
-  }
+  function clearPersistedId(){ try{ localStorage.removeItem(STORAGE_KEY); } catch(e){} }
 
-  const urlParams = new URLSearchParams(window.location.search);
+  // /employee/logout can redirect here with ?_clear=1 to wipe the device.
+  var urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('_clear') === '1'){
-    clearPersistedPhone();
+    clearPersistedId();
     window.history.replaceState({}, '', window.location.pathname);
   }
 
-  let phoneDigits = (PREFILL_PHONE || '').replace(/\D/g,'').slice(0,10);
-  let fromStorage = false;
-  if (!phoneDigits){
-    const stored = readPersistedPhone();
-    if (stored.length === 10){ phoneDigits = stored; fromStorage = true; }
-  }
-  let code = '';
-  let busy = false;
-
-  const phoneStrip = document.getElementById('phone-strip');
-  const codeStrip  = document.getElementById('code-strip');
-  const codeSub    = document.getElementById('code-sub');
-  const toast      = document.getElementById('toast');
-  const screenPhone = document.getElementById('screen-phone');
-  const screenCode  = document.getElementById('screen-code');
-  const resendLink  = document.getElementById('resend-link');
-
-  function formatPhone(d){
-    if (!d) return '<span class="ph-empty">(___) ___-____</span>';
-    const a = d.slice(0,3).padEnd(3,'_');
-    const b = d.slice(3,6).padEnd(3,'_');
-    const c = d.slice(6,10).padEnd(4,'_');
-    return `(${a})<span class="ph-sep">&nbsp;</span>${b}<span class="ph-sep">-</span>${c}`;
-  }
-  function prettyPhone(d){
-    return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6,10)}`;
-  }
-  function formatCode(c){
-    let out = '';
-    for (let i=0;i<CODE_LENGTH;i++){
-      out += i < c.length
-        ? `<span class="pin-digit">${c[i]}</span>`
-        : '<span class="pin-digit ph-empty">_</span>';
-    }
-    return out;
-  }
-  function renderPhone(){ phoneStrip.innerHTML = formatPhone(phoneDigits); }
-  function renderCode(){ codeStrip.innerHTML = formatCode(code); }
+  var form     = document.getElementById('signin-form');
+  var idInput  = document.getElementById('identifier');
+  var passInput= document.getElementById('passcode');
+  var btn      = document.getElementById('signin-btn');
+  var toast    = document.getElementById('toast');
+  var togglePass = document.getElementById('toggle-pass');
+  var notMeLink  = document.getElementById('not-me-link');
+  var busy = false;
+  var PASS_RE = new RegExp('^[0-9]{' + PASSCODE_LEN + '}$');
 
   function flashToast(msg){
     toast.textContent = msg; toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 1800);
+    setTimeout(function(){ toast.classList.remove('show'); }, 2000);
   }
-  function showError(msg, where){
-    busy = false;
-    if (where === 'phone'){
-      phoneStrip.classList.add('error');
-      setTimeout(() => phoneStrip.classList.remove('error'), 450);
-    } else {
-      codeStrip.classList.add('error');
-      setTimeout(() => codeStrip.classList.remove('error'), 450);
-      code = ''; renderCode();
-    }
-    flashToast(msg);
+  function markBad(el){
+    el.classList.add('bad');
+    setTimeout(function(){ el.classList.remove('bad'); }, 450);
+  }
+  function setBusy(b){
+    busy = b; btn.disabled = b; btn.textContent = b ? 'Signing in...' : 'Sign in';
   }
 
-  function goToCode(){
-    code = ''; renderCode();
-    codeSub.textContent = 'sent to ' + prettyPhone(phoneDigits);
-    screenPhone.classList.remove('active');
-    screenCode.classList.add('active');
-  }
-  function goToPhone(){
-    code = ''; renderCode();
-    screenCode.classList.remove('active');
-    screenPhone.classList.add('active');
-  }
-
-  async function requestCode(isResend){
+  function submit(){
     if (busy) return;
-    if (phoneDigits.length !== 10){ showError('Enter a 10-digit phone number.', 'phone'); return; }
-    busy = true;
-    try{
-      const r = await fetch(REQUEST_CODE_URL, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({phone: phoneDigits}),
-      });
-      let data = {};
-      try{ data = await r.json(); } catch(_){}
+    var identifier = (idInput.value || '').trim();
+    var passcode = (passInput.value || '').trim();
+    if (!identifier){ markBad(idInput); flashToast('Enter your email or phone.'); idInput.focus(); return; }
+    if (!PASS_RE.test(passcode)){
+      markBad(passInput);
+      flashToast('Enter your ' + PASSCODE_LEN + '-digit passcode.');
+      passInput.focus();
+      return;
+    }
+    setBusy(true);
+    fetch(SUBMIT_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ identifier: identifier, passcode: passcode })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(data){ return { r: r, data: data }; });
+    }).then(function(o){
+      var r = o.r, data = o.data || {};
       if (r.status === 429){
-        showError(data.error || 'Too many requests - wait a moment.', isResend ? 'code' : 'phone');
+        setBusy(false); passInput.value=''; markBad(passInput);
+        flashToast(data.error || 'Too many attempts. Try again later.');
         return;
       }
       if (!r.ok || data.ok === false){
-        showError(data.error || `Could not send code (${r.status}).`, isResend ? 'code' : 'phone');
+        setBusy(false); passInput.value=''; markBad(passInput); passInput.focus();
+        flashToast(data.error || 'Wrong email/phone or passcode.');
         return;
       }
-      busy = false;
-      writePersistedPhone(phoneDigits);
-      if (isResend){ flashToast('Code sent.'); }
-      else { goToCode(); }
-    } catch(e){
-      showError('Network error - try again.', isResend ? 'code' : 'phone');
-    }
-  }
-
-  async function verifyCode(){
-    if (busy) return;
-    if (code.length !== CODE_LENGTH){ flashToast(`Enter all ${CODE_LENGTH} digits.`); return; }
-    busy = true;
-    try{
-      const r = await fetch(VERIFY_CODE_URL, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({phone: phoneDigits, code}),
-      });
-      let data = {};
-      try{ data = await r.json(); } catch(_){}
-      if (!r.ok || data.ok === false){
-        showError(data.error || `Wrong code (${r.status}).`, 'code');
-        return;
-      }
+      // Success - remember the identifier, head to the next page.
+      writePersistedId(identifier);
       window.location.replace(data.next || DASHBOARD_URL);
-    } catch(e){
-      showError('Network error - try again.', 'code');
-    }
+    }).catch(function(){
+      setBusy(false);
+      flashToast('Network error - try again.');
+    });
   }
 
-  // "Not you? Tap to clear" - only shown when prefilled from storage.
-  const notMeLink = document.getElementById('not-me-link');
-  if (fromStorage && notMeLink){
+  form.addEventListener('submit', function(e){ e.preventDefault(); submit(); });
+
+  // Show / hide the passcode.
+  function toggleVisibility(){
+    if (passInput.type === 'password'){ passInput.type = 'text'; togglePass.textContent = 'Hide'; }
+    else { passInput.type = 'password'; togglePass.textContent = 'Show'; }
+  }
+  togglePass.addEventListener('click', toggleVisibility);
+  togglePass.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleVisibility(); }
+  });
+
+  // Prefill the identifier from a server value or this device's storage.
+  var prefill = (PREFILL_ID || '') || readPersistedId();
+  if (prefill){
+    idInput.value = prefill;
     notMeLink.style.display = '';
-    notMeLink.addEventListener('click', (ev) => {
+    notMeLink.addEventListener('click', function(ev){
       ev.preventDefault();
-      clearPersistedPhone();
-      phoneDigits = ''; fromStorage = false;
+      clearPersistedId();
+      idInput.value = '';
       notMeLink.style.display = 'none';
-      renderPhone();
+      idInput.focus();
     });
+    // Identifier known -> focus straight on the passcode.
+    setTimeout(function(){ passInput.focus(); }, 60);
+  } else {
+    setTimeout(function(){ idInput.focus(); }, 60);
   }
-
-  // Phone pad
-  document.querySelectorAll('#pad-phone .key').forEach(key => {
-    key.addEventListener('click', () => {
-      const v = key.dataset.val;
-      if (v === 'BACK'){
-        phoneDigits = phoneDigits.slice(0,-1);
-      } else if (v === 'NEXT'){
-        requestCode(false);
-        return;
-      } else if (/^[0-9]$/.test(v) && phoneDigits.length < 10){
-        phoneDigits += v;
-      } else { return; }
-      renderPhone();
-      if (phoneDigits.length === 10){ setTimeout(() => requestCode(false), 200); }
-    });
-  });
-
-  // Code pad
-  document.querySelectorAll('#pad-code .key').forEach(key => {
-    key.addEventListener('click', () => {
-      const v = key.dataset.val;
-      if (v === 'BACK'){
-        code = code.slice(0,-1);
-      } else if (v === 'ENTER'){
-        verifyCode();
-        return;
-      } else if (/^[0-9]$/.test(v) && code.length < CODE_LENGTH){
-        code += v;
-      } else { return; }
-      renderCode();
-      if (code.length === CODE_LENGTH){ setTimeout(verifyCode, 180); }
-    });
-  });
-
-  document.getElementById('back-to-phone').addEventListener('click', goToPhone);
-  resendLink.addEventListener('click', () => requestCode(true));
-
-  // Keyboard input - works on both screens
-  document.addEventListener('keydown', e => {
-    const onPhone = screenPhone.classList.contains('active');
-    const padId = onPhone ? 'pad-phone' : 'pad-code';
-    if (/^[0-9]$/.test(e.key)){
-      const k = document.querySelector(`#${padId} .key[data-val="${e.key}"]`);
-      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
-      e.preventDefault();
-    } else if (e.key === 'Backspace'){
-      const k = document.querySelector(`#${padId} .key[data-val="BACK"]`);
-      if (k){ k.classList.add('pressed'); setTimeout(() => k.classList.remove('pressed'), 100); k.click(); }
-      e.preventDefault();
-    } else if (e.key === 'Enter'){
-      if (onPhone){ requestCode(false); }
-      else { verifyCode(); }
-      e.preventDefault();
-    }
-  });
-
-  // Initial render
-  renderPhone();
-  renderCode();
 </script>
 </body>
 </html>

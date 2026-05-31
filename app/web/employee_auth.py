@@ -229,18 +229,20 @@ _STORE_LABELS = {"tomball": "Tomball", "copperfield": "Copperfield"}
 
 @employee_auth.route("/employee/login", methods=["GET"])
 def login_page():
-    """Phone -> SMS-code login screen (mobile, branded). Anonymous-reachable:
-    the site gate exempts /employee/login (auth.py). The page POSTs to
-    request_code / verify_code above; on success its JS redirects to
-    dashboard_url. code_len mirrors the backend OTP length (CODE_LEN)."""
+    """Passcode login screen (mobile, branded). Anonymous-reachable: the site
+    gate exempts /employee/login (auth.py). The page POSTs {identifier,
+    passcode} to submit_url (ckai's /employee/login/passcode); on success its
+    JS redirects to dashboard_url. passcode_len mirrors the 5-digit PIN the
+    employee set at /employee/setup. (B11 email-onboarding swap, 2026-05-30 --
+    replaced the retired phone -> SMS-code flow; ckai owns the passcode
+    endpoint, ck owns this page route + template.)"""
     return render_template(
         "employee_login.html",
-        code_len=CODE_LEN,
-        request_code_url="/employee/login/request-code",
-        verify_code_url="/employee/login/verify-code",
+        submit_url="/employee/login/passcode",
         dashboard_url="/employee/dashboard",
         login_url="/employee/login",
-        prefill_phone="",
+        passcode_len=5,
+        prefill_identifier="",
     )
 
 

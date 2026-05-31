@@ -140,6 +140,22 @@
     background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
     border-radius: var(--sk-radius-sm); padding: 7px 10px; min-width: 150px;
   }
+  .sv2-posfilter { position: relative; display: inline-block; }
+  #sv2-posfilter-btn { cursor: pointer; text-align: left; }
+  #sv2-posfilter-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
+  .sv2-posfilter-pop {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+    min-width: 200px; max-height: 300px; overflow-y: auto;
+    background: var(--sk-bg-card); border: 1px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-sm); padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .sv2-posfilter-opt {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
+    font-size: 13px; color: var(--sk-cream); cursor: pointer; white-space: nowrap;
+  }
+  .sv2-posfilter-opt:hover { background: var(--sk-bg-card-hi); }
+  .sv2-posfilter-opt input { accent-color: var(--sk-red); margin: 0; }
+  .sv2-posfilter-sep { height: 1px; background: var(--sk-border-subtle); margin: 4px 2px; }
 
   /* ---- grid ---- */
   .sv2-gridwrap {
@@ -279,9 +295,10 @@
     <span class="sv2-pill none" id="sv2-status">No schedule</span>
     <button class="sv2-btn warn sv2-hidden" id="sv2-declined" title="Show only declined shifts that need reassigning" aria-pressed="false"></button>
     <div class="sv2-spacer"></div>
-    <select class="sv2-filter" id="sv2-posfilter" aria-label="Filter by position">
-      <option value="">All positions</option>
-    </select>
+    <div class="sv2-posfilter" id="sv2-posfilter-wrap">
+      <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">All positions</button>
+      <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
+    </div>
     <button class="sv2-btn" id="sv2-today">This week</button>
     <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
     <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
@@ -381,7 +398,7 @@
   var state = {
     weekStart: mondayOf(new Date()),  // Date (local midnight, Monday)
     board: null,
-    posFilter: "",
+    posFilter: [],
     editing: null,        // shift object when editing, else null
     cellEmp: null,        // employee_id (or null=open) for a new shift
     cellDate: null,       // ISO date string for a new shift
@@ -417,7 +434,7 @@
       elLoading = $("sv2-loading"), elGrid = $("sv2-gridwrap"),
       elNoDraft = $("sv2-nodraft"), elAccess = $("sv2-access"),
       elStatus = $("sv2-status"), elWeekLabel = $("sv2-weeklabel"),
-      elPosFilter = $("sv2-posfilter"), elCreate = $("sv2-createdraft"),
+      elPosBtn = $("sv2-posfilter-btn"), elPosPop = $("sv2-posfilter-pop"), elCreate = $("sv2-createdraft"),
       elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast");
 
   // ---- weekly board load ----
@@ -519,14 +536,32 @@
 
   function buildPosFilter() {
     var positions = (state.board.positions || []);
-    var cur = elPosFilter.value;
-    elPosFilter.innerHTML = '<option value="">All positions</option>';
+    // drop any selections no longer in the catalog (e.g. after the #1 cleanup)
+    var valid = {}; positions.forEach(function (p) { valid[String(p.id)] = true; });
+    state.posFilter = state.posFilter.filter(function (id) { return valid[id]; });
+    elPosPop.innerHTML = "";
+    var allLab = document.createElement("label"); allLab.className = "sv2-posfilter-opt";
+    var allCk = document.createElement("input"); allCk.type = "checkbox"; allCk.id = "sv2-pf-all";
+    allCk.checked = (state.posFilter.length === 0);
+    allLab.appendChild(allCk); allLab.appendChild(document.createTextNode(" All positions"));
+    elPosPop.appendChild(allLab);
+    var sep = document.createElement("div"); sep.className = "sv2-posfilter-sep"; elPosPop.appendChild(sep);
     positions.forEach(function (p) {
-      var o = document.createElement("option");
-      o.value = String(p.id); o.textContent = p.name;
-      elPosFilter.appendChild(o);
+      var id = String(p.id);
+      var lab = document.createElement("label"); lab.className = "sv2-posfilter-opt";
+      var ck = document.createElement("input"); ck.type = "checkbox"; ck.className = "sv2-pf-pos"; ck.value = id;
+      ck.checked = (state.posFilter.indexOf(id) !== -1);
+      lab.appendChild(ck); lab.appendChild(document.createTextNode(" " + (p.name || ("#" + id))));
+      elPosPop.appendChild(lab);
     });
-    elPosFilter.value = cur;
+    updatePosFilterLabel();
+  }
+
+  function updatePosFilterLabel() {
+    var n = state.posFilter.length, label = "All positions";
+    if (n === 1) { var p = posById(state.posFilter[0]); label = p ? p.name : "1 position"; }
+    else if (n > 1) { label = n + " positions"; }
+    elPosBtn.textContent = label;
   }
 
   // ---- grid render ----
@@ -567,7 +602,7 @@
       var s = shifts[i];
       var matchEmp = empId === null ? (s.employee_id == null) : (String(s.employee_id) === String(empId));
       if (!matchEmp) continue;
-      if (state.posFilter && String(s.position_id) !== String(state.posFilter)) continue;
+      if (state.posFilter.length && state.posFilter.indexOf(String(s.position_id)) === -1) continue;
       if (state.declinedOnly && String(s.response || "") !== "declined") continue;
       var sd = parseISO(s.start_at);
       if (!sd) continue;
@@ -839,7 +874,32 @@
   $("sv2-prev").onclick = function () { state.weekStart = addDays(state.weekStart, -7); loadBoard(); };
   $("sv2-next").onclick = function () { state.weekStart = addDays(state.weekStart, 7); loadBoard(); };
   $("sv2-today").onclick = function () { state.weekStart = mondayOf(new Date()); loadBoard(); };
-  elPosFilter.onchange = function () { state.posFilter = elPosFilter.value; if (state.board) renderGrid(); };
+  elPosBtn.onclick = function (e) {
+    e.stopPropagation();
+    var willOpen = elPosPop.classList.contains("sv2-hidden");
+    elPosPop.classList.toggle("sv2-hidden", !willOpen);
+    elPosBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  };
+  elPosPop.addEventListener("click", function (e) { e.stopPropagation(); });
+  elPosPop.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.id === "sv2-pf-all") {
+      state.posFilter = [];                 // "All positions" -> clear the filter
+      buildPosFilter();
+    } else if (t.classList && t.classList.contains("sv2-pf-pos")) {
+      var id = t.value, i = state.posFilter.indexOf(id);
+      if (t.checked && i === -1) state.posFilter.push(id);
+      else if (!t.checked && i !== -1) state.posFilter.splice(i, 1);
+      var allCk = $("sv2-pf-all"); if (allCk) allCk.checked = (state.posFilter.length === 0);
+      updatePosFilterLabel();
+    }
+    if (state.board) renderGrid();
+  });
+  document.addEventListener("click", function () {
+    if (elPosPop && !elPosPop.classList.contains("sv2-hidden")) {
+      elPosPop.classList.add("sv2-hidden"); elPosBtn.setAttribute("aria-expanded", "false");
+    }
+  });
   $("sv2-createdraft").onclick = createDraft;
   $("sv2-createdraft2").onclick = createDraft;
   elPublish.onclick = doPublish;

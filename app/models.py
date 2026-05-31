@@ -3045,6 +3045,11 @@ class Employee(Base):
         String(32), unique=True, nullable=True, index=True
     )
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Roster edit-contact (2026-05-31, roster-edit branch): free-text mailing
+    # address a manager can set/update from the Team roster. Nullable; the boot
+    # ALTER adds it to the populated employees table (app/__init__.py), same
+    # mechanism as store_key/user_id/session_version.
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Email-pivot (2026-05-30): set by the employee during email self-setup; NULL =
     # not set up yet. Numeric PIN (4-8 digits), hashed. Login = identifier (email or

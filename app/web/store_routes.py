@@ -4833,6 +4833,7 @@ def team_workspace():
     # 403 add-gate uses, so the FE can never drift from enforcement
     # (aick #2413; Sam #2381/#2404). Unknown/floor role -> [] -> "can't add".
     from app.db import SessionLocal
+    from app.models import CANONICAL_POSITIONS
     from app.services.team_roster import addable_positions_for
     _role = (getattr(getattr(g, "current_user", None), "permission_level", None) or "")
     _db = SessionLocal()
@@ -4846,6 +4847,11 @@ def team_workspace():
         store_label=label,
         today_label=today_label,
         addable_positions=addable_positions,
+        # Full canonical position-name list for the #tws-pos filter dropdown
+        # (Sam roster-fix #3): the server matches by NAME (team_roster._passes),
+        # so the dropdown must offer every canonical name -- including ones no
+        # one currently holds -- not just positions seen on the shown rows.
+        filter_positions=sorted(CANONICAL_POSITIONS),
     )
 
 

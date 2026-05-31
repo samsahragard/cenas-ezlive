@@ -304,3 +304,52 @@ def backfill_employee_position_stores(db):
     if expanded or removed:
         db.commit()
     return (expanded, removed)
+
+
+# permission_level -> the canonical MANAGEMENT position name (layer-1 backfill).
+_MGR_LEVEL_TO_POSITION = {
+    "partner": "Partner", "corporate": "Corporate", "corporate_chef": "Corporate Chef",
+    "gm": "GM", "km": "KM", "assistant_km": "Assistant KM", "foh_manager": "FOH Manager",
+}
+
+
+def backfill_manager_positions(db):
+    """Layer-1 lockout-safety (Sam #2457 / ckai #2488 hole-1+2): assign each
+    LINKED active manager (User.permission_level in the management set, with a
+    linked Employee) the POSITION matching their level, at each store they're
+    assigned to - so position-based enforcement finds their management perms
+    (a manager with no position would otherwise lock out). store_key = the
+    LOCATION key (tomball/copperfield, ckbro #2489 canonical key). Idempotent;
+    must run at boot BEFORE enforcement is live. Returns assigned count."""
+    pos_by_name = {}
+    for p in db.query(Position).all():
+        nm = (p.name or "").strip().lower()
+        pos_by_name.setdefault(nm, p.id)
+    existing = {(r.employee_id, r.position_id, r.store_key)
+                for r in db.query(EmployeePosition).all()}
+    from collections import defaultdict
+    emp_stores = defaultdict(list)
+    for a in db.query(EmployeeStoreAssignment).all():
+        sk = (a.store_key or "").strip().lower()
+        if sk and sk not in emp_stores[a.employee_id]:
+            emp_stores[a.employee_id].append(sk)
+    emp_by_user = {e.user_id: e for e in
+                   db.query(Employee).filter(Employee.user_id.isnot(None)).all()}
+    assigned = 0
+    for u in db.query(User).filter(User.active.is_(True)).all():
+        pos_name = _MGR_LEVEL_TO_POSITION.get((u.permission_level or "").strip().lower())
+        if not pos_name:
+            continue
+        pid = pos_by_name.get(pos_name.lower())
+        emp = emp_by_user.get(u.id)
+        if pid is None or emp is None:
+            continue
+        for sk in emp_stores.get(emp.id, []):
+            key = (emp.id, pid, sk)
+            if key not in existing:
+                db.add(EmployeePosition(employee_id=emp.id, position_id=pid, store_key=sk))
+                existing.add(key)
+                assigned += 1
+    if assigned:
+        db.commit()
+    return assigned

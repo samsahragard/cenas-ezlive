@@ -713,3 +713,208 @@ def start_in_background() -> bool:
     t = threading.Thread(target=_loop, name="produce-ingest", daemon=True)
     t.start()
     return True
+
+
+# ============ On-demand ingest (hourly cron + box failover entrypoint) ============
+# The 60s in-process poller (above) is the real-time IMAP watcher and the SOLE writer
+# of ingest_state.json. run_ingest_now() is the INDEPENDENT safety net the hourly
+# Render cron + the box-failover Task Scheduler call. To stay race-free it does NOT
+# call _poll_once (so it never touches ingest_state.json) - it only runs the idempotent
+# "ensure each vendor's latest sheet is ingested" catch-up, which alone recovers a
+# baseline-skip, a dead poller thread, or a disk reset. Serialized by its own NB lock
+# (cron vs box). Writes a heartbeat + alerts on staleness. Sends NO vendor email, and
+# re-parses (paid Claude vision) ONLY when a genuinely newer email exists.
+HEARTBEAT_FILE = STATE_DIR / "ingest_heartbeat.json"
+NOW_LOCK_FILE = STATE_DIR / ".ingest_now.lock"
+STALE_DAYS = float(os.getenv("PRODUCE_STALE_DAYS", "12"))   # vendors send ~weekly + slack
+SCAN_DEPTH = int(os.getenv("PRODUCE_CATCHUP_SCAN", "300"))  # cap the catch-up inbox walk
+_NON_VENDOR_JSON = {"ingest_state", "ingest_heartbeat", "pending_orders",
+                    "completed_orders"}
+
+
+def _acquire_now_lock():
+    """NB lock so the hourly cron + the box failover never run the catch-up
+    concurrently (which would double-pay the Claude-vision parse). A SEPARATE file
+    from the poller's lifetime lock, so it never deadlocks against it. Returns an open
+    handle to keep until done, or None if another run already holds it."""
+    try:
+        import fcntl
+    except ImportError:
+        return object()  # non-POSIX dev/box: assume single runner
+    NOW_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(NOW_LOCK_FILE, "w")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh
+    except OSError:
+        fh.close()
+        return None
+
+
+def _release_now_lock(fh) -> None:
+    try:
+        import fcntl
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        fh.close()
+    except Exception:
+        pass
+
+
+def _age_days(parsed_at):
+    """Days since parsed_at (tz-aware ISO). None if unparseable. total_seconds (not
+    .days) so the threshold isn't floored; tolerant of a 'Z' suffix + naive stamps."""
+    if not parsed_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(parsed_at).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
+    except Exception:
+        return None
+
+
+def _vendor_freshness() -> dict:
+    """Per-vendor {parsed_at, items, age_days} from the {vendor}.json files. age_days
+    is from parsed_at - and since the catch-up re-parses ONLY on a newer mid, parsed_at
+    is a valid 'when we last got a fresh sheet' signal (retries don't reset it)."""
+    out = {}
+    try:
+        files = list(STATE_DIR.glob("*.json"))
+    except Exception:
+        return out
+    for vf in files:
+        if vf.stem in _NON_VENDOR_JSON:
+            continue
+        doc = _read_json(vf, {})
+        if "items" not in doc and "parsed_at" not in doc:
+            continue
+        out[vf.stem] = {"parsed_at": doc.get("parsed_at"),
+                        "items": len(doc.get("items", [])),
+                        "age_days": _age_days(doc.get("parsed_at"))}
+    return out
+
+
+def _ensure_latest_per_vendor(attempted=None):
+    """Catch-up: guarantee each vendor's NEWEST approved email is reflected in
+    {vendor}.json. Fixes the baseline-skip / dead-poller / disk-reset gap. Idempotent:
+    re-parses ONLY when a newer email exists than what's stored (source_email_mid), and
+    NEVER re-parses the same mid twice (the `attempted` guard) - so a newest email that
+    legitimately yields 0 items (and so writes no file) can't loop a paid vision parse
+    every hour. Returns (result, attempted). `attempted` = {vendor: last_mid_tried},
+    carried in the heartbeat."""
+    attempted = dict(attempted or {})
+    senders = _read_json(APPROVED_SENDERS_FILE).get("senders", {})
+    if not senders:
+        return {}, attempted
+    pwd = _email_pwd()
+    want = {s["vendor"] for s in senders.values() if s.get("vendor")}
+    result: dict = {}
+    M = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
+    try:
+        M.login(IMAP_USER, pwd)
+        M.select("INBOX", readonly=True)
+        typ, data = M.search(None, "ALL")
+        if typ != "OK":
+            return result, attempted
+        ids = data[0].split()
+        newest: dict = {}  # vendor -> (mid, sender_info)
+        for nid in reversed(ids[-SCAN_DEPTH:]):   # cap the walk; newest-first
+            if len(newest) >= len(want):
+                break
+            typ, hdr = M.fetch(nid, "(BODY.PEEK[HEADER.FIELDS (FROM)])")
+            if typ != "OK":
+                continue
+            msg_hdr = email.message_from_string(hdr[0][1].decode("utf-8", "replace"))
+            addr = _extract_email_address(_decode_h(msg_hdr.get("From", "")))
+            si = senders.get(addr)
+            if si and si.get("vendor") and si["vendor"] not in newest:
+                newest[si["vendor"]] = (nid, si)
+        for vendor, (nid, si) in newest.items():
+            mid_str = nid.decode() if isinstance(nid, bytes) else str(nid)
+            cur = _read_json(STATE_DIR / f"{vendor}.json", {})
+            if cur.get("source_email_mid") == mid_str and cur.get("items"):
+                result[vendor] = "fresh"
+                continue
+            if attempted.get(vendor) == mid_str:
+                result[vendor] = f"skip (already attempted mid {mid_str})"
+                continue
+            attempted[vendor] = mid_str   # record BEFORE the parse so a failure can't loop
+            try:
+                r = _process_email(M, nid, si)
+                result[vendor] = f"ingested mid {mid_str} items={(r or {}).get('items_count', 0)}"
+            except Exception as e:  # noqa: BLE001
+                logger.exception("catch-up failed vendor=%s mid=%s", vendor, mid_str)
+                result[vendor] = f"error: {str(e)[:120]}"
+    finally:
+        try:
+            M.close()
+        except Exception:
+            pass
+        try:
+            M.logout()
+        except Exception:
+            pass
+    return result, attempted
+
+
+def _maybe_alert_stale(fresh: dict, prev_alert_at=None) -> str | None:
+    """Telegram Sam at most once / 24h if a vendor has NO priced sheet at all, or its
+    latest sheet is older than STALE_DAYS. Low-frequency, low-false-positive - the
+    'it went quiet' signal so ingest can't silently die for weeks again. Called under
+    run_ingest_now's lock with prev_alert_at passed in, so no concurrent-alert race."""
+    if prev_alert_at:
+        try:
+            if (datetime.now(timezone.utc) - datetime.fromisoformat(str(prev_alert_at).replace("Z", "+00:00"))).total_seconds() < 86400:
+                return None
+        except Exception:
+            pass
+    senders = _read_json(APPROVED_SENDERS_FILE).get("senders", {})
+    want = {s["vendor"] for s in senders.values() if s.get("vendor")}
+    problems = []
+    for v in sorted(want):
+        f = fresh.get(v)
+        if not f or not f.get("items"):
+            problems.append(f"{v}: NO prices")
+        elif f.get("age_days") is not None and f["age_days"] > STALE_DAYS:
+            problems.append(f"{v}: {f['age_days']:.0f}d old")
+    if not problems:
+        return None
+    _telegram("⚠ produce-ingest staleness: " + "; ".join(problems)
+              + ". Check orders@ + the poller/cron.")
+    return "; ".join(problems)
+
+
+def run_ingest_now() -> dict:
+    """On-demand catch-up for the hourly Render cron + the box failover. NB-locked
+    (cron vs box). Does NOT call _poll_once - the 60s poller owns real-time polling +
+    ingest_state.json; this only ensures each vendor's latest sheet is ingested (which
+    alone recovers a dead poller / baseline-skip / disk reset), writes a heartbeat, and
+    alerts on staleness. Idempotent; sends no vendor email."""
+    lock = _acquire_now_lock()
+    if lock is None:
+        return {"skipped": "another ingest run in progress"}
+    summary: dict = {"catch_up": {}, "alert": None}
+    try:
+        prev = _read_json(HEARTBEAT_FILE, {})
+        attempted = prev.get("attempted", {})
+        try:
+            summary["catch_up"], attempted = _ensure_latest_per_vendor(attempted)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("run_ingest_now catch-up failed")
+            summary["catch_up_error"] = str(e)[:160]
+        try:
+            fresh = _vendor_freshness()
+            summary["freshness"] = fresh
+            summary["alert"] = _maybe_alert_stale(fresh, prev.get("last_alert_at"))
+            hb = {"at": _now_iso(), "freshness": fresh, "attempted": attempted,
+                  "last_alert_at": _now_iso() if summary.get("alert") else prev.get("last_alert_at")}
+            _write_json(HEARTBEAT_FILE, hb)
+        except Exception:
+            logger.exception("run_ingest_now freshness/heartbeat failed")
+        return summary
+    finally:
+        _release_now_lock(lock)

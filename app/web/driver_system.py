@@ -1067,3 +1067,18 @@ def cron_refresh_traffic():
     credential-pending stub). Render cron resource cadence: every 2h,
     business hours (8am-6pm CT)."""
     return _run_ambient_refresh("traffic")
+
+
+@driver_system_bp.route("/cron/produce-ingest", methods=["POST"])
+def cron_produce_ingest():
+    """Produce vendor-email ingest, on demand. The INDEPENDENT hourly safety net
+    behind the in-process 60s poller: recovers a dead poller thread, catches up any
+    backlog the startup-baseline skipped, and alerts on staleness. Token-gated via
+    CRON_TOKEN (the /cron/ prefix is EXEMPT in auth.py); fail-closed. The ingest
+    sends NO vendor email - it only parses inbound price sheets into the page data."""
+    import os
+    _tok = os.getenv("CRON_TOKEN")
+    if not _tok or _extract_cron_token() != _tok:
+        abort(403)
+    from app.services.produce_ingest import run_ingest_now
+    return jsonify({"ok": True, **run_ingest_now()})

@@ -249,3 +249,21 @@ def backfill_user_links(db):
     if linked or created or consolidated:
         db.commit()
     return linked, created
+
+
+def addable_positions_for(actor_role, db):
+    """Canonical Position rows [{id, name}] that an actor of `actor_role` may
+    ADD - computed from the SAME addable_roles() + position_role() the +Add 403
+    gate uses, so the +Add dropdown the FE renders can never drift from the
+    enforcement (Sam #2381/#2404). Sorted by name. Unknown/None actor -> []."""
+    from app.services.permission_catalog import addable_roles, position_role
+    allowed = addable_roles(actor_role)
+    if not allowed:
+        return []
+    out = []
+    for p in db.query(Position).all():
+        nm = (p.name or "").strip()
+        if nm.lower() in _CANON_LC and position_role(nm) in allowed:
+            out.append({"id": p.id, "name": nm})
+    out.sort(key=lambda x: x["name"])
+    return out

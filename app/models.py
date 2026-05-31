@@ -2997,12 +2997,46 @@ class Employee(Base):
     )
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Email-pivot (2026-05-30): set by the employee during email self-setup; NULL =
+    # not set up yet. Numeric PIN (4-8 digits), hashed. Login = identifier (email or
+    # phone) + this passcode (replaces the retired SMS-OTP). aick runs the prod
+    # column-add on the populated employees table.
+    passcode_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # passcode-login lockout (lift of keypad_auth's pattern; samai guardrail #3)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lockout_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # bumped on passcode-set; a before_request invalidates any session whose
+    # employee_session_version != this (samai guardrail #4)
+    session_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class EmployeeSetupToken(Base):
+    """Email-pivot (2026-05-30): a one-time, expiring email-setup link for an
+    admin-added employee. The admin-add emails /employee/setup/<token>; the
+    employee opens it to set their passcode + complete their profile. Stored as a
+    SHA-256 hash of a high-entropy value (lookupable, not reversible), single-use
+    (used flips on consume), and expiring - so a leaked or stale link can't hijack
+    an invite (samai guardrail #1)."""
+
+    __tablename__ = "employee_setup_tokens"
+    __table_args__ = (
+        Index("ix_setup_token_emp", "employee_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # sha256 hex
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class EmployeePhone(Base):

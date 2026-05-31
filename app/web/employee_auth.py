@@ -113,99 +113,20 @@ def _establish_employee_session(emp) -> None:
         session.pop(k, None)
     session.permanent = True
     session["employee_id"] = emp.id
+    session["employee_session_version"] = emp.session_version  # stale-session gate (guardrail #4)
     session["auth_ok"] = True   # passes auth.py:_gate; does NOT grant partner.
 
 
 # --------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------
-@employee_auth.route("/employee/login/request-code", methods=["POST"])
-def request_code():
-    data = request.get_json(silent=True) or {}
-    digits = normalize_phone((data.get("phone") or "").strip())
-    if not digits:
-        return jsonify({"ok": False, "error": "Enter your phone number."}), 400
-
-    db = SessionLocal()
-    try:
-        emp = _find_employee_by_phone(db, digits)
-        # Anti-enumeration: respond OK regardless of match; only send on a hit.
-        if emp is None:
-            log.info("employee request-code: no active employee for that phone")
-            return jsonify({"ok": True}), 200
-
-        # Rate-limit: too many codes for this employee in the window -> 429.
-        window_start = datetime.utcnow() - timedelta(seconds=RATE_WINDOW_SECONDS)
-        recent = (db.query(EmployeeSmsCode)
-                    .filter(EmployeeSmsCode.employee_id == emp.id)
-                    .filter(EmployeeSmsCode.created_at >= window_start)
-                    .count())
-        if recent >= RATE_MAX_PER_WINDOW:
-            return jsonify({"ok": False,
-                            "error": "Too many requests. Wait a minute and try again."}), 429
-
-        now = datetime.utcnow()
-        code = _generate_code()
-        db.add(EmployeeSmsCode(
-            employee_id=emp.id,
-            code_hash=generate_password_hash(code),
-            created_at=now,
-            expires_at=now + timedelta(minutes=CODE_TTL_MINUTES),
-            used=False,
-            attempts=0,
-        ))
-        db.commit()
-        _send_sms_code(emp, code)
-        return jsonify({"ok": True}), 200
-    finally:
-        db.close()
-
-
-@employee_auth.route("/employee/login/verify-code", methods=["POST"])
-def verify_code():
-    data = request.get_json(silent=True) or {}
-    digits = normalize_phone((data.get("phone") or "").strip())
-    code = (data.get("code") or "").strip()
-    if not digits or not code:
-        return jsonify({"ok": False, "error": "Enter your phone and the code."}), 400
-
-    db = SessionLocal()
-    try:
-        emp = _find_employee_by_phone(db, digits)
-        if emp is None:
-            return jsonify({"ok": False, "error": "Phone or code doesn't match."}), 401
-
-        now = datetime.utcnow()
-        row = (db.query(EmployeeSmsCode)
-                 .filter(EmployeeSmsCode.employee_id == emp.id)
-                 .filter(EmployeeSmsCode.used.is_(False))
-                 .filter(EmployeeSmsCode.expires_at > now)
-                 .order_by(EmployeeSmsCode.created_at.desc())
-                 .first())
-        if row is None:
-            return jsonify({"ok": False, "error": "Code expired. Request a new one."}), 401
-
-        # 5-attempt lock: burn the code once it's hit the cap.
-        if (row.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
-            row.used = True
-            db.commit()
-            return jsonify({"ok": False,
-                            "error": "Too many attempts. Request a new code."}), 429
-
-        if not check_password_hash(row.code_hash, code):
-            row.attempts = (row.attempts or 0) + 1
-            if row.attempts >= MAX_VERIFY_ATTEMPTS:
-                row.used = True   # lock: no more tries on this code
-            db.commit()
-            return jsonify({"ok": False, "error": "Phone or code doesn't match."}), 401
-
-        # Success — single-use: burn the code, open an isolated employee session.
-        row.used = True
-        db.commit()
-        _establish_employee_session(emp)
-        return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
-    finally:
-        db.close()
+# --- RETIRED 2026-05-30 (email pivot): the SMS-OTP login endpoints
+# /employee/login/request-code + /employee/login/verify-code are REMOVED. Login is
+# now email-or-phone + a 5-digit passcode via POST /employee/login/passcode
+# (app/web/employee_setup.py); onboarding is the emailed setup link. No dangling
+# OTP route can bypass the new passcode gate (samai guardrail #5). _send_sms_code,
+# _generate_code, the RATE_*/CODE_*/MAX_VERIFY constants + the EmployeeSmsCode
+# import are now unused here - left in place (harmless) for a tidy-up pass. ---
 
 
 @employee_auth.route("/employee/logout", methods=["POST"])
@@ -381,3 +302,24 @@ def install(app):
             path = request.path or "/"
             if path == "/partner" or path.startswith("/partner/"):
                 abort(403)
+
+    @app.before_request
+    def _employee_session_version_gate():
+        """Invalidate a stale employee session at a single chokepoint (samai
+        guardrail #4): if the logged-in employee is gone, deactivated, or their
+        session_version was bumped (e.g. a passcode reset), drop the employee
+        session keys so the route's own employee_id guard then 401s/redirects.
+        Real sessions always carry employee_session_version (set on login/setup)."""
+        eid = session.get("employee_id")
+        if not eid:
+            return None
+        db = SessionLocal()
+        try:
+            emp = db.query(Employee).filter_by(id=eid).first()
+        finally:
+            db.close()
+        sv = session.get("employee_session_version")
+        if emp is None or not emp.active or (sv is not None and sv != emp.session_version):
+            for k in ("employee_id", "employee_session_version", "auth_ok"):
+                session.pop(k, None)
+        return None

@@ -46,6 +46,7 @@ EXEMPT_PREFIXES = (
     "/employee/shift-offers",    # Schedules V2 B9: ckai's offer API (create/take/cancel + /list) - self-guards employee_id (401 JSON); a ck HTML page can own a bare child path under it.
     "/employee/shift-marketplace",  # Schedules V2 B9: ckai's marketplace DATA (/list) + ck's PAGE - self-guards employee_id (401 JSON).
     "/employee/shift-swaps",     # Schedules V2 B9: ckai's swap API (propose/accept/cancel + /list) - self-guards employee_id (401 JSON).
+    "/employee/setup",           # email-pivot: the emailed one-time setup link (GET /employee/setup/<token> page + /info + /complete) - the invited employee has no session yet; the single-use expiring sha256 token IS the auth. ckai.
     "/change-passcode",          # post-keypad-login, before main app
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
     "/driver/app.apk",           # public APK download redirect — drivers need this BEFORE having an account

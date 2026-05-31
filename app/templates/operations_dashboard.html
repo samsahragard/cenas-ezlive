@@ -451,6 +451,19 @@
        JS upgrades them to in-page panel swaps. #}
     <div class="opsd-tabs" id="opsdTabs" role="tablist">
       {% for t in tabs %}
+      {% if t.linkout %}
+      {# LINK-OUT tab (schedule): a full-page nav to the V2 area, NOT an in-dash
+         iframe (samai #2165). No data-tab, so the panel-swap JS leaves it alone
+         and the browser navigates; target=_top in case the dash is ever framed. #}
+      <a class="opsd-tab"
+         href="{{ t.url }}"
+         target="_top"
+         role="tab"
+         aria-selected="false">
+        <svg class="opsd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _opsd_icons.get(t.key, _opsd_icons['team'])|safe }}</svg>
+        <span class="opsd-tab-label">{{ t.label }}</span>
+      </a>
+      {% else %}
       <a class="opsd-tab{% if t.key == active_tab %} active{% endif %}"
          href="?tab={{ t.key }}"
          role="tab"
@@ -460,6 +473,7 @@
         <span class="opsd-tab-label">{{ t.label }}</span>
         {% if t.coming %}<span class="opsd-soon">soon</span>{% endif %}
       </a>
+      {% endif %}
       {% endfor %}
     </div>
 
@@ -476,6 +490,7 @@
      instead — no iframe at all. #}
   <div class="opsd-content-wrap">
     {% for t in tabs %}
+    {% if not t.linkout %}{# link-out tabs navigate away - no in-dash panel #}
     <div class="opsd-panel{% if t.key != active_tab %} hidden{% endif %}"
          id="opsd-panel-{{ t.key }}"
          data-tab-panel="{{ t.key }}"
@@ -499,6 +514,7 @@
               loading="lazy"></iframe>
       {% endif %}
     </div>
+    {% endif %}
     {% endfor %}
   </div>
 
@@ -648,8 +664,9 @@
   root.querySelector("#opsdTabs").addEventListener("click", function (e) {
     var tab = e.target.closest(".opsd-tab");
     if (!tab) return;
-    e.preventDefault();
     var key = tab.getAttribute("data-tab");
+    if (!key) return;   // link-out tab (no data-tab, e.g. Schedule -> V2): let the browser follow its href
+    e.preventDefault();
     activate(key);
     /* Keep the URL in sync so a refresh / share lands on the same tab,
        without adding a history entry per tap. */

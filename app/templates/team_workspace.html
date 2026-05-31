@@ -228,8 +228,7 @@
       <label class="tws-fld"><span>Full name</span><input type="text" id="tws-f-name" autocomplete="off"></label>
       <label class="tws-fld"><span>Phone</span><input type="tel" id="tws-f-phone" autocomplete="off"></label>
       <label class="tws-fld"><span>Email</span><input type="email" id="tws-f-email" autocomplete="off"></label>
-      <div class="tws-fld"><span>Position(s) -- pick one or more</span><div class="tws-multi" id="tws-f-pos"></div></div>
-      <div class="tws-fld"><span>Store(s) -- pick one or more</span><div class="tws-multi" id="tws-f-store"></div></div>
+      <div class="tws-fld"><span>Positions per store -- check the roles they work AT each store</span><div class="tws-multi" id="tws-f-pos"></div></div>
       <div class="tws-modal-err" id="tws-add-err"></div>
       <div class="tws-modal-actions">
         <button class="tws-btn-ghost" id="tws-add-cancel" type="button">Cancel</button>
@@ -409,26 +408,28 @@
   /* ---------------- +Add team member (Sam #2310-2317) ---------------- */
   var addBack = document.getElementById("tws-add-back");
   function buildAddOptions() {
-    // stores mirror the filter select; positions are the rank-gated addable set (tws-addable)
+    // Positions are assigned PER STORE (Sam #2435/#2457): render the rank-gated
+    // addable positions (tws-addable = the SAME set as the 403 gate, zero drift)
+    // under EACH store, so a manager can give e.g. Manager @ Tomball + Server @
+    // Copperfield on one login. Each checkbox value is "<position_id>|<store_key>"
+    // -> the submit sends (position, store) pairs to sv2_employee_add.
     var posWrap = document.getElementById("tws-f-pos");
-    var storeWrap = document.getElementById("tws-f-store");
     if (posWrap && !posWrap.childNodes.length) {
-      // ONLY the positions this manager may add (server-sourced via
-      // addable_positions_for -> same set as the 403 gate, zero drift).
       var addable = [];
       try { addable = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]"); } catch (e) { addable = []; }
       if (!addable.length) {
         posWrap.innerHTML = '<span style="font-size:12px;color:var(--tws-cream-meta)">Your role can\'t add team members.</span>';
-      } else {
-        addable.forEach(function (p) {
-          posWrap.insertAdjacentHTML("beforeend", '<label><input type="checkbox" value="' + esc(String(p.id)) + '"> ' + esc(p.name) + '</label>');
-        });
+        return;
       }
-    }
-    if (storeWrap && !storeWrap.childNodes.length) {
       var locSel = document.getElementById("tws-loc");
       for (var j = 1; j < locSel.options.length; j++) {  // skip "Both stores"
-        storeWrap.insertAdjacentHTML("beforeend", '<label><input type="checkbox" value="' + esc(locSel.options[j].value) + '"> ' + esc(locSel.options[j].textContent) + '</label>');
+        var skey = locSel.options[j].value, slabel = locSel.options[j].textContent;
+        posWrap.insertAdjacentHTML("beforeend",
+          '<div style="width:100%;margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tws-gold)">' + esc(slabel) + '</div>');
+        addable.forEach(function (p) {
+          posWrap.insertAdjacentHTML("beforeend",
+            '<label><input type="checkbox" value="' + esc(String(p.id)) + '|' + esc(skey) + '"> ' + esc(p.name) + '</label>');
+        });
       }
     }
   }
@@ -441,23 +442,26 @@
     var name = document.getElementById("tws-f-name").value.trim();
     var phone = document.getElementById("tws-f-phone").value.trim();
     var email = document.getElementById("tws-f-email").value.trim();
-    var posIds = Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked")).map(function (c) { return c.value; });
-    var storeKeys = Array.prototype.slice.call(document.querySelectorAll("#tws-f-store input:checked")).map(function (c) { return c.value; });
+    var pairs = Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked")).map(function (c) {
+      var parts = c.value.split("|"); return { position_id: parts[0], store_key: parts[1] };
+    });
     if (!name || !email) { err.textContent = "Name and email are required."; return; }
-    if (!storeKeys.length) { err.textContent = "Pick at least one store (sets where they're schedulable)."; return; }
+    if (!pairs.length) { err.textContent = "Check at least one position under the store(s) they'll work."; return; }
     err.textContent = "Sending...";
-    // aick's extended sv2_employee_add (#2324, b788ca0): create Employee + N store-assignments + N positions -> invite
+    // sv2_employee_add per-store (ck part 1 @ 1d16060): assignments = (position, store)
+    // pairs -> one EmployeePosition per pair (store_key) + a store-assignment per store + invite
     fetch("/{{ store_slug }}/schedules-v2/employees/add", {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ full_name: name, phone: phone, email: email, position_ids: posIds, store_keys: storeKeys })
+      body: JSON.stringify({ full_name: name, phone: phone, email: email, assignments: pairs })
     })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok || (res.d && res.d.ok === false)) { err.textContent = (res.d && res.d.error) || "Could not send the invite."; return; }
         closeAdd();
         ["tws-f-name", "tws-f-phone", "tws-f-email"].forEach(function (id) { document.getElementById(id).value = ""; });
-        Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked, #tws-f-store input:checked")).forEach(function (c) { c.checked = false; });
+        document.getElementById("tws-f-pos").innerHTML = "";  // rebuild grouped options on next open
+        Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked")).forEach(function (c) { c.checked = false; });
         load();  // refresh the roster (the new member appears Active once they set up)
       })
       .catch(function () { err.textContent = "Invite endpoint not live yet (aick's +Add backend pending)."; });

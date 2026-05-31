@@ -4735,7 +4735,7 @@ def _operations_dash_full_url(tab_key):
     the current request. Falls back to "" on an unknown key so an
     iframe src is never wrong."""
     if tab_key == "team":
-        return url_for("team.team_page")
+        return url_for("store.team_workspace")   # unify (Sam #2261): Ops Team tab now opens the unified [Team|Schedule|Market] workspace (was team.team_page)
     if tab_key == "sales":
         return url_for("store.sales")
     if tab_key == "labor":
@@ -4803,6 +4803,28 @@ def kitchen_dashboard():
         today_label=today_label,
         active_tab=active_tab,
         tabs=tabs,
+    )
+
+
+@store_bp.route("/team", methods=["GET"])
+def team_workspace():
+    """Unified Team workspace (Sam #2261 unify) -- the Operations Team tab opens
+    into [ Team | Schedule | Market ]. Team = the all-store roster (team_roster
+    defaults location=all, so it's the ONE team list regardless of the URL
+    store) + the Add form; Schedule + Market re-home the existing per-store
+    manager pages (Week / Time-off / Availability / marketplace) as chrome-
+    stripped iframes. Thin shell, same pattern as the other store-scoped
+    dashboards: the roster loads client-side from
+    GET /<store>/schedules-v2/team-roster; this route only renders the page
+    with the store context (store_slug drives the iframe srcs + the fetch)."""
+    label = g.store_label or "Cenas Kitchen"
+    _t = date.today()
+    today_label = f"{_t:%a, %b} {_t.day}"
+    return render_template(
+        "team_workspace.html",
+        active="partner_team",
+        store_label=label,
+        today_label=today_label,
     )
 
 

@@ -3014,6 +3014,18 @@ class Employee(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+    # Unify LINK (2026-05-31, Sam #2261 Team+Schedule combine; seam ckai-locked
+    # #2295): nullable FK to the User account for a team member who ALSO has
+    # system access (manager/partner). NULL = a pure scheduling employee (no
+    # /partner login). Employee stays the canonical identity - auth/isolation/
+    # positions UNTOUCHED; the link carries the legacy User.permission_level
+    # transitionally for require_level gates, until Project 2's position-driven
+    # permissions land. ondelete=SET NULL: deleting a User unlinks, never deletes
+    # the employee. The boot ALTER adds this column to the populated employees
+    # table (app/__init__.py).
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
 
 class EmployeeSetupToken(Base):

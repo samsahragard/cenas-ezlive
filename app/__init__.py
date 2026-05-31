@@ -320,6 +320,11 @@ def create_app():
                     ("failed_attempts", "INTEGER NOT NULL DEFAULT 0"),
                     ("lockout_until",   "TIMESTAMP"),
                     ("session_version", "INTEGER NOT NULL DEFAULT 0"),
+                    # Unify LINK (Sam #2261, 2026-05-31): nullable FK -> users.id.
+                    # Raw ADD COLUMN can't carry the FK constraint on SQLite, but
+                    # the ORM ForeignKey declaration handles the Employee->User join;
+                    # the column itself is all the storage we need.
+                    ("user_id",         "INTEGER"),
                 ]
                 added = []
                 with _eng_emp.begin() as conn:
@@ -363,6 +368,37 @@ def create_app():
                 _db_pos.close()
     except Exception:
         logging.getLogger(__name__).exception("canonical positions seed failed (non-fatal)")
+
+    # Unify backfill (Sam #2261, 2026-05-31): bring managers/partners into the ONE
+    # team list (Team+Schedule combine). For each ACTIVE User, LINK it to an
+    # Employee matched by email (case-insensitive) - or CREATE + link an Employee
+    # if none exists (a "pure manager" who was never a scheduling employee;
+    # created phone=NULL to dodge the Employee.phone UNIQUE, since their contact
+    # lives on the linked User). The link (Employee.user_id) is purely additive:
+    # the User row + its keypad auth are UNTOUCHED. Idempotent - skips a User
+    # already linked (User.email is UNIQUE so each email-match is 1:1). Gated on
+    # the user_id column existing; single-threaded at boot (ckai seam point 2, #2295).
+    try:
+        from sqlalchemy import inspect as _sa_inspect_lnk
+        from app.db import SessionLocal as _SL_lnk, engine as _eng_lnk
+        if _eng_lnk is not None:
+            _insp_lnk = _sa_inspect_lnk(_eng_lnk)
+            _tabs_lnk = _insp_lnk.get_table_names()
+            _ecols = ({c["name"] for c in _insp_lnk.get_columns("employees")}
+                      if "employees" in _tabs_lnk else set())
+            if "user_id" in _ecols and "users" in _tabs_lnk:
+                from app.services.team_roster import backfill_user_links as _bfl
+                _db_lnk = _SL_lnk()
+                try:
+                    _linked, _created = _bfl(_db_lnk)
+                    if _linked or _created:
+                        logging.getLogger(__name__).info(
+                            "unify link: linked %d + created %d employee(s) from users",
+                            _linked, _created)
+                finally:
+                    _db_lnk.close()
+    except Exception:
+        logging.getLogger(__name__).exception("unify user-link backfill failed (non-fatal)")
 
     # Idempotent column backfill for orders.total_amount (migration 10) AND
     # the payroll backfill columns from migration 11. Same self-healing

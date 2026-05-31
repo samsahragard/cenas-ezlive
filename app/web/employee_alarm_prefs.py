@@ -29,8 +29,8 @@ from app.web.employee_auth import employee_auth
 
 # System defaults when an employee has no saved row (mirrors scheduling_alarms).
 _DEFAULTS = {
-    "sms_enabled": True,
-    "email_enabled": False,
+    "sms_enabled": False,      # SMS parked (Sam channel pivot 2026-05-30)
+    "email_enabled": True,     # EMAIL is the primary alert channel now
     "minutes_before": 60,
     "second_minutes_before": None,
 }

@@ -47,9 +47,10 @@ try:
 except Exception:  # pragma: no cover
     _STORE_TZ = None
 
-# Defaults when an employee has no employee_alarm_preferences row.
-_DEFAULT_SMS = True
-_DEFAULT_EMAIL = False
+# Defaults when an employee has no employee_alarm_preferences row. EMAIL-first
+# (Sam channel pivot 2026-05-30): SMS is parked, so EMAIL is the default channel.
+_DEFAULT_SMS = False
+_DEFAULT_EMAIL = True
 _DEFAULT_MINUTES_BEFORE = 60
 
 
@@ -225,11 +226,22 @@ def _twilio_send(sid, token, from_num, msid, to_phone, body) -> None:
 
 
 def _send_email(to_email, subject, body) -> None:
-    """STUB: secondary channel, default-off. Logs a mock send; swap in the
-    brief_email SMTP_SSL path (orders@ mailbox) when email alarms are enabled."""
+    """Shift-alarm email via the shared orders@ SMTP (brief_email transport - the
+    same mailbox produce_order uses). Email is the PRIMARY channel after the SMS
+    pivot. GATED for a controlled go-live: actually sends only when the mailbox
+    password (ORDERS_EMAIL_PWD) is configured AND SHIFT_ALARM_EMAIL_DISPATCH is on;
+    otherwise a mock-log stub. (The password is already set on prod for
+    produce_order, so the extra dispatch flag is what prevents a surprise blast on
+    deploy - aick flips it for the controlled go-live.) A missing email raises ->
+    the caller marks the alarm 'failed'."""
     if not to_email:
         raise ValueError("no email on file")
-    log.info("[shift-alarm][EMAIL-STUB] to=%s subj=%s :: %s", to_email, subject, body)
+    dispatch = os.getenv("SHIFT_ALARM_EMAIL_DISPATCH", "").strip().lower() in ("1", "true", "yes", "on")
+    if not (dispatch and os.getenv("ORDERS_EMAIL_PWD")):
+        log.info("[shift-alarm][EMAIL-STUB] to=%s subj=%s :: %s", to_email, subject, body)
+        return
+    from app.services import brief_email
+    brief_email._smtp_send(to_email, subject, body)
 
 
 def _dispatch(alarm, emp, sh) -> None:

@@ -216,6 +216,10 @@
     </div>
   </div>
 
+  {# Positions THIS manager may add -- server-sourced from addable_positions_for()
+     (same logic as the 403 add-gate), so the +Add dropdown can't drift (aick #2413). #}
+  <script type="application/json" id="tws-addable">{{ (addable_positions or [])|tojson }}</script>
+
   {# +Add team member modal (Sam #2310-2317: Name / Phone / Email + multi Position + multi Store -> invite) #}
   <div class="tws-modal-back" id="tws-add-back">
     <div class="tws-modal" role="dialog" aria-modal="true" aria-labelledby="tws-add-title">
@@ -395,13 +399,20 @@
   /* ---------------- +Add team member (Sam #2310-2317) ---------------- */
   var addBack = document.getElementById("tws-add-back");
   function buildAddOptions() {
-    // positions + stores mirror the filter selects (populated from the roster data)
+    // stores mirror the filter select; positions are the rank-gated addable set (tws-addable)
     var posWrap = document.getElementById("tws-f-pos");
     var storeWrap = document.getElementById("tws-f-store");
     if (posWrap && !posWrap.childNodes.length) {
-      var posSel = document.getElementById("tws-pos");
-      for (var i = 1; i < posSel.options.length; i++) {  // skip "All positions"
-        posWrap.insertAdjacentHTML("beforeend", '<label><input type="checkbox" value="' + esc(posSel.options[i].value) + '"> ' + esc(posSel.options[i].textContent) + '</label>');
+      // ONLY the positions this manager may add (server-sourced via
+      // addable_positions_for -> same set as the 403 gate, zero drift).
+      var addable = [];
+      try { addable = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]"); } catch (e) { addable = []; }
+      if (!addable.length) {
+        posWrap.innerHTML = '<span style="font-size:12px;color:var(--tws-cream-meta)">Your role can\'t add team members.</span>';
+      } else {
+        addable.forEach(function (p) {
+          posWrap.insertAdjacentHTML("beforeend", '<label><input type="checkbox" value="' + esc(String(p.id)) + '"> ' + esc(p.name) + '</label>');
+        });
       }
     }
     if (storeWrap && !storeWrap.childNodes.length) {

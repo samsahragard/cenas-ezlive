@@ -402,6 +402,49 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("unify user-link backfill failed (non-fatal)")
 
+    # Per-store POSITIONS migration + backfills (Sam #2457, permissions rework
+    # 2026-05-31). EmployeePosition is now PER-STORE (store_key). create_all does
+    # NOT alter the populated employee_positions table, so: ADD COLUMN store_key,
+    # swap the unique (uq_emp_position -> uq_emp_position_store), then run BOTH
+    # backfills - manager-positions FIRST (linked managers get their mgmt position
+    # so enforcement finds their perms) then expand legacy global rows - BEFORE
+    # enforcement reads positions (ckai #2488 hole-2 ordering; runs after the unify
+    # link above, which it depends on for managers + their store assignments). Each
+    # ALTER is its own txn so a no-op (fresh SQLite already has the new schema via
+    # create_all, or a re-run) can't poison the others. All defensive / idempotent.
+    try:
+        from sqlalchemy import inspect as _sa_insp_ep, text as _sa_text_ep
+        from app.db import SessionLocal as _SL_ep, engine as _eng_ep
+        if _eng_ep is not None and "employee_positions" in _sa_insp_ep(_eng_ep).get_table_names():
+            _epcols = {c["name"] for c in _sa_insp_ep(_eng_ep).get_columns("employee_positions")}
+
+            def _try_alter_ep(_stmt):
+                try:
+                    with _eng_ep.begin() as _c:
+                        _c.execute(_sa_text_ep(_stmt))
+                except Exception:
+                    pass  # constraint absent/exists / unsupported on this DB - fine
+            if "store_key" not in _epcols:
+                _try_alter_ep("ALTER TABLE employee_positions ADD COLUMN store_key VARCHAR(40)")
+            _try_alter_ep("ALTER TABLE employee_positions DROP CONSTRAINT uq_emp_position")
+            _try_alter_ep("ALTER TABLE employee_positions ADD CONSTRAINT uq_emp_position_store "
+                          "UNIQUE (employee_id, position_id, store_key)")
+            from app.services.team_roster import (
+                backfill_manager_positions as _bmp,
+                backfill_employee_position_stores as _bps)
+            _db_ep = _SL_ep()
+            try:
+                _assigned = _bmp(_db_ep)         # layer-1: managers get their position
+                _exp, _rem = _bps(_db_ep)         # expand legacy global rows -> per-store
+                if _assigned or _exp or _rem:
+                    logging.getLogger(__name__).info(
+                        "per-store positions: %d mgr-position(s) assigned, %d expanded, %d global replaced",
+                        _assigned, _exp, _rem)
+            finally:
+                _db_ep.close()
+    except Exception:
+        logging.getLogger(__name__).exception("per-store positions migration/backfill failed (non-fatal)")
+
     # Idempotent column backfill for orders.total_amount (migration 10) AND
     # the payroll backfill columns from migration 11. Same self-healing
     # pattern as the drivers backfill above — each ALTER is gated on column

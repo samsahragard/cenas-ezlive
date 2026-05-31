@@ -58,6 +58,14 @@
   .tws-panel { display: none; }
   .tws-panel.active { display: block; }
 
+  /* nested Schedule sub-tabs [Week | Time off | Availability] */
+  .tws-subbar { display: flex; gap: 5px; margin-bottom: 12px; }
+  .tws-subtab { appearance: none; background: var(--tws-card); border: 1px solid var(--tws-border-soft); cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--tws-cream-dim); padding: 6px 14px; border-radius: 999px; }
+  .tws-subtab:hover { color: var(--tws-cream); }
+  .tws-subtab.active { background: var(--tws-gold); color: #1a0d08; border-color: transparent; }
+  .tws-sub2panel { display: none; }
+  .tws-sub2panel.active { display: block; }
+
   /* filter row */
   .tws-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
   .tws-pills { display: inline-flex; gap: 4px; background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: 999px; padding: 3px; }
@@ -134,7 +142,7 @@
 </style>
 
 <div class="tws" id="tws-root"
-     data-roster-url="/{{ store_slug }}/team/roster"
+     data-roster-url="/{{ store_slug }}/schedules-v2/team-roster"
      data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1">
 
   <div class="tws-head">
@@ -173,17 +181,39 @@
     <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
   </div>
 
-  {# ---- SCHEDULE panel: the existing V2 Week Builder, chrome-stripped iframe ---- #}
+  {# ---- SCHEDULE panel: nested [Week | Time off | Availability], each a chrome-stripped iframe of the existing mgr page (aick #2333) ---- #}
   <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
-    <div class="tws-embed-wrap">
-      <div class="tws-embed-loading" data-embed-loading="schedule"><span class="tws-embed-dot"></span><span>Loading Schedule</span></div>
-      <iframe class="tws-embed-frame" data-embed-frame="schedule" data-src="/{{ store_slug }}/schedules-v2/?embed=1" title="Schedule" loading="lazy"></iframe>
+    <div class="tws-subbar" role="tablist">
+      <button class="tws-subtab active" data-sub2="week" type="button" role="tab">Week</button>
+      <button class="tws-subtab" data-sub2="timeoff" type="button" role="tab">Time off</button>
+      <button class="tws-subtab" data-sub2="availability" type="button" role="tab">Availability</button>
+    </div>
+    <div class="tws-sub2panel active" data-sub2-panel="week">
+      <div class="tws-embed-wrap">
+        <div class="tws-embed-loading" data-embed-loading="week"><span class="tws-embed-dot"></span><span>Loading Week Builder</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="week" data-src="/{{ store_slug }}/schedules-v2/?embed=1" title="Week Builder" loading="lazy"></iframe>
+      </div>
+    </div>
+    <div class="tws-sub2panel" data-sub2-panel="timeoff">
+      <div class="tws-embed-wrap">
+        <div class="tws-embed-loading" data-embed-loading="timeoff"><span class="tws-embed-dot"></span><span>Loading Time off</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="timeoff" data-src="/{{ store_slug }}/schedules-v2/time-off?embed=1" title="Time off" loading="lazy"></iframe>
+      </div>
+    </div>
+    <div class="tws-sub2panel" data-sub2-panel="availability">
+      <div class="tws-embed-wrap">
+        <div class="tws-embed-loading" data-embed-loading="availability"><span class="tws-embed-dot"></span><span>Loading Availability</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="availability" data-src="/{{ store_slug }}/schedules-v2/availability?embed=1" title="Availability" loading="lazy"></iframe>
+      </div>
     </div>
   </div>
 
-  {# ---- MARKET panel: STUB until ckbro describes file_134/135 (Sam: mainly mgr view) ---- #}
+  {# ---- MARKET panel: the B9 manager approval queue (Pending/All live inside the page), chrome-stripped iframe (aick #2333) ---- #}
   <div class="tws-panel" id="tws-panel-market" data-sub-panel="market" role="tabpanel">
-    <div class="tws-stub">Market sub-tab <b>(manager view)</b> -- wiring pending Sam's mockup (file_134/135). Will embed the manager marketplace the same chrome-stripped way as Schedule.</div>
+    <div class="tws-embed-wrap">
+      <div class="tws-embed-loading" data-embed-loading="market"><span class="tws-embed-dot"></span><span>Loading Market</span></div>
+      <iframe class="tws-embed-frame" data-embed-frame="market" data-src="/{{ store_slug }}/schedules-v2/marketplace?embed=1" title="Market" loading="lazy"></iframe>
+    </div>
   </div>
 
   {# +Add team member modal (Sam #2310-2317: Name / Phone / Email + multi Position + multi Store -> invite) #}
@@ -250,13 +280,26 @@
     frame.addEventListener("load", function () { stripChrome(frame); });
     frame.setAttribute("src", frame.getAttribute("data-src"));
   }
+  var activeSub2 = "week";
   function show(sub) {
     tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-sub") === sub); });
     panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
-    if (sub === "schedule" || sub === "market") loadFrame(sub);
+    if (sub === "schedule") loadFrame(activeSub2);   // load the active Schedule sub-tab's iframe
+    else if (sub === "market") loadFrame("market");
   }
   tabs.forEach(function (t) {
     t.addEventListener("click", function (e) { e.preventDefault(); show(t.getAttribute("data-sub")); });
+  });
+  // nested Schedule sub-tabs [Week | Time off | Availability]
+  var sub2tabs = root.querySelectorAll(".tws-subtab");
+  var sub2panels = root.querySelectorAll(".tws-sub2panel");
+  sub2tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      activeSub2 = t.getAttribute("data-sub2");
+      sub2tabs.forEach(function (x) { x.classList.toggle("active", x === t); });
+      sub2panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub2-panel") === activeSub2); });
+      loadFrame(activeSub2);
+    });
   });
   // honour ?sub= on load
   var initial = (new URLSearchParams(location.search)).get("sub") || "team";
@@ -382,8 +425,8 @@
     if (!name || !email) { err.textContent = "Name and email are required."; return; }
     if (!storeKeys.length) { err.textContent = "Pick at least one store (sets where they're schedulable)."; return; }
     err.textContent = "Sending...";
-    // POST contract for aick's extended admin-add (#2319): create Employee + N store-assignments + N positions -> invite
-    fetch("/{{ store_slug }}/team/add", {
+    // aick's extended sv2_employee_add (#2324, b788ca0): create Employee + N store-assignments + N positions -> invite
+    fetch("/{{ store_slug }}/schedules-v2/employees/add", {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify({ full_name: name, phone: phone, email: email, position_ids: posIds, store_keys: storeKeys })

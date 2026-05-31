@@ -51,7 +51,7 @@ from flask import (Blueprint, abort, jsonify, redirect, render_template,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment
+from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition
 from app.services.ezcater_known_drivers_seed import normalize_phone
 
 log = logging.getLogger(__name__)
@@ -141,10 +141,11 @@ def _establish_employee_session(emp) -> list[str]:
         finally:
             _udb.close()
     # CROSS-STORE login resolution (Lane B, Sam #3573/#3582 + ckbro #3583): the
-    # store(s) a person may act at = their EmployeeStoreAssignment rows. ONE store ->
+    # store(s) a person may act at = the stores where they HOLD A POSITION (per-store
+    # EmployeePosition.store_key - the (A)-model source, Sam #2457). ONE store ->
     # auto-scope now; 2+ -> leave active_store unset, the caller pops the picker and
     # /employee/select-store sets the chosen store. Perms then follow that store via
-    # aick's per-request g.effective_perms (Lane A); session-store scoping is Lane B's.
+    # aick's per-request g.effective_perms (Lane A); store scoping is Lane B's.
     stores = _employee_store_keys(emp.id)
     if len(stores) == 1:
         session["active_store"] = stores[0]
@@ -152,13 +153,18 @@ def _establish_employee_session(emp) -> list[str]:
 
 
 def _employee_store_keys(emp_id) -> list[str]:
-    """Distinct store_keys an employee is assigned to (stable order) - drives the
-    Lane B cross-store login resolution, the picker option list, and the
-    select-store membership check."""
+    """Distinct stores where the employee HOLDS A POSITION (per-store
+    EmployeePosition.store_key) - the (A)-model 'their stores' source (Sam #2457):
+    a person can act at a store only where they hold a position there (= where they
+    have perms), so the login picker, the active-store auto-scope, and the
+    select-store membership check all key off THIS, not EmployeeStoreAssignment.
+    NULL-store rows (store-less employees, pre-backfill) are excluded (stable order)."""
     db = SessionLocal()
     try:
-        rows = (db.query(EmployeeStoreAssignment.store_key)
-                  .filter(EmployeeStoreAssignment.employee_id == emp_id).all())
+        rows = (db.query(EmployeePosition.store_key)
+                  .filter(EmployeePosition.employee_id == emp_id,
+                          EmployeePosition.store_key.isnot(None))
+                  .distinct().all())
     finally:
         db.close()
     seen: set[str] = set()

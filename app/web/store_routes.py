@@ -240,6 +240,9 @@ def _schedule_subnav_cards(store_slug: str) -> list[dict]:
         {"label": "Marketplace", "icon": "🔁", "href": f"/{store_slug}/schedules-v2/marketplace",
          "active": ["schedules_v2_marketplace"],
          "sub": "Approve shift offers & swaps."},
+        {"label": "Add Staff", "icon": "➕", "href": f"/{store_slug}/schedules-v2/employees",
+         "active": ["schedules_v2_employees"],
+         "sub": "Invite a new team member by email."},
     ]
 
 
@@ -350,6 +353,7 @@ _ACTIVE_TO_CATEGORY = {
     "schedules_v2_timeoff":     "schedule",
     "schedules_v2_availability":"schedule",
     "schedules_v2_marketplace": "schedule",
+    "schedules_v2_employees":   "schedule",   # B11: manager Add-Staff (email onboarding)
     # Performance (matches perf_open)
     "perf_landing":     "performance",
     "perf_server":      "performance",

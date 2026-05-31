@@ -122,3 +122,29 @@ def sv2_marketplace_page():
         store_label=g.store_label,
         config_json=json.dumps(config),
     )
+
+
+@store_bp.route("/schedules-v2/employees", methods=["GET"])
+@require_level(_MGR)
+def sv2_employees_page():
+    """Render the manager Add-Staff page (B11 email-onboarding). The manager adds
+    a new team member by name + email; aick's backend creates the Employee (no
+    passcode/phone yet) + emails them a one-time setup link to create their own
+    login + profile. Same gates as the other manager schedules-v2 pages (store
+    gate + per-store + foh_manager), so a cross-store gm gets a 302/403. The page
+    owns the parent path; aick's create endpoint is the child POST
+    <base>/employees/add (#2108): {full_name, email} -> 200 {ok, employee_id,
+    message} | 4xx {ok:false, error}. NOTE: store + position(s) are assigned
+    separately (manager purview, samai #2111) once the hire is in the roster -
+    that control lands when ckai's assign route is in."""
+    slug = g.current_store
+    base = f"/{slug}/schedules-v2"
+    config = {
+        "storeLabel": g.store_label,
+        "addUrl": f"{base}/employees/add",   # aick (B11 #2108): POST {full_name, email} -> 200 {ok, employee_id, message} | 4xx {ok:false, error}
+    }
+    return render_template(
+        "schedules_v2_employees.html",
+        store_label=g.store_label,
+        config_json=json.dumps(config),
+    )

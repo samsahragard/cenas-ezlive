@@ -4710,8 +4710,9 @@ _OPERATIONS_DASH_TABS = [
     ("sales",       "Sales",           False),
     ("labor",       "Labor",           False),
     ("performance", "Performance",     False),
-    ("schedule",    "Schedule",        False),
-    ("corp-order",  "Corporate Order", False),
+    ("schedule",         "Schedule",         False),
+    ("schedule-reports", "Schedule Reports", False),
+    ("corp-order",       "Corporate Order",  False),
 ]
 
 
@@ -4723,8 +4724,9 @@ def _operations_dash_full_url(tab_key):
       labor       -> /<store>/reports/labor          (store.labor)
       performance -> /<store>/reports/server-performance
                                                      (store.server_performance)
-      schedule    -> /<store>/schedule               (store.schedule)
-      corp-order  -> /<store>/corporate-order         (corporate_order.view)
+      schedule         -> /<store>/schedules-v2/     (store.sv2_week_page) V2 (samai #2156)
+      schedule-reports -> /<store>/schedule           (store.schedule) old date-range report
+      corp-order       -> /<store>/corporate-order    (corporate_order.view)
       forecasts   -> not built yet — returns "" (no iframe, coming-soon)
     team.team_page lives outside the /<store> blueprint, so url_for on
     it resolves to the flat /partner/team with no slug. corporate_order
@@ -4741,7 +4743,9 @@ def _operations_dash_full_url(tab_key):
     if tab_key == "performance":
         return url_for("store.server_performance")
     if tab_key == "schedule":
-        return url_for("store.schedule")
+        return url_for("store.sv2_week_page")   # repointed (samai #2156): Operations > Schedule opens the actual V2 scheduling (week-view + its sub-nav cards)
+    if tab_key == "schedule-reports":
+        return url_for("store.schedule")        # the OLD date-range report - kept, just relabeled so it is not mistaken for scheduling
     if tab_key == "corp-order":
         return url_for("corporate_order.view", store_slug=g.current_store)
     return ""   # 'forecasts' (not built) or any unknown key
@@ -4819,6 +4823,10 @@ def operations_dashboard():
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
         active_tab = _OPERATIONS_DASH_TABS[0][0]   # 'team'
+    if active_tab == "schedule":
+        # 'schedule' is now a LINK-OUT to the V2 area (samai #2165) - it has no
+        # in-dash panel, so a direct ?tab=schedule hit goes straight to V2.
+        return redirect(_operations_dash_full_url("schedule"))
     tabs = [
         {
             "key": key,
@@ -4826,6 +4834,10 @@ def operations_dashboard():
             "coming": coming,
             # Coming-soon surface has no real page to embed -> empty url.
             "url": "" if coming else _operations_dash_full_url(key),
+            # 'schedule' is a LINK-OUT to the full V2 area (samai #2165): a real
+            # full-page nav, NOT an in-dash iframe (the iframe chrome-strip would
+            # hide V2 sub-nav cards like Add Staff). Every other tab stays iframe.
+            "linkout": (key == "schedule"),
         }
         for key, caption, coming in _OPERATIONS_DASH_TABS
     ]

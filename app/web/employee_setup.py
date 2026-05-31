@@ -31,7 +31,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.db import SessionLocal
 from app.models import Employee, EmployeeSetupToken
 from app.web.employee_auth import (_establish_employee_session,
-                                   _find_employee_by_phone, employee_auth)
+                                   _find_employee_by_phone, _post_login_response,
+                                   employee_auth)
 
 log = logging.getLogger(__name__)
 
@@ -156,8 +157,8 @@ def login_passcode():
         emp.failed_attempts = 0
         emp.lockout_until = None
         db.commit()
-        _establish_employee_session(emp)
-        return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
+        stores = _establish_employee_session(emp)
+        return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
     finally:
         db.close()
 
@@ -210,7 +211,7 @@ def setup_complete(token):
             db.rollback()
             return jsonify({"ok": False,
                             "error": "Could not save - that phone may already be on file."}), 409
-        _establish_employee_session(emp)
-        return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
+        stores = _establish_employee_session(emp)
+        return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
     finally:
         db.close()

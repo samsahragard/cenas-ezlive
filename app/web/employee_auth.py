@@ -102,14 +102,20 @@ def _send_sms_code(emp, code: str) -> None:
                 getattr(emp, "id", "?"), code)
 
 
-def _establish_employee_session(emp) -> None:
+def _establish_employee_session(emp) -> list[str]:
     """Open an ISOLATED employee session. Clears any other principal's keys
     first (mirrors keypad_auth's login cleanup at :227 / :325) so a shared
     device can't carry a stale higher-privilege session, then sets the
-    employee keys + auth_ok (site gate). NEVER sets partner_auth_ok."""
+    employee keys + auth_ok (site gate). NEVER sets partner_auth_ok.
+
+    Returns the employee's assigned store_keys (Lane B, Sam #3573 cross-store):
+    with exactly ONE, session['active_store'] is auto-set (the store aick's
+    per-request g.effective_perms resolves the position-union against); with 2+
+    it's left UNSET and the caller routes to the 'Uno Mas / Dos Mas' picker
+    (POST /employee/select-store), which sets it."""
     for k in ("user_id", "user_session_version",
               "driver_id", "driver_name", "driver_location",
-              "driver_session_version", "partner_auth_ok"):
+              "driver_session_version", "partner_auth_ok", "active_store"):
         session.pop(k, None)
     session.permanent = True
     session["employee_id"] = emp.id
@@ -134,6 +140,50 @@ def _establish_employee_session(emp) -> None:
                 session["user_session_version"] = getattr(u, "session_version", None)
         finally:
             _udb.close()
+    # CROSS-STORE login resolution (Lane B, Sam #3573/#3582 + ckbro #3583): the
+    # store(s) a person may act at = their EmployeeStoreAssignment rows. ONE store ->
+    # auto-scope now; 2+ -> leave active_store unset, the caller pops the picker and
+    # /employee/select-store sets the chosen store. Perms then follow that store via
+    # aick's per-request g.effective_perms (Lane A); session-store scoping is Lane B's.
+    stores = _employee_store_keys(emp.id)
+    if len(stores) == 1:
+        session["active_store"] = stores[0]
+    return stores
+
+
+def _employee_store_keys(emp_id) -> list[str]:
+    """Distinct store_keys an employee is assigned to (stable order) - drives the
+    Lane B cross-store login resolution, the picker option list, and the
+    select-store membership check."""
+    db = SessionLocal()
+    try:
+        rows = (db.query(EmployeeStoreAssignment.store_key)
+                  .filter(EmployeeStoreAssignment.employee_id == emp_id).all())
+    finally:
+        db.close()
+    seen: set[str] = set()
+    out: list[str] = []
+    for (sk,) in rows:
+        sk = (sk or "").strip().lower()
+        if sk and sk not in seen:
+            seen.add(sk)
+            out.append(sk)
+    return out
+
+
+def _post_login_response(stores):
+    """Lane B: shape the login JSON. A both-store person (2+ assigned stores,
+    active_store not yet set by _establish_employee_session) is routed to the
+    store picker; everyone else goes straight to the dashboard."""
+    if len(stores) > 1 and not session.get("active_store"):
+        return jsonify({
+            "ok": True,
+            "needs_store_pick": True,
+            "stores": [{"key": s, "label": _STORE_LABELS.get(s, (s or "").title())}
+                       for s in stores],
+            "next": "/employee/select-store",
+        }), 200
+    return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
 
 
 # --------------------------------------------------------------------------
@@ -150,13 +200,33 @@ def _establish_employee_session(emp) -> None:
 
 @employee_auth.route("/employee/logout", methods=["POST"])
 def logout():
-    """Clear the employee session fully. Pops auth_ok too (employee-login set
-    it; an employee shouldn't retain site-gate access after logging out).
-    Leaves any unrelated principal keys untouched — employee-login cleared
-    those on the way in, so a clean employee session has none."""
-    for k in ("employee_id", "employee_session_version", "auth_ok"):
+    """Clear the employee session fully. Pops auth_ok (employee-login set it; an
+    employee shouldn't retain site-gate access after logout), active_store (Lane B),
+    AND the folded manager keys (user_id / user_session_version) the UNIFY login-fold
+    sets for a LINKED team member - else a linked manager logging out of the employee
+    app would keep their management session. Other principals were cleared on login."""
+    for k in ("employee_id", "employee_session_version", "auth_ok",
+              "active_store", "user_id", "user_session_version"):
         session.pop(k, None)
     return jsonify({"ok": True}), 200
+
+
+@employee_auth.route("/employee/select-store", methods=["POST"])
+def select_store():
+    """Lane B (cross-store, Sam #3582): a person assigned to BOTH stores picks
+    their active store after login. Sets session['active_store'] - the store
+    aick's per-request g.effective_perms resolves the position-union against -
+    but ONLY after verifying the logged-in employee is actually assigned there
+    (you can't scope yourself into a store you don't belong to). Idempotent."""
+    emp_id = session.get("employee_id")
+    if not emp_id:
+        return jsonify({"ok": False, "error": "Not logged in."}), 401
+    data = request.get_json(silent=True) or {}
+    store_key = (data.get("store_key") or "").strip().lower()
+    if store_key not in _employee_store_keys(emp_id):
+        return jsonify({"ok": False, "error": "You aren't assigned to that store."}), 403
+    session["active_store"] = store_key
+    return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
 
 
 # --------------------------------------------------------------------------

@@ -69,6 +69,12 @@
   .sv2-emp .note{ margin-top:18px; padding-top:14px; border-top:1px solid rgba(20,32,92,0.1);
     font-size:12.5px; color:rgba(20,32,92,0.55); line-height:1.55; }
   .sv2-emp .note b{ color:rgba(20,32,92,0.7); }
+  .sv2-emp .retry-row{ margin-top:10px; }
+  .sv2-emp .retry-row[hidden]{ display:none; }
+  .sv2-emp .btn-retry{ padding:10px 16px; border-radius:9px; font-size:13.5px; font-weight:800; letter-spacing:0.4px;
+    color:#fff; cursor:pointer; border:none; background:var(--sk-blue); box-shadow:0 3px 8px rgba(21,32,92,0.3); }
+  .sv2-emp .btn-retry:hover{ filter:brightness(1.08); }
+  .sv2-emp .btn-retry:active{ transform:translateY(1px); }
 
   .sv2-emp .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:60;
     max-width:440px; width:calc(100% - 36px); background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px;
@@ -80,7 +86,8 @@
 
 <div class="sv2-emp" id="sv2-emp-root">
   <div class="intro">
-    Add a team member with their name and email. They get an email with a setup link to
+    Add a team member with their name and email. They are put on <b>this store's roster</b>
+    right away (so you can schedule them immediately), and get an email with a setup link to
     create their own login and fill in their profile &mdash; no passcode to read aloud.
   </div>
 
@@ -99,11 +106,14 @@
 
   <div class="banner ok" id="ok-banner" hidden></div>
   <div class="banner err" id="err-banner" hidden></div>
+  <div class="retry-row" id="retry-row" hidden>
+    <button type="button" class="btn-retry" id="retry-btn">Retry adding to roster</button>
+  </div>
 
   <div class="note">
-    <b>Next:</b> once they finish setup, assign their store from the roster so they can be put
-    on the schedule. (Store &amp; position are manager-set &mdash; the new hire only sets their
-    own name, phone, and passcode.)
+    They are rostered to this store automatically, so you can schedule them now &mdash; they do
+    not need to finish setup first. (Store is manager-set here; the new hire only sets their own
+    name, phone, and passcode. Position / marketplace eligibility is set later.)
   </div>
 
   <div class="toast" id="emp-toast"></div>
@@ -117,25 +127,56 @@
   var form=document.getElementById("add-form"), nameEl=document.getElementById("f-name"),
       emailEl=document.getElementById("f-email"), btn=document.getElementById("add-btn"),
       okB=document.getElementById("ok-banner"), errB=document.getElementById("err-banner"),
+      retryRow=document.getElementById("retry-row"), retryBtn=document.getElementById("retry-btn"),
       toast=document.getElementById("emp-toast");
   var EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   var busy=false, toastTimer=null;
+  var pendingId=null, pendingName="";   // for the roster retry (samai #2120 guard)
+  var store = CFG.storeLabel || "this store";
 
-  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
   function toastMsg(msg,isErr){ toast.textContent=msg; toast.classList.toggle("err",!!isErr); toast.classList.add("show"); if(toastTimer) clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toast.classList.remove("show"); },3200); }
   function markBad(el){ el.classList.add("bad"); setTimeout(function(){ el.classList.remove("bad"); }, 600); }
-  function hideBanners(){ okB.hidden=true; errB.hidden=true; }
-  function showOk(msg){ hideBanners(); okB.textContent=msg; okB.hidden=false; }
-  function showErr(msg){ hideBanners(); errB.textContent=msg; errB.hidden=false; }
-  function setBusy(b){ busy=b; btn.disabled=b; btn.textContent = b ? "Sending..." : "Send invite"; }
+  function hideMsgs(){ okB.hidden=true; errB.hidden=true; retryRow.hidden=true; }
+  function showOk(msg){ hideMsgs(); okB.textContent=msg; okB.hidden=false; }
+  function showErr(msg, withRetry){ okB.hidden=true; errB.textContent=msg; errB.hidden=false; retryRow.hidden = !withRetry; }
+  function setBusy(b, label){ busy=b; btn.disabled=b; btn.textContent = b ? (label||"Working...") : "Send invite"; }
 
+  // Step 2: auto-chain the roster-assign so the hire is schedulable immediately
+  // (samai #2120). ckai's /roster is idempotent (#2123) -> a retry just re-fires.
+  function roster(empId, name){
+    setBusy(true, "Adding to roster...");
+    fetch(CFG.rosterUrl, {
+      method:"POST", credentials:"same-origin",
+      headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+      body: JSON.stringify({ employee_id: empId })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){ return { r:r, d:d }; });
+    }).then(function(o){
+      setBusy(false);
+      var r=o.r, d=o.d||{};
+      if(!r.ok || d.ok !== true){
+        pendingId=empId; pendingName=name;
+        showErr(name + " was created and emailed, but could not be added to the " + store + " roster. The rest is done - retry just the roster below.", true);
+        return;
+      }
+      pendingId=null;
+      showOk(name + " added to the " + store + " roster and invited by email. You can put them on the schedule now.");
+      form.reset(); nameEl.focus();
+    }).catch(function(){
+      setBusy(false);
+      pendingId=empId; pendingName=name;
+      showErr(name + " was created and emailed, but the roster step hit a network error. Retry below.", true);
+    });
+  }
+
+  // Step 1: admin-add (aick #2108) -> then auto-chain the roster.
   function submit(){
     if(busy) return;
     var name=(nameEl.value||"").trim(), email=(emailEl.value||"").trim();
     if(!name){ markBad(nameEl); toastMsg("Enter the team member's name.", true); nameEl.focus(); return; }
     if(!EMAIL_RE.test(email)){ markBad(emailEl); toastMsg("Enter a valid email.", true); emailEl.focus(); return; }
-    hideBanners();
-    setBusy(true);
+    hideMsgs();
+    setBusy(true, "Sending...");
     fetch(CFG.addUrl, {
       method:"POST", credentials:"same-origin",
       headers:{ "Content-Type":"application/json", "Accept":"application/json" },
@@ -143,21 +184,27 @@
     }).then(function(r){
       return r.json().catch(function(){ return {}; }).then(function(d){ return { r:r, d:d }; });
     }).then(function(o){
-      setBusy(false);
       var r=o.r, d=o.d||{};
       if(!r.ok || d.ok !== true){
-        showErr(d.error || ("Could not add this person (" + r.status + "). Try again."));
+        setBusy(false);
+        showErr(d.error || ("Could not add this person (" + r.status + "). Try again."), false);
         return;
       }
-      showOk(d.message || ("Invitation emailed to " + email + "."));
-      form.reset();
-      nameEl.focus();
+      if(!d.employee_id){
+        // Created but no id to roster with - surface success without the chain.
+        setBusy(false);
+        showOk(d.message || ("Invitation emailed to " + email + "."));
+        form.reset(); nameEl.focus();
+        return;
+      }
+      roster(d.employee_id, name);   // chain create -> roster
     }).catch(function(){
       setBusy(false);
-      showErr("Network error - try again.");
+      showErr("Network error - try again.", false);
     });
   }
 
+  retryBtn.addEventListener("click", function(){ if(pendingId!=null) roster(pendingId, pendingName); });
   form.addEventListener("submit", function(e){ e.preventDefault(); submit(); });
 })();
 </script>

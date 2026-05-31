@@ -379,7 +379,17 @@
     fetch(ROSTER_URL + qs, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
       .then(function (r) { if (!r.ok) throw new Error("roster " + r.status); return r.json(); })
       .then(function (d) { if (!d || d.ok === false) throw new Error("bad"); renderBoard(d); })
-      .catch(function () { renderBoard(PLACEHOLDER); });  // endpoint not live yet -> placeholder (aick OK'd)
+      .catch(function () {
+        // The placeholder is a LOCALHOST-ONLY dev convenience -- never show fake
+        // names on a real host. On prod a failed fetch shows an honest state
+        // instead (Sam saw the placeholder on a GM session where the fetch
+        // failed, #2381-2390 -- read as 'no real ppl').
+        if (/^(127\.0\.0\.1|localhost|0\.0\.0\.0)$/.test(location.hostname)) {
+          renderBoard(PLACEHOLDER);
+        } else if (elRoster) {
+          elRoster.innerHTML = '<div class="tws-empty">Couldn\'t load the team roster right now -- pull to refresh, or try again in a moment.</div>';
+        }
+      });
   }
 
   // filter wiring

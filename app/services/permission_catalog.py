@@ -84,6 +84,22 @@ def addable_roles(actor_role):
         return set()
     return {k for k, r in ROLE_RANK.items() if r < actor_rank}
 
+
+# Canonical scheduling-position NAME -> permissions ROLE key, for the +Add
+# rank-gate (the 14 positions map to their role; expo/driver are access-only,
+# not scheduling positions, so they aren't here). 'Well' -> well, 'Hostess' -> host.
+POSITION_TO_ROLE = {
+    "partner": "partner", "corporate": "corporate", "corporate chef": "corporate_chef",
+    "gm": "gm", "km": "km", "assistant km": "assistant_km", "foh manager": "foh_manager",
+    "busser": "busser", "hostess": "host", "cashier": "cashier", "server": "server",
+    "well": "well", "bartender": "bartender", "cook": "cook",
+}
+
+def position_role(position_name):
+    """The permissions ROLE key for a canonical scheduling-position name (drives
+    the +Add rank-gate). Unknown name -> None (the gate skips it)."""
+    return POSITION_TO_ROLE.get((position_name or "").strip().lower())
+
 def _c(num, name): return {"num": num, "name": name}
 
 # ---- The catalog. 14 categories, renumbered clean (Sam's 14-18 gap closed). ----

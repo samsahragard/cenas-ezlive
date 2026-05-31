@@ -327,6 +327,9 @@ def create_app():
                     # the ORM ForeignKey declaration handles the Employee->User join;
                     # the column itself is all the storage we need.
                     ("user_id",         "INTEGER"),
+                    # Roster edit-contact (2026-05-31, roster-edit branch): nullable
+                    # free-text mailing address, manager-editable from the Team roster.
+                    ("address",         "VARCHAR(255)"),
                 ]
                 added = []
                 with _eng_emp.begin() as conn:

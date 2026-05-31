@@ -220,6 +220,11 @@
      (same logic as the 403 add-gate), so the +Add dropdown can't drift (aick #2413). #}
   <script type="application/json" id="tws-addable">{{ (addable_positions or [])|tojson }}</script>
 
+  {# Canonical position names for the #tws-pos filter dropdown -- the server
+     matches by NAME (team_roster._passes), so the dropdown offers every
+     canonical name (incl. unheld ones), value = the NAME (Sam roster-fix #3). #}
+  <script type="application/json" id="tws-filter-positions">{{ (filter_positions or [])|tojson }}</script>
+
   {# +Add team member modal (Sam #2310-2317: Name / Phone / Email + multi Position + multi Store -> invite) #}
   <div class="tws-modal-back" id="tws-add-back">
     <div class="tws-modal" role="dialog" aria-modal="true" aria-labelledby="tws-add-title">
@@ -340,12 +345,15 @@
     document.getElementById("tws-stat-showing").textContent = (b.stats && b.stats.showing != null) ? b.stats.showing : "--";
     document.getElementById("tws-stat-active").textContent = (b.stats && b.stats.active_total != null) ? b.stats.active_total : "--";
     document.getElementById("tws-stat-positions").textContent = (b.stats && b.stats.positions != null) ? b.stats.positions : "--";
-    // populate position filter from positions seen (once)
+    // Populate the position filter from the FULL canonical name list (once).
+    // The server matches by NAME (team_roster._passes), so option value = the
+    // NAME, and we include every canonical position -- even ones nobody
+    // currently holds -- not just positions seen on the shown rows (#3).
     var posSel = document.getElementById("tws-pos");
     if (posSel && posSel.options.length <= 1) {
-      var seen = {};
-      (b.stores || []).forEach(function (s) { (s.employees || []).forEach(function (e) { (e.positions || []).forEach(function (p) { seen[p.id] = p.name; }); }); });
-      Object.keys(seen).forEach(function (id) { var o = document.createElement("option"); o.value = id; o.textContent = seen[id]; posSel.appendChild(o); });
+      var canon = [];
+      try { canon = JSON.parse((document.getElementById("tws-filter-positions") || {}).textContent || "[]"); } catch (e) { canon = []; }
+      canon.forEach(function (name) { var o = document.createElement("option"); o.value = name; o.textContent = name; posSel.appendChild(o); });
     }
     var locSel = document.getElementById("tws-loc");
     if (locSel && locSel.options.length <= 1) {
@@ -378,7 +386,7 @@
 
   function load() {
     var qs = "?location=" + encodeURIComponent(state.location) + "&position=" + encodeURIComponent(state.position) +
-             "&include_inactive=" + (state.include_inactive ? "1" : "0") + "&filter=" + encodeURIComponent(state.filter);
+             "&include_inactive=" + (state.include_inactive ? "1" : "0") + "&flt=" + encodeURIComponent(state.filter);
     fetch(ROSTER_URL + qs, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
       .then(function (r) { if (!r.ok) throw new Error("roster " + r.status); return r.json(); })
       .then(function (d) { if (!d || d.ok === false) throw new Error("bad"); renderBoard(d); })

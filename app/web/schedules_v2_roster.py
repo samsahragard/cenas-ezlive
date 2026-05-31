@@ -27,9 +27,9 @@ from flask import jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app.db import SessionLocal
-from app.models import (Employee, EmployeePosition, EmployeeStoreAssignment,
-                        Position)
-from app.web.permissions import require_level
+from app.models import (CANONICAL_POSITIONS, Employee, EmployeePosition,
+                        EmployeeStoreAssignment, Position, User)
+from app.web.permissions import current_user_id, require_level
 from app.web.schedules_v2 import _MGR, _store
 from app.web.store_routes import store_bp
 
@@ -141,5 +141,237 @@ def sv2_team_roster():
     try:
         return jsonify(team_roster(db, location=location, position=position,
                                    include_inactive=include_inactive, flt=flt)), 200
+    finally:
+        db.close()
+
+
+# ==========================================================================
+# Roster EDIT endpoints (2026-05-31, roster-edit branch): a manager edits an
+# EXISTING scheduling employee from the Team roster -- contact, PIN reset, and
+# per-store (position, store) assignment. All three are MANAGER actions
+# (@require_level(_MGR)), keyed off the URL employee_id, and NEVER touch
+# session['partner_auth_ok'] (ckai security invariant): editing a team member
+# is not a partner-auth event. They ride store_bp, inheriting _pull_store (404
+# on unknown slug) + _per_store_gate (403-before-mutation cross-store).
+# ==========================================================================
+def _emp_email_valid(email: str) -> bool:
+    """Same shape-check sv2_employee_add uses (schedules_v2.py:126-128)."""
+    parts = (email or "").split("@")
+    return len(parts) == 2 and bool(parts[0]) and "." in parts[1] and not parts[1].endswith(".")
+
+
+@store_bp.route("/schedules-v2/employees/<int:emp_id>/update", methods=["POST"])
+@require_level(_MGR)
+def sv2_employee_update(emp_id):
+    """EDIT CONTACT: update an existing employee's phone / email / address from
+    the Team roster. Body {phone, email, address} -- each optional; only the keys
+    PRESENT in the body are written (so the FE can patch one field). Email is the
+    login identity, so it is validated (shape) + uniqueness-checked (case-
+    insensitive, excluding this employee) exactly like sv2_employee_add; phone is
+    the SMS-identity UNIQUE so a duplicate is rejected too. address is free text.
+    -> 200 {ok, employee:{id,full_name,phone,email,address}}; 400 bad email;
+    404 unknown employee; 409 duplicate email/phone.
+    """
+    data = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter_by(id=emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "employee not found"}), 404
+
+        # Only mutate fields the caller actually sent (presence, not truthiness:
+        # address="" clears it; an absent key is left untouched).
+        if "email" in data:
+            email = (data.get("email") or "").strip()
+            if not _emp_email_valid(email):
+                return jsonify({"ok": False, "error": "A valid email is required."}), 400
+            # Uniqueness: case-insensitive, excluding self (mirrors sv2_employee_add).
+            if any((e.email or "").lower() == email.lower()
+                   for e in db.query(Employee).all() if e.id != emp.id):
+                return jsonify({"ok": False,
+                                "error": "An employee with that email already exists."}), 409
+            emp.email = email
+
+        if "phone" in data:
+            phone = (data.get("phone") or "").strip() or None
+            if phone and any((e.phone or "") == phone
+                             for e in db.query(Employee).all() if e.id != emp.id):
+                return jsonify({"ok": False,
+                                "error": "An employee with that phone already exists."}), 409
+            emp.phone = phone
+
+        if "address" in data:
+            emp.address = (data.get("address") or "").strip() or None
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            return jsonify({"ok": False,
+                            "error": "Could not update (duplicate phone or data conflict)."}), 409
+        return jsonify({"ok": True, "employee": {
+            "id": emp.id, "full_name": emp.full_name,
+            "phone": emp.phone, "email": emp.email, "address": emp.address,
+        }}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/employees/<int:emp_id>/reset-pin", methods=["POST"])
+@require_level(_MGR)
+def sv2_employee_reset_pin(emp_id):
+    """PIN RESET: mint a FRESH single-use email setup link (send_setup_invite ->
+    a new /employee/setup/<token>, the same path the employee used originally to
+    set their 5-digit passcode) AND bump emp.session_version. The version bump is
+    CRITICAL: the employee before_request invalidates any session whose stored
+    version != Employee.session_version (samai guardrail #4), so this immediately
+    kills any stale logged-in session -- the employee must re-setup. Keyed off the
+    URL emp_id; NEVER touches session['partner_auth_ok']. -> 200 {ok, message};
+    404 unknown employee. The invite email just logs the link on missing SMTP
+    (send_setup_invite never raises), which is fine.
+    """
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter_by(id=emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "employee not found"}), 404
+        # Bump session_version FIRST so any stale session is dead even if the
+        # invite send is slow. before_request keys off this exact column.
+        emp.session_version = (emp.session_version or 0) + 1
+        db.commit()
+    finally:
+        db.close()
+
+    # Fire the invite AFTER our session closes (send_setup_invite opens its own
+    # and never raises into us -- logs the link on SMTP failure). Same ordering
+    # as sv2_employee_add.
+    from app.web.employee_setup import send_setup_invite
+    send_setup_invite(emp_id)
+    return jsonify({"ok": True,
+                    "message": "A fresh setup link has been emailed and any existing "
+                               "session was signed out."}), 200
+
+
+@store_bp.route("/schedules-v2/employees/<int:emp_id>/assign", methods=["POST"])
+@require_level(_MGR)
+def sv2_employee_assign(emp_id):
+    """ASSIGN (existing): set per-store (position, store) assignments for an
+    EXISTING employee. Body:
+        {assignments:[{position_id, store_key}], remove?:[{position_id, store_key}]}
+    ADD: writes one EmployeePosition per (position_id, store_key) pair WITH
+    store_key (reusing sv2_employee_add's logic -- canonical-position validation +
+    the rank-gate) and one EmployeeStoreAssignment per distinct store (the
+    schedulability gate). REMOVE: deletes exactly those EmployeePosition rows
+    (store assignments are left intact -- removing one role at a store should not
+    un-schedule the person there). Idempotent on uq_emp_position_store / uq_emp_store.
+    Rank-gate: a manager may assign only positions whose permission-role is
+    STRICTLY BELOW their own rank (addable_roles/position_role) -- an over-rank
+    position is 403 with NOTHING committed. Keyed off the URL emp_id; NEVER
+    touches session['partner_auth_ok']. -> 200 {ok, positions:[{id,name,store_key}]};
+    400 bad input / unknown-or-non-canonical / unknown store; 403 over-rank;
+    404 unknown employee.
+    """
+    data = request.get_json(silent=True) or {}
+
+    def _pairs(key):
+        out = []
+        v = data.get(key) or []
+        if not isinstance(v, list):
+            return None  # signal malformed
+        for a in v:
+            if not isinstance(a, dict):
+                return None
+            try:
+                pid = int(a.get("position_id"))
+            except (TypeError, ValueError):
+                return None
+            sk = str(a.get("store_key") or "").strip().lower()
+            if not sk:
+                return None
+            out.append((pid, sk))
+        return out
+
+    add_pairs = _pairs("assignments")
+    rem_pairs = _pairs("remove")
+    if add_pairs is None or rem_pairs is None:
+        return jsonify({"ok": False,
+                        "error": "assignments/remove must be [{position_id, store_key}]."}), 400
+
+    # Store-key allow-list (mirrors sv2_employee_add:129-131).
+    bad_stores = sorted({s for (_p, s) in (add_pairs + rem_pairs)
+                         if s not in ("tomball", "copperfield")})
+    if bad_stores:
+        return jsonify({"ok": False, "error": "Unknown store(s): %s." % ", ".join(bad_stores)}), 400
+
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter_by(id=emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "employee not found"}), 404
+
+        # Validate + rank-gate the ADD positions against the CANONICAL catalog --
+        # identical to sv2_employee_add (schedules_v2.py:147-172). REMOVE is not
+        # rank-gated: a manager clearing a stale assignment shouldn't be blocked
+        # by their own rank, and remove only deletes existing rows.
+        add_pids = list(dict.fromkeys([p for (p, _s) in add_pairs]))
+        valid_pids = set()
+        if add_pids:
+            from app.services.permission_catalog import addable_roles, position_role
+            _canon_lc = {c.lower() for c in CANONICAL_POSITIONS}
+            found = {p.id: p for p in
+                     db.query(Position).filter(Position.id.in_(add_pids)).all()}
+            for pid, p in found.items():
+                if (p.name or "").strip().lower() in _canon_lc:
+                    valid_pids.add(pid)
+            if [pid for pid in add_pids if pid not in valid_pids]:
+                return jsonify({"ok": False, "error": "Unknown or non-canonical position(s)."}), 400
+            _allowed = addable_roles(getattr(db.get(User, current_user_id()), "permission_level", None))
+            _over = sorted({p.name for pid, p in found.items()
+                            if pid in valid_pids
+                            and position_role(p.name) and position_role(p.name) not in _allowed})
+            if _over:
+                return jsonify({"ok": False,
+                                "error": "Your role can only assign positions below your own - not: %s."
+                                         % ", ".join(_over)}), 403
+
+        # REMOVE first, then ADD (so a same-pair remove+add nets to present).
+        for (pid, sk) in dict.fromkeys(rem_pairs):
+            (db.query(EmployeePosition)
+               .filter_by(employee_id=emp.id, position_id=pid, store_key=sk)
+               .delete(synchronize_session=False))
+
+        # ADD: EmployeePosition per (position, store) WITH store_key + one
+        # EmployeeStoreAssignment per distinct store (the schedulability gate).
+        have_pos = {(ep.position_id, ep.store_key) for ep in
+                    db.query(EmployeePosition).filter_by(employee_id=emp.id).all()}
+        have_stores = {sa.store_key for sa in
+                       db.query(EmployeeStoreAssignment).filter_by(employee_id=emp.id).all()}
+        for (pid, sk) in dict.fromkeys([(p, s) for (p, s) in add_pairs if p in valid_pids]):
+            if (pid, sk) not in have_pos:
+                db.add(EmployeePosition(employee_id=emp.id, position_id=pid, store_key=sk))
+                have_pos.add((pid, sk))
+        for sk in dict.fromkeys([s for (_p, s) in add_pairs]):
+            if sk not in have_stores:
+                db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
+                have_stores.add(sk)
+
+        try:
+            db.commit()
+        except IntegrityError:
+            # concurrent manager raced us on a unique constraint -> row exists
+            # either way; re-read the resulting state below.
+            db.rollback()
+
+        # Echo the resulting per-store positions (id+name+store_key) so the FE
+        # reflects the actual committed state.
+        rows = db.query(EmployeePosition).filter_by(employee_id=emp.id).all()
+        names = {p.id: p.name for p in
+                 db.query(Position).filter(
+                     Position.id.in_([r.position_id for r in rows] or [-1])).all()}
+        positions = sorted(
+            [{"id": r.position_id, "name": names.get(r.position_id), "store_key": r.store_key}
+             for r in rows],
+            key=lambda d: ((d["name"] or ""), (d["store_key"] or "")))
+        return jsonify({"ok": True, "positions": positions}), 200
     finally:
         db.close()

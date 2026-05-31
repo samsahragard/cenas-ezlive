@@ -4735,7 +4735,15 @@ def _operations_dash_full_url(tab_key):
     the current request. Falls back to "" on an unknown key so an
     iframe src is never wrong."""
     if tab_key == "team":
-        return url_for("store.team_workspace")   # unify (Sam #2261): Ops Team tab now opens the unified [Team|Schedule|Market] workspace (was team.team_page)
+        # The unified workspace is per-store (its Schedule/Market iframes need a
+        # real store). Partner/corporate-level Operations have no single store --
+        # url_for'ing /partner|/corporate/team would (a) collide with the legacy
+        # team.team_page (the OLD user-list, which then shadows it) and (b) give
+        # the per-store iframes no real store. So default those to a real store;
+        # the roster still shows ALL stores (team_roster location=all). Real-store
+        # views (dos/uno) open their own workspace. (Sam #2352-2359.)
+        _ws_store = "dos" if g.current_store in ("partner", "corporate") else g.current_store
+        return url_for("store.team_workspace", store_slug=_ws_store)
     if tab_key == "sales":
         return url_for("store.sales")
     if tab_key == "labor":

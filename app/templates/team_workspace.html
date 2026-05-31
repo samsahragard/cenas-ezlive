@@ -406,8 +406,8 @@
               '<div class="tws-colhead editable"><span>Name</span><span>Positions</span><span>Phone</span></div>';
       s.employees.forEach(function (e) {
         var chips = (e.positions || []).map(function (p) { return '<span class="tws-chip">' + esc(p.name) + '</span>'; }).join("");
-        // manager/partner: their access-role shows as a position badge too (the user_id link)
-        var rolePill = e.access_role ? '<span class="tws-chip role">' + esc(e.access_role) + '</span>' : "";
+        // Access-role pill removed (Sam #2582): permissions follow the POSITION now,
+        // so the old login-role badge was legacy + redundant -- positions only.
         var ph = (e.phone || "").trim();
         var phHtml = ph
           ? '<span class="tws-phone"><i class="ti ti-phone"></i>' + esc(ph) + '</span>'
@@ -417,7 +417,7 @@
         html += '<div class="tws-row editable' + (e.active ? "" : " inactive") + '" data-emp-row="' + e.id + '"' +
                 ' data-emp="' + esc(JSON.stringify(e)) + '">' +
                 '<div class="tws-name">' + esc(e.full_name) + '</div>' +
-                '<div class="tws-poschips">' + rolePill + chips + '</div>' +
+                '<div class="tws-poschips">' + chips + '</div>' +
                 '<div>' + phHtml + '<span class="caret ti ti-chevron-down"></span></div>' +
                 '</div>' +
                 '<div class="tws-edit" data-emp-edit="' + e.id + '"></div>';

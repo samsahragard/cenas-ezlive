@@ -112,6 +112,42 @@
   .tws-status.off .dot { background: var(--tws-cream-meta); }
   .tws-empty { padding: 26px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
 
+  /* click-to-edit roster rows (roster-edit branch) */
+  .tws-colhead.editable, .tws-row.editable { grid-template-columns: 200px 1fr 150px; }
+  .tws-row.editable { cursor: pointer; transition: background .12s; }
+  .tws-row.editable:hover { background: var(--tws-card); }
+  .tws-row.editable.open { background: var(--tws-card); border-bottom-color: transparent; }
+  .tws-phone { font-size: 12px; color: var(--tws-cream-dim); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tws-phone .ti { font-size: 13px; color: var(--tws-cream-meta); }
+  .tws-phone.none { color: var(--tws-cream-meta); font-style: italic; }
+  .tws-row .caret { font-size: 14px; color: var(--tws-cream-meta); margin-left: 6px; transition: transform .15s; display: inline-block; }
+  .tws-row.open .caret { transform: rotate(180deg); }
+
+  /* the inline edit panel (matches the +Add modal warm aesthetic) */
+  .tws-edit { display: none; padding: 4px 6px 18px; border-bottom: 1px solid var(--tws-border-soft); }
+  .tws-edit.open { display: block; }
+  .tws-edit-inner { background: var(--tws-card); border: 1px solid var(--tws-border); border-radius: var(--tws-radius); padding: 18px; }
+  .tws-edit-sec { padding: 14px 0; border-top: 1px solid var(--tws-border-soft); }
+  .tws-edit-sec:first-child { padding-top: 0; border-top: 0; }
+  .tws-edit-sec > h4 { margin: 0 0 10px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  .tws-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .tws-edit-grid .full { grid-column: 1 / -1; }
+  .tws-edit-fld > span { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--tws-cream-meta); margin-bottom: 5px; }
+  .tws-edit-fld input { width: 100%; font-family: inherit; font-size: 13.5px; color: var(--tws-cream); background: var(--tws-bg); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 8px 10px; }
+  .tws-edit-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .tws-save { font-family: inherit; font-size: 12.5px; font-weight: 700; color: #1a0d08; background: var(--tws-gold); border: 0; border-radius: var(--tws-radius-sm); padding: 8px 16px; cursor: pointer; }
+  .tws-save:disabled { opacity: .55; cursor: default; }
+  .tws-edit-msg { font-size: 12px; min-height: 15px; }
+  .tws-edit-msg.ok { color: #6fcf73; }
+  .tws-edit-msg.err { color: var(--tws-red); }
+  .tws-resetbtn { font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--tws-cream); background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 8px 16px; cursor: pointer; }
+  .tws-resetbtn:hover { border-color: var(--tws-border); }
+  .tws-resetbtn:disabled { opacity: .55; cursor: default; }
+  .tws-edit-hint { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 0 0 4px; }
+  .tws-store-grp { margin-top: 10px; }
+  .tws-store-grp > .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--tws-gold); margin-bottom: 6px; }
+  .tws-store-grp .tws-multi { gap: 6px; }
+
   /* embedded sub-tab iframes (Schedule / Market) */
   .tws-embed-wrap { position: relative; min-height: 70vh; }
   .tws-embed-frame { width: 100%; height: 78vh; border: 0; border-radius: var(--tws-radius); background: #241610; opacity: 0; transition: opacity .25s; }
@@ -359,25 +395,32 @@
     if (locSel && locSel.options.length <= 1) {
       (b.stores || []).forEach(function (s) { var o = document.createElement("option"); o.value = s.store_key; o.textContent = s.label; locSel.appendChild(o); });
     }
-    // rows
+    // rows -- COLLAPSED row shows NAME, JOB(s), PHONE (Sam #2504). Click a row to
+    // expand an inline edit panel (contact / reset-pin / assign). One open at a time.
+    openEmpId = null;  // a fresh render rebuilds every row -> no panel is open
     var html = "";
     (b.stores || []).forEach(function (s) {
       if (!s.employees || !s.employees.length) return;
       html += '<div class="tws-store"><div class="tws-store-head"><span class="tws-store-name">' + esc(s.label) + '</span>' +
               '<span class="tws-store-meta">' + (s.shown != null ? s.shown : s.employees.length) + ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>' +
-              '<div class="tws-colhead"><span>Name</span><span>Positions</span><span>Status</span></div>';
+              '<div class="tws-colhead editable"><span>Name</span><span>Positions</span><span>Phone</span></div>';
       s.employees.forEach(function (e) {
         var chips = (e.positions || []).map(function (p) { return '<span class="tws-chip">' + esc(p.name) + '</span>'; }).join("");
         // manager/partner: their access-role shows as a position badge too (the user_id link)
         var rolePill = e.access_role ? '<span class="tws-chip role">' + esc(e.access_role) + '</span>' : "";
-        var st = e.active
-          ? '<span class="tws-status on"><span class="dot"></span>Active</span>'
-          : '<span class="tws-status off"><span class="dot"></span>Inactive</span>';
-        html += '<div class="tws-row' + (e.active ? "" : " inactive") + '">' +
+        var ph = (e.phone || "").trim();
+        var phHtml = ph
+          ? '<span class="tws-phone"><i class="ti ti-phone"></i>' + esc(ph) + '</span>'
+          : '<span class="tws-phone none">No phone</span>';
+        // data-emp carries the full record so the panel prefills/pre-checks from
+        // the row's own data (no extra fetch). store_key on the row = canonical.
+        html += '<div class="tws-row editable' + (e.active ? "" : " inactive") + '" data-emp-row="' + e.id + '"' +
+                ' data-emp="' + esc(JSON.stringify(e)) + '">' +
                 '<div class="tws-name">' + esc(e.full_name) + '</div>' +
                 '<div class="tws-poschips">' + rolePill + chips + '</div>' +
-                '<div>' + st + '</div>' +
-                '</div>';
+                '<div>' + phHtml + '<span class="caret ti ti-chevron-down"></span></div>' +
+                '</div>' +
+                '<div class="tws-edit" data-emp-edit="' + e.id + '"></div>';
       });
       html += '</div>';
     });
@@ -413,6 +456,206 @@
   document.getElementById("tws-loc").addEventListener("change", function (e) { state.location = e.target.value; load(); });
   document.getElementById("tws-pos").addEventListener("change", function (e) { state.position = e.target.value; load(); });
   document.getElementById("tws-inactive").addEventListener("change", function (e) { state.include_inactive = e.target.checked; load(); });
+
+  /* ---------------- click-to-edit roster row (Sam #2504) ----------------
+     Click a row -> inline panel with 3 sections: EDIT CONTACT (phone/email/
+     address -> .../update), RESET PIN (-> .../reset-pin), ASSIGN POSITIONS +
+     STORES (the per-store picker reused from +Add, pre-checked from
+     positions_by_store, Save posts the DIFF to .../assign). Only ONE row open
+     at a time. The store keys here are CANONICAL (tomball/copperfield) -- the
+     #tws-loc option values -- matching EmployeePosition.store_key. */
+  var openEmpId = null;
+
+  function empFromRow(row) {
+    try { return JSON.parse(row.getAttribute("data-emp") || "{}"); } catch (e) { return {}; }
+  }
+
+  // Build the per-store (position, store) checkbox picker -- SAME shape as the
+  // +Add editor (value="<position_id>|<store_key>"), grouped by store, but
+  // PRE-CHECKED from the employee's current positions_by_store.
+  function buildAssignPicker(emp) {
+    var addable = [];
+    try { addable = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]"); } catch (e) { addable = []; }
+    var locSel = document.getElementById("tws-loc");
+    if (!addable.length) {
+      return '<p class="tws-edit-hint">Your role can\'t reassign positions.</p>';
+    }
+    var byStore = emp.positions_by_store || {};
+    var out = "";
+    for (var j = 1; j < locSel.options.length; j++) {  // skip "Both stores"
+      var skey = locSel.options[j].value, slabel = locSel.options[j].textContent;
+      var held = byStore[skey] || [];
+      var labels = addable.map(function (p) {
+        var on = held.indexOf(p.id) !== -1 ? " checked" : "";
+        return '<label><input type="checkbox" value="' + esc(String(p.id)) + '|' + esc(skey) + '"' + on + '> ' + esc(p.name) + '</label>';
+      }).join("");
+      out += '<div class="tws-store-grp"><div class="lbl">' + esc(slabel) + '</div><div class="tws-multi">' + labels + '</div></div>';
+    }
+    return out;
+  }
+
+  function buildEditPanel(emp) {
+    var canAssign = false;
+    try { canAssign = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]").length > 0; } catch (e) {}
+    return '<div class="tws-edit-inner">' +
+      // 1) EDIT CONTACT
+      '<div class="tws-edit-sec"><h4>Edit contact</h4>' +
+        '<div class="tws-edit-grid">' +
+          '<label class="tws-edit-fld"><span>Phone</span><input type="tel" data-f="phone" value="' + esc(emp.phone || "") + '" autocomplete="off"></label>' +
+          '<label class="tws-edit-fld"><span>Email</span><input type="email" data-f="email" value="' + esc(emp.email || "") + '" autocomplete="off"></label>' +
+          '<label class="tws-edit-fld full"><span>Address</span><input type="text" data-f="address" value="' + esc(emp.address || "") + '" autocomplete="off"></label>' +
+        '</div>' +
+        '<div class="tws-edit-row"><button class="tws-save" data-act="save-contact" type="button">Save contact</button>' +
+          '<span class="tws-edit-msg" data-msg="contact"></span></div>' +
+      '</div>' +
+      // 2) RESET PIN
+      '<div class="tws-edit-sec"><h4>Reset passcode</h4>' +
+        '<p class="tws-edit-hint">Emails a fresh setup link and signs out their current session.</p>' +
+        '<div class="tws-edit-row"><button class="tws-resetbtn" data-act="reset-pin" type="button">Reset PIN</button>' +
+          '<span class="tws-edit-msg" data-msg="pin"></span></div>' +
+      '</div>' +
+      // 3) ASSIGN POSITIONS + STORES
+      '<div class="tws-edit-sec"><h4>Positions &amp; stores</h4>' +
+        '<p class="tws-edit-hint">Check the roles they work at each store.</p>' +
+        '<div data-assign-picker>' + buildAssignPicker(emp) + '</div>' +
+        (canAssign ? '<div class="tws-edit-row"><button class="tws-save" data-act="save-assign" type="button">Save positions</button>' +
+          '<span class="tws-edit-msg" data-msg="assign"></span></div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function collapseOpen() {
+    if (openEmpId == null) return;
+    var prevRow = elRoster.querySelector('[data-emp-row="' + openEmpId + '"]');
+    var prevEdit = elRoster.querySelector('[data-emp-edit="' + openEmpId + '"]');
+    if (prevRow) prevRow.classList.remove("open");
+    if (prevEdit) { prevEdit.classList.remove("open"); prevEdit.innerHTML = ""; }
+    openEmpId = null;
+  }
+
+  function toggleRow(row) {
+    var id = row.getAttribute("data-emp-row");
+    if (String(openEmpId) === String(id)) { collapseOpen(); return; }  // re-click closes
+    collapseOpen();                                                     // swap: close the other
+    var emp = empFromRow(row);
+    var edit = elRoster.querySelector('[data-emp-edit="' + id + '"]');
+    if (!edit) return;
+    edit.innerHTML = buildEditPanel(emp);
+    edit.classList.add("open");
+    row.classList.add("open");
+    openEmpId = id;
+  }
+
+  // event delegation: a single listener on the roster survives every re-render.
+  elRoster.addEventListener("click", function (ev) {
+    // clicks INSIDE the open panel must not toggle the row
+    if (ev.target.closest(".tws-edit")) return;
+    var row = ev.target.closest(".tws-row.editable");
+    if (row) toggleRow(row);
+  });
+
+  function msgEl(editEl, key) { return editEl.querySelector('[data-msg="' + key + '"]'); }
+  function setMsg(el, text, ok) { if (!el) return; el.textContent = text; el.className = "tws-edit-msg " + (ok ? "ok" : "err"); }
+
+  // section actions (delegated on the roster too)
+  elRoster.addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-act]");
+    if (!btn) return;
+    var editEl = btn.closest(".tws-edit");
+    if (!editEl) return;
+    var empId = editEl.getAttribute("data-emp-edit");
+    var act = btn.getAttribute("data-act");
+
+    if (act === "save-contact") {
+      var phone = editEl.querySelector('[data-f="phone"]').value.trim();
+      var email = editEl.querySelector('[data-f="email"]').value.trim();
+      var address = editEl.querySelector('[data-f="address"]').value.trim();
+      var m = msgEl(editEl, "contact");
+      setMsg(m, "Saving...", true);
+      btn.disabled = true;
+      fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/update", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ phone: phone, email: email, address: address })
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res.ok || (res.d && res.d.ok === false)) { setMsg(m, (res.d && res.d.error) || "Could not save.", false); return; }
+          setMsg(m, "Saved.", true);
+          // patch the row's cached data + the visible phone so a re-open is fresh
+          var row = elRoster.querySelector('[data-emp-row="' + empId + '"]');
+          if (row && res.d && res.d.employee) {
+            var emp = empFromRow(row);
+            emp.phone = res.d.employee.phone; emp.email = res.d.employee.email; emp.address = res.d.employee.address;
+            row.setAttribute("data-emp", JSON.stringify(emp));
+            var phEl = row.querySelector(".tws-phone");
+            if (phEl) {
+              if (emp.phone) { phEl.className = "tws-phone"; phEl.innerHTML = '<i class="ti ti-phone"></i>' + esc(emp.phone); }
+              else { phEl.className = "tws-phone none"; phEl.textContent = "No phone"; }
+            }
+          }
+        })
+        .catch(function () { btn.disabled = false; setMsg(m, "Network error -- try again.", false); });
+      return;
+    }
+
+    if (act === "reset-pin") {
+      var pm = msgEl(editEl, "pin");
+      if (!window.confirm("Reset this team member's passcode? They'll be emailed a fresh setup link and signed out of any current session.")) return;
+      setMsg(pm, "Resetting...", true);
+      btn.disabled = true;
+      fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/reset-pin", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" }
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res.ok || (res.d && res.d.ok === false)) { setMsg(pm, (res.d && res.d.error) || "Could not reset.", false); return; }
+          setMsg(pm, "Setup link emailed; their old session is signed out.", true);
+        })
+        .catch(function () { btn.disabled = false; setMsg(pm, "Network error -- try again.", false); });
+      return;
+    }
+
+    if (act === "save-assign") {
+      var am = msgEl(editEl, "assign");
+      var emp2 = empFromRow(elRoster.querySelector('[data-emp-row="' + empId + '"]'));
+      // current pairs (from positions_by_store) vs checked pairs -> diff.
+      var current = {};  // "pid|store" -> true
+      var pbs = emp2.positions_by_store || {};
+      Object.keys(pbs).forEach(function (sk) { (pbs[sk] || []).forEach(function (pid) { current[pid + "|" + sk] = true; }); });
+      var checked = {};
+      Array.prototype.slice.call(editEl.querySelectorAll('[data-assign-picker] input:checked')).forEach(function (c) { checked[c.value] = true; });
+      var assignments = [], remove = [];
+      Object.keys(checked).forEach(function (key) {
+        if (!current[key]) { var p = key.split("|"); assignments.push({ position_id: parseInt(p[0], 10), store_key: p[1] }); }
+      });
+      Object.keys(current).forEach(function (key) {
+        if (!checked[key]) { var p = key.split("|"); remove.push({ position_id: parseInt(p[0], 10), store_key: p[1] }); }
+      });
+      if (!assignments.length && !remove.length) { setMsg(am, "No changes to save.", true); return; }
+      setMsg(am, "Saving...", true);
+      btn.disabled = true;
+      fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/assign", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ assignments: assignments, remove: remove })
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res.ok || (res.d && res.d.ok === false)) { setMsg(am, (res.d && res.d.error) || "Could not save positions.", false); return; }
+          setMsg(am, "Saved.", true);
+          collapseOpen();
+          load();  // refresh the roster so the chips + pre-checks reflect the new state
+        })
+        .catch(function () { btn.disabled = false; setMsg(am, "Network error -- try again.", false); });
+      return;
+    }
+  });
+
   /* ---------------- +Add team member (Sam #2310-2317) ---------------- */
   var addBack = document.getElementById("tws-add-back");
   function buildAddOptions() {

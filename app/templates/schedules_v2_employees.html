@@ -1,0 +1,164 @@
+{# ============================================================
+   schedules_v2_employees.html - Schedules V2 / Block 11
+   Manager ADD-STAFF page (email onboarding). The manager adds a new team
+   member by name + email; the backend creates the Employee (no passcode/phone
+   yet) and emails them a one-time setup link to create their own login +
+   profile.
+
+   FRONTEND-ONLY (ck). Client-rendered: the page route hands this template a
+   config blob (store label + the add URL) and the JS POSTs the form. The
+   template never touches models (aick's lane). Contract (aick #2108):
+
+     POST <addUrl>  {full_name, email}
+        -> 200 {ok:true, employee_id, message:"Invitation emailed to <email>"}
+        -> 4xx {ok:false, error}  (email in use / invalid email / missing name)
+
+   MANAGER-GATED page (require_level foh_manager); a cross-store gm gets a
+   302/403. Store + position(s) are assigned SEPARATELY (manager purview,
+   samai #2111) once the hire appears in the roster - not on this page.
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'schedules_v2_employees' %}
+
+{% block title %}Add Staff - Cenas Kitchen{% endblock %}
+
+{% block page_module %}SCHEDULES{% endblock %}
+{% block page_title %}Add Staff{% endblock %}
+{% block page_subtitle %}{{ store_label }} - invite a new team member (V2){% endblock %}
+
+{% block content %}
+<style>
+  .sv2-emp{
+    --sk-red:#c8302a; --sk-red-deep:#8a1d18; --sk-blue:#15205c; --sk-blue-deep:#0a1340;
+    --sk-cream:#f4e7d0; --sk-ink:#14205c; --sk-ok:#2f8f57; --sk-ok-deep:#1f6b3e;
+    position:relative; color:var(--sk-ink); font-family:'Manrope','Segoe UI',Arial,sans-serif;
+    background:#fbf4e7; border-radius:14px; padding:20px; max-width:540px;
+    box-shadow:0 0 0 1px rgba(20,32,92,0.10), 0 8px 22px rgba(0,0,0,0.10);
+  }
+  .sv2-emp *{ box-sizing:border-box; }
+  .sv2-emp .intro{ font-size:14px; color:rgba(20,32,92,0.75); line-height:1.55; margin-bottom:18px; }
+  .sv2-emp .fld{ margin-bottom:15px; }
+  .sv2-emp label{ display:block; font-size:12px; font-weight:800; letter-spacing:0.6px; text-transform:uppercase;
+    color:rgba(20,32,92,0.6); margin-bottom:6px; }
+  .sv2-emp input{
+    width:100%; padding:12px 14px; border-radius:10px; font-size:16px; font-family:inherit; font-weight:600;
+    color:var(--sk-blue-deep); background:#fff; border:1.5px solid rgba(20,32,92,0.2); outline:none;
+    transition:border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .sv2-emp input:focus{ border-color:var(--sk-blue); box-shadow:0 0 0 3px rgba(21,32,92,0.12); }
+  .sv2-emp input::placeholder{ color:rgba(20,32,92,0.35); font-weight:500; }
+  .sv2-emp input.bad{ border-color:var(--sk-red); box-shadow:0 0 0 3px rgba(200,48,42,0.16); }
+
+  .sv2-emp .btn{
+    width:100%; margin-top:4px; padding:13px; border-radius:10px; font-size:15px; font-weight:800;
+    letter-spacing:0.8px; color:#fff; cursor:pointer; border:none;
+    background:linear-gradient(180deg, var(--sk-red) 0%, var(--sk-red-deep) 100%);
+    box-shadow:0 4px 10px rgba(138,29,24,0.3); transition:transform 80ms ease, filter 80ms ease;
+  }
+  .sv2-emp .btn:hover{ filter:brightness(1.05); }
+  .sv2-emp .btn:active{ transform:translateY(1px); }
+  .sv2-emp .btn[disabled]{ opacity:0.6; pointer-events:none; }
+
+  .sv2-emp .banner{ margin-top:15px; padding:12px 14px; border-radius:10px; font-size:14px; line-height:1.5; }
+  .sv2-emp .banner[hidden]{ display:none; }
+  .sv2-emp .banner.ok{ background:rgba(47,143,87,0.12); color:var(--sk-ok-deep);
+    border:1px solid rgba(47,143,87,0.4); font-weight:700; }
+  .sv2-emp .banner.err{ background:rgba(200,48,42,0.1); color:var(--sk-red-deep);
+    border:1px solid rgba(200,48,42,0.4); font-weight:600; }
+
+  .sv2-emp .note{ margin-top:18px; padding-top:14px; border-top:1px solid rgba(20,32,92,0.1);
+    font-size:12.5px; color:rgba(20,32,92,0.55); line-height:1.55; }
+  .sv2-emp .note b{ color:rgba(20,32,92,0.7); }
+
+  .sv2-emp .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:60;
+    max-width:440px; width:calc(100% - 36px); background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px;
+    padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.5);
+    opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
+  .sv2-emp .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .sv2-emp .toast.err{ background:var(--sk-red-deep); }
+</style>
+
+<div class="sv2-emp" id="sv2-emp-root">
+  <div class="intro">
+    Add a team member with their name and email. They get an email with a setup link to
+    create their own login and fill in their profile &mdash; no passcode to read aloud.
+  </div>
+
+  <form id="add-form" novalidate>
+    <div class="fld">
+      <label for="f-name">Full name</label>
+      <input id="f-name" name="full_name" type="text" autocomplete="off" placeholder="e.g. Jordan Rivera" />
+    </div>
+    <div class="fld">
+      <label for="f-email">Email</label>
+      <input id="f-email" name="email" type="email" inputmode="email" autocomplete="off"
+             autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="name@example.com" />
+    </div>
+    <button type="submit" class="btn" id="add-btn">Send invite</button>
+  </form>
+
+  <div class="banner ok" id="ok-banner" hidden></div>
+  <div class="banner err" id="err-banner" hidden></div>
+
+  <div class="note">
+    <b>Next:</b> once they finish setup, assign their store from the roster so they can be put
+    on the schedule. (Store &amp; position are manager-set &mdash; the new hire only sets their
+    own name, phone, and passcode.)
+  </div>
+
+  <div class="toast" id="emp-toast"></div>
+</div>
+
+<script type="application/json" id="sv2-emp-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("sv2-emp-config").textContent);
+  var form=document.getElementById("add-form"), nameEl=document.getElementById("f-name"),
+      emailEl=document.getElementById("f-email"), btn=document.getElementById("add-btn"),
+      okB=document.getElementById("ok-banner"), errB=document.getElementById("err-banner"),
+      toast=document.getElementById("emp-toast");
+  var EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  var busy=false, toastTimer=null;
+
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  function toastMsg(msg,isErr){ toast.textContent=msg; toast.classList.toggle("err",!!isErr); toast.classList.add("show"); if(toastTimer) clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toast.classList.remove("show"); },3200); }
+  function markBad(el){ el.classList.add("bad"); setTimeout(function(){ el.classList.remove("bad"); }, 600); }
+  function hideBanners(){ okB.hidden=true; errB.hidden=true; }
+  function showOk(msg){ hideBanners(); okB.textContent=msg; okB.hidden=false; }
+  function showErr(msg){ hideBanners(); errB.textContent=msg; errB.hidden=false; }
+  function setBusy(b){ busy=b; btn.disabled=b; btn.textContent = b ? "Sending..." : "Send invite"; }
+
+  function submit(){
+    if(busy) return;
+    var name=(nameEl.value||"").trim(), email=(emailEl.value||"").trim();
+    if(!name){ markBad(nameEl); toastMsg("Enter the team member's name.", true); nameEl.focus(); return; }
+    if(!EMAIL_RE.test(email)){ markBad(emailEl); toastMsg("Enter a valid email.", true); emailEl.focus(); return; }
+    hideBanners();
+    setBusy(true);
+    fetch(CFG.addUrl, {
+      method:"POST", credentials:"same-origin",
+      headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+      body: JSON.stringify({ full_name:name, email:email })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){ return { r:r, d:d }; });
+    }).then(function(o){
+      setBusy(false);
+      var r=o.r, d=o.d||{};
+      if(!r.ok || d.ok !== true){
+        showErr(d.error || ("Could not add this person (" + r.status + "). Try again."));
+        return;
+      }
+      showOk(d.message || ("Invitation emailed to " + email + "."));
+      form.reset();
+      nameEl.focus();
+    }).catch(function(){
+      setBusy(false);
+      showErr("Network error - try again.");
+    });
+  }
+
+  form.addEventListener("submit", function(e){ e.preventDefault(); submit(); });
+})();
+</script>
+{% endblock %}

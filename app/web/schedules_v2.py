@@ -32,6 +32,7 @@ from app.models import (
     Shift,
     ShiftTag,
     Tag,
+    User,
 )
 from app.services import scheduling_alarms, scheduling_availability, scheduling_timeoff
 from app.web.permissions import current_user_id, require_level
@@ -132,6 +133,22 @@ def sv2_employee_add():
                     valid_pids.add(p.id)
             if [pid for pid in position_ids if pid not in valid_pids]:
                 return jsonify({"ok": False, "error": "Unknown or non-canonical position(s)."}), 400
+
+        # Rank-gate (Sam #2381 / #2404): a manager adds only roles STRICTLY BELOW
+        # their own rank - map each chosen canonical position to its permissions
+        # role and reject any the adder ties or outranks. Authoritative server
+        # check (the +Add dropdown is rank-filtered FE-side too). GM/KM/Corp-Chef
+        # are peers (a GM can't add a KM); Asst-KM/FOH-Mgr are peers; partner +
+        # corporate are the only tiers that add GM/KM/Corp-Chef.
+        from app.services.permission_catalog import addable_roles, position_role
+        _allowed = addable_roles(getattr(db.get(User, current_user_id()), "permission_level", None))
+        _over = sorted({p.name for p in
+                        db.query(Position).filter(Position.id.in_(valid_pids)).all()
+                        if position_role(p.name) and position_role(p.name) not in _allowed})
+        if _over:
+            return jsonify({"ok": False,
+                            "error": "Your role can only add positions below your own - not: %s."
+                                     % ", ".join(_over)}), 403
 
         emp = Employee(full_name=full_name, email=email, phone=phone, active=True)
         db.add(emp)

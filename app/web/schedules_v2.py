@@ -25,6 +25,7 @@ from app.db import SessionLocal
 from app.models import (
     CANONICAL_POSITIONS,
     Employee,
+    EmployeePosition,
     EmployeeStoreAssignment,
     Position,
     Schedule,
@@ -66,40 +67,85 @@ def _dt(s):
 @store_bp.route("/schedules-v2/employees/add", methods=["POST"])
 @require_level(_MGR)
 def sv2_employee_add():
-    """B11 email-onboarding (#1, aick): a manager admin-adds an employee with
-    NAME + EMAIL only ("basic info", Sam #2088 / samai #2097). Creates the
-    Employee (active; no passcode, no phone) and fires the email setup invite
-    (ckai's employee_setup.send_setup_invite -> mints a one-time token + emails
-    the /employee/setup/<token> link via the orders@ SMTP). The employee then
-    self-completes their profile + sets a 5-digit passcode at that link.
+    """Unify +Add (Sam #2261 / #2310 / #2312 / #2315): a manager adds a team
+    member with NAME + PHONE + EMAIL + POSITION(s) + STORE(s). Creates the
+    Employee (active; no passcode yet), assigns the store(s) + position(s) the
+    manager picked, and fires the email setup invite
+    (employee_setup.send_setup_invite -> a one-time /employee/setup/<token> link
+    via orders@ SMTP); the hire then sets their 5-digit passcode + finishes their
+    profile at that link.
 
-    Deliberately does NOT set store/position here: those are MANAGER-set via a
-    separate route (samai's privilege boundary #2097 - an employee self-assigning
-    store/position would self-grant scheduling reach). A new hire onboards fully
-    (setup -> passcode -> login) and simply sees an empty schedule until a manager
-    assigns them. Email is the login IDENTITY, so duplicates are rejected."""
+    The manager sets store(s)/position(s) at add-time - a MANAGER action
+    (require_level _MGR), NOT an employee self-assigning, so samai's #2097
+    privilege boundary (an employee can't self-grant scheduling reach) still
+    holds. POSITION + STORE are BOTH multi-select (Sam #2315): multi-position
+    (EmployeePosition M2M) + multi-store (one EmployeeStoreAssignment per store =
+    the schedulability gate, so the hire is immediately schedulable at each).
+    Email is the login IDENTITY; duplicate email (and phone) are rejected."""
     data = request.get_json(silent=True) or {}
     full_name = (data.get("full_name") or "").strip()
     email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip() or None
+
+    def _as_list(v):
+        if v is None:
+            return []
+        return v if isinstance(v, list) else [v]
+    position_ids = []
+    for p in _as_list(data.get("position_ids")):
+        try:
+            position_ids.append(int(p))
+        except (TypeError, ValueError):
+            pass
+    store_keys = [str(s).strip().lower() for s in _as_list(data.get("store_keys")) if str(s).strip()]
+
     if not full_name:
         return jsonify({"ok": False, "error": "Name is required."}), 400
-    # basic email sanity (real validation is delivery): one @, a dotted domain
     parts = email.split("@")
     if len(parts) != 2 or not parts[0] or "." not in parts[1] or parts[1].endswith("."):
         return jsonify({"ok": False, "error": "A valid email is required."}), 400
+    bad_stores = [s for s in store_keys if s not in ("tomball", "copperfield")]
+    if bad_stores:
+        return jsonify({"ok": False, "error": "Unknown store(s): %s." % ", ".join(bad_stores)}), 400
+    if not store_keys:
+        return jsonify({"ok": False, "error": "Pick at least one store so they are schedulable."}), 400
 
     db = SessionLocal()
     try:
         # Email is the login identity (login + invite key off it), so it must be
-        # unique. No DB UNIQUE on employees.email, so guard here (case-insensitive,
-        # small-table scan like _find_employee_by_identifier).
-        el = email.lower()
-        if any((e.email or "").lower() == el for e in db.query(Employee).all()):
+        # unique. Phone is the SMS-identity UNIQUE. Guard both here (case-insensitive
+        # email; small-table scan).
+        all_emps = db.query(Employee).all()
+        if any((e.email or "").lower() == email.lower() for e in all_emps):
             return jsonify({"ok": False,
                             "error": "An employee with that email already exists."}), 409
-        emp = Employee(full_name=full_name, email=email, active=True)
+        if phone and any((e.phone or "") == phone for e in all_emps):
+            return jsonify({"ok": False,
+                            "error": "An employee with that phone already exists."}), 409
+        # Validate position_ids against the CANONICAL catalog (the 14) - a manager
+        # can only assign real positions (mirrors the cleaned dropdown).
+        valid_pids = set()
+        if position_ids:
+            _canon_lc = {c.lower() for c in CANONICAL_POSITIONS}
+            for p in db.query(Position).filter(Position.id.in_(position_ids)).all():
+                if (p.name or "").strip().lower() in _canon_lc:
+                    valid_pids.add(p.id)
+            if [pid for pid in position_ids if pid not in valid_pids]:
+                return jsonify({"ok": False, "error": "Unknown or non-canonical position(s)."}), 400
+
+        emp = Employee(full_name=full_name, email=email, phone=phone, active=True)
         db.add(emp)
-        db.commit()
+        try:
+            db.flush()
+            for sk in dict.fromkeys(store_keys):       # multi-store (Sam #2315), de-duped
+                db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
+            for pid in dict.fromkeys(valid_pids):       # multi-position (M2M), de-duped
+                db.add(EmployeePosition(employee_id=emp.id, position_id=pid))
+            db.commit()
+        except Exception:
+            db.rollback()
+            return jsonify({"ok": False,
+                            "error": "Could not add (duplicate phone or data conflict)."}), 409
         emp_id = emp.id
     finally:
         db.close()
@@ -110,6 +156,7 @@ def sv2_employee_add():
     from app.web.employee_setup import send_setup_invite
     send_setup_invite(emp_id)
     return jsonify({"ok": True, "employee_id": emp_id,
+                    "stores": store_keys, "position_ids": sorted(valid_pids),
                     "message": "Invitation emailed to %s." % email}), 200
 
 

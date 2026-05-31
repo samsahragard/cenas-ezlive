@@ -18,6 +18,7 @@ from app.web import schedules_v2_pages  # noqa: F401  B4: attaches the manager w
 from app.web import schedules_v2_timeoff  # noqa: F401  B7: attaches the manager time-off review routes to store_bp (ckai; must precede register_blueprint)
 from app.web import schedules_v2_availability  # noqa: F401  B8: attaches the manager availability view to store_bp (ckai; must precede register_blueprint)
 from app.web import schedules_v2_market  # noqa: F401  B9: attaches the manager offer/swap approval routes to store_bp (ckai; must precede register_blueprint)
+from app.web import schedules_v2_roster  # noqa: F401  email-pivot: attaches the manager roster-assignment write route (POST /<store>/schedules-v2/roster) to store_bp (ckai; must precede register_blueprint)
 from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web.interview import interview as interview_bp
 from app.web.corporate_order import corp_order as corp_order_bp

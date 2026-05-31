@@ -94,6 +94,21 @@
       <span class="ck-sb-section-label">Operations</span>
     </a>
 
+    {# ==== SCHEDULES ==== direct link to the Schedules V2 area (ck 2026-05-30):
+       the V2 scheduling surface - build/publish/assign a week + Add Staff +
+       Time Off + Availability + Marketplace - lives at /<store>/schedules-v2/
+       and was previously only reachable by typing the URL. (The Operations
+       dashboard "Schedule" tab is the OLD date-range REPORT, a different
+       feature - ckbro/Sam #2141/#2142.) This is the clear entry every manager
+       role needs; the V2 pages gate at foh_manager, so partner..foh_manager all
+       get in (expo/driver bounce). Lands on the week-view, which renders the
+       full schedules sub-nav (Weekly Schedule / Time Off / Availability /
+       Marketplace / Add Staff). #}
+    <a class="ck-sb-section-head" href="/{{ store_slug }}/schedules-v2/"
+       style="margin-top: 10px; text-decoration: none;">
+      <span class="ck-sb-section-label">Schedules</span>
+    </a>
+
     {# ==== KITCHEN ==== direct link to the tabbed Kitchen dashboard
        (Sam #1066 TODO #2, 2026-05-26): the sidebar Kitchen entry no
        longer expands a sub-menu — it links straight to /<store>/kitchen

@@ -11,7 +11,7 @@ stores shows in both sections; the 'all' count is distinct employees.
 from __future__ import annotations
 
 from app.models import (CANONICAL_POSITIONS, Employee, EmployeePosition,
-                        EmployeeStoreAssignment, Position, User)
+                        EmployeeStoreAssignment, Position, Shift, User)
 from app.services.role_hierarchy import role_domain
 
 # Canonical Position NAME -> role_hierarchy role key, so role_domain (which keys
@@ -154,40 +154,98 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
 
 
 def backfill_user_links(db):
-    """Idempotent unify backfill (Sam #2261, ckai seam #2295): link each ACTIVE
-    User to an Employee matched by email - or CREATE + link + store-assign an
-    Employee for a pure manager who has none, so managers/partners appear in the
-    one team roster + are schedulable. The link (Employee.user_id) is additive;
-    the User row + keypad auth are untouched. A created manager gets one
-    EmployeeStoreAssignment per store in their User.store_scope (NULL/'both' ->
-    both stores). Skips an already-linked User (User.email is UNIQUE so each
-    email-match is 1:1). Returns (linked, created). Safe to call at boot or re-run.
+    """Idempotent unify reconcile (Sam #2261, ckai seam #2295; dedup #2370-#2374).
+    Link each ACTIVE User to its Employee, with a name fallback that prevents the
+    email-only-match duplicate ckbro spotted (Adriana Herrera x2):
+      1. exact email match to a single UNLINKED employee, else
+      2. EXACTLY-ONE same-name UNLINKED employee (a manager already in the roster
+         under a different/blank email), else
+      3. CREATE + link + store-assign a new Employee (a genuine pure manager).
+    Also CONSOLIDATES an earlier email-only-match dup: a User linked to a BARE
+    created row (no positions, no phone, no shifts) while a real same-name employee
+    exists -> move the link to the real row + drop the bare dup (no data loss).
+    Name COLLISIONS (>1 same-name UNLINKED) are SKIPPED, never mislinked (ckai
+    #2374). A created manager gets one EmployeeStoreAssignment per store in their
+    User.store_scope (NULL/'both' -> both). The User row + keypad auth are
+    untouched. Returns (linked, created). Safe at boot / re-run (re-run -> 0,0).
     """
-    emps = db.query(Employee).all()
-    already = {e.user_id for e in emps if e.user_id is not None}
-    by_email = {}
-    for e in emps:
-        if e.email:
-            by_email.setdefault(e.email.strip().lower(), e)
-    linked = created = 0
+    emps = list(db.query(Employee).all())
+    pos_ids = {ep.employee_id for ep in db.query(EmployeePosition).all()}
+
+    def norm(s):
+        return (s or "").strip().lower()
+
+    def has_data(e):
+        # a "real" roster row (has positions or a phone) vs a bare created row
+        return (e.id in pos_ids) or bool(norm(e.phone))
+
+    def email_match(addr):
+        addr = norm(addr)
+        if not addr:
+            return None
+        hit = [e for e in emps if e.user_id is None and norm(e.email) == addr]
+        return hit[0] if len(hit) == 1 else None
+
+    def lone_name(name, exclude):
+        name = norm(name)
+        if not name:
+            return None
+        hit = [e for e in emps if e.user_id is None and e is not exclude
+               and norm(e.full_name) == name]
+        return hit[0] if len(hit) == 1 else None
+
+    def has_shifts(e):
+        return db.query(Shift.id).filter(Shift.employee_id == e.id).first() is not None
+
+    linked = created = consolidated = 0
     for u in db.query(User).filter(User.active.is_(True)).all():
-        if u.id in already:
+        current = next((e for e in emps if e.user_id == u.id), None)
+        # already linked to a real roster row -> nothing to do
+        if current is not None and has_data(current):
             continue
-        ue = (u.email or "").strip().lower()
-        emp = by_email.get(ue) if ue else None
-        if emp is None:
-            emp = Employee(full_name=u.full_name, email=u.email, phone=None, active=True)
-            db.add(emp)
-            db.flush()
-            created += 1
-            scope = (u.store_scope or "").strip().lower()
-            stores = (["tomball", "copperfield"] if scope in ("", "both")
-                      else [scope] if scope in ("tomball", "copperfield") else [])
-            for sk in stores:
-                db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
-        if emp.user_id is None:
-            emp.user_id = u.id
+        # best UNLINKED target: exact email, else exactly-one same-name
+        target = email_match(u.email) or lone_name(u.full_name, exclude=current)
+        # CONSOLIDATE: current is a BARE row (failed has_data); if a real same-name
+        # target exists and the dup carries no shifts, move the link + drop the dup
+        if current is not None:
+            if target is not None and has_data(target) and not has_shifts(current):
+                db.query(EmployeePosition).filter_by(employee_id=current.id).delete()
+                db.query(EmployeeStoreAssignment).filter_by(
+                    employee_id=current.id).delete()
+                db.delete(current)
+                emps.remove(current)
+                target.user_id = u.id
+                consolidated += 1
+                linked += 1
+            continue  # no real target / ambiguous / has shifts -> leave the row
+        # not linked yet -> link the target if found
+        if target is not None:
+            target.user_id = u.id
             linked += 1
-    if linked or created:
+            continue
+        # no email + a same-name COLLISION blocked the match -> skip + FLAG (never
+        # dup/mislink); surfaced so a human links the manager manually (ckai #2374)
+        if norm(u.full_name) and len(
+                [e for e in emps if e.user_id is None
+                 and norm(e.full_name) == norm(u.full_name)]) > 1:
+            import logging
+            logging.getLogger(__name__).warning(
+                "unify reconcile: same-name collision, manager %r not auto-linked "
+                "(link manually)", u.full_name)
+            continue
+        # genuine pure manager (no existing employee) -> create + link + store-assign
+        emp = Employee(full_name=u.full_name, email=u.email, phone=None, active=True)
+        db.add(emp)
+        db.flush()
+        created += 1
+        scope = norm(u.store_scope)
+        stores = (["tomball", "copperfield"] if scope in ("", "both")
+                  else [scope] if scope in ("tomball", "copperfield") else [])
+        for sk in stores:
+            db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
+        emp.user_id = u.id
+        emps.append(emp)
+        linked += 1
+    if linked or created or consolidated:
         db.commit()
     return linked, created

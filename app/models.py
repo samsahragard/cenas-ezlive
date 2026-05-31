@@ -3172,11 +3172,16 @@ CANONICAL_POSITIONS = [
 
 
 class EmployeePosition(Base):
-    """Which positions an employee holds (many-to-many)."""
+    """Which positions an employee holds, PER STORE (Sam #2435/#2457: positions
+    are assigned per-store, so one person on ONE login can be Manager @ Tomball
+    + Server @ Copperfield). store_key added 2026-05-31 (permissions rework); the
+    boot migration backfills existing global rows across each person's stores.
+    store_key is nullable only to survive the ADD COLUMN on the populated table -
+    app logic + the backfill always set it; the union enforcement keys off it."""
 
     __tablename__ = "employee_positions"
     __table_args__ = (
-        UniqueConstraint("employee_id", "position_id", name="uq_emp_position"),
+        UniqueConstraint("employee_id", "position_id", "store_key", name="uq_emp_position_store"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -3186,6 +3191,8 @@ class EmployeePosition(Base):
     position_id: Mapped[int] = mapped_column(
         ForeignKey("positions.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # 'tomball' | 'copperfield' - the store this position is held at (#2457).
+    store_key: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

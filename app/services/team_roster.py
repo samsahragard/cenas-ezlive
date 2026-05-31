@@ -267,3 +267,40 @@ def addable_positions_for(actor_role, db):
             out.append({"id": p.id, "name": nm})
     out.sort(key=lambda x: x["name"])
     return out
+
+
+def backfill_employee_position_stores(db):
+    """One-time idempotent (Sam #2457 per-store positions): expand GLOBAL
+    EmployeePosition rows (store_key NULL, pre-rework) into per-store rows - one
+    per the employee's assigned stores (EmployeeStoreAssignment). A NULL row WITH
+    stores is replaced by its per-store copies; a NULL row for a store-less
+    employee is KEPT (never lose a position). Only touches NULL-store rows.
+    Returns (expanded, removed). Safe at boot / re-run (re-run -> (0, 0))."""
+    from collections import defaultdict
+    null_rows = db.query(EmployeePosition).filter(EmployeePosition.store_key.is_(None)).all()
+    if not null_rows:
+        return (0, 0)
+    emp_stores = defaultdict(list)
+    for a in db.query(EmployeeStoreAssignment).all():
+        sk = (a.store_key or "").strip().lower()
+        if sk and sk not in emp_stores[a.employee_id]:
+            emp_stores[a.employee_id].append(sk)
+    existing = {(r.employee_id, r.position_id, r.store_key) for r in
+                db.query(EmployeePosition).filter(EmployeePosition.store_key.isnot(None)).all()}
+    expanded = removed = 0
+    for r in null_rows:
+        stores = emp_stores.get(r.employee_id, [])
+        if not stores:
+            continue  # store-less employee: keep the global row, don't lose the position
+        for sk in stores:
+            key = (r.employee_id, r.position_id, sk)
+            if key not in existing:
+                db.add(EmployeePosition(employee_id=r.employee_id,
+                                        position_id=r.position_id, store_key=sk))
+                existing.add(key)
+                expanded += 1
+        db.delete(r)
+        removed += 1
+    if expanded or removed:
+        db.commit()
+    return (expanded, removed)

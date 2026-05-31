@@ -770,6 +770,32 @@ class UserPermissionOverride(Base):
     )
 
 
+class PositionPermission(Base):
+    """A permission GRANTED to a (position, store) - the POSITION-based
+    permissions model (Sam #2426/#2435). The partner toggles each catalog
+    permission ON/OFF for a position-at-a-store; a row here = ON (granted),
+    no row = OFF. A person's effective perms at their active store = the UNION
+    of their positions' rows for that store (Q1=union, #2435). Supersedes the
+    per-user UserPermissionOverride for the permissions page (Sam's pivot from
+    per-user to per-position). position_key = a permission_catalog ROLE key
+    (the 16 positions). NOT ezCater driver perms (coded-locked, separate)."""
+    __tablename__ = "position_permission"
+    __table_args__ = (
+        UniqueConstraint("position_key", "store_key", "perm_key", name="uq_pos_store_perm"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    position_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)  # permission_catalog role/position key
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False)   # 'copperfield' | 'tomball'
+    perm_key: Mapped[str] = mapped_column(String(80), nullable=False)    # permission_catalog key (present = ON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False,
+    )
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
 class SampleApproval(Base):
     """Approval state for a sample on the /partner/developer/samples
     page. One row per sample_slug (latest state only — no history

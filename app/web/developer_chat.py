@@ -1376,7 +1376,7 @@ def _build_permissions_catalog():
         from app.services import permission_catalog as pc
     except Exception:
         logging.getLogger(__name__).exception("permission_catalog import failed")
-        return {"roles": [], "stores": [], "permissions": [],
+        return {"positions": [], "stores": [], "permissions": [],
                 "is_placeholder": True, "catalog_source": "error"}
 
     permissions = []
@@ -1396,7 +1396,7 @@ def _build_permissions_catalog():
             })
 
     return {
-        "roles": [dict(r) for r in pc.ROLES],
+        "positions": [dict(r) for r in pc.ROLES],
         "stores": [dict(s) for s in pc.STORES],
         "permissions": permissions,
         "is_placeholder": False,

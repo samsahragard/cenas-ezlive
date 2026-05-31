@@ -171,6 +171,35 @@
     max-width: calc(100% - 36px); text-align:center;
   }
   .toast.show{ opacity:1; }
+
+  /* Cross-store picker modal (both-store people choose their store post-login) */
+  .store-pick-back{
+    position:fixed; inset:0; z-index:20; display:none;
+    align-items:center; justify-content:center; padding:24px;
+    background: rgba(10,6,4,0.74); backdrop-filter: blur(3px);
+  }
+  .store-pick-back.show{ display:flex; }
+  .store-pick{
+    width:100%; max-width:360px; border-radius:16px; padding:22px 20px 20px;
+    background: linear-gradient(180deg, #fffaf0 0%, var(--cream) 55%, var(--cream-soft) 100%);
+    border: 3px solid var(--blue-bright);
+    box-shadow: 0 0 0 3px var(--red), 0 18px 40px rgba(0,0,0,0.6);
+    text-align:center;
+  }
+  .store-pick h2{ color: var(--blue-deep); font-size:18px; font-weight:800; letter-spacing:0.5px; margin-bottom:4px; }
+  .store-pick p{ color: rgba(20,32,92,0.72); font-size:13px; line-height:1.4; margin-bottom:16px; }
+  .store-pick-btn{
+    display:block; width:100%; margin:8px 0; padding:15px; border-radius:12px;
+    font-size:16px; font-weight:800; letter-spacing:1px; text-transform:uppercase;
+    color: var(--cream); cursor:pointer; border:3px solid var(--blue-bright);
+    background-image: radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 45%, var(--red-deep) 100%);
+    text-shadow: 0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.5);
+    box-shadow: inset 0 2px 1px rgba(255,210,200,0.5), 0 5px 10px rgba(0,0,0,0.5);
+    transition: transform 80ms ease, filter 80ms ease;
+  }
+  .store-pick-btn:hover{ filter:brightness(1.06); }
+  .store-pick-btn:active{ transform: translateY(2px) scale(0.99); }
+  .store-pick-btn[disabled]{ opacity:0.6; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -210,6 +239,13 @@
   <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
        alt="Cenas Kitchen" class="brand-logo" />
 </div>
+  <div class="store-pick-back" id="store-pick-back" role="dialog" aria-modal="true" aria-labelledby="store-pick-title">
+    <div class="store-pick">
+      <h2 id="store-pick-title">Which store today?</h2>
+      <p>You work at more than one location -- pick where you are today. Your access follows that store.</p>
+      <div id="store-pick-list"></div>
+    </div>
+  </div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -300,12 +336,59 @@
         flashToast(data.error || 'Wrong email/phone or passcode.');
         return;
       }
-      // Success - remember the identifier, head to the next page.
+      // Success - remember the identifier.
       writePersistedId(identifier);
+      // Both-store people pick their store before landing (ckai Lane B:
+      // {needs_store_pick, stores:[{key,label}], next:'/employee/select-store'}).
+      if (data.needs_store_pick && data.stores && data.stores.length){
+        setBusy(false);
+        showStorePicker(data.stores, data.next || '/employee/select-store');
+        return;
+      }
       window.location.replace(data.next || DASHBOARD_URL);
     }).catch(function(){
       setBusy(false);
       flashToast('Network error - try again.');
+    });
+  }
+
+  // --- cross-store picker (both-store people; ckai Lane B) ---
+  // Shown only when login returns needs_store_pick. The chosen store POSTs to
+  // /employee/select-store, which sets session active_store, then we land.
+  function showStorePicker(storeList, actionUrl){
+    var back = document.getElementById('store-pick-back');
+    var list = document.getElementById('store-pick-list');
+    list.innerHTML = '';
+    storeList.forEach(function(st){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'store-pick-btn';
+      b.textContent = st.label;
+      b.addEventListener('click', function(){ pickStore(actionUrl, st.key, list); });
+      list.appendChild(b);
+    });
+    back.classList.add('show');
+  }
+  function pickStore(actionUrl, storeKey, listEl){
+    var btns = listEl.querySelectorAll('button');
+    btns.forEach(function(b){ b.disabled = true; });
+    fetch(actionUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ store_key: storeKey })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(data){ return { r: r, data: data }; });
+    }).then(function(o){
+      if (o.r.ok && o.data.ok !== false){
+        window.location.replace(o.data.next || DASHBOARD_URL);
+      } else {
+        btns.forEach(function(b){ b.disabled = false; });
+        flashToast(o.data.error || 'Could not set your store -- try again.');
+      }
+    }).catch(function(){
+      btns.forEach(function(b){ b.disabled = false; });
+      flashToast('Network error -- try again.');
     });
   }
 

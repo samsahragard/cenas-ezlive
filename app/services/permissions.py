@@ -345,6 +345,32 @@ def _canonical_role(level: str | None) -> str | None:
     return _LEGACY_ALIASES.get(level)
 
 
+def effective_perms_for(position_keys, store_key, db=None):
+    """The UNION of ON permissions across the given positions at a store
+    (Sam #2426/#2435, Q1=union). position_keys = a person's permission-role
+    keys (from their positions); store_key = the active store. Returns a set of
+    perm_keys. The source of truth for position-based enforcement; never raises
+    (returns set() on no positions / no store). Manages its own session if none
+    is passed."""
+    if not position_keys or not store_key:
+        return set()
+    from app.models import PositionPermission
+    close = False
+    if db is None:
+        from app.db import SessionLocal
+        db = SessionLocal()
+        close = True
+    try:
+        rows = (db.query(PositionPermission.perm_key)
+                .filter(PositionPermission.store_key == store_key,
+                        PositionPermission.position_key.in_(list(position_keys)))
+                .distinct().all())
+        return {r[0] for r in rows}
+    finally:
+        if close:
+            db.close()
+
+
 # ============================================================
 # Core check
 # ============================================================

@@ -372,6 +372,120 @@ def effective_perms_for(position_keys, store_key, db=None):
 
 
 # ============================================================
+# Position-based effective perms (perms-rework, the repoint).
+# ============================================================
+def _effective_perms(user) -> set[str]:
+    """Resolve `user`'s effective permission set for the ACTIVE store
+    (session['active_store'], a LOCATION key tomball/copperfield), gating
+    the saved position-union BEHIND the static role-perms fallback.
+
+    Lockout-safe by construction (the 5-hole spec):
+      * the partner wildcard is handled by the caller BEFORE this runs,
+        off User.permission_level, so a partner can never self-lock;
+      * role-perms = ROLE_PERMISSIONS.get(role, set()) is the real
+        fallback and is returned whenever the active store is unset OR
+        the person has no Employee OR no positions at that store — never
+        an empty-deny;
+      * when the person has positions at the active store we ADD (union)
+        their positions' catalog perms (per position: the SAVED config,
+        else that position-role's catalog default) ON TOP of the role
+        baseline - additive, never a replace, so a positioned manager
+        keeps all current route access (the route @requires_permission
+        tags are a DIFFERENT vocabulary from the catalog keys; see below).
+
+    Cached per-request on flask.g keyed by user id (the decorator + the
+    Jinja helper both call through here on the same request). Manages its
+    own SessionLocal in try/finally and never raises out: on any error it
+    falls back to role-perms (fail toward the safe role baseline, not an
+    empty deny that would lock a legitimate user out)."""
+    role = _canonical_role(getattr(user, "permission_level", None))
+    role_perms = ROLE_PERMISSIONS.get(role, set())
+
+    # Per-request cache (flask.g). Keyed by user id so impersonation /
+    # multiple users in one request can't collide.
+    uid = getattr(user, "id", None)
+    try:
+        cache = g._effective_perms_cache
+    except Exception:
+        cache = None
+    if cache is None:
+        cache = {}
+        try:
+            g._effective_perms_cache = cache
+        except Exception:
+            cache = None  # no app/request context — skip caching
+    if cache is not None and uid in cache:
+        return cache[uid]
+
+    result = set(role_perms)  # default = the safe role baseline (holes 1 + 3)
+    try:
+        store = session.get("active_store")
+        # Hole 1 + 3 belt: no active store -> role-perms.
+        if store:
+            from app.db import SessionLocal
+            from app.models import (Employee, EmployeePosition, Position)
+            from app.services.permission_catalog import (
+                default_role_map, position_role)
+            db = SessionLocal()
+            try:
+                emp = (db.query(Employee)
+                       .filter(Employee.user_id == uid)
+                       .first()) if uid is not None else None
+                # Hole 1 belt: no linked Employee -> role-perms.
+                if emp is not None:
+                    # The person's position role-keys AT the active store.
+                    rows = (db.query(Position.name)
+                            .join(EmployeePosition,
+                                  EmployeePosition.position_id == Position.id)
+                            .filter(EmployeePosition.employee_id == emp.id,
+                                    EmployeePosition.store_key == store)
+                            .all())
+                    pos_keys = set()
+                    for (pname,) in rows:
+                        pk = position_role(pname)
+                        if pk:
+                            pos_keys.add(pk)
+                    # Hole 1 belt: no positions at the active store ->
+                    # role-perms (the person isn't working that store yet).
+                    if pos_keys:
+                        drm = default_role_map()
+                        union = set()
+                        for pk in pos_keys:
+                            saved = effective_perms_for([pk], store, db)
+                            # Per-position: the SAVED config if any row
+                            # exists for it, else that role's catalog
+                            # default (a brand-new position with nothing
+                            # toggled still gets its sensible baseline).
+                            if saved:
+                                union |= saved
+                            else:
+                                union |= drm.get(pk, set())
+                        # Path B / additive (perms-rework merge-safety): the
+                        # position catalog-union ADDS to the role baseline, it
+                        # does NOT replace it. The route @requires_permission
+                        # tags are a DIFFERENT vocabulary (SS3.1 / ROLE_PERMISSIONS:
+                        # team_reports.view, briefs.view_own, drivers.admin ...)
+                        # than the catalog keys (dash.*, reports.*, emp.* ...) -
+                        # disjoint but for ~1 tag. REPLACING role-perms with the
+                        # catalog-union would strip a positioned manager of their
+                        # real route access (a regression). Unioning preserves all
+                        # current access + lets the toggles ADD catalog perms.
+                        # Full catalog-key -> route-tag wiring (so OFF can also
+                        # REVOKE a role-granted route) is a separate scoped pass.
+                        result = set(role_perms) | union
+            finally:
+                db.close()
+    except Exception:
+        # Fail toward the role baseline, never an empty deny.
+        log.exception("effective-perms resolve failed; falling back to role-perms")
+        result = set(role_perms)
+
+    if cache is not None and uid is not None:
+        cache[uid] = result
+    return result
+
+
+# ============================================================
 # Core check
 # ============================================================
 def _user_has(user, tag: str, store_id: str | None = None) -> bool:
@@ -422,9 +536,16 @@ def _user_has(user, tag: str, store_id: str | None = None) -> bool:
     role = _canonical_role(getattr(user, "permission_level", None))
     if role is None:
         return False
-    perms = ROLE_PERMISSIONS.get(role, set())
-    if "*" in perms:
+    # Hole 4: the partner WILDCARD is checked FIRST, off User.permission_level,
+    # before any position logic — a partner can never self-lock (and the check
+    # never touches the DB / active-store join). Stays on the static
+    # ROLE_PERMISSIONS dict, the never-stubbed source of the wildcard.
+    if "*" in ROLE_PERMISSIONS.get(role, set()):
         return True
+    # perms-rework repoint: enforcement now reads the POSITION-based effective
+    # set (saved PositionPermission union at the active store), gated BEHIND the
+    # role-perms fallback inside _effective_perms — never an empty-deny.
+    perms = _effective_perms(user)
     # tag=None means no permission tag is required — the action is open
     # to every role; the store-scope check below still applies. Used by
     # requires_store_access (Sam 2026-05-20: unhook / free-up driver have

@@ -404,31 +404,114 @@ def create_app():
 
     # Per-store POSITIONS migration + backfills (Sam #2457, permissions rework
     # 2026-05-31). EmployeePosition is now PER-STORE (store_key). create_all does
-    # NOT alter the populated employee_positions table, so: ADD COLUMN store_key,
-    # swap the unique (uq_emp_position -> uq_emp_position_store), then run BOTH
-    # backfills - manager-positions FIRST (linked managers get their mgmt position
-    # so enforcement finds their perms) then expand legacy global rows - BEFORE
-    # enforcement reads positions (ckai #2488 hole-2 ordering; runs after the unify
-    # link above, which it depends on for managers + their store assignments). Each
-    # ALTER is its own txn so a no-op (fresh SQLite already has the new schema via
-    # create_all, or a re-run) can't poison the others. All defensive / idempotent.
+    # NOT alter the populated employee_positions table, so we must swap the unique
+    # (uq_emp_position 2-col -> uq_emp_position_store 3-col) DIALECT-AWARE and BEFORE
+    # the backfills run (hole-1, #2457): SQLite cannot ALTER DROP/ADD CONSTRAINT, so
+    # it gets an atomic TABLE REBUILD; Postgres uses ADD COLUMN + ALTER CONSTRAINT.
+    # The 3-col uq must be in place first or the backfills collide on the surviving
+    # 2-col uq (expanding a legacy global row, or a both-store manager). Then run
+    # BOTH backfills - manager-positions FIRST (linked managers get their mgmt
+    # position so enforcement finds their perms) then expand legacy global rows -
+    # BEFORE enforcement reads positions (ckai #2488 hole-2 ordering; runs after the
+    # unify link above, which it depends on for managers + their store assignments).
+    # Idempotent: the sqlite rebuild is skipped when the new 3-col uq already exists
+    # (fresh db via create_all, or a re-run); the backfills are no-ops on re-run.
     try:
         from sqlalchemy import inspect as _sa_insp_ep, text as _sa_text_ep
         from app.db import SessionLocal as _SL_ep, engine as _eng_ep
         if _eng_ep is not None and "employee_positions" in _sa_insp_ep(_eng_ep).get_table_names():
-            _epcols = {c["name"] for c in _sa_insp_ep(_eng_ep).get_columns("employee_positions")}
+            _insp_ep = _sa_insp_ep(_eng_ep)
+            _epcols = {c["name"] for c in _insp_ep.get_columns("employee_positions")}
+            # Detect the 3-col uq BY COLUMN SET, not by name: a prod uq created
+            # without an explicit name (auto-named sqlite_autoindex_*) would defeat a
+            # name-based check and silently SKIP the rebuild -> the inert bug would
+            # persist. Column-set detection is name-independent + bulletproof.
+            _epuq_colsets = [frozenset(u.get("column_names") or [])
+                             for u in _insp_ep.get_unique_constraints("employee_positions")]
+            _has_3col_uq = frozenset(("employee_id", "position_id", "store_key")) in _epuq_colsets
 
-            def _try_alter_ep(_stmt):
-                try:
-                    with _eng_ep.begin() as _c:
-                        _c.execute(_sa_text_ep(_stmt))
-                except Exception:
-                    pass  # constraint absent/exists / unsupported on this DB - fine
-            if "store_key" not in _epcols:
-                _try_alter_ep("ALTER TABLE employee_positions ADD COLUMN store_key VARCHAR(40)")
-            _try_alter_ep("ALTER TABLE employee_positions DROP CONSTRAINT uq_emp_position")
-            _try_alter_ep("ALTER TABLE employee_positions ADD CONSTRAINT uq_emp_position_store "
-                          "UNIQUE (employee_id, position_id, store_key)")
+            if _eng_ep.dialect.name == "sqlite":
+                # SQLite cannot ALTER TABLE DROP/ADD CONSTRAINT, so the only way to
+                # swap uq_emp_position(2-col) -> uq_emp_position_store(3-col) is a
+                # TABLE REBUILD. The 3-col uq MUST exist before the backfills run or
+                # they collide on the surviving 2-col uq (hole-1, #2457). Idempotent:
+                # skip when the 3-col uq already exists (fresh db built by create_all,
+                # or an already-migrated db). Atomic: the whole rebuild is ONE
+                # transaction, so a mid-rebuild failure loses no data.
+                if _has_3col_uq:
+                    pass  # already migrated: 3-col uq present (fresh db, or a re-run)
+                else:
+                    _has_store = "store_key" in _epcols
+                    _sel_store = "store_key" if _has_store else "NULL"
+                    # FK enforcement is OFF by default on this sqlite engine (no
+                    # PRAGMA foreign_keys=ON listener) and nothing references
+                    # employee_positions, but force it OFF on THIS connection
+                    # (before BEGIN; the pragma is a no-op inside a txn) so the
+                    # DROP/RENAME can never trip a referencing-FK check, then begin
+                    # the atomic rebuild.
+                    _raw = _eng_ep.raw_connection()
+                    try:
+                        _cur0 = _raw.cursor()
+                        _cur0.execute("PRAGMA foreign_keys=OFF")
+                        _cur0.close()
+                        _cur = _raw.cursor()
+                        _cur.execute("BEGIN")
+                        try:
+                            _cur.execute(
+                                "CREATE TABLE employee_positions_new ("
+                                "id INTEGER NOT NULL PRIMARY KEY, "
+                                "employee_id INTEGER NOT NULL, "
+                                "position_id INTEGER NOT NULL, "
+                                "store_key VARCHAR(40), "
+                                "created_at DATETIME NOT NULL, "
+                                "CONSTRAINT uq_emp_position_store UNIQUE (employee_id, position_id, store_key), "
+                                "FOREIGN KEY(employee_id) REFERENCES employees (id) ON DELETE CASCADE, "
+                                "FOREIGN KEY(position_id) REFERENCES positions (id) ON DELETE CASCADE)")
+                            _cur.execute(
+                                "INSERT INTO employee_positions_new "
+                                "(id, employee_id, position_id, store_key, created_at) "
+                                "SELECT id, employee_id, position_id, " + _sel_store + ", created_at "
+                                "FROM employee_positions")
+                            _cur.execute("DROP TABLE employee_positions")
+                            _cur.execute("ALTER TABLE employee_positions_new RENAME TO employee_positions")
+                            _cur.execute("CREATE INDEX ix_employee_positions_employee_id "
+                                         "ON employee_positions (employee_id)")
+                            _cur.execute("CREATE INDEX ix_employee_positions_position_id "
+                                         "ON employee_positions (position_id)")
+                            _cur.execute("CREATE INDEX ix_employee_positions_store_key "
+                                         "ON employee_positions (store_key)")
+                            _raw.commit()
+                            logging.getLogger(__name__).info(
+                                "per-store positions: sqlite table rebuild swapped "
+                                "uq_emp_position -> uq_emp_position_store")
+                        except Exception:
+                            _raw.rollback()
+                            raise
+                        finally:
+                            _cur.close()
+                    finally:
+                        try:
+                            _cur1 = _raw.cursor()
+                            _cur1.execute("PRAGMA foreign_keys=ON")
+                            _cur1.close()
+                        except Exception:
+                            pass
+                        _raw.close()
+            else:
+                # Non-sqlite (Postgres): ADD COLUMN + ALTER DROP/ADD CONSTRAINT work
+                # natively. Each is its own txn, defensive (constraint absent/exists
+                # is fine), so a no-op or re-run can't poison the others.
+                def _try_alter_ep(_stmt):
+                    try:
+                        with _eng_ep.begin() as _c:
+                            _c.execute(_sa_text_ep(_stmt))
+                    except Exception:
+                        pass  # constraint absent/exists / unsupported on this DB - fine
+                if "store_key" not in _epcols:
+                    _try_alter_ep("ALTER TABLE employee_positions ADD COLUMN store_key VARCHAR(40)")
+                _try_alter_ep("ALTER TABLE employee_positions DROP CONSTRAINT uq_emp_position")
+                _try_alter_ep("ALTER TABLE employee_positions ADD CONSTRAINT uq_emp_position_store "
+                              "UNIQUE (employee_id, position_id, store_key)")
             from app.services.team_roster import (
                 backfill_manager_positions as _bmp,
                 backfill_employee_position_stores as _bps)

@@ -1,6 +1,6 @@
 {% extends "base_dashboard.html" %}
 {% set active = active|default('dev_permissions') %}
-{% block title %}Permissions — Cenas Kitchen{% endblock %}
+{% block title %}Permissions - Cenas Kitchen{% endblock %}
 {% block page_title %}Permissions{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">Assign what each role can do, per store. 100% our platform &mdash; no Toast/POS link. ezCater driver permissions are separate and locked.</p>
@@ -401,7 +401,7 @@
     empty.hidden = !!ready;
     empty.textContent = !state.role
       ? "Pick a role and at least one store to assign permissions."
-      : (state.stores.length ? "" : "Select at least one store – use “Select locations” above.");
+      : (state.stores.length ? "" : "Select at least one store -- use 'Select locations' above.");
     if (!ready) return;
 
     var groups = groupByCategory();

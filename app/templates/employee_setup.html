@@ -1,0 +1,313 @@
+{# Employee self-setup (Schedules V2, B11 email-onboarding swap).
+   Reached from the one-time setup link emailed after a manager admin-adds the
+   employee (name + email). The new hire completes their personal info and
+   CREATES their login (sets a 5-digit passcode). Token is in the path; this is
+   PRE-login (no session) - the token is the credential.
+
+   ck owns this template + GET /employee/setup/<token> (employee_setup_page.py).
+   ckai owns the token-scoped endpoints it calls (contract #2103/#2107):
+     GET  {{ '<infoUrl>' }}      -> {ok, valid, employee:{full_name, email}}
+     POST {{ '<completeUrl>' }}  {full_name, phone?, passcode} -> 200 {ok} | 410
+   Fields (samai #2107): full_name (prefilled, editable), email (read-only, from
+   invite), phone (optional, records-only), passcode (5-digit). Store/position
+   are MANAGER-set, never here.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Set Up Your Login &mdash; Cenas Kitchen</title>
+<style>
+  :root{
+    --blue:#15205c; --blue-bright:#1d2a70; --blue-deep:#0a1340;
+    --red:#c8302a; --red-bright:#e54a3f; --red-deep:#8a1d18; --red-shadow:#3d0a08;
+    --cream:#f4e7d0; --cream-soft:#ebd9bc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh; background:#0a0604;
+    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:24px; position:relative;
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter:blur(5px) brightness(0.82) saturate(1.10);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(232,122,62,0.10), transparent 55%),
+      radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.08), transparent 50%),
+      linear-gradient(180deg, rgba(10,6,4,0.20) 0%, rgba(10,6,4,0.30) 100%);
+  }
+  .wrap{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; width:100%; }
+
+  .header-cap{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    margin:22px 22px 22px; padding:10px 30px; border-radius:14px;
+    background-image:
+      radial-gradient(circle at 14% 22%, rgba(138,29,24,0.4) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 76% 36%, rgba(138,29,24,0.3) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 32% 68%, rgba(138,29,24,0.35) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 86% 80%, rgba(138,29,24,0.3) 0.7px, transparent 1.5px),
+      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 40%, var(--cream-soft) 100%);
+    background-size:20px 20px,26px 26px,17px 17px,30px 30px,100% 100%;
+    background-position:2px 1px,7px 9px,13px 4px,4px 15px,0 0;
+    box-shadow:
+      inset 0 2px 1px rgba(255,255,255,0.9), inset 0 -3px 6px rgba(150,110,70,0.3),
+      0 0 0 2px var(--cream), 0 0 0 2.5px rgba(255,255,255,0.7),
+      0 0 0 7.5px var(--blue-bright), 0 2px 0 7.5px var(--blue-deep),
+      0 0 0 10.5px var(--red), 0 3px 0 10.5px var(--red-shadow),
+      0 14px 28px rgba(0,0,0,0.65), 0 6px 12px rgba(0,0,0,0.5);
+  }
+  .header-label{
+    color:var(--red); font-size:13px; font-weight:800; letter-spacing:3px; text-transform:uppercase;
+    text-shadow:0 1px 0 rgba(255,255,255,0.8), 0 -1px 1px rgba(150,30,25,0.3), 1px 1px 0 rgba(150,30,25,0.15);
+  }
+  .header-sub{ color:var(--blue-deep); font-size:12px; font-weight:600; letter-spacing:0.5px; opacity:0.75; }
+
+  .card{ width:100%; max-width:340px; display:flex; flex-direction:column; gap:14px; margin:2px 0 4px; }
+  .card[hidden]{ display:none; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{
+    font-size:12px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase;
+    color:rgba(244,231,208,0.7); padding-left:3px;
+  }
+  .field label .opt{ font-weight:600; letter-spacing:0.5px; text-transform:none; color:rgba(244,231,208,0.45); }
+  .field input{
+    width:100%; padding:13px 15px; border-radius:12px; font-size:17px; font-family:inherit; font-weight:600;
+    color:var(--blue-deep);
+    background:linear-gradient(180deg, #fffaf0 0%, var(--cream) 55%, var(--cream-soft) 100%);
+    border:2px solid rgba(20,32,92,0.25);
+    box-shadow:inset 0 2px 3px rgba(150,110,70,0.25), 0 4px 10px rgba(0,0,0,0.4);
+    outline:none; transition:border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .field input:focus{
+    border-color:var(--blue-bright);
+    box-shadow:inset 0 2px 3px rgba(150,110,70,0.2), 0 0 0 3px rgba(29,42,112,0.35), 0 4px 12px rgba(0,0,0,0.45);
+  }
+  .field input::placeholder{ color:rgba(20,32,92,0.38); font-weight:500; }
+  .field input.bad{ border-color:var(--red); box-shadow:0 0 0 3px rgba(200,48,42,0.3); animation:shake 0.4s ease; }
+
+  .readonly-pill{
+    width:100%; padding:13px 15px; border-radius:12px; font-size:16px; font-weight:600;
+    color:rgba(20,32,92,0.7); background:rgba(244,231,208,0.5);
+    border:2px dashed rgba(20,32,92,0.25); word-break:break-all;
+  }
+
+  .passcode-row{ position:relative; }
+  .passcode-row input{ padding-right:62px; letter-spacing:3px; }
+  .toggle-pass{
+    position:absolute; right:8px; top:50%; transform:translateY(-50%);
+    font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+    color:rgba(20,32,92,0.6); cursor:pointer; user-select:none; padding:6px 9px; border-radius:8px;
+  }
+  .toggle-pass:hover{ color:var(--blue-deep); background:rgba(20,32,92,0.07); }
+
+  @keyframes shake{ 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-6px);} 40%,80%{transform:translateX(6px);} }
+
+  .btn-primary{
+    margin-top:6px; width:100%; padding:15px; border-radius:12px;
+    font-size:15px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--cream); cursor:pointer; border:3px solid var(--blue-bright);
+    background-image:radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 45%, var(--red-deep) 100%);
+    text-shadow:0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.5);
+    box-shadow:inset 0 2px 1px rgba(255,210,200,0.5), inset 0 -4px 8px rgba(40,5,3,0.6),
+      0 6px 12px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.6);
+    transition:transform 80ms ease, box-shadow 80ms ease, filter 80ms ease;
+  }
+  .btn-primary:hover{ filter:brightness(1.06); }
+  .btn-primary:active{ transform:translateY(2px) scale(0.99); box-shadow:inset 0 3px 6px rgba(40,5,3,0.8), 0 1px 2px rgba(0,0,0,0.5); }
+  .btn-primary[disabled]{ opacity:0.65; pointer-events:none; }
+
+  /* Loading / expired / success states. */
+  .state{
+    width:100%; max-width:340px; text-align:center; color:rgba(244,231,208,0.85);
+    padding:18px 8px; display:flex; flex-direction:column; align-items:center; gap:10px;
+  }
+  .state[hidden]{ display:none; }
+  .state .s-title{ font-size:18px; font-weight:800; color:var(--cream); letter-spacing:0.3px; }
+  .state .s-body{ font-size:14px; line-height:1.55; color:rgba(244,231,208,0.7); }
+  .state .s-emoji{ font-size:30px; }
+  .state-link{
+    display:inline-block; margin-top:4px; padding:11px 22px; border-radius:11px;
+    font-size:14px; font-weight:800; letter-spacing:1px; text-transform:uppercase;
+    color:var(--cream); text-decoration:none; cursor:pointer; border:2px solid var(--blue-bright);
+    background-image:radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 45%, var(--red-deep) 100%);
+    box-shadow:0 5px 10px rgba(0,0,0,0.5);
+  }
+  .state-link.ghost{
+    background-image:none; background:rgba(244,231,208,0.08); border-color:rgba(244,231,208,0.3);
+    color:rgba(244,231,208,0.85); font-weight:700;
+  }
+
+  .brand-logo{
+    display:block; width:100%; max-width:460px; height:auto; margin:16px auto 0;
+    filter:drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:rgba(20,8,8,0.92); color:#fff; padding:10px 18px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.12); font-size:13px; letter-spacing:0.5px;
+    opacity:0; transition:opacity 0.2s ease; pointer-events:none; z-index:10;
+    max-width:calc(100% - 36px); text-align:center;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-cap">
+    <div class="header-label">SET UP YOUR LOGIN</div>
+    <div class="header-sub">Cenas Kitchen</div>
+  </div>
+
+  {# Loading - shown until the token check resolves. #}
+  <div class="state" id="loading">
+    <div class="s-emoji">&#9203;</div>
+    <div class="s-body">Checking your invite&hellip;</div>
+  </div>
+
+  {# Expired / used / invalid token. #}
+  <div class="state" id="expired" hidden>
+    <div class="s-emoji">&#9888;</div>
+    <div class="s-title">This link is no longer valid</div>
+    <div class="s-body">Your setup link may have already been used or timed out. Ask your manager to send you a fresh invite.</div>
+    <a class="state-link" id="expired-login">Go to sign in</a>
+  </div>
+
+  {# Could-not-load (network) - distinct from expired so we don't mislabel a blip. #}
+  <div class="state" id="load-error" hidden>
+    <div class="s-emoji">&#128268;</div>
+    <div class="s-title">Could not load</div>
+    <div class="s-body">Check your connection and try again.</div>
+    <a class="state-link ghost" id="reload-link">Reload</a>
+  </div>
+
+  {# The setup form. #}
+  <form class="card" id="setup-form" hidden novalidate>
+    <div class="field">
+      <label for="full_name">Your name</label>
+      <input id="full_name" name="full_name" type="text" autocomplete="name" placeholder="Full name" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <div class="readonly-pill" id="email-display">&mdash;</div>
+    </div>
+    <div class="field">
+      <label for="phone">Phone <span class="opt">(optional)</span></label>
+      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="For shift alerts later" />
+    </div>
+    <div class="field">
+      <label for="passcode">Create a 5-digit passcode</label>
+      <div class="passcode-row">
+        <input id="passcode" name="passcode" type="password" inputmode="numeric" maxlength="5" pattern="[0-9]*" placeholder="5 digits" />
+        <span class="toggle-pass" id="toggle-pass" role="button" tabindex="0" aria-label="Show passcode">Show</span>
+      </div>
+    </div>
+    <div class="field">
+      <label for="passcode2">Confirm passcode</label>
+      <input id="passcode2" name="passcode2" type="password" inputmode="numeric" maxlength="5" pattern="[0-9]*" placeholder="Re-enter" />
+    </div>
+    <button type="submit" class="btn-primary" id="setup-btn">Create my login</button>
+  </form>
+
+  {# Success - account created, route them to sign in. #}
+  <div class="state" id="done" hidden>
+    <div class="s-emoji">&#127881;</div>
+    <div class="s-title">You are all set!</div>
+    <div class="s-body">Your login is ready. Sign in with your email or phone and your new passcode.</div>
+    <a class="state-link" id="done-login">Sign in</a>
+  </div>
+
+  <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" class="brand-logo" />
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="application/json" id="setup-config">{{ config_json | safe }}</script>
+<script>
+  "use strict";
+  var CFG = JSON.parse(document.getElementById('setup-config').textContent);
+  var PASSCODE_LEN = CFG.passcodeLen || 5;
+  var PASS_RE = new RegExp('^[0-9]{' + PASSCODE_LEN + '}$');
+
+  var el = function(id){ return document.getElementById(id); };
+  var loading=el('loading'), expired=el('expired'), loadErr=el('load-error'),
+      form=el('setup-form'), done=el('done'), toast=el('toast'),
+      fullName=el('full_name'), emailDisp=el('email-display'), phone=el('phone'),
+      pass=el('passcode'), pass2=el('passcode2'), btn=el('setup-btn'), togglePass=el('toggle-pass');
+  var employeeEmail = '';
+  var busy = false;
+
+  function show(e){ e.hidden=false; } function hide(e){ e.hidden=true; }
+  function flashToast(msg){ toast.textContent=msg; toast.classList.add('show'); setTimeout(function(){ toast.classList.remove('show'); }, 2200); }
+  function markBad(e){ e.classList.add('bad'); setTimeout(function(){ e.classList.remove('bad'); }, 450); }
+  function setBusy(b){ busy=b; btn.disabled=b; btn.textContent = b ? 'Saving...' : 'Create my login'; }
+
+  el('expired-login').addEventListener('click', function(){ window.location.href = CFG.loginUrl; });
+  el('done-login').addEventListener('click', function(){ window.location.href = CFG.loginUrl; });
+  el('reload-link').addEventListener('click', function(){ window.location.reload(); });
+
+  // Persist the identifier (email) for the login page to prefill, same shape +
+  // key as employee_login.html (never the passcode).
+  function rememberEmail(em){
+    try{ localStorage.setItem('ck-employee-id-v1', JSON.stringify({ id:String(em), lastUsedTs:Date.now() })); } catch(e){}
+  }
+
+  // Validate the token + prefill on load.
+  fetch(CFG.infoUrl, { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
+    .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { r:r, d:d }; }); })
+    .then(function(o){
+      hide(loading);
+      var r=o.r, d=o.d||{};
+      if (r.status === 410 || !r.ok || d.ok === false || d.valid === false){ show(expired); return; }
+      var emp = d.employee || {};
+      employeeEmail = emp.email || '';
+      fullName.value = emp.full_name || '';
+      emailDisp.textContent = employeeEmail || '(no email on file)';
+      show(form);
+      setTimeout(function(){ (fullName.value ? phone : fullName).focus(); }, 60);
+    })
+    .catch(function(){ hide(loading); show(loadErr); });
+
+  function toggleVisibility(){
+    var t = (pass.type === 'password') ? 'text' : 'password';
+    pass.type = t; pass2.type = t;
+    togglePass.textContent = (t === 'text') ? 'Hide' : 'Show';
+  }
+  togglePass.addEventListener('click', toggleVisibility);
+  togglePass.addEventListener('keydown', function(e){ if (e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleVisibility(); } });
+
+  function submit(){
+    if (busy) return;
+    var name = (fullName.value||'').trim();
+    var pc = (pass.value||'').trim();
+    var pc2 = (pass2.value||'').trim();
+    if (!name){ markBad(fullName); flashToast('Enter your name.'); fullName.focus(); return; }
+    if (!PASS_RE.test(pc)){ markBad(pass); flashToast('Passcode must be ' + PASSCODE_LEN + ' digits.'); pass.focus(); return; }
+    if (pc2 !== pc){ markBad(pass2); flashToast('Passcodes do not match.'); pass2.focus(); return; }
+    setBusy(true);
+    fetch(CFG.completeUrl, {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+      body: JSON.stringify({ full_name:name, phone:(phone.value||'').trim(), passcode:pc })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){ return { r:r, d:d }; });
+    }).then(function(o){
+      var r=o.r, d=o.d||{};
+      if (r.status === 410){ setBusy(false); hide(form); show(expired); return; }
+      if (!r.ok || d.ok === false){ setBusy(false); flashToast(d.error || 'Could not save. Check your entries and try again.'); return; }
+      // Success - remember the email so login prefills, then show the done state.
+      if (employeeEmail) rememberEmail(employeeEmail);
+      hide(form); show(done);
+    }).catch(function(){ setBusy(false); flashToast('Network error - try again.'); });
+  }
+
+  form.addEventListener('submit', function(e){ e.preventDefault(); submit(); });
+</script>
+</body>
+</html>

@@ -45,6 +45,7 @@ from app.web import employee_availability_page  # noqa: F401  B8: attaches GET /
 from app.web import employee_shift_market  # noqa: F401  B9: attaches the employee offer/swap/marketplace endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import employee_shift_marketplace_page  # noqa: F401  B9: attaches GET /employee/shift-marketplace to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import employee_setup  # noqa: F401  email-pivot: passcode login + email self-setup endpoints on the employee_auth blueprint (ckai; must import before ezempauth.install)
+from app.web import employee_setup_page  # noqa: F401  B11: attaches GET /employee/setup/<token> (employee self-setup page) to the employee_auth blueprint (ck; must import before ezempauth.install). ckai's /employee/setup/<token>/info + /complete are in employee_setup.py (separate import); the auth EXEMPT /employee/setup (ckai's) covers this page too.
 from app.web import anomaly_routes as ezanomaly
 from app.web import ribbon_routes as ezribbon
 from app.web import notifications as eznotifications

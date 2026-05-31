@@ -300,6 +300,37 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("drivers column backfill failed (non-fatal)")
 
+    # Idempotent column backfill for the employees table (email-pivot 2026-05-30,
+    # "B11"): the passcode-auth columns added to the Employee model. create_all()
+    # does NOT ALTER the already-populated employees table, so add them here, each
+    # gated on column absence (safe to run every boot). All nullable or
+    # NOT NULL DEFAULT 0 -> a safe SQLite ADD COLUMN. The new employee_setup_tokens
+    # table is a NEW table, so Base.metadata.create_all already creates it.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_emp, text as _sa_text_emp
+        from app.db import engine as _eng_emp
+        if _eng_emp is not None:
+            insp = _sa_inspect_emp(_eng_emp)
+            if "employees" in insp.get_table_names():
+                existing = {c["name"] for c in insp.get_columns("employees")}
+                additions = [
+                    ("passcode_hash",   "VARCHAR(255)"),
+                    ("failed_attempts", "INTEGER NOT NULL DEFAULT 0"),
+                    ("lockout_until",   "TIMESTAMP"),
+                    ("session_version", "INTEGER NOT NULL DEFAULT 0"),
+                ]
+                added = []
+                with _eng_emp.begin() as conn:
+                    for col_name, col_def in additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_emp(f"ALTER TABLE employees ADD COLUMN {col_name} {col_def}"))
+                            added.append(col_name)
+                if added:
+                    logging.getLogger(__name__).info(
+                        "employees table: backfilled missing columns %s", added)
+    except Exception:
+        logging.getLogger(__name__).exception("employees column backfill failed (non-fatal)")
+
     # Idempotent column backfill for orders.total_amount (migration 10) AND
     # the payroll backfill columns from migration 11. Same self-healing
     # pattern as the drivers backfill above — each ALTER is gated on column

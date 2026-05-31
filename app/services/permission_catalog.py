@@ -77,11 +77,15 @@ ROLE_RANK = {
 }
 
 def addable_roles(actor_role):
-    """Role keys an actor of `actor_role` may ADD - strictly below their rank
-    (Sam #2381). Unknown/None -> no add rights; partner (top) -> all others."""
+    """Role keys an actor of `actor_role` may ADD. PARTNER (the top-rank wildcard
+    owner) adds EVERY role incl peers - Sam #2381 'all permission sets'; everyone
+    else adds STRICTLY BELOW their own rank (a GM can't add a KM; peers can't add
+    peers). Unknown/None actor -> no add rights."""
     actor_rank = ROLE_RANK.get((actor_role or "").strip().lower())
     if actor_rank is None:
         return set()
+    if actor_rank >= max(ROLE_RANK.values()):    # partner -> adds anyone
+        return set(ROLE_RANK)
     return {k for k, r in ROLE_RANK.items() if r < actor_rank}
 
 

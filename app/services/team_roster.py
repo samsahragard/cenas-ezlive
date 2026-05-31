@@ -67,11 +67,27 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
     # canonical positions by id (junk filtered out, same set as the dropdown)
     canon = {p.id: p.name for p in db.query(Position).all()
              if (p.name or "").strip().lower() in _CANON_LC}
-    emp_pos = {}  # employee_id -> [(position_id, name)]
+    emp_pos = {}  # employee_id -> [(position_id, name)]  (flattened, dedup'd by id)
+    emp_pos_by_store = {}  # employee_id -> {store_key: [position_id, ...]} (per-store)
     for ep in db.query(EmployeePosition).all():
         nm = canon.get(ep.position_id)
-        if nm:
-            emp_pos.setdefault(ep.employee_id, []).append((ep.position_id, nm))
+        if not nm:
+            continue
+        # Flattened list (row chips): a position held at >1 store should appear
+        # once -- de-dup by position_id so the chips don't double up.
+        flat = emp_pos.setdefault(ep.employee_id, [])
+        if not any(pid == ep.position_id for pid, _n in flat):
+            flat.append((ep.position_id, nm))
+        # Per-store map (assign editor pre-check): keyed by the CANONICAL store_key
+        # the EmployeePosition row carries (tomball/copperfield). NULL-store rows
+        # (pre-rework, not yet backfilled) are skipped here -- they can't pre-check
+        # a specific store box, and the flattened chip above still shows them.
+        sk = (ep.store_key or "").strip().lower()
+        if sk:
+            by_store = emp_pos_by_store.setdefault(ep.employee_id, {})
+            by_store.setdefault(sk, [])
+            if ep.position_id not in by_store[sk]:
+                by_store[sk].append(ep.position_id)
     emp_stores = {}  # employee_id -> {store_key}
     for a in db.query(EmployeeStoreAssignment).all():
         emp_stores.setdefault(a.employee_id, set()).add(a.store_key)
@@ -91,6 +107,12 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
             "domain": _domain_label(dom),
             "access_role": role_by_uid.get(e.user_id),
             "phone": e.phone, "email": e.email,
+            # Roster edit (roster-edit branch): address (free text the manager
+            # edits) + positions_by_store {store_key: [position_id,...]} so the
+            # inline assign editor can PRE-CHECK the current per-store positions.
+            # Purely additive -- the flattened positions[] above is untouched.
+            "address": getattr(e, "address", None),
+            "positions_by_store": emp_pos_by_store.get(e.id, {}),
             "_dom": dom, "_stores": emp_stores.get(e.id, set()),
         }
 

@@ -1,0 +1,405 @@
+{% extends "base_dashboard.html" %}
+{# ============================================================
+   team_workspace.html -- PROJECT 1 (Team + Schedule unify, Sam #2261).
+   The Operations "Team" tab opens into ONE workspace with three sub-tabs:
+     [ Team | Schedule | Market ]
+   - Team   = the unified roster (SCREEN 01): All/BOH/FOH + Add, location +
+              position filters, 3 stat cards, grouped by store. Binds to
+              aick's GET team/roster contract (#2296). Built here, in-page.
+   - Schedule = the existing V2 Week Builder, embedded as a chrome-stripped
+                iframe (reuses /<store>/schedules-v2/ as-is -> all current
+                functionality kept, Sam's requirement).
+   - Market = the marketplace (Sam #2297: mainly manager view) -- STUB until
+              ckbro describes file_134/135; wired the same iframe way.
+   Operations ribbon + bottom nav are UNCHANGED (Sam, repeated #2261/#2297);
+   this page suppresses the shared topbar and draws only the workspace, so
+   when the Operations Team tab embeds it the outer chrome stays intact.
+   Eyebrow intentionally omitted (Sam #2230; aick #2269 -- Team page defaults
+   to no eyebrow unless Sam says keep).
+   ============================================================ #}
+{% block title %}Team -- Cenas Kitchen{% endblock %}
+{% set active = 'partner_team' %}
+{% block topbar %}{% endblock %}
+
+{% block content %}
+<style>
+  /* All scoped under .tws so the warm palette never leaks globally. */
+  .tws {
+    --tws-bg: #1a0d08; --tws-card: #241610; --tws-card-hi: #2c1c13;
+    --tws-cream: #ece3d0; --tws-cream-dim: #b7a98f; --tws-cream-meta: #8c7c63;
+    --tws-gold: #d9a436; --tws-gold-bright: #e4b340; --tws-red: #c73b36;
+    --tws-boh: #6ea8c7; --tws-foh: #cf9a4a;
+    --tws-border: rgba(217,164,54,.18); --tws-border-soft: rgba(217,164,54,.10);
+    --tws-radius: 14px; --tws-radius-sm: 9px;
+    background: linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
+    border: .5px solid var(--tws-border); border-radius: 18px;
+    padding: 18px 18px 28px; margin-bottom: 36px;
+    font-family: 'Manrope', system-ui, sans-serif; color: var(--tws-cream);
+  }
+  .tws *, .tws *::before, .tws *::after { box-sizing: border-box; }
+  .tws h1, .tws h2, .tws h3, .tws p { margin: 0; }
+
+  .tws-head { margin-bottom: 14px; }
+  .tws-title { font-family: 'Instrument Serif', serif; font-size: 30px; line-height: 1.05; color: var(--tws-cream); }
+  .tws-sub { font-size: 13px; color: var(--tws-cream-dim); margin-top: 4px; }
+
+  /* sub-tab bar */
+  .tws-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--tws-border); margin: 14px 0 16px; }
+  .tws-tab {
+    appearance: none; background: transparent; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 14px; font-weight: 600; color: var(--tws-cream-meta);
+    padding: 9px 16px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  }
+  .tws-tab:hover { color: var(--tws-cream); }
+  .tws-tab.active { color: var(--tws-gold-bright); border-bottom-color: var(--tws-gold-bright); }
+  .tws-tab .ti { font-size: 16px; }
+
+  .tws-panel { display: none; }
+  .tws-panel.active { display: block; }
+
+  /* filter row */
+  .tws-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .tws-pills { display: inline-flex; gap: 4px; background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: 999px; padding: 3px; }
+  .tws-pill {
+    appearance: none; background: transparent; border: 0; cursor: pointer; font-family: inherit;
+    font-size: 12.5px; font-weight: 600; color: var(--tws-cream-dim);
+    padding: 6px 13px; border-radius: 999px; white-space: nowrap;
+  }
+  .tws-pill.active { background: var(--tws-gold); color: #1a0d08; }
+  .tws-pill .ct { opacity: .7; margin-left: 4px; font-weight: 500; }
+  .tws-pill.active .ct { opacity: .85; }
+  .tws-spacer { flex: 1 1 auto; }
+  .tws-select, .tws-addbtn {
+    font-family: inherit; font-size: 12.5px; color: var(--tws-cream);
+    background: var(--tws-card); border: 1px solid var(--tws-border-soft);
+    border-radius: var(--tws-radius-sm); padding: 7px 10px;
+  }
+  .tws-addbtn { background: var(--tws-red); border-color: transparent; color: #fff; font-weight: 700; cursor: pointer; }
+  .tws-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--tws-cream-dim); cursor: pointer; }
+  .tws-chk input { accent-color: var(--tws-gold); }
+
+  /* stat cards (quieted, per the mockup caption) */
+  .tws-stats { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tws-stat { background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 10px 14px; min-width: 116px; }
+  .tws-stat .n { font-family: 'Instrument Serif', serif; font-size: 24px; color: var(--tws-cream); line-height: 1; }
+  .tws-stat .l { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--tws-cream-meta); margin-top: 5px; }
+
+  /* store sections + rows (dense, readable) */
+  .tws-store { margin-bottom: 18px; }
+  .tws-store-head { display: flex; align-items: baseline; gap: 10px; padding: 6px 2px 8px; border-bottom: 1px solid var(--tws-border-soft); margin-bottom: 4px; }
+  .tws-store-name { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tws-gold); }
+  .tws-store-meta { font-size: 11.5px; color: var(--tws-cream-meta); }
+  .tws-colhead, .tws-row { display: grid; grid-template-columns: 210px 1fr 120px; gap: 12px; align-items: center; }
+  .tws-colhead { padding: 4px 6px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--tws-cream-meta); border-bottom: 1px solid var(--tws-border-soft); }
+  .tws-row { padding: 9px 6px; border-bottom: 1px solid var(--tws-border-soft); }
+  .tws-row.inactive { opacity: .5; }
+  .tws-name { font-weight: 600; font-size: 13.5px; color: var(--tws-cream); }
+  .tws-poschips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tws-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); color: var(--tws-cream-dim); white-space: nowrap; }
+  .tws-chip.role { color: var(--tws-gold-bright); border-color: rgba(228,179,64,.4); background: rgba(228,179,64,.10); font-weight: 700; }
+  .tws-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tws-cream-dim); }
+  .tws-status .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .tws-status.on .dot { background: #4caf50; }
+  .tws-status.off .dot { background: var(--tws-cream-meta); }
+  .tws-empty { padding: 26px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
+
+  /* embedded sub-tab iframes (Schedule / Market) */
+  .tws-embed-wrap { position: relative; min-height: 70vh; }
+  .tws-embed-frame { width: 100%; height: 78vh; border: 0; border-radius: var(--tws-radius); background: #241610; opacity: 0; transition: opacity .25s; }
+  .tws-embed-frame.ready { opacity: 1; }
+  .tws-embed-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--tws-cream-meta); font-size: 13px; }
+  .tws-embed-loading.gone { display: none; }
+  .tws-embed-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--tws-gold); animation: tws-pulse 1s infinite; }
+  @keyframes tws-pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+  .tws-stub { padding: 40px 20px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
+  .tws-stub b { color: var(--tws-cream-dim); }
+
+  /* +Add modal */
+  .tws-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: flex-start; justify-content: center; z-index: 300; padding: 40px 16px; overflow-y: auto; }
+  .tws-modal-back.open { display: flex; }
+  .tws-modal { width: 100%; max-width: 460px; background: var(--tws-card); border: 1px solid var(--tws-border); border-radius: var(--tws-radius); padding: 22px; }
+  .tws-modal h2 { font-family: 'Instrument Serif', serif; font-size: 24px; color: var(--tws-cream); }
+  .tws-modal-sub { font-size: 12.5px; color: var(--tws-cream-meta); margin: 6px 0 16px; line-height: 1.5; }
+  .tws-fld { display: block; margin-bottom: 14px; }
+  .tws-fld > span { display: block; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--tws-cream-meta); margin-bottom: 6px; }
+  .tws-fld input { width: 100%; font-family: inherit; font-size: 14px; color: var(--tws-cream); background: var(--tws-bg); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 9px 11px; }
+  .tws-multi { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tws-multi label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--tws-cream-dim); background: var(--tws-bg); border: 1px solid var(--tws-border-soft); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  .tws-multi label:has(input:checked) { color: var(--tws-gold-bright); border-color: rgba(228,179,64,.5); background: rgba(228,179,64,.10); }
+  .tws-multi input { accent-color: var(--tws-gold); margin: 0; }
+  .tws-modal-err { color: var(--tws-red); font-size: 12.5px; min-height: 16px; margin-bottom: 8px; }
+  .tws-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .tws-btn-ghost { font-family: inherit; font-size: 13px; color: var(--tws-cream-dim); background: transparent; border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 9px 16px; cursor: pointer; }
+</style>
+
+<div class="tws" id="tws-root"
+     data-roster-url="/{{ store_slug }}/team/roster"
+     data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1">
+
+  <div class="tws-head">
+    <h1 class="tws-title">Team Roster</h1>
+    <p class="tws-sub">Active employees by location with the positions they fill.</p>
+  </div>
+
+  {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
+  <div class="tws-tabs" role="tablist">
+    <a class="tws-tab active" href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
+    <a class="tws-tab"        href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
+    <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
+  </div>
+
+  {# ---- TEAM panel (the new roster; binds to aick's contract) ---- #}
+  <div class="tws-panel active" id="tws-panel-team" data-sub-panel="team" role="tabpanel">
+    <div class="tws-filterbar">
+      <div class="tws-pills" id="tws-pills">
+        <button class="tws-pill active" data-filter="all">All<span class="ct" data-ct="all">--</span></button>
+        <button class="tws-pill" data-filter="boh">BOH<span class="ct" data-ct="boh">--</span></button>
+        <button class="tws-pill" data-filter="foh">FOH<span class="ct" data-ct="foh">--</span></button>
+      </div>
+      <button class="tws-addbtn" id="tws-add">+ Add</button>
+      <span class="tws-spacer"></span>
+      <select class="tws-select" id="tws-loc" aria-label="Location"><option value="all">Both stores</option></select>
+      <select class="tws-select" id="tws-pos" aria-label="Position"><option value="all">All positions</option></select>
+      <label class="tws-chk"><input type="checkbox" id="tws-inactive"> Include inactive</label>
+    </div>
+
+    <div class="tws-stats">
+      <div class="tws-stat"><div class="n" id="tws-stat-showing">--</div><div class="l">Showing</div></div>
+      <div class="tws-stat"><div class="n" id="tws-stat-active">--</div><div class="l">Active total</div></div>
+      <div class="tws-stat"><div class="n" id="tws-stat-positions">--</div><div class="l">Positions</div></div>
+    </div>
+
+    <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
+  </div>
+
+  {# ---- SCHEDULE panel: the existing V2 Week Builder, chrome-stripped iframe ---- #}
+  <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
+    <div class="tws-embed-wrap">
+      <div class="tws-embed-loading" data-embed-loading="schedule"><span class="tws-embed-dot"></span><span>Loading Schedule</span></div>
+      <iframe class="tws-embed-frame" data-embed-frame="schedule" data-src="/{{ store_slug }}/schedules-v2/?embed=1" title="Schedule" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  {# ---- MARKET panel: STUB until ckbro describes file_134/135 (Sam: mainly mgr view) ---- #}
+  <div class="tws-panel" id="tws-panel-market" data-sub-panel="market" role="tabpanel">
+    <div class="tws-stub">Market sub-tab <b>(manager view)</b> -- wiring pending Sam's mockup (file_134/135). Will embed the manager marketplace the same chrome-stripped way as Schedule.</div>
+  </div>
+
+  {# +Add team member modal (Sam #2310-2317: Name / Phone / Email + multi Position + multi Store -> invite) #}
+  <div class="tws-modal-back" id="tws-add-back">
+    <div class="tws-modal" role="dialog" aria-modal="true" aria-labelledby="tws-add-title">
+      <h2 id="tws-add-title">Add a team member</h2>
+      <p class="tws-modal-sub">They get an email setup link to finish their profile and set a passcode -- no passcode needed now; they show Active once they set up their login.</p>
+      <label class="tws-fld"><span>Full name</span><input type="text" id="tws-f-name" autocomplete="off"></label>
+      <label class="tws-fld"><span>Phone</span><input type="tel" id="tws-f-phone" autocomplete="off"></label>
+      <label class="tws-fld"><span>Email</span><input type="email" id="tws-f-email" autocomplete="off"></label>
+      <div class="tws-fld"><span>Position(s) -- pick one or more</span><div class="tws-multi" id="tws-f-pos"></div></div>
+      <div class="tws-fld"><span>Store(s) -- pick one or more</span><div class="tws-multi" id="tws-f-store"></div></div>
+      <div class="tws-modal-err" id="tws-add-err"></div>
+      <div class="tws-modal-actions">
+        <button class="tws-btn-ghost" id="tws-add-cancel" type="button">Cancel</button>
+        <button class="tws-addbtn" id="tws-add-send" type="button">Send invite</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById("tws-root");
+  if (!root) return;
+  var ROSTER_URL = root.getAttribute("data-roster-url");
+
+  /* ---------------- sub-tab switching + iframe lazy-load ---------------- */
+  var tabs = root.querySelectorAll(".tws-tab");
+  var panels = root.querySelectorAll(".tws-panel");
+  var loaded = {};
+
+  function hideEl(doc, sel) { var n = doc.querySelectorAll(sel); for (var i = 0; i < n.length; i++) n[i].style.setProperty("display", "none", "important"); }
+  function stripChrome(frame) {
+    var doc = null;
+    try { doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document); } catch (e) { doc = null; }
+    if (doc) {
+      [".sidebar", ".sidebar-overlay", ".dash-role-badge-bar", ".topbar", ".subnav-row", ".wordmark", ".ck-bnav"].forEach(function (s) { hideEl(doc, s); });
+      try {
+        var k = doc.createElement("style");
+        k.textContent = "html,body{background-image:none!important;background-color:#241610!important}body::before,body::after,html::before,html::after{display:none!important;content:none!important}";
+        (doc.head || doc.documentElement).appendChild(k);
+      } catch (e) {}
+      var lay = doc.querySelector(".layout");
+      if (lay) { lay.style.setProperty("grid-template-columns", "1fr", "important"); lay.style.setProperty("display", "block", "important"); }
+      var m = doc.querySelector("main.main");
+      if (m) { m.style.setProperty("margin", "0", "important"); m.style.setProperty("padding", "0", "important"); m.style.setProperty("width", "100%", "important"); m.style.setProperty("max-width", "100%", "important"); }
+    }
+    reveal(frame);
+  }
+  function reveal(frame) {
+    frame.classList.add("ready");
+    var key = frame.getAttribute("data-embed-frame");
+    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+    if (shim) shim.classList.add("gone");
+  }
+  function loadFrame(key) {
+    if (loaded[key]) return;
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!frame) return;
+    loaded[key] = true;
+    frame.addEventListener("load", function () { stripChrome(frame); });
+    frame.setAttribute("src", frame.getAttribute("data-src"));
+  }
+  function show(sub) {
+    tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-sub") === sub); });
+    panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
+    if (sub === "schedule" || sub === "market") loadFrame(sub);
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function (e) { e.preventDefault(); show(t.getAttribute("data-sub")); });
+  });
+  // honour ?sub= on load
+  var initial = (new URLSearchParams(location.search)).get("sub") || "team";
+  show(initial);
+
+  /* ---------------- Team roster: fetch + render against the contract ---------------- */
+  var state = { filter: "all", location: "all", position: "all", include_inactive: false, board: null };
+  var elRoster = document.getElementById("tws-roster");
+
+  // Placeholder matching aick's #2296 shape, so the FE renders before ckai's
+  // endpoint is live (aick: "placeholder data fine"). Swapped for the live fetch.
+  var PLACEHOLDER = {
+    ok: true, filter: "all", location: "all", include_inactive: false,
+    counts: { all: 3, boh: 1, foh: 2 },
+    stats: { showing: 3, active_total: 3, positions: 4 },
+    stores: [
+      { store_key: "dos", label: "Tomball", shown: 2, active: 2, employees: [
+        { id: 1, full_name: "Alex Rivera", active: true, positions: [{ id: 11, name: "Server" }, { id: 13, name: "Bartender" }], domain: "foh", access_role: null, email: "alex@x.com", phone: "281-555-0101" },
+        { id: 2, full_name: "Sam Operator", active: true, positions: [{ id: 1, name: "Partner" }, { id: 14, name: "Cook" }], domain: "both", access_role: "partner", email: "sam@x.com", phone: "281-555-0102" }
+      ] },
+      { store_key: "uno", label: "Copperfield", shown: 1, active: 1, employees: [
+        { id: 3, full_name: "Jordan Cook", active: true, positions: [{ id: 14, name: "Cook" }], domain: "boh", access_role: null, email: "jordan@x.com", phone: "281-555-0103" }
+      ] }
+    ]
+  };
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function renderBoard(b) {
+    state.board = b;
+    // pill counts + stats
+    ["all", "boh", "foh"].forEach(function (k) {
+      var el = root.querySelector('[data-ct="' + k + '"]'); if (el) el.textContent = (b.counts && b.counts[k] != null) ? b.counts[k] : "--";
+    });
+    document.getElementById("tws-stat-showing").textContent = (b.stats && b.stats.showing != null) ? b.stats.showing : "--";
+    document.getElementById("tws-stat-active").textContent = (b.stats && b.stats.active_total != null) ? b.stats.active_total : "--";
+    document.getElementById("tws-stat-positions").textContent = (b.stats && b.stats.positions != null) ? b.stats.positions : "--";
+    // populate position filter from positions seen (once)
+    var posSel = document.getElementById("tws-pos");
+    if (posSel && posSel.options.length <= 1) {
+      var seen = {};
+      (b.stores || []).forEach(function (s) { (s.employees || []).forEach(function (e) { (e.positions || []).forEach(function (p) { seen[p.id] = p.name; }); }); });
+      Object.keys(seen).forEach(function (id) { var o = document.createElement("option"); o.value = id; o.textContent = seen[id]; posSel.appendChild(o); });
+    }
+    var locSel = document.getElementById("tws-loc");
+    if (locSel && locSel.options.length <= 1) {
+      (b.stores || []).forEach(function (s) { var o = document.createElement("option"); o.value = s.store_key; o.textContent = s.label; locSel.appendChild(o); });
+    }
+    // rows
+    var html = "";
+    (b.stores || []).forEach(function (s) {
+      if (!s.employees || !s.employees.length) return;
+      html += '<div class="tws-store"><div class="tws-store-head"><span class="tws-store-name">' + esc(s.label) + '</span>' +
+              '<span class="tws-store-meta">' + (s.shown != null ? s.shown : s.employees.length) + ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>' +
+              '<div class="tws-colhead"><span>Name</span><span>Positions</span><span>Status</span></div>';
+      s.employees.forEach(function (e) {
+        var chips = (e.positions || []).map(function (p) { return '<span class="tws-chip">' + esc(p.name) + '</span>'; }).join("");
+        // manager/partner: their access-role shows as a position badge too (the user_id link)
+        var rolePill = e.access_role ? '<span class="tws-chip role">' + esc(e.access_role) + '</span>' : "";
+        var st = e.active
+          ? '<span class="tws-status on"><span class="dot"></span>Active</span>'
+          : '<span class="tws-status off"><span class="dot"></span>Inactive</span>';
+        html += '<div class="tws-row' + (e.active ? "" : " inactive") + '">' +
+                '<div class="tws-name">' + esc(e.full_name) + '</div>' +
+                '<div class="tws-poschips">' + rolePill + chips + '</div>' +
+                '<div>' + st + '</div>' +
+                '</div>';
+      });
+      html += '</div>';
+    });
+    elRoster.innerHTML = html || '<div class="tws-empty">No team members match these filters.</div>';
+  }
+
+  function load() {
+    var qs = "?location=" + encodeURIComponent(state.location) + "&position=" + encodeURIComponent(state.position) +
+             "&include_inactive=" + (state.include_inactive ? "1" : "0") + "&filter=" + encodeURIComponent(state.filter);
+    fetch(ROSTER_URL + qs, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) throw new Error("roster " + r.status); return r.json(); })
+      .then(function (d) { if (!d || d.ok === false) throw new Error("bad"); renderBoard(d); })
+      .catch(function () { renderBoard(PLACEHOLDER); });  // endpoint not live yet -> placeholder (aick OK'd)
+  }
+
+  // filter wiring
+  root.querySelectorAll(".tws-pill").forEach(function (p) {
+    p.addEventListener("click", function () {
+      root.querySelectorAll(".tws-pill").forEach(function (x) { x.classList.remove("active"); });
+      p.classList.add("active"); state.filter = p.getAttribute("data-filter"); load();
+    });
+  });
+  document.getElementById("tws-loc").addEventListener("change", function (e) { state.location = e.target.value; load(); });
+  document.getElementById("tws-pos").addEventListener("change", function (e) { state.position = e.target.value; load(); });
+  document.getElementById("tws-inactive").addEventListener("change", function (e) { state.include_inactive = e.target.checked; load(); });
+  /* ---------------- +Add team member (Sam #2310-2317) ---------------- */
+  var addBack = document.getElementById("tws-add-back");
+  function buildAddOptions() {
+    // positions + stores mirror the filter selects (populated from the roster data)
+    var posWrap = document.getElementById("tws-f-pos");
+    var storeWrap = document.getElementById("tws-f-store");
+    if (posWrap && !posWrap.childNodes.length) {
+      var posSel = document.getElementById("tws-pos");
+      for (var i = 1; i < posSel.options.length; i++) {  // skip "All positions"
+        posWrap.insertAdjacentHTML("beforeend", '<label><input type="checkbox" value="' + esc(posSel.options[i].value) + '"> ' + esc(posSel.options[i].textContent) + '</label>');
+      }
+    }
+    if (storeWrap && !storeWrap.childNodes.length) {
+      var locSel = document.getElementById("tws-loc");
+      for (var j = 1; j < locSel.options.length; j++) {  // skip "Both stores"
+        storeWrap.insertAdjacentHTML("beforeend", '<label><input type="checkbox" value="' + esc(locSel.options[j].value) + '"> ' + esc(locSel.options[j].textContent) + '</label>');
+      }
+    }
+  }
+  function closeAdd() { addBack.classList.remove("open"); }
+  document.getElementById("tws-add").addEventListener("click", function () { buildAddOptions(); document.getElementById("tws-add-err").textContent = ""; addBack.classList.add("open"); });
+  document.getElementById("tws-add-cancel").addEventListener("click", closeAdd);
+  addBack.addEventListener("click", function (e) { if (e.target === addBack) closeAdd(); });
+  document.getElementById("tws-add-send").addEventListener("click", function () {
+    var err = document.getElementById("tws-add-err");
+    var name = document.getElementById("tws-f-name").value.trim();
+    var phone = document.getElementById("tws-f-phone").value.trim();
+    var email = document.getElementById("tws-f-email").value.trim();
+    var posIds = Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked")).map(function (c) { return c.value; });
+    var storeKeys = Array.prototype.slice.call(document.querySelectorAll("#tws-f-store input:checked")).map(function (c) { return c.value; });
+    if (!name || !email) { err.textContent = "Name and email are required."; return; }
+    if (!storeKeys.length) { err.textContent = "Pick at least one store (sets where they're schedulable)."; return; }
+    err.textContent = "Sending...";
+    // POST contract for aick's extended admin-add (#2319): create Employee + N store-assignments + N positions -> invite
+    fetch("/{{ store_slug }}/team/add", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ full_name: name, phone: phone, email: email, position_ids: posIds, store_keys: storeKeys })
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok || (res.d && res.d.ok === false)) { err.textContent = (res.d && res.d.error) || "Could not send the invite."; return; }
+        closeAdd();
+        ["tws-f-name", "tws-f-phone", "tws-f-email"].forEach(function (id) { document.getElementById(id).value = ""; });
+        Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked, #tws-f-store input:checked")).forEach(function (c) { c.checked = false; });
+        load();  // refresh the roster (the new member appears Active once they set up)
+      })
+      .catch(function () { err.textContent = "Invite endpoint not live yet (aick's +Add backend pending)."; });
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

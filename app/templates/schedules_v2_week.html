@@ -87,7 +87,13 @@
     border-radius: var(--sk-radius-lg);
     padding: 18px 18px 32px;
     margin-bottom: 40px;
-    overflow: hidden;
+    /* was overflow:hidden -- it clipped the grid's lower rows whenever the box
+       height got constrained (the native-app WebView / a pinned app-shell),
+       hiding shifts off the bottom with no way to scroll to them (Sam #2249).
+       The warm surface is a background-image so it still clips to the rounded
+       border-box; dropping the clip just lets the schedule box stretch full-
+       height and the page scroll to every row. */
+    overflow: visible;
   }
   .sv2-sched *, .sv2-sched *::before, .sv2-sched *::after {
     box-sizing: border-box;

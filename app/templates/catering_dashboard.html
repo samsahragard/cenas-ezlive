@@ -372,18 +372,11 @@
        base_dashboard.html outside the topbar block. #}
     <div class="catd-ribbon">
       <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
-      <div class="catd-brand">
-        <span class="catd-brand-dot"></span>
-        <span class="catd-brand-text">CENAS <span class="catd-div">&middot;</span> OPS <span class="catd-div">&middot;</span> <span class="catd-module">CATERING</span></span>
-      </div>
+      {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
       <h1 class="catd-title">Catering</h1>
       <div class="catd-rule"></div>
       <div class="catd-meta">
         <span>{{ today_label }}</span>
-        <span class="catd-sep"></span>
-        <span class="catd-meta-val">{{ store_label }}</span>
-        <span class="catd-sep"></span>
-        <span>{{ tabs|length }} sections</span>
       </div>
     </div>
 

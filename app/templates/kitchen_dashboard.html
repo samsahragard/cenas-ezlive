@@ -428,18 +428,11 @@
        base_dashboard.html outside the topbar block. #}
     <div class="kitd-ribbon">
       <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
-      <div class="kitd-brand">
-        <span class="kitd-brand-dot"></span>
-        <span class="kitd-brand-text">CENAS <span class="kitd-div">&middot;</span> OPS <span class="kitd-div">&middot;</span> <span class="kitd-module">KITCHEN</span></span>
-      </div>
+      {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
       <h1 class="kitd-title">Kitchen</h1>
       <div class="kitd-rule"></div>
       <div class="kitd-meta">
         <span>{{ today_label }}</span>
-        <span class="kitd-sep"></span>
-        <span class="kitd-meta-val">{{ store_label }}</span>
-        <span class="kitd-sep"></span>
-        <span>{{ tabs|length }} sections</span>
       </div>
     </div>
 

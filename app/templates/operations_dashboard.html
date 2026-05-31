@@ -432,18 +432,11 @@
        base_dashboard.html outside the topbar block. #}
     <div class="opsd-ribbon">
       <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
-      <div class="opsd-brand">
-        <span class="opsd-brand-dot"></span>
-        <span class="opsd-brand-text">CENAS <span class="opsd-div">&middot;</span> OPS <span class="opsd-div">&middot;</span> <span class="opsd-module">OPERATIONS</span></span>
-      </div>
+      {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
       <h1 class="opsd-title">Operations</h1>
       <div class="opsd-rule"></div>
       <div class="opsd-meta">
         <span>{{ today_label }}</span>
-        <span class="opsd-sep"></span>
-        <span class="opsd-meta-val">{{ store_label }}</span>
-        <span class="opsd-sep"></span>
-        <span>{{ tabs|length }} sections</span>
       </div>
     </div>
 

@@ -248,6 +248,17 @@
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
     </a>
+    {# Kitchen - per Sam #2239 (2026-05-31): added between Catering and
+       Operations, linking straight to the tabbed Kitchen dashboard
+       (/<store>/kitchen, opens on Fresh Food; Prep List / Recipes are tabs
+       there). Twin of the Catering / Operations link-out tabs - an <a> with
+       no data-pop, so the popover JS skips it. The kitchen surface keys were
+       moved off the Operations tab (below) so they light Kitchen, not Ops. #}
+    <a href="/{{ store_slug }}/kitchen"
+       class="ck-bnav-tab{% if _bn_active in ['kitchen_dashboard', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes'] %} active{% endif %}">
+      <i class="ti ti-tools-kitchen-2 bn-ico" aria-hidden="true"></i>
+      <span class="bn-lbl">Kitchen</span>
+    </a>
     {# Operations — per Sam 2026-05-21 (dck) this tab no longer opens a
        popover: it links straight to the tabbed Operations dashboard
        (default tab = Team), from where the seven operations surfaces
@@ -256,7 +267,7 @@
        Manager and Catering tabs above — an <a> with no data-pop, so
        the popover JS skips it. #}
     <a href="/{{ store_slug }}/operations"
-       class="ck-bnav-tab{% if _bn_active in ['operations_dashboard', 'partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
+       class="ck-bnav-tab{% if _bn_active in ['operations_dashboard', 'partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
       <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Operations</span>
     </a>

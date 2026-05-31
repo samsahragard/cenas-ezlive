@@ -118,3 +118,28 @@ def sv2_roster_add():
         }), (201 if created else 200)
     finally:
         db.close()
+
+
+@store_bp.route("/schedules-v2/team-roster", methods=["GET"])
+@require_level(_MGR)
+def sv2_team_roster():
+    """Unified Team-tab roster (Project 1 unify, Sam #2261): wraps aick's team_roster()
+    read -> jsonify, the exact shape ck's FE binds to (counts{all,boh,foh} + stats +
+    stores[] with per-member multi-position pills + domain + access_role). Query params:
+      location=all|tomball|copperfield (default all = the ONE team list; dropdown narrows)
+      position=all|<name>, flt=all|boh|foh, include_inactive=0/1
+    Manager-gated (require_level _MGR) + rides store_bp so the per-store audience gate is
+    inherited. NB: location='all' shows BOTH stores (the unified team list) regardless of
+    the manager's store_scope - flagged to aick/Sam; trivial to scope to store_scope if
+    they prefer a gm see only their store(s)."""
+    from app.services.team_roster import team_roster
+    location = (request.args.get("location") or "all").strip()
+    position = (request.args.get("position") or "all").strip()
+    flt = (request.args.get("flt") or "all").strip()
+    include_inactive = (request.args.get("include_inactive") or "").strip().lower() in ("1", "true", "yes", "on")
+    db = SessionLocal()
+    try:
+        return jsonify(team_roster(db, location=location, position=position,
+                                   include_inactive=include_inactive, flt=flt)), 200
+    finally:
+        db.close()

@@ -115,6 +115,25 @@ def _establish_employee_session(emp) -> None:
     session["employee_id"] = emp.id
     session["employee_session_version"] = emp.session_version  # stale-session gate (guardrail #4)
     session["auth_ok"] = True   # passes auth.py:_gate; does NOT grant partner.
+    # UNIFY login-fold (Project 1, Sam #2261; seam ckai-locked #2295): a team member
+    # who is ALSO a manager/partner is LINKED via Employee.user_id. ONE login (this
+    # passcode flow) then establishes their MANAGER keypad session too, so the same
+    # login grants both self-service (employee_id) AND management gates (require_level
+    # reads user_id). A PURE employee (user_id NULL) stays fully isolated - no user_id,
+    # no /partner. partner_auth_ok is NOT folded - the /partner/* second-factor stays
+    # a deliberate separate gate (owner-only), so a linked partner still second-factors.
+    uid = getattr(emp, "user_id", None)
+    if uid:
+        from app.db import SessionLocal as _SL
+        from app.models import User as _User
+        _udb = _SL()
+        try:
+            u = _udb.query(_User).filter_by(id=uid).first()
+            if u is not None and u.active:
+                session["user_id"] = u.id
+                session["user_session_version"] = getattr(u, "session_version", None)
+        finally:
+            _udb.close()
 
 
 # --------------------------------------------------------------------------

@@ -175,6 +175,14 @@
   .tws-resetbtn:disabled { opacity: .55; cursor: default; }
   .tws-resetbtn.danger { color: #ff7a7a; border-color: rgba(255,122,122,.38); }
   .tws-resetbtn.danger:hover { border-color: rgba(255,122,122,.7); background: rgba(255,122,122,.10); }
+  /* Link tab (Sam #2629): two-column Cena | Toast match list */
+  .tws-link-head { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 4px 4px 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  .tws-link-rows { display: flex; flex-direction: column; }
+  .tws-link-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--tws-border-soft); align-items: center; }
+  .tws-link-cena .nm { color: var(--tws-cream); font-weight: 600; }
+  .tws-link-cena .ph { color: var(--tws-cream-meta); font-size: 12px; }
+  .tws-link-toast { color: var(--tws-cream-meta); font-size: 12.5px; }
+  .tws-link-toast.pending { font-style: italic; opacity: .75; }
   .tws-edit-hint { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 0 0 4px; }
   .tws-store-grp { margin-top: 10px; }
   .tws-store-grp > .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--tws-gold); margin-bottom: 6px; }
@@ -223,6 +231,7 @@
     <a class="tws-tab active" href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
     <a class="tws-tab"        href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
     <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
+    <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
   </div>
 
   {# ---- TEAM panel (the new roster; binds to aick's contract) ---- #}
@@ -305,6 +314,13 @@
     </div>
   </div>
 
+  {# ---- LINK panel (Sam #2629): match Cena team members <-> Toast employees; you verify each. The Toast side wires up once the Toast API lands (samai). ---- #}
+  <div class="tws-panel" id="tws-panel-link" data-sub-panel="link" role="tabpanel">
+    <p class="tws-sub">Match each Cena team member to their Toast employee. You confirm every match; once verified, that person's Toast hours, timecards and pay load onto their Cena profile.</p>
+    <div class="tws-link-head"><span>Cena</span><span>Toast</span></div>
+    <div id="tws-link-rows" class="tws-link-rows"><div class="tws-empty">Loading team...</div></div>
+  </div>
+
   {# Positions THIS manager may add -- server-sourced from addable_positions_for()
      (same logic as the 403 add-gate), so the +Add dropdown can't drift (aick #2413). #}
   <script type="application/json" id="tws-addable">{{ (addable_positions or [])|tojson }}</script>
@@ -383,6 +399,7 @@
     panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
     if (sub === "schedule") loadFrame(activeSub2);   // load the active Schedule sub-tab's iframe
     else if (sub === "market") loadFrame("market");
+    else if (sub === "link") loadLink();             // Sam #2629
   }
   tabs.forEach(function (t) {
     t.addEventListener("click", function (e) { e.preventDefault(); show(t.getAttribute("data-sub")); });
@@ -530,6 +547,32 @@
           elRoster.innerHTML = '<div class="tws-empty">Couldn\'t load the team roster right now -- pull to refresh, or try again in a moment.</div>';
         }
       });
+  }
+
+  // Link tab (Sam #2629): all team members (both stores) on the left; the Toast match
+  // column is a placeholder until the Toast backend + API land (samai/ckbro).
+  var linkLoaded = false;
+  function loadLink() {
+    if (linkLoaded) return;
+    linkLoaded = true;
+    var el = document.getElementById("tws-link-rows");
+    fetch(ROSTER_URL + "?location=all&position=all&include_inactive=0&flt=all", { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var seen = {}, uniq = [];
+        (d.stores || []).forEach(function (s) { (s.employees || []).forEach(function (e) { if (!seen[e.id]) { seen[e.id] = 1; uniq.push(e); } }); });
+        uniq.sort(function (a, b) { return (a.full_name || "").localeCompare(b.full_name || ""); });
+        if (!uniq.length) { el.innerHTML = '<div class="tws-empty">No team members yet.</div>'; return; }
+        el.innerHTML = uniq.map(function (e) {
+          var ph = (e.phone || "").trim();
+          return '<div class="tws-link-row" data-cena-id="' + e.id + '">' +
+            '<div class="tws-link-cena"><div class="nm">' + esc(e.full_name || "") + '</div>' +
+              '<div class="ph">' + (ph ? esc(ph) : "No phone") + '</div></div>' +
+            '<div class="tws-link-toast pending">Toast match -- connecting...</div>' +
+          '</div>';
+        }).join("");
+      })
+      .catch(function () { el.innerHTML = '<div class="tws-empty">Couldn\'t load the team right now.</div>'; });
   }
 
   // filter wiring

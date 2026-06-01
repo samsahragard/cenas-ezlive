@@ -183,6 +183,13 @@
   .tws-link-cena .ph { color: var(--tws-cream-meta); font-size: 12px; }
   .tws-link-toast { color: var(--tws-cream-meta); font-size: 12.5px; }
   .tws-link-toast.pending { font-style: italic; opacity: .75; }
+  .tws-link-toast .nm { color: var(--tws-cream); }
+  .tws-link-store { padding: 14px 4px 4px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  .tws-link-cena.ph { color: var(--tws-cream-meta); font-size: 12.5px; }
+  .tws-conf { font-size: 10px; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; margin-left: 7px; vertical-align: middle; }
+  .tws-conf.high { background: rgba(96,176,96,.18); color: #8fd28f; }
+  .tws-conf.low { background: rgba(217,164,54,.18); color: var(--tws-gold); }
+  .tws-conf.toastonly { background: rgba(255,255,255,.07); color: var(--tws-cream-meta); }
   .tws-edit-hint { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 0 0 4px; }
   .tws-store-grp { margin-top: 10px; }
   .tws-store-grp > .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--tws-gold); margin-bottom: 6px; }
@@ -549,30 +556,58 @@
       });
   }
 
-  // Link tab (Sam #2629): all team members (both stores) on the left; the Toast match
-  // column is a placeholder until the Toast backend + API land (samai/ckbro).
+  // Link tab (Sam #2629): match Cena <-> Toast per store via ckbro's
+  // /<store>/schedules-v2/toast/match-suggestions (a39084b). Calls BOTH stores; a store
+  // the manager can't reach is skipped, a Toast outage (502) shows a note. DISPLAY pass --
+  // the Verify/confirm step + the per-person Toast data are the next increment.
   var linkLoaded = false;
+  var LINK_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
   function loadLink() {
     if (linkLoaded) return;
     linkLoaded = true;
     var el = document.getElementById("tws-link-rows");
-    fetch(ROSTER_URL + "?location=all&position=all&include_inactive=0&flt=all", { headers: { "Accept": "application/json" }, credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var seen = {}, uniq = [];
-        (d.stores || []).forEach(function (s) { (s.employees || []).forEach(function (e) { if (!seen[e.id]) { seen[e.id] = 1; uniq.push(e); } }); });
-        uniq.sort(function (a, b) { return (a.full_name || "").localeCompare(b.full_name || ""); });
-        if (!uniq.length) { el.innerHTML = '<div class="tws-empty">No team members yet.</div>'; return; }
-        el.innerHTML = uniq.map(function (e) {
-          var ph = (e.phone || "").trim();
-          return '<div class="tws-link-row" data-cena-id="' + e.id + '">' +
-            '<div class="tws-link-cena"><div class="nm">' + esc(e.full_name || "") + '</div>' +
-              '<div class="ph">' + (ph ? esc(ph) : "No phone") + '</div></div>' +
-            '<div class="tws-link-toast pending">Toast match -- connecting...</div>' +
+    el.innerHTML = '<div class="tws-empty">Matching Cena to Toast...</div>';
+    Promise.all(LINK_STORES.map(function (s) {
+      return fetch("/" + s.slug + "/schedules-v2/toast/match-suggestions", { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { s: s, ok: r.ok, d: d || {} }; }); })
+        .catch(function () { return { s: s, ok: false, d: { error: "network error" } }; });
+    })).then(function (results) {
+      var html = "";
+      results.forEach(function (res) {
+        var d = res.d || {};
+        // Skip a store this manager can't reach (gate returns non-JSON / no error field).
+        if (!res.ok && d.ok === undefined && !d.error) return;
+        html += '<div class="tws-link-store">' + esc(res.s.label) + '</div>';
+        if (!res.ok || d.ok === false) {
+          html += '<div class="tws-link-row"><div class="tws-link-cena ph">' + esc(d.error || "Toast unavailable") + '</div><div class="tws-link-toast"></div></div>';
+          return;
+        }
+        var sugg = d.suggestions || [], uc = d.unmatched_cena || [], ut = d.unmatched_toast || [];
+        if (!sugg.length && !uc.length && !ut.length) {
+          html += '<div class="tws-link-row"><div class="tws-link-cena ph">No team members at this store.</div><div class="tws-link-toast"></div></div>';
+        }
+        sugg.forEach(function (m) {
+          var conf = (m.confidence === "high") ? "high" : "low";
+          html += '<div class="tws-link-row" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '">' +
+            '<div class="tws-link-cena"><div class="nm">' + esc(m.cena_name || "") + '</div><div class="ph">' + esc(m.cena_phone || "No phone") + '</div></div>' +
+            '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span><span class="tws-conf ' + conf + '">' + conf + '</span></div>' +
           '</div>';
-        }).join("");
-      })
-      .catch(function () { el.innerHTML = '<div class="tws-empty">Couldn\'t load the team right now.</div>'; });
+        });
+        uc.forEach(function (c) {
+          html += '<div class="tws-link-row" data-cena-id="' + c.emp_id + '">' +
+            '<div class="tws-link-cena"><div class="nm">' + esc(c.name || "") + '</div><div class="ph">' + esc(c.phone || "No phone") + '</div></div>' +
+            '<div class="tws-link-toast pending">No Toast match</div>' +
+          '</div>';
+        });
+        ut.forEach(function (t) {
+          html += '<div class="tws-link-row" data-toast-id="' + esc(t.toast_id || "") + '">' +
+            '<div class="tws-link-cena ph">(no Cena profile)</div>' +
+            '<div class="tws-link-toast"><span class="nm">' + esc(t.name || "") + '</span><span class="tws-conf toastonly">Toast only</span></div>' +
+          '</div>';
+        });
+      });
+      el.innerHTML = html || '<div class="tws-empty">No Toast data available.</div>';
+    });
   }
 
   // filter wiring

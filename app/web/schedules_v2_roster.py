@@ -32,7 +32,6 @@ from app.db import SessionLocal
 from app.models import (CANONICAL_POSITIONS, Employee, EmployeeAvailability,
                         EmployeePosition, EmployeeStoreAssignment,
                         EmployeeUnavailabilityBlock, Position, User)
-from app.services.permissions import requires_permission
 from app.web.permissions import current_user_id, require_level
 from app.web.schedules_v2 import _MGR, _store
 from app.web.store_routes import store_bp
@@ -387,7 +386,10 @@ def sv2_employee_assign(emp_id):
 # weekly windows (EmployeeAvailability: when they CAN work) + the date-specific
 # unavailability blocks (EmployeeUnavailabilityBlock: one-off spans they CANNOT
 # work). Manager-controlled (NOT employee-self-set), keyed off the URL emp_id,
-# gated @require_level(_MGR) AND @requires_permission("availability.manage").
+# gated @require_level(_MGR) ONLY -- availability.manage is a reserved catalog/
+# display toggle (NOT in ROLE_PERMISSIONS), so a @requires_permission gate on it
+# would deny managers (lockout); _MGR is the right gate, same as /update+/assign.
+# (Per ck #3769.)
 # Ride store_bp (inheriting _pull_store 404 + _per_store_gate cross-store) and
 # NEVER touch session['partner_auth_ok']. Times are exchanged as "HH:MM"
 # (stored as minutes-since-midnight) / ISO datetimes ("YYYY-MM-DDTHH:MM").
@@ -432,7 +434,6 @@ def _availability_payload(db, emp_id):
 
 @store_bp.route("/schedules-v2/employees/<int:emp_id>/availability", methods=["GET"])
 @require_level(_MGR)
-@requires_permission("availability.manage")
 def sv2_employee_availability_get(emp_id):
     """LOAD AVAILABILITY: return an existing employee's B8 recurring weekly
     windows + date-specific unavailability blocks. -> 200 {ok, recurring:
@@ -451,7 +452,6 @@ def sv2_employee_availability_get(emp_id):
 
 @store_bp.route("/schedules-v2/employees/<int:emp_id>/availability", methods=["POST"])
 @require_level(_MGR)
-@requires_permission("availability.manage")
 def sv2_employee_availability_set(emp_id):
     """WHOLESALE-REPLACE AVAILABILITY: replace ALL of an existing employee's B8
     recurring windows + unavailability blocks with the posted sets. Body:

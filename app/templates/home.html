@@ -13,8 +13,7 @@
 {% block page_title %}<span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
-    {{ today_long }} · {{ today_orders|length }} deliveries today
-    {% if today_orders %}({{ tomball_today }} Tomball · {{ copperfield_today }} Copperfield){% endif %}
+    {{ today_long }}{# "N deliveries today (Tomball/Copperfield)" removed per Sam #2813 - extra info #}
   </p>
 {% endblock %}
 {% block topbar_right %}
@@ -42,7 +41,7 @@
     <button type="button" class="dash-chart-tab is-active" data-period="today">Today</button>
     <button type="button" class="dash-chart-tab" data-period="week">This Week</button>
     <button type="button" class="dash-chart-tab" data-period="prev_week">Last Week</button>
-    <span class="dash-chart-range" id="dash-chart-range"></span>
+    <span class="dash-chart-range" id="dash-chart-range" style="display:none"></span>{# date-range hidden per Sam #2813 (extra info); kept in DOM so the chart-toggle JS is unaffected #}
   </div>
 
   <div class="charts-grid">

@@ -1181,6 +1181,15 @@ def vendor_recent_orders(vendor: str):
             )
         rows = q.order_by(VendorRecentOrder.placed_at.desc().nullslast(),
                           VendorRecentOrder.created_at.desc()).limit(100).all()
+        # Strip the reserved {"_meta": {...}} order-level entry from items_json so the
+        # template's item loop (+ the data-items JS) only iterate real line items. samai's
+        # d2e6416 stores order-level extras as a _meta entry INSIDE items_json; it has no
+        # subtotal_cents, so the Jinja arithmetic (it.subtotal_cents / 100.0) hit Undefined
+        # on it -> 500 on every tab with real orders (Sam #2762). In-memory only (no commit).
+        for _r in rows:
+            if isinstance(_r.items_json, list):
+                _r.items_json = [it for it in _r.items_json
+                                 if not (isinstance(it, dict) and "_meta" in it)]
         active_key = "vendor_recent_" + vendor.replace("-", "_")
         return render_template(
             "vendor_recent_orders.html",

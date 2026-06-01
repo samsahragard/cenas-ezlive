@@ -270,7 +270,7 @@
                 <div class="vro-mr-num">{{ o.order_number or 'Order' }}</div>
                 <div class="vro-mr-sub">
                   {%- if o.placed_at -%}
-                    {{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%-I:%M %p') if o.placed_at.strftime('%-I:%M %p')|length else o.placed_at.strftime('%I:%M %p') }}
+                    {{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%I:%M %p').lstrip('0') }}
                   {%- else -%}—{%- endif -%}
                 </div>
               </div>

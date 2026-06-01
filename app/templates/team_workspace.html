@@ -236,6 +236,21 @@
   .tws-stub { padding: 40px 20px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
   .tws-stub b { color: var(--tws-cream-dim); }
 
+  /* "Both stores" mode (Sam #2675b): each Schedule sub-tab stacks BOTH stores'
+     iframes, one per store, with a small store-label header above each. The
+     header only appears in both-mode (JS adds .both to the embed-wrap); in
+     single-store mode the headers are hidden and only the primary iframe shows,
+     so the existing single-store view is byte-for-byte unchanged. */
+  .tws-sched-storehead {
+    display: none; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--tws-gold); font-weight: 700; padding: 4px 2px 6px; margin-top: 10px;
+  }
+  .tws-embed-wrap.both .tws-sched-storehead { display: block; }
+  .tws-embed-wrap.both .tws-sched-storehead:first-child { margin-top: 0; }
+  /* stacked iframes each keep full width; only the primary is hidden until ready
+     by .tws-embed-frame's opacity rule, so the second slots in below it. */
+  .tws-embed-wrap.both .tws-embed-frame { display: block; }
+
   /* +Add modal */
   .tws-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: flex-start; justify-content: center; z-index: 300; padding: 40px 16px; overflow-y: auto; }
   .tws-modal-back.open { display: flex; }
@@ -319,6 +334,8 @@
           {% for s in schedule_stores %}
           <option value="{{ s.slug }}"{% if s.slug == schedule_store_default %} selected{% endif %}>{{ s.label }}</option>
           {% endfor %}
+          {# Both stores (Sam #2675b): show every store's schedule STACKED for the active sub-tab. #}
+          <option value="both">Both stores</option>
         </select>
       </div>
       {% endif %}
@@ -431,11 +448,88 @@
     frame.addEventListener("load", function () { stripChrome(frame); });
     frame.setAttribute("src", frame.getAttribute("data-src"));
   }
+  /* ---- "Both stores" mode scaffolding (Sam #2675b) ----
+     When the Schedule store dropdown is "both", each sub-tab's embed-wrap shows
+     TWO iframes stacked -- the existing PRIMARY iframe points at /dos/<path>
+     (Tomball) and a dynamically-injected SECONDARY iframe (data-embed-frame
+     "<key>-2") points at /uno/<path> (Copperfield) -- each under a small
+     store-label header. The secondary iframe is a first-class lazy-load citizen
+     (its own data-src + loading shim), so loadFrame/stripChrome/reveal work on
+     it UNCHANGED. Switching back to one store tears the injected nodes down, so
+     the single-store view is exactly the original one-iframe layout. */
+  var BOTH_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
+  var bothMode = false;
+  function secKey(key) { return key + "-2"; }
+  // Idempotently build the both-mode scaffold for one sub-tab key: a header above
+  // the primary iframe, then a header + loading shim + secondary iframe after it.
+  function buildBothScaffold(key) {
+    var primary = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!primary) return;
+    var wrap = primary.parentNode;
+    wrap.classList.add("both");
+    var path = primary.getAttribute("data-path") || "";
+    // header for the PRIMARY (first store)
+    var h1 = wrap.querySelector('[data-storehead="' + key + '"]');
+    if (!h1) {
+      h1 = document.createElement("div");
+      h1.className = "tws-sched-storehead";
+      h1.setAttribute("data-storehead", key);
+      h1.textContent = BOTH_STORES[0].label;
+      wrap.insertBefore(h1, primary);
+    }
+    // header + shim + iframe for the SECONDARY (second store)
+    var sk = secKey(key);
+    var sec = root.querySelector('[data-embed-frame="' + sk + '"]');
+    if (!sec) {
+      var h2 = document.createElement("div");
+      h2.className = "tws-sched-storehead";
+      h2.setAttribute("data-storehead", sk);
+      h2.textContent = BOTH_STORES[1].label;
+      wrap.appendChild(h2);
+      var shim2 = document.createElement("div");
+      shim2.className = "tws-embed-loading";
+      shim2.setAttribute("data-embed-loading", sk);
+      shim2.innerHTML = '<span class="tws-embed-dot"></span><span>Loading ' + BOTH_STORES[1].label + '</span>';
+      wrap.appendChild(shim2);
+      sec = document.createElement("iframe");
+      sec.className = "tws-embed-frame";
+      sec.setAttribute("data-embed-frame", sk);
+      sec.setAttribute("data-path", path);
+      sec.setAttribute("title", BOTH_STORES[1].label + " schedule");
+      sec.setAttribute("loading", "lazy");
+      wrap.appendChild(sec);
+    }
+    // point primary at store 1, secondary at store 2 (always, in both-mode)
+    primary.setAttribute("data-src", "/" + BOTH_STORES[0].slug + "/" + path);
+    sec.setAttribute("data-src", "/" + BOTH_STORES[1].slug + "/" + path);
+  }
+  // Remove the injected secondary iframe + both headers + the secondary shim for
+  // one sub-tab key, and drop its loaded guard, so only the primary iframe remains.
+  function teardownBothScaffold(key) {
+    var primary = root.querySelector('[data-embed-frame="' + key + '"]');
+    var wrap = primary ? primary.parentNode : null;
+    if (wrap) wrap.classList.remove("both");
+    var sk = secKey(key);
+    if (wrap) {
+      var heads = wrap.querySelectorAll(".tws-sched-storehead");
+      for (var i = 0; i < heads.length; i++) heads[i].parentNode.removeChild(heads[i]);
+    }
+    var sec = root.querySelector('[data-embed-frame="' + sk + '"]');
+    if (sec) sec.parentNode.removeChild(sec);
+    var shim2 = root.querySelector('[data-embed-loading="' + sk + '"]');
+    if (shim2) shim2.parentNode.removeChild(shim2);
+    loaded[sk] = false;
+  }
+  // Load a Schedule sub-tab: in both-mode load BOTH iframes, else just the one.
+  function loadSchedFrame(key) {
+    if (bothMode) { loadFrame(key); loadFrame(secKey(key)); }
+    else { loadFrame(key); }
+  }
   var activeSub2 = "week";
   function show(sub) {
     tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-sub") === sub); });
     panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
-    if (sub === "schedule") loadFrame(activeSub2);   // load the active Schedule sub-tab's iframe
+    if (sub === "schedule") loadSchedFrame(activeSub2);   // load the active Schedule sub-tab's iframe(s)
     else if (sub === "market") loadFrame("market");
     else if (sub === "link") loadLink();             // Sam #2629
   }
@@ -450,7 +544,7 @@
       activeSub2 = t.getAttribute("data-sub2");
       sub2tabs.forEach(function (x) { x.classList.toggle("active", x === t); });
       sub2panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub2-panel") === activeSub2); });
-      loadFrame(activeSub2);
+      loadSchedFrame(activeSub2);
     });
   });
   /* ---- Schedule STORE switch (Sam #2589) ----
@@ -462,27 +556,45 @@
   var schedPanel = document.getElementById("tws-panel-schedule");
   var schedStoreSel = document.getElementById("tws-sched-store");
   var SCHED_KEYS = ["week", "timeoff", "availability"];
+  // Reset ONE iframe's lazy-load state: blank its src, re-arm its loading shim,
+  // drop its loaded guard -- so the next time it's shown it re-fetches (reveal()
+  // re-runs on its load). Shared by single-store + both-store repointing.
+  function resetFrame(key) {
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!frame) return;
+    loaded[key] = false;
+    frame.classList.remove("ready");
+    frame.removeAttribute("src");
+    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+    if (shim) shim.classList.remove("gone");
+  }
   if (schedStoreSel && schedPanel) {
     schedStoreSel.addEventListener("change", function () {
       var slug = schedStoreSel.value;
       if (!slug) return;
       schedPanel.setAttribute("data-store", slug);
-      SCHED_KEYS.forEach(function (key) {
-        var frame = root.querySelector('[data-embed-frame="' + key + '"]');
-        if (!frame) return;
-        var path = frame.getAttribute("data-path") || "";
-        frame.setAttribute("data-src", "/" + slug + "/" + path);
-        // forget the old load: blank the src, re-arm the loading shim, drop the
-        // loaded guard -- so the next time this sub-tab is shown it re-fetches the
-        // NEW store (and reveal() re-runs on its load).
-        loaded[key] = false;
-        frame.classList.remove("ready");
-        frame.removeAttribute("src");
-        var shim = root.querySelector('[data-embed-loading="' + key + '"]');
-        if (shim) shim.classList.remove("gone");
-      });
+      if (slug === "both") {
+        // BOTH stores (Sam #2675b): scaffold a second iframe per sub-tab, point
+        // primary -> /dos/ + secondary -> /uno/, reset both, reveal the headers.
+        bothMode = true;
+        SCHED_KEYS.forEach(function (key) {
+          buildBothScaffold(key);   // sets data-src for primary + secondary, adds .both
+          resetFrame(key);
+          resetFrame(secKey(key));
+        });
+      } else {
+        // Single concrete store: tear down any injected second iframe + headers,
+        // repoint the primary at /<slug>/<path>, reset it. Original layout restored.
+        bothMode = false;
+        SCHED_KEYS.forEach(function (key) {
+          teardownBothScaffold(key);   // removes secondary iframe + headers + .both
+          var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+          if (frame) frame.setAttribute("data-src", "/" + slug + "/" + (frame.getAttribute("data-path") || ""));
+          resetFrame(key);
+        });
+      }
       // reload the Schedule sub-tab currently in view, if the Schedule tab is open
-      if (schedPanel.classList.contains("active")) loadFrame(activeSub2);
+      if (schedPanel.classList.contains("active")) loadSchedFrame(activeSub2);
     });
   }
 

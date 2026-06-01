@@ -252,6 +252,17 @@ def login_page():
     employee set at /employee/setup. (B11 email-onboarding swap, 2026-05-30 --
     replaced the retired phone -> SMS-code flow; ckai owns the passcode
     endpoint, ck owns this page route + template.)"""
+    # Sam #2606: a both-store employee who signed in at the keypad is bounced here
+    # (?needpick=1) with an employee session but no active_store -> hand the template
+    # their stores so it pops the "Which store today?" picker on load. Else (single-
+    # store or anonymous) autopick is empty and the normal sign-in form shows.
+    autopick = []
+    eid = session.get("employee_id")
+    if eid and not session.get("active_store"):
+        skeys = _employee_store_keys(eid)
+        if len(skeys) > 1:
+            autopick = [{"key": s, "label": _STORE_LABELS.get(s, (s or "").title())}
+                        for s in skeys]
     return render_template(
         "employee_login.html",
         submit_url="/employee/login/passcode",
@@ -259,6 +270,7 @@ def login_page():
         login_url="/employee/login",
         passcode_len=5,
         prefill_identifier="",
+        autopick=autopick,
     )
 
 

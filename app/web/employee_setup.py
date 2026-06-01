@@ -173,7 +173,8 @@ def setup_info(token):
         if emp is None:
             return jsonify({"ok": True, "valid": False}), 200
         return jsonify({"ok": True, "valid": True,
-                        "employee": {"full_name": emp.full_name, "email": emp.email}}), 200
+                        "employee": {"full_name": emp.full_name, "email": emp.email,
+                                     "phone": emp.phone}}), 200
     finally:
         db.close()
 
@@ -187,6 +188,12 @@ def setup_complete(token):
     passcode = (data.get("passcode") or "").strip()
     if not _valid_passcode(passcode):
         return jsonify({"ok": False, "error": "Passcode must be exactly 5 digits."}), 400
+    # Phone is REQUIRED at setup (Sam #2606): the normal /keypad-login is phone+PIN, so
+    # an employee needs a phone on file to sign in there. Validate + normalize up front.
+    from app.services.ezcater_known_drivers_seed import normalize_phone
+    norm_phone = normalize_phone((data.get("phone") or "").strip())
+    if not norm_phone or len(norm_phone) < 10:
+        return jsonify({"ok": False, "error": "A valid phone number is required."}), 400
     db = SessionLocal()
     try:
         emp, row = _resolve_setup_token(db, token)
@@ -196,10 +203,7 @@ def setup_complete(token):
         full_name = (data.get("full_name") or "").strip()
         if full_name:
             emp.full_name = full_name
-        phone = (data.get("phone") or "").strip()
-        if phone:
-            from app.services.ezcater_known_drivers_seed import normalize_phone
-            emp.phone = normalize_phone(phone) or phone
+        emp.phone = norm_phone   # required + normalized above (Sam #2606)
         emp.failed_attempts = 0
         emp.lockout_until = None
         emp.session_version = (emp.session_version or 0) + 1  # bump -> invalidate any stale session (guardrail #4)

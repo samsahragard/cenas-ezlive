@@ -199,8 +199,8 @@
       <div class="readonly-pill" id="email-display">&mdash;</div>
     </div>
     <div class="field">
-      <label for="phone">Phone <span class="opt">(optional)</span></label>
-      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="For shift alerts later" />
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Your mobile number" />
     </div>
     <div class="field">
       <label for="passcode">Create a 5-digit passcode</label>
@@ -269,6 +269,7 @@
       employeeEmail = emp.email || '';
       fullName.value = emp.full_name || '';
       emailDisp.textContent = employeeEmail || '(no email on file)';
+      if (emp.phone) phone.value = emp.phone;
       show(form);
       setTimeout(function(){ (fullName.value ? phone : fullName).focus(); }, 60);
     })
@@ -288,6 +289,8 @@
     var pc = (pass.value||'').trim();
     var pc2 = (pass2.value||'').trim();
     if (!name){ markBad(fullName); flashToast('Enter your name.'); fullName.focus(); return; }
+    var phDigits = (phone.value||'').replace(/\D/g, '');
+    if (phDigits.length < 10){ markBad(phone); flashToast('Enter a valid phone number.'); phone.focus(); return; }
     if (!PASS_RE.test(pc)){ markBad(pass); flashToast('Passcode must be ' + PASSCODE_LEN + ' digits.'); pass.focus(); return; }
     if (pc2 !== pc){ markBad(pass2); flashToast('Passcodes do not match.'); pass2.focus(); return; }
     setBusy(true);

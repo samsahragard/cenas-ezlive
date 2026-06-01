@@ -45,11 +45,13 @@ def employee_setup_page(token):
     config = {
         "infoUrl": "/employee/setup/%s/info" % token,
         "completeUrl": "/employee/setup/%s/complete" % token,
-        "loginUrl": "/employee/login",
+        # Sam #2606: after setup, send people to the NORMAL login screen (the keypad),
+        # not /employee/login. The keypad now accepts the employee's phone + passcode.
+        "loginUrl": "/keypad-login",
         "passcodeLen": 5,
     }
     return render_template(
         "employee_setup.html",
         config_json=json.dumps(config),
-        login_url="/employee/login",
+        login_url="/keypad-login",
     )

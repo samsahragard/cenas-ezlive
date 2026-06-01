@@ -254,6 +254,10 @@
   var DASHBOARD_URL = {{ (dashboard_url|default('/employee/dashboard'))|tojson }};
   var PASSCODE_LEN  = {{ passcode_len|default(5) }};
   var PREFILL_ID    = {{ (prefill_identifier|default(''))|tojson }};
+  // Sam #2606: a both-store employee who signs in at the keypad (/keypad-login) is
+  // bounced here already logged in but with no active store; the server hands us their
+  // stores so we pop the SAME "Which store today?" picker on load.
+  var AUTOPICK      = {{ (autopick|default([]))|tojson }};
 
   // Remember the identifier (email or phone) on this device, never the
   // passcode. Same banking-app pattern as the driver login: identifier
@@ -420,6 +424,12 @@
     setTimeout(function(){ passInput.focus(); }, 60);
   } else {
     setTimeout(function(){ idInput.focus(); }, 60);
+  }
+
+  // Both-store employee routed here from the keypad with an active session but no
+  // store chosen yet -> show the store picker immediately (Sam #2606).
+  if (AUTOPICK && AUTOPICK.length){
+    showStorePicker(AUTOPICK, '/employee/select-store');
   }
 </script>
 </body>

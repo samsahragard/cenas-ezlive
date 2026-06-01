@@ -304,6 +304,43 @@ def login_submit():
         if user_match is None and not digits:
             user_match = _find_user_by_passcode(db, passcode)
 
+        # ===== Path 4: Employee lookup by phone (Schedules V2 staff, Sam #2606) =====
+        # A team member who set up via the email invite has an Employee passcode but NO
+        # Driver/User keypad PIN -> without this they read INVALID here even though
+        # /employee/login accepts the same creds. Try the Employee table by phone + the
+        # SAME passcode, mirror the employee lockout, and open the ISOLATED employee
+        # session (_establish_employee_session -- the same one /employee/login uses).
+        # Runs only when a phone was typed and no Driver/User matched.
+        if user_match is None and digits:
+            from app.web.employee_auth import (_establish_employee_session,
+                                               _find_employee_by_phone)
+            emp = _find_employee_by_phone(db, digits)
+            if emp is not None and getattr(emp, "passcode_hash", None):
+                if emp.lockout_until and emp.lockout_until > now:
+                    mins = max(1, int((emp.lockout_until - now).total_seconds() // 60) + 1)
+                    return jsonify({
+                        "ok": False,
+                        "error": f"Too many failed attempts. Try again in {mins} min.",
+                    }), 429
+                if _check(emp.passcode_hash, passcode):
+                    emp.failed_attempts = 0
+                    emp.lockout_until = None
+                    db.commit()
+                    stores = _establish_employee_session(emp)
+                    if len(stores) > 1 and not session.get("active_store"):
+                        # both-store: the login page pops the "Which store today?" picker
+                        return jsonify({"ok": True, "next": "/employee/login?needpick=1"})
+                    return jsonify({"ok": True, "next": "/employee/dashboard"})
+                emp.failed_attempts = (emp.failed_attempts or 0) + 1
+                if emp.failed_attempts >= MAX_FAILED_ATTEMPTS:
+                    emp.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+                    emp.failed_attempts = 0
+                db.commit()
+                return jsonify({
+                    "ok": False,
+                    "error": "Phone or passcode doesn't match.",
+                }), 401
+
         if user_match is None:
             return jsonify({
                 "ok": False,

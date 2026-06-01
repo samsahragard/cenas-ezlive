@@ -571,7 +571,7 @@ def sv2_employee_availability_set(emp_id):
 # same as the roster writes above; confirmed_by = current_user_id().
 # ==========================================================================
 @store_bp.route("/schedules-v2/toast/link", methods=["POST"])
-@require_level(_MGR)
+@require_level("partner")   # Sam #2675: only the partner (owner) confirms a Toast match
 def sv2_toast_link():
     """UPSERT a confirmed Cena<->Toast link for (cena_emp_id, _store()). Body:
         {cena_emp_id: int (required), toast_id: str (required), toast_name?: str}
@@ -618,7 +618,7 @@ def sv2_toast_link():
 
 
 @store_bp.route("/schedules-v2/toast/unlink", methods=["POST"])
-@require_level(_MGR)
+@require_level("partner")   # Sam #2675: partner-only (paired with link)
 def sv2_toast_unlink():
     """Delete the confirmed Cena<->Toast link for (cena_emp_id, _store()).
     Body: {cena_emp_id: int (required)}. Idempotent: 200 {ok} even if no link

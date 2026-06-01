@@ -4868,6 +4868,12 @@ def team_workspace():
     _cur = getattr(g, "current_store", None)
     schedule_store_default = _cur if _cur in _concrete_slugs else _concrete_slugs[0]
 
+    # Sam #2675: only the partner (owner) may confirm Cena<->Toast links -> pass a flag so
+    # the Link tab shows Verify/Unlink to the partner only (the endpoints are partner-gated too).
+    from app.web.permissions import load_current_user as _lcu
+    _u = getattr(g, "current_user", None) or _lcu()
+    is_partner = bool(_u and (getattr(_u, "permission_level", "") or "").lower() == "partner")
+
     return render_template(
         "team_workspace.html",
         active="partner_team",
@@ -4882,6 +4888,7 @@ def team_workspace():
         # Schedule store selector (Sam #2589): concrete options + the default pick.
         schedule_stores=schedule_stores,
         schedule_store_default=schedule_store_default,
+        is_partner=is_partner,
     )
 
 

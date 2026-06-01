@@ -194,6 +194,7 @@
   .tws-link-btn:hover { border-color: var(--tws-gold); }
   .tws-link-btn:disabled { opacity: .55; cursor: default; }
   .tws-link-btn.linked { color: #8fd28f; border-color: rgba(96,176,96,.4); background: rgba(96,176,96,.10); }
+  .tws-link-tag { margin-left: 8px; font-size: 11px; font-weight: 600; color: #8fd28f; }
   /* A VERIFIED ("Linked") row is expandable (Sam #2629 final): click it to open
      its Toast data panel. Gains a pointer + a caret on the right of the Toast cell. */
   .tws-link-row.linkable { cursor: pointer; }
@@ -391,6 +392,7 @@
   var root = document.getElementById("tws-root");
   if (!root) return;
   var ROSTER_URL = root.getAttribute("data-roster-url");
+  var IS_PARTNER = {{ (is_partner|default(false))|tojson }};   // Sam #2675: only the owner confirms Toast links
 
   /* ---------------- sub-tab switching + iframe lazy-load ---------------- */
   var tabs = root.querySelectorAll(".tws-tab");
@@ -593,6 +595,8 @@
   var LINK_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
   function _ljson(r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d || {} }; }); }
   function linkCtrl(isLinked) {
+    // Sam #2675: only the partner (owner) confirms. Managers see verified state read-only.
+    if (!IS_PARTNER) { return isLinked ? '<span class="tws-link-tag">Linked &#10003;</span>' : ''; }
     return isLinked
       ? '<button class="tws-link-btn linked" data-link-act="unlink" type="button">Linked &#10003;</button>'
       : '<button class="tws-link-btn" data-link-act="verify" type="button">Verify</button>';

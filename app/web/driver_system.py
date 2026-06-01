@@ -1007,6 +1007,79 @@ def cron_schedule_peek():
         db.close()
 
 
+@driver_system_bp.route("/cron/roster-peek", methods=["GET"])
+def cron_roster_peek():
+    """Diagnostic (Sam #2890): token-gated read of the app roster + Toast links, so
+    the Link reconciliation can be planned without a manager login. Each Employee:
+    name, active, stores, and confirmed CenaToastLink(s) -> spot system accounts,
+    duplicates, and bad links."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from app.models import Employee, EmployeeStoreAssignment, CenaToastLink
+    db = SessionLocal()
+    try:
+        stores = {}
+        for a in db.query(EmployeeStoreAssignment).all():
+            stores.setdefault(a.employee_id, []).append(a.store_key)
+        links = {}
+        for l in db.query(CenaToastLink).all():
+            links.setdefault(l.cena_employee_id, []).append(
+                {"store": l.store_key, "toast_id": l.toast_id, "toast_name": l.toast_name})
+        out = []
+        for e in db.query(Employee).order_by(Employee.full_name).all():
+            out.append({"id": e.id, "name": e.full_name, "active": e.active,
+                        "stores": stores.get(e.id, []), "links": links.get(e.id, [])})
+        return jsonify({"ok": True, "count": len(out), "employees": out}), 200
+    finally:
+        db.close()
+
+
+@driver_system_bp.route("/cron/roster-action", methods=["POST"])
+def cron_roster_action():
+    """Token-gated roster reconciliation actions (Sam #2890). REVERSIBLE ONLY:
+    'deactivate' sets Employee.active=False (re-addable; never hard-deletes);
+    'unlink' deletes a CenaToastLink row (re-linkable). Body: {action, ...}."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from app.models import Employee, CenaToastLink
+    body = request.get_json(silent=True) or {}
+    action = (body.get("action") or "").strip()
+    db = SessionLocal()
+    try:
+        if action == "deactivate":
+            e = db.query(Employee).filter_by(id=body.get("employee_id")).first()
+            if not e:
+                return jsonify({"ok": False, "error": "no such employee"}), 404
+            e.active = False
+            try:
+                e.session_version = (e.session_version or 0) + 1
+            except Exception:
+                pass
+            db.commit()
+            return jsonify({"ok": True, "deactivated": {"id": e.id, "name": e.full_name}}), 200
+        if action == "unlink":
+            q = db.query(CenaToastLink)
+            if body.get("link_id"):
+                q = q.filter_by(id=body["link_id"])
+            elif body.get("cena_employee_id"):
+                q = q.filter_by(cena_employee_id=body["cena_employee_id"])
+                if body.get("store"):
+                    q = q.filter_by(store_key=body["store"])
+            else:
+                return jsonify({"ok": False, "error": "link_id or cena_employee_id required"}), 400
+            rows = q.all()
+            removed = [{"id": r.id, "toast_name": r.toast_name} for r in rows]
+            for r in rows:
+                db.delete(r)
+            db.commit()
+            return jsonify({"ok": True, "unlinked": removed}), 200
+        return jsonify({"ok": False, "error": "action must be deactivate|unlink"}), 400
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])
 def cron_anomaly_brief():
     """Phase 1 / Block 6: compose one morning brief per enrolled

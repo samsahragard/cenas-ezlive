@@ -819,6 +819,37 @@ def create_app():
         logging.getLogger(__name__).exception(
             "vendor_recent_orders backfill failed (non-fatal)")
 
+    # Heal vendor_recent_orders schema (Sam #2762): samai's d2e6416 (full email detail) +
+    # b94da15 (order_number) ADDED columns to the model, but the boot path above only CREATEs
+    # the table -- an EXISTING prod DB still has the OLD column set, so every Vendors tab 500s
+    # on the SELECT ('no such column'). ADD any model columns the live table is missing
+    # (SQLite-safe ALTER ADD COLUMN, nullable; idempotent -- only adds what's absent).
+    try:
+        from sqlalchemy import inspect as _sa_insp_vh
+        from app.db import engine as _eng_vh
+        from app.models import VendorRecentOrder as _VRO_vh
+        if _eng_vh is not None:
+            _insp_vh = _sa_insp_vh(_eng_vh)
+            if "vendor_recent_orders" in set(_insp_vh.get_table_names()):
+                _have_vh = {c["name"] for c in _insp_vh.get_columns("vendor_recent_orders")}
+                _missing_vh = [c for c in _VRO_vh.__table__.columns if c.name not in _have_vh]
+                if _missing_vh:
+                    with _eng_vh.begin() as _cx_vh:
+                        for _col_vh in _missing_vh:
+                            _ty_vh = str(_col_vh.type).split("(")[0].upper()
+                            if _ty_vh not in ("INTEGER", "VARCHAR", "TEXT", "DATETIME",
+                                              "BOOLEAN", "FLOAT", "NUMERIC", "BIGINT"):
+                                _ty_vh = "TEXT"
+                            _cx_vh.exec_driver_sql(
+                                'ALTER TABLE vendor_recent_orders ADD COLUMN "%s" %s'
+                                % (_col_vh.name, _ty_vh))
+                    logging.getLogger(__name__).info(
+                        "vendor_recent_orders: healed missing columns %s",
+                        [c.name for c in _missing_vh])
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "vendor_recent_orders column-heal failed (non-fatal)")
+
     # Idempotent table create — sam_chat_attachments (Sam #837 item 5
     # vision parity for dev-team agents). Persists image/PDF blocks so
     # aick / ck / samai can fetch the same files cena saw at API time.

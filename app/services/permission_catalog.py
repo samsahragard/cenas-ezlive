@@ -165,6 +165,9 @@ CATALOG = [
    {"id":"2.9","key":"timeoff.approve","label":"Approve Time Off Requests","status":"reserved","default_roles":MGR_UP,
     "maps_to":{"route":"verify:schedules-v2","blueprint_or_fn":"Schedules V2"},
     "notes":"Approve/reject time-off. Manager-and-above."},
+   {"id":"2.10","key":"availability.manage","label":"Set & Manage Availability","status":"reserved","default_roles":MGR_UP,
+    "maps_to":{"route":"verify:/<store>/schedules-v2/employees/<id>/availability","blueprint_or_fn":"Schedules V2 roster (manager-set availability)"},
+    "notes":"Set, adjust, change or delete an employee's availability (in the team roster). Manager-level -- whoever can configure schedules. Employees no longer self-set their own."},
  ]},
  {"id": 3, "key": "catering", "name": "Catering & EZ Orders", "perms": [
    {"id":"3.1","key":"catering.view","label":"View Catering Orders","status":"live","default_roles":MGR_UP+["corporate_driver"],

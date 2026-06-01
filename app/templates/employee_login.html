@@ -371,6 +371,16 @@
       b.addEventListener('click', function(){ pickStore(actionUrl, st.key, list); });
       list.appendChild(b);
     });
+    // Sam #2606: a "Both stores" option so a multi-store person sees both at once
+    // instead of one-by-one. Picks the "__both__" sentinel (perms union across stores).
+    if (storeList.length >= 2){
+      var both = document.createElement('button');
+      both.type = 'button';
+      both.className = 'store-pick-btn';
+      both.textContent = 'Both stores';
+      both.addEventListener('click', function(){ pickStore(actionUrl, '__both__', list); });
+      list.appendChild(both);
+    }
     back.classList.add('show');
   }
   function pickStore(actionUrl, storeKey, listEl){

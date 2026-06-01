@@ -464,12 +464,16 @@ def _effective_perms(user) -> set[str]:
                 # Hole 1 belt: no linked Employee -> role-perms.
                 if emp is not None:
                     # The person's position role-keys AT the active store.
-                    rows = (db.query(Position.name)
-                            .join(EmployeePosition,
-                                  EmployeePosition.position_id == Position.id)
-                            .filter(EmployeePosition.employee_id == emp.id,
-                                    EmployeePosition.store_key == store)
-                            .all())
+                    pos_q = (db.query(Position.name)
+                             .join(EmployeePosition,
+                                   EmployeePosition.position_id == Position.id)
+                             .filter(EmployeePosition.employee_id == emp.id))
+                    # Sam #2606 "both stores": when the person picked BOTH, union the
+                    # positions across ALL their stores (this only ADDS positions ->
+                    # can only grant more, never lock out). Else scope to the one store.
+                    if store != "__both__":
+                        pos_q = pos_q.filter(EmployeePosition.store_key == store)
+                    rows = pos_q.all()
                     pos_keys = set()
                     for (pname,) in rows:
                         pk = position_role(pname)

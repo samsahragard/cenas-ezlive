@@ -229,7 +229,13 @@ def select_store():
         return jsonify({"ok": False, "error": "Not logged in."}), 401
     data = request.get_json(silent=True) or {}
     store_key = (data.get("store_key") or "").strip().lower()
-    if store_key not in _employee_store_keys(emp_id):
+    member = _employee_store_keys(emp_id)
+    # Sam #2606: "__both__" = the "Both stores" pick -> only valid for someone actually
+    # assigned to 2+ stores; perms then union across stores (see _effective_perms).
+    if store_key == "__both__":
+        if len(member) < 2:
+            return jsonify({"ok": False, "error": "You aren't assigned to both stores."}), 403
+    elif store_key not in member:
         return jsonify({"ok": False, "error": "You aren't assigned to that store."}), 403
     session["active_store"] = store_key
     return jsonify({"ok": True, "next": "/employee/dashboard"}), 200

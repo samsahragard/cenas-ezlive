@@ -110,6 +110,19 @@ def read_snapshot(store_key: str, toast_id: str) -> dict | None:
         db.close()
 
 
+def snapshot_count() -> int:
+    """How many snapshot rows exist right now -- a quick liveness/confirmation
+    read for the cron endpoint (so a caller can watch the table populate)."""
+    from app.models import ToastEmployeeSnapshot
+    db = SessionLocal()
+    try:
+        return int(db.query(ToastEmployeeSnapshot).count())
+    except Exception:
+        return -1
+    finally:
+        db.close()
+
+
 def _recently_synced(within_seconds: int) -> bool:
     """True if ANY snapshot was refreshed within `within_seconds` -- a soft
     cross-worker dedup so two workers' pollers don't both pull every cycle."""

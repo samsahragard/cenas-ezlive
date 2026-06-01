@@ -925,18 +925,24 @@ def cron_anomaly_eval():
 
 @driver_system_bp.route("/cron/toast-sync", methods=["POST"])
 def cron_toast_sync():
-    """Bulk-refresh the Toast employee snapshots (Sam #2845). Token-gated via
-    CRON_TOKEN. Drives the SAME in-app sync the background poller runs -- lets
-    samai wire a Render cron as belt-and-suspenders, and lets us seed the
-    snapshot immediately after a deploy. Optional ?store=tomball|copperfield to
-    scope it. Accepts Authorization: Bearer (spec), X-Cron-Token, or ?token= ."""
+    """Kick the Toast snapshot refresh (Sam #2845). Token-gated via CRON_TOKEN.
+    The bulk pull is HEAVY (Toast calls per employee), so it runs in a daemon
+    thread and this returns IMMEDIATELY (202) -- a synchronous full sync can blow
+    the gateway timeout -> 502 and tie up a worker. Lets samai wire a Render cron
+    as belt-and-suspenders + nudge a refresh on demand; the in-app poller does
+    this automatically every ~15 min regardless. snapshots_now lets a caller
+    confirm the table is populating across calls. Optional ?store=tomball|
+    copperfield. Accepts Authorization: Bearer, X-Cron-Token, or ?token= ."""
     import os
+    import threading
     if _extract_cron_token() != os.getenv("CRON_TOKEN"):
         abort(403)
-    from app.services.toast_sync import sync_toast_snapshots
+    from app.services.toast_sync import sync_toast_snapshots, snapshot_count
     store = (request.args.get("store") or "").strip() or None
-    summary = sync_toast_snapshots(only_store=store)
-    return jsonify({"ok": True, **summary})
+    threading.Thread(target=sync_toast_snapshots, kwargs={"only_store": store},
+                     name="toast-sync-cron", daemon=True).start()
+    return jsonify({"ok": True, "started": True, "store": store or "all",
+                    "snapshots_now": snapshot_count()}), 202
 
 
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])

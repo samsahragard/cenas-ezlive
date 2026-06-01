@@ -154,8 +154,16 @@ def main() -> int:
     db = SessionLocal()
     inserted = 0
     updated = 0
+    skipped_junk = 0
+    cleaned = 0
     try:
         for r in rows:
+            # Skip emails with no real order content (shipping notifications,
+            # "you've been invited", status updates) - they'd create empty "-" rows
+            # that clutter the Order History with no info (Sam directive 2026-05-31).
+            if r.get("total_cents") is None and not r.get("items_json"):
+                skipped_junk += 1
+                continue
             existing = (db.query(VendorRecentOrder)
                 .filter(VendorRecentOrder.vendor == r["vendor"])
                 .filter(VendorRecentOrder.source_email_mid == r["source_email_mid"])
@@ -168,6 +176,12 @@ def main() -> int:
             else:
                 db.add(VendorRecentOrder(**r))
                 inserted += 1
+        # One-time cleanup of pre-filter junk already in the table: rows with neither a
+        # total nor line items are not real orders - remove them so the history is clean.
+        cleaned = (db.query(VendorRecentOrder)
+            .filter(VendorRecentOrder.total_cents.is_(None))
+            .filter(VendorRecentOrder.items_json.is_(None))
+            .delete(synchronize_session=False))
         db.commit()
     finally:
         db.close()
@@ -176,6 +190,8 @@ def main() -> int:
         "ok": True,
         "inserted": inserted,
         "updated": updated,
+        "skipped_junk": skipped_junk,
+        "cleaned_empty_rows": cleaned,
         "total_processed": len(rows),
         "inbox_summary": inbox_summary,
         "by_vendor": {

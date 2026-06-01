@@ -926,6 +926,70 @@ def cena_db_probe_list_orders():
         db.close()
 
 
+@cena_bp.route("/sam/cena/db-probe/vendor-recent-orders", methods=["POST"])
+def cena_db_probe_vendor_recent_orders():
+    """Read-only dump of vendor_recent_orders so the Order History can be
+    verified directly (there was no JSON endpoint for this table before).
+    Body (JSON, optional): {vendor: str, limit: int<=500}. Reports a
+    no_substance_rows count so leftover junk lines are obvious at a glance."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    from app.models import VendorRecentOrder as _VRO
+
+    body = request.get_json(silent=True) or {}
+    vendor = (body.get("vendor") or "").strip() or None
+    try:
+        limit = int(body.get("limit", 200))
+    except (TypeError, ValueError):
+        limit = 200
+    limit = max(1, min(limit, 500))
+
+    def _named_items(v):
+        return bool(isinstance(v, list) and any(
+            isinstance(it, dict) and (it.get("name") or "").strip() for it in v))
+
+    db = SessionLocal()
+    try:
+        q = db.query(_VRO)
+        if vendor:
+            q = q.filter(_VRO.vendor == vendor)
+        rows = q.order_by(_VRO.placed_at.desc().nullslast(),
+                          _VRO.created_at.desc()).limit(limit).all()
+        out = [{
+            "id": r.id,
+            "vendor": r.vendor,
+            "order_number": r.order_number,
+            "store_scope": r.store_scope,
+            "placed_at": r.placed_at.isoformat() if r.placed_at else None,
+            "total_cents": r.total_cents,
+            "status": r.status,
+            "items": len(r.items_json) if isinstance(r.items_json, list) else (1 if r.items_json else 0),
+            "subject": r.subject,
+            "parse_status": r.parse_status,
+        } for r in rows]
+        by_vendor = {}
+        for r in rows:
+            by_vendor[r.vendor] = by_vendor.get(r.vendor, 0) + 1
+        no_substance = sum(
+            1 for r in rows
+            if not r.order_number and r.total_cents is None and not _named_items(r.items_json))
+        return jsonify({
+            "ok": True,
+            "count": len(out),
+            "by_vendor": by_vendor,
+            "no_substance_rows": no_substance,
+            "rows": out,
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: vendor-recent-orders probe failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 # ============================================================
 # POST /sam/cena/db-probe/set-order-status — Sam-only write
 # ============================================================

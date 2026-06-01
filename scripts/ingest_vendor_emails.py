@@ -12,6 +12,7 @@ from __future__ import annotations
 import email
 import imaplib
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -34,6 +35,64 @@ from scan_vendor_inbox import (  # noqa: E402
     VENDOR_DOMAIN_HINTS, VENDOR_BODY_HINTS,
     _classify_domain, _classify_by_body, _body_preview,
 )
+
+
+# Admin / notification emails that must NOT become order-history rows even
+# when the LLM parser hallucinates stray line items for them. Matched on the
+# decoded subject (re.search, so Fwd:/SPAM prefixes don't matter). Carefully
+# excludes "confirmation"/"order"/"shipped" so real PFG order emails stay.
+# (Sam directive 2026-05-31: "we don't need a line with no information.")
+_NON_ORDER_SUBJECT_RE = re.compile(
+    r"verify\s+(your\s+)?(contact\s+)?e-?mail"
+    r"|verify\s+(your\s+)?contact"
+    r"|reset\s+your\s+password|password\s+reset"
+    r"|e-?statement|monthly\s+statement|account\s+statement"
+    r"|rate\s+your|review\s+your\s+(order\s+)?experience|leave\s+a\s+review"
+    r"|take\s+(our|a)\s+survey|feedback\s+request"
+    r"|email\s+preferences|manage\s+your\s+subscription|unsubscribe"
+    r"|welcome\s+to\b|account\s+(created|activated|updated)",
+    re.I,
+)
+
+
+def _has_order_substance(r: dict) -> bool:
+    """A real order has at least one of: an order number, a total, or a
+    NAMED line item. Ignores parser-invented empty/placeholder items."""
+    if r.get("order_number"):
+        return True
+    if r.get("total_cents") is not None:
+        return True
+    items = r.get("items_json") or []
+    if isinstance(items, list):
+        for it in items:
+            if isinstance(it, dict) and (it.get("name") or "").strip():
+                return True
+            if isinstance(it, str) and it.strip():
+                return True
+    return False
+
+
+def _is_non_order(r: dict) -> bool:
+    """True if this email should not create an order row: admin/notification
+    by subject, or no order substance at all."""
+    if _NON_ORDER_SUBJECT_RE.search(r.get("subject") or ""):
+        return True
+    return not _has_order_substance(r)
+
+
+def _clean_subject(s: str | None) -> str | None:
+    """Strip 'Fwd:'/'*****SPAM*****' cruft so the Order History shows a usable
+    label instead of 'Fwd: *****SPAM***** CustomerFirst Confirmation ...'."""
+    if not s:
+        return s
+    out = re.sub(r"\*+\s*spam\s*\*+", " ", s, flags=re.I)
+    for _ in range(4):  # peel repeated Fwd:/Fw:/Re: prefixes
+        new = re.sub(r"^\s*(fwd?|fw|re)\s*:\s*", "", out, flags=re.I)
+        if new == out:
+            break
+        out = new
+    out = re.sub(r"\s+", " ", out).strip()
+    return out or s
 
 
 def _process_inbox(M, source_inbox_label: str, store_default: str | None = None) -> list[dict]:
@@ -114,7 +173,7 @@ def _process_inbox(M, source_inbox_label: str, store_default: str | None = None)
                 "items_json":          parsed.get("items") or None,
                 "tracking_links_json": parsed.get("tracking_links") or None,
                 "source_email_mid":    f"{source_inbox_label}:{mid_str}",
-                "subject":             subject,
+                "subject":             _clean_subject(subject),
                 "from_addr":           addr,
                 "raw_body":            body[:8000],
                 "parse_status":        "parsed" if parsed else "unparsed",
@@ -158,11 +217,15 @@ def main() -> int:
     cleaned = 0
     try:
         for r in rows:
-            # Skip emails with no real order content (shipping notifications,
-            # "you've been invited", status updates) - they'd create empty "-" rows
-            # that clutter the Order History with no info (Sam directive 2026-05-31).
-            if r.get("total_cents") is None and not r.get("items_json"):
+            # Drop admin / notification emails (verify-email, statements, surveys,
+            # shipping-only notices) and anything with no order substance - they
+            # create empty / garbage lines with no real info (Sam directive 2026-05-31).
+            if _is_non_order(r):
                 skipped_junk += 1
+                db.query(VendorRecentOrder).filter(
+                    VendorRecentOrder.vendor == r["vendor"],
+                    VendorRecentOrder.source_email_mid == r["source_email_mid"],
+                ).delete(synchronize_session=False)
                 continue
             existing = (db.query(VendorRecentOrder)
                 .filter(VendorRecentOrder.vendor == r["vendor"])
@@ -176,12 +239,21 @@ def main() -> int:
             else:
                 db.add(VendorRecentOrder(**r))
                 inserted += 1
-        # One-time cleanup of pre-filter junk already in the table: rows with neither a
-        # total nor line items are not real orders - remove them so the history is clean.
-        cleaned = (db.query(VendorRecentOrder)
-            .filter(VendorRecentOrder.total_cents.is_(None))
-            .filter(VendorRecentOrder.items_json.is_(None))
-            .delete(synchronize_session=False))
+        # Sweep rows already in the table: delete legacy junk (incl. rows the old
+        # narrow filter missed because the parser invented stray items) and clean
+        # garbled 'Fwd: *****SPAM*****' subjects on the real orders that remain.
+        for legacy in db.query(VendorRecentOrder).all():
+            lr = {"order_number": legacy.order_number,
+                  "total_cents": legacy.total_cents,
+                  "items_json": legacy.items_json,
+                  "subject": legacy.subject}
+            if _is_non_order(lr):
+                db.delete(legacy)
+                cleaned += 1
+            else:
+                cs = _clean_subject(legacy.subject)
+                if cs != legacy.subject:
+                    legacy.subject = cs
         db.commit()
     finally:
         db.close()

@@ -427,9 +427,12 @@
 
   var DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  // Schedule week begins on this weekday (0=Sun..6=Sat). Sam #2603: start Saturday,
+  // so the columns run Sat..Fri. Flip this one value to change the week-start day.
+  var WEEK_START_DOW = 6;  // 6 = Saturday
 
   var state = {
-    weekStart: mondayOf(new Date()),  // Date (local midnight, Monday)
+    weekStart: weekStartOf(new Date()),  // Date (local midnight, week-start day)
     board: null,
     posFilter: [],
     editing: null,        // shift object when editing, else null
@@ -441,9 +444,9 @@
   };
 
   // ---- date helpers (all local-time; dates are calendar days) ----
-  function mondayOf(d) {
+  function weekStartOf(d) {
     var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    var dow = (x.getDay() + 6) % 7;  // 0=Mon
+    var dow = (x.getDay() - WEEK_START_DOW + 7) % 7;  // days since the week-start weekday
     x.setDate(x.getDate() - dow);
     return x;
   }
@@ -622,7 +625,7 @@
     for (var i = 0; i < 7; i++) {
       var d = addDays(state.weekStart, i);
       var isT = sameDay(d, today);
-      html += '<th class="' + (isT ? "is-today" : "") + '">' + DOW[i] +
+      html += '<th class="' + (isT ? "is-today" : "") + '">' + DOW[(d.getDay() + 6) % 7] +
               '<span class="dom">' + d.getDate() + '</span></th>';
     }
     elHead.innerHTML = html;
@@ -971,7 +974,7 @@
   // ---- events ----
   $("sv2-prev").onclick = function () { state.weekStart = addDays(state.weekStart, -7); loadBoard(); };
   $("sv2-next").onclick = function () { state.weekStart = addDays(state.weekStart, 7); loadBoard(); };
-  $("sv2-today").onclick = function () { state.weekStart = mondayOf(new Date()); loadBoard(); };
+  $("sv2-today").onclick = function () { state.weekStart = weekStartOf(new Date()); loadBoard(); };
   elPosBtn.onclick = function (e) {
     e.stopPropagation();
     var willOpen = elPosPop.classList.contains("sv2-hidden");

@@ -110,15 +110,26 @@ def read_snapshot(store_key: str, toast_id: str) -> dict | None:
         db.close()
 
 
-def snapshot_count() -> int:
-    """How many snapshot rows exist right now -- a quick liveness/confirmation
-    read for the cron endpoint (so a caller can watch the table populate)."""
+def snapshot_status() -> dict:
+    """Compact health read of the snapshot table for the cron response: row
+    count, ok vs failed, a sample error, and the freshest sync time -- so the
+    Toast sync can be CONFIRMED or DIAGNOSED without DB/dashboard access (the
+    page endpoints are auth-gated; this is token-gated). Sam #2845/#2840."""
     from app.models import ToastEmployeeSnapshot
     db = SessionLocal()
     try:
-        return int(db.query(ToastEmployeeSnapshot).count())
-    except Exception:
-        return -1
+        rows = db.query(ToastEmployeeSnapshot).all()
+        failed = [r for r in rows if not r.ok]
+        synced = [r.synced_at for r in rows if r.synced_at]
+        return {
+            "total": len(rows),
+            "ok": len(rows) - len(failed),
+            "failed": len(failed),
+            "sample_error": (failed[0].error if failed else None),
+            "latest_synced_at": (max(synced).isoformat() if synced else None),
+        }
+    except Exception as e:  # table missing / DB error -> surface it, don't raise
+        return {"error": f"{type(e).__name__}: {e}"}
     finally:
         db.close()
 

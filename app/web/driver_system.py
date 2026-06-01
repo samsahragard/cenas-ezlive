@@ -937,12 +937,12 @@ def cron_toast_sync():
     import threading
     if _extract_cron_token() != os.getenv("CRON_TOKEN"):
         abort(403)
-    from app.services.toast_sync import sync_toast_snapshots, snapshot_count
+    from app.services.toast_sync import sync_toast_snapshots, snapshot_status
     store = (request.args.get("store") or "").strip() or None
     threading.Thread(target=sync_toast_snapshots, kwargs={"only_store": store},
                      name="toast-sync-cron", daemon=True).start()
     return jsonify({"ok": True, "started": True, "store": store or "all",
-                    "snapshots_now": snapshot_count()}), 202
+                    "status": snapshot_status()}), 202
 
 
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])

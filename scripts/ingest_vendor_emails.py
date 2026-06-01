@@ -243,6 +243,14 @@ def main() -> int:
         # narrow filter missed because the parser invented stray items) and clean
         # garbled 'Fwd: *****SPAM*****' subjects on the real orders that remain.
         for legacy in db.query(VendorRecentOrder).all():
+            # Legacy rows under a non-canonical slug (e.g. 'performance_foods',
+            # 'restaurant_depot' from an older ingest convention) don't match the
+            # page tabs (which use the hyphen slugs in VENDOR_DOMAIN_HINTS) and are
+            # duplicate mis-parses of canonical-slug orders - remove them.
+            if legacy.vendor not in VENDOR_DOMAIN_HINTS:
+                db.delete(legacy)
+                cleaned += 1
+                continue
             lr = {"order_number": legacy.order_number,
                   "total_cents": legacy.total_cents,
                   "items_json": legacy.items_json,

@@ -55,14 +55,22 @@ def _domain_label(dom):
 
 
 def team_roster(db, location="all", position="all", include_inactive=False, flt="all"):
-    """Team-sub-tab roster shape. location='all'|store_key; position='all'|name;
-    flt='all'|'boh'|'foh'. Returns {ok, filter, location, include_inactive,
+    """Team-sub-tab roster shape. location='all'|store_key; flt='all'|'boh'|'foh'.
+    position is the MULTI-SELECT position filter (Sam #2585): a comma-separated
+    list of canonical names ('Server,Cook'), a single name (back-compat), or
+    'all'/'' (no filter). A row passes if it holds ANY of the named positions
+    (union/OR). Returns {ok, filter, location, include_inactive,
     counts:{all,boh,foh}, stats:{showing,active_total,positions},
     stores:[{store_key,label,shown,active,employees:[{id,full_name,active,
     positions:[{id,name}],domain,access_role,phone,email}]}]}."""
     location = (location or "all").strip().lower()
-    position = (position or "all").strip()
     flt = (flt or "all").strip().lower()
+    # position -> set of lowercased canonical names (comma-split). 'all'/'' or a
+    # bare 'all' token => no position filter. Single value stays single-element
+    # (back-compat). Blank tokens (trailing comma) are dropped.
+    pos_set = {p.strip().lower() for p in (position or "all").split(",") if p.strip()}
+    if "all" in pos_set:
+        pos_set = set()
 
     # canonical positions by id (junk filtered out, same set as the dropdown)
     canon = {p.id: p.name for p in db.query(Position).all()
@@ -139,8 +147,8 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
             return False
         if flt == "foh" and "foh" not in r["_dom"]:
             return False
-        if position != "all" and not any(
-                (p["name"] or "").strip().lower() == position.lower()
+        if pos_set and not any(
+                (p["name"] or "").strip().lower() in pos_set
                 for p in r["positions"]):
             return False
         return True

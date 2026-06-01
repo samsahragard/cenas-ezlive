@@ -87,6 +87,26 @@
   .tws-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--tws-cream-dim); cursor: pointer; }
   .tws-chk input { accent-color: var(--tws-gold); }
 
+  /* multi-select POSITION filter popover (Sam #2585) -- mirrors the Week
+     Builder's sv2-posfilter, in the .tws warm palette. */
+  .tws-posfilter { position: relative; display: inline-block; }
+  #tws-pos-btn { cursor: pointer; text-align: left; white-space: nowrap; }
+  #tws-pos-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
+  .tws-pos-pop {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 40;
+    min-width: 200px; max-height: 300px; overflow-y: auto;
+    background: var(--tws-card); border: 1px solid var(--tws-border);
+    border-radius: var(--tws-radius-sm); padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .tws-pos-pop.hidden { display: none; }
+  .tws-pos-opt {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
+    font-size: 13px; color: var(--tws-cream); cursor: pointer; white-space: nowrap;
+  }
+  .tws-pos-opt:hover { background: var(--tws-card-hi); }
+  .tws-pos-opt input { accent-color: var(--tws-gold); margin: 0; }
+  .tws-pos-sep { height: 1px; background: var(--tws-border-soft); margin: 4px 2px; }
+
   /* stat cards (quieted, per the mockup caption) */
   .tws-stats { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .tws-stat { background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 10px 14px; min-width: 116px; }
@@ -204,7 +224,10 @@
       <button class="tws-addbtn" id="tws-add">+ Add</button>
       <span class="tws-spacer"></span>
       <select class="tws-select" id="tws-loc" aria-label="Location"><option value="all">Both stores</option></select>
-      <select class="tws-select" id="tws-pos" aria-label="Position"><option value="all">All positions</option></select>
+      <div class="tws-posfilter" id="tws-pos-wrap">
+        <button type="button" class="tws-select" id="tws-pos-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filter by position">All positions</button>
+        <div class="tws-pos-pop hidden" id="tws-pos-pop" role="group" aria-label="Filter by position"></div>
+      </div>
       <label class="tws-chk"><input type="checkbox" id="tws-inactive"> Include inactive</label>
     </div>
 
@@ -350,7 +373,9 @@
   show(initial);
 
   /* ---------------- Team roster: fetch + render against the contract ---------------- */
-  var state = { filter: "all", location: "all", position: "all", include_inactive: false, board: null };
+  // position is the MULTI-SELECT filter (Sam #2585): an ARRAY of selected
+  // canonical names; empty array = "All positions" (no filter).
+  var state = { filter: "all", location: "all", position: [], include_inactive: false, board: null };
   var elRoster = document.getElementById("tws-roster");
 
   // Placeholder matching aick's #2296 shape, so the FE renders before ckai's
@@ -381,16 +406,11 @@
     document.getElementById("tws-stat-showing").textContent = (b.stats && b.stats.showing != null) ? b.stats.showing : "--";
     document.getElementById("tws-stat-active").textContent = (b.stats && b.stats.active_total != null) ? b.stats.active_total : "--";
     document.getElementById("tws-stat-positions").textContent = (b.stats && b.stats.positions != null) ? b.stats.positions : "--";
-    // Populate the position filter from the FULL canonical name list (once).
-    // The server matches by NAME (team_roster._passes), so option value = the
-    // NAME, and we include every canonical position -- even ones nobody
-    // currently holds -- not just positions seen on the shown rows (#3).
-    var posSel = document.getElementById("tws-pos");
-    if (posSel && posSel.options.length <= 1) {
-      var canon = [];
-      try { canon = JSON.parse((document.getElementById("tws-filter-positions") || {}).textContent || "[]"); } catch (e) { canon = []; }
-      canon.forEach(function (name) { var o = document.createElement("option"); o.value = name; o.textContent = name; posSel.appendChild(o); });
-    }
+    // Build the multi-select position filter popover from the FULL canonical
+    // name list (once). The server matches by NAME (team_roster._passes), so
+    // each checkbox value = the NAME, and we include every canonical position
+    // -- even ones nobody currently holds -- not just positions on shown rows.
+    buildPosFilter();
     var locSel = document.getElementById("tws-loc");
     if (locSel && locSel.options.length <= 1) {
       (b.stores || []).forEach(function (s) { var o = document.createElement("option"); o.value = s.store_key; o.textContent = s.label; locSel.appendChild(o); });
@@ -428,7 +448,10 @@
   }
 
   function load() {
-    var qs = "?location=" + encodeURIComponent(state.location) + "&position=" + encodeURIComponent(state.position) +
+    // Multi-select position: send the selected NAMES joined by commas; empty
+    // selection => "all" (no filter). team_roster() comma-splits this back out.
+    var posParam = state.position.length ? state.position.join(",") : "all";
+    var qs = "?location=" + encodeURIComponent(state.location) + "&position=" + encodeURIComponent(posParam) +
              "&include_inactive=" + (state.include_inactive ? "1" : "0") + "&flt=" + encodeURIComponent(state.filter);
     fetch(ROSTER_URL + qs, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
       .then(function (r) { if (!r.ok) throw new Error("roster " + r.status); return r.json(); })
@@ -454,8 +477,77 @@
     });
   });
   document.getElementById("tws-loc").addEventListener("change", function (e) { state.location = e.target.value; load(); });
-  document.getElementById("tws-pos").addEventListener("change", function (e) { state.position = e.target.value; load(); });
   document.getElementById("tws-inactive").addEventListener("change", function (e) { state.include_inactive = e.target.checked; load(); });
+
+  /* ---------------- multi-select POSITION filter popover (Sam #2585) ----------------
+     Mirrors the Week Builder's sv2-posfilter: a button summary + a popover of
+     canonical-name checkboxes plus an "All positions" entry that clears the
+     rest. state.position is an ARRAY of selected names (empty = no filter). */
+  var elPosBtn = document.getElementById("tws-pos-btn");
+  var elPosPop = document.getElementById("tws-pos-pop");
+
+  function buildPosFilter() {
+    if (!elPosPop) return;
+    var canon = [];
+    try { canon = JSON.parse((document.getElementById("tws-filter-positions") || {}).textContent || "[]"); } catch (e) { canon = []; }
+    // Drop any stale selections no longer in the canonical catalog.
+    var valid = {}; canon.forEach(function (n) { valid[n] = true; });
+    state.position = state.position.filter(function (n) { return valid[n]; });
+    elPosPop.innerHTML = "";
+    var allLab = document.createElement("label"); allLab.className = "tws-pos-opt";
+    var allCk = document.createElement("input"); allCk.type = "checkbox"; allCk.id = "tws-pos-all";
+    allCk.checked = (state.position.length === 0);
+    allLab.appendChild(allCk); allLab.appendChild(document.createTextNode(" All positions"));
+    elPosPop.appendChild(allLab);
+    var sep = document.createElement("div"); sep.className = "tws-pos-sep"; elPosPop.appendChild(sep);
+    canon.forEach(function (name) {
+      var lab = document.createElement("label"); lab.className = "tws-pos-opt";
+      var ck = document.createElement("input"); ck.type = "checkbox"; ck.className = "tws-pos-one"; ck.value = name;
+      ck.checked = (state.position.indexOf(name) !== -1);
+      lab.appendChild(ck); lab.appendChild(document.createTextNode(" " + name));
+      elPosPop.appendChild(lab);
+    });
+    updatePosFilterLabel();
+  }
+
+  function updatePosFilterLabel() {
+    if (!elPosBtn) return;
+    var n = state.position.length, label = "All positions";
+    if (n === 1) { label = state.position[0]; }
+    else if (n > 1) { label = state.position.join(", ") + " (" + n + ")"; }
+    elPosBtn.textContent = label;
+  }
+
+  if (elPosBtn && elPosPop) {
+    elPosBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var willOpen = elPosPop.classList.contains("hidden");
+      elPosPop.classList.toggle("hidden", !willOpen);
+      elPosBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+    elPosPop.addEventListener("click", function (e) { e.stopPropagation(); });
+    elPosPop.addEventListener("change", function (e) {
+      var t = e.target;
+      if (t.id === "tws-pos-all") {
+        state.position = [];              // "All positions" -> clear the filter
+        buildPosFilter();
+      } else if (t.classList && t.classList.contains("tws-pos-one")) {
+        var name = t.value, i = state.position.indexOf(name);
+        if (t.checked && i === -1) state.position.push(name);
+        else if (!t.checked && i !== -1) state.position.splice(i, 1);
+        var allCk = document.getElementById("tws-pos-all");
+        if (allCk) allCk.checked = (state.position.length === 0);
+        updatePosFilterLabel();
+      }
+      load();
+    });
+    // outside-click closes the popover
+    document.addEventListener("click", function () {
+      if (elPosPop && !elPosPop.classList.contains("hidden")) {
+        elPosPop.classList.add("hidden"); elPosBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
 
   /* ---------------- click-to-edit roster row (Sam #2504) ----------------
      Click a row -> inline panel with 3 sections: EDIT CONTACT (phone/email/

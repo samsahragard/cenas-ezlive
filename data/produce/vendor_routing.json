@@ -1,6 +1,6 @@
 {
-  "_comment": "Where to email orders for each vendor. CURRENTLY IN TEST MODE - replace with real vendor emails before going to production. CC list locked per CENA.md (Sam 2026-05-19): every produce order CCs sam@ + javier@.",
-  "mode": "test",
+  "_comment": "Where to email orders for each vendor. LIVE / PRODUCTION MODE (Sam directive 2026-05-31): orders email the REAL vendors below. To pause, set mode back to 'test'. CC list locked per CENA.md (Sam 2026-05-19): every produce order CCs sam@ + javier@.",
+  "mode": "production",
   "test": {
     "alvarado": {
       "to": "masood@cenaskitchen.com",

@@ -130,6 +130,39 @@
     border:1px solid rgba(228,179,64,0.30); border-radius:999px; padding:2px 8px;
   }
 
+  /* Personalized "My Hours & Pay" panel (Sam #2829) — appears only when a
+     manager has verified this person's Cena<->Toast link. */
+  .perf-card{
+    background: linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
+    border:0.5px solid var(--bd-gold); border-radius:16px;
+    padding:16px 18px; margin-bottom:18px;
+    box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 8px 20px rgba(0,0,0,0.45);
+  }
+  .perf-head{ margin-bottom:12px; }
+  .perf-title{ font-size:16px; font-weight:800; color:var(--blue-deep); letter-spacing:0.3px; }
+  .perf-subtitle{ font-size:11.5px; color:rgba(250,246,236,0.6); margin-top:2px; }
+  .perf-note{ font-size:12.5px; color:rgba(250,246,236,0.72); margin-bottom:2px; line-height:1.45; }
+  .perf-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .stat{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:12px;
+    padding:12px 8px; text-align:center; }
+  .stat-val{ font-size:21px; font-weight:800; color:var(--blue-deep); line-height:1.1; }
+  .stat-lbl{ font-size:10.5px; font-weight:600; letter-spacing:0.4px; text-transform:uppercase;
+    color:rgba(244,231,208,0.6); margin-top:4px; }
+  .perf-sub{ margin-top:14px; }
+  .perf-sub-lbl{ font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:rgba(244,231,208,0.6); margin-bottom:8px; }
+  .shift-list{ display:flex; flex-direction:column; gap:6px; }
+  .shift-row{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;
+    background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:10px; padding:8px 11px; }
+  .shift-when{ font-size:12.5px; color:var(--cream); }
+  .shift-when .d{ font-weight:700; color:var(--blue-deep); }
+  .shift-hrs{ font-size:12.5px; font-weight:700; color:var(--red-deep); white-space:nowrap; }
+  .shift-row.open .shift-hrs{ color:#7FD17F; }
+  .perf-metrics{ display:flex; flex-wrap:wrap; gap:6px 8px; }
+  .metric{ font-size:12px; color:var(--cream); background:var(--surface);
+    border:0.5px solid var(--bd-gold); border-radius:8px; padding:5px 9px; }
+  .metric b{ color:var(--blue-deep); font-weight:700; margin-right:3px; }
+
   .footnote{
     margin-top:auto; padding-top:22px; text-align:center;
     font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
@@ -149,6 +182,29 @@
     <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'Team Member')) }}</div>
     {% if employee and employee.store_name %}<div class="meta">{{ employee.store_name }}</div>{% endif %}
   </div>
+
+  {# Personalized Toast panel (Sam #2829) — stays hidden until
+     /employee/my-performance confirms a manager-verified Cena<->Toast link. #}
+  <section class="perf-card" id="perf-card" hidden>
+    <div class="perf-head">
+      <div class="perf-title">My Hours &amp; Pay</div>
+      <div class="perf-subtitle" id="perf-subtitle">Your last 30 days</div>
+    </div>
+    <div class="perf-note" id="perf-note" hidden></div>
+    <div class="perf-stats" id="perf-stats">
+      <div class="stat"><div class="stat-val" id="stat-hours">&mdash;</div><div class="stat-lbl">Hours (30d)</div></div>
+      <div class="stat" id="stat-pay-wrap"><div class="stat-val" id="stat-pay">&mdash;</div><div class="stat-lbl">Est. pay</div></div>
+      <div class="stat"><div class="stat-val" id="stat-shifts">&mdash;</div><div class="stat-lbl">Shifts</div></div>
+    </div>
+    <div class="perf-sub" id="perf-shifts-wrap" hidden>
+      <div class="perf-sub-lbl">Recent shifts</div>
+      <div class="shift-list" id="shift-list"></div>
+    </div>
+    <div class="perf-sub" id="perf-perf-wrap" hidden>
+      <div class="perf-sub-lbl">Performance</div>
+      <div class="perf-metrics" id="perf-metrics"></div>
+    </div>
+  </section>
 
   <div class="section-label">My tools</div>
   <div class="tiles">
@@ -204,6 +260,81 @@
     // Clear the remembered phone too, then back to login.
     window.location.replace(LOGIN_URL + '?_clear=1');
   });
+
+  // --- Personalized Toast panel (Sam #2829): pull THIS employee's
+  //     manager-verified hours / shifts / performance / pay and fill #perf-card.
+  //     No confirmed link -> panel stays hidden; linked-but-no-data -> a
+  //     "pending sync" note instead of an error. ---
+  (function(){
+    var card = document.getElementById('perf-card');
+    function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function show(){ card.hidden = false; }
+    function note(txt){ var n=document.getElementById('perf-note'); n.textContent=txt; n.hidden=!txt; }
+    function pending(){
+      show();
+      document.getElementById('perf-stats').style.display='none';
+      document.getElementById('perf-subtitle').textContent='Linked to your POS profile';
+      note('Your Toast profile is linked. Your hours, shifts and pay will appear here once the next sync runs.');
+    }
+    function prettyKey(k){ return k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
+    function prettyVal(k,v){
+      if (typeof v === 'number'){
+        if (/sales|pay|tips|total|amount|net|gross|comp|void|check|wage|rate/i.test(k)) return money(v);
+        return (Math.round(v*100)/100).toLocaleString();
+      }
+      return v;
+    }
+    function hm(x){ return (x && !isNaN(x)) ? x.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}) : ''; }
+    function render(d){
+      show();
+      document.getElementById('stat-hours').textContent = (d.hours!=null ? d.hours : '—');
+      var tcs = d.timecards || [];
+      document.getElementById('stat-shifts').textContent = tcs.length;
+      var pay = d.payroll || {};
+      if (pay.available){ document.getElementById('stat-pay').textContent = money(pay.gross_pay); }
+      else { document.getElementById('stat-pay').textContent = '—'; document.getElementById('stat-pay-wrap').title = (pay.note||''); }
+      if (tcs.length){
+        var list = document.getElementById('shift-list'); list.innerHTML='';
+        tcs.slice(0,6).forEach(function(t){
+          var row = document.createElement('div');
+          row.className = 'shift-row' + (t.open ? ' open' : '');
+          var di = t.in ? new Date(t.in) : null, dout = t.out ? new Date(t.out) : null;
+          var dstr = (di && !isNaN(di)) ? di.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : (t.in||'');
+          var range = t.open ? (hm(di) + ' – on the clock') : (hm(di) + ' – ' + hm(dout));
+          row.innerHTML = '<div class="shift-when"><span class="d">'+esc(dstr)+'</span> &middot; '+esc(range)+'</div>'+
+                          '<div class="shift-hrs">'+(t.open ? 'open' : (Number(t.hours||0).toFixed(2)+'h'))+'</div>';
+          list.appendChild(row);
+        });
+        document.getElementById('perf-shifts-wrap').hidden = false;
+      }
+      var perf = d.performance || {};
+      if (perf.available){
+        var pm = document.getElementById('perf-metrics'); pm.innerHTML='';
+        var skip = {available:1, note:1, name:1}, any=false;
+        Object.keys(perf).forEach(function(k){
+          if (skip[k]) return;
+          var v = perf[k];
+          if (v==null || v==='') return;
+          any=true;
+          var el = document.createElement('span'); el.className='metric';
+          el.innerHTML = '<b>'+esc(prettyKey(k))+'</b>'+esc(prettyVal(k,v));
+          pm.appendChild(el);
+        });
+        if (any) document.getElementById('perf-perf-wrap').hidden = false;
+      }
+    }
+    fetch('/employee/my-performance', { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status:r.status, d:d }; }); })
+      .then(function(res){
+        var d = res.d || {};
+        if (res.status === 200 && d.ok && d.linked === false) return;   // not linked -> hidden
+        if (d.linked && (!d.ok || res.status >= 500)){ pending(); return; }  // linked, data pending
+        if (!(d.ok && d.linked)) return;                                 // 401/404/unknown -> hidden
+        render(d);
+      })
+      .catch(function(){ /* network error -> leave panel hidden */ });
+  })();
 </script>
 </body>
 </html>

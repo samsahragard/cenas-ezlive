@@ -212,37 +212,34 @@ def sv2_toast_match_suggestions():
     }), 200
 
 
-@store_bp.route("/schedules-v2/toast/employee/<toast_id>", methods=["GET"])
-@require_level(_MGR)
-def sv2_toast_employee(toast_id):
-    """LINK TAB -- one Toast employee's recent labor + performance for THIS store.
+def toast_employee_summary(store: str, toast_id: str) -> tuple[dict, int]:
+    """Resolve ONE Toast employee's recent labor + performance + (derived) pay
+    for `store`, by Toast GUID. SHARED by the manager Link-tab endpoint and the
+    employee self view (/employee/my-performance) so both surface IDENTICAL
+    numbers. Pure data -- no request/permission context; the caller gates.
 
-    Resolve location + GUID; pull fetch_time_entries(location, guid, start, end)
-    over the last ~30 days and keep only THIS employee's entries (filter on
-    employeeReference.guid == toast_id) -> hours (total) + timecards (in/out
-    list). Then server_perf_report (the Operations Performance pull) for the same
-    window + store, matched to this employee by name -> performance. payroll is
-    DERIVED from the time entries x the employee's wage IF Toast exposes an
-    hourlyWage on the entries ({estimated:true}); otherwise we say the Payroll
-    API isn't wired yet (pending creds) rather than fabricate a number.
-    ->
-      {ok, hours, timecards:[...], performance:{...}, payroll:{...}}
-    Any Toast/creds failure -> {ok:false, error} (HTTP 502), never a 500.
+    Resolve location + GUID; pull fetch_time_entries over the last ~30 days and
+    keep only THIS employee's entries (employeeReference.guid == toast_id) ->
+    hours (total) + timecards (in/out). Then server_perf_report for the same
+    window + store, matched by name -> performance. payroll is DERIVED from the
+    entries x hourlyWage IF Toast exposes a rate ({estimated:true}); otherwise we
+    say the Payroll API isn't wired (pending creds) rather than fabricate.
+
+    Returns (payload, http_status). Any Toast/creds failure ->
+    ({ok:False, error}, 502) -- never raises, never a 500. Sam #2629 / #2829.
     """
-    store = _store()
     if not store or store not in ("tomball", "copperfield"):
-        return jsonify({"ok": False,
-                        "error": "Select a specific store (Tomball or Copperfield)."}), 400
+        return {"ok": False,
+                "error": "Select a specific store (Tomball or Copperfield)."}, 400
 
     guids = restaurant_guids()
     guid = guids.get(store)
     if not guid:
-        return jsonify({"ok": False,
-                        "error": f"No Toast restaurant GUID configured for {store}."}), 502
+        return {"ok": False,
+                "error": f"No Toast restaurant GUID configured for {store}."}, 502
 
-    # Last ~30 days, inclusive. fetch_time_entries takes datetimes (date-only
-    # granularity for the range) -- same shape attendance/weekly use.
-    end = datetime.utcnow() - timedelta(hours=5)  # CT "today" (matches toast_client)
+    # Last ~30 days, inclusive (CT "today" offset, matching toast_client).
+    end = datetime.utcnow() - timedelta(hours=5)
     start = end - timedelta(days=_TIMECARD_WINDOW_DAYS)
 
     client = ToastClient.shared()
@@ -252,7 +249,7 @@ def sv2_toast_employee(toast_id):
         entries = client.fetch_time_entries(store, guid, start, end) or []
     except Exception as ex:
         log.warning("toast-link: fetch_time_entries failed for %s/%s: %s", store, toast_id, ex)
-        return jsonify({"ok": False, "error": f"Toast time entries unavailable: {ex}"}), 502
+        return {"ok": False, "error": f"Toast time entries unavailable: {ex}"}, 502
 
     timecards: list[dict] = []
     total_hours = 0.0
@@ -322,10 +319,22 @@ def sv2_toast_employee(toast_id):
             "note": "Toast Payroll API not wired -- pending creds check",
         }
 
-    return jsonify({
+    return {
         "ok": True,
         "hours": round(total_hours, 2),
         "timecards": timecards,
         "performance": performance,
         "payroll": payroll,
-    }), 200
+    }, 200
+
+
+@store_bp.route("/schedules-v2/toast/employee/<toast_id>", methods=["GET"])
+@require_level(_MGR)
+def sv2_toast_employee(toast_id):
+    """LINK TAB -- one Toast employee's recent labor + performance for THIS store
+    (manager view). Thin wrapper: toast_employee_summary() does the Toast pull +
+    shaping (shared with the employee self view at /employee/my-performance);
+    this adds the manager gate + store resolution. Toast/creds failure ->
+    {ok:false} 502, never a 500."""
+    payload, status = toast_employee_summary(_store(), toast_id)
+    return jsonify(payload), status

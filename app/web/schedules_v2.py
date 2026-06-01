@@ -274,6 +274,7 @@ def sv2_board():
                     "end_at": sh.end_at.isoformat() if sh.end_at else None,
                     "break_minutes": sh.break_minutes, "status": sh.status,
                     "notes": sh.notes, "tag_ids": tag_ids,
+                    "display_name": sh.display_name,  # Sam #2872: former-staff name (employee_id NULL) -> struck-through
                 })
         # positions: filtered to the CANONICAL 14 (Sam #2227 - 13 FOH + Cook);
         # Sling-import junk (C-Grill, C-Prep, Chba, Dish, ...) is hidden. store_key

@@ -945,6 +945,29 @@ def cron_toast_sync():
                     "status": snapshot_status()}), 202
 
 
+@driver_system_bp.route("/cron/import-schedules", methods=["POST"])
+def cron_import_schedules():
+    """One-time historical schedule import (Sam #2872). Token-gated via CRON_TOKEN.
+    POST body {"records":[{iso_date,start,end,job,store,name}, ...]} -> loaded via
+    schedule_import.import_historical (DB-only, fast). Idempotent: re-running
+    replaces the import-created weeks and NEVER clobbers a manager-made schedule.
+    Returns the import summary. Accepts Authorization: Bearer / X-Cron-Token / ?token=."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    payload = request.get_json(silent=True) or {}
+    records = payload.get("records")
+    if not isinstance(records, list) or not records:
+        return jsonify({"ok": False, "error": 'POST {"records":[...]} required'}), 400
+    from app.services.schedule_import import import_historical
+    db = SessionLocal()
+    try:
+        summary = import_historical(records, db)
+        return jsonify({"ok": True, **summary}), 200
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])
 def cron_anomaly_brief():
     """Phase 1 / Block 6: compose one morning brief per enrolled

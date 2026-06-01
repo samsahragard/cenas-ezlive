@@ -209,6 +209,7 @@
   .sv2-emp-sub { font-size: 11px; color: var(--sk-cream-meta); margin-top: 2px; }
   .sv2-row.open .sv2-namecol { background: #2a1410; }
   .sv2-row.open .sv2-emp-name { color: var(--open); letter-spacing:.04em; }
+  .sv2-row.former .sv2-emp-name { opacity: .6; }   /* Sam #2872: former staff, struck-through (<s>) + muted */
   .sv2-cell { padding: 5px; min-width: 88px; height: 62px; cursor: pointer; transition: background .12s; }
   .sv2-cell:hover { background: rgba(228,179,64,.06); }
   .sv2-cell.is-today { background: rgba(228,179,64,.04); }
@@ -631,12 +632,19 @@
     elHead.innerHTML = html;
   }
 
-  function shiftsFor(empId, isoDay) {
+  function shiftsFor(emp, isoDay) {
     var out = [];
     var shifts = (state.board.shifts || []);
     for (var i = 0; i < shifts.length; i++) {
       var s = shifts[i];
-      var matchEmp = empId === null ? (s.employee_id == null) : (String(s.employee_id) === String(empId));
+      var matchEmp;
+      if (emp && emp.former) {              // former-staff row (Sam #2872): match by display_name
+        matchEmp = (s.employee_id == null && s.display_name === emp.former);
+      } else if (emp && emp.id != null) {   // a current employee's row
+        matchEmp = (String(s.employee_id) === String(emp.id));
+      } else {                              // the Open-shifts row: truly unassigned only (no display_name)
+        matchEmp = (s.employee_id == null && !s.display_name);
+      }
       if (!matchEmp) continue;
       if (state.posFilter.length && state.posFilter.indexOf(String(s.position_id)) === -1) continue;
       if (state.declinedOnly && String(s.response || "") !== "declined") continue;
@@ -652,7 +660,7 @@
     var sd = parseISO(s.start_at), ed = parseISO(s.end_at);
     var t = (sd ? fmtTime(sd) : "?") + "-" + (ed ? fmtTime(ed) : "?");
     var p = posById(s.position_id);
-    var open = (s.employee_id == null);
+    var open = (s.employee_id == null && !s.display_name);  // former-staff (display_name set) renders as a real chip, not "Open"
     // B5: only ASSIGNED shifts carry an acceptance response (pending|accepted|declined);
     // `response` is absent until aick's board JSON includes it, so this is a no-op until then.
     var resp = open ? "" : String(s.response || "").toLowerCase();
@@ -691,10 +699,27 @@
       : roster;
     var rows = "";
     // Open-shifts row first
-    rows += rowHtml({ id: null, full_name: "Open shifts" }, true);
-    people.forEach(function (emp) { rows += rowHtml(emp, false); });
+    rows += rowHtml({ id: null, full_name: "Open shifts" }, "open");
+    people.forEach(function (emp) { rows += rowHtml(emp, "current"); });
+    // Former-staff rows (Sam #2872): anyone in THIS week's shifts with no employee
+    // record (display_name set) -> a struck-through row, so paging back reads complete.
+    formerNamesInWeek().forEach(function (nm) {
+      rows += rowHtml({ id: null, former: nm, full_name: nm }, "former");
+    });
     elBody.innerHTML = rows;
     renderFilterHint(people, roster.length);
+  }
+
+  // Distinct display_names of former (no-record) staff among the loaded week's shifts.
+  function formerNamesInWeek() {
+    var seen = {}, out = [];
+    (state.board.shifts || []).forEach(function (s) {
+      if (s.employee_id == null && s.display_name && !seen[s.display_name]) {
+        seen[s.display_name] = 1; out.push(s.display_name);
+      }
+    });
+    out.sort();
+    return out;
   }
 
   // When a position filter is on, surface WHO can work it (Sam #2589): a one-line
@@ -731,24 +756,29 @@
     }
   }
 
-  function rowHtml(emp, isOpen) {
+  function rowHtml(emp, kind) {
     var today = new Date();
-    var tds = '<td class="sv2-namecol">' +
-                '<div class="sv2-emp-name">' + esc(emp.full_name || "Team member") + '</div>' +
-                (isOpen ? '<div class="sv2-emp-sub">unassigned</div>' : "") +
-              '</td>';
+    var isOpen = (kind === "open");
+    var isFormer = (kind === "former");
+    // Former-staff row (Sam #2872): person no longer employed -> name struck-through,
+    // a "former" sub-label, and no "+" add hint (it's a historical record, not schedulable).
+    var nameCell = isFormer
+      ? '<div class="sv2-emp-name former"><s>' + esc(emp.full_name || "") + '</s></div><div class="sv2-emp-sub">former</div>'
+      : '<div class="sv2-emp-name">' + esc(emp.full_name || "Team member") + '</div>' +
+        (isOpen ? '<div class="sv2-emp-sub">unassigned</div>' : "");
+    var tds = '<td class="sv2-namecol">' + nameCell + '</td>';
     var hasDraft = !!(state.board && state.board.schedule);
     for (var i = 0; i < 7; i++) {
       var d = addDays(state.weekStart, i);
       var iso = isoDate(d);
       var isT = sameDay(d, today);
-      var chips = shiftsFor(emp.id, iso).map(chipHtml).join("");
-      var addable = hasDraft ? '<div class="sv2-addhint">+</div>' : "";
+      var chips = shiftsFor(emp, iso).map(chipHtml).join("");
+      var addable = (hasDraft && !isFormer) ? '<div class="sv2-addhint">+</div>' : "";
       tds += '<td class="sv2-cell ' + (isT ? "is-today" : "") + '" data-emp="' +
              (emp.id == null ? "" : emp.id) + '" data-date="' + iso + '">' +
              chips + (chips ? "" : addable) + '</td>';
     }
-    return '<tr class="sv2-row ' + (isOpen ? "open" : "") + '">' + tds + '</tr>';
+    return '<tr class="sv2-row ' + (isOpen ? "open" : "") + (isFormer ? " former" : "") + '">' + tds + '</tr>';
   }
 
   function esc(s) {

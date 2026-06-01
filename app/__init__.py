@@ -344,6 +344,23 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("employees column backfill failed (non-fatal)")
 
+    # Sam #2872: add shifts.display_name (historical import shows a former, no-record
+    # employee's name struck-through). create_all() won't ALTER the existing shifts
+    # table, so add it here, gated on absence -- safe + idempotent on every boot.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_sh, text as _sa_text_sh
+        from app.db import engine as _eng_sh
+        if _eng_sh is not None:
+            insp = _sa_inspect_sh(_eng_sh)
+            if "shifts" in insp.get_table_names():
+                cols = {c["name"] for c in insp.get_columns("shifts")}
+                if "display_name" not in cols:
+                    with _eng_sh.begin() as conn:
+                        conn.execute(_sa_text_sh("ALTER TABLE shifts ADD COLUMN display_name VARCHAR(120)"))
+                    logging.getLogger(__name__).info("shifts table: added display_name column")
+    except Exception:
+        logging.getLogger(__name__).exception("shifts.display_name backfill failed (non-fatal)")
+
     # Idempotent seed of the canonical schedule positions (Sam 2026-05-31): the
     # 14 jobs that must appear in the manager schedule dropdowns (13 FOH roles +
     # Cook). The management roles (Partner, Corporate, GM, KM, ...) are User

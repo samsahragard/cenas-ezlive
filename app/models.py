@@ -3306,6 +3306,10 @@ class Shift(Base):
     break_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="assigned", nullable=False)  # assigned | open
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Sam #2872: for an imported HISTORICAL shift whose person is no longer employed
+    # (no Employee record), employee_id is NULL and display_name carries their name
+    # so the week-view renders it struck-through. NULL for normal shifts.
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

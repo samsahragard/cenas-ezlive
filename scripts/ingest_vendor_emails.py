@@ -72,6 +72,14 @@ def _has_order_substance(r: dict) -> bool:
     return False
 
 
+def _real_item_count(items_json) -> int:
+    """Count actual line items, ignoring the reserved {"_meta": {...}} entry."""
+    if not isinstance(items_json, list):
+        return 0
+    return sum(1 for it in items_json
+               if isinstance(it, dict) and (it.get("name") or "").strip())
+
+
 def _is_non_order(r: dict) -> bool:
     """True if this email should not create an order row: admin/notification
     by subject, or no order substance at all."""
@@ -162,6 +170,19 @@ def _process_inbox(M, source_inbox_label: str, store_default: str | None = None)
             store_scope = parsed.get("store_scope") or store_default
 
             mid_str = nid.decode() if isinstance(nid, bytes) else str(nid)
+            # Per-item rich data (sku/qty/unit/line/ship_estimate/kind/...) lives in
+            # items_json. Order-level extras (shipping type, ship-to, est-delivery,
+            # total breakdown) ride in a reserved {"_meta": {...}} entry the display
+            # reads + skips as a line item - keeps everything in one JSON column, no
+            # schema migration. (Sam 2026-05-31: capture everything the email shows.)
+            _items = parsed.get("items")
+            if not isinstance(_items, list):
+                _items = []
+            _meta = {k: parsed.get(k) for k in
+                     ("shipping_type", "ship_to", "est_delivery",
+                      "subtotal_cents", "tax_cents", "shipping_cents")
+                     if parsed.get(k) not in (None, "", [], {})}
+            _items_json = ([{"_meta": _meta}] if _meta else []) + _items
             out.append({
                 "vendor":              slug,
                 "store_scope":         store_scope,
@@ -170,7 +191,7 @@ def _process_inbox(M, source_inbox_label: str, store_default: str | None = None)
                 "placed_at":           placed_at,
                 "total_cents":         parsed.get("total_cents"),
                 "status":              parsed.get("status"),
-                "items_json":          parsed.get("items") or None,
+                "items_json":          _items_json or None,
                 "tracking_links_json": parsed.get("tracking_links") or None,
                 "source_email_mid":    f"{source_inbox_label}:{mid_str}",
                 "subject":             _clean_subject(subject),
@@ -278,8 +299,7 @@ def main() -> int:
             if len(grp) < 2:
                 continue
             rich = [r for r in grp
-                    if (r.total_cents or 0) > 0
-                    or (isinstance(r.items_json, list) and len(r.items_json) > 0)]
+                    if (r.total_cents or 0) > 0 or _real_item_count(r.items_json) > 0]
             pool = rich or grp
             pool.sort(key=lambda r: (r.placed_at or datetime.min, r.id or 0), reverse=True)
             keep = pool[0]

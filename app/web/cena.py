@@ -966,6 +966,7 @@ def cena_db_probe_vendor_recent_orders():
             "total_cents": r.total_cents,
             "status": r.status,
             "items": len(r.items_json) if isinstance(r.items_json, list) else (1 if r.items_json else 0),
+            "items_detail": r.items_json,
             "subject": r.subject,
             "parse_status": r.parse_status,
         } for r in rows]

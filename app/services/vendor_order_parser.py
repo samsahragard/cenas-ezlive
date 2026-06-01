@@ -34,17 +34,37 @@ _PARSE_PROMPT = """You extract structured order data from a vendor order email.
 
 Vendor: {vendor}
 
-Return ONE JSON object only (no prose, no markdown fences). Fields:
+Return ONE JSON object only (no prose, no markdown fences). Capture EVERY field the
+email actually shows — vendors differ, so use null / [] for anything not present.
+DO NOT invent data. DO NOT output anything but the JSON object.
+
+Order-level fields:
 - order_number (string or null) — the vendor's order number
 - placed_at (ISO 8601 string or null) — when the order was placed/sent
-- total_cents (integer or null) — total order amount in CENTS (multiply dollars by 100, round to int)
-- status (string or null) — "placed" / "shipped" / "delivered" / "confirmed" / "receipt" / etc
-- customer_or_caterer (string or null) — caterer / business name
-- items (array) — list of {{"name": str, "qty": str or null, "unit_price_cents": int or null, "subtotal_cents": int or null}}
-- tracking_links (array) — list of {{"carrier": str or null, "label": str, "url": str}}; carrier examples "UPS"/"FedEx"
-- store_scope (string or null) — "tomball" if address mentions Tomball or 27727 Tomball Pkwy; "copperfield" if address mentions Copperfield or 15650 FM 529; otherwise null
+- total_cents (integer or null) — order TOTAL in CENTS (dollars * 100, rounded)
+- subtotal_cents, tax_cents, shipping_cents (integer or null) — the total breakdown if shown
+- status (string or null) — "placed"/"confirmed"/"shipped"/"delivered"/"receipt"/"update"/etc
+- customer_or_caterer (string or null) — the caterer / business name on the order
+- shipping_type (string or null) — e.g. "Common Carrier w/ Liftgate", "Pickup", "UPS Ground"
+- est_delivery (string or null) — estimated delivery / ship date the order shows, if any
+- ship_to (object or null) — {{"name": str|null, "company": str|null, "address": str|null, "city_state_zip": str|null, "phone": str|null}}
 
-If a field can't be extracted, use null (or [] for the arrays). DO NOT invent data. DO NOT output anything but the JSON object.
+- items (array) — ONE object per line on the order, INCLUDING products, protection
+  plans / warranties, services, and fees. Each item:
+    {{"name": str,
+      "sku": str|null,                 # the vendor item / model number, e.g. "7156650CX"
+      "qty": str|null,
+      "unit_price_cents": int|null,
+      "subtotal_cents": int|null,      # the line total
+      "ship_estimate": str|null,       # e.g. "Usually Ships in 5-10 Bus. Days"
+      "notes": str|null,               # e.g. "Special Order", "Virtual Start-up"
+      "kind": str,                     # "product"|"protection_plan"|"service"|"fee"|"shipping"|"discount"
+      "provider": str|null,            # e.g. "Safeware" for a protection plan
+      "ref": str|null}}                # e.g. "PWI:462976"
+
+- tracking_links (array) — list of {{"carrier": str or null, "label": str, "url": str}}
+- store_scope (string or null) — "tomball" if the address mentions Tomball or 27727 Tomball Pkwy;
+  "copperfield" if Copperfield or 15650 FM 529; otherwise null
 
 EMAIL BODY:
 {body}

@@ -968,6 +968,45 @@ def cron_import_schedules():
         db.close()
 
 
+@driver_system_bp.route("/cron/schedule-peek", methods=["GET"])
+def cron_schedule_peek():
+    """Diagnostic (Sam #2872): token-gated read of schedules + shift counts for a
+    store, so the import can be verified without a manager login. ?store=dos|uno|
+    tomball|copperfield. Optional ?week=YYYY-MM-DD runs the EXACT board query
+    (store_key + week_start) so we can confirm what the week-view would see."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from datetime import date as _date
+    from app.models import Schedule, Shift
+    store = (request.args.get("store") or "tomball").strip().lower()
+    store = {"dos": "tomball", "uno": "copperfield"}.get(store, store)
+    db = SessionLocal()
+    try:
+        rows = (db.query(Schedule).filter_by(store_key=store)
+                  .order_by(Schedule.week_start).all())
+        weeks = []
+        for s in rows:
+            n = db.query(Shift).filter_by(schedule_id=s.id).count()
+            weeks.append({"week_start": s.week_start.isoformat(), "status": s.status,
+                          "created_by": s.created_by, "shifts": n})
+        out = {"ok": True, "store": store, "schedule_count": len(rows), "weeks": weeks}
+        wk = (request.args.get("week") or "").strip()
+        if wk:
+            try:
+                ws = _date.fromisoformat(wk)
+                sch = db.query(Schedule).filter_by(store_key=store, week_start=ws).first()
+                out["board_query"] = {
+                    "week": wk, "found": sch is not None,
+                    "shifts": (db.query(Shift).filter_by(schedule_id=sch.id).count() if sch else 0),
+                }
+            except Exception as ex:
+                out["board_query"] = {"week": wk, "error": str(ex)}
+        return jsonify(out), 200
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])
 def cron_anomaly_brief():
     """Phase 1 / Block 6: compose one morning brief per enrolled

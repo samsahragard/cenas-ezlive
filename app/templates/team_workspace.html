@@ -143,7 +143,8 @@
   .tws-empty { padding: 26px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
 
   /* click-to-edit roster rows (roster-edit branch) */
-  .tws-colhead.editable, .tws-row.editable { grid-template-columns: 200px 1fr 150px; }
+  .tws-colhead.editable { grid-template-columns: 28px 1fr auto; gap: 10px; }
+  .tws-row.editable { grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start; }
   .tws-row.editable { cursor: pointer; transition: background .12s; }
   .tws-row.editable:hover { background: var(--tws-card); }
   .tws-row.editable.open { background: var(--tws-card); border-bottom-color: transparent; }
@@ -175,6 +176,25 @@
   .tws-resetbtn:disabled { opacity: .55; cursor: default; }
   .tws-resetbtn.danger { color: #ff7a7a; border-color: rgba(255,122,122,.38); }
   .tws-resetbtn.danger:hover { border-color: rgba(255,122,122,.7); background: rgba(255,122,122,.10); }
+  /* Availability editor -- dark-themed time grid (Sam #2808): native time inputs
+     were rendering as bright white boxes against the dark panel. color-scheme:dark
+     makes the picker dark; the indicator filter tints the clock icon gold. */
+  .tws-avail { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+  .tws-avail-head { display: grid; grid-template-columns: 44px 1fr 1fr 24px; gap: 8px; font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--tws-cream-meta); padding: 0 2px 2px; }
+  .tws-avail-row { display: grid; grid-template-columns: 44px 1fr 1fr 24px; gap: 8px; align-items: center; }
+  .tws-avail-day { font-size: 12px; font-weight: 600; color: var(--tws-cream-dim); }
+  .tws-avail-time { width: 100%; font-family: inherit; font-size: 13px; color: var(--tws-cream); background: var(--tws-bg); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 7px 8px; color-scheme: dark; }
+  .tws-avail-time:focus { outline: none; border-color: var(--tws-gold); }
+  .tws-avail-time::-webkit-calendar-picker-indicator { filter: invert(.75) sepia(.6) saturate(4) hue-rotate(2deg); opacity: .85; cursor: pointer; }
+  .tws-avail-clear { font-family: inherit; font-size: 17px; line-height: 1; color: var(--tws-cream-meta); background: transparent; border: 0; cursor: pointer; padding: 0; border-radius: 4px; }
+  .tws-avail-clear:hover { color: var(--tws-red); }
+  /* Roster rows (Sam #2806): # | name+positions stacked | phone (right, own column). */
+  .tws-rnum { font-size: 11.5px; color: var(--tws-cream-meta); font-variant-numeric: tabular-nums; text-align: right; padding-top: 1px; }
+  .tws-namecell { min-width: 0; }
+  .tws-namecell .tws-poschips { margin-top: 5px; }
+  .tws-phonecell { display: inline-flex; align-items: center; gap: 2px; justify-self: end; white-space: nowrap; }
+  .tws-ph-h { text-align: right; }
+  .tws-nopos { font-size: 11px; font-style: italic; color: var(--tws-cream-meta); opacity: .7; }
   /* Link tab (Sam #2629): two-column Cena | Toast match list */
   .tws-link-head { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 4px 4px 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
   .tws-link-rows { display: flex; flex-direction: column; }
@@ -653,22 +673,31 @@
       if (!s.employees || !s.employees.length) return;
       html += '<div class="tws-store"><div class="tws-store-head"><span class="tws-store-name">' + esc(s.label) + '</span>' +
               '<span class="tws-store-meta">' + (s.shown != null ? s.shown : s.employees.length) + ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>' +
-              '<div class="tws-colhead editable"><span>Name</span><span>Positions</span><span>Phone</span></div>';
-      s.employees.forEach(function (e) {
-        var chips = (e.positions || []).map(function (p) { return '<span class="tws-chip">' + esc(p.name) + '</span>'; }).join("");
-        // Access-role pill removed (Sam #2582): permissions follow the POSITION now,
-        // so the old login-role badge was legacy + redundant -- positions only.
+              '<div class="tws-colhead editable"><span>#</span><span>Name</span><span class="tws-ph-h">Phone</span></div>';
+      s.employees.forEach(function (e, i) {
+        // positions: leadership/role chips first, then alpha -- a consistent order
+        // so the column reads cleanly (Sam #2806); role chips get the gold style.
+        var poss = (e.positions || []).slice().sort(function (a, b) {
+          var ar = isRolePos(a.name) ? 0 : 1, br = isRolePos(b.name) ? 0 : 1;
+          return ar - br || String(a.name || "").localeCompare(String(b.name || ""));
+        });
+        var chips = poss.length
+          ? poss.map(function (p) { return '<span class="tws-chip' + (isRolePos(p.name) ? ' role' : '') + '">' + esc(p.name) + '</span>'; }).join("")
+          : '<span class="tws-nopos">No positions yet</span>';
+        // Access-role pill removed (Sam #2582): permissions follow the POSITION now.
         var ph = (e.phone || "").trim();
         var phHtml = ph
           ? '<span class="tws-phone"><i class="ti ti-phone"></i>' + esc(ph) + '</span>'
           : '<span class="tws-phone none">No phone</span>';
-        // data-emp carries the full record so the panel prefills/pre-checks from
-        // the row's own data (no extra fetch). store_key on the row = canonical.
+        // Row = [#] [name + positions stacked] [phone, right-aligned + caret]. Phone
+        // sits in its own auto column so position chips can never push it out of
+        // alignment (Sam #2806/#2807). data-emp carries the full record.
         html += '<div class="tws-row editable' + (e.active ? "" : " inactive") + '" data-emp-row="' + e.id + '"' +
                 ' data-emp="' + esc(JSON.stringify(e)) + '">' +
-                '<div class="tws-name">' + esc(e.full_name) + '</div>' +
-                '<div class="tws-poschips">' + chips + '</div>' +
-                '<div>' + phHtml + '<span class="caret ti ti-chevron-down"></span></div>' +
+                '<div class="tws-rnum">' + (i + 1) + '</div>' +
+                '<div class="tws-namecell"><div class="tws-name">' + esc(e.full_name) + '</div>' +
+                  '<div class="tws-poschips">' + chips + '</div></div>' +
+                '<div class="tws-phonecell">' + phHtml + '<span class="caret ti ti-chevron-down"></span></div>' +
                 '</div>' +
                 '<div class="tws-edit" data-emp-edit="' + e.id + '"></div>';
       });
@@ -1104,6 +1133,11 @@
   // weekday labels -> day_of_week 0..6 (Mon..Sun) for the availability editor
   var AVAIL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+  // A position counts as "leadership" -> gold chip + sorts first in the roster.
+  function isRolePos(name) {
+    return /manager|\bgm\b|\blead\b|shift ?lead|team ?lead|partner|corporate|director|owner|supervisor/i.test(name || "");
+  }
+
   function buildEditPanel(emp) {
     var canAssign = false;
     try { canAssign = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]").length > 0; } catch (e) {}
@@ -1131,14 +1165,18 @@
         (canAssign ? '<div class="tws-edit-row"><button class="tws-save" data-act="save-assign" type="button">Save positions</button>' +
           '<span class="tws-edit-msg" data-msg="assign"></span></div>' : '') +
       '</div>' +
-      // 4) AVAILABILITY
+      // 4) AVAILABILITY -- dark-themed grid: Day | Start | End | clear (Sam #2808)
       '<div class="tws-edit-sec"><h4>Availability</h4>' +
-        '<p class="tws-edit-hint">Set when this person is available each week; it feeds the schedule.</p>' +
-        AVAIL_DAYS.map(function (label, n) {
-          return '<div class="tws-edit-row"><span>' + esc(label) + '</span>' +
-            '<input type="time" data-avail-day="' + n + '" data-avail-field="start">' +
-            '<input type="time" data-avail-day="' + n + '" data-avail-field="end"></div>';
-        }).join("") +
+        '<p class="tws-edit-hint">Set when this person is available each week; it feeds the schedule. Leave a day blank to mark it unavailable.</p>' +
+        '<div class="tws-avail">' +
+          '<div class="tws-avail-head"><span></span><span>Start</span><span>End</span><span></span></div>' +
+          AVAIL_DAYS.map(function (label, n) {
+            return '<div class="tws-avail-row"><span class="tws-avail-day">' + esc(label) + '</span>' +
+              '<input class="tws-avail-time" type="time" data-avail-day="' + n + '" data-avail-field="start" aria-label="' + esc(label) + ' start">' +
+              '<input class="tws-avail-time" type="time" data-avail-day="' + n + '" data-avail-field="end" aria-label="' + esc(label) + ' end">' +
+              '<button class="tws-avail-clear" type="button" data-avail-clear="' + n + '" title="Clear ' + esc(label) + '" aria-label="Clear ' + esc(label) + '">&times;</button></div>';
+          }).join("") +
+        '</div>' +
         '<div class="tws-edit-row"><button class="tws-save" data-act="save-availability" type="button">Save availability</button>' +
           '<span class="tws-edit-msg" data-msg="availability"></span></div>' +
       '</div>' +
@@ -1207,6 +1245,16 @@
 
   // section actions (delegated on the roster too)
   elRoster.addEventListener("click", function (ev) {
+    // Availability "clear" (x) button -- it carries no data-act; reset that day.
+    var clr = ev.target.closest("[data-avail-clear]");
+    if (clr) {
+      var ce = clr.closest(".tws-edit"); if (!ce) return;
+      var cd = clr.getAttribute("data-avail-clear");
+      var cs = ce.querySelector('[data-avail-day="' + cd + '"][data-avail-field="start"]');
+      var cen = ce.querySelector('[data-avail-day="' + cd + '"][data-avail-field="end"]');
+      if (cs) cs.value = ""; if (cen) cen.value = "";
+      return;
+    }
     var btn = ev.target.closest("[data-act]");
     if (!btn) return;
     var editEl = btn.closest(".tws-edit");

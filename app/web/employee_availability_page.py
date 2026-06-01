@@ -31,38 +31,7 @@ from app.web.employee_auth import employee_auth
 
 @employee_auth.route("/employee/availability", methods=["GET"])
 def employee_availability_page():
-    """Render the client-side availability editor. Requires an employee session;
-    with none we bounce to /employee/login (the employee door, not the keypad).
-    Only the Employee name is read here - recurring windows + blocks come from
-    ckai's data endpoint via fetch()."""
-    emp_id = session.get("employee_id")
-    if not emp_id:
-        return redirect("/employee/login")
-
-    db = SessionLocal()
-    try:
-        emp = db.query(Employee).filter(Employee.id == emp_id).first()
-        if emp is None:
-            for k in ("employee_id", "employee_session_version", "auth_ok"):
-                session.pop(k, None)
-            return redirect("/employee/login")
-        full_name = (emp.full_name or "").strip()
-        first_name = full_name.split(" ")[0] if full_name else None
-        view = SimpleNamespace(first_name=first_name, full_name=full_name or None)
-    finally:
-        db.close()
-
-    config = {
-        "listUrl": "/employee/availability/list",          # ckai: GET -> {ok, recurring:[...], blocks:[...]}
-        "recurringBase": "/employee/availability/recurring",  # ckai: POST {day_of_week,start_time,end_time}; DELETE <base>/<id>
-        "blockBase": "/employee/availability/block",        # ckai: POST {start_at,end_at,reason?}; DELETE <base>/<id>
-        "dashboardUrl": "/employee/dashboard",
-        "loginUrl": "/employee/login",
-    }
-    return render_template(
-        "employee_availability.html",
-        employee=view,
-        config_json=json.dumps(config),
-        dashboard_url="/employee/dashboard",
-        login_url="/employee/login",
-    )
+    """RETIRED (D2): availability is now manager-controlled, so the employee
+    self-service editor is gone. The route stays REGISTERED (no 404) but simply
+    bounces to the employee dashboard instead of rendering the old editor."""
+    return redirect("/employee/dashboard")

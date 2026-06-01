@@ -23,12 +23,16 @@ it's the last link in the onboarding -> schedulable chain (samai's end-to-end).
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from flask import jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app.db import SessionLocal
-from app.models import (CANONICAL_POSITIONS, Employee, EmployeePosition,
-                        EmployeeStoreAssignment, Position, User)
+from app.models import (CANONICAL_POSITIONS, Employee, EmployeeAvailability,
+                        EmployeePosition, EmployeeStoreAssignment,
+                        EmployeeUnavailabilityBlock, Position, User)
+from app.services.permissions import requires_permission
 from app.web.permissions import current_user_id, require_level
 from app.web.schedules_v2 import _MGR, _store
 from app.web.store_routes import store_bp
@@ -373,5 +377,163 @@ def sv2_employee_assign(emp_id):
              for r in rows],
             key=lambda d: ((d["name"] or ""), (d["store_key"] or "")))
         return jsonify({"ok": True, "positions": positions}), 200
+    finally:
+        db.close()
+
+
+# ==========================================================================
+# Availability endpoints (D3, 2026-05-31): a MANAGER edits an existing
+# scheduling employee's B8 availability from the Team roster -- the recurring
+# weekly windows (EmployeeAvailability: when they CAN work) + the date-specific
+# unavailability blocks (EmployeeUnavailabilityBlock: one-off spans they CANNOT
+# work). Manager-controlled (NOT employee-self-set), keyed off the URL emp_id,
+# gated @require_level(_MGR) AND @requires_permission("availability.manage").
+# Ride store_bp (inheriting _pull_store 404 + _per_store_gate cross-store) and
+# NEVER touch session['partner_auth_ok']. Times are exchanged as "HH:MM"
+# (stored as minutes-since-midnight) / ISO datetimes ("YYYY-MM-DDTHH:MM").
+# ==========================================================================
+def _min_to_hhmm(m: int) -> str:
+    """Minutes-since-midnight -> 'HH:MM' (e.g. 540 -> '09:00')."""
+    return "%02d:%02d" % (divmod(int(m), 60))
+
+
+def _hhmm_to_min(s: str) -> int:
+    """'HH:MM' -> minutes-since-midnight. Raises ValueError on a bad shape /
+    out-of-range value (so the POST validator can turn it into a 400)."""
+    parts = (s or "").strip().split(":")
+    if len(parts) != 2:
+        raise ValueError("time must be 'HH:MM'")
+    hh, mm = int(parts[0]), int(parts[1])
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        raise ValueError("time out of range")
+    return hh * 60 + mm
+
+
+def _availability_payload(db, emp_id):
+    """The shared GET/POST response body: current recurring windows (sorted by
+    weekday, then start) + unavailability blocks for this employee."""
+    recurring = sorted(
+        db.query(EmployeeAvailability).filter_by(employee_id=emp_id).all(),
+        key=lambda a: (a.day_of_week, a.start_minute))
+    blocks = sorted(
+        db.query(EmployeeUnavailabilityBlock).filter_by(employee_id=emp_id).all(),
+        key=lambda b: b.start_at)
+    return {
+        "ok": True,
+        "recurring": [{"day_of_week": a.day_of_week,
+                       "start": _min_to_hhmm(a.start_minute),
+                       "end": _min_to_hhmm(a.end_minute)} for a in recurring],
+        "blocks": [{"id": b.id,
+                    "start_at": b.start_at.isoformat(timespec="minutes"),
+                    "end_at": b.end_at.isoformat(timespec="minutes"),
+                    "reason": b.reason or ""} for b in blocks],
+    }
+
+
+@store_bp.route("/schedules-v2/employees/<int:emp_id>/availability", methods=["GET"])
+@require_level(_MGR)
+@requires_permission("availability.manage")
+def sv2_employee_availability_get(emp_id):
+    """LOAD AVAILABILITY: return an existing employee's B8 recurring weekly
+    windows + date-specific unavailability blocks. -> 200 {ok, recurring:
+    [{day_of_week, start:'HH:MM', end:'HH:MM'} ...sorted by day], blocks:
+    [{id, start_at:'YYYY-MM-DDTHH:MM', end_at, reason}]}; 404 unknown employee.
+    """
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter_by(id=emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "employee not found"}), 404
+        return jsonify(_availability_payload(db, emp.id)), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/employees/<int:emp_id>/availability", methods=["POST"])
+@require_level(_MGR)
+@requires_permission("availability.manage")
+def sv2_employee_availability_set(emp_id):
+    """WHOLESALE-REPLACE AVAILABILITY: replace ALL of an existing employee's B8
+    recurring windows + unavailability blocks with the posted sets. Body:
+        {recurring:[{day_of_week:0-6, start:'HH:MM', end:'HH:MM'} ...],
+         blocks:[{start_at:'YYYY-MM-DDTHH:MM', end_at:'...', reason:'...'} ...]}
+    Both keys optional (default []). Every item is validated BEFORE any write --
+    on a single bad item we commit NOTHING and return 400. day_of_week int 0-6;
+    start/end parse as 'HH:MM' with end>start; start_at/end_at parse as ISO
+    datetime with end_at>start_at. -> 200 same shape as GET; 400 bad item;
+    404 unknown employee; 409 commit conflict.
+    """
+    data = request.get_json(silent=True) or {}
+    recurring_in = data.get("recurring") or []
+    blocks_in = data.get("blocks") or []
+    if not isinstance(recurring_in, list) or not isinstance(blocks_in, list):
+        return jsonify({"ok": False, "error": "recurring/blocks must be lists."}), 400
+
+    # Validate EVERYTHING first (parse into the new rows) so a bad item aborts
+    # before we delete or insert anything -- commit nothing on a 400.
+    new_recurring = []
+    for r in recurring_in:
+        if not isinstance(r, dict):
+            return jsonify({"ok": False,
+                            "error": "each recurring item must be an object."}), 400
+        try:
+            dow = int(r.get("day_of_week"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "day_of_week must be an int 0-6."}), 400
+        if not (0 <= dow <= 6):
+            return jsonify({"ok": False, "error": "day_of_week must be 0-6."}), 400
+        try:
+            start_minute = _hhmm_to_min(r.get("start"))
+            end_minute = _hhmm_to_min(r.get("end"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False,
+                            "error": "recurring start/end must be 'HH:MM'."}), 400
+        if end_minute <= start_minute:
+            return jsonify({"ok": False,
+                            "error": "recurring end must be after start."}), 400
+        new_recurring.append((dow, start_minute, end_minute))
+
+    new_blocks = []
+    for b in blocks_in:
+        if not isinstance(b, dict):
+            return jsonify({"ok": False,
+                            "error": "each block must be an object."}), 400
+        try:
+            start_at = datetime.fromisoformat((b.get("start_at") or "").strip())
+            end_at = datetime.fromisoformat((b.get("end_at") or "").strip())
+        except (TypeError, ValueError):
+            return jsonify({"ok": False,
+                            "error": "block start_at/end_at must be ISO datetimes."}), 400
+        if end_at <= start_at:
+            return jsonify({"ok": False,
+                            "error": "block end_at must be after start_at."}), 400
+        reason = (b.get("reason") or "").strip() or None
+        new_blocks.append((start_at, end_at, reason))
+
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter_by(id=emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "employee not found"}), 404
+
+        # Wholesale replace: drop the old sets, insert the validated new ones.
+        (db.query(EmployeeAvailability)
+           .filter_by(employee_id=emp.id).delete(synchronize_session=False))
+        (db.query(EmployeeUnavailabilityBlock)
+           .filter_by(employee_id=emp.id).delete(synchronize_session=False))
+        for (dow, sm, em) in new_recurring:
+            db.add(EmployeeAvailability(employee_id=emp.id, day_of_week=dow,
+                                        start_minute=sm, end_minute=em))
+        for (sa, ea, reason) in new_blocks:
+            db.add(EmployeeUnavailabilityBlock(employee_id=emp.id, start_at=sa,
+                                               end_at=ea, reason=reason))
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            return jsonify({"ok": False,
+                            "error": "Could not save availability (data conflict)."}), 409
+        return jsonify(_availability_payload(db, emp.id)), 200
     finally:
         db.close()

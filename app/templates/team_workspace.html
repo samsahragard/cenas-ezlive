@@ -647,6 +647,9 @@
     return out;
   }
 
+  // weekday labels -> day_of_week 0..6 (Mon..Sun) for the availability editor
+  var AVAIL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
   function buildEditPanel(emp) {
     var canAssign = false;
     try { canAssign = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]").length > 0; } catch (e) {}
@@ -674,6 +677,17 @@
         (canAssign ? '<div class="tws-edit-row"><button class="tws-save" data-act="save-assign" type="button">Save positions</button>' +
           '<span class="tws-edit-msg" data-msg="assign"></span></div>' : '') +
       '</div>' +
+      // 4) AVAILABILITY
+      '<div class="tws-edit-sec"><h4>Availability</h4>' +
+        '<p class="tws-edit-hint">Set when this person is available each week; it feeds the schedule.</p>' +
+        AVAIL_DAYS.map(function (label, n) {
+          return '<div class="tws-edit-row"><span>' + esc(label) + '</span>' +
+            '<input type="time" data-avail-day="' + n + '" data-avail-field="start">' +
+            '<input type="time" data-avail-day="' + n + '" data-avail-field="end"></div>';
+        }).join("") +
+        '<div class="tws-edit-row"><button class="tws-save" data-act="save-availability" type="button">Save availability</button>' +
+          '<span class="tws-edit-msg" data-msg="availability"></span></div>' +
+      '</div>' +
     '</div>';
   }
 
@@ -697,6 +711,27 @@
     edit.classList.add("open");
     row.classList.add("open");
     openEmpId = id;
+    loadAvailability(edit, id);  // pre-fill the weekly availability inputs
+  }
+
+  // GET the employee's recurring weekly availability and pre-fill the time inputs.
+  function loadAvailability(editEl, empId) {
+    fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/availability", {
+      method: "GET", credentials: "same-origin",
+      headers: { "Accept": "application/json" }
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (d) {
+        var rec = (d && d.recurring) || [];
+        rec.forEach(function (a) {
+          var n = a.day_of_week;
+          var s = editEl.querySelector('[data-avail-day="' + n + '"][data-avail-field="start"]');
+          var e = editEl.querySelector('[data-avail-day="' + n + '"][data-avail-field="end"]');
+          if (s) s.value = a.start || "";
+          if (e) e.value = a.end || "";
+        });
+      })
+      .catch(function () {});
   }
 
   // event delegation: a single listener on the roster survives every re-render.
@@ -805,6 +840,34 @@
           load();  // refresh the roster so the chips + pre-checks reflect the new state
         })
         .catch(function () { btn.disabled = false; setMsg(am, "Network error -- try again.", false); });
+      return;
+    }
+
+    if (act === "save-availability") {
+      var vm = msgEl(editEl, "availability");
+      // collect the 7 weekday rows; include only days where BOTH start and end are filled.
+      var recurring = [];
+      for (var n = 0; n < 7; n++) {
+        var sEl = editEl.querySelector('[data-avail-day="' + n + '"][data-avail-field="start"]');
+        var eEl = editEl.querySelector('[data-avail-day="' + n + '"][data-avail-field="end"]');
+        var s = sEl ? sEl.value.trim() : "";
+        var e = eEl ? eEl.value.trim() : "";
+        if (s && e) recurring.push({ day_of_week: n, start: s, end: e });
+      }
+      setMsg(vm, "Saving...", true);
+      btn.disabled = true;
+      fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/availability", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ recurring: recurring, blocks: [] })
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res.ok || (res.d && res.d.ok === false)) { setMsg(vm, (res.d && res.d.error) || "Could not save availability.", false); return; }
+          setMsg(vm, "Saved.", true);
+        })
+        .catch(function () { btn.disabled = false; setMsg(vm, "Network error -- try again.", false); });
       return;
     }
   });

@@ -14,8 +14,11 @@
         { ok, store, schedule:{id,week_start,status,published_at}|null,
           shifts:[{id,employee_id,position_id,start_at,end_at,
                    break_minutes,status,notes,tag_ids}],
-          roster:[{id,full_name,active}], positions:[{id,name,store_key}],
-          tags:[{id,name}] }
+          roster:[{id,full_name,active,position_ids:[id,...]}],
+          positions:[{id,name,store_key}], tags:[{id,name}] }
+        roster[].position_ids = the canonical positions that employee HOLDS at
+          this store (EmployeePosition, per-store) -> drives the position filter:
+          picking a position narrows the schedulable rows to its holders (Sam #2589).
         schedule:null + shifts:[] => no draft yet (Create-draft CTA).
      POST <schedule_new_url>  {week_start}            -> {ok,id,...}
      POST <shift_new_url>     {schedule_id,employee_id?,position_id?,
@@ -162,6 +165,19 @@
   .sv2-posfilter-opt:hover { background: var(--sk-bg-card-hi); }
   .sv2-posfilter-opt input { accent-color: var(--sk-red); margin: 0; }
   .sv2-posfilter-sep { height: 1px; background: var(--sk-border-subtle); margin: 4px 2px; }
+  /* position-filter people hint + holder list (Sam #2589) */
+  .sv2-pos-hint { font-size: 12.5px; color: var(--sk-gold-bright); margin: -4px 2px 10px;
+    line-height: 1.4; }
+  .sv2-pospeople { margin: 0 2px 14px; padding: 12px 14px; border-radius: var(--sk-radius-md);
+    border: 1px solid var(--sk-border-subtle); background: rgba(0,0,0,.18); }
+  .sv2-pospeople-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--sk-cream-faint); margin-bottom: 9px; }
+  .sv2-pospeople-list { display: flex; flex-wrap: wrap; gap: 7px; }
+  .sv2-posperson { font-size: 12.5px; font-weight: 600; color: var(--sk-cream);
+    background: var(--sk-bg-card-hi); border: 1px solid var(--sk-border-subtle);
+    border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
+  .sv2-posperson.inactive { opacity: .5; }
+  .sv2-pospeople-empty { font-size: 12.5px; color: var(--sk-cream-faint); }
 
   /* ---- grid ---- */
   .sv2-gridwrap {
@@ -308,6 +324,17 @@
     <button class="sv2-btn" id="sv2-today">This week</button>
     <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
     <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
+  </div>
+
+  <!-- position-filter people hint (Sam #2589: who can work the selected role) -->
+  <div id="sv2-pos-hint" class="sv2-pos-hint sv2-hidden" role="status" aria-live="polite"></div>
+
+  <!-- People who can work the filtered position(s) (Sam #2589): everyone who
+       HOLDS the role, surfaced so they can be scheduled. Visible whenever a
+       position filter is on -- including the "no draft yet" state. -->
+  <div id="sv2-pospeople" class="sv2-pospeople sv2-hidden">
+    <div class="sv2-pospeople-head" id="sv2-pospeople-head">Can work this position</div>
+    <div class="sv2-pospeople-list" id="sv2-pospeople-list"></div>
   </div>
 
   <!-- grid / states -->
@@ -638,16 +665,66 @@
              '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + '</div>';
   }
 
+  // Does this employee HOLD one of the filtered positions? (Sam #2589: a position
+  // filter surfaces the people who can work that role.) No filter -> everyone.
+  // Uses roster[].position_ids (the canonical positions held at THIS store).
+  function empHoldsFilteredPos(emp) {
+    if (!state.posFilter.length) return true;
+    var held = (emp && emp.position_ids) || [];
+    for (var i = 0; i < held.length; i++) {
+      if (state.posFilter.indexOf(String(held[i])) !== -1) return true;
+    }
+    return false;
+  }
+
   function renderGrid() {
     renderHead();
     var roster = (state.board.roster || []).slice();
+    // When a position is selected, the schedulable rows narrow to the people who
+    // HOLD that position (Sam #2589) -- so "choose Busser" shows every busser,
+    // ready to be given a shift. The Open-shifts row always stays.
+    var people = state.posFilter.length
+      ? roster.filter(empHoldsFilteredPos)
+      : roster;
     var rows = "";
     // Open-shifts row first
     rows += rowHtml({ id: null, full_name: "Open shifts" }, true);
-    roster.forEach(function (emp) { rows += rowHtml(emp, false); });
+    people.forEach(function (emp) { rows += rowHtml(emp, false); });
     elBody.innerHTML = rows;
-    if (!roster.length) {
-      // still allow open-shift row; hint that roster is empty
+    renderFilterHint(people, roster.length);
+  }
+
+  // When a position filter is on, surface WHO can work it (Sam #2589): a one-line
+  // count + a chip list of every holder on this store's roster -- visible even in
+  // the "no draft yet" state, so the manager sees the schedulable people up front.
+  // No filter -> both are hidden. Honest empty state when nobody holds it yet.
+  function renderFilterHint(people, totalPeople) {
+    var hint = $("sv2-pos-hint"), panel = $("sv2-pospeople"),
+        list = $("sv2-pospeople-list"), head = $("sv2-pospeople-head");
+    if (!state.posFilter.length) {
+      if (hint) { hint.textContent = ""; hint.classList.add("sv2-hidden"); }
+      if (panel) panel.classList.add("sv2-hidden");
+      return;
+    }
+    var label = elPosBtn ? elPosBtn.textContent : "this position";
+    var n = people.length;
+    if (hint) {
+      hint.classList.remove("sv2-hidden");
+      hint.textContent = n === 0
+        ? "No one on this store's roster holds " + label + " yet -- assign it on the Team tab to schedule them here."
+        : "Showing " + n + " of " + totalPeople + " who can work " + label + ".";
+    }
+    if (panel && list) {
+      panel.classList.remove("sv2-hidden");
+      if (head) head.textContent = "Can work " + label;
+      if (n === 0) {
+        list.innerHTML = '<span class="sv2-pospeople-empty">No one holds this position at this store yet.</span>';
+      } else {
+        list.innerHTML = people.map(function (e) {
+          return '<span class="sv2-posperson' + (e.active ? "" : " inactive") + '">' +
+                 esc(e.full_name || "Team member") + '</span>';
+        }).join("");
+      }
     }
   }
 
@@ -688,8 +765,20 @@
         del = $("sv2-m-delete"), err = $("sv2-m-err"), title = $("sv2-mtitle"), sub = $("sv2-msub");
     err.textContent = "";
 
-    // populate employee + position selects from board
-    fillSelect(emp, state.board.roster || [], "id", "full_name", "Open shift (unassigned)");
+    // populate employee + position selects from board. When a position filter is
+    // ON, the "Assign to" list narrows to people who HOLD that position (Sam
+    // #2589) -- you're staffing that role, so you only see who can work it. The
+    // shift's CURRENT assignee is always kept in the list (editing never drops an
+    // existing assignment, even if they don't hold the filtered role).
+    var assignable = (state.board.roster || []);
+    if (state.posFilter.length) {
+      var keepId = (opts.shift && opts.shift.employee_id != null)
+        ? String(opts.shift.employee_id) : null;
+      assignable = assignable.filter(function (e) {
+        return empHoldsFilteredPos(e) || (keepId !== null && String(e.id) === keepId);
+      });
+    }
+    fillSelect(emp, assignable, "id", "full_name", "Open shift (unassigned)");
     fillSelect(pos, state.board.positions || [], "id", "name", "No position");
     fillTags(state.board.tags || []);
 
@@ -715,7 +804,10 @@
       state.cellDate = opts.dateISO;
       sub.textContent = dayLabel(new Date(opts.dateISO + "T00:00:00"));
       emp.value = state.cellEmp != null ? String(state.cellEmp) : "";
-      pos.value = ""; start.value = "09:00"; end.value = "17:00"; brk.value = 0; notes.value = "";
+      // If exactly one position is being filtered, default the new shift to it
+      // (Sam #2589: you filtered to Busser, so a new shift here is a Busser shift).
+      pos.value = (state.posFilter.length === 1) ? String(state.posFilter[0]) : "";
+      start.value = "09:00"; end.value = "17:00"; brk.value = 0; notes.value = "";
       hide(del);
     }
     mb.classList.add("show");

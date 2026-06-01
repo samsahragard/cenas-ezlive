@@ -275,14 +275,6 @@ def sv2_board():
                     "break_minutes": sh.break_minutes, "status": sh.status,
                     "notes": sh.notes, "tag_ids": tag_ids,
                 })
-        # roster = employees assigned to THIS store (location-keyed)
-        emp_ids = [a.employee_id for a in
-                   db.query(EmployeeStoreAssignment).filter_by(store_key=store).all()]
-        roster = []
-        if emp_ids:
-            for e in (db.query(Employee).filter(Employee.id.in_(emp_ids))
-                        .order_by(Employee.full_name).all()):
-                roster.append({"id": e.id, "full_name": e.full_name, "active": e.active})
         # positions: filtered to the CANONICAL 14 (Sam #2227 - 13 FOH + Cook);
         # Sling-import junk (C-Grill, C-Prep, Chba, Dish, ...) is hidden. store_key
         # null = all-store. NON-DESTRUCTIVE read filter - never deletes a row
@@ -291,6 +283,32 @@ def sv2_board():
         positions = [{"id": p.id, "name": p.name, "store_key": p.store_key}
                      for p in db.query(Position).order_by(Position.name).all()
                      if _is_canonical_position(p.name)]
+        # position_ids each employee HOLDS at THIS store -> lets the week-view
+        # position filter surface the people who can work a role (Sam #2589): pick
+        # Busser and only Busser-holders stay schedulable. Keyed off
+        # EmployeePosition.store_key (the location, == `store`); restricted to the
+        # canonical ids above so junk positions never gate the roster. A NULL-store
+        # EmployeePosition row (pre per-store backfill) is treated as held at every
+        # store the employee is rostered to, so an un-backfilled holder isn't hidden.
+        _canon_pids = {p["id"] for p in positions}
+        pos_by_emp: dict[int, set[int]] = {}
+        for ep in db.query(EmployeePosition).all():
+            if ep.position_id not in _canon_pids:
+                continue
+            sk = (ep.store_key or "").strip().lower()
+            if sk and sk != store:
+                continue  # held at the OTHER store only
+            pos_by_emp.setdefault(ep.employee_id, set()).add(ep.position_id)
+        # roster = employees assigned to THIS store (location-keyed), each carrying
+        # the canonical position ids they hold here (position_ids, additive).
+        emp_ids = [a.employee_id for a in
+                   db.query(EmployeeStoreAssignment).filter_by(store_key=store).all()]
+        roster = []
+        if emp_ids:
+            for e in (db.query(Employee).filter(Employee.id.in_(emp_ids))
+                        .order_by(Employee.full_name).all()):
+                roster.append({"id": e.id, "full_name": e.full_name, "active": e.active,
+                               "position_ids": sorted(pos_by_emp.get(e.id, set()))})
         tags = [{"id": t.id, "name": t.name} for t in db.query(Tag).order_by(Tag.name).all()]
         return jsonify({
             "ok": True, "store": store,

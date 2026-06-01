@@ -66,6 +66,11 @@
   .tws-sub2panel { display: none; }
   .tws-sub2panel.active { display: block; }
 
+  /* Schedule store selector (Sam #2589): only shown to both-store users. */
+  .tws-sched-storebar { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+  .tws-sched-storelbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tws-cream-meta); }
+  #tws-sched-store { min-width: 150px; }
+
   /* filter row */
   .tws-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
   .tws-pills { display: inline-flex; gap: 4px; background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: 999px; padding: 3px; }
@@ -240,8 +245,24 @@
     <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
   </div>
 
-  {# ---- SCHEDULE panel: nested [Week | Time off | Availability], each a chrome-stripped iframe of the existing mgr page (aick #2333) ---- #}
-  <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
+  {# ---- SCHEDULE panel: nested [Week | Time off | Availability], each a chrome-stripped iframe of the existing mgr page (aick #2333) ----
+     Store selector (Sam #2589): schedules live per concrete store (/dos/ + /uno/);
+     a user who can reach BOTH stores picks which store's schedule to build, and
+     the pick swaps ALL three iframe srcs (Week/Time-off/Availability). The slug is
+     carried as data-store on the panel; each iframe builds its src from that slug +
+     its own data-path. Server defaults to the URL store when it's concrete. #}
+  <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel"
+       data-store="{{ schedule_store_default }}">
+    {% if schedule_stores and schedule_stores|length > 1 %}
+    <div class="tws-sched-storebar">
+      <label class="tws-sched-storelbl" for="tws-sched-store">Store</label>
+      <select class="tws-select" id="tws-sched-store" aria-label="Schedule store">
+        {% for s in schedule_stores %}
+        <option value="{{ s.slug }}"{% if s.slug == schedule_store_default %} selected{% endif %}>{{ s.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="tws-subbar" role="tablist">
       <button class="tws-subtab active" data-sub2="week" type="button" role="tab">Week</button>
       <button class="tws-subtab" data-sub2="timeoff" type="button" role="tab">Time off</button>
@@ -250,19 +271,19 @@
     <div class="tws-sub2panel active" data-sub2-panel="week">
       <div class="tws-embed-wrap">
         <div class="tws-embed-loading" data-embed-loading="week"><span class="tws-embed-dot"></span><span>Loading Week Builder</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="week" data-src="/{{ store_slug }}/schedules-v2/?embed=1" title="Week Builder" loading="lazy"></iframe>
+        <iframe class="tws-embed-frame" data-embed-frame="week" data-path="schedules-v2/?embed=1" data-src="/{{ schedule_store_default }}/schedules-v2/?embed=1" title="Week Builder" loading="lazy"></iframe>
       </div>
     </div>
     <div class="tws-sub2panel" data-sub2-panel="timeoff">
       <div class="tws-embed-wrap">
         <div class="tws-embed-loading" data-embed-loading="timeoff"><span class="tws-embed-dot"></span><span>Loading Time off</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="timeoff" data-src="/{{ store_slug }}/schedules-v2/time-off?embed=1" title="Time off" loading="lazy"></iframe>
+        <iframe class="tws-embed-frame" data-embed-frame="timeoff" data-path="schedules-v2/time-off?embed=1" data-src="/{{ schedule_store_default }}/schedules-v2/time-off?embed=1" title="Time off" loading="lazy"></iframe>
       </div>
     </div>
     <div class="tws-sub2panel" data-sub2-panel="availability">
       <div class="tws-embed-wrap">
         <div class="tws-embed-loading" data-embed-loading="availability"><span class="tws-embed-dot"></span><span>Loading Availability</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="availability" data-src="/{{ store_slug }}/schedules-v2/availability?embed=1" title="Availability" loading="lazy"></iframe>
+        <iframe class="tws-embed-frame" data-embed-frame="availability" data-path="schedules-v2/availability?embed=1" data-src="/{{ schedule_store_default }}/schedules-v2/availability?embed=1" title="Availability" loading="lazy"></iframe>
       </div>
     </div>
   </div>
@@ -368,6 +389,39 @@
       loadFrame(activeSub2);
     });
   });
+  /* ---- Schedule STORE switch (Sam #2589) ----
+     A both-store user picks which concrete store's schedule to build. The pick
+     repoints ALL THREE Schedule iframes (Week / Time off / Availability) at the
+     new store by rebuilding each src from <slug> + the iframe's own data-path,
+     then resets their loaded state (so a re-open re-fetches) and reloads whichever
+     Schedule sub-tab is showing right now. /dos/ = Tomball, /uno/ = Copperfield. */
+  var schedPanel = document.getElementById("tws-panel-schedule");
+  var schedStoreSel = document.getElementById("tws-sched-store");
+  var SCHED_KEYS = ["week", "timeoff", "availability"];
+  if (schedStoreSel && schedPanel) {
+    schedStoreSel.addEventListener("change", function () {
+      var slug = schedStoreSel.value;
+      if (!slug) return;
+      schedPanel.setAttribute("data-store", slug);
+      SCHED_KEYS.forEach(function (key) {
+        var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+        if (!frame) return;
+        var path = frame.getAttribute("data-path") || "";
+        frame.setAttribute("data-src", "/" + slug + "/" + path);
+        // forget the old load: blank the src, re-arm the loading shim, drop the
+        // loaded guard -- so the next time this sub-tab is shown it re-fetches the
+        // NEW store (and reveal() re-runs on its load).
+        loaded[key] = false;
+        frame.classList.remove("ready");
+        frame.removeAttribute("src");
+        var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+        if (shim) shim.classList.remove("gone");
+      });
+      // reload the Schedule sub-tab currently in view, if the Schedule tab is open
+      if (schedPanel.classList.contains("active")) loadFrame(activeSub2);
+    });
+  }
+
   // honour ?sub= on load
   var initial = (new URLSearchParams(location.search)).get("sub") || "team";
   show(initial);

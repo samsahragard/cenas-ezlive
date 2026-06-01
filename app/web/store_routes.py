@@ -4841,6 +4841,33 @@ def team_workspace():
         addable_positions = addable_positions_for(_role, _db)
     finally:
         _db.close()
+
+    # Schedule store selector (Sam #2589): the Schedule sub-tab embeds the Week
+    # Builder per CONCRETE store (schedules are stored by location key tomball/
+    # copperfield -> served at /dos/ + /uno/; /partner/ + /corporate/ map to
+    # 'both' and have NO schedule rows). So a user with reach to BOTH stores needs
+    # to pick which store's schedule to build. Derive the concrete options from
+    # the user's accessible stores: partner/corporate (or any mix covering both)
+    # -> Tomball + Copperfield; a single-store manager -> just their store.
+    from app.web.permissions import accessible_store_slugs
+    _acc = accessible_store_slugs(getattr(g, "current_user", None))
+    _CONCRETE = [("dos", "Tomball"), ("uno", "Copperfield")]
+    if ("partner" in _acc) or ("corporate" in _acc):
+        _concrete_slugs = ["dos", "uno"]
+    else:
+        _concrete_slugs = [s for s in ("dos", "uno") if s in _acc]
+    if not _concrete_slugs:
+        # Fallback (legacy/tooling session with no resolvable scope): offer both
+        # so the Schedule tab is never dead -- the per-store gate still guards each
+        # iframe request, so an out-of-scope pick just renders the friendly notice.
+        _concrete_slugs = ["dos", "uno"]
+    schedule_stores = [{"slug": s, "label": dict(_CONCRETE)[s]} for s in _concrete_slugs]
+    # Default the embedded schedule to the URL's store when it's already concrete
+    # (/dos/team or /uno/team), else the first option (a both-store user lands on
+    # Tomball but can switch). g.current_store is the slug the page loaded under.
+    _cur = getattr(g, "current_store", None)
+    schedule_store_default = _cur if _cur in _concrete_slugs else _concrete_slugs[0]
+
     return render_template(
         "team_workspace.html",
         active="partner_team",
@@ -4852,6 +4879,9 @@ def team_workspace():
         # so the dropdown must offer every canonical name -- including ones no
         # one currently holds -- not just positions seen on the shown rows.
         filter_positions=sorted(CANONICAL_POSITIONS),
+        # Schedule store selector (Sam #2589): concrete options + the default pick.
+        schedule_stores=schedule_stores,
+        schedule_store_default=schedule_store_default,
     )
 
 

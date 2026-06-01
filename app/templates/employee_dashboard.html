@@ -16,19 +16,25 @@
 <title>My Dashboard &mdash; Cenas Kitchen</title>
 <style>
   :root{
-    --blue:        #15205c;
-    --blue-bright: #1d2a70;
-    --blue-deep:   #0a1340;
-    --red:         #c8302a;
-    --red-bright:  #e54a3f;
-    --red-deep:    #8a1d18;
-    --cream:       #f4e7d0;
-    --cream-soft:  #ebd9bc;
-    --ink:         #14205c;
+    /* House palette (warm gold / cream / dark) — var NAMES kept from the
+       old blue/cream scheme so the rest of this page's CSS recolours for
+       free. --blue* now carry the dark surface + gold-accent roles; --red*
+       are the warm gold accent; --cream* the house cream. */
+    --blue:        #E4B340;   /* gold accent (was navy) */
+    --blue-bright: #FFD970;   /* bright gold */
+    --blue-deep:   #FFD970;   /* heading text on dark -> bright gold */
+    --red:         #E4B340;   /* eyebrow / accent -> gold */
+    --red-bright:  #FFD970;
+    --red-deep:    #d4af37;
+    --cream:       #FAF6EC;   /* house cream */
+    --cream-soft:  #ece3d0;
+    --ink:         #FAF6EC;   /* body text -> cream */
+    --surface:     #241409;   /* card / panel surface */
+    --bd-gold:     rgba(217,164,54,0.18);  /* gold hairline border */
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   html,body{
-    width:100%; min-height:100vh; background:#0a0604;
+    width:100%; min-height:100vh; background:#1a0d08;
     font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
     position:relative; color: var(--ink);
   }
@@ -44,14 +50,17 @@
   }
   .wrap{
     position:relative; z-index:1;
-    max-width:520px; margin:0 auto; padding:20px 18px 36px;
+    max-width:520px; margin:0 auto; padding:20px 18px 90px;
     display:flex; flex-direction:column; min-height:100vh;
   }
 
-  /* Top bar: logo + logout */
+  /* Top bar: logo + logout — house dark bar look */
   .topbar{
     display:flex; align-items:center; justify-content:space-between; gap:12px;
     margin-bottom:18px;
+    background:#241409; border:0.5px solid var(--bd-gold);
+    border-radius:14px; padding:12px 14px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.35);
   }
   .topbar img{
     width:auto; height:34px;
@@ -67,15 +76,15 @@
   }
   .logout-btn:hover{ background: rgba(244,231,208,0.22); }
 
-  /* Greeting card */
+  /* Greeting card — house dark surface with a warm gold edge + glow */
   .greeting{
     background:
-      radial-gradient(ellipse at 30% 20%, #ffffff 0%, var(--cream) 45%, var(--cream-soft) 100%);
+      linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
+    border:0.5px solid var(--bd-gold);
     border-radius:16px; padding:18px 20px; margin-bottom:18px;
     box-shadow:
-      0 0 0 2px var(--blue-bright),
-      0 2px 0 2px var(--blue-deep),
-      0 0 0 5px var(--red),
+      inset 0 0 0 1px rgba(228,179,64,0.10),
+      0 0 26px rgba(255,217,112,0.10),
       0 10px 22px rgba(0,0,0,0.5);
   }
   .greeting .hi{
@@ -87,7 +96,7 @@
     margin-top:2px;
   }
   .greeting .meta{
-    font-size:13px; color: rgba(20,32,92,0.7); margin-top:6px;
+    font-size:13px; color: rgba(250,246,236,0.7); margin-top:6px;
   }
 
   /* Feature tiles */
@@ -99,9 +108,10 @@
     display:grid; grid-template-columns: repeat(2, 1fr); gap:14px;
   }
   .tile{
-    position:relative; background: rgba(244,231,208,0.96);
+    position:relative; background: var(--surface);
+    border:0.5px solid var(--bd-gold);
     border-radius:14px; padding:16px 14px 18px;
-    box-shadow: 0 0 0 1px rgba(29,42,112,0.5), 0 6px 14px rgba(0,0,0,0.4);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.4);
     display:flex; flex-direction:column; gap:10px; min-height:108px;
   }
   .tile.soon{ opacity:0.62; }
@@ -116,8 +126,8 @@
   .tile .t-badge{
     position:absolute; top:10px; right:10px;
     font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
-    color: var(--red-deep); background: rgba(200,48,42,0.14);
-    border:1px solid rgba(200,48,42,0.30); border-radius:999px; padding:2px 8px;
+    color: var(--red-deep); background: rgba(228,179,64,0.12);
+    border:1px solid rgba(228,179,64,0.30); border-radius:999px; padding:2px 8px;
   }
 
   .footnote{
@@ -179,6 +189,10 @@
 
   <div class="footnote">Schedules V2 &middot; more tools arriving block by block</div>
 </div>
+
+{# House bottom nav. Dashboard is the hub — no single tab represents it,
+   so no active_nav is passed (no tab is highlighted here). #}
+{% include 'partials/_employee_nav.html' %}
 
 <script>
   const LOGOUT_URL = {{ (logout_url|default('/employee/logout'))|tojson }};

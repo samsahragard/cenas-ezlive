@@ -1,0 +1,142 @@
+{# ============================================================
+   _employee_nav.html — Cenas Kitchen employee-portal bottom nav.
+
+   The warm "house" twin of partials/_bottom_nav.html's .ck-bnav, for the
+   five standalone employee-portal pages (dashboard / schedule / time-off /
+   shift-marketplace / profile). Those pages do NOT extend base_dashboard,
+   so this partial is fully self-contained: it ships its own <style> and
+   uses inline SVG glyphs (the base_dashboard Tabler webfont is not loaded
+   on these pages, so `ti ti-*` would not render here — the pages already
+   draw their own icons as inline SVG, so we match that).
+
+   Fixed to the bottom on every viewport (these are mobile-first employee
+   screens — no desktop sidebar to defer to, unlike _bottom_nav.html which
+   only shows <=1024px). Dark #2a2419 bar, gold #d4af37 resting tabs, the
+   active tab gets a white top-border + white label + the same golden-glow
+   box-shadow as .ck-bnav.
+
+   6 tabs (NO Availability — that surface is manager-controlled / retired):
+     My Schedule        -> /employee/my-schedule        (built)
+     Time Off           -> /employee/time-off           (built)
+     Shift Marketplace  -> /employee/shift-marketplace  (built)
+     Notifications      -> /employee/profile            (built; the
+                           notification-preferences page)
+     Announcements      -> #  (not built yet -> "soon")
+     Messages           -> #  (not built yet -> "soon")
+
+   Active tab: the including page passes {{ active_nav }} (one of the keys
+   below: my_schedule | time_off | shift_marketplace | notifications |
+   announcements | messages). It defaults to '' (none). As a fallback we
+   also light a tab when request.path matches its href, so a page that
+   forgets to pass active_nav still highlights correctly.
+   ============================================================ #}
+{% set _en_active = active_nav|default('') or '' %}
+{% set _en_path = request.path if request else '' %}
+<style>
+  .ck-enav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    border-top: 1px solid rgba(217, 164, 54, 0.18);
+    background: #2a2419;
+    /* Lift the tappable row clear of the phone's home indicator. The
+       max() floor mirrors _bottom_nav.html (covers a 0-inset WebView). */
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+    /* Soft golden glow above the bar (the .ck-bnav signature). */
+    box-shadow: 0 -8px 24px -8px rgba(212, 175, 55, 0.35),
+                0 -2px 8px -2px rgba(212, 175, 55, 0.22);
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  }
+  .ck-enav *, .ck-enav *::before, .ck-enav *::after { box-sizing: border-box; }
+  .ck-enav-inner { display: flex; }
+  .ck-enav-tab {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 9px 2px 7px;
+    background: transparent; border: 0;
+    border-top: 2px solid transparent; margin-top: -1px;
+    /* Resting state: gold with a soft glow. */
+    color: #d4af37;
+    text-decoration: none; cursor: pointer;
+    font-family: inherit;
+  }
+  .ck-enav-tab .en-ico {
+    width: 21px; height: 21px; display: block;
+    fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+    filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
+  }
+  .ck-enav-tab .en-lbl {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.03em;
+    text-transform: uppercase; color: #d4af37;
+    text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
+  }
+  /* Current section -> white (the .ck-bnav active treatment). */
+  .ck-enav-tab.active { border-top-color: #ffffff; }
+  .ck-enav-tab.active .en-lbl {
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  }
+  .ck-enav-tab.active .en-ico {
+    color: #ffffff;
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+  }
+  /* Not-yet-built surface ("soon") — dimmed, with a tiny caption. */
+  .ck-enav-tab.soon { color: rgba(212, 175, 55, 0.45); cursor: default; }
+  .ck-enav-tab.soon .en-lbl {
+    color: rgba(212, 175, 55, 0.45);
+    text-shadow: none;
+  }
+  .ck-enav-tab.soon .en-ico {
+    filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.28));
+    opacity: 0.85;
+  }
+  .ck-enav-tab.soon .en-soon {
+    font-size: 7px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; line-height: 1;
+    color: rgba(212, 175, 55, 0.5);
+    margin-top: -1px;
+  }
+</style>
+
+{# Inline SVG glyphs keyed by tab — drawn in the same line-icon style the
+   employee pages already use (stroke, no fill). #}
+{% set _en_icons = {
+  'my_schedule':       '<rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>',
+  'time_off':          '<path d="M5 21 V8 a2 2 0 0 1 2 -2 h10 a2 2 0 0 1 2 2 v13"/><path d="M9 13 l2 2 l4 -4"/>',
+  'shift_marketplace': '<path d="M3 7 h18 l-2 12 H5 Z"/><path d="M8 7 a4 4 0 0 1 8 0"/>',
+  'notifications':     '<path d="M18 8 a6 6 0 0 0 -12 0 c0 7 -3 9 -3 9 h18 s-3 -2 -3 -9"/><path d="M13.7 21 a2 2 0 0 1 -3.4 0"/>',
+  'announcements':     '<path d="M3 11 l18 -7 v16 Z"/><line x1="3" y1="11" x2="3" y2="17"/>',
+  'messages':          '<path d="M21 15 a2 2 0 0 1 -2 2 H7 l-4 4 V5 a2 2 0 0 1 2 -2 h14 a2 2 0 0 1 2 2 Z"/>'
+} %}
+
+<nav class="ck-enav" aria-label="Employee navigation">
+  <div class="ck-enav-inner">
+    {% for key, href, label in [
+      ('my_schedule',       '/employee/my-schedule',       'Schedule'),
+      ('time_off',          '/employee/time-off',          'Time Off'),
+      ('shift_marketplace', '/employee/shift-marketplace', 'Market'),
+      ('notifications',     '/employee/profile',           'Alerts'),
+    ] %}
+    <a href="{{ href }}"
+       class="ck-enav-tab{% if _en_active == key or (not _en_active and _en_path == href) %} active{% endif %}"{% if _en_active == key or (not _en_active and _en_path == href) %} aria-current="page"{% endif %}>
+      <svg class="en-ico" viewBox="0 0 24 24" aria-hidden="true">{{ _en_icons[key]|safe }}</svg>
+      <span class="en-lbl">{{ label }}</span>
+    </a>
+    {% endfor %}
+
+    {# Not-yet-built surfaces -> href="#" with subtle "soon" styling so a
+       tap never breaks (no real page exists for these yet). #}
+    {% for key, label in [
+      ('announcements', 'News'),
+      ('messages',      'Messages'),
+    ] %}
+    <a href="#"
+       class="ck-enav-tab soon"
+       aria-disabled="true"
+       title="{{ label }} — coming soon">
+      <svg class="en-ico" viewBox="0 0 24 24" aria-hidden="true">{{ _en_icons[key]|safe }}</svg>
+      <span class="en-lbl">{{ label }}</span>
+      <span class="en-soon">soon</span>
+    </a>
+    {% endfor %}
+  </div>
+</nav>

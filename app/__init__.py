@@ -19,6 +19,7 @@ from app.web import schedules_v2_timeoff  # noqa: F401  B7: attaches the manager
 from app.web import schedules_v2_availability  # noqa: F401  B8: attaches the manager availability view to store_bp (ckai; must precede register_blueprint)
 from app.web import schedules_v2_market  # noqa: F401  B9: attaches the manager offer/swap approval routes to store_bp (ckai; must precede register_blueprint)
 from app.web import schedules_v2_roster  # noqa: F401  email-pivot: attaches the manager roster-assignment write route (POST /<store>/schedules-v2/roster) to store_bp (ckai; must precede register_blueprint)
+from app.web import toast_link_routes  # noqa: F401  Link tab: attaches the manager Toast match-suggestions + per-employee labor/perf routes (GET /<store>/schedules-v2/toast/*) to store_bp (ckbro; must precede register_blueprint)
 from app.web.developer_chat import dev_chat as dev_chat_bp
 from app.web.permissions_admin import permissions_admin as perms_admin_bp  # PERMISSIONS admin page (partner-only, Sam #1676)
 from app.web.interview import interview as interview_bp

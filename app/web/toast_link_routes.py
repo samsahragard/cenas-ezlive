@@ -1,0 +1,331 @@
+"""Schedules V2 -- "Link" tab Toast backend (ckbro, 2026-05-31).
+
+Two manager-only read endpoints that power the Team > Link tab, which pairs
+each Cena scheduling employee with their Toast POS identity and then surfaces
+that employee's Toast labor + server-performance for the store.
+
+REUSE, not reinvent (per the build brief):
+  - Toast API access: app.services.toast_client (ToastClient.shared(),
+    restaurant_guids(), fetch_employees, fetch_time_entries). Creds are env
+    vars handled INSIDE toast_client -- we never touch them here.
+  - The Cena<->Toast name+phone MATCH logic: app.services.sling_reports already
+    cross-references Cena people against Toast /labor/v1/employees by a
+    normalized "first last" key with a last-name-only fallback, formatting the
+    phone via _fmt_phone. We import _fmt_phone and mirror that exact normalize
+    rule here (the sling matcher is a name->phone MAP builder, not a 1:1 pair
+    emitter, so we run the same rule to emit {cena<->toast} pairs). We do NOT
+    use app/services/toast_match.py.
+  - Per-employee PERFORMANCE (server sales): app.services.toast_reports
+    .server_perf_report -- the same pull the Operations > Performance page uses
+    (reports.py:411 `toast_reports.server_perf_report(start, end, location,
+    role_filter=...)`). It returns rows keyed by employee NAME within
+    by_location[loc]["rows"]; we pull for the resolved store and pick the row
+    whose name matches the Toast employee.
+  - The Cena store roster: app.services.team_roster.team_roster(db,
+    location=<store>) -> stores[].employees[] each {id, full_name, phone, ...}.
+
+Conventions mirror app.web.schedules_v2_roster: rides store_bp (inheriting
+_pull_store 404 + _per_store_gate cross-store), gated @require_level(_MGR) ONLY
+(NO @requires_permission -- a prior lockout came from gating a manager action on
+a reserved catalog permission), SessionLocal() in try/finally, and never touches
+session['partner_auth_ok']. Every Toast call is wrapped so a Toast/creds failure
+returns {"ok": false, "error": ...} -- never an uncaught 500.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timedelta
+
+from flask import jsonify
+
+from app.db import SessionLocal
+from app.services.sling_reports import _fmt_phone
+from app.services.toast_client import ToastClient, restaurant_guids
+from app.web.permissions import require_level
+from app.web.schedules_v2 import _MGR, _store
+from app.web.store_routes import store_bp
+
+log = logging.getLogger(__name__)
+
+# Recent window for the per-employee timecard/hours pull.
+_TIMECARD_WINDOW_DAYS = 30
+
+
+def _norm_name(first: str, last: str) -> str:
+    """Normalized 'first last' match key -- the SAME rule sling_reports uses to
+    cross-reference Cena names against Toast employees (lowercased, trimmed)."""
+    return f"{(first or '').strip().lower()} {(last or '').strip().lower()}".strip()
+
+
+def _norm_full(full: str) -> str:
+    """Normalize a single full-name string the same way (Cena's full_name is one
+    field; Toast carries first/last separately)."""
+    return " ".join((full or "").strip().lower().split())
+
+
+def _toast_name(e: dict) -> str:
+    """Display 'First Last' for a Toast employee (chosenName falls back to
+    firstName -- same precedence the sling matcher + schedule_report use)."""
+    first = (e.get("firstName") or e.get("chosenName") or "").strip()
+    last = (e.get("lastName") or "").strip()
+    return (f"{first} {last}".strip()
+            or e.get("email") or (e.get("guid") or "?")[:8])
+
+
+def _toast_phone(e: dict) -> str:
+    """Formatted phone for a Toast employee (Toast carries phoneNumber +
+    phoneNumberCountryCode); '' when absent. Reuses sling_reports._fmt_phone."""
+    raw = e.get("phoneNumber")
+    if not raw:
+        return ""
+    return _fmt_phone(raw, e.get("phoneNumberCountryCode") or "")
+
+
+def _cena_roster(db, store: str) -> list[dict]:
+    """THIS store's Cena scheduling roster as [{emp_id, name, phone}].
+
+    Cleanest source = team_roster(db, location=store): it already resolves the
+    store-based roster (EmployeeStoreAssignment) + names + phones, returning
+    stores[].employees[]. We narrow to the requested store and flatten."""
+    from app.services.team_roster import team_roster
+    data = team_roster(db, location=store)
+    out: list[dict] = []
+    for s in data.get("stores", []):
+        if s.get("store_key") != store:
+            continue
+        for e in s.get("employees", []):
+            out.append({
+                "emp_id": e.get("id"),
+                "name": e.get("full_name") or "",
+                "phone": e.get("phone") or "",
+            })
+    return out
+
+
+@store_bp.route("/schedules-v2/toast/match-suggestions", methods=["GET"])
+@require_level(_MGR)
+def sv2_toast_match_suggestions():
+    """LINK TAB -- suggest Cena<->Toast employee pairings for THIS store.
+
+    Resolve the location via _store() and its restaurant GUID via
+    restaurant_guids(); fetch_employees(location, guid); pull this store's Cena
+    roster; match by the reused sling normalize rule (exact 'first last', then a
+    last-name-only fallback). ->
+      {ok, suggestions:[{cena_emp_id, cena_name, cena_phone, toast_id,
+                         toast_name, toast_phone, confidence}],
+       unmatched_cena:[{emp_id, name, phone}],
+       unmatched_toast:[{toast_id, name, phone}]}
+    Any Toast/creds failure -> {ok:false, error} (HTTP 502), never a 500.
+    """
+    store = _store()
+    if not store or store not in ("tomball", "copperfield"):
+        # Link is a per-store action; 'both'/partner has no single GUID to match.
+        return jsonify({"ok": False,
+                        "error": "Select a specific store (Tomball or Copperfield) to link Toast."}), 400
+
+    guids = restaurant_guids()
+    guid = guids.get(store)
+    if not guid:
+        return jsonify({"ok": False,
+                        "error": f"No Toast restaurant GUID configured for {store}."}), 502
+
+    try:
+        toast_emps = ToastClient.shared().fetch_employees(store, guid) or []
+    except Exception as ex:
+        log.warning("toast-link: fetch_employees failed for %s: %s", store, ex)
+        return jsonify({"ok": False, "error": f"Toast employees unavailable: {ex}"}), 502
+
+    # Build the Toast side: skip deleted; index by normalized full name + by
+    # last name (the weak fallback, only used when a full-name match misses).
+    toast_by_full: dict[str, dict] = {}
+    toast_by_last: dict[str, list[dict]] = {}
+    toast_records: list[dict] = []
+    for e in toast_emps:
+        if e.get("deleted"):
+            continue
+        first = (e.get("firstName") or e.get("chosenName") or "").strip()
+        last = (e.get("lastName") or "").strip()
+        rec = {
+            "toast_id": e.get("guid"),
+            "name": _toast_name(e),
+            "phone": _toast_phone(e),
+            "_full": _norm_name(first, last),
+            "_last": last.lower(),
+        }
+        toast_records.append(rec)
+        if rec["_full"]:
+            # First writer wins on a full-name collision (rare); both still
+            # appear in unmatched_toast if neither gets claimed.
+            toast_by_full.setdefault(rec["_full"], rec)
+        if rec["_last"]:
+            toast_by_last.setdefault(rec["_last"], []).append(rec)
+
+    db = SessionLocal()
+    try:
+        cena = _cena_roster(db, store)
+    finally:
+        db.close()
+
+    suggestions: list[dict] = []
+    unmatched_cena: list[dict] = []
+    claimed: set[str] = set()  # toast_ids already paired
+
+    for c in cena:
+        full = _norm_full(c["name"])
+        parts = full.split()
+        match = None
+        confidence = None
+        # 1) exact normalized full-name match
+        hit = toast_by_full.get(full)
+        if hit and hit["toast_id"] not in claimed:
+            match, confidence = hit, "high"
+        # 2) last-name-only fallback -- ONLY when exactly one unclaimed Toast
+        #    employee shares the last name (avoid mislinking two same-surname).
+        if match is None and parts:
+            cands = [r for r in toast_by_last.get(parts[-1], [])
+                     if r["toast_id"] not in claimed]
+            if len(cands) == 1:
+                match, confidence = cands[0], "low"
+        if match is not None:
+            claimed.add(match["toast_id"])
+            suggestions.append({
+                "cena_emp_id": c["emp_id"],
+                "cena_name": c["name"],
+                "cena_phone": c["phone"],
+                "toast_id": match["toast_id"],
+                "toast_name": match["name"],
+                "toast_phone": match["phone"],
+                "confidence": confidence,
+            })
+        else:
+            unmatched_cena.append({"emp_id": c["emp_id"],
+                                   "name": c["name"], "phone": c["phone"]})
+
+    unmatched_toast = [{"toast_id": r["toast_id"], "name": r["name"], "phone": r["phone"]}
+                       for r in toast_records if r["toast_id"] not in claimed]
+
+    return jsonify({
+        "ok": True,
+        "suggestions": suggestions,
+        "unmatched_cena": unmatched_cena,
+        "unmatched_toast": unmatched_toast,
+    }), 200
+
+
+@store_bp.route("/schedules-v2/toast/employee/<toast_id>", methods=["GET"])
+@require_level(_MGR)
+def sv2_toast_employee(toast_id):
+    """LINK TAB -- one Toast employee's recent labor + performance for THIS store.
+
+    Resolve location + GUID; pull fetch_time_entries(location, guid, start, end)
+    over the last ~30 days and keep only THIS employee's entries (filter on
+    employeeReference.guid == toast_id) -> hours (total) + timecards (in/out
+    list). Then server_perf_report (the Operations Performance pull) for the same
+    window + store, matched to this employee by name -> performance. payroll is
+    DERIVED from the time entries x the employee's wage IF Toast exposes an
+    hourlyWage on the entries ({estimated:true}); otherwise we say the Payroll
+    API isn't wired yet (pending creds) rather than fabricate a number.
+    ->
+      {ok, hours, timecards:[...], performance:{...}, payroll:{...}}
+    Any Toast/creds failure -> {ok:false, error} (HTTP 502), never a 500.
+    """
+    store = _store()
+    if not store or store not in ("tomball", "copperfield"):
+        return jsonify({"ok": False,
+                        "error": "Select a specific store (Tomball or Copperfield)."}), 400
+
+    guids = restaurant_guids()
+    guid = guids.get(store)
+    if not guid:
+        return jsonify({"ok": False,
+                        "error": f"No Toast restaurant GUID configured for {store}."}), 502
+
+    # Last ~30 days, inclusive. fetch_time_entries takes datetimes (date-only
+    # granularity for the range) -- same shape attendance/weekly use.
+    end = datetime.utcnow() - timedelta(hours=5)  # CT "today" (matches toast_client)
+    start = end - timedelta(days=_TIMECARD_WINDOW_DAYS)
+
+    client = ToastClient.shared()
+
+    # --- time entries -> hours + timecards (filtered to THIS toast_id) ---
+    try:
+        entries = client.fetch_time_entries(store, guid, start, end) or []
+    except Exception as ex:
+        log.warning("toast-link: fetch_time_entries failed for %s/%s: %s", store, toast_id, ex)
+        return jsonify({"ok": False, "error": f"Toast time entries unavailable: {ex}"}), 502
+
+    timecards: list[dict] = []
+    total_hours = 0.0
+    total_cost = 0.0
+    wage_seen = False
+    for te in entries:
+        if te.get("deleted"):
+            continue
+        if (te.get("employeeReference") or {}).get("guid") != toast_id:
+            continue
+        reg = float(te.get("regularHours") or 0)
+        ot = float(te.get("overtimeHours") or 0)
+        hrs = reg + ot
+        total_hours += hrs
+        wage = te.get("hourlyWage")
+        if wage is not None:
+            wage_seen = True
+            w = float(wage or 0)
+            total_cost += reg * w + ot * w * 1.5
+        timecards.append({
+            "guid": te.get("guid"),
+            "in": te.get("inDate"),
+            "out": te.get("outDate"),
+            "regular_hours": reg,
+            "overtime_hours": ot,
+            "hours": hrs,
+            "open": te.get("outDate") in (None, "") or (te.get("outDate") or "").startswith("1970"),
+        })
+    timecards.sort(key=lambda t: (t["in"] or ""))
+
+    # --- performance: the Operations Performance pull, matched by name ---
+    performance: dict = {"available": False,
+                         "note": "No Toast server-performance data for this employee in the window."}
+    toast_name = ""
+    try:
+        # Resolve this employee's display name (to match the perf row by name).
+        for e in (client.fetch_employees(store, guid) or []):
+            if e.get("guid") == toast_id:
+                toast_name = _toast_name(e)
+                break
+        from app.services import toast_reports
+        report = toast_reports.server_perf_report(start, end, store)
+        rows = ((report.get("by_location") or {}).get(store) or {}).get("rows") or []
+        want = _norm_full(toast_name)
+        match_row = next((r for r in rows if _norm_full(r.get("name") or "") == want), None)
+        if match_row:
+            performance = {"available": True, **match_row}
+    except Exception as ex:
+        # Performance is best-effort: a failure here must not 500 or blank the
+        # whole response (hours/timecards are still useful). Surface a note.
+        log.warning("toast-link: server_perf_report failed for %s/%s: %s", store, toast_id, ex)
+        performance = {"available": False, "note": f"Performance unavailable: {ex}"}
+
+    # --- payroll: derive from time entries x wage IF a rate is available ---
+    if wage_seen and total_hours > 0:
+        payroll = {
+            "available": True,
+            "estimated": True,
+            "gross_pay": round(total_cost, 2),
+            "hours": round(total_hours, 2),
+            "note": "Estimated from Toast time entries x hourlyWage (reg + 1.5x OT); "
+                    "not the official Toast Payroll figure.",
+        }
+    else:
+        payroll = {
+            "available": False,
+            "note": "Toast Payroll API not wired -- pending creds check",
+        }
+
+    return jsonify({
+        "ok": True,
+        "hours": round(total_hours, 2),
+        "timecards": timecards,
+        "performance": performance,
+        "payroll": payroll,
+    }), 200

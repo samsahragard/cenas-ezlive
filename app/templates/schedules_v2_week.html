@@ -698,14 +698,23 @@
       ? roster.filter(empHoldsFilteredPos)
       : roster;
     var rows = "";
-    // Open-shifts row first
+    // Sam #2889: float everyone who ACTUALLY WORKED this week to the top, so a
+    // historical/imported week shows its schedule immediately instead of being
+    // buried under empty current-roster rows. The bench (no shift this week) sinks
+    // to the bottom (still present to assign on a live week).
+    function empHasShifts(emp) {
+      for (var d = 0; d < 7; d++) { if (shiftsFor(emp, isoDate(addDays(state.weekStart, d))).length) return true; }
+      return false;
+    }
+    var withShifts = [], bench = [];
+    people.forEach(function (emp) { (empHasShifts(emp) ? withShifts : bench).push(emp); });
+    // Open row, then everyone-with-shifts (current + former), then the empty bench.
     rows += rowHtml({ id: null, full_name: "Open shifts" }, "open");
-    people.forEach(function (emp) { rows += rowHtml(emp, "current"); });
-    // Former-staff rows (Sam #2872): anyone in THIS week's shifts with no employee
-    // record (display_name set) -> a struck-through row, so paging back reads complete.
+    withShifts.forEach(function (emp) { rows += rowHtml(emp, "current"); });
     formerNamesInWeek().forEach(function (nm) {
       rows += rowHtml({ id: null, former: nm, full_name: nm }, "former");
     });
+    bench.forEach(function (emp) { rows += rowHtml(emp, "current"); });
     elBody.innerHTML = rows;
     renderFilterHint(people, roster.length);
   }

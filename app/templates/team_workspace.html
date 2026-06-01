@@ -451,6 +451,17 @@
       if (lay) { lay.style.setProperty("grid-template-columns", "1fr", "important"); lay.style.setProperty("display", "block", "important"); }
       var m = doc.querySelector("main.main");
       if (m) { m.style.setProperty("margin", "0", "important"); m.style.setProperty("padding", "0", "important"); m.style.setProperty("width", "100%", "important"); m.style.setProperty("max-width", "100%", "important"); }
+      // Sam #2888: grow the embed to its CONTENT height so EVERY schedule row is
+      // visible by scrolling the page -- no cramped 78vh inner scrollbar. Re-measure
+      // on inner re-render (week switch / row sort) via ResizeObserver (same-origin).
+      try {
+        var fit = function () {
+          var h = (doc.body ? doc.body.scrollHeight : 0);
+          if (h > 0) frame.style.setProperty("height", (h + 24) + "px", "important");
+        };
+        fit(); setTimeout(fit, 400); setTimeout(fit, 1200);
+        if (window.ResizeObserver && doc.body) { try { new ResizeObserver(fit).observe(doc.body); } catch (e) {} }
+      } catch (e) {}
     }
     reveal(frame);
   }

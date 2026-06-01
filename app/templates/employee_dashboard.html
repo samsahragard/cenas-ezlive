@@ -329,7 +329,7 @@
       .then(function(res){
         var d = res.d || {};
         if (res.status === 200 && d.ok && d.linked === false) return;   // not linked -> hidden
-        if (d.linked && (!d.ok || res.status >= 500)){ pending(); return; }  // linked, data pending
+        if (d.linked && (d.syncing || !d.ok || res.status >= 500)){ pending(); return; }  // linked, data not ready
         if (!(d.ok && d.linked)) return;                                 // 401/404/unknown -> hidden
         render(d);
       })

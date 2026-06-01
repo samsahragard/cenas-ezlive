@@ -332,10 +332,13 @@ def my_performance():
     personalized-app payload (Sam #2829). Surfaces ONLY for the logged-in
     employee, and ONLY where a manager has CONFIRMED their Cena<->Toast link (a
     cena_toast_link row, which is partner-verified). No confirmed link ->
-    {ok:true, linked:false} (the dashboard panel then stays hidden). Reuses the
-    SAME toast_employee_summary() the manager Link tab uses, so the employee
-    sees identical numbers. Scoped strictly to session['employee_id'] -- zero
-    cross-employee data (the B2 isolation guarantee)."""
+    {ok:true, linked:false} (the dashboard panel stays hidden).
+
+    Serves from the cached ToastEmployeeSnapshot (refreshed in the background by
+    toast_sync -- Sam #2845): a fast DB read, NEVER a live Toast pull, so a page
+    load can't 502. Linked but not synced yet / last pull failed -> {syncing:true}
+    (the panel shows a 'pending sync' note). Scoped strictly to
+    session['employee_id'] -- zero cross-employee data (the B2 guarantee)."""
     emp_id = session.get("employee_id")
     if not emp_id:
         return jsonify({"ok": False, "error": "not signed in"}), 401
@@ -351,8 +354,9 @@ def my_performance():
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 
-        # Aggregate across the employee's confirmed links (usually one store).
-        from app.web.toast_link_routes import toast_employee_summary
+        # Aggregate the employee's confirmed links from the cached snapshot
+        # (usually one store). No live Toast call in the request path.
+        from app.services.toast_sync import read_snapshot
         total_hours = 0.0
         timecards: list[dict] = []
         performance: dict = {"available": False}
@@ -360,30 +364,29 @@ def my_performance():
         pay_available = False
         stores_seen: list[str] = []
         any_ok = False
-        last_err = None
+        synced_at = None
         for ln in links:
-            payload, _status = toast_employee_summary(ln.store_key, ln.toast_id)
-            if not payload.get("ok"):
-                last_err = payload.get("error")
-                continue
+            snap = read_snapshot(ln.store_key, ln.toast_id)
+            if not snap or not snap.get("ok"):
+                continue  # not synced yet / last pull failed -> pending
             any_ok = True
             stores_seen.append(ln.store_key)
-            total_hours += float(payload.get("hours") or 0)
-            timecards.extend(payload.get("timecards") or [])
-            perf = payload.get("performance") or {}
+            total_hours += float(snap.get("hours") or 0)
+            timecards.extend(snap.get("timecards") or [])
+            perf = snap.get("performance") or {}
             if perf.get("available") and not performance.get("available"):
                 performance = perf
-            pay = payload.get("payroll") or {}
+            pay = snap.get("payroll") or {}
             if pay.get("available"):
                 pay_available = True
                 gross_pay += float(pay.get("gross_pay") or 0)
+            if snap.get("synced_at"):
+                synced_at = snap["synced_at"]
 
         if not any_ok:
-            # Linked, but every Toast pull failed (creds blank / Toast down).
-            # Report linked:true so the panel shows a "pending sync" state
-            # instead of vanishing -- and never 500.
-            return jsonify({"ok": False, "linked": True,
-                            "error": last_err or "Toast data unavailable"}), 502
+            # Linked, but no successful snapshot yet -> "pending sync" (not an
+            # error). The background poller fills it within ~15 min.
+            return jsonify({"ok": True, "linked": True, "syncing": True}), 200
 
         timecards.sort(key=lambda t: (t.get("in") or ""), reverse=True)  # newest first
         payroll = ({"available": True, "estimated": True,
@@ -394,11 +397,13 @@ def my_performance():
         return jsonify({
             "ok": True,
             "linked": True,
+            "syncing": False,
             "stores": stores_seen,
             "hours": round(total_hours, 2),
             "timecards": timecards,
             "performance": performance,
             "payroll": payroll,
+            "synced_at": synced_at,
         }), 200
     finally:
         db.close()

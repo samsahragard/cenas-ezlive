@@ -337,9 +337,27 @@ def toast_employee_summary(store: str, toast_id: str) -> tuple[dict, int]:
 @require_level(_MGR)
 def sv2_toast_employee(toast_id):
     """LINK TAB -- one Toast employee's recent labor + performance for THIS store
-    (manager view). Thin wrapper: toast_employee_summary() does the Toast pull +
-    shaping (shared with the employee self view at /employee/my-performance);
-    this adds the manager gate + store resolution. Toast/creds failure ->
-    {ok:false} 502, never a 500."""
-    payload, status = toast_employee_summary(_store(), toast_id)
-    return jsonify(payload), status
+    (manager view). Serves from the cached ToastEmployeeSnapshot (refreshed in
+    the background by toast_sync -- Sam #2845), so this is a fast DB read with NO
+    live Toast pull -> the page can't 502 and never shows a raw Toast error.
+    Not synced yet / last pull failed -> a clean {syncing:true} state. The actual
+    Toast pull (toast_employee_summary) now runs only in the background sync."""
+    from app.services.toast_sync import read_snapshot
+    snap = read_snapshot(_store(), toast_id)
+    if snap is None:
+        return jsonify({"ok": True, "syncing": True, "hours": 0, "timecards": [],
+                        "performance": {"available": False,
+                                        "note": "Syncing from Toast -- check back shortly."},
+                        "payroll": {"available": False, "note": "Syncing from Toast..."}}), 200
+    if not snap.get("ok"):
+        return jsonify({"ok": True, "syncing": True, "hours": snap.get("hours") or 0,
+                        "timecards": snap.get("timecards") or [],
+                        "performance": {"available": False,
+                                        "note": "Toast sync pending -- retrying automatically."},
+                        "payroll": {"available": False, "note": "Toast sync pending."},
+                        "synced_at": snap.get("synced_at")}), 200
+    return jsonify({"ok": True, "syncing": False, "hours": snap.get("hours") or 0,
+                    "timecards": snap.get("timecards") or [],
+                    "performance": snap.get("performance") or {"available": False},
+                    "payroll": snap.get("payroll") or {"available": False},
+                    "synced_at": snap.get("synced_at")}), 200

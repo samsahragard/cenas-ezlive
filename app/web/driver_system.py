@@ -923,6 +923,22 @@ def cron_anomaly_eval():
     return jsonify({"ok": True, **summary})
 
 
+@driver_system_bp.route("/cron/toast-sync", methods=["POST"])
+def cron_toast_sync():
+    """Bulk-refresh the Toast employee snapshots (Sam #2845). Token-gated via
+    CRON_TOKEN. Drives the SAME in-app sync the background poller runs -- lets
+    samai wire a Render cron as belt-and-suspenders, and lets us seed the
+    snapshot immediately after a deploy. Optional ?store=tomball|copperfield to
+    scope it. Accepts Authorization: Bearer (spec), X-Cron-Token, or ?token= ."""
+    import os
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from app.services.toast_sync import sync_toast_snapshots
+    store = (request.args.get("store") or "").strip() or None
+    summary = sync_toast_snapshots(only_store=store)
+    return jsonify({"ok": True, **summary})
+
+
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])
 def cron_anomaly_brief():
     """Phase 1 / Block 6: compose one morning brief per enrolled

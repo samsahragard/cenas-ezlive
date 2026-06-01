@@ -1669,6 +1669,18 @@ def create_app():
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
 
+    # Sam #2845: background Toast -> snapshot poller. Pulls every confirmed-linked
+    # Toast employee's labor/performance/pay every ~15 min into the
+    # toast_employee_snapshot table, so the Link tab + the employee "My Hours &
+    # Pay" panel serve from a fast DB read -- no live Toast pull per page load
+    # (the live model choked the workers -> 502s). Idempotent per worker.
+    try:
+        from app.services import toast_sync
+        toast_sync.start_in_background()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "toast-sync poller failed to start (non-fatal)")
+
     # Phase 1 / Block 5: register all anomaly rules. Module-level
     # @anomaly_rule decorators populate app.services.anomaly_engine.REGISTRY
     # at import time. Importing here means the engine + cron + admin

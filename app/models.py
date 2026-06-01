@@ -3511,6 +3511,36 @@ class CenaToastLink(Base):
     confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class ToastEmployeeSnapshot(Base):
+    """Sam #2845: a CACHED snapshot of one Toast employee's labor/performance/pay
+    for a store, refreshed by a scheduled BULK sync (sync_toast_snapshots) so the
+    Link tab + the employee 'My Hours & Pay' panel serve from a fast DB read
+    instead of a live Toast pull on every page load. The live-per-request model
+    fired ~30 Toast calls per view (the performance pull) and, x many employees,
+    choked the workers -> Render 502s + on/off flicker. Now the heavy Toast work
+    happens once in the background; web requests just read this row.
+
+    Keyed (store_key, toast_id); the JSON columns hold the exact pieces
+    toast_employee_summary() returns. ok/error capture the last pull's outcome so
+    the UI can show a 'syncing'/'unavailable' state without ever calling Toast."""
+
+    __tablename__ = "toast_employee_snapshot"
+    __table_args__ = (
+        UniqueConstraint("store_key", "toast_id", name="uq_toast_snapshot_store_toast"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    toast_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    ok: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    error: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    timecards_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    performance_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    payroll_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

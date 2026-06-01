@@ -3484,6 +3484,33 @@ class EmployeeUnavailabilityBlock(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class CenaToastLink(Base):
+    """Cena<->Toast Link tab (Sam #2629): a CONFIRMED match between a Cena
+    employee and a Toast employee, scoped per store. A manager VERIFIES one of
+    ckbro's GET .../toast/match-suggestions rows; that confirmation persists here
+    so the Link tab can show verified links + later load that person's Toast data
+    (by toast_id). One confirmed Toast link per Cena person per store
+    (UNIQUE(cena_employee_id, store_key)) -- re-confirming UPSERTs the same row.
+    cena_employee_id is conceptually an employees.id; store_key is the LOCATION
+    ('tomball'/'copperfield'), same key the roster/board filter by. toast_id is a
+    Toast guid (string). confirmed_by is the User.id who verified."""
+
+    __tablename__ = "cena_toast_link"
+    __table_args__ = (
+        # one confirmed Toast link per Cena person per store
+        UniqueConstraint("cena_employee_id", "store_key", name="uq_cena_toast_link_emp_store"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cena_employee_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)  # -> employees.id (conceptual FK)
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False)  # location: 'tomball'/'copperfield'
+    toast_id: Mapped[str] = mapped_column(String(64), nullable=False)   # Toast employee guid
+    toast_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    confirmed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)  # User.id who verified
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

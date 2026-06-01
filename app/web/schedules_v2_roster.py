@@ -29,9 +29,10 @@ from flask import jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app.db import SessionLocal
-from app.models import (CANONICAL_POSITIONS, Employee, EmployeeAvailability,
-                        EmployeePosition, EmployeeStoreAssignment,
-                        EmployeeUnavailabilityBlock, Position, User)
+from app.models import (CANONICAL_POSITIONS, CenaToastLink, Employee,
+                        EmployeeAvailability, EmployeePosition,
+                        EmployeeStoreAssignment, EmployeeUnavailabilityBlock,
+                        Position, User)
 from app.web.permissions import current_user_id, require_level
 from app.web.schedules_v2 import _MGR, _store
 from app.web.store_routes import store_bp
@@ -556,5 +557,108 @@ def sv2_employee_availability_set(emp_id):
             return jsonify({"ok": False,
                             "error": "Could not save availability (data conflict)."}), 409
         return jsonify(_availability_payload(db, emp.id)), 200
+    finally:
+        db.close()
+
+
+# ==========================================================================
+# Cena<->Toast Link tab (Sam #2629): persist a manager-CONFIRMED match between
+# a Cena employee and a Toast employee, scoped to THIS store (_store() = the
+# location). ckbro's GET .../toast/match-suggestions proposes matches; a manager
+# verifies one and we store it here (CenaToastLink, UNIQUE(cena_employee_id,
+# store_key)) so the Link tab can mark which suggestions are confirmed + later
+# load that person's Toast data by toast_id. Manager-gated @require_level(_MGR),
+# same as the roster writes above; confirmed_by = current_user_id().
+# ==========================================================================
+@store_bp.route("/schedules-v2/toast/link", methods=["POST"])
+@require_level(_MGR)
+def sv2_toast_link():
+    """UPSERT a confirmed Cena<->Toast link for (cena_emp_id, _store()). Body:
+        {cena_emp_id: int (required), toast_id: str (required), toast_name?: str}
+    If a link already exists for (cena_employee_id, store_key) update its
+    toast_id/toast_name/confirmed_by/confirmed_at; else insert a new row.
+    -> 200 {ok, link:{cena_emp_id, toast_id, toast_name, store_key}};
+    400 if cena_emp_id or toast_id is missing."""
+    data = request.get_json(silent=True) or {}
+    try:
+        cena_emp_id = int(data.get("cena_emp_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "cena_emp_id required"}), 400
+    toast_id = str(data.get("toast_id") or "").strip()
+    if not toast_id:
+        return jsonify({"ok": False, "error": "toast_id required"}), 400
+    toast_name = (data.get("toast_name") or "").strip() or None
+    store = _store()
+    if not store:
+        # defensive: store_bp's _pull_store should always set this on a valid slug.
+        return jsonify({"ok": False, "error": "store not resolved"}), 400
+    db = SessionLocal()
+    try:
+        row = (db.query(CenaToastLink)
+                 .filter_by(cena_employee_id=cena_emp_id, store_key=store).first())
+        now = datetime.utcnow()
+        uid = current_user_id()
+        if row is None:
+            row = CenaToastLink(cena_employee_id=cena_emp_id, store_key=store,
+                                toast_id=toast_id, toast_name=toast_name,
+                                confirmed_by=uid, confirmed_at=now)
+            db.add(row)
+        else:
+            row.toast_id = toast_id
+            row.toast_name = toast_name
+            row.confirmed_by = uid
+            row.confirmed_at = now
+        db.commit()
+        return jsonify({"ok": True, "link": {"cena_emp_id": cena_emp_id,
+                                             "toast_id": toast_id,
+                                             "toast_name": toast_name,
+                                             "store_key": store}}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/toast/unlink", methods=["POST"])
+@require_level(_MGR)
+def sv2_toast_unlink():
+    """Delete the confirmed Cena<->Toast link for (cena_emp_id, _store()).
+    Body: {cena_emp_id: int (required)}. Idempotent: 200 {ok} even if no link
+    existed. 400 if cena_emp_id is missing."""
+    data = request.get_json(silent=True) or {}
+    try:
+        cena_emp_id = int(data.get("cena_emp_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "cena_emp_id required"}), 400
+    store = _store()
+    if not store:
+        return jsonify({"ok": False, "error": "store not resolved"}), 400
+    db = SessionLocal()
+    try:
+        (db.query(CenaToastLink)
+           .filter_by(cena_employee_id=cena_emp_id, store_key=store)
+           .delete(synchronize_session=False))
+        db.commit()
+        return jsonify({"ok": True}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/toast/links", methods=["GET"])
+@require_level(_MGR)
+def sv2_toast_links():
+    """List all confirmed Cena<->Toast links for THIS store (_store()) so the FE
+    can mark which suggestions are already confirmed.
+    -> {ok, links:[{cena_emp_id, toast_id, toast_name}]}."""
+    store = _store()
+    if not store:
+        return jsonify({"ok": False, "error": "store not resolved"}), 400
+    db = SessionLocal()
+    try:
+        rows = (db.query(CenaToastLink)
+                  .filter_by(store_key=store)
+                  .order_by(CenaToastLink.cena_employee_id).all())
+        links = [{"cena_emp_id": r.cena_employee_id,
+                  "toast_id": r.toast_id,
+                  "toast_name": r.toast_name} for r in rows]
+        return jsonify({"ok": True, "links": links}), 200
     finally:
         db.close()

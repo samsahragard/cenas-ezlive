@@ -1612,6 +1612,27 @@ def create_app():
         logging.getLogger(__name__).exception(
             "legal_matter_note migration failed (non-fatal)")
 
+    # Idempotent table create -- cena_toast_link (Cena<->Toast Link tab,
+    # Sam #2629). Persists a CONFIRMED Cena-employee <-> Toast-employee match
+    # per store (UNIQUE(cena_employee_id, store_key)) so the Link tab shows
+    # verified links + can later load that person's Toast data. Render runs no
+    # alembic -- this boot create is the real schema apply. create_all scoped to
+    # just this table is a no-op once present; SQLite-safe on a fresh AND an
+    # existing DB (the UniqueConstraint becomes the table-level UNIQUE).
+    try:
+        from sqlalchemy import inspect as _sa_insp_ctl
+        from app.db import engine as _eng_ctl
+        from app.models import Base as _Base_ctl, CenaToastLink as _CTL
+        if _eng_ctl is not None:
+            if "cena_toast_link" not in set(_sa_insp_ctl(_eng_ctl).get_table_names()):
+                _Base_ctl.metadata.create_all(
+                    bind=_eng_ctl, tables=[_CTL.__table__])
+                logging.getLogger(__name__).info(
+                    "cena_toast_link (Sam #2629): table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "cena_toast_link table create failed (non-fatal)")
+
     # Start the IMAP poller for produce vendor pricing. No-op unless
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock
     # ensures only one gunicorn worker actually polls.

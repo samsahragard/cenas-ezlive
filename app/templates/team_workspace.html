@@ -190,6 +190,10 @@
   .tws-conf.high { background: rgba(96,176,96,.18); color: #8fd28f; }
   .tws-conf.low { background: rgba(217,164,54,.18); color: var(--tws-gold); }
   .tws-conf.toastonly { background: rgba(255,255,255,.07); color: var(--tws-cream-meta); }
+  .tws-link-btn { font-family: inherit; font-size: 11px; font-weight: 600; color: var(--tws-cream); background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 3px 10px; margin-left: 8px; cursor: pointer; vertical-align: middle; }
+  .tws-link-btn:hover { border-color: var(--tws-gold); }
+  .tws-link-btn:disabled { opacity: .55; cursor: default; }
+  .tws-link-btn.linked { color: #8fd28f; border-color: rgba(96,176,96,.4); background: rgba(96,176,96,.10); }
   .tws-edit-hint { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 0 0 4px; }
   .tws-store-grp { margin-top: 10px; }
   .tws-store-grp > .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--tws-gold); margin-bottom: 6px; }
@@ -556,28 +560,39 @@
       });
   }
 
-  // Link tab (Sam #2629): match Cena <-> Toast per store via ckbro's
-  // /<store>/schedules-v2/toast/match-suggestions (a39084b). Calls BOTH stores; a store
-  // the manager can't reach is skipped, a Toast outage (502) shows a note. DISPLAY pass --
-  // the Verify/confirm step + the per-person Toast data are the next increment.
+  // Link tab (Sam #2629): match Cena <-> Toast per store via ckbro's match-suggestions
+  // (a39084b) + my confirmed links (/toast/links). A matched row shows a Verify button;
+  // once confirmed it shows "Linked" + Unlink. Calls BOTH stores; a store the manager
+  // can't reach is skipped, a Toast outage (502) shows a note.
   var linkLoaded = false;
   var LINK_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
+  function _ljson(r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d || {} }; }); }
+  function linkCtrl(isLinked) {
+    return isLinked
+      ? '<button class="tws-link-btn linked" data-link-act="unlink" type="button">Linked &#10003;</button>'
+      : '<button class="tws-link-btn" data-link-act="verify" type="button">Verify</button>';
+  }
   function loadLink() {
     if (linkLoaded) return;
     linkLoaded = true;
     var el = document.getElementById("tws-link-rows");
     el.innerHTML = '<div class="tws-empty">Matching Cena to Toast...</div>';
     Promise.all(LINK_STORES.map(function (s) {
-      return fetch("/" + s.slug + "/schedules-v2/toast/match-suggestions", { headers: { "Accept": "application/json" }, credentials: "same-origin" })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { s: s, ok: r.ok, d: d || {} }; }); })
-        .catch(function () { return { s: s, ok: false, d: { error: "network error" } }; });
+      var base = "/" + s.slug + "/schedules-v2/toast/";
+      var opt = { headers: { "Accept": "application/json" }, credentials: "same-origin" };
+      return Promise.all([
+        fetch(base + "match-suggestions", opt).then(_ljson).catch(function () { return { ok: false, d: { error: "network error" } }; }),
+        fetch(base + "links", opt).then(_ljson).catch(function () { return { ok: false, d: {} }; })
+      ]).then(function (pair) { return { s: s, ok: pair[0].ok, d: pair[0].d, links: (pair[1].d && pair[1].d.links) || [] }; });
     })).then(function (results) {
       var html = "";
       results.forEach(function (res) {
-        var d = res.d || {};
+        var s = res.s, d = res.d || {};
         // Skip a store this manager can't reach (gate returns non-JSON / no error field).
         if (!res.ok && d.ok === undefined && !d.error) return;
-        html += '<div class="tws-link-store">' + esc(res.s.label) + '</div>';
+        var confirmed = {};
+        res.links.forEach(function (l) { confirmed[l.cena_emp_id] = l; });
+        html += '<div class="tws-link-store">' + esc(s.label) + '</div>';
         if (!res.ok || d.ok === false) {
           html += '<div class="tws-link-row"><div class="tws-link-cena ph">' + esc(d.error || "Toast unavailable") + '</div><div class="tws-link-toast"></div></div>';
           return;
@@ -588,9 +603,11 @@
         }
         sugg.forEach(function (m) {
           var conf = (m.confidence === "high") ? "high" : "low";
-          html += '<div class="tws-link-row" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '">' +
+          var cf = confirmed[m.cena_emp_id];
+          var isLinked = cf && String(cf.toast_id) === String(m.toast_id);
+          html += '<div class="tws-link-row" data-store="' + esc(s.slug) + '" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '" data-toast-name="' + esc(m.toast_name || "") + '">' +
             '<div class="tws-link-cena"><div class="nm">' + esc(m.cena_name || "") + '</div><div class="ph">' + esc(m.cena_phone || "No phone") + '</div></div>' +
-            '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span><span class="tws-conf ' + conf + '">' + conf + '</span></div>' +
+            '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span><span class="tws-conf ' + conf + '">' + conf + '</span>' + linkCtrl(isLinked) + '</div>' +
           '</div>';
         });
         uc.forEach(function (c) {
@@ -609,6 +626,31 @@
       el.innerHTML = html || '<div class="tws-empty">No Toast data available.</div>';
     });
   }
+  // Verify / Unlink (Sam #2629): confirm a Cena<->Toast match -> POST /toast/link; undo -> /toast/unlink.
+  (function () {
+    var rows = document.getElementById("tws-link-rows");
+    if (!rows) return;
+    rows.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("[data-link-act]");
+      if (!btn) return;
+      var row = btn.closest(".tws-link-row");
+      if (!row) return;
+      var act = btn.getAttribute("data-link-act");
+      var slug = row.getAttribute("data-store");
+      var body = (act === "verify")
+        ? { cena_emp_id: row.getAttribute("data-cena-id"), toast_id: row.getAttribute("data-toast-id"), toast_name: row.getAttribute("data-toast-name") }
+        : { cena_emp_id: row.getAttribute("data-cena-id") };
+      btn.disabled = true;
+      fetch("/" + slug + "/schedules-v2/toast/" + (act === "verify" ? "link" : "unlink"), {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(body)
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (dd) { return { ok: r.ok, d: dd }; }); })
+        .then(function (resp) { if (resp.ok && resp.d && resp.d.ok !== false) { btn.outerHTML = linkCtrl(act === "verify"); } else { btn.disabled = false; } })
+        .catch(function () { btn.disabled = false; });
+    });
+  })();
 
   // filter wiring
   root.querySelectorAll(".tws-pill").forEach(function (p) {

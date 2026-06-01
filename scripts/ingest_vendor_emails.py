@@ -215,6 +215,7 @@ def main() -> int:
     updated = 0
     skipped_junk = 0
     cleaned = 0
+    deduped = 0
     try:
         for r in rows:
             # Drop admin / notification emails (verify-email, statements, surveys,
@@ -263,6 +264,39 @@ def main() -> int:
                 if cs != legacy.subject:
                     legacy.subject = cs
         db.commit()
+
+        # Dedup by (vendor, order_number): multiple emails for the SAME order
+        # (confirmation -> update -> receipt / invoice) should be ONE row, not
+        # several. Keep the latest row that actually carries data, fold any
+        # missing fields in from the others, drop the rest. (Sam directive: don't
+        # create a line per status email - use that info on the one order row.)
+        groups = defaultdict(list)
+        for row in db.query(VendorRecentOrder).all():
+            if row.order_number:
+                groups[(row.vendor, row.order_number)].append(row)
+        for grp in groups.values():
+            if len(grp) < 2:
+                continue
+            rich = [r for r in grp
+                    if (r.total_cents or 0) > 0
+                    or (isinstance(r.items_json, list) and len(r.items_json) > 0)]
+            pool = rich or grp
+            pool.sort(key=lambda r: (r.placed_at or datetime.min, r.id or 0), reverse=True)
+            keep = pool[0]
+            for other in grp:
+                if other is keep:
+                    continue
+                if not keep.total_cents and other.total_cents:
+                    keep.total_cents = other.total_cents
+                if not keep.items_json and other.items_json:
+                    keep.items_json = other.items_json
+                if not keep.subject and other.subject:
+                    keep.subject = other.subject
+                if not keep.status and other.status:
+                    keep.status = other.status
+                db.delete(other)
+                deduped += 1
+        db.commit()
     finally:
         db.close()
 
@@ -272,6 +306,7 @@ def main() -> int:
         "updated": updated,
         "skipped_junk": skipped_junk,
         "cleaned_empty_rows": cleaned,
+        "deduped_orders": deduped,
         "total_processed": len(rows),
         "inbox_summary": inbox_summary,
         "by_vendor": {

@@ -58,16 +58,21 @@
   .tws-panel { display: none; }
   .tws-panel.active { display: block; }
 
-  /* nested Schedule sub-tabs [Week | Time off | Availability] */
-  .tws-subbar { display: flex; gap: 5px; margin-bottom: 12px; }
-  .tws-subtab { appearance: none; background: var(--tws-card); border: 1px solid var(--tws-border-soft); cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--tws-cream-dim); padding: 6px 14px; border-radius: 999px; }
+  /* nested Schedule sub-tabs [Week | Time off | Availability] -- squared
+     underline tabs matching the top .tws-tab bar (Sam #2600), not pills. */
+  .tws-subbar { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--tws-border); margin-bottom: 14px; }
+  .tws-subtab { appearance: none; background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--tws-cream-meta); padding: 8px 14px; border-radius: 0; }
   .tws-subtab:hover { color: var(--tws-cream); }
-  .tws-subtab.active { background: var(--tws-gold); color: #1a0d08; border-color: transparent; }
+  .tws-subtab.active { background: transparent; color: var(--tws-gold-bright); border-bottom-color: var(--tws-gold-bright); }
   .tws-sub2panel { display: none; }
   .tws-sub2panel.active { display: block; }
 
-  /* Schedule store selector (Sam #2589): only shown to both-store users. */
-  .tws-sched-storebar { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+  /* Schedule toolbar row (Sam #2600): the sub-tabs sit left, the store selector
+     sits at the right end of the same bar -- grouped with the controls, near the
+     Week Builder's in-iframe position filter. Only shown to both-store users. */
+  .tws-sched-toolbar { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; }
+  .tws-sched-toolbar .tws-subbar { flex: 1 1 auto; margin-bottom: 0; }
+  .tws-sched-store-group { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
   .tws-sched-storelbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tws-cream-meta); }
   #tws-sched-store { min-width: 150px; }
 
@@ -253,20 +258,22 @@
      its own data-path. Server defaults to the URL store when it's concrete. #}
   <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel"
        data-store="{{ schedule_store_default }}">
-    {% if schedule_stores and schedule_stores|length > 1 %}
-    <div class="tws-sched-storebar">
-      <label class="tws-sched-storelbl" for="tws-sched-store">Store</label>
-      <select class="tws-select" id="tws-sched-store" aria-label="Schedule store">
-        {% for s in schedule_stores %}
-        <option value="{{ s.slug }}"{% if s.slug == schedule_store_default %} selected{% endif %}>{{ s.label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endif %}
-    <div class="tws-subbar" role="tablist">
-      <button class="tws-subtab active" data-sub2="week" type="button" role="tab">Week</button>
-      <button class="tws-subtab" data-sub2="timeoff" type="button" role="tab">Time off</button>
-      <button class="tws-subtab" data-sub2="availability" type="button" role="tab">Availability</button>
+    <div class="tws-sched-toolbar">
+      <div class="tws-subbar" role="tablist">
+        <button class="tws-subtab active" data-sub2="week" type="button" role="tab">Week</button>
+        <button class="tws-subtab" data-sub2="timeoff" type="button" role="tab">Time off</button>
+        <button class="tws-subtab" data-sub2="availability" type="button" role="tab">Availability</button>
+      </div>
+      {% if schedule_stores and schedule_stores|length > 1 %}
+      <div class="tws-sched-store-group">
+        <label class="tws-sched-storelbl" for="tws-sched-store">Store</label>
+        <select class="tws-select" id="tws-sched-store" aria-label="Schedule store">
+          {% for s in schedule_stores %}
+          <option value="{{ s.slug }}"{% if s.slug == schedule_store_default %} selected{% endif %}>{{ s.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
     </div>
     <div class="tws-sub2panel active" data-sub2-panel="week">
       <div class="tws-embed-wrap">

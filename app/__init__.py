@@ -1669,17 +1669,22 @@ def create_app():
     # ensures only one gunicorn worker actually polls.
     produce_ingest.start_in_background()
 
-    # Sam #2845: background Toast -> snapshot poller. Pulls every confirmed-linked
-    # Toast employee's labor/performance/pay every ~15 min into the
-    # toast_employee_snapshot table, so the Link tab + the employee "My Hours &
-    # Pay" panel serve from a fast DB read -- no live Toast pull per page load
-    # (the live model choked the workers -> 502s). Idempotent per worker.
-    try:
-        from app.services import toast_sync
-        toast_sync.start_in_background()
-    except Exception:
-        logging.getLogger(__name__).exception(
-            "toast-sync poller failed to start (non-fatal)")
+    # Sam #2845/#2853: the Toast -> snapshot refresh. The IN-APP poller did the
+    # heavy Toast pulls (many calls per employee) INSIDE the web worker, which
+    # periodically saturated the Render worker -> intermittent 502s. So it is OFF
+    # by default now: the snapshot still SERVES from the DB (fast read, pages stay
+    # up), but it is REFRESHED by an EXTERNAL process so heavy Toast work never
+    # touches the web dyno -- a Render cron running `python -m app.services.toast_sync`
+    # (samai), or the token-gated POST /cron/toast-sync. Set TOAST_SYNC_POLLER=1 to
+    # run the in-app poller anyway (e.g. local dev).
+    import os as _os_poller
+    if _os_poller.getenv("TOAST_SYNC_POLLER") == "1":
+        try:
+            from app.services import toast_sync
+            toast_sync.start_in_background()
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "toast-sync poller failed to start (non-fatal)")
 
     # Phase 1 / Block 5: register all anomaly rules. Module-level
     # @anomaly_rule decorators populate app.services.anomaly_engine.REGISTRY

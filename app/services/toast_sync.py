@@ -174,3 +174,14 @@ def start_in_background() -> bool:
     threading.Thread(target=_loop, name="toast-sync", daemon=True).start()
     log.info("toast-sync background poller launched")
     return True
+
+
+# Standalone entrypoint for an EXTERNAL scheduler (Sam #2853): a Render cron job
+# running `python -m app.services.toast_sync [store]` does the heavy Toast pull in
+# its OWN process, so the web dyno is never loaded by the sync. This is the safe
+# replacement for the in-app poller (which is now off by default).
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(level=logging.INFO)
+    _only = sys.argv[1] if len(sys.argv) > 1 else None
+    print("toast-sync (standalone):", sync_toast_snapshots(only_store=_only))

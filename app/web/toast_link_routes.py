@@ -47,8 +47,13 @@ from app.web.store_routes import store_bp
 
 log = logging.getLogger(__name__)
 
-# Recent window for the per-employee timecard/hours pull.
-_TIMECARD_WINDOW_DAYS = 30
+# Recent window for the per-employee timecard/hours pull. Toast's labor API
+# rejects any interval "longer than 30 days", and toast_client.fetch_time_entries
+# pads the end +1 day (inclusive end), so the REQUEST span = WINDOW + 1. Cap the
+# window at 29 -> a 30-day request == Toast's documented max (Sam #2840: 30 here
+# over-shot to a 31-day request -> HTTP 400, which starved BOTH the manager Link
+# tab and the employee 'My Hours & Pay' panel once real creds went live).
+_TIMECARD_WINDOW_DAYS = 29
 
 
 def _norm_name(first: str, last: str) -> str:

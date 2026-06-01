@@ -255,6 +255,27 @@ def sv2_employee_reset_pin(emp_id):
                                "session was signed out."}), 200
 
 
+@store_bp.route("/schedules-v2/employees/<int:emp_id>/deactivate", methods=["POST"])
+@require_level(_MGR)
+def sv2_employee_deactivate(emp_id):
+    """DEACTIVATE (Sam #2626): soft-remove a team member -- set active=False so they
+    drop off the roster, and bump session_version to kill any live session (they can no
+    longer sign in). Reversible (re-add / reactivate) -- NOT a hard delete, so history
+    and FKs are preserved. Manager-gated; keyed off the URL emp_id; never touches
+    session['partner_auth_ok']. -> 200 {ok}; 404 unknown employee."""
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter_by(id=emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "employee not found"}), 404
+        emp.active = False
+        emp.session_version = (emp.session_version or 0) + 1  # kill any live session
+        db.commit()
+        return jsonify({"ok": True, "message": "Removed from the team."}), 200
+    finally:
+        db.close()
+
+
 @store_bp.route("/schedules-v2/employees/<int:emp_id>/assign", methods=["POST"])
 @require_level(_MGR)
 def sv2_employee_assign(emp_id):

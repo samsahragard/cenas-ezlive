@@ -173,6 +173,8 @@
   .tws-resetbtn { font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--tws-cream); background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 8px 16px; cursor: pointer; }
   .tws-resetbtn:hover { border-color: var(--tws-border); }
   .tws-resetbtn:disabled { opacity: .55; cursor: default; }
+  .tws-resetbtn.danger { color: #ff7a7a; border-color: rgba(255,122,122,.38); }
+  .tws-resetbtn.danger:hover { border-color: rgba(255,122,122,.7); background: rgba(255,122,122,.10); }
   .tws-edit-hint { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 0 0 4px; }
   .tws-store-grp { margin-top: 10px; }
   .tws-store-grp > .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--tws-gold); margin-bottom: 6px; }
@@ -688,6 +690,12 @@
         '<div class="tws-edit-row"><button class="tws-save" data-act="save-availability" type="button">Save availability</button>' +
           '<span class="tws-edit-msg" data-msg="availability"></span></div>' +
       '</div>' +
+      // 5) DEACTIVATE / REMOVE FROM TEAM (Sam #2626)
+      '<div class="tws-edit-sec"><h4>Remove from team</h4>' +
+        '<p class="tws-edit-hint">Deactivates this person -- they drop off the roster and can no longer sign in. Reversible (re-add them later).</p>' +
+        '<div class="tws-edit-row"><button class="tws-resetbtn danger" data-act="deactivate" type="button">Deactivate</button>' +
+          '<span class="tws-edit-msg" data-msg="deactivate"></span></div>' +
+      '</div>' +
     '</div>';
   }
 
@@ -804,6 +812,26 @@
           setMsg(pm, "Setup link emailed; their old session is signed out.", true);
         })
         .catch(function () { btn.disabled = false; setMsg(pm, "Network error -- try again.", false); });
+      return;
+    }
+
+    if (act === "deactivate") {
+      var dm = msgEl(editEl, "deactivate");
+      if (!window.confirm("Deactivate this team member? They'll drop off the roster and can't sign in. You can re-add them later.")) return;
+      setMsg(dm, "Removing...", true);
+      btn.disabled = true;
+      fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/deactivate", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" }
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || (res.d && res.d.ok === false)) { btn.disabled = false; setMsg(dm, (res.d && res.d.error) || "Could not remove.", false); return; }
+          // gone -> collapse the panel + refresh the roster so the row drops off.
+          collapseOpen();
+          load();
+        })
+        .catch(function () { btn.disabled = false; setMsg(dm, "Network error -- try again.", false); });
       return;
     }
 

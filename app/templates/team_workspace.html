@@ -194,6 +194,31 @@
   .tws-link-btn:hover { border-color: var(--tws-gold); }
   .tws-link-btn:disabled { opacity: .55; cursor: default; }
   .tws-link-btn.linked { color: #8fd28f; border-color: rgba(96,176,96,.4); background: rgba(96,176,96,.10); }
+  /* A VERIFIED ("Linked") row is expandable (Sam #2629 final): click it to open
+     its Toast data panel. Gains a pointer + a caret on the right of the Toast cell. */
+  .tws-link-row.linkable { cursor: pointer; }
+  .tws-link-row.linkable:hover { background: var(--tws-card); }
+  .tws-link-row .tws-link-caret { display: none; margin-left: 8px; font-size: 12px; color: var(--tws-cream-meta); vertical-align: middle; transition: transform .15s; }
+  .tws-link-row.linkable .tws-link-caret { display: inline-block; }
+  .tws-link-row.linkable.open .tws-link-caret { transform: rotate(180deg); }
+  /* the inline per-person Toast data panel -- full-width, sits as the row's next sibling */
+  .tws-link-data { padding: 4px 4px 14px; border-top: 1px solid var(--tws-border-soft); }
+  .tws-link-data-inner { background: var(--tws-card); border: 1px solid var(--tws-border); border-radius: var(--tws-radius); padding: 14px 16px; }
+  .tws-link-data-sec { padding: 10px 0; border-top: 1px solid var(--tws-border-soft); }
+  .tws-link-data-sec:first-child { padding-top: 0; border-top: 0; }
+  .tws-link-data-sec > h5 { margin: 0 0 8px; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  .tws-ld-kv { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--tws-cream); margin: 3px 0; }
+  .tws-ld-kv .k { color: var(--tws-cream-meta); min-width: 150px; flex: 0 0 auto; }
+  .tws-ld-kv .v { color: var(--tws-cream); font-weight: 600; }
+  .tws-ld-kv .note { color: var(--tws-cream-dim); font-weight: 400; font-style: italic; }
+  .tws-ld-est { font-size: 11px; color: var(--tws-cream-meta); margin-left: 6px; font-style: italic; }
+  .tws-ld-tc { list-style: none; margin: 0; padding: 0; }
+  .tws-ld-tc li { font-size: 12.5px; color: var(--tws-cream-dim); padding: 3px 0; display: flex; align-items: center; gap: 7px; }
+  .tws-ld-tc li .h { color: var(--tws-cream-meta); }
+  .tws-ld-tc li.open .open-tag { color: var(--tws-gold); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+  .tws-ld-empty { font-size: 12.5px; color: var(--tws-cream-meta); font-style: italic; }
+  .tws-ld-loading { font-size: 12.5px; color: var(--tws-cream-meta); padding: 6px 2px; }
+  .tws-ld-err { font-size: 12.5px; color: var(--tws-red); padding: 6px 2px; }
   .tws-edit-hint { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 0 0 4px; }
   .tws-store-grp { margin-top: 10px; }
   .tws-store-grp > .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--tws-gold); margin-bottom: 6px; }
@@ -605,9 +630,11 @@
           var conf = (m.confidence === "high") ? "high" : "low";
           var cf = confirmed[m.cena_emp_id];
           var isLinked = cf && String(cf.toast_id) === String(m.toast_id);
-          html += '<div class="tws-link-row" data-store="' + esc(s.slug) + '" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '" data-toast-name="' + esc(m.toast_name || "") + '">' +
+          // A VERIFIED row is expandable: mark .linkable + add a caret so it reads
+          // as clickable (clicking opens the person's Toast data panel below).
+          html += '<div class="tws-link-row' + (isLinked ? " linkable" : "") + '" data-store="' + esc(s.slug) + '" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '" data-toast-name="' + esc(m.toast_name || "") + '">' +
             '<div class="tws-link-cena"><div class="nm">' + esc(m.cena_name || "") + '</div><div class="ph">' + esc(m.cena_phone || "No phone") + '</div></div>' +
-            '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span><span class="tws-conf ' + conf + '">' + conf + '</span>' + linkCtrl(isLinked) + '</div>' +
+            '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span><span class="tws-conf ' + conf + '">' + conf + '</span>' + linkCtrl(isLinked) + '<span class="tws-link-caret">&#9662;</span></div>' +
           '</div>';
         });
         uc.forEach(function (c) {
@@ -626,6 +653,179 @@
       el.innerHTML = html || '<div class="tws-empty">No Toast data available.</div>';
     });
   }
+  /* ---- per-person Toast DATA PANEL (Sam #2629, final piece) ----
+     Once a Cena<->Toast match is VERIFIED (a "Linked" row), the manager can
+     expand that person's Toast data inline: hours, recent timecards (clock
+     in/out), performance and pay. Fetched lazily from ckbro's live endpoint
+     GET /<slug>/schedules-v2/toast/employee/<toast_id>; the rendered HTML is
+     cached per toast_id so re-toggling never refetches. One panel open at a
+     time. A 502/error shows an inline error line, not a broken panel. */
+  var dataCache = {};        // toast_id -> rendered panel innerHTML (one fetch ever)
+  var openDataKey = null;    // toast_id of the row whose panel is currently open
+
+  function linkKey(row) { return row.getAttribute("data-toast-id") || ""; }
+
+  // Remove the data panel that sits immediately after `row` (if any) + clear marks.
+  function removeDataPanel(row) {
+    if (!row) return;
+    var sib = row.nextElementSibling;
+    if (sib && sib.classList && sib.classList.contains("tws-link-data")) sib.parentNode.removeChild(sib);
+    row.classList.remove("open");
+    if (openDataKey === linkKey(row)) openDataKey = null;
+  }
+
+  // Close whichever panel is currently open (one-at-a-time).
+  function closeOpenDataPanel() {
+    if (openDataKey == null) return;
+    var rows = document.getElementById("tws-link-rows");
+    if (rows) {
+      var open = rows.querySelector('.tws-link-row.open');
+      if (open) removeDataPanel(open);
+    }
+    openDataKey = null;
+  }
+
+  // Flip a row's expandable (verified) state: add/remove .linkable + the caret,
+  // and on UN-link drop any open panel for it. Keeps the row consistent with the
+  // button the existing verify/unlink handler just swapped in.
+  function setRowLinkable(row, on) {
+    if (!row) return;
+    var toastCell = row.querySelector(".tws-link-toast");
+    if (on) {
+      row.classList.add("linkable");
+      if (toastCell && !toastCell.querySelector(".tws-link-caret")) {
+        var c = document.createElement("span");
+        c.className = "tws-link-caret";
+        c.innerHTML = "&#9662;";
+        toastCell.appendChild(c);
+      }
+    } else {
+      removeDataPanel(row);                 // un-linking removes its open panel
+      row.classList.remove("linkable");
+      var caret = toastCell && toastCell.querySelector(".tws-link-caret");
+      if (caret) caret.parentNode.removeChild(caret);
+    }
+  }
+
+  function fmtTime(iso) {
+    // open shifts come through as null or a 1970 epoch sentinel -> treat as open.
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d.getTime()) || d.getFullYear() <= 1970) return null;
+    var hh = d.getHours(), mm = d.getMinutes();
+    var ampm = hh >= 12 ? "PM" : "AM";
+    var h12 = hh % 12; if (h12 === 0) h12 = 12;
+    var mo = d.getMonth() + 1, day = d.getDate();
+    return mo + "/" + day + " " + h12 + ":" + (mm < 10 ? "0" + mm : mm) + " " + ampm;
+  }
+  function num(v) { return (v == null || isNaN(parseFloat(v))) ? null : parseFloat(v); }
+  function money(v) { var n = num(v); return n == null ? null : n.toFixed(2); }
+
+  // Build the panel body from the employee endpoint payload.
+  function renderEmpData(d) {
+    var out = '<div class="tws-link-data-inner">';
+    // HOURS
+    var hrs = num(d.hours);
+    out += '<div class="tws-link-data-sec"><h5>Hours</h5>' +
+      '<div class="tws-ld-kv"><span class="k">Hours (last 30 days)</span><span class="v">' +
+        (hrs == null ? "&mdash;" : esc(String(hrs))) + '</span></div></div>';
+    // PAY
+    var pay = d.payroll || {};
+    out += '<div class="tws-link-data-sec"><h5>Pay</h5>';
+    if (pay.available) {
+      var gp = money(pay.gross_pay);
+      out += '<div class="tws-ld-kv"><span class="k">Est. pay</span><span class="v">' +
+        (gp == null ? "&mdash;" : "$" + esc(gp)) + '</span>' +
+        (pay.estimated ? '<span class="tws-ld-est">(estimated)</span>' : '') + '</div>';
+      if (num(pay.hours) != null) {
+        out += '<div class="tws-ld-kv"><span class="k">Paid hours</span><span class="v">' + esc(String(num(pay.hours))) + '</span></div>';
+      }
+    } else {
+      out += '<div class="tws-ld-kv"><span class="note">' + esc(pay.note || "Pay not available.") + '</span></div>';
+    }
+    out += '</div>';
+    // PERFORMANCE
+    var perf = d.performance || {};
+    out += '<div class="tws-link-data-sec"><h5>Performance</h5>';
+    if (perf.available) {
+      var shown = 0;
+      ["sales", "orders", "covers", "tips", "rating", "name"].forEach(function (k) {
+        if (shown >= 4) return;
+        if (perf[k] == null) return;
+        var label = k.charAt(0).toUpperCase() + k.slice(1);
+        var val = (k === "sales" || k === "tips") ? ("$" + (money(perf[k]) || esc(String(perf[k])))) : esc(String(perf[k]));
+        out += '<div class="tws-ld-kv"><span class="k">' + esc(label) + '</span><span class="v">' + val + '</span></div>';
+        shown++;
+      });
+      if (shown === 0) out += '<div class="tws-ld-kv"><span class="note">No performance fields.</span></div>';
+    } else {
+      out += '<div class="tws-ld-kv"><span class="note">' + esc(perf.note || "Performance not available.") + '</span></div>';
+    }
+    out += '</div>';
+    // TIMECARDS (most recent ~8)
+    var tcs = (d.timecards || []).slice(0, 8);
+    out += '<div class="tws-link-data-sec"><h5>Recent timecards</h5>';
+    if (!tcs.length) {
+      out += '<div class="tws-ld-empty">No recent timecards.</div>';
+    } else {
+      out += '<ul class="tws-ld-tc">';
+      tcs.forEach(function (t) {
+        var tin = fmtTime(t.in);
+        var isOpen = t.open === true || fmtTime(t.out) == null;
+        var tout = fmtTime(t.out);
+        var h = num(t.hours);
+        if (isOpen) {
+          out += '<li class="open"><span>' + esc(tin || "?") + '</span><span class="h">&rarr;</span><span class="open-tag">open</span></li>';
+        } else {
+          out += '<li><span>' + esc(tin || "?") + '</span><span class="h">&rarr;</span><span>' + esc(tout || "?") + '</span>' +
+            (h == null ? '' : '<span class="h">(' + esc(String(h)) + 'h)</span>') + '</li>';
+        }
+      });
+      out += '</ul>';
+    }
+    out += '</div>';
+    out += '</div>';
+    return out;
+  }
+
+  // Insert (or reveal) the data panel for a verified row. Fetches once, caches.
+  function openDataPanel(row) {
+    var slug = row.getAttribute("data-store");
+    var toastId = linkKey(row);
+    if (!slug || !toastId) return;
+    closeOpenDataPanel();                    // one panel at a time
+    var panel = document.createElement("div");
+    panel.className = "tws-link-data";
+    row.parentNode.insertBefore(panel, row.nextElementSibling);
+    row.classList.add("open");
+    openDataKey = toastId;
+    if (dataCache[toastId] != null) { panel.innerHTML = dataCache[toastId]; return; }
+    panel.innerHTML = '<div class="tws-ld-loading">Loading Toast data&hellip;</div>';
+    fetch("/" + slug + "/schedules-v2/toast/employee/" + encodeURIComponent(toastId), {
+      method: "GET", credentials: "same-origin", headers: { "Accept": "application/json" }
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (dd) { return { ok: r.ok, d: dd || {} }; }); })
+      .then(function (resp) {
+        // the panel may have been closed/removed while the request was in flight
+        if (!panel.parentNode) return;
+        if (!resp.ok || !resp.d || resp.d.ok === false) {
+          panel.innerHTML = '<div class="tws-ld-err">' + esc((resp.d && resp.d.error) || "Couldn't load Toast data for this person.") + '</div>';
+          return;   // errors are NOT cached -> a re-open retries
+        }
+        var rendered = renderEmpData(resp.d);
+        dataCache[toastId] = rendered;       // cache success only
+        panel.innerHTML = rendered;
+      })
+      .catch(function () {
+        if (panel.parentNode) panel.innerHTML = '<div class="tws-ld-err">Network error loading Toast data &mdash; try again.</div>';
+      });
+  }
+
+  function toggleDataPanel(row) {
+    if (row.classList.contains("open")) { removeDataPanel(row); }
+    else { openDataPanel(row); }
+  }
+
   // Verify / Unlink (Sam #2629): confirm a Cena<->Toast match -> POST /toast/link; undo -> /toast/unlink.
   (function () {
     var rows = document.getElementById("tws-link-rows");
@@ -647,8 +847,24 @@
         body: JSON.stringify(body)
       })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (dd) { return { ok: r.ok, d: dd }; }); })
-        .then(function (resp) { if (resp.ok && resp.d && resp.d.ok !== false) { btn.outerHTML = linkCtrl(act === "verify"); } else { btn.disabled = false; } })
+        .then(function (resp) {
+          if (resp.ok && resp.d && resp.d.ok !== false) {
+            btn.outerHTML = linkCtrl(act === "verify");
+            // keep the row's expandable state in sync with the new button:
+            // freshly VERIFIED -> becomes expandable; UNLINKED -> loses caret +
+            // any open panel is removed.
+            setRowLinkable(row, act === "verify");
+          } else { btn.disabled = false; }
+        })
         .catch(function () { btn.disabled = false; });
+    });
+    // Row-expand: a click anywhere on a verified (.linkable) row -- EXCEPT on its
+    // Linked/Unlink button -- toggles the Toast data panel.
+    rows.addEventListener("click", function (ev) {
+      if (ev.target.closest("[data-link-act]")) return;   // the verify/unlink handler owns those
+      var row = ev.target.closest(".tws-link-row.linkable");
+      if (!row) return;
+      toggleDataPanel(row);
     });
   })();
 

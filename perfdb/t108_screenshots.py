@@ -396,6 +396,21 @@ def run():
                         out = classify_dashboard(page)
                         desc = out[0]
                         state = "dashboard"
+                        # T108 (samai #3142 note 4): the position:fixed sticky
+                        # bottom-nav (`nav.ck-enav` from partials/_employee_nav.html)
+                        # overlays the bottom content in a full-page static capture,
+                        # clipping "Not eligible" / "Top X%" text. The app is correct
+                        # at real runtime; this is purely a screenshot artifact. Hide
+                        # ONLY that nav for the full-page dashboard shot. (Dashboard
+                        # captures only -- detail captures are left untouched.)
+                        hidden = page.evaluate(
+                            """() => {
+                                const navs = document.querySelectorAll('nav.ck-enav');
+                                navs.forEach(n => { n.style.display = 'none'; });
+                                return navs.length;
+                            }"""
+                        )
+                        desc += "  [hid %d .ck-enav bottom-nav for capture]" % hidden
                     else:
                         # detail: wait until loading is gone AND one terminal state visible
                         try:

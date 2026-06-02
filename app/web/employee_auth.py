@@ -471,6 +471,195 @@ def my_performance():
         db.close()
 
 
+@employee_auth.route("/employee/performance-center", methods=["GET"])
+def performance_center():
+    """Unified self-view payload for the performance DETAIL pages (T108). ONE
+    endpoint feeds all 11 metric routes -- the detail template is data-driven by
+    a metric_key, so this returns every period's money / rankings / daily /
+    attendance in a single shape and the page picks the slice it needs.
+
+    Scoped strictly to session['employee_id'] (the B2 isolation guarantee: zero
+    cross-employee or partner data). Serves ONLY from the SANITIZED CK-pushed
+    caches (PerfPeriodCache / PerfShiftCache / PerfRankCache) -- never a live
+    Toast pull, and never sales / eligible_sales / cashSales / GUID (those never
+    reach these tables; tip_pct is the allowed RATIO only).
+
+    ROLE-AWARE (Sam #3077 / #3120): a non-tipped (BOH) employee's payload OMITS
+    every tip key entirely -- no tips, tip_pct, tips_per_hour in money/daily and
+    no tip_pct / tips_per_hour rankings. The UI reads is_tipped and renders a
+    coherent BOH dashboard, not a tipped one with empty holes."""
+    emp_id = session.get("employee_id")
+    if not emp_id:
+        return jsonify({"ok": False, "error": "not signed in"}), 401
+
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter(Employee.id == emp_id).first()
+        if emp is None:
+            return jsonify({"ok": False, "error": "unknown employee"}), 404
+        links = (db.query(CenaToastLink)
+                   .filter(CenaToastLink.cena_employee_id == emp.id).all())
+        if not links:
+            return jsonify({"ok": True, "linked": False}), 200
+
+        from app.models import PerfPeriodCache, PerfShiftCache
+        try:
+            pc_rows = (db.query(PerfPeriodCache)
+                         .filter(PerfPeriodCache.cena_employee_id == emp.id).all())
+        except Exception:
+            pc_rows = []
+        if not pc_rows:
+            # linked but the sanitized cache has not been pushed yet -> pending
+            return jsonify({"ok": True, "linked": True, "syncing": True}), 200
+        try:
+            ps_rows = (db.query(PerfShiftCache)
+                         .filter(PerfShiftCache.cena_employee_id == emp.id)
+                         .order_by(PerfShiftCache.clock_in.desc()).all())
+        except Exception:
+            ps_rows = []
+
+        # Sanitized ranking (own ranks + per-cohort leaderboards). The read-path
+        # sanitizer strips peer rows to the field whitelist; structure (is_tipped,
+        # ranks, leaderboards) is preserved. Absent (non-pilot) -> treat as BOH-
+        # safe: no rankings, no tip keys.
+        ranking = {}
+        try:
+            from app.models import PerfRankCache, sanitize_rank_json
+            rk = (db.query(PerfRankCache)
+                    .filter(PerfRankCache.cena_employee_id == emp.id).first())
+            if rk and rk.rank_json:
+                ranking = sanitize_rank_json(rk.rank_json) or {}
+        except Exception:
+            ranking = {}
+        is_tipped = bool(ranking.get("is_tipped"))
+
+        full_name = (emp.full_name or "").strip()
+        first_name = full_name.split(" ")[0] if full_name else None
+
+        pc_by_period = {r.period: r for r in pc_rows}
+        rj_ranks = ranking.get("ranks") or {}
+        rj_lb = ranking.get("leaderboards") or {}
+        # metric_key (UI) -> rank_json metric name
+        RJ = {"effective_hourly": "effective_hourly",
+              "tip_pct": "tip_percent", "tips_per_hour": "tips_per_hour"}
+
+        def _shifts_in(r):
+            lo, hi = r.period_start, r.period_end  # ISO 'YYYY-MM-DD' strings
+            out = []
+            for s in ps_rows:
+                bd = s.business_date
+                if bd and (not lo or bd >= lo) and (not hi or bd <= hi):
+                    out.append(s)
+            return out
+
+        def _peer_rows(period, mk):
+            rj = RJ[mk]
+            lb = (rj_lb.get(period) or {}).get(rj) or {}
+            rows = lb.get("rows") or []
+            ranked = [{"rank": x.get("rank"), "name": x.get("name"),
+                       "value": x.get(rj)} for x in rows if x.get("rank")]
+            ranked.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
+            return ranked
+
+        periods = {}
+        for period in ("today", "week", "month", "last30"):
+            r = pc_by_period.get(period)
+            if r is None:
+                periods[period] = {"money": {}, "rankings": {},
+                                   "attendance": {"late": 0, "missed": 0, "rows": []},
+                                   "daily": []}
+                continue
+            hours = round(float(r.total_hours or 0), 2)
+            base = round(float(r.base_pay or 0), 2)
+            tips = round(float(r.tips or 0), 2)
+            total = round(base + tips, 2)
+            money = {"hours": hours, "base_pay": base, "total_pay": total,
+                     "effective_hourly": (round(total / hours, 2) if hours > 0 else None),
+                     "shifts": len(_shifts_in(r))}
+            metrics = ["effective_hourly"]
+            if is_tipped:
+                # tip keys ONLY for tipped roles (sales-clean: tips $ + ratios)
+                money["tips"] = tips
+                money["tips_per_hour"] = (round(tips / hours, 4) if hours > 0 else None)
+                tp = ((rj_ranks.get(period) or {}).get("tip_percent") or {}).get("value")
+                money["tip_pct"] = (round(float(tp), 1) if tp is not None else None)
+                metrics += ["tip_pct", "tips_per_hour"]
+
+            rankings = {}
+            for mk in metrics:
+                rj = RJ[mk]
+                rr = (rj_ranks.get(period) or {}).get(rj) or {}
+                ranked = _peer_rows(period, mk)
+                rankings[mk] = {
+                    "rank": rr.get("rank"), "status": rr.get("status"),
+                    "cohort_size": rr.get("cohort_size"), "value": rr.get("value"),
+                    # held-days history not built yet -> clean empty state
+                    "days_ranked": 0, "days_at_current_rank": 0, "history": [],
+                    "leaders": ranked[:3],
+                    "bottom": (ranked[-3:] if len(ranked) > 3 else []),
+                }
+
+            # daily breakdown from per-shift cache (grouped by business_date)
+            daily = []
+            byd = {}
+            order = []
+            for s in _shifts_in(r):
+                if s.business_date not in byd:
+                    byd[s.business_date] = []
+                    order.append(s.business_date)
+                byd[s.business_date].append(s)
+            for bd in order:
+                ss = byd[bd]
+                dh = round(sum(float(x.total_hours or 0) for x in ss), 2)
+                dbase = round(sum(float(x.base_pay or 0) for x in ss), 2)
+                dtips = round(sum(float(x.tips or 0) for x in ss), 2)
+                drow = {"date": bd, "hours": dh, "base_pay": dbase,
+                        "total_pay": round(dbase + dtips, 2),
+                        "effective_hourly": (round((dbase + dtips) / dh, 2) if dh > 0 else None),
+                        "shifts": len(ss)}
+                if is_tipped:
+                    drow["tips"] = dtips
+                    drow["tips_per_hour"] = (round(dtips / dh, 4) if dh > 0 else None)
+                    drow["tip_pct"] = None  # per-day tip% needs eligible_sales (internal) -> omit
+                daily.append(drow)
+
+            periods[period] = {"money": money, "rankings": rankings,
+                               # attendance hybrid (late-vs-scheduled join) lands next;
+                               # clean empty state until then (Sam: clean Not-available is OK)
+                               "attendance": {"late": 0, "missed": 0, "rows": []},
+                               "daily": daily}
+
+        return jsonify({"ok": True, "linked": True,
+                        "employee": {"first_name": first_name},
+                        "is_tipped": is_tipped,
+                        "periods": periods}), 200
+    finally:
+        db.close()
+
+
+# All 11 performance DETAIL pages share ONE parameterized route + ONE data-driven
+# template (the page picks its slice by metric_key). Tip metrics render a clean,
+# role-aware "applies to tipped roles" state for BOH (the page reads is_tipped).
+_PERF_DETAIL_METRICS = {
+    "total_pay", "tips", "base_pay", "effective_hourly", "tips_per_hour",
+    "tip_pct", "shifts", "attendance",
+    "rank_effective_hourly", "rank_tip_pct", "rank_tips_per_hour",
+}
+
+
+@employee_auth.route("/employee/performance/<metric>", methods=["GET"])
+def performance_detail(metric):
+    """One route serves all 11 performance detail pages. Requires an employee
+    session (mirrors /employee/dashboard's no-session redirect). The template is
+    data-driven: it fetches /employee/performance-center (scoped to this
+    employee) and renders the slice for metric_key. Unknown metric -> 404."""
+    if not session.get("employee_id"):
+        return redirect("/employee/login")
+    if metric not in _PERF_DETAIL_METRICS:
+        abort(404)
+    return render_template("employee_performance_detail.html", metric_key=metric)
+
+
 @employee_auth.route("/partner/schedules-v2/migration/run", methods=["POST"])
 def migration_run_placeholder():
     """B2 placeholder — B3 (aick) fills in the real Sling migration trigger.

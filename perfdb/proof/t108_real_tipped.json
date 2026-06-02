@@ -1,0 +1,1808 @@
+{
+  "_meta": {
+    "cena_employee_id": 71,
+    "full_name": "Yadira Romer Hernandez",
+    "kind": "REAL_DATA_PROOF",
+    "my_performance_status": 200,
+    "performance_center_status": 200,
+    "rank_json_source": "pilot_phase5.compute_ranks(stored CK perf.sqlite, persist=False) + build_rank_output  (NO Toast pull)",
+    "role": "tipped"
+  },
+  "my_performance": {
+    "linked": true,
+    "ok": true,
+    "perf_periods": [
+      {
+        "base_pay": 0.0,
+        "ot_hours": 0.0,
+        "period": "today",
+        "period_end": "2026-06-02",
+        "period_start": "2026-06-02",
+        "reg_hours": 0.0,
+        "service": {},
+        "tips": 0.0,
+        "total_hours": 0.0
+      },
+      {
+        "base_pay": 13.31,
+        "ot_hours": 0.0,
+        "period": "week",
+        "period_end": "2026-06-02",
+        "period_start": "2026-05-30",
+        "reg_hours": 6.25,
+        "service": {},
+        "tips": 93.9,
+        "total_hours": 6.25
+      },
+      {
+        "base_pay": 13.31,
+        "ot_hours": 0.0,
+        "period": "month",
+        "period_end": "2026-06-02",
+        "period_start": "2026-06-01",
+        "reg_hours": 6.25,
+        "service": {},
+        "tips": 93.9,
+        "total_hours": 6.25
+      },
+      {
+        "base_pay": 298.14,
+        "ot_hours": 0.0,
+        "period": "last30",
+        "period_end": "2026-06-02",
+        "period_start": "2026-05-04",
+        "reg_hours": 139.97,
+        "service": {},
+        "tips": 3077.25,
+        "total_hours": 139.97
+      }
+    ],
+    "ranking": {
+      "cena_employee_id": 71,
+      "held_days_status": "pending",
+      "is_tipped": true,
+      "leaderboards": {
+        "last30": {
+          "effective_hourly": {
+            "cohort_key": "store:copperfield|role:tipped|metric:effective_hourly",
+            "cohort_size": 15,
+            "role": "tipped",
+            "rows": [
+              {
+                "effective_hourly": 27.2628,
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 1
+              },
+              {
+                "effective_hourly": 26.5054,
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 2
+              },
+              {
+                "effective_hourly": 25.9601,
+                "is_me": false,
+                "name": "Valentina Anzola Diaz",
+                "rank": 3
+              },
+              {
+                "effective_hourly": 24.1151,
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 4
+              },
+              {
+                "effective_hourly": 24.1032,
+                "is_me": false,
+                "name": "Drew Stewart",
+                "rank": 5
+              },
+              {
+                "effective_hourly": 23.9844,
+                "is_me": false,
+                "name": "Irene Tadros",
+                "rank": 6
+              },
+              {
+                "effective_hourly": 23.3351,
+                "is_me": false,
+                "name": "Elida Fulgencio",
+                "rank": 7
+              },
+              {
+                "effective_hourly": 23.2879,
+                "is_me": false,
+                "name": "Kennya Islas",
+                "rank": 8
+              },
+              {
+                "effective_hourly": 21.4471,
+                "is_me": false,
+                "name": "Alexa Rodriguez",
+                "rank": 9
+              },
+              {
+                "effective_hourly": 21.2184,
+                "is_me": false,
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 10
+              },
+              {
+                "effective_hourly": 20.826,
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 11
+              },
+              {
+                "effective_hourly": 19.8426,
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 12
+              },
+              {
+                "effective_hourly": 9.193,
+                "is_me": false,
+                "name": "Dani Gomez",
+                "rank": 13
+              },
+              {
+                "effective_hourly": 8.8951,
+                "is_me": false,
+                "name": "Nadia Cibrian",
+                "rank": 14
+              },
+              {
+                "effective_hourly": 7.5392,
+                "is_me": false,
+                "name": "Maykol Ramirez Almeida",
+                "rank": 15
+              }
+            ],
+            "status": "ranked"
+          },
+          "tipped": {
+            "cohort_key": "store:copperfield|role:tipped|metric:tip_percent",
+            "cohort_size": 12,
+            "rows": [
+              {
+                "combined": 0.9166,
+                "combined_rank": 1,
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 1,
+                "tip_percent": 0.1895
+              },
+              {
+                "combined": 0.75,
+                "combined_rank": 2,
+                "is_me": false,
+                "name": "Drew Stewart",
+                "rank": 2,
+                "tip_percent": 0.1882
+              },
+              {
+                "combined": 0.5417,
+                "combined_rank": 5,
+                "is_me": false,
+                "name": "Alexa Rodriguez",
+                "rank": 3,
+                "tip_percent": 0.1812
+              },
+              {
+                "combined": 0.7083,
+                "combined_rank": 3,
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 4,
+                "tip_percent": 0.1749
+              },
+              {
+                "combined": 0.4167,
+                "combined_rank": 7,
+                "is_me": false,
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 5,
+                "tip_percent": 0.1709
+              },
+              {
+                "combined": 0.2917,
+                "combined_rank": 10,
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 6,
+                "tip_percent": 0.1705
+              },
+              {
+                "combined": 0.2916,
+                "combined_rank": 11,
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 7,
+                "tip_percent": 0.1691
+              },
+              {
+                "combined": 0.4166,
+                "combined_rank": 8,
+                "is_me": false,
+                "name": "Elida Fulgencio",
+                "rank": 8,
+                "tip_percent": 0.1662
+              },
+              {
+                "combined": 0.625,
+                "combined_rank": 4,
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 9,
+                "tip_percent": 0.1638
+              },
+              {
+                "combined": 0.5,
+                "combined_rank": 6,
+                "is_me": false,
+                "name": "Valentina Anzola Diaz",
+                "rank": 10,
+                "tip_percent": 0.1629
+              },
+              {
+                "combined": 0.3333,
+                "combined_rank": 9,
+                "is_me": false,
+                "name": "Irene Tadros",
+                "rank": 11,
+                "tip_percent": 0.1623
+              },
+              {
+                "combined": 0.2084,
+                "combined_rank": 12,
+                "is_me": false,
+                "name": "Kennya Islas",
+                "rank": 12,
+                "tip_percent": 0.1572
+              }
+            ],
+            "status": "ranked"
+          },
+          "tips_per_hour": {
+            "cohort_key": "store:copperfield|role:tipped|metric:tips_per_hour",
+            "cohort_size": 15,
+            "rows": [
+              {
+                "is_me": false,
+                "name": "Valentina Anzola Diaz",
+                "rank": 1,
+                "tips_per_hour": 23.8301
+              },
+              {
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 2,
+                "tips_per_hour": 22.4252
+              },
+              {
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 3,
+                "tips_per_hour": 21.9851
+              },
+              {
+                "is_me": false,
+                "name": "Drew Stewart",
+                "rank": 4,
+                "tips_per_hour": 21.9732
+              },
+              {
+                "is_me": false,
+                "name": "Irene Tadros",
+                "rank": 5,
+                "tips_per_hour": 21.8543
+              },
+              {
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 6,
+                "tips_per_hour": 21.7254
+              },
+              {
+                "is_me": false,
+                "name": "Kennya Islas",
+                "rank": 7,
+                "tips_per_hour": 19.5358
+              },
+              {
+                "is_me": false,
+                "name": "Alexa Rodriguez",
+                "rank": 8,
+                "tips_per_hour": 19.3171
+              },
+              {
+                "is_me": false,
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 9,
+                "tips_per_hour": 18.8966
+              },
+              {
+                "is_me": false,
+                "name": "Elida Fulgencio",
+                "rank": 10,
+                "tips_per_hour": 18.6766
+              },
+              {
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 11,
+                "tips_per_hour": 17.7127
+              },
+              {
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 12,
+                "tips_per_hour": 14.7214
+              },
+              {
+                "is_me": false,
+                "name": "Nadia Cibrian",
+                "rank": 13,
+                "tips_per_hour": 0.0
+              },
+              {
+                "is_me": false,
+                "name": "Maykol Ramirez Almeida",
+                "rank": 14,
+                "tips_per_hour": 0.0
+              },
+              {
+                "is_me": false,
+                "name": "Dani Gomez",
+                "rank": 15,
+                "tips_per_hour": 0.0
+              }
+            ],
+            "status": "ranked"
+          }
+        },
+        "month": {
+          "effective_hourly": {
+            "cohort_key": "store:copperfield|role:tipped|metric:effective_hourly",
+            "cohort_size": 7,
+            "role": "tipped",
+            "rows": [
+              {
+                "effective_hourly": 42.1452,
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 1
+              },
+              {
+                "effective_hourly": 21.1825,
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 2
+              },
+              {
+                "effective_hourly": 17.1536,
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 3
+              },
+              {
+                "effective_hourly": 13.9504,
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 4
+              },
+              {
+                "effective_hourly": 10.0,
+                "is_me": false,
+                "name": "Maykol Ramirez Almeida",
+                "rank": 5
+              },
+              {
+                "effective_hourly": 5.6295,
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 6
+              },
+              {
+                "effective_hourly": 2.129,
+                "is_me": false,
+                "name": "Nadia Cibrian",
+                "rank": 7
+              }
+            ],
+            "status": "ranked"
+          },
+          "tipped": {
+            "cohort_key": "store:copperfield|role:tipped|metric:tip_percent",
+            "cohort_size": 5,
+            "rows": [
+              {
+                "combined": 0.8,
+                "combined_rank": 1,
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 1,
+                "tip_percent": 0.223
+              },
+              {
+                "combined": 0.6,
+                "combined_rank": 3,
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 2,
+                "tip_percent": 0.2101
+              },
+              {
+                "combined": 0.7,
+                "combined_rank": 2,
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 3,
+                "tip_percent": 0.2019
+              },
+              {
+                "combined": 0.3,
+                "combined_rank": 4,
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 4,
+                "tip_percent": 0.1725
+              },
+              {
+                "combined": 0.1,
+                "combined_rank": 5,
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 5,
+                "tip_percent": 0.1642
+              }
+            ],
+            "status": "ranked"
+          },
+          "tips_per_hour": {
+            "cohort_key": "store:copperfield|role:tipped|metric:tips_per_hour",
+            "cohort_size": 7,
+            "rows": [
+              {
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 1,
+                "tips_per_hour": 34.8947
+              },
+              {
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 2,
+                "tips_per_hour": 19.053
+              },
+              {
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 3,
+                "tips_per_hour": 15.024
+              },
+              {
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 4,
+                "tips_per_hour": 7.2423
+              },
+              {
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 5,
+                "tips_per_hour": 3.4996
+              },
+              {
+                "is_me": false,
+                "name": "Maykol Ramirez Almeida",
+                "rank": 6,
+                "tips_per_hour": 0.0
+              },
+              {
+                "is_me": false,
+                "name": "Nadia Cibrian",
+                "rank": 7,
+                "tips_per_hour": 0.0
+              }
+            ],
+            "status": "ranked"
+          }
+        },
+        "today": {},
+        "week": {
+          "effective_hourly": {
+            "cohort_key": "store:copperfield|role:tipped|metric:effective_hourly",
+            "cohort_size": 12,
+            "role": "tipped",
+            "rows": [
+              {
+                "effective_hourly": 33.142,
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 1
+              },
+              {
+                "effective_hourly": 26.4524,
+                "is_me": false,
+                "name": "Valentina Anzola Diaz",
+                "rank": 2
+              },
+              {
+                "effective_hourly": 21.57,
+                "is_me": false,
+                "name": "Elida Fulgencio",
+                "rank": 3
+              },
+              {
+                "effective_hourly": 20.3238,
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 4
+              },
+              {
+                "effective_hourly": 19.2898,
+                "is_me": false,
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 5
+              },
+              {
+                "effective_hourly": 18.8786,
+                "is_me": false,
+                "name": "Kennya Islas",
+                "rank": 6
+              },
+              {
+                "effective_hourly": 17.1536,
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 7
+              },
+              {
+                "effective_hourly": 13.9504,
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 8
+              },
+              {
+                "effective_hourly": 10.0,
+                "is_me": false,
+                "name": "Dani Gomez",
+                "rank": 9
+              },
+              {
+                "effective_hourly": 10.0,
+                "is_me": false,
+                "name": "Maykol Ramirez Almeida",
+                "rank": 10
+              },
+              {
+                "effective_hourly": 9.849,
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 11
+              },
+              {
+                "effective_hourly": 2.1304,
+                "is_me": false,
+                "name": "Nadia Cibrian",
+                "rank": 12
+              }
+            ],
+            "status": "ranked"
+          },
+          "tipped": {
+            "cohort_key": "store:copperfield|role:tipped|metric:tip_percent",
+            "cohort_size": 9,
+            "rows": [
+              {
+                "combined": 0.6111,
+                "combined_rank": 2,
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 1,
+                "tip_percent": 0.2101
+              },
+              {
+                "combined": 0.8889,
+                "combined_rank": 1,
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 2,
+                "tip_percent": 0.1789
+              },
+              {
+                "combined": 0.5555,
+                "combined_rank": 3,
+                "is_me": false,
+                "name": "Kennya Islas",
+                "rank": 3,
+                "tip_percent": 0.1727
+              },
+              {
+                "combined": 0.3889,
+                "combined_rank": 8,
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 4,
+                "tip_percent": 0.1725
+              },
+              {
+                "combined": 0.5,
+                "combined_rank": 5,
+                "is_me": false,
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 5,
+                "tip_percent": 0.1691
+              },
+              {
+                "combined": 0.5,
+                "combined_rank": 6,
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 6,
+                "tip_percent": 0.1683
+              },
+              {
+                "combined": 0.1667,
+                "combined_rank": 9,
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 7,
+                "tip_percent": 0.1624
+              },
+              {
+                "combined": 0.5,
+                "combined_rank": 4,
+                "is_me": false,
+                "name": "Valentina Anzola Diaz",
+                "rank": 8,
+                "tip_percent": 0.161
+              },
+              {
+                "combined": 0.3889,
+                "combined_rank": 7,
+                "is_me": false,
+                "name": "Elida Fulgencio",
+                "rank": 9,
+                "tip_percent": 0.1355
+              }
+            ],
+            "status": "ranked"
+          },
+          "tips_per_hour": {
+            "cohort_key": "store:copperfield|role:tipped|metric:tips_per_hour",
+            "cohort_size": 12,
+            "rows": [
+              {
+                "is_me": false,
+                "name": "kennya Garcia",
+                "rank": 1,
+                "tips_per_hour": 27.425
+              },
+              {
+                "is_me": false,
+                "name": "Valentina Anzola Diaz",
+                "rank": 2,
+                "tips_per_hour": 24.3225
+              },
+              {
+                "is_me": false,
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 3,
+                "tips_per_hour": 17.1598
+              },
+              {
+                "is_me": false,
+                "name": "Melanie Diaz",
+                "rank": 4,
+                "tips_per_hour": 17.0712
+              },
+              {
+                "is_me": true,
+                "name": "Yadira Romer Hernandez",
+                "rank": 5,
+                "tips_per_hour": 15.024
+              },
+              {
+                "is_me": false,
+                "name": "Kennya Islas",
+                "rank": 6,
+                "tips_per_hour": 13.1233
+              },
+              {
+                "is_me": false,
+                "name": "Elida Fulgencio",
+                "rank": 7,
+                "tips_per_hour": 12.8251
+              },
+              {
+                "is_me": false,
+                "name": "Jaslyn Parrish",
+                "rank": 8,
+                "tips_per_hour": 7.7192
+              },
+              {
+                "is_me": false,
+                "name": "Jessika Sanchez",
+                "rank": 9,
+                "tips_per_hour": 7.2423
+              },
+              {
+                "is_me": false,
+                "name": "Nadia Cibrian",
+                "rank": 10,
+                "tips_per_hour": 0.0
+              },
+              {
+                "is_me": false,
+                "name": "Dani Gomez",
+                "rank": 11,
+                "tips_per_hour": 0.0
+              },
+              {
+                "is_me": false,
+                "name": "Maykol Ramirez Almeida",
+                "rank": 12,
+                "tips_per_hour": 0.0
+              }
+            ],
+            "status": "ranked"
+          }
+        }
+      },
+      "ranks": {
+        "last30": {
+          "combined": {
+            "cohort_size": 12,
+            "rank": 3,
+            "status": "ranked",
+            "value": null
+          },
+          "effective_hourly": {
+            "cohort_size": 15,
+            "rank": 4,
+            "role": "tipped",
+            "status": "ranked",
+            "value": 24.1151
+          },
+          "next_best": {
+            "msg": "You're in the top 3 of your group -- keep it up!",
+            "rule": "top"
+          },
+          "score": {
+            "band": "Strong",
+            "basis": "combined",
+            "cohort_size": 12,
+            "standing_percentile": 79
+          },
+          "tip_percent": {
+            "cohort_size": 12,
+            "rank": 4,
+            "status": "ranked",
+            "value": 0.1749
+          },
+          "tips_per_hour": {
+            "cohort_size": 15,
+            "rank": 3,
+            "status": "ranked",
+            "value": 21.9851
+          }
+        },
+        "month": {
+          "combined": {
+            "cohort_size": 5,
+            "rank": 3,
+            "status": "ranked",
+            "value": null
+          },
+          "effective_hourly": {
+            "cohort_size": 7,
+            "rank": 3,
+            "role": "tipped",
+            "status": "ranked",
+            "value": 17.1536
+          },
+          "next_best": {
+            "msg": "You're in the lower half of your group this period -- small, steady gains move you up. Keep showing up strong.",
+            "rule": "improve"
+          },
+          "score": {
+            "band": "Steady",
+            "basis": "combined",
+            "cohort_size": 5,
+            "standing_percentile": 50
+          },
+          "tip_percent": {
+            "cohort_size": 5,
+            "rank": 2,
+            "status": "ranked",
+            "value": 0.2101
+          },
+          "tips_per_hour": {
+            "cohort_size": 7,
+            "rank": 3,
+            "status": "ranked",
+            "value": 15.024
+          }
+        },
+        "today": {
+          "next_best": {
+            "rule": "not_available"
+          },
+          "score": {
+            "status": "not_available"
+          }
+        },
+        "week": {
+          "combined": {
+            "cohort_size": 9,
+            "rank": 2,
+            "status": "ranked",
+            "value": null
+          },
+          "effective_hourly": {
+            "cohort_size": 12,
+            "rank": 7,
+            "role": "tipped",
+            "status": "ranked",
+            "value": 17.1536
+          },
+          "next_best": {
+            "msg": "You're in the top 3 of your group -- keep it up!",
+            "rule": "top"
+          },
+          "score": {
+            "band": "Strong",
+            "basis": "combined",
+            "cohort_size": 9,
+            "standing_percentile": 83
+          },
+          "tip_percent": {
+            "cohort_size": 9,
+            "rank": 1,
+            "status": "ranked",
+            "value": 0.2101
+          },
+          "tips_per_hour": {
+            "cohort_size": 12,
+            "rank": 5,
+            "status": "ranked",
+            "value": 15.024
+          }
+        }
+      }
+    },
+    "shifts": [
+      {
+        "base_pay": 13.31,
+        "business_date": "2026-06-01",
+        "clock_in": "2026-06-01T15:09:44.476+0000",
+        "clock_out": "2026-06-01T21:24:49.715+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.25,
+        "review_reason": null,
+        "tips": 93.9,
+        "tips_declared": true,
+        "total_hours": 6.25
+      },
+      {
+        "base_pay": 11.52,
+        "business_date": "2026-05-29",
+        "clock_in": "2026-05-29T16:12:09.602+0000",
+        "clock_out": "2026-05-29T21:37:01.581+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 5.41,
+        "review_reason": null,
+        "tips": 387.03,
+        "tips_declared": true,
+        "total_hours": 5.41
+      },
+      {
+        "base_pay": 13.59,
+        "business_date": "2026-05-28",
+        "clock_in": "2026-05-28T15:05:31.829+0000",
+        "clock_out": "2026-05-28T21:28:34.954+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.38,
+        "review_reason": null,
+        "tips": 105.55,
+        "tips_declared": true,
+        "total_hours": 6.38
+      },
+      {
+        "base_pay": 14.76,
+        "business_date": "2026-05-26",
+        "clock_in": "2026-05-26T15:08:16.772+0000",
+        "clock_out": "2026-05-26T22:04:14.142+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.93,
+        "review_reason": null,
+        "tips": 269.84,
+        "tips_declared": true,
+        "total_hours": 6.93
+      },
+      {
+        "base_pay": 38.15,
+        "business_date": "2026-05-25",
+        "clock_in": "2026-05-25T15:05:11.779+0000",
+        "clock_out": "2026-05-26T09:00:00.000+0000",
+        "needs_review": true,
+        "ot_hours": 0.0,
+        "reg_hours": 17.91,
+        "review_reason": "auto clock-out (possible missed punch) -- verify with manager",
+        "tips": 282.8,
+        "tips_declared": true,
+        "total_hours": 17.91
+      },
+      {
+        "base_pay": 14.21,
+        "business_date": "2026-05-22",
+        "clock_in": "2026-05-22T15:02:41.135+0000",
+        "clock_out": "2026-05-22T21:42:46.119+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.67,
+        "review_reason": null,
+        "tips": 133.37,
+        "tips_declared": true,
+        "total_hours": 6.67
+      },
+      {
+        "base_pay": 13.59,
+        "business_date": "2026-05-21",
+        "clock_in": "2026-05-21T15:07:51.130+0000",
+        "clock_out": "2026-05-21T21:30:36.973+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.38,
+        "review_reason": null,
+        "tips": 168.68,
+        "tips_declared": true,
+        "total_hours": 6.38
+      },
+      {
+        "base_pay": 13.21,
+        "business_date": "2026-05-20",
+        "clock_in": "2026-05-20T15:03:43.452+0000",
+        "clock_out": "2026-05-20T21:15:36.689+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.2,
+        "review_reason": null,
+        "tips": 103.85,
+        "tips_declared": true,
+        "total_hours": 6.2
+      },
+      {
+        "base_pay": 13.4,
+        "business_date": "2026-05-19",
+        "clock_in": "2026-05-19T15:01:12.978+0000",
+        "clock_out": "2026-05-19T21:18:40.298+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.29,
+        "review_reason": null,
+        "tips": 83.52,
+        "tips_declared": true,
+        "total_hours": 6.29
+      },
+      {
+        "base_pay": 13.65,
+        "business_date": "2026-05-18",
+        "clock_in": "2026-05-18T15:07:27.234+0000",
+        "clock_out": "2026-05-18T21:32:00.498+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.41,
+        "review_reason": null,
+        "tips": 101.76,
+        "tips_declared": true,
+        "total_hours": 6.41
+      },
+      {
+        "base_pay": 14.89,
+        "business_date": "2026-05-15",
+        "clock_in": "2026-05-15T14:59:42.766+0000",
+        "clock_out": "2026-05-15T21:58:55.497+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.99,
+        "review_reason": null,
+        "tips": 163.85,
+        "tips_declared": true,
+        "total_hours": 6.99
+      },
+      {
+        "base_pay": 13.27,
+        "business_date": "2026-05-14",
+        "clock_in": "2026-05-14T15:11:10.589+0000",
+        "clock_out": "2026-05-14T21:24:48.387+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.23,
+        "review_reason": null,
+        "tips": 153.37,
+        "tips_declared": true,
+        "total_hours": 6.23
+      },
+      {
+        "base_pay": 13.25,
+        "business_date": "2026-05-13",
+        "clock_in": "2026-05-13T15:02:15.305+0000",
+        "clock_out": "2026-05-13T21:15:36.956+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.22,
+        "review_reason": null,
+        "tips": 150.5,
+        "tips_declared": true,
+        "total_hours": 6.22
+      },
+      {
+        "base_pay": 12.46,
+        "business_date": "2026-05-12",
+        "clock_in": "2026-05-12T15:09:00.000+0000",
+        "clock_out": "2026-05-12T21:00:00.000+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 5.85,
+        "review_reason": null,
+        "tips": 140.33,
+        "tips_declared": true,
+        "total_hours": 5.85
+      },
+      {
+        "base_pay": 14.16,
+        "business_date": "2026-05-11",
+        "clock_in": "2026-05-11T15:15:25.396+0000",
+        "clock_out": "2026-05-11T21:54:17.784+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.65,
+        "review_reason": null,
+        "tips": 87.7,
+        "tips_declared": true,
+        "total_hours": 6.65
+      },
+      {
+        "base_pay": 14.12,
+        "business_date": "2026-05-08",
+        "clock_in": "2026-05-08T15:04:55.240+0000",
+        "clock_out": "2026-05-08T21:42:46.286+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.63,
+        "review_reason": null,
+        "tips": 154.3,
+        "tips_declared": true,
+        "total_hours": 6.63
+      },
+      {
+        "base_pay": 13.67,
+        "business_date": "2026-05-07",
+        "clock_in": "2026-05-07T15:00:40.446+0000",
+        "clock_out": "2026-05-07T21:25:53.357+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.42,
+        "review_reason": null,
+        "tips": 91.69,
+        "tips_declared": true,
+        "total_hours": 6.42
+      },
+      {
+        "base_pay": 13.23,
+        "business_date": "2026-05-06",
+        "clock_in": "2026-05-06T15:01:14.669+0000",
+        "clock_out": "2026-05-06T21:13:46.453+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.21,
+        "review_reason": null,
+        "tips": 89.42,
+        "tips_declared": true,
+        "total_hours": 6.21
+      },
+      {
+        "base_pay": 16.25,
+        "business_date": "2026-05-05",
+        "clock_in": "2026-05-05T14:43:13.057+0000",
+        "clock_out": "2026-05-05T22:21:05.776+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 7.63,
+        "review_reason": null,
+        "tips": 195.98,
+        "tips_declared": true,
+        "total_hours": 7.63
+      },
+      {
+        "base_pay": 13.44,
+        "business_date": "2026-05-04",
+        "clock_in": "2026-05-04T15:03:31.348+0000",
+        "clock_out": "2026-05-04T21:22:04.983+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.31,
+        "review_reason": null,
+        "tips": 119.81,
+        "tips_declared": true,
+        "total_hours": 6.31
+      }
+    ]
+  },
+  "performance_center": {
+    "employee": {
+      "first_name": "Yadira"
+    },
+    "is_tipped": true,
+    "linked": true,
+    "ok": true,
+    "periods": {
+      "last30": {
+        "attendance": {
+          "late": 0,
+          "missed": 1,
+          "rows": [
+            {
+              "clock_in": "2026-05-25T15:05:11.779+0000",
+              "clock_out": "2026-05-26T09:00:00.000+0000",
+              "date": "2026-05-25",
+              "late_minutes": 0,
+              "note": "auto clock-out (possible missed punch) -- verify with manager",
+              "status": "needs review"
+            }
+          ]
+        },
+        "daily": [
+          {
+            "base_pay": 13.31,
+            "date": "2026-06-01",
+            "effective_hourly": 17.15,
+            "hours": 6.25,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 93.9,
+            "tips_per_hour": 15.024,
+            "total_pay": 107.21
+          },
+          {
+            "base_pay": 11.52,
+            "date": "2026-05-29",
+            "effective_hourly": 73.67,
+            "hours": 5.41,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 387.03,
+            "tips_per_hour": 71.5397,
+            "total_pay": 398.55
+          },
+          {
+            "base_pay": 13.59,
+            "date": "2026-05-28",
+            "effective_hourly": 18.67,
+            "hours": 6.38,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 105.55,
+            "tips_per_hour": 16.5439,
+            "total_pay": 119.14
+          },
+          {
+            "base_pay": 14.76,
+            "date": "2026-05-26",
+            "effective_hourly": 41.07,
+            "hours": 6.93,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 269.84,
+            "tips_per_hour": 38.938,
+            "total_pay": 284.6
+          },
+          {
+            "base_pay": 38.15,
+            "date": "2026-05-25",
+            "effective_hourly": 17.92,
+            "hours": 17.91,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 282.8,
+            "tips_per_hour": 15.7901,
+            "total_pay": 320.95
+          },
+          {
+            "base_pay": 14.21,
+            "date": "2026-05-22",
+            "effective_hourly": 22.13,
+            "hours": 6.67,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 133.37,
+            "tips_per_hour": 19.9955,
+            "total_pay": 147.58
+          },
+          {
+            "base_pay": 13.59,
+            "date": "2026-05-21",
+            "effective_hourly": 28.57,
+            "hours": 6.38,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 168.68,
+            "tips_per_hour": 26.4389,
+            "total_pay": 182.27
+          },
+          {
+            "base_pay": 13.21,
+            "date": "2026-05-20",
+            "effective_hourly": 18.88,
+            "hours": 6.2,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 103.85,
+            "tips_per_hour": 16.75,
+            "total_pay": 117.06
+          },
+          {
+            "base_pay": 13.4,
+            "date": "2026-05-19",
+            "effective_hourly": 15.41,
+            "hours": 6.29,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 83.52,
+            "tips_per_hour": 13.2782,
+            "total_pay": 96.92
+          },
+          {
+            "base_pay": 13.65,
+            "date": "2026-05-18",
+            "effective_hourly": 18.0,
+            "hours": 6.41,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 101.76,
+            "tips_per_hour": 15.8752,
+            "total_pay": 115.41
+          },
+          {
+            "base_pay": 14.89,
+            "date": "2026-05-15",
+            "effective_hourly": 25.57,
+            "hours": 6.99,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 163.85,
+            "tips_per_hour": 23.4406,
+            "total_pay": 178.74
+          },
+          {
+            "base_pay": 13.27,
+            "date": "2026-05-14",
+            "effective_hourly": 26.75,
+            "hours": 6.23,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 153.37,
+            "tips_per_hour": 24.618,
+            "total_pay": 166.64
+          },
+          {
+            "base_pay": 13.25,
+            "date": "2026-05-13",
+            "effective_hourly": 26.33,
+            "hours": 6.22,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 150.5,
+            "tips_per_hour": 24.1961,
+            "total_pay": 163.75
+          },
+          {
+            "base_pay": 12.46,
+            "date": "2026-05-12",
+            "effective_hourly": 26.12,
+            "hours": 5.85,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 140.33,
+            "tips_per_hour": 23.988,
+            "total_pay": 152.79
+          },
+          {
+            "base_pay": 14.16,
+            "date": "2026-05-11",
+            "effective_hourly": 15.32,
+            "hours": 6.65,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 87.7,
+            "tips_per_hour": 13.188,
+            "total_pay": 101.86
+          },
+          {
+            "base_pay": 14.12,
+            "date": "2026-05-08",
+            "effective_hourly": 25.4,
+            "hours": 6.63,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 154.3,
+            "tips_per_hour": 23.273,
+            "total_pay": 168.42
+          },
+          {
+            "base_pay": 13.67,
+            "date": "2026-05-07",
+            "effective_hourly": 16.41,
+            "hours": 6.42,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 91.69,
+            "tips_per_hour": 14.2819,
+            "total_pay": 105.36
+          },
+          {
+            "base_pay": 13.23,
+            "date": "2026-05-06",
+            "effective_hourly": 16.53,
+            "hours": 6.21,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 89.42,
+            "tips_per_hour": 14.3994,
+            "total_pay": 102.65
+          },
+          {
+            "base_pay": 16.25,
+            "date": "2026-05-05",
+            "effective_hourly": 27.82,
+            "hours": 7.63,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 195.98,
+            "tips_per_hour": 25.6855,
+            "total_pay": 212.23
+          },
+          {
+            "base_pay": 13.44,
+            "date": "2026-05-04",
+            "effective_hourly": 21.12,
+            "hours": 6.31,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 119.81,
+            "tips_per_hour": 18.9873,
+            "total_pay": 133.25
+          }
+        ],
+        "money": {
+          "base_pay": 298.14,
+          "effective_hourly": 24.12,
+          "hours": 139.97,
+          "shifts": 20,
+          "tip_pct": 0.2,
+          "tips": 3077.25,
+          "tips_per_hour": 21.9851,
+          "total_pay": 3375.39
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [
+              {
+                "name": "Dani Gomez",
+                "rank": 13,
+                "value": 9.193
+              },
+              {
+                "name": "Nadia Cibrian",
+                "rank": 14,
+                "value": 8.8951
+              },
+              {
+                "name": "Maykol Ramirez Almeida",
+                "rank": 15,
+                "value": 7.5392
+              }
+            ],
+            "cohort_size": 15,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "kennya Garcia",
+                "rank": 1,
+                "value": 27.2628
+              },
+              {
+                "name": "Melanie Diaz",
+                "rank": 2,
+                "value": 26.5054
+              },
+              {
+                "name": "Valentina Anzola Diaz",
+                "rank": 3,
+                "value": 25.9601
+              }
+            ],
+            "rank": 4,
+            "status": "ranked",
+            "value": 24.1151
+          },
+          "tip_pct": {
+            "bottom": [],
+            "cohort_size": 12,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": 4,
+            "status": "ranked",
+            "value": 0.1749
+          },
+          "tips_per_hour": {
+            "bottom": [
+              {
+                "name": "Nadia Cibrian",
+                "rank": 13,
+                "value": 0.0
+              },
+              {
+                "name": "Maykol Ramirez Almeida",
+                "rank": 14,
+                "value": 0.0
+              },
+              {
+                "name": "Dani Gomez",
+                "rank": 15,
+                "value": 0.0
+              }
+            ],
+            "cohort_size": 15,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "Valentina Anzola Diaz",
+                "rank": 1,
+                "value": 23.8301
+              },
+              {
+                "name": "Melanie Diaz",
+                "rank": 2,
+                "value": 22.4252
+              },
+              {
+                "name": "Yadira Romer Hernandez",
+                "rank": 3,
+                "value": 21.9851
+              }
+            ],
+            "rank": 3,
+            "status": "ranked",
+            "value": 21.9851
+          }
+        }
+      },
+      "month": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [
+          {
+            "base_pay": 13.31,
+            "date": "2026-06-01",
+            "effective_hourly": 17.15,
+            "hours": 6.25,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 93.9,
+            "tips_per_hour": 15.024,
+            "total_pay": 107.21
+          }
+        ],
+        "money": {
+          "base_pay": 13.31,
+          "effective_hourly": 17.15,
+          "hours": 6.25,
+          "shifts": 1,
+          "tip_pct": 0.2,
+          "tips": 93.9,
+          "tips_per_hour": 15.024,
+          "total_pay": 107.21
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [
+              {
+                "name": "Maykol Ramirez Almeida",
+                "rank": 5,
+                "value": 10.0
+              },
+              {
+                "name": "Jaslyn Parrish",
+                "rank": 6,
+                "value": 5.6295
+              },
+              {
+                "name": "Nadia Cibrian",
+                "rank": 7,
+                "value": 2.129
+              }
+            ],
+            "cohort_size": 7,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "kennya Garcia",
+                "rank": 1,
+                "value": 42.1452
+              },
+              {
+                "name": "Melanie Diaz",
+                "rank": 2,
+                "value": 21.1825
+              },
+              {
+                "name": "Yadira Romer Hernandez",
+                "rank": 3,
+                "value": 17.1536
+              }
+            ],
+            "rank": 3,
+            "status": "ranked",
+            "value": 17.1536
+          },
+          "tip_pct": {
+            "bottom": [],
+            "cohort_size": 5,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": 2,
+            "status": "ranked",
+            "value": 0.2101
+          },
+          "tips_per_hour": {
+            "bottom": [
+              {
+                "name": "Jaslyn Parrish",
+                "rank": 5,
+                "value": 3.4996
+              },
+              {
+                "name": "Maykol Ramirez Almeida",
+                "rank": 6,
+                "value": 0.0
+              },
+              {
+                "name": "Nadia Cibrian",
+                "rank": 7,
+                "value": 0.0
+              }
+            ],
+            "cohort_size": 7,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "kennya Garcia",
+                "rank": 1,
+                "value": 34.8947
+              },
+              {
+                "name": "Melanie Diaz",
+                "rank": 2,
+                "value": 19.053
+              },
+              {
+                "name": "Yadira Romer Hernandez",
+                "rank": 3,
+                "value": 15.024
+              }
+            ],
+            "rank": 3,
+            "status": "ranked",
+            "value": 15.024
+          }
+        }
+      },
+      "today": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [],
+        "money": {
+          "base_pay": 0.0,
+          "effective_hourly": null,
+          "hours": 0.0,
+          "shifts": 0,
+          "tip_pct": null,
+          "tips": 0.0,
+          "tips_per_hour": null,
+          "total_pay": 0.0
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [],
+            "cohort_size": null,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": null,
+            "status": null,
+            "value": null
+          },
+          "tip_pct": {
+            "bottom": [],
+            "cohort_size": null,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": null,
+            "status": null,
+            "value": null
+          },
+          "tips_per_hour": {
+            "bottom": [],
+            "cohort_size": null,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": null,
+            "status": null,
+            "value": null
+          }
+        }
+      },
+      "week": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [
+          {
+            "base_pay": 13.31,
+            "date": "2026-06-01",
+            "effective_hourly": 17.15,
+            "hours": 6.25,
+            "shifts": 1,
+            "tip_pct": null,
+            "tips": 93.9,
+            "tips_per_hour": 15.024,
+            "total_pay": 107.21
+          }
+        ],
+        "money": {
+          "base_pay": 13.31,
+          "effective_hourly": 17.15,
+          "hours": 6.25,
+          "shifts": 1,
+          "tip_pct": 0.2,
+          "tips": 93.9,
+          "tips_per_hour": 15.024,
+          "total_pay": 107.21
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [
+              {
+                "name": "Maykol Ramirez Almeida",
+                "rank": 10,
+                "value": 10.0
+              },
+              {
+                "name": "Jaslyn Parrish",
+                "rank": 11,
+                "value": 9.849
+              },
+              {
+                "name": "Nadia Cibrian",
+                "rank": 12,
+                "value": 2.1304
+              }
+            ],
+            "cohort_size": 12,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "kennya Garcia",
+                "rank": 1,
+                "value": 33.142
+              },
+              {
+                "name": "Valentina Anzola Diaz",
+                "rank": 2,
+                "value": 26.4524
+              },
+              {
+                "name": "Elida Fulgencio",
+                "rank": 3,
+                "value": 21.57
+              }
+            ],
+            "rank": 7,
+            "status": "ranked",
+            "value": 17.1536
+          },
+          "tip_pct": {
+            "bottom": [],
+            "cohort_size": 9,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": 1,
+            "status": "ranked",
+            "value": 0.2101
+          },
+          "tips_per_hour": {
+            "bottom": [
+              {
+                "name": "Nadia Cibrian",
+                "rank": 10,
+                "value": 0.0
+              },
+              {
+                "name": "Dani Gomez",
+                "rank": 11,
+                "value": 0.0
+              },
+              {
+                "name": "Maykol Ramirez Almeida",
+                "rank": 12,
+                "value": 0.0
+              }
+            ],
+            "cohort_size": 12,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "kennya Garcia",
+                "rank": 1,
+                "value": 27.425
+              },
+              {
+                "name": "Valentina Anzola Diaz",
+                "rank": 2,
+                "value": 24.3225
+              },
+              {
+                "name": "Melissa D Almaguer Aguilera",
+                "rank": 3,
+                "value": 17.1598
+              }
+            ],
+            "rank": 5,
+            "status": "ranked",
+            "value": 15.024
+          }
+        }
+      }
+    }
+  }
+}

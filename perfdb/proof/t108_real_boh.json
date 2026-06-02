@@ -1,0 +1,799 @@
+{
+  "_meta": {
+    "cena_employee_id": 16,
+    "full_name": "Carlos Moreno",
+    "kind": "REAL_DATA_PROOF",
+    "last30_money_keys": [
+      "base_pay",
+      "effective_hourly",
+      "hours",
+      "shifts",
+      "total_pay"
+    ],
+    "my_performance_status": 200,
+    "performance_center_status": 200,
+    "rank_json_source": "pilot_phase5.compute_ranks(stored CK perf.sqlite, persist=False) + build_rank_output  (NO Toast pull)",
+    "role": "boh_non_tipped",
+    "tip_keys_present_in_money": []
+  },
+  "my_performance": {
+    "linked": true,
+    "ok": true,
+    "perf_periods": [
+      {
+        "base_pay": 0.0,
+        "ot_hours": 0.0,
+        "period": "today",
+        "period_end": "2026-06-02",
+        "period_start": "2026-06-02",
+        "reg_hours": 0.0,
+        "service": {},
+        "tips": 0.0,
+        "total_hours": 0.0
+      },
+      {
+        "base_pay": 72.27,
+        "ot_hours": 0.0,
+        "period": "week",
+        "period_end": "2026-06-02",
+        "period_start": "2026-05-30",
+        "reg_hours": 6.57,
+        "service": {},
+        "tips": 0.0,
+        "total_hours": 6.57
+      },
+      {
+        "base_pay": 0.0,
+        "ot_hours": 0.0,
+        "period": "month",
+        "period_end": "2026-06-02",
+        "period_start": "2026-06-01",
+        "reg_hours": 0.0,
+        "service": {},
+        "tips": 0.0,
+        "total_hours": 0.0
+      },
+      {
+        "base_pay": 657.25,
+        "ot_hours": 0.0,
+        "period": "last30",
+        "period_end": "2026-06-02",
+        "period_start": "2026-05-04",
+        "reg_hours": 59.75,
+        "service": {},
+        "tips": 0.0,
+        "total_hours": 59.75
+      }
+    ],
+    "ranking": {
+      "cena_employee_id": 16,
+      "held_days_status": "pending",
+      "is_tipped": false,
+      "leaderboards": {
+        "last30": {
+          "effective_hourly": {
+            "cohort_key": "store:tomball|role:nontipped|metric:effective_hourly",
+            "cohort_size": 23,
+            "role": "nontipped",
+            "rows": [
+              {
+                "effective_hourly": 19.1601,
+                "is_me": false,
+                "name": "Janeth Arvizu Animas",
+                "rank": 1
+              },
+              {
+                "effective_hourly": 18.954,
+                "is_me": false,
+                "name": "Gina Paola Buritica Amaya",
+                "rank": 2
+              },
+              {
+                "effective_hourly": 16.117,
+                "is_me": false,
+                "name": "Amadeo Santiago",
+                "rank": 3
+              },
+              {
+                "effective_hourly": 15.8024,
+                "is_me": false,
+                "name": "Marlen Zuniga",
+                "rank": 4
+              },
+              {
+                "effective_hourly": 15.6631,
+                "is_me": false,
+                "name": "Adriana Herrera",
+                "rank": 5
+              },
+              {
+                "effective_hourly": 15.6591,
+                "is_me": false,
+                "name": "Yessika Carolina Palencia Torres",
+                "rank": 6
+              },
+              {
+                "effective_hourly": 15.5214,
+                "is_me": false,
+                "name": "Javier Cruz",
+                "rank": 7
+              },
+              {
+                "effective_hourly": 14.5605,
+                "is_me": false,
+                "name": "Jorge Ramirez Mendez",
+                "rank": 8
+              },
+              {
+                "effective_hourly": 13.3318,
+                "is_me": false,
+                "name": "JOHANA CRISTINA GONZALES REVERON",
+                "rank": 9
+              },
+              {
+                "effective_hourly": 13.3209,
+                "is_me": false,
+                "name": "Damaris Padilla",
+                "rank": 10
+              },
+              {
+                "effective_hourly": 13.1317,
+                "is_me": false,
+                "name": "Carolina G\u00f3mez Gomez",
+                "rank": 11
+              },
+              {
+                "effective_hourly": 13.0,
+                "is_me": false,
+                "name": "Isabel Cruz Ajpacaja",
+                "rank": 12
+              },
+              {
+                "effective_hourly": 13.0,
+                "is_me": false,
+                "name": "Yesica  Torres Ramirez Ramirez",
+                "rank": 13
+              },
+              {
+                "effective_hourly": 13.0,
+                "is_me": false,
+                "name": "James Paddie",
+                "rank": 14
+              },
+              {
+                "effective_hourly": 11.4627,
+                "is_me": false,
+                "name": "Sara Zuniga",
+                "rank": 15
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": false,
+                "name": "Sofia Hernandez Castro",
+                "rank": 16
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": false,
+                "name": "Jose Bargas",
+                "rank": 17
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": true,
+                "name": "Carlos Moreno",
+                "rank": 18
+              },
+              {
+                "effective_hourly": 10.7704,
+                "is_me": false,
+                "name": "Jordyn Lalena Brooks",
+                "rank": 19
+              },
+              {
+                "effective_hourly": 10.2642,
+                "is_me": false,
+                "name": "Natalie Abt",
+                "rank": 20
+              },
+              {
+                "effective_hourly": 9.6034,
+                "is_me": false,
+                "name": "Sarai Hernandez",
+                "rank": 21
+              },
+              {
+                "effective_hourly": 0.0,
+                "is_me": false,
+                "name": "Ana Carbajal",
+                "rank": 22
+              },
+              {
+                "effective_hourly": 0.0,
+                "is_me": false,
+                "name": "Masood Sahragard",
+                "rank": 23
+              }
+            ],
+            "status": "ranked"
+          }
+        },
+        "month": {},
+        "today": {},
+        "week": {
+          "effective_hourly": {
+            "cohort_key": "store:tomball|role:nontipped|metric:effective_hourly",
+            "cohort_size": 20,
+            "role": "nontipped",
+            "rows": [
+              {
+                "effective_hourly": 19.0984,
+                "is_me": false,
+                "name": "Amadeo Santiago",
+                "rank": 1
+              },
+              {
+                "effective_hourly": 18.411,
+                "is_me": false,
+                "name": "Gina Paola Buritica Amaya",
+                "rank": 2
+              },
+              {
+                "effective_hourly": 18.1317,
+                "is_me": false,
+                "name": "Janeth Arvizu Animas",
+                "rank": 3
+              },
+              {
+                "effective_hourly": 17.8029,
+                "is_me": false,
+                "name": "Javier Cruz",
+                "rank": 4
+              },
+              {
+                "effective_hourly": 16.2396,
+                "is_me": false,
+                "name": "Jorge Ramirez Mendez",
+                "rank": 5
+              },
+              {
+                "effective_hourly": 15.7819,
+                "is_me": false,
+                "name": "Marlen Zuniga",
+                "rank": 6
+              },
+              {
+                "effective_hourly": 15.512,
+                "is_me": false,
+                "name": "Adriana Herrera",
+                "rank": 7
+              },
+              {
+                "effective_hourly": 15.5113,
+                "is_me": false,
+                "name": "Yessika Carolina Palencia Torres",
+                "rank": 8
+              },
+              {
+                "effective_hourly": 14.5975,
+                "is_me": false,
+                "name": "Damaris Padilla",
+                "rank": 9
+              },
+              {
+                "effective_hourly": 13.6763,
+                "is_me": false,
+                "name": "JOHANA CRISTINA GONZALES REVERON",
+                "rank": 10
+              },
+              {
+                "effective_hourly": 13.0,
+                "is_me": false,
+                "name": "Carolina G\u00f3mez Gomez",
+                "rank": 11
+              },
+              {
+                "effective_hourly": 13.0,
+                "is_me": false,
+                "name": "Yesica  Torres Ramirez Ramirez",
+                "rank": 12
+              },
+              {
+                "effective_hourly": 13.0,
+                "is_me": false,
+                "name": "Isabel Cruz Ajpacaja",
+                "rank": 13
+              },
+              {
+                "effective_hourly": 12.369,
+                "is_me": false,
+                "name": "Natalie Abt",
+                "rank": 14
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": false,
+                "name": "Sara Zuniga",
+                "rank": 15
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": false,
+                "name": "Sofia Hernandez Castro",
+                "rank": 16
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": true,
+                "name": "Carlos Moreno",
+                "rank": 17
+              },
+              {
+                "effective_hourly": 11.0,
+                "is_me": false,
+                "name": "Jose Bargas",
+                "rank": 18
+              },
+              {
+                "effective_hourly": 9.5408,
+                "is_me": false,
+                "name": "Jordyn Lalena Brooks",
+                "rank": 19
+              },
+              {
+                "effective_hourly": 8.6653,
+                "is_me": false,
+                "name": "Sarai Hernandez",
+                "rank": 20
+              }
+            ],
+            "status": "ranked"
+          }
+        }
+      },
+      "ranks": {
+        "last30": {
+          "effective_hourly": {
+            "cohort_size": 23,
+            "rank": 18,
+            "role": "nontipped",
+            "status": "ranked",
+            "value": 11.0
+          },
+          "next_best": {
+            "msg": "You're in the lower half of your group this period -- small, steady gains move you up. Keep showing up strong.",
+            "rule": "improve"
+          },
+          "score": {
+            "band": "Building",
+            "basis": "effective_hourly",
+            "cohort_size": 23,
+            "standing_percentile": 28
+          }
+        },
+        "month": {
+          "next_best": {
+            "rule": "not_available"
+          },
+          "score": {
+            "status": "not_available"
+          }
+        },
+        "today": {
+          "next_best": {
+            "rule": "not_available"
+          },
+          "score": {
+            "status": "not_available"
+          }
+        },
+        "week": {
+          "effective_hourly": {
+            "cohort_size": 20,
+            "rank": 17,
+            "role": "nontipped",
+            "status": "ranked",
+            "value": 11.0
+          },
+          "next_best": {
+            "msg": "You're in the lower half of your group this period -- small, steady gains move you up. Keep showing up strong.",
+            "rule": "improve"
+          },
+          "score": {
+            "band": "Building",
+            "basis": "effective_hourly",
+            "cohort_size": 20,
+            "standing_percentile": 20
+          }
+        }
+      }
+    },
+    "shifts": [
+      {
+        "base_pay": 72.27,
+        "business_date": "2026-05-30",
+        "clock_in": "2026-05-30T20:59:53.709+0000",
+        "clock_out": "2026-05-31T03:33:59.210+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.57,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 6.57
+      },
+      {
+        "base_pay": 76.01,
+        "business_date": "2026-05-29",
+        "clock_in": "2026-05-29T21:07:55.910+0000",
+        "clock_out": "2026-05-30T04:02:14.423+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.91,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 6.91
+      },
+      {
+        "base_pay": 73.15,
+        "business_date": "2026-05-23",
+        "clock_in": "2026-05-23T21:01:53.829+0000",
+        "clock_out": "2026-05-24T03:40:40.406+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.65,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 6.65
+      },
+      {
+        "base_pay": 79.2,
+        "business_date": "2026-05-22",
+        "clock_in": "2026-05-22T21:09:56.927+0000",
+        "clock_out": "2026-05-23T04:22:00.989+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 7.2,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 7.2
+      },
+      {
+        "base_pay": 77.33,
+        "business_date": "2026-05-15",
+        "clock_in": "2026-05-15T20:59:14.191+0000",
+        "clock_out": "2026-05-16T04:01:07.150+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 7.03,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 7.03
+      },
+      {
+        "base_pay": 64.35,
+        "business_date": "2026-05-10",
+        "clock_in": "2026-05-10T20:57:31.900+0000",
+        "clock_out": "2026-05-11T02:48:36.665+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 5.85,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 5.85
+      },
+      {
+        "base_pay": 72.6,
+        "business_date": "2026-05-09",
+        "clock_in": "2026-05-09T21:00:57.432+0000",
+        "clock_out": "2026-05-10T03:36:58.086+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 6.6,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 6.6
+      },
+      {
+        "base_pay": 77.33,
+        "business_date": "2026-05-08",
+        "clock_in": "2026-05-08T20:56:35.113+0000",
+        "clock_out": "2026-05-09T03:58:27.665+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 7.03,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 7.03
+      },
+      {
+        "base_pay": 65.01,
+        "business_date": "2026-05-05",
+        "clock_in": "2026-05-05T20:21:34.142+0000",
+        "clock_out": "2026-05-06T02:16:06.278+0000",
+        "needs_review": false,
+        "ot_hours": 0.0,
+        "reg_hours": 5.91,
+        "review_reason": null,
+        "tips": 0.0,
+        "tips_declared": true,
+        "total_hours": 5.91
+      }
+    ]
+  },
+  "performance_center": {
+    "employee": {
+      "first_name": "Carlos"
+    },
+    "is_tipped": false,
+    "linked": true,
+    "ok": true,
+    "periods": {
+      "last30": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [
+          {
+            "base_pay": 72.27,
+            "date": "2026-05-30",
+            "effective_hourly": 11.0,
+            "hours": 6.57,
+            "shifts": 1,
+            "total_pay": 72.27
+          },
+          {
+            "base_pay": 76.01,
+            "date": "2026-05-29",
+            "effective_hourly": 11.0,
+            "hours": 6.91,
+            "shifts": 1,
+            "total_pay": 76.01
+          },
+          {
+            "base_pay": 73.15,
+            "date": "2026-05-23",
+            "effective_hourly": 11.0,
+            "hours": 6.65,
+            "shifts": 1,
+            "total_pay": 73.15
+          },
+          {
+            "base_pay": 79.2,
+            "date": "2026-05-22",
+            "effective_hourly": 11.0,
+            "hours": 7.2,
+            "shifts": 1,
+            "total_pay": 79.2
+          },
+          {
+            "base_pay": 77.33,
+            "date": "2026-05-15",
+            "effective_hourly": 11.0,
+            "hours": 7.03,
+            "shifts": 1,
+            "total_pay": 77.33
+          },
+          {
+            "base_pay": 64.35,
+            "date": "2026-05-10",
+            "effective_hourly": 11.0,
+            "hours": 5.85,
+            "shifts": 1,
+            "total_pay": 64.35
+          },
+          {
+            "base_pay": 72.6,
+            "date": "2026-05-09",
+            "effective_hourly": 11.0,
+            "hours": 6.6,
+            "shifts": 1,
+            "total_pay": 72.6
+          },
+          {
+            "base_pay": 77.33,
+            "date": "2026-05-08",
+            "effective_hourly": 11.0,
+            "hours": 7.03,
+            "shifts": 1,
+            "total_pay": 77.33
+          },
+          {
+            "base_pay": 65.01,
+            "date": "2026-05-05",
+            "effective_hourly": 11.0,
+            "hours": 5.91,
+            "shifts": 1,
+            "total_pay": 65.01
+          }
+        ],
+        "money": {
+          "base_pay": 657.25,
+          "effective_hourly": 11.0,
+          "hours": 59.75,
+          "shifts": 9,
+          "total_pay": 657.25
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [
+              {
+                "name": "Sarai Hernandez",
+                "rank": 21,
+                "value": 9.6034
+              },
+              {
+                "name": "Ana Carbajal",
+                "rank": 22,
+                "value": 0.0
+              },
+              {
+                "name": "Masood Sahragard",
+                "rank": 23,
+                "value": 0.0
+              }
+            ],
+            "cohort_size": 23,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "Janeth Arvizu Animas",
+                "rank": 1,
+                "value": 19.1601
+              },
+              {
+                "name": "Gina Paola Buritica Amaya",
+                "rank": 2,
+                "value": 18.954
+              },
+              {
+                "name": "Amadeo Santiago",
+                "rank": 3,
+                "value": 16.117
+              }
+            ],
+            "rank": 18,
+            "status": "ranked",
+            "value": 11.0
+          }
+        }
+      },
+      "month": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [],
+        "money": {
+          "base_pay": 0.0,
+          "effective_hourly": null,
+          "hours": 0.0,
+          "shifts": 0,
+          "total_pay": 0.0
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [],
+            "cohort_size": null,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": null,
+            "status": null,
+            "value": null
+          }
+        }
+      },
+      "today": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [],
+        "money": {
+          "base_pay": 0.0,
+          "effective_hourly": null,
+          "hours": 0.0,
+          "shifts": 0,
+          "total_pay": 0.0
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [],
+            "cohort_size": null,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [],
+            "rank": null,
+            "status": null,
+            "value": null
+          }
+        }
+      },
+      "week": {
+        "attendance": {
+          "late": 0,
+          "missed": 0,
+          "rows": []
+        },
+        "daily": [
+          {
+            "base_pay": 72.27,
+            "date": "2026-05-30",
+            "effective_hourly": 11.0,
+            "hours": 6.57,
+            "shifts": 1,
+            "total_pay": 72.27
+          }
+        ],
+        "money": {
+          "base_pay": 72.27,
+          "effective_hourly": 11.0,
+          "hours": 6.57,
+          "shifts": 1,
+          "total_pay": 72.27
+        },
+        "rankings": {
+          "effective_hourly": {
+            "bottom": [
+              {
+                "name": "Jose Bargas",
+                "rank": 18,
+                "value": 11.0
+              },
+              {
+                "name": "Jordyn Lalena Brooks",
+                "rank": 19,
+                "value": 9.5408
+              },
+              {
+                "name": "Sarai Hernandez",
+                "rank": 20,
+                "value": 8.6653
+              }
+            ],
+            "cohort_size": 20,
+            "days_at_current_rank": 0,
+            "days_ranked": 0,
+            "history": [],
+            "leaders": [
+              {
+                "name": "Amadeo Santiago",
+                "rank": 1,
+                "value": 19.0984
+              },
+              {
+                "name": "Gina Paola Buritica Amaya",
+                "rank": 2,
+                "value": 18.411
+              },
+              {
+                "name": "Janeth Arvizu Animas",
+                "rank": 3,
+                "value": 18.1317
+              }
+            ],
+            "rank": 17,
+            "status": "ranked",
+            "value": 11.0
+          }
+        }
+      }
+    }
+  }
+}

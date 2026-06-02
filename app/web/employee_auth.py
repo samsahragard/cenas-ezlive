@@ -391,6 +391,9 @@ def my_performance():
                 "total_hours": round(float(s.total_hours or 0), 2),
                 "base_pay": round(float(s.base_pay or 0), 2),
                 "tips": round(float(s.tips or 0), 2),
+                "tips_declared": bool(getattr(s, "tips_declared", True)),   # N4
+                "needs_review": bool(getattr(s, "needs_review", False)),    # N5 -- visible warning marker
+                "review_reason": getattr(s, "review_reason", None),
             } for s in ps_rows]
             return jsonify({"ok": True, "linked": True,
                             "perf_periods": perf_periods, "shifts": shifts}), 200

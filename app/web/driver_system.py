@@ -1142,6 +1142,9 @@ def cron_perf_push():
                 row.total_hours = float(sh.get("total_hours") or 0)
                 row.base_pay = float(sh.get("base_pay") or 0)
                 row.tips = float(sh.get("tips") or 0)
+                row.tips_declared = bool(sh.get("tips_declared", True))   # N4
+                row.needs_review = bool(sh.get("needs_review", False))    # N5 (employee-visible flag)
+                row.review_reason = sh.get("review_reason")
                 attr = sh.get("attribution")
                 row.attribution_json = attr if isinstance(attr, dict) else None
                 db.add(row)

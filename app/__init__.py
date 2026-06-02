@@ -361,6 +361,25 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("shifts.display_name backfill failed (non-fatal)")
 
+    # Phase 3.5 hardening (Sam #2973, N4/N5): add per-shift markers to perf_shift_cache.
+    # create_all won't ALTER the existing table, so add gated-on-absence (idempotent).
+    try:
+        from sqlalchemy import inspect as _sa_insp_ps, text as _sa_text_ps
+        from app.db import engine as _eng_ps
+        if _eng_ps is not None:
+            _insp_ps = _sa_insp_ps(_eng_ps)
+            if "perf_shift_cache" in _insp_ps.get_table_names():
+                _pscols = {c["name"] for c in _insp_ps.get_columns("perf_shift_cache")}
+                for _cn, _cdef in (("tips_declared", "INTEGER DEFAULT 1"),
+                                   ("needs_review", "INTEGER DEFAULT 0"),
+                                   ("review_reason", "VARCHAR(120)")):
+                    if _cn not in _pscols:
+                        with _eng_ps.begin() as conn:
+                            conn.execute(_sa_text_ps("ALTER TABLE perf_shift_cache ADD COLUMN %s %s" % (_cn, _cdef)))
+                        logging.getLogger(__name__).info("perf_shift_cache: added %s column", _cn)
+    except Exception:
+        logging.getLogger(__name__).exception("perf_shift_cache markers backfill failed (non-fatal)")
+
     # Idempotent seed of the canonical schedule positions (Sam 2026-05-31): the
     # 14 jobs that must appear in the manager schedule dropdowns (13 FOH roles +
     # Cook). The management roles (Partner, Corporate, GM, KM, ...) are User

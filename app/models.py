@@ -3598,6 +3598,9 @@ class PerfShiftCache(Base):
     total_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     base_pay: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     tips: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    tips_declared: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)    # N4: null (undeclared) vs $0
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)    # N5: employee/mgr-visible missed-punch flag
+    review_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     attribution_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 

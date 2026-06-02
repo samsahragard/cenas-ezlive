@@ -358,7 +358,7 @@ def my_performance():
         # present. STRICT WHITELIST -- only employee-visible numbers + service
         # metrics. NO toast_id/GUID, NO attribution internals, NO sync plumbing
         # (attribution_json is a column this builder never reads).
-        from app.models import PerfPeriodCache
+        from app.models import PerfPeriodCache, PerfShiftCache
         try:
             pc_rows = (db.query(PerfPeriodCache)
                          .filter(PerfPeriodCache.cena_employee_id == emp.id).all())
@@ -376,7 +376,24 @@ def my_performance():
                 "tips": round(float(r.tips or 0), 2),
                 "service": (r.service_json or {}),
             } for r in pc_rows]), key=lambda x: _ord.get(x["period"], 99))
-            return jsonify({"ok": True, "linked": True, "perf_periods": perf_periods}), 200
+            # per-shift detail (Sam #2938 / samai #2954) -- STRICT WHITELIST: only
+            # employee-own fields; NO toast_id / attribution / GUID in the payload.
+            try:
+                ps_rows = (db.query(PerfShiftCache)
+                             .filter(PerfShiftCache.cena_employee_id == emp.id)
+                             .order_by(PerfShiftCache.clock_in.desc()).all())
+            except Exception:
+                ps_rows = []
+            shifts = [{
+                "business_date": s.business_date, "clock_in": s.clock_in, "clock_out": s.clock_out,
+                "reg_hours": round(float(s.reg_hours or 0), 2),
+                "ot_hours": round(float(s.ot_hours or 0), 2),
+                "total_hours": round(float(s.total_hours or 0), 2),
+                "base_pay": round(float(s.base_pay or 0), 2),
+                "tips": round(float(s.tips or 0), 2),
+            } for s in ps_rows]
+            return jsonify({"ok": True, "linked": True,
+                            "perf_periods": perf_periods, "shifts": shifts}), 200
 
         # Aggregate the employee's confirmed links from the cached snapshot
         # (usually one store). No live Toast call in the request path.

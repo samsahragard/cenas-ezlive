@@ -1125,8 +1125,30 @@ def cron_perf_push():
             row.computed_at = p.get("computed_at")
             row.synced_at = _dt.utcnow()
             written += 1
+        # per-shift (Sam #2938 / samai #2954) -- same sanitize discipline; attribution -> internal
+        from app.models import PerfShiftCache
+        shift_written = 0
+        shifts = body.get("shifts") or []
+        if shifts:
+            db.query(PerfShiftCache).filter_by(cena_employee_id=cid).delete()
+            for sh in shifts:
+                row = PerfShiftCache(cena_employee_id=cid, clock_in=sh.get("clock_in"))
+                row.toast_id = emp.get("toast_id")
+                row.store_key = emp.get("store_key")
+                row.business_date = sh.get("business_date")
+                row.clock_out = sh.get("clock_out")
+                row.reg_hours = float(sh.get("reg_hours") or 0)
+                row.ot_hours = float(sh.get("ot_hours") or 0)
+                row.total_hours = float(sh.get("total_hours") or 0)
+                row.base_pay = float(sh.get("base_pay") or 0)
+                row.tips = float(sh.get("tips") or 0)
+                attr = sh.get("attribution")
+                row.attribution_json = attr if isinstance(attr, dict) else None
+                db.add(row)
+                shift_written += 1
         db.commit()
-        return jsonify({"ok": True, "cena_employee_id": cid, "periods_written": written}), 200
+        return jsonify({"ok": True, "cena_employee_id": cid,
+                        "periods_written": written, "shifts_written": shift_written}), 200
     finally:
         db.close()
 

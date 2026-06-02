@@ -3576,6 +3576,32 @@ class PerfPeriodCache(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PerfShiftCache(Base):
+    """Phase 3.5 (Sam #2938 / samai #2954): SANITIZED per-shift rows pushed from the
+    CK perf DB. Employee-own + sales-free. attribution_json is INTERNAL (the payload
+    builder never reads it). One row per (employee, shift clock_in)."""
+
+    __tablename__ = "perf_shift_cache"
+    __table_args__ = (
+        UniqueConstraint("cena_employee_id", "clock_in", name="uq_perfshift_emp_clockin"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cena_employee_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    toast_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    store_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    business_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    clock_in: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    clock_out: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    reg_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    ot_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    total_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    base_pay: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    tips: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    attribution_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

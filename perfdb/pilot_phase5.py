@@ -52,6 +52,23 @@ ALLOWLIST = [
 ALLOWED_IDS = frozenset(e["cena_employee_id"] for e in ALLOWLIST)   # {71,45,16,63,31,33}
 PERIODS = ["today", "week", "month", "last30"]
 
+
+def load_eligible(path=None):
+    """All-employee (Sam #3052): the DETERMINISTIC-ELIGIBLE set (exact 1:1 Cena<->Toast linked,
+    ambiguous/no-match excluded) -- an EXPLICIT allowlist file (NOT a blind all-employee loop),
+    so the same _assert_allowed chokepoint + eligible-only guarantee still hold at scale."""
+    p = path or os.path.join(DB_DIR, "eligible_set.json")
+    return json.load(open(p, encoding="utf-8"))
+
+
+def set_active_set(entries):
+    """Rebind the working set (ALLOWLIST/ALLOWED_IDS/_NAMES) so every pull/compute/push +
+    the _assert_allowed guard operate on exactly `entries` (pilot 6, or the eligible 70+)."""
+    global ALLOWLIST, ALLOWED_IDS, _NAMES
+    ALLOWLIST = list(entries)
+    ALLOWED_IDS = frozenset(e["cena_employee_id"] for e in ALLOWLIST)
+    _NAMES = {e["cena_employee_id"]: e["full_name"] for e in ALLOWLIST}
+
 # Ranking knobs (Sam #3009/#3014 + samai #3012).
 MIN_COHORT = 4            # < 4 qualifying peers -> "cohort too small" (privacy+fairness gate)
 TIPPED_WAGE_MAX = 5.00    # role basis v1: min shift wage <= this => tipped (server). v2: use position table.
@@ -211,18 +228,21 @@ def _members_for_period(con, period, win):
         shift_ct = len(te)
         eff_hourly = round((base_pay + tips) / hours, 4) if hours > 0 else None
         tip_pct = round(tips / eligible_sales, 4) if (is_tipped and eligible_sales > 0) else None
+        tph = round(tips / hours, 4) if (is_tipped and hours > 0) else None  # tips/hr -- SALES-CLEAN (Sam #4185)
         # qualification thresholds (Sam #3009)
         if period == "today":
             q_eff = hours >= TODAY_MIN_HOURS
             q_tip = is_tipped and hours >= TODAY_MIN_HOURS and tip_pct is not None
+            q_tph = is_tipped and hours >= TODAY_MIN_HOURS and tph is not None
         else:
             q_eff = hours >= LONG_MIN_HOURS
             q_tip = is_tipped and hours >= LONG_MIN_HOURS and tipped_shift_ct >= 1 and tip_pct is not None
+            q_tph = is_tipped and hours >= LONG_MIN_HOURS and tipped_shift_ct >= 1 and tph is not None
         members.append({
             "cid": cid, "store": store, "name": _name(cid), "hours": hours,
-            "eff_hourly": eff_hourly, "tip_pct": tip_pct, "is_tipped": is_tipped,
+            "eff_hourly": eff_hourly, "tip_pct": tip_pct, "tph": tph, "is_tipped": is_tipped,
             "needs_review_ct": needs_review_ct, "shift_ct": shift_ct,
-            "q_eff": bool(q_eff and eff_hourly is not None), "q_tip": bool(q_tip),
+            "q_eff": bool(q_eff and eff_hourly is not None), "q_tip": bool(q_tip), "q_tph": bool(q_tph),
         })
     return members
 
@@ -280,7 +300,7 @@ def compute_ranks(con, snapshot_date, persist=True):
 
     for period in PERIODS:
         members = _members_for_period(con, period, wins[period])
-        results[period] = {"effective_hourly": [], "tip_percent": [], "combined": []}
+        results[period] = {"effective_hourly": [], "tip_percent": [], "combined": [], "tips_per_hour": []}
         for store in sorted(set(m["store"] for m in members)):
             sm = [m for m in members if m["store"] == store]
             # effective_hourly: ROLE-SPLIT (tipped vs non-tipped) -- never mixed in one board
@@ -298,6 +318,10 @@ def compute_ranks(con, snapshot_date, persist=True):
                 m["combined"] = round((pe + pt) / 2, 4) if (pe is not None and pt is not None) else None
             emit(results[period]["combined"], tcohort, "combined", "combined",
                  "store:%s|role:tipped|metric:combined" % store, "tipped", period)
+            # tips/hr rank (Sam #4185 3rd tile): tipped cohort, SALES-CLEAN (tips/hours), min-cohort gated
+            tphcohort = [m for m in sm if m["q_tph"]]
+            emit(results[period]["tips_per_hour"], tphcohort, "tph", "tips_per_hour",
+                 "store:%s|role:tipped|metric:tips_per_hour" % store, "tipped", period)
     if persist:
         con.commit()
     return results
@@ -338,17 +362,18 @@ def build_rank_output(results, cid):
             out["ranks"][period]["effective_hourly"] = {
                 "rank": s["rank"], "cohort_size": s["cohort_size"], "status": s["status"],
                 "value": s["value_metric"], "role": s["role"]}
-        # ---- OWN tip% + combined (TIPPED cohort only; non-tipped/BOH = not_eligible) ----
-        for metric in ("tip_percent", "combined"):
+        # ---- OWN tip% + combined (TIPPED cohort ONLY) ----
+        # Server-side role gate (Sam #3077 / aick #3068): BOH/non-tipped payloads do NOT carry
+        # tip_percent/combined objects AT ALL -- not even a null 'not_eligible' marker. The UI
+        # infers a clean 'Not eligible' state from is_tipped=false. Only a TIPPED employee who is
+        # in the cohort carries these keys; a tipped-but-unqualified period simply omits them too.
+        for metric in ("tip_percent", "combined", "tips_per_hour"):
             mine = [s for s in results[period][metric] if s["cid"] == cid]
             if mine:
                 s = mine[0]
                 out["ranks"][period][metric] = {
                     "rank": s["rank"], "cohort_size": s["cohort_size"], "status": s["status"],
-                    "value": (s["value_metric"] if metric != "combined" else None)}
-            elif out["is_tipped"] is False:
-                out["ranks"][period][metric] = {"rank": None, "cohort_size": 0,
-                                                "status": "not_eligible", "value": None}
+                    "value": (None if metric == "combined" else s["value_metric"])}
         # ---- leaderboards (per-cohort, each gated on ITS OWN cohort size) ----
         boards = {}
         if mine_eff:
@@ -373,8 +398,41 @@ def build_rank_output(results, cid):
                                  "combined": cv, "combined_rank": cr, "is_me": (p["cid"] == cid)})
             boards["tipped"] = {"cohort_key": ck, "cohort_size": s["cohort_size"],
                                 "status": s["status"], "rows": rows}
+        # tips/hr board (Sam #4185 3rd tile, tipped-only). Peer rows carry ONLY the whitelisted
+        # tips_per_hour (sales-clean) -- never peer base_pay/tips$/sales. BOH never reach here.
+        tph_snaps = results[period]["tips_per_hour"]
+        mine_tph = [s for s in tph_snaps if s["cid"] == cid]
+        if mine_tph:
+            s = mine_tph[0]; ck = s["cohort_key"]; gated = (s["status"] == "cohort_too_small")
+            peers = [t for t in tph_snaps if t["cohort_key"] == ck]
+            rows = ([] if gated else
+                    [{"name": p["name"], "rank": p["rank"], "tips_per_hour": p["value_metric"],
+                      "is_me": (p["cid"] == cid)} for p in sorted(peers, key=lambda x: x["rank"] or 1e9)])
+            boards["tips_per_hour"] = {"cohort_key": ck, "cohort_size": s["cohort_size"],
+                                       "status": s["status"], "rows": rows}
+        # SCORE (Sam #3088, relative standing; OWN card only, never a peer field): tipped =
+        # combined percentile; BOH/non-tipped = eff-hourly percentile (NO tips). x100 + band.
+        # gated/no-data -> not_available (no fake). The pct_rank comes from the same audited cohort.
+        if out["is_tipped"]:
+            _src = next((s for s in results[period]["combined"] if s["cid"] == cid), None)
+        else:
+            _src = mine_eff[0] if mine_eff else None
+        if _src and _src["status"] != "cohort_too_small" and _src.get("pct_rank") is not None:
+            out["ranks"][period]["score"] = {
+                "standing_percentile": round(_src["pct_rank"] * 100), "band": _score_band(_src["pct_rank"]),
+                "cohort_size": _src["cohort_size"],
+                "basis": ("combined" if out["is_tipped"] else "effective_hourly")}
+        else:
+            out["ranks"][period]["score"] = {"status": "not_available"}
         out["leaderboards"][period] = boards
     return out
+
+
+def _score_band(pct):
+    """Encouraging band for a relative-standing percentile (samai #3105: no harsh 'Poor')."""
+    p = pct * 100
+    return ("Excellent" if p >= 90 else "Strong" if p >= 75 else "Good" if p >= 60
+            else "Steady" if p >= 45 else "Building")
 
 
 def rank_run(persist=True):
@@ -515,6 +573,10 @@ def pilot_push(base_url=None):
 
 
 if __name__ == "__main__":
+    if "--eligible" in sys.argv:   # all-employee set instead of the pilot 6 (Sam #3052)
+        set_active_set(load_eligible())
+        print("ACTIVE SET = eligible-deterministic (%d employees / %d store-entries)"
+              % (len(ALLOWED_IDS), len(ALLOWLIST)))
     if "--pull" in sys.argv:
         pull_all(execute=("--execute" in sys.argv))
     elif "--rank" in sys.argv:

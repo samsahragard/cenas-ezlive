@@ -30,6 +30,7 @@ from app.web.team_routes import team_bp
 from app.web.legal_routes import legal as legal_bp
 from app.web.access_request_routes import access_req as access_req_bp
 from app.web.driver_system import driver_system_bp
+from app.web.perf_roster_link import perf_roster_link_bp
 from app.web.scheduling_cron import scheduling_cron_bp  # B6: shift-alarm send cron (ckai)
 from app.web.briefs import briefs_bp
 from app.web.tasks import tasks_bp
@@ -150,6 +151,7 @@ def create_app():
     app.register_blueprint(legal_bp)
     app.register_blueprint(access_req_bp)
     app.register_blueprint(driver_system_bp)
+    app.register_blueprint(perf_roster_link_bp)
     app.register_blueprint(scheduling_cron_bp)  # B6: POST /internal/scheduling/cron/process-shift-alarms (ckai)
     app.register_blueprint(briefs_bp)
     # Phase 2 / Block 1A — task create + reassign routes

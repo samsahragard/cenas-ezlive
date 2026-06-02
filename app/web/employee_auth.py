@@ -411,11 +411,14 @@ def my_performance():
                     ranking = sanitize_rank_json(rk.rank_json)
             except Exception:
                 ranking = None
-            # FLAG 2 (aick #3143 / samai #3142 note 2): strict server-side tip omission for BOH on
-            # /my-performance too -- when the role is non-tipped, DROP the (own, zero) tip keys from
-            # the payload instead of letting the dashboard DOM-hide a present key. Matches the
-            # invariant the T108 /performance-center already holds; consistent across both endpoints.
-            if isinstance(ranking, dict) and ranking.get("is_tipped") is False:
+            # FLAG 2 (aick #3143 / samai #3142 note 2; live re-audit FAIL fix samai #3163):
+            # strict server-side tip omission for non-tipped on /my-performance too. FAIL-SAFE:
+            # omit tips UNLESS the role is EXPLICITLY tipped (ranking is a dict with truthy
+            # is_tipped). This matches /performance-center's `bool(ranking.get("is_tipped"))`
+            # semantics so the BOTH-endpoints BOH-omission invariant holds for is_tipped =
+            # None / absent / False / ranking-None too (common before GATE-3 sets classifications),
+            # not only explicit False. Only an explicitly-tipped account keeps its tip keys.
+            if not (isinstance(ranking, dict) and ranking.get("is_tipped")):
                 for _p in perf_periods:
                     _p.pop("tips", None)
                 for _s in shifts:

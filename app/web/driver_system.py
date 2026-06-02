@@ -1149,9 +1149,34 @@ def cron_perf_push():
                 row.attribution_json = attr if isinstance(attr, dict) else None
                 db.add(row)
                 shift_written += 1
+        # Phase 5.1 ranking (Sam #3009/#3019): store the SANITIZED rank output blob.
+        # SERVER-SIDE SALES-WALL BACKSTOP -- even though CK sanitizes at build, the
+        # receiver REFUSES any rank payload containing a sales / eligible_sales /
+        # source-sales term (only the tip% RATIO may pass). Defense in depth.
+        rank_written = 0
+        rank = body.get("rank")
+        if isinstance(rank, dict):
+            import json as _json, re as _re
+            _SALES_WALL = _re.compile(
+                r"cashsales|noncashsales|eligible_sales|sales_attributed|sales_dollars|"
+                r"\bsales\b|\bgross\b|\brevenue\b|\bdrawer\b|gratuityservicecharges|"
+                r"cc_subtotal|cash_amount|net_sales|check_total|store_total", _re.I)
+            if _SALES_WALL.search(_json.dumps(rank)):
+                db.rollback()
+                return jsonify({"ok": False, "error": "rank payload failed sales-wall guard"}), 422
+            from app.models import PerfRankCache
+            rrow = db.query(PerfRankCache).filter_by(cena_employee_id=cid).first()
+            if rrow is None:
+                rrow = PerfRankCache(cena_employee_id=cid)
+                db.add(rrow)
+            rrow.rank_json = rank
+            rrow.computed_at = rank.get("computed_at")
+            rrow.synced_at = _dt.utcnow()
+            rank_written = 1
         db.commit()
         return jsonify({"ok": True, "cena_employee_id": cid,
-                        "periods_written": written, "shifts_written": shift_written}), 200
+                        "periods_written": written, "shifts_written": shift_written,
+                        "rank_written": rank_written}), 200
     finally:
         db.close()
 

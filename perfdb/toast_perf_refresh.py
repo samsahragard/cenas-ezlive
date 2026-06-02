@@ -1,0 +1,473 @@
+"""Phase 2 refresh/importer (Sam #2901) -- CK-local, Yadira-only first.
+
+STATUS: dry-run path is COMPLETE and proves the keystone safety property --
+restaurant sales are isolated in perf_internal and can NEVER reach the employee
+payload (built only from perf_period). The real_run() live-Toast path is a STUB
+pending (a) Toast creds on CK and (b) aick's Phase 1 field map, so the exact
+field/endpoint wiring matches what is actually deployed ("extend not rebuild").
+
+No prod DB is touched. Dry-run writes to a throwaway temp SQLite, not perf.sqlite.
+"""
+import sqlite3, os, json, re, tempfile
+import datetime as dt
+
+DB_DIR = r"C:\Users\sam\cena-perfdb"
+DB = os.path.join(DB_DIR, "perf.sqlite")
+SCHEMA = os.path.join(DB_DIR, "schema_v1.sql")
+
+# First test case (Sam): real identity from the live roster (roster-peek id=71).
+YADIRA = {"cena_employee_id": 71,
+          "toast_id": "75a58c11-bce8-4e03-9222-dec3a3774744",
+          "store_key": "copperfield",
+          "full_name": "Yadira Romer Hernandez"}
+
+# samai's sanitize criterion: no sales-ish key/value may appear in an employee payload.
+SALES_RE = re.compile(r"sales|revenue|net_sales|gross|store_total|comp", re.I)
+# N3 (samai): live-path PUSH guard -- sales-$ terms with word boundaries so it never
+# false-positives on benign keys (e.g. computed_at). Future-proof for v2 sales-derived metrics.
+# Phase 5.1 (aick #3016 load-bearing): sales now ENTERS the pipeline (cashSales+nonCashSales ->
+# perf_internal for the tip% denominator), so the guard EXPLICITLY adds the camelCase Toast sales
+# fields + eligible_sales + the perf_internal sales columns -- \bsales\b alone does NOT match
+# "cashSales"/"eligible_sales" (no word boundary inside them). re.I -> camelCase matches lowercased.
+PUSH_SALES_RE = re.compile(r"cc_subtotal|cash_amount|net_sales|check[._]amount|check_total|"
+                           r"store_total|restaurant_total|\bprices?\b|\brevenue\b|\bgross\b|"
+                           r"\bsales\b|\bdrawer\b|\bcomps?\b|"
+                           r"cashsales|noncashsales|eligible_sales|sales_attributed|sales_dollars|"
+                           r"gratuityservicecharges|nontippablesales", re.I)
+
+
+def period_windows(ref):
+    """today / week (Saturday-start, matches app #2603) / month (MTD) / last30."""
+    since_sat = (ref.weekday() - 5) % 7        # Mon=0..Sun=6; Saturday=5
+    wk_start = ref - dt.timedelta(days=since_sat)
+    return {
+        "today":  (ref, ref),
+        "week":   (wk_start, ref),
+        "month":  (ref.replace(day=1), ref),
+        "last30": (ref - dt.timedelta(days=29), ref),
+    }
+
+
+def normalize(labor, sales_ctx, period, window):
+    """Split a toast_employee_summary-shaped labor payload into a SANITIZED
+    perf_period row + an INTERNAL-ONLY perf_internal row. sales_ctx is
+    structurally confined to the internal row -- it has no path into perf_period."""
+    pay = labor.get("payroll") or {}
+    reg = float(pay.get("reg_hours") or 0)
+    ot = float(pay.get("ot_hours") or 0)
+    base_pay = float(pay.get("reg_pay") or 0) + float(pay.get("ot_pay") or 0)
+    tips = float(pay.get("tips") or labor.get("tips") or 0)
+    now = dt.datetime.now().isoformat(timespec="seconds")
+    perf_period = {
+        "cena_employee_id": YADIRA["cena_employee_id"],
+        "toast_employee_id": YADIRA["toast_id"],
+        "store_key": YADIRA["store_key"],
+        "period": period,
+        "period_start": window[0].isoformat(),
+        "period_end": window[1].isoformat(),
+        "reg_hours": reg, "ot_hours": ot, "total_hours": round(reg + ot, 2),
+        "base_pay": round(base_pay, 2), "tips": round(tips, 2),
+        "tip_pct": None,        # sales-derived -> classified INTERNAL pending aick/samai
+        "service_json": json.dumps(labor.get("performance") or {}),
+        "attendance_json": None,
+        "rank_in_store": None, "rank_metric": None,
+        "computed_at": now,
+    }
+    perf_internal = None
+    if sales_ctx:
+        perf_internal = {
+            "cena_employee_id": YADIRA["cena_employee_id"],
+            "store_key": YADIRA["store_key"], "period": period,
+            "sales_dollars": float(sales_ctx.get("sales_dollars") or 0),
+            "sales_attributed": float(sales_ctx.get("sales_attributed") or 0),
+            "scoring_json": json.dumps(sales_ctx.get("scoring") or {}),
+            "computed_at": now,
+        }
+    return perf_period, perf_internal
+
+
+def employee_payload(pp):
+    """EXACTLY what the app read-cache would receive -- built ONLY from
+    perf_period columns. No perf_internal field is reachable from here."""
+    return {
+        "period": pp["period"], "period_start": pp["period_start"], "period_end": pp["period_end"],
+        "total_hours": pp["total_hours"], "reg_hours": pp["reg_hours"], "ot_hours": pp["ot_hours"],
+        "base_pay": pp["base_pay"], "tips": pp["tips"],
+        "service": json.loads(pp["service_json"] or "{}"),
+    }
+
+
+def _temp_db():
+    ddl = open(SCHEMA, encoding="utf-8").read()
+    fd, path = tempfile.mkstemp(suffix="_perfdry.sqlite"); os.close(fd)
+    con = sqlite3.connect(path); con.executescript(ddl); con.commit()
+    return con, path
+
+
+def _write(con, pp, pi):
+    cols = ",".join(pp); con.execute(
+        "INSERT OR REPLACE INTO perf_period (%s) VALUES (%s)" % (cols, ",".join("?" * len(pp))),
+        list(pp.values()))
+    if pi:
+        cols2 = ",".join(pi); con.execute(
+            "INSERT OR REPLACE INTO perf_internal (%s) VALUES (%s)" % (cols2, ",".join("?" * len(pi))),
+            list(pi.values()))
+    con.commit()
+
+
+def dry_run():
+    # SAMPLE Toast labor (summary-shaped) + an INJECTED sales figure to PROVE
+    # that even when sales is present at input, it cannot reach the employee payload.
+    sample_labor = {"ok": True, "hours": 31.0,
+                    "payroll": {"reg_hours": 29.0, "ot_hours": 2.0,
+                                "reg_pay": 406.0, "ot_pay": 42.0, "tips": 63.5},
+                    "performance": {"available": True, "orders": 38, "avg_prep_min": 6.4},
+                    "timecards": []}
+    sample_sales = {"sales_dollars": 5123.40, "sales_attributed": 980.25,
+                    "scoring": {"composite": 0.81}}
+    today = dt.date.today()
+    wins = period_windows(today)
+    con, path = _temp_db()
+    print("=" * 60)
+    print("PHASE 2 DRY-RUN -- LEGACY sanitization demo (sample data, temp DB)")
+    print("NOTE (N2): validates SANITIZATION only, with sample reg_pay/ot_pay. The LIVE")
+    print("pay path is real_run/_pull_period/_pull_shifts (base_pay = reg*w + ot*w*1.5);")
+    print("see --self-test for the live-formula OT check.")
+    print("=" * 60)
+    print("temp DB     :", path, "(throwaway -- perf.sqlite untouched)")
+    print("Yadira      : cena_id=%s toast_id=%s store=%s" % (
+        YADIRA["cena_employee_id"], YADIRA["toast_id"], YADIRA["store_key"]))
+    print("period windows (proof of date logic):")
+    for p, (s, e) in wins.items():
+        print("  %-7s %s .. %s" % (p, s, e))
+    overall = True
+    for p, win in wins.items():
+        pp, pi = normalize(sample_labor, sample_sales, p, win)
+        _write(con, pp, pi)
+        ok, hits = (lambda b: (not SALES_RE.search(b), SALES_RE.findall(b)))(json.dumps(employee_payload(pp)))
+        overall = overall and ok
+        print("  [%-6s] employee payload sanitized=%s%s" % (
+            p, ok, "" if ok else "  LEAK:" + str(hits)))
+    pp_n = con.execute("SELECT COUNT(*) FROM perf_period").fetchone()[0]
+    pi_n = con.execute("SELECT COUNT(*) FROM perf_internal").fetchone()[0]
+    sales_cols = con.execute(
+        "SELECT COUNT(*) FROM pragma_table_info('perf_period') WHERE LOWER(name) LIKE '%sales%'").fetchone()[0]
+    sample_internal = con.execute("SELECT sales_dollars FROM perf_internal LIMIT 1").fetchone()
+    print("-" * 60)
+    print("rows written: perf_period=%d  perf_internal=%d" % (pp_n, pi_n))
+    print("perf_period 'sales' columns: %d (0 = sales structurally absent)" % sales_cols)
+    print("perf_internal sales_dollars: %s  (INTERNAL ONLY -- never pushed)" % (
+        sample_internal[0] if sample_internal else None))
+    print("sample employee payload (week):")
+    print("  " + json.dumps(employee_payload(normalize(sample_labor, sample_sales, "week", wins["week"])[0])))
+    con.close(); os.remove(path)
+    print("-" * 60)
+    print("RESULT      :", "PASS -- sales isolated; every employee payload sanitized"
+          if overall and sales_cols == 0 else "FAIL")
+    print("=" * 60)
+
+
+CRED_PATH = r"C:\Users\sam\cena-secrets\toast_render_env.txt"
+WORKTREE = r"C:\Users\sam\_schedv2_wt"
+
+# Non-sales performance metrics allowed into the employee payload (WHITELIST --
+# anything not listed stays internal, so a sales-$ field can never leak). Used
+# once server-performance is folded in (Phase 3, with samai's grep gate).
+SAFE_PERF_KEYS = {"orders", "order_count", "items", "entrees", "guests",
+                  "avg_prep_min", "avg_ticket_time", "void_count", "refund_count"}
+
+
+def _load_creds(path=CRED_PATH):
+    """Parse `export KEY=VALUE` lines into os.environ. Returns KEY NAMES only."""
+    names = []
+    for raw in open(path, encoding="utf-8"):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:]
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ[k.strip()] = v.strip().strip('"').strip("'")
+        names.append(k.strip())
+    return names
+
+
+def _pull_period(client, store, guid, toast_id, start, end):
+    """Reuse the DEPLOYED filter (toast_link_routes.toast_employee_summary):
+    keep entries whose employeeReference.guid == toast_id (GUID attribution),
+    sum reg/ot hours + gross (reg*wage + 1.5*ot*wage). No sales in this source."""
+    s = dt.datetime.combine(start, dt.time()); e = dt.datetime.combine(end, dt.time())
+    entries = client.fetch_time_entries(store, guid, s, e) or []
+    reg = ot = cost = tips = 0.0
+    wage_seen = False; cards = 0; tip_entries = 0; tip_null = 0
+    for te in entries:
+        if te.get("deleted"):
+            continue
+        if (te.get("employeeReference") or {}).get("guid") != toast_id:
+            continue
+        r = float(te.get("regularHours") or 0); o = float(te.get("overtimeHours") or 0)
+        reg += r; ot += o; cards += 1
+        w = te.get("hourlyWage")
+        if w is not None:
+            wage_seen = True; cost += r * float(w) + o * float(w) * 1.5
+        # tips: GUID-keyed on the TimeEntry per aick #2921 (no name-match). NULL is
+        # genuine (server didn't declare), counted -- never silently mis-attributed.
+        nc = te.get("nonCashTips"); dc = te.get("declaredCashTips")
+        if nc is None and dc is None:
+            tip_null += 1
+        else:
+            tips += float(nc or 0) + float(dc or 0); tip_entries += 1
+    return {"reg": round(reg, 2), "ot": round(ot, 2), "hours": round(reg + ot, 2),
+            "gross": round(cost, 2) if wage_seen else None, "cards": cards,
+            "tips": round(tips, 2), "tip_entries": tip_entries, "tip_null": tip_null}
+
+
+def _pull_shifts(client, store, guid, toast_id, start, end):
+    """Per-shift rows (Sam #2938 / samai #2954) from the SAME GUID-filtered Labor
+    pull. Each shift = employee-own + sales-free. _hourly_rate is INTERNAL (used to
+    compute base_pay; never pushed to the employee payload). tips_declared (N4) +
+    needs_review/review_reason (N5) are non-destructive markers; raw values stand."""
+    s = dt.datetime.combine(start, dt.time()); e = dt.datetime.combine(end, dt.time())
+    entries = client.fetch_time_entries(store, guid, s, e) or []
+    shifts = []
+    for te in entries:
+        if te.get("deleted"):
+            continue
+        if (te.get("employeeReference") or {}).get("guid") != toast_id:
+            continue
+        reg = float(te.get("regularHours") or 0); ot = float(te.get("overtimeHours") or 0)
+        w = te.get("hourlyWage")
+        w = float(w) if w is not None else None
+        base_pay = round(reg * w + ot * w * 1.5, 2) if w is not None else 0
+        nc = te.get("nonCashTips"); dc = te.get("declaredCashTips")
+        tips_declared = (nc is not None) or (dc is not None)   # N4: null (undeclared) vs $0
+        tips = round(float(nc or 0) + float(dc or 0), 2)
+        bd = str(te.get("businessDate") or "")
+        if len(bd) != 10:  # Toast businessDate can be an int yyyymmdd; fall back to clock-in date
+            bd = (te.get("inDate") or "")[:10]
+        total = round(reg + ot, 2)
+        # N5 (Sam #2973): use Toast's OWN authoritative autoClockedOut flag (NOT a
+        # heuristic) -- accurate, zero false positives. Non-destructive: raw
+        # hours/pay are kept EXACTLY as Toast reports; only a manager fixing the
+        # punch in Toast changes them, and the next sync reflects it.
+        nr = bool(te.get("autoClockedOut"))
+        shifts.append({
+            "business_date": bd, "clock_in": te.get("inDate"), "clock_out": te.get("outDate"),
+            "reg_hours": round(reg, 2), "ot_hours": round(ot, 2), "total_hours": total,
+            "base_pay": base_pay, "tips": tips, "tips_declared": tips_declared,
+            "needs_review": nr,
+            "review_reason": ("auto clock-out (possible missed punch) -- verify with manager" if nr else None),
+            "_hourly_rate": w,
+        })
+    shifts.sort(key=lambda x: (x["clock_in"] or ""), reverse=True)  # newest first
+    return shifts
+
+
+def _pull_sales_internal(client, store, guid, toast_id, start, end):
+    """INTERNAL ONLY (Phase 5.1, Sam #3017/#3019). Sum the employee's OWN GUID-keyed
+    eligible sales = cashSales + nonCashSales over the period, for the tip% denominator
+    (tip_percent = tips / eligible_sales). This is the FIRST time restaurant sales enters
+    the pipeline (aick #3016) -- so it is written ONLY to perf_internal and the tip%
+    RATIO is the only thing that ever derives out. sales_basis=v1 (Sam #3017): cashSales+
+    nonCashSales now; v2 cleanup = exclude voided/comped/non-eligible when the source
+    supports it. The raw sales-$ NEVER reaches perf_period / time_entry / any payload."""
+    s = dt.datetime.combine(start, dt.time()); e = dt.datetime.combine(end, dt.time())
+    entries = client.fetch_time_entries(store, guid, s, e) or []
+    elig = 0.0; n = 0
+    for te in entries:
+        if te.get("deleted"):
+            continue
+        if (te.get("employeeReference") or {}).get("guid") != toast_id:
+            continue
+        cs = te.get("cashSales"); ncs = te.get("nonCashSales")
+        if cs is not None or ncs is not None:
+            elig += float(cs or 0) + float(ncs or 0); n += 1
+    return {"eligible_sales": round(elig, 2), "shifts_with_sales": n,
+            "sales_basis": "v1_cashNonCashSales"}
+
+
+def real_run(execute=False):
+    """Live Yadira-only refresh. Without execute=True this is a SELF-TEST: loads
+    creds + imports the deployed Toast client + prints period windows, with NO
+    Toast call and NO write -- proves readiness while the lane is gated."""
+    import sys
+    if WORKTREE not in sys.path:
+        sys.path.insert(0, WORKTREE)
+    names = _load_creds()
+    print("=" * 60)
+    print("PHASE 2 REAL-RUN %s -- Yadira" % ("EXECUTE" if execute else "SELF-TEST"))
+    print("=" * 60)
+    print("creds loaded (key names): " + ", ".join(sorted(names)))
+    from app.services.toast_client import ToastClient, restaurant_guids
+    guid = restaurant_guids().get(YADIRA["store_key"])
+    print("Yadira: cena_id=%s toast_id=%s store=%s restaurant_guid_present=%s" % (
+        YADIRA["cena_employee_id"], YADIRA["toast_id"], YADIRA["store_key"], bool(guid)))
+    today = dt.date.today(); wins = period_windows(today)
+    print("period windows:")
+    for p, (s, e) in wins.items():
+        print("  %-7s %s .. %s" % (p, s, e))
+    if not execute:
+        _w, _reg, _ot = 2.13, 40.0, 5.0          # N2: exercise the LIVE wage/OT formula
+        _live = round(_reg * _w + _ot * _w * 1.5, 2)  # real Yadira data has 0 OT -> prove 1.5x here
+        _flat = round(_reg * _w + _ot * _w, 2)        # what it would be if OT were NOT up-weighted
+        print("-" * 60)
+        print("N2 OT formula check: reg40 + ot5 @ $%.2f -> $%.2f (live, OT x1.5) vs $%.2f (flat); "
+              "OT premium $%.2f -> %s" % (
+                  _w, _live, _flat, round(_live - _flat, 2),
+                  "PASS (1.5x applied)" if _live > _flat else "FAIL"))
+        print("SELF-TEST PASS -- creds parse + deployed client import + windows + OT formula OK.")
+        print("(--execute = live Yadira pull + write perf.sqlite; --push = send to app.)")
+        print("=" * 60)
+        return
+    client = ToastClient.shared()
+    con = sqlite3.connect(DB)
+    started = dt.datetime.now().isoformat(timespec="seconds")
+    written = 0
+    try:
+        for p, win in wins.items():
+            agg = _pull_period(client, YADIRA["store_key"], guid, YADIRA["toast_id"], win[0], win[1])
+            pp = {
+                "cena_employee_id": YADIRA["cena_employee_id"],
+                "toast_employee_id": YADIRA["toast_id"], "store_key": YADIRA["store_key"],
+                "period": p, "period_start": win[0].isoformat(), "period_end": win[1].isoformat(),
+                "reg_hours": agg["reg"], "ot_hours": agg["ot"], "total_hours": agg["hours"],
+                "base_pay": agg["gross"] or 0, "tips": agg["tips"], "tip_pct": None,
+                "service_json": json.dumps({
+                    "timecards": agg["cards"],
+                    "attribution_method": "guid_direct",          # Sam #2923
+                    "guid_key": "timeEntries.employeeReference.guid == cena_toast_link.toast_id",
+                    "toast_guid": YADIRA["toast_id"],
+                    "guid_attributed": ["reg_hours", "ot_hours", "total_hours", "base_pay", "tips"],
+                    "tip_entries": agg["tip_entries"],
+                    "unattributed_null": {"tips_not_declared": agg["tip_null"]},
+                    "service_metrics": "deferred_v2 (needs server_guid carried out of "
+                                       "toast_reports.server_perf_report:499; NO name_fallback used)",
+                }),
+                "attendance_json": None, "rank_in_store": None, "rank_metric": None,
+                "computed_at": dt.datetime.now().isoformat(timespec="seconds"),
+            }
+            _write(con, pp, None)   # perf_internal None -- v1 pulls NO sales source
+            written += 1
+            print("  [%-6s] %s..%s hours=%.2f gross=%s cards=%d" % (
+                p, win[0], win[1], agg["hours"], agg["gross"], agg["cards"]))
+        # per-shift rows (Sam #2938 / samai #2954): same GUID-filtered pull, last30 window
+        shifts = _pull_shifts(client, YADIRA["store_key"], guid, YADIRA["toast_id"],
+                              wins["last30"][0], wins["last30"][1])
+        con.execute("DELETE FROM time_entry WHERE cena_employee_id=?", (YADIRA["cena_employee_id"],))
+        for sh in shifts:
+            con.execute(
+                "INSERT INTO time_entry (cena_employee_id,toast_employee_id,store_key,business_date,"
+                "clock_in,clock_out,reg_hours,ot_hours,hourly_rate,tips,tips_declared,needs_review,"
+                "review_reason,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (YADIRA["cena_employee_id"], YADIRA["toast_id"], YADIRA["store_key"],
+                 sh["business_date"], sh["clock_in"], sh["clock_out"], sh["reg_hours"],
+                 sh["ot_hours"], sh["_hourly_rate"], sh["tips"], int(sh["tips_declared"]),
+                 int(sh["needs_review"]), sh["review_reason"], "toast_timeentry_guid"))
+        print("  [shifts] wrote %d per-shift time_entry rows (last30, GUID-keyed)" % len(shifts))
+        con.execute("INSERT INTO sync_run (started_at,finished_at,scope,period,status,"
+                    "employees_processed,rows_written,note) VALUES (?,?,?,?,?,?,?,?)",
+                    (started, dt.datetime.now().isoformat(timespec="seconds"), "yadira", "all",
+                     "ok", 1, written, "live GUID pull v1 (hours/pay/tips; service deferred v2)"))
+        con.commit()
+        # ---- PROOF read-back (Sam #2928) ----
+        print("-" * 60)
+        print("PROOF (read back from perf.sqlite):")
+        for r in con.execute(
+                "SELECT period,period_start,period_end,total_hours,reg_hours,ot_hours,"
+                "base_pay,tips,toast_employee_id,service_json FROM perf_period "
+                "WHERE cena_employee_id=? ORDER BY period", (YADIRA["cena_employee_id"],)):
+            sj = json.loads(r[9] or "{}")
+            print("  [%-6s] %s..%s hrs=%.2f (reg %.2f/ot %.2f) pay=%.2f tips=%.2f method=%s null_tips=%s" % (
+                r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7],
+                sj.get("attribution_method"), (sj.get("unattributed_null") or {}).get("tips_not_declared")))
+        print("  GUID anchor: cena_employee_id=%s <-> toast_id=%s (every row)" % (
+            YADIRA["cena_employee_id"], YADIRA["toast_id"]))
+        counts = {t: con.execute("SELECT COUNT(*) FROM %s" % t).fetchone()[0]
+                  for t in ("perf_period", "perf_internal", "time_entry", "sync_run")}
+        print("  row counts: " + ", ".join("%s=%d" % (k, v) for k, v in counts.items()))
+        print("  perf_internal=%d (v1 pulls NO sales source -> expected 0 = sales-safe)" % counts["perf_internal"])
+        sr = con.execute("SELECT id,started_at,finished_at,scope,status,rows_written,note "
+                         "FROM sync_run ORDER BY id DESC LIMIT 1").fetchone()
+        print("  sync_run: id=%s %s..%s scope=%s status=%s rows=%s note=%s" % sr)
+    finally:
+        con.close()
+    print("-" * 60)
+    print("EXECUTE done -- Yadira v1 written to CK-local perf.sqlite (NO prod write).")
+    print("=" * 60)
+
+
+def push(base_url="https://cenas-ezlive.onrender.com"):
+    """Phase 3 (Sam #2938/#2941): POST the SANITIZED Yadira perf_period rows to the
+    app token-gated /cron/perf-push. Each period is split into employee-visible
+    'service' ({} in v1 -- service metrics deferred) + INTERNAL 'attribution'
+    (the receiver stores it out of the employee payload). Reads CRON_TOKEN from
+    env. NO sales pushed (perf_period carries none)."""
+    import urllib.request
+    token = os.getenv("CRON_TOKEN")
+    if not token:
+        raise SystemExit("CRON_TOKEN not in env -- export it before --push")
+    con = sqlite3.connect(DB); con.row_factory = sqlite3.Row
+    rows = con.execute("SELECT * FROM perf_period WHERE cena_employee_id=? ORDER BY period",
+                       (YADIRA["cena_employee_id"],)).fetchall()
+    shift_rows = con.execute("SELECT * FROM time_entry WHERE cena_employee_id=? ORDER BY clock_in DESC",
+                             (YADIRA["cena_employee_id"],)).fetchall()
+    con.close()
+    if not rows:
+        raise SystemExit("no perf_period rows -- run --execute first")
+    periods = []
+    for r in rows:
+        try:
+            attribution = json.loads(r["service_json"] or "{}")
+        except Exception:
+            attribution = {}
+        periods.append({
+            "period": r["period"], "period_start": r["period_start"], "period_end": r["period_end"],
+            "total_hours": r["total_hours"], "reg_hours": r["reg_hours"], "ot_hours": r["ot_hours"],
+            "base_pay": r["base_pay"], "tips": r["tips"],
+            "service": {},               # employee-visible service metrics -- none in v1
+            "attribution": attribution,  # INTERNAL -- receiver keeps it out of the payload
+            "computed_at": r["computed_at"],
+        })
+    shifts = []
+    for sr in shift_rows:
+        rate = sr["hourly_rate"]
+        reg = float(sr["reg_hours"] or 0); ot = float(sr["ot_hours"] or 0)
+        base_pay = round(reg * float(rate) + ot * float(rate) * 1.5, 2) if rate is not None else 0
+        shifts.append({
+            "business_date": sr["business_date"], "clock_in": sr["clock_in"], "clock_out": sr["clock_out"],
+            "reg_hours": reg, "ot_hours": ot, "total_hours": round(reg + ot, 2),
+            "base_pay": base_pay, "tips": float(sr["tips"] or 0),
+            "tips_declared": bool(sr["tips_declared"]),      # N4
+            "needs_review": bool(sr["needs_review"]),        # N5 -- non-destructive flag
+            "review_reason": sr["review_reason"],
+            "attribution": {"attribution_method": "guid_direct"},  # INTERNAL -- receiver keeps out of payload
+        })
+    payload = {"employee": {"cena_employee_id": YADIRA["cena_employee_id"],
+                            "toast_id": YADIRA["toast_id"], "store_key": YADIRA["store_key"]},
+               "periods": periods, "shifts": shifts}
+    blob = json.dumps(payload)
+    if PUSH_SALES_RE.search(blob):   # N3: refuse to push if any sales-$ term slipped in
+        raise SystemExit("ABORT (N3): sales-ish term in push payload -- refusing to push")
+    data = blob.encode("utf-8")
+    req = urllib.request.Request(base_url + "/cron/perf-push", data=data,
+                                 headers={"Content-Type": "application/json", "X-Cron-Token": token})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        out = resp.read().decode("utf-8"); code = resp.getcode()
+    print("PUSH ->", base_url + "/cron/perf-push", "HTTP", code)
+    print("response:", out)
+    print("pushed periods:", [p["period"] for p in periods], "+ shifts:", len(shifts),
+          "(service={} + per-shift employee-own fields; attribution kept internal)")
+
+
+if __name__ == "__main__":
+    import sys
+    if "--execute" in sys.argv:
+        real_run(execute=True)
+    elif "--self-test" in sys.argv:
+        real_run(execute=False)
+    elif "--push" in sys.argv:
+        push()
+    else:
+        dry_run()

@@ -174,6 +174,25 @@
     background:#E4B340; border-radius:7px; padding:3px 8px; cursor:pointer; letter-spacing:0.2px; }
   .review-reason{ font-size:11px; color:rgba(228,179,64,0.92); margin-top:6px; line-height:1.4; }
 
+  /* Phase 5.1 ranking surface */
+  .rank-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:13px; }
+  .rcard{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:12px; padding:12px 8px; text-align:center; }
+  .rcard-rank{ font-size:21px; font-weight:800; color:var(--blue-deep); line-height:1.05; }
+  .rcard-rank .of{ font-size:12px; font-weight:600; color:rgba(244,231,208,0.6); }
+  .rcard-gate{ font-size:11px; font-weight:700; color:rgba(228,179,64,0.85); line-height:1.25; }
+  .rcard-lbl{ font-size:9.5px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase; color:rgba(244,231,208,0.6); margin-top:7px; }
+  .rcard-val{ font-size:11px; color:rgba(250,246,236,0.66); margin-top:3px; }
+  .lb-lbl{ font-size:10.5px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:rgba(244,231,208,0.58); margin:12px 0 8px; }
+  .lb-row{ display:flex; align-items:center; gap:10px; background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:10px; padding:9px 11px; margin-bottom:6px; }
+  .lb-row.me{ border-color:var(--bd-gold); background:linear-gradient(135deg, rgba(228,179,64,0.17), rgba(228,179,64,0.03)); }
+  .lb-rank{ font-size:14px; font-weight:800; color:var(--bd-gold); min-width:24px; }
+  .lb-name{ flex:1; font-size:13px; font-weight:700; color:var(--blue-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lb-name .you{ font-size:10px; font-weight:700; color:rgba(244,231,208,0.6); margin-left:5px; }
+  .lb-metric{ font-size:13px; font-weight:800; color:var(--red-deep); white-space:nowrap; }
+  .lb-gate{ font-size:12px; color:rgba(250,246,236,0.72); line-height:1.45; background:var(--surface);
+    border:0.5px dashed rgba(228,179,64,0.5); border-radius:10px; padding:11px 12px; }
+  .rank-foot{ font-size:10.5px; color:rgba(244,231,208,0.5); margin-top:10px; letter-spacing:0.2px; line-height:1.4; }
+
   .footnote{
     margin-top:auto; padding-top:22px; text-align:center;
     font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
@@ -209,6 +228,12 @@
       <div class="perf-tab active" data-period="last30">Last 30</div>
     </div>
     <div class="perf-cards" id="perf-cards"></div>
+    <div class="perf-sub" id="perf-rank-wrap" hidden>
+      <div class="perf-sub-lbl"><span>Your rankings</span><span class="cnt" id="rank-period-lbl"></span></div>
+      <div class="rank-grid" id="rank-grid"></div>
+      <div id="rank-boards"></div>
+      <div class="rank-foot" id="rank-foot"></div>
+    </div>
     <div class="perf-sub" id="perf-shifts-wrap" hidden>
       <div class="perf-sub-lbl"><span>Recent shifts</span><span class="cnt" id="shift-count-lbl"></span></div>
       <div class="shift-list" id="shift-list"></div>
@@ -275,7 +300,7 @@
   //     shift list shows recent shifts with a needs_review badge (raw totals kept). ---
   (function(){
     var card = document.getElementById('perf-card');
-    var PERIODS = {}, shifts = [], sel = 'last30';
+    var PERIODS = {}, shifts = [], sel = 'last30', RANK = null;
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
@@ -338,15 +363,59 @@
         });
       });
     }
+    // --- Phase 5.1 (Sam #3009/#3014): ranking surface. Consumes ONLY the sanitized
+    //     `ranking` block (own ranks + per-cohort leaderboards). Peer rows carry only
+    //     name + rank + allowed metrics; min-cohort-gated cohorts show "too small". No
+    //     peer pay breakdown; held-days stays pending (no faked history). ---
+    function pctTxt(v){ return v==null ? '' : (Math.round((Number(v)||0)*1000)/10) + '%'; }
+    function rcard(o, lbl, fmt){
+      if(!o || o.rank==null || o.status==='cohort_too_small'){
+        var g = (o && o.status==='cohort_too_small') ? 'Cohort<br>too small' : 'Not<br>ranked';
+        return '<div class="rcard"><div class="rcard-gate">'+g+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
+      }
+      var val = (fmt && o.value!=null) ? '<div class="rcard-val">'+fmt(o.value)+'</div>' : '';
+      return '<div class="rcard"><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
+             '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</div>';
+    }
+    function lbBoard(b, title, key, fmt){
+      if(!b){ return ''; }
+      var h='<div class="lb-lbl">'+esc(title)+'</div>';
+      if(b.status==='cohort_too_small' || !b.rows || !b.rows.length){
+        return h+'<div class="lb-gate">Cohort too small &mdash; a ranking needs at least 4 qualifying teammates. It appears once more of your team is on board.</div>';
+      }
+      return h + b.rows.map(function(r){
+        var v = (r[key]==null) ? '' : fmt(r[key]);
+        return '<div class="lb-row'+(r.is_me?' me':'')+'"><span class="lb-rank">#'+r.rank+'</span>'+
+               '<span class="lb-name">'+esc(r.name)+(r.is_me?'<span class="you">you</span>':'')+'</span>'+
+               '<span class="lb-metric">'+v+'</span></div>';
+      }).join('');
+    }
+    function renderRank(){
+      var wrap=document.getElementById('perf-rank-wrap');
+      if(!RANK || !RANK.ranks){ wrap.hidden=true; return; }
+      wrap.hidden=false;
+      document.getElementById('rank-period-lbl').textContent = PLABEL[sel] || sel;
+      var R = RANK.ranks[sel] || {};
+      document.getElementById('rank-grid').innerHTML =
+        rcard(R.effective_hourly, 'Effective rate', function(v){ return money(v)+'/hr'; }) +
+        rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
+        rcard(R.combined, 'Combined', null);
+      var L = (RANK.leaderboards||{})[sel] || {};
+      document.getElementById('rank-boards').innerHTML =
+        lbBoard(L.effective_hourly, 'Effective rate — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
+        lbBoard(L.tipped, 'Tip % — ' + (PLABEL[sel]||sel), 'tip_percent', function(v){ return pctTxt(v); });
+      document.getElementById('rank-foot').textContent = 'Days held at #1 / last: pending — building rank history from here.';
+    }
     function selectPeriod(p){
       sel=p;
       document.querySelectorAll('.perf-tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-period')===p); });
-      renderCards();
+      renderCards(); renderRank();
     }
     function render(d){
       show();
       (d.perf_periods||[]).forEach(function(p){ PERIODS[p.period]=p; });
       shifts = d.shifts || [];
+      RANK = d.ranking || null;
       if(!PERIODS[sel]){ var ks=Object.keys(PERIODS); sel = (ks.indexOf('last30')>=0) ? 'last30' : (ks[0]||'last30'); }
       document.querySelectorAll('.perf-tab').forEach(function(t){ t.addEventListener('click', function(){ selectPeriod(t.getAttribute('data-period')); }); });
       selectPeriod(sel);

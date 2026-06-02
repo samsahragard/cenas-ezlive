@@ -395,8 +395,24 @@ def my_performance():
                 "needs_review": bool(getattr(s, "needs_review", False)),    # N5 -- visible warning marker
                 "review_reason": getattr(s, "review_reason", None),
             } for s in ps_rows]
-            return jsonify({"ok": True, "linked": True,
-                            "perf_periods": perf_periods, "shifts": shifts}), 200
+            # Phase 5.1 ranking (Sam #3009/#3014): the SANITIZED rank output -- own
+            # ranks + per-cohort leaderboards (peers carry ONLY name+rank+allowed
+            # metrics; min-cohort-gated). Sanitized at the CK source + sales-wall-
+            # guarded at the receiver; this read returns it verbatim, scoped to
+            # emp.id. Absent (Yadira-only Phase 4 / non-pilot) -> key simply omitted.
+            ranking = None
+            try:
+                from app.models import PerfRankCache
+                rk = (db.query(PerfRankCache)
+                        .filter(PerfRankCache.cena_employee_id == emp.id).first())
+                if rk and rk.rank_json:
+                    ranking = rk.rank_json
+            except Exception:
+                ranking = None
+            resp = {"ok": True, "linked": True, "perf_periods": perf_periods, "shifts": shifts}
+            if ranking is not None:
+                resp["ranking"] = ranking
+            return jsonify(resp), 200
 
         # Aggregate the employee's confirmed links from the cached snapshot
         # (usually one store). No live Toast call in the request path.

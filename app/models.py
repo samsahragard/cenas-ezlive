@@ -3605,6 +3605,29 @@ class PerfShiftCache(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PerfRankCache(Base):
+    """Phase 5.1 (Sam #3009/#3014/#3019): the SANITIZED per-employee RANK output,
+    pushed from the CK perf DB. rank_json holds ONLY allowed rank output --
+    own ranks {effective_hourly, tip_percent, combined} per period (own values are
+    the Phase-4 own view) + per-cohort leaderboards whose peer rows carry ONLY
+    {name, rank, effective_hourly, tip_percent, combined} and gate independently on
+    min-cohort. It holds NO restaurant sales / eligible_sales / GUID / attribution /
+    peer pay breakdown -- sales is walled in CK perf_internal and only the tip%
+    RATIO ever derives out (the receiver re-checks with a sales-wall guard before
+    storing). held_days stays 'pending' until real rank_snapshots accrue (no faking)."""
+
+    __tablename__ = "perf_rank_cache"
+    __table_args__ = (
+        UniqueConstraint("cena_employee_id", name="uq_perfrank_emp"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cena_employee_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    rank_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)   # sanitized rank output (no sales/GUID/peer-pay)
+    computed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

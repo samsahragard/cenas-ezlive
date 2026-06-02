@@ -1,0 +1,41 @@
+### --self-test ###
+============================================================
+PHASE 2 REAL-RUN SELF-TEST -- Yadira
+============================================================
+creds loaded (key names): TOAST_ANALYTICS_CLIENT_ID, TOAST_ANALYTICS_CLIENT_SECRET, TOAST_CLIENT_ID, TOAST_CLIENT_SECRET, TOAST_RESTAURANT_GUID_COPPERFIELD, TOAST_RESTAURANT_GUID_TOMBALL
+Yadira: cena_id=71 toast_id=75a58c11-bce8-4e03-9222-dec3a3774744 store=copperfield restaurant_guid_present=True
+period windows:
+  today   2026-06-01 .. 2026-06-01
+  week    2026-05-30 .. 2026-06-01
+  month   2026-06-01 .. 2026-06-01
+  last30  2026-05-03 .. 2026-06-01
+------------------------------------------------------------
+SELF-TEST PASS -- creds parse + deployed client import + windows OK.
+Holding the live Toast pull for samai branch-audit PASS + Sam green-light
+(run with --execute once cleared).
+============================================================
+
+### --dry-run ###
+============================================================
+PHASE 2 DRY-RUN (Sam #2901) -- Yadira, sample data, temp DB
+============================================================
+temp DB     : C:\Users\sam\AppData\Local\Temp\claude\tmpr9aaokox_perfdry.sqlite (throwaway -- perf.sqlite untouched)
+Yadira      : cena_id=71 toast_id=75a58c11-bce8-4e03-9222-dec3a3774744 store=copperfield
+period windows (proof of date logic):
+  today   2026-06-01 .. 2026-06-01
+  week    2026-05-30 .. 2026-06-01
+  month   2026-06-01 .. 2026-06-01
+  last30  2026-05-03 .. 2026-06-01
+  [today ] employee payload sanitized=True
+  [week  ] employee payload sanitized=True
+  [month ] employee payload sanitized=True
+  [last30] employee payload sanitized=True
+------------------------------------------------------------
+rows written: perf_period=4  perf_internal=4
+perf_period 'sales' columns: 0 (0 = sales structurally absent)
+perf_internal sales_dollars: 5123.4  (INTERNAL ONLY -- never pushed)
+sample employee payload (week):
+  {"period": "week", "period_start": "2026-05-30", "period_end": "2026-06-01", "total_hours": 31.0, "reg_hours": 29.0, "ot_hours": 2.0, "base_pay": 448.0, "tips": 63.5, "service": {"available": true, "orders": 38, "avg_prep_min": 6.4}}
+------------------------------------------------------------
+RESULT      : PASS -- sales isolated; every employee payload sanitized
+============================================================

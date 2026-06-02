@@ -61,7 +61,11 @@ def cron_employee_perf_push():
     employee's SANITIZED PerfPeriodCache / PerfShiftCache / PerfRankCache. Isolated
     from driver/catering (Sam #3178). Body: {employee:{cena_employee_id, toast_id,
     store_key}, periods:[...], shifts:[...], rank:{...}}."""
-    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+    # FAIL-CLOSED (aick #3182): read expected ONCE; an UNSET/empty CRON_TOKEN must 403, not
+    # fail-open. Without the `not expected` guard, os.getenv->None + a no-token request->None
+    # makes None!=None False -> no abort -> unauthenticated push. (Matches perf_roster_link.py.)
+    expected = os.getenv("CRON_TOKEN")
+    if not expected or _extract_cron_token() != expected:
         abort(403)
     body = request.get_json(silent=True) or {}
     emp = body.get("employee") or {}

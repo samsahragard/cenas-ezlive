@@ -402,11 +402,13 @@ def my_performance():
             # emp.id. Absent (Yadira-only Phase 4 / non-pilot) -> key simply omitted.
             ranking = None
             try:
-                from app.models import PerfRankCache
+                from app.models import PerfRankCache, sanitize_rank_json
                 rk = (db.query(PerfRankCache)
                         .filter(PerfRankCache.cena_employee_id == emp.id).first())
                 if rk and rk.rank_json:
-                    ranking = rk.rank_json
+                    # N-c read-path belt (Sam #3028): strip every leaderboard peer row to the
+                    # field whitelist before serving (fail-safe even if a bad row were stored).
+                    ranking = sanitize_rank_json(rk.rank_json)
             except Exception:
                 ranking = None
             resp = {"ok": True, "linked": True, "perf_periods": perf_periods, "shifts": shifts}

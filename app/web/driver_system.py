@@ -1097,6 +1097,16 @@ def cron_perf_push():
     cid = emp.get("cena_employee_id")
     if not cid:
         return jsonify({"ok": False, "error": "employee.cena_employee_id required"}), 400
+    # N-b (Sam #3028 hardening): WHOLE-BODY server-side sales-wall (defense-in-depth) -- reject
+    # the entire push (422) if any sales / eligible_sales / source-sales term appears ANYWHERE
+    # in the body, not just the rank blob. Only the tip% RATIO may ever be stored.
+    import json as _json, re as _re
+    _SALES_WALL = _re.compile(
+        r"cashsales|noncashsales|eligible_sales|sales_attributed|sales_dollars|"
+        r"\bsales\b|\bgross\b|\brevenue\b|\bdrawer\b|gratuityservicecharges|"
+        r"cc_subtotal|cash_amount|net_sales|check_total|store_total", _re.I)
+    if _SALES_WALL.search(_json.dumps(body)):
+        return jsonify({"ok": False, "error": "push body failed sales-wall guard"}), 422
     db = SessionLocal()
     written = 0
     try:
@@ -1156,15 +1166,15 @@ def cron_perf_push():
         rank_written = 0
         rank = body.get("rank")
         if isinstance(rank, dict):
-            import json as _json, re as _re
-            _SALES_WALL = _re.compile(
-                r"cashsales|noncashsales|eligible_sales|sales_attributed|sales_dollars|"
-                r"\bsales\b|\bgross\b|\brevenue\b|\bdrawer\b|gratuityservicecharges|"
-                r"cc_subtotal|cash_amount|net_sales|check_total|store_total", _re.I)
-            if _SALES_WALL.search(_json.dumps(rank)):
+            # sales-wall already enforced on the WHOLE body above (N-b). N-c (Sam #3028):
+            # explicit peer-row field whitelist -- reject (422) any leaderboard row carrying a
+            # field outside the allowed set (fail-closed at store; guards a future peer-pay leak).
+            from app.models import PerfRankCache, rank_peer_rows_ok
+            ok, offending = rank_peer_rows_ok(rank)
+            if not ok:
                 db.rollback()
-                return jsonify({"ok": False, "error": "rank payload failed sales-wall guard"}), 422
-            from app.models import PerfRankCache
+                return jsonify({"ok": False, "error": "rank payload failed peer-row whitelist",
+                                "offending_fields": offending}), 422
             rrow = db.query(PerfRankCache).filter_by(cena_employee_id=cid).first()
             if rrow is None:
                 rrow = PerfRankCache(cena_employee_id=cid)

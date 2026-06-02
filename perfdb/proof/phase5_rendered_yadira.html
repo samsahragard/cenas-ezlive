@@ -217,8 +217,8 @@
     <div class="perf-cards" id="perf-cards"><div class="pcard hero"><div class="pcard-val">$3,375.39</div><div class="pcard-lbl">Total pay (last 30 days)</div><div class="pcard-sub">$298.14 base + $3,077.25 tips</div></div><div class="pcard"><div class="pcard-val">$24.12<span class="u">/hr</span></div><div class="pcard-lbl">Effective rate</div><div class="pcard-sub">pay / hours</div></div><div class="pcard"><div class="pcard-val">139.97<span class="u">h</span></div><div class="pcard-lbl">Total hours</div></div><div class="pcard"><div class="pcard-val">$3,077.25</div><div class="pcard-lbl">Tips</div></div><div class="pcard"><div class="pcard-val">$298.14</div><div class="pcard-lbl">Base pay</div></div><div class="pcard"><div class="pcard-val">$21.99<span class="u">/hr</span></div><div class="pcard-lbl">Tips per hour</div></div><div class="pcard"><div class="pcard-val">20</div><div class="pcard-lbl">Shifts</div></div><div class="pcard"><div class="pcard-val">1</div><div class="pcard-lbl">Need review</div><div class="pcard-sub">tap a flagged shift</div></div></div>
     <div class="perf-sub" id="perf-rank-wrap">
       <div class="perf-sub-lbl"><span>Your rankings</span><span class="cnt" id="rank-period-lbl">last 30 days</span></div>
-      <div class="rank-grid" id="rank-grid"><div class="rcard"><div class="rcard-rank">#1 <span class="of">of 4</span></div><div class="rcard-lbl">Effective rate</div><div class="rcard-val">$24.12/hr</div></div><div class="rcard"><div class="rcard-gate">Cohort<br>too small</div><div class="rcard-lbl">Tip %</div></div><div class="rcard"><div class="rcard-gate">Cohort<br>too small</div><div class="rcard-lbl">Combined</div></div></div>
-      <div id="rank-boards"><div class="lb-lbl">Effective rate — last 30 days</div><div class="lb-row me"><span class="lb-rank">#1</span><span class="lb-name">Yadira Romer Hernandez<span class="you">you</span></span><span class="lb-metric">$24.12/hr</span></div><div class="lb-row"><span class="lb-rank">#2</span><span class="lb-name">Drew Stewart</span><span class="lb-metric">$24.10/hr</span></div><div class="lb-row"><span class="lb-rank">#3</span><span class="lb-name">Alexa Rodriguez</span><span class="lb-metric">$21.45/hr</span></div><div class="lb-row"><span class="lb-rank">#4</span><span class="lb-name">Marcos Villalta</span><span class="lb-metric">$12.19/hr</span></div><div class="lb-lbl">Tip % — last 30 days</div><div class="lb-gate">Cohort too small — a ranking needs at least 4 qualifying teammates. It appears once more of your team is on board.</div></div>
+      <div class="rank-grid" id="rank-grid"><div class="rcard"><div class="rcard-gate">Cohort<br>too small</div><div class="rcard-lbl">Eff. rate (w/tips)</div></div><div class="rcard"><div class="rcard-gate">Cohort<br>too small</div><div class="rcard-lbl">Tip %</div></div><div class="rcard"><div class="rcard-gate">Cohort<br>too small</div><div class="rcard-lbl">Combined</div></div></div>
+      <div id="rank-boards"><div class="lb-lbl">Effective hourly (with tips) — last 30 days</div><div class="lb-gate">Cohort too small — a ranking needs at least 4 qualifying teammates. It appears once more of your team is on board.</div><div class="lb-lbl">Tip % — last 30 days</div><div class="lb-gate">Cohort too small — a ranking needs at least 4 qualifying teammates. It appears once more of your team is on board.</div></div>
       <div class="rank-foot" id="rank-foot">Days held at #1 / last: pending — building rank history from here.</div>
     </div>
     <div class="perf-sub" id="perf-shifts-wrap">
@@ -465,10 +465,11 @@
     //     peer pay breakdown; held-days stays pending (no faked history). ---
     function pctTxt(v){ return v==null ? '' : (Math.round((Number(v)||0)*1000)/10) + '%'; }
     function rcard(o, lbl, fmt){
-      if(!o || o.rank==null || o.status==='cohort_too_small'){
-        var g = (o && o.status==='cohort_too_small') ? 'Cohort<br>too small' : 'Not<br>ranked';
-        return '<div class="rcard"><div class="rcard-gate">'+g+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
-      }
+      var gate=null;
+      if(!o) gate='Not<br>ranked';
+      else if(o.status==='not_eligible') gate='Not<br>eligible';
+      else if(o.status==='cohort_too_small' || o.rank==null) gate='Cohort<br>too small';
+      if(gate) return '<div class="rcard"><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
       var val = (fmt && o.value!=null) ? '<div class="rcard-val">'+fmt(o.value)+'</div>' : '';
       return '<div class="rcard"><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
              '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</div>';
@@ -492,13 +493,17 @@
       wrap.hidden=false;
       document.getElementById('rank-period-lbl').textContent = PLABEL[sel] || sel;
       var R = RANK.ranks[sel] || {};
+      // Role-split labels (Sam #3031): tipped board says "with tips"; BOH says "Hourly rate".
+      var tipped = (RANK.is_tipped !== false);
+      var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
+      var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
       document.getElementById('rank-grid').innerHTML =
-        rcard(R.effective_hourly, 'Effective rate', function(v){ return money(v)+'/hr'; }) +
+        rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }) +
         rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
         rcard(R.combined, 'Combined', null);
       var L = (RANK.leaderboards||{})[sel] || {};
       document.getElementById('rank-boards').innerHTML =
-        lbBoard(L.effective_hourly, 'Effective rate — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
+        lbBoard(L.effective_hourly, effTitle + ' — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
         lbBoard(L.tipped, 'Tip % — ' + (PLABEL[sel]||sel), 'tip_percent', function(v){ return pctTxt(v); });
       document.getElementById('rank-foot').textContent = 'Days held at #1 / last: pending — building rank history from here.';
     }

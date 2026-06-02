@@ -176,27 +176,38 @@ def _pct_rank(values, v):
 
 
 def _members_for_period(con, period, win):
-    """Build the per (employee, store) metric members for a period. is_tipped + needs_review
-    + completed-tipped-shift counts are derived from time_entry within the window."""
-    ws, we = win[0].isoformat(), win[1].isoformat()
+    """Build the per (employee, store) metric members for a period. is_tipped is a STABLE
+    role property (min wage over ALL the employee's shifts -- never the period window);
+    needs_review + completed-tipped-shift counts use the STORED row window (robust to a
+    date rollover between pull and compute)."""
     members = []
+    # N-a (Sam #3028 hardening): read-side allowlist filter in SQL -- a stray non-allowlist
+    # perf_period row can NEVER enter a cohort/perturb a legit member's stats, even though
+    # the pull only ever writes allowlist ids (defense-in-depth for broad rollout).
+    allow = sorted(ALLOWED_IDS); ph = ",".join("?" * len(allow))
     for r in con.execute("SELECT cena_employee_id, toast_employee_id, store_key, total_hours, "
-                         "base_pay, tips FROM perf_period WHERE period=?", (period,)):
-        cid, tid, store, hours, base_pay, tips = r
+                         "base_pay, tips, period_start, period_end FROM perf_period "
+                         "WHERE period=? AND cena_employee_id IN (%s)" % ph, (period, *allow)):
+        cid, tid, store, hours, base_pay, tips, p_start, p_end = r
         hours = float(hours or 0); base_pay = float(base_pay or 0); tips = float(tips or 0)
         # eligible_sales (INTERNAL) -> tip% denominator
         es = con.execute("SELECT sales_attributed FROM perf_internal WHERE cena_employee_id=? "
                          "AND store_key=? AND period=?", (cid, store, period)).fetchone()
         eligible_sales = float(es[0]) if es and es[0] is not None else 0.0
-        # shift-derived signals within the window (time_entry holds last30; filter by business_date)
-        te = con.execute("SELECT hourly_rate, needs_review, tips_declared, tips FROM time_entry "
+        # is_tipped = STABLE role signal: min wage over ALL the employee's shifts at this store
+        # (a tipped server has $2.13 shifts). NOT the period window -- else a tipped server who
+        # did not work in a short window (e.g. today) would misclassify as non-tipped and land
+        # in the wrong role-split cohort (Sam #3031). Heuristic; production uses the position table.
+        aw = con.execute("SELECT MIN(hourly_rate) FROM time_entry WHERE cena_employee_id=? "
+                         "AND store_key=? AND hourly_rate IS NOT NULL", (cid, store)).fetchone()
+        min_wage = aw[0] if aw and aw[0] is not None else None
+        is_tipped = (min_wage is not None and float(min_wage) <= TIPPED_WAGE_MAX)
+        # period-windowed signals use the STORED row window (consistent with the pulled data):
+        te = con.execute("SELECT needs_review, tips_declared, tips FROM time_entry "
                          "WHERE cena_employee_id=? AND store_key=? AND business_date>=? AND business_date<=?",
-                         (cid, store, ws, we)).fetchall()
-        wages = [float(x[0]) for x in te if x[0] is not None]
-        min_wage = min(wages) if wages else None
-        is_tipped = (min_wage is not None and min_wage <= TIPPED_WAGE_MAX)
-        needs_review_ct = sum(1 for x in te if x[1])
-        tipped_shift_ct = sum(1 for x in te if x[2] or float(x[3] or 0) > 0)
+                         (cid, store, p_start, p_end)).fetchall()
+        needs_review_ct = sum(1 for x in te if x[0])
+        tipped_shift_ct = sum(1 for x in te if x[1] or float(x[2] or 0) > 0)
         shift_ct = len(te)
         eff_hourly = round((base_pay + tips) / hours, 4) if hours > 0 else None
         tip_pct = round(tips / eligible_sales, 4) if (is_tipped and eligible_sales > 0) else None
@@ -237,61 +248,56 @@ def _rank_cohort(cohort, value_key):
 
 def compute_ranks(con, snapshot_date, persist=True):
     """Compute the 3 ranking systems for all 4 periods; write rank_snapshot rows.
-    Returns a nested dict used to build per-employee sanitized output."""
+    effective_hourly is ROLE-SPLIT (Sam #3031, no misleading cross-role mix): tipped
+    employees rank within the same-store TIPPED cohort, non-tipped/BOH within the same-store
+    NON-TIPPED cohort -- never mixed in one board. tip% + combined stay TIPPED-cohort-only.
+    Returns period -> metric -> list of snapshot dicts (role-tagged) for the sanitized output."""
     _ensure_schema(con)
     today = dt.date.today(); wins = period_windows(today)
-    results = {}   # period -> metric -> list of snapshot dicts
+    results = {}
+
+    def emit(out_snaps, cohort, vkey, metric, cohort_key, role, period):
+        size = len(cohort); gated = size < MIN_COHORT     # min-cohort privacy+fairness gate
+        ranks = _rank_cohort(cohort, vkey)
+        for m in cohort:
+            rank, pctr = ranks[(m["cid"], m["store"])]
+            snap = {"snapshot_date": snapshot_date, "period": period, "metric": metric,
+                    "cohort_key": cohort_key, "cohort_size": size, "cid": m["cid"],
+                    "store": m["store"], "name": m["name"], "role": role, "is_tipped": m["is_tipped"],
+                    "rank": (None if gated else rank), "pct_rank": (None if gated else pctr),
+                    "value_metric": m.get(vkey), "qualified": 1,
+                    "status": ("cohort_too_small" if gated else "ranked")}
+            out_snaps.append(snap)
+            if persist:
+                _assert_allowed(m["cid"])
+                con.execute(
+                    "INSERT OR REPLACE INTO rank_snapshot (snapshot_date,period,metric,cohort_key,"
+                    "cohort_size,cena_employee_id,store_key,rank,pct_rank,value_metric,qualified,"
+                    "computed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (snapshot_date, period, metric, cohort_key, size, m["cid"], m["store"],
+                     snap["rank"], snap["pct_rank"], snap["value_metric"], 1,
+                     dt.datetime.now().isoformat(timespec="seconds")))
+
     for period in PERIODS:
         members = _members_for_period(con, period, wins[period])
-        results[period] = {}
-        # group by store
-        stores = sorted(set(m["store"] for m in members))
-        for metric in ("effective_hourly", "tip_percent", "combined"):
-            snaps = []
-            for store in stores:
-                if metric == "effective_hourly":
-                    cohort = [m for m in members if m["store"] == store and m["q_eff"]]
-                    cohort_key = "store:%s|metric:effective_hourly" % store
-                    ranks = _rank_cohort(cohort, "eff_hourly")
-                    vkey = "eff_hourly"
-                else:
-                    # tip% + combined: same-store TIPPED cohort
-                    cohort = [m for m in members if m["store"] == store and m["q_tip"]]
-                    cohort_key = "store:%s|role:tipped" % store
-                    if metric == "tip_percent":
-                        ranks = _rank_cohort(cohort, "tip_pct"); vkey = "tip_pct"
-                    else:
-                        # combined = avg(pctile_eff_within_tipped, pctile_tip_within_tipped)
-                        eff_p = _rank_cohort(cohort, "eff_hourly")
-                        tip_p = _rank_cohort(cohort, "tip_pct")
-                        for m in cohort:
-                            k = (m["cid"], m["store"])
-                            pe = eff_p[k][1]; pt = tip_p[k][1]
-                            m["combined"] = round((pe + pt) / 2, 4) if (pe is not None and pt is not None) else None
-                        ranks = _rank_cohort(cohort, "combined"); vkey = "combined"
-                size = len(cohort)
-                gated = size < MIN_COHORT     # min-cohort privacy+fairness gate
-                for m in cohort:
-                    k = (m["cid"], m["store"])
-                    rank, pctr = ranks[k]
-                    val = m.get(vkey)
-                    snap = {"snapshot_date": snapshot_date, "period": period, "metric": metric,
-                            "cohort_key": cohort_key, "cohort_size": size, "cid": m["cid"],
-                            "store": m["store"], "name": m["name"],
-                            "rank": (None if gated else rank), "pct_rank": (None if gated else pctr),
-                            "value_metric": val, "qualified": 1,
-                            "status": ("cohort_too_small" if gated else "ranked")}
-                    snaps.append(snap)
-                    if persist:
-                        _assert_allowed(m["cid"])
-                        con.execute(
-                            "INSERT OR REPLACE INTO rank_snapshot (snapshot_date,period,metric,cohort_key,"
-                            "cohort_size,cena_employee_id,store_key,rank,pct_rank,value_metric,qualified,"
-                            "computed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                            (snapshot_date, period, metric, cohort_key, size, m["cid"], m["store"],
-                             snap["rank"], snap["pct_rank"], val, 1,
-                             dt.datetime.now().isoformat(timespec="seconds")))
-            results[period][metric] = snaps
+        results[period] = {"effective_hourly": [], "tip_percent": [], "combined": []}
+        for store in sorted(set(m["store"] for m in members)):
+            sm = [m for m in members if m["store"] == store]
+            # effective_hourly: ROLE-SPLIT (tipped vs non-tipped) -- never mixed in one board
+            for role in ("tipped", "nontipped"):
+                cohort = [m for m in sm if m["q_eff"] and (m["is_tipped"] == (role == "tipped"))]
+                emit(results[period]["effective_hourly"], cohort, "eff_hourly", "effective_hourly",
+                     "store:%s|role:%s|metric:effective_hourly" % (store, role), role, period)
+            # tip% + combined: TIPPED cohort only (q_tip already requires is_tipped)
+            tcohort = [m for m in sm if m["q_tip"]]
+            emit(results[period]["tip_percent"], tcohort, "tip_pct", "tip_percent",
+                 "store:%s|role:tipped|metric:tip_percent" % store, "tipped", period)
+            eff_p = _rank_cohort(tcohort, "eff_hourly"); tip_p = _rank_cohort(tcohort, "tip_pct")
+            for m in tcohort:
+                pe = eff_p[(m["cid"], m["store"])][1]; pt = tip_p[(m["cid"], m["store"])][1]
+                m["combined"] = round((pe + pt) / 2, 4) if (pe is not None and pt is not None) else None
+            emit(results[period]["combined"], tcohort, "combined", "combined",
+                 "store:%s|role:tipped|metric:combined" % store, "tipped", period)
     if persist:
         con.commit()
     return results
@@ -309,45 +315,53 @@ def build_rank_output(results, cid):
     Peer rows carry ONLY allowed metrics -- never peer base_pay/tips/sales/GUID/attribution/
     needs_review (Sam #3014/#3019). held_days pending (no-fake history). NO sales/eligible_sales."""
     _assert_allowed(cid)
-    out = {"cena_employee_id": cid, "held_days_status": "pending", "ranks": {}, "leaderboards": {}}
+    out = {"cena_employee_id": cid, "held_days_status": "pending", "is_tipped": None,
+           "ranks": {}, "leaderboards": {}}
     for period in PERIODS:
         out["ranks"][period] = {}
-        # ---- OWN ranks (all 3 metrics; own values are the Phase-4 own view) ----
-        for metric, snaps in results[period].items():
-            mine = [s for s in snaps if s["cid"] == cid]
+        # ---- OWN effective_hourly (the employee's role-split cohort; own value) ----
+        eff = results[period]["effective_hourly"]
+        mine_eff = [s for s in eff if s["cid"] == cid]
+        if mine_eff:
+            s = mine_eff[0]; out["is_tipped"] = s["is_tipped"]
+            out["ranks"][period]["effective_hourly"] = {
+                "rank": s["rank"], "cohort_size": s["cohort_size"], "status": s["status"],
+                "value": s["value_metric"], "role": s["role"]}
+        # ---- OWN tip% + combined (TIPPED cohort only; non-tipped/BOH = not_eligible) ----
+        for metric in ("tip_percent", "combined"):
+            mine = [s for s in results[period][metric] if s["cid"] == cid]
             if mine:
                 s = mine[0]
                 out["ranks"][period][metric] = {
                     "rank": s["rank"], "cohort_size": s["cohort_size"], "status": s["status"],
                     "value": (s["value_metric"] if metric != "combined" else None)}
+            elif out["is_tipped"] is False:
+                out["ranks"][period][metric] = {"rank": None, "cohort_size": 0,
+                                                "status": "not_eligible", "value": None}
         # ---- leaderboards (per-cohort, each gated on ITS OWN cohort size) ----
         boards = {}
-        eff = results[period]["effective_hourly"]
-        mine_eff = [s for s in eff if s["cid"] == cid]
         if mine_eff:
-            ms = mine_eff[0]; ck = ms["cohort_key"]; gated = (ms["status"] == "cohort_too_small")
-            peers = [s for s in eff if s["cohort_key"] == ck]
+            s = mine_eff[0]; ck = s["cohort_key"]; gated = (s["status"] == "cohort_too_small")
+            peers = [t for t in eff if t["cohort_key"] == ck]
             rows = ([] if gated else
                     [{"name": p["name"], "rank": p["rank"], "effective_hourly": p["value_metric"],
-                      "is_me": (p["cid"] == cid)}
-                     for p in sorted(peers, key=lambda x: x["rank"] or 1e9)])
-            boards["effective_hourly"] = {"cohort_key": ck, "cohort_size": ms["cohort_size"],
-                                          "status": ms["status"], "rows": rows}
+                      "is_me": (p["cid"] == cid)} for p in sorted(peers, key=lambda x: x["rank"] or 1e9)])
+            boards["effective_hourly"] = {"cohort_key": ck, "cohort_size": s["cohort_size"],
+                                          "status": s["status"], "role": s["role"], "rows": rows}
         tip = results[period]["tip_percent"]; comb = results[period]["combined"]
         mine_tip = [s for s in tip if s["cid"] == cid]
         if mine_tip:
-            ms = mine_tip[0]; ck = ms["cohort_key"]; gated = (ms["status"] == "cohort_too_small")
-            peers = [s for s in tip if s["cohort_key"] == ck]
-            comb_by = {(s["cid"], s["store"]): (s["rank"], s["value_metric"]) for s in comb}
+            s = mine_tip[0]; ck = s["cohort_key"]; gated = (s["status"] == "cohort_too_small")
+            peers = [t for t in tip if t["cohort_key"] == ck]
+            comb_by = {(x["cid"], x["store"]): (x["rank"], x["value_metric"]) for x in comb}
             rows = []
             if not gated:
                 for p in sorted(peers, key=lambda x: x["rank"] or 1e9):
                     cr, cv = comb_by.get((p["cid"], p["store"]), (None, None))
-                    rows.append({"name": p["name"], "rank": p["rank"],
-                                 "tip_percent": p["value_metric"], "combined": cv, "combined_rank": cr,
-                                 "is_me": (p["cid"] == cid)})
-            boards["tipped"] = {"cohort_key": ck, "cohort_size": ms["cohort_size"],
-                                "status": ms["status"], "rows": rows}
+                    rows.append({"name": p["name"], "rank": p["rank"], "tip_percent": p["value_metric"],
+                                 "combined": cv, "combined_rank": cr, "is_me": (p["cid"] == cid)})
+            boards["tipped"] = {"cohort_key": ck, "cohort_size": s["cohort_size"],
+                                "status": s["status"], "rows": rows}
         out["leaderboards"][period] = boards
     return out
 

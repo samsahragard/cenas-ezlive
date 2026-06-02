@@ -3628,6 +3628,50 @@ class PerfRankCache(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+# N-c (Sam #3028 hardening): explicit peer-row field whitelist for leaderboard rows in a
+# PerfRankCache.rank_json. The /cron/perf-push receiver REJECTS (422) a push whose leaderboard
+# rows carry any field outside this set (fail-closed); the read-path STRIPS to this set before
+# serving (fail-safe). Guards a future change from leaking peer base_pay/tips/sales into a row.
+RANK_PEER_FIELDS = {"name", "rank", "effective_hourly", "tip_percent", "combined",
+                    "combined_rank", "is_me"}
+
+
+def rank_peer_rows_ok(rank_json):
+    """(ok, offending_fields). ok=False if any leaderboard peer row carries a field outside
+    RANK_PEER_FIELDS."""
+    bad = set()
+    lbs = (rank_json or {}).get("leaderboards") or {}
+    if isinstance(lbs, dict):
+        for _per, boards in lbs.items():
+            if not isinstance(boards, dict):
+                continue
+            for _b, board in boards.items():
+                for row in ((board or {}).get("rows") or []):
+                    if isinstance(row, dict):
+                        bad |= (set(row.keys()) - RANK_PEER_FIELDS)
+    return (not bad), sorted(bad)
+
+
+def sanitize_rank_json(rank_json):
+    """Return a COPY with every leaderboard peer row stripped to RANK_PEER_FIELDS (read-path
+    belt; never mutates the stored object)."""
+    if not isinstance(rank_json, dict):
+        return rank_json
+    import copy
+    d = copy.deepcopy(rank_json)
+    lbs = d.get("leaderboards")
+    if isinstance(lbs, dict):
+        for _per, boards in lbs.items():
+            if not isinstance(boards, dict):
+                continue
+            for _b, board in boards.items():
+                rows = (board or {}).get("rows")
+                if isinstance(rows, list):
+                    board["rows"] = [{k: v for k, v in row.items() if k in RANK_PEER_FIELDS}
+                                     for row in rows if isinstance(row, dict)]
+    return d
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

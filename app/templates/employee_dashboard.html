@@ -369,10 +369,11 @@
     //     peer pay breakdown; held-days stays pending (no faked history). ---
     function pctTxt(v){ return v==null ? '' : (Math.round((Number(v)||0)*1000)/10) + '%'; }
     function rcard(o, lbl, fmt){
-      if(!o || o.rank==null || o.status==='cohort_too_small'){
-        var g = (o && o.status==='cohort_too_small') ? 'Cohort<br>too small' : 'Not<br>ranked';
-        return '<div class="rcard"><div class="rcard-gate">'+g+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
-      }
+      var gate=null;
+      if(!o) gate='Not<br>ranked';
+      else if(o.status==='not_eligible') gate='Not<br>eligible';
+      else if(o.status==='cohort_too_small' || o.rank==null) gate='Cohort<br>too small';
+      if(gate) return '<div class="rcard"><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
       var val = (fmt && o.value!=null) ? '<div class="rcard-val">'+fmt(o.value)+'</div>' : '';
       return '<div class="rcard"><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
              '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</div>';
@@ -396,13 +397,17 @@
       wrap.hidden=false;
       document.getElementById('rank-period-lbl').textContent = PLABEL[sel] || sel;
       var R = RANK.ranks[sel] || {};
+      // Role-split labels (Sam #3031): tipped board says "with tips"; BOH says "Hourly rate".
+      var tipped = (RANK.is_tipped !== false);
+      var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
+      var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
       document.getElementById('rank-grid').innerHTML =
-        rcard(R.effective_hourly, 'Effective rate', function(v){ return money(v)+'/hr'; }) +
+        rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }) +
         rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
         rcard(R.combined, 'Combined', null);
       var L = (RANK.leaderboards||{})[sel] || {};
       document.getElementById('rank-boards').innerHTML =
-        lbBoard(L.effective_hourly, 'Effective rate — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
+        lbBoard(L.effective_hourly, effTitle + ' — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
         lbBoard(L.tipped, 'Tip % — ' + (PLABEL[sel]||sel), 'tip_percent', function(v){ return pctTxt(v); });
       document.getElementById('rank-foot').textContent = 'Days held at #1 / last: pending — building rank history from here.';
     }

@@ -1,0 +1,111 @@
+# Link reproducibility table (aick #3079). exact_match_count MUST be 1 for every candidate.
+# Matcher = link_matcher.py in this dir (exact token-set name match vs the live Toast roster:
+#   norm() = casefold + strip non-alnum + drop 1-char tokens -> frozenset; match = equal token-set).
+# Toast roster sizes pulled: copperfield 589 / tomball 504.
+
+## 18 NEW candidates -- cena_id | name | exact_match_count | matched_toast_guid
+- 100 | Alejandra Valencia | 1 | ec0d7f40-0f3f-4bdc-ba82-a45db722fe74
+- 12 | Ali mohammad Rao | 1 | 3ccc213e-d071-461c-bf7c-1485b25296bf
+- 78 | Aniya Owens | 1 | 2a887f22-51d1-4906-bf5b-ce5ac10fd5ee
+- 8 | Carlos Ruiz | 1 | 2caef749-7d82-4fa5-8296-a128ca3973e0
+- 11 | Chad Alexander Reid | 1 | a05d60e6-afee-4948-8db7-45285f3e70f7
+- 10 | Damon Greer | 1 | 7e8c3ffd-d6db-4d0e-803b-425e0db5873a
+- 1 | Elijah Lemos | 1 | 4f9b5c04-9323-4a9a-bf6e-0698a15f2ce7
+- 59 | Geidis Dailen Alarcon | 1 | 0b35c4fc-5094-41d0-b637-6740c97a5331
+- 7 | Glenda Soto | 1 | d8f9c0fb-212f-4a5e-87b2-995463a35449
+- 9 | Ismael Villa Sanchez | 1 | fbb10844-1175-4b1e-810b-7548e4856824
+- 46 | Kimberly Rivera | 1 | a572c6c0-fb24-4b21-a513-c47013610dff
+- 79 | Kristal Castillo Garcia | 1 | 1228e1dc-4af0-47ae-99b5-697f98867308
+- 97 | Martin Arredondo Arvizu | 1 | 4043ca7b-0a9d-4ba5-8e55-9b8006fce398
+- 29 | Nancy Calderon Pedroso | 1 | 6076eb8e-fbb7-4166-95e7-13e4cb0bd8d7
+- 4 | Natalie Allen | 1 | 1b6cc8aa-dd55-45fd-9221-db38b9f6d9f1
+- 5 | Odalis Arenciba Arzola | 1 | 6a439765-8f15-4733-9894-98173d995242
+- 58 | Rubi Lira | 1 | 98775cf2-46a1-4786-9762-d388a84a921b
+- 62 | Tahily Vazquez | 1 | 380193b5-e8b6-47c2-bfdc-3005ec7562c8
+
+## ambiguous/no-match (excluded) -- cena_id | name | exact_match_count
+- 84 | Ashlyn Weinert | 2
+- 98 | Agustin Martinez | 0
+- 117 | Jessika Palencia | 0
+- 110 | Sam Sahragard | 0
+- 109 | sam sahragard | 0
+- 122 | Sebastian | 0
+
+## 70 EXISTING deterministic links -- cena_id | store | toast_id
+- 3 | tomball | b5eef1e7-6459-45e6-b8aa-6d07f76bc1a0
+- 13 | copperfield | b5c2b8d8-3c15-4b9e-a3d6-5f888071798c
+- 14 | copperfield | 54875224-886f-4349-8043-82c944d7a83e
+- 15 | copperfield | 596e51ba-6529-4752-a3ba-e19cfe43fe2c
+- 16 | tomball | 5b9e08f1-f77b-4cf6-98b9-338a7d35c601
+- 17 | tomball | 0344a6e6-6b31-4b93-825e-3fac8d1f1a1d
+- 18 | copperfield | 2e6e211c-8308-402f-b301-05459815d6d6
+- 19 | copperfield | 6c3ba63c-c5a9-48e4-9e95-a08e301626ed
+- 20 | tomball | d9b04f20-ce6e-44b5-a1aa-2c0f0ad9457d
+- 21 | copperfield | 9fcb99a6-e07c-4546-99fb-ca21f81b091a
+- 22 | copperfield | de4bf9e1-47fa-4e0c-89aa-42c36facb777
+- 23 | copperfield | 581d037c-d575-494a-98dd-c8d85e1252f8
+- 24 | tomball | 6aa76078-7f36-4511-b137-2a44296adba4
+- 25 | tomball | 7c136fd2-f450-4040-b620-46deff8bff1e
+- 26 | copperfield | 046f9945-bd59-4454-8bba-7b8231049c34
+- 26 | tomball | a2805dcf-7484-4ede-8c51-96e223a90a2c
+- 27 | copperfield | 7f5799f9-725c-4423-9c46-e88daff49c4a
+- 28 | copperfield | fe8c41eb-2f9c-49cf-a52e-a7b272ce8ea9
+- 30 | copperfield | bfe8af11-c547-44ba-b1b6-6a9e84b5f628
+- 31 | copperfield | 3b7fc3a7-9f24-4b7c-9af5-94f7fbcac782
+- 32 | copperfield | 3ec15dbf-6ebc-44be-94fc-d440bb0347eb
+- 33 | copperfield | 66aa19e5-1f22-4a93-a98b-ea3c88f525ba
+- 33 | tomball | 39833da0-e7c2-400b-9cba-135b10a51238
+- 34 | tomball | 6bc89e2f-2862-45b7-bc19-7b4f8cd9a823
+- 35 | copperfield | 1ec5c8eb-7ace-4ce5-b883-c6e77033f648
+- 36 | copperfield | 1e48938b-da0d-44f2-aef4-1633b2c4cdc9
+- 37 | tomball | bc6a8df1-ec55-435f-b8cd-d9de980ac1e2
+- 38 | copperfield | 668930d4-df13-45ce-bc66-7457c2c6dccf
+- 38 | tomball | 51144558-c83b-48e5-a66c-3dfa0b02b92a
+- 39 | copperfield | f8b2aa83-1c0f-4ba8-853e-ac475f35beaf
+- 40 | copperfield | 3ecfabe0-cdda-4a68-8eda-ec90008306bb
+- 41 | tomball | 95a4b01e-abd7-41a3-8ea9-9c30b0511476
+- 42 | tomball | b4e535a2-a34a-4b02-a8d0-8d1afff01fee
+- 43 | copperfield | 21bfa356-8df3-4074-acd3-a62709cf36ea
+- 44 | tomball | 5e0e3038-26ad-4a61-a4fd-6eceed146303
+- 45 | tomball | c1eece6b-7f6a-4ef1-9234-b6cfd7966cc5
+- 47 | copperfield | f641ffb1-5b49-4263-a214-756f59e7c4c0
+- 48 | tomball | 52682637-2b73-49ca-a374-3ff9334c461b
+- 49 | tomball | a40513a7-f1a0-4a30-ae2e-8275f7a8ceab
+- 50 | tomball | 184d86ac-1ffb-4ad7-82e4-31dfa900c7cc
+- 51 | copperfield | a33b8aaa-028e-4f39-9ff8-ecfb816b1091
+- 52 | copperfield | f5475c3a-60cb-46f2-9110-e5851e4b231e
+- 52 | tomball | 2f96be12-4fc4-4132-b3b9-a7af0f8533d7
+- 53 | copperfield | 73eb9a1f-5017-40b6-83b8-a79d328c6850
+- 54 | copperfield | 4af518a2-af52-4940-b974-ba529a59bb73
+- 55 | tomball | b19d6ee0-54e0-491a-b386-416cfb1b34f6
+- 56 | tomball | 7a141440-6d9f-4648-8f83-f2df9ee3b412
+- 57 | tomball | f6fad2c5-6b6b-406e-a9ca-0ee6bcce1fb9
+- 60 | tomball | 8021bc33-83a6-4fa9-9c8e-ec1a1336a80d
+- 61 | tomball | 92250036-7ecd-409d-a91a-a33ac2d36a66
+- 63 | copperfield | 9ae59443-98e6-4ea7-9893-46ec42234fa1
+- 64 | copperfield | 8bf3ca8a-618f-4aa0-adcc-aa9a614846d4
+- 65 | tomball | 64d7bd68-7fad-4bf3-abd5-4284a30ac5f3
+- 66 | copperfield | 6bbb6ba3-894d-4082-8c8f-ccadc2bb141d
+- 67 | tomball | 5e7c0e9f-f0f8-4f1c-bb07-cb97825dc5f0
+- 68 | copperfield | 00667650-a741-4b63-960e-5e05d4b44082
+- 69 | copperfield | 95480ad1-ee88-4229-b4a1-8334e44b9afc
+- 70 | copperfield | 04f483aa-725a-4a58-aa3d-a281859223ce
+- 71 | copperfield | 75a58c11-bce8-4e03-9222-dec3a3774744
+- 72 | tomball | 297fbe30-a802-4613-85f0-6dec27cc46e5
+- 73 | copperfield | 97d3c026-a569-4324-848a-860831e892d7
+- 74 | tomball | 06faaea8-3240-4381-8133-30a6fbb1b55a
+- 76 | copperfield | 7c25e123-3e79-4f75-a839-048e17834a3d
+- 77 | copperfield | 11e81d75-a2bf-4372-9acf-b86ffcf67e5a
+- 80 | tomball | 8f655b21-0b4f-4b4e-aec0-5ea7d8181673
+- 81 | copperfield | 48c24e30-335f-4433-adda-ffbcc7afacd3
+- 82 | copperfield | 2021d7ba-2306-46ef-8c5e-c50a5ff29c3f
+- 82 | tomball | ac998573-74c0-4761-8c9c-4ade54e6af5b
+- 83 | copperfield | a208831f-6d04-451a-8584-ac5460850fb5
+- 83 | tomball | b8302aa6-ca4d-40f4-8706-6961a98545b7
+- 85 | tomball | c683dec8-0b8b-4553-990b-7ffcf12166d2
+- 86 | copperfield | c9cac573-9cc8-4464-a435-986f189131a7
+- 86 | tomball | 31258159-dcbf-416f-9b58-4d35dc12f5f7
+- 95 | tomball | 8223b406-3202-4ea4-97f8-113ae4f307ed
+- 96 | tomball | e87de3e9-735c-4a23-b1ee-e91872957f3e
+- 99 | tomball | e55332b9-eabc-4ac3-8911-49f361948c7c
+- 101 | tomball | 873737f7-65c5-48ca-9e12-1f14dc7211e3

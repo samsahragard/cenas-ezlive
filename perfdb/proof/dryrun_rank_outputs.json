@@ -21,20 +21,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 16,
@@ -42,18 +29,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -63,18 +38,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -84,18 +47,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -1106,20 +1057,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 17,
@@ -1127,34 +1065,9 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 18,
@@ -1162,18 +1075,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -1465,20 +1366,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 20,
@@ -1486,18 +1374,6 @@
 "status": "ranked",
 "value": 8.6653,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -1507,18 +1383,6 @@
 "status": "ranked",
 "value": 9.0805,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -1528,18 +1392,6 @@
 "status": "ranked",
 "value": 9.6034,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -2429,20 +2281,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 15,
@@ -2450,18 +2289,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -2471,18 +2298,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -2492,18 +2307,6 @@
 "status": "ranked",
 "value": 11.4627,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -2882,20 +2685,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 14,
@@ -2903,34 +2693,9 @@
 "status": "ranked",
 "value": 12.2413,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 17,
@@ -2938,18 +2703,6 @@
 "status": "ranked",
 "value": 12.0583,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -4079,20 +3832,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 18,
@@ -4100,34 +3840,9 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 17,
@@ -4135,18 +3850,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -4749,20 +4452,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 7,
@@ -4770,18 +4460,6 @@
 "status": "ranked",
 "value": 13.3169,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -4791,18 +4469,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -4812,18 +4478,6 @@
 "status": "ranked",
 "value": 12.3188,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -5202,20 +4856,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 10,
@@ -5223,18 +4864,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -5244,18 +4873,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -5265,18 +4882,6 @@
 "status": "ranked",
 "value": 12.5453,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -5655,48 +5260,9 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"week": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
+"week": {},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 20,
@@ -5704,18 +5270,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -5884,20 +5438,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 18,
@@ -5905,18 +5446,6 @@
 "status": "ranked",
 "value": 7.25,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -5926,18 +5455,6 @@
 "status": "ranked",
 "value": 7.2509,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -5947,18 +5464,6 @@
 "status": "ranked",
 "value": 7.25,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -6337,20 +5842,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 15,
@@ -6358,18 +5850,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -6379,18 +5859,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -6400,18 +5868,6 @@
 "status": "ranked",
 "value": 12.1964,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -7566,20 +7022,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 8,
@@ -7587,18 +7030,6 @@
 "status": "ranked",
 "value": 15.5113,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -7608,18 +7039,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -7629,18 +7048,6 @@
 "status": "ranked",
 "value": 15.6591,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -9139,48 +8546,9 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"week": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
+"week": {},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 24,
@@ -9188,18 +8556,6 @@
 "status": "ranked",
 "value": 0.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -9368,20 +8724,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 13,
@@ -9389,34 +8732,9 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 12,
@@ -9424,18 +8742,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -9727,48 +9033,9 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"week": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
+"week": {},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 16,
@@ -9776,18 +9043,6 @@
 "status": "ranked",
 "value": 12.1821,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -10267,20 +9522,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 10,
@@ -10288,18 +9530,6 @@
 "status": "ranked",
 "value": 13.6763,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -10309,18 +9539,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -10330,18 +9548,6 @@
 "status": "ranked",
 "value": 13.3318,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -10720,20 +9926,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 6,
@@ -10741,18 +9934,6 @@
 "status": "ranked",
 "value": 13.9477,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -10762,18 +9943,6 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -10783,18 +9952,6 @@
 "status": "ranked",
 "value": 13.1978,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -11173,20 +10330,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 7,
@@ -11194,34 +10338,9 @@
 "status": "ranked",
 "value": 15.512,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 5,
@@ -11229,18 +10348,6 @@
 "status": "ranked",
 "value": 15.6631,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -11532,20 +10639,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 9,
@@ -11553,18 +10647,6 @@
 "status": "ranked",
 "value": 14.5975,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -11574,18 +10656,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -11595,18 +10665,6 @@
 "status": "ranked",
 "value": 13.3209,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -11985,20 +11043,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 17,
@@ -12006,34 +11051,9 @@
 "status": "ranked",
 "value": 12.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 18,
@@ -12041,18 +11061,6 @@
 "status": "ranked",
 "value": 12.0174,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -12655,20 +11663,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 14,
@@ -12676,34 +11671,9 @@
 "status": "ranked",
 "value": 12.369,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 20,
@@ -12711,18 +11681,6 @@
 "status": "ranked",
 "value": 10.2642,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -13384,20 +12342,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 8,
@@ -13405,18 +12350,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -13426,18 +12359,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -13447,18 +12368,6 @@
 "status": "ranked",
 "value": 13.1745,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -13837,48 +12746,9 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"week": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
+"week": {},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 23,
@@ -13886,18 +12756,6 @@
 "status": "ranked",
 "value": 0.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -14066,20 +12924,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 11,
@@ -14087,18 +12932,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -14108,18 +12941,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -14129,18 +12950,6 @@
 "status": "ranked",
 "value": 13.0735,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -14519,20 +13328,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 12,
@@ -14540,18 +13336,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -14561,18 +13345,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -14582,18 +13354,6 @@
 "status": "ranked",
 "value": 13.1051,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -14972,20 +13732,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 12,
@@ -14993,18 +13740,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -15014,18 +13749,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -15035,18 +13758,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -15425,20 +14136,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 16,
@@ -15446,18 +14144,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -15467,18 +14153,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -15488,18 +14162,6 @@
 "status": "ranked",
 "value": 11.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -16248,20 +14910,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 6,
@@ -16269,18 +14918,6 @@
 "status": "ranked",
 "value": 15.7819,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -16290,18 +14927,6 @@
 "status": "ranked",
 "value": 14.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -16311,18 +14936,6 @@
 "status": "ranked",
 "value": 15.8024,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -16701,20 +15314,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 11,
@@ -16722,18 +15322,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -16743,18 +15331,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -16764,18 +15340,6 @@
 "status": "ranked",
 "value": 13.1317,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -17812,20 +16376,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 3,
@@ -17833,18 +16384,6 @@
 "status": "ranked",
 "value": 18.1317,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -17854,18 +16393,6 @@
 "status": "ranked",
 "value": 16.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -17875,18 +16402,6 @@
 "status": "ranked",
 "value": 19.1601,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -18265,20 +16780,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 5,
@@ -18286,34 +16788,9 @@
 "status": "ranked",
 "value": 14.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 6,
@@ -18321,18 +16798,6 @@
 "status": "ranked",
 "value": 14.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -18624,20 +17089,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 13,
@@ -18645,34 +17097,9 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 12,
@@ -18680,18 +17107,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -18983,20 +17398,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 2,
@@ -19004,18 +17406,6 @@
 "status": "ranked",
 "value": 19.1538,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -19025,18 +17415,6 @@
 "status": "ranked",
 "value": 17.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -19046,18 +17424,6 @@
 "status": "ranked",
 "value": 18.6236,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -21064,20 +19430,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 19,
@@ -21085,18 +19438,6 @@
 "status": "ranked",
 "value": 0.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -21106,18 +19447,6 @@
 "status": "ranked",
 "value": 0.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -21127,18 +19456,6 @@
 "status": "ranked",
 "value": 0.5993,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -21517,20 +19834,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 2,
@@ -21538,18 +19842,6 @@
 "status": "ranked",
 "value": 18.411,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -21559,18 +19851,6 @@
 "status": "ranked",
 "value": 16.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -21580,18 +19860,6 @@
 "status": "ranked",
 "value": 18.954,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -21970,20 +20238,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 9,
@@ -21991,18 +20246,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -22012,18 +20255,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -22033,18 +20264,6 @@
 "status": "ranked",
 "value": 13.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -22423,20 +20642,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 1,
@@ -22444,34 +20650,9 @@
 "status": "ranked",
 "value": 22.5482,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 2,
@@ -22479,18 +20660,6 @@
 "status": "ranked",
 "value": 20.5542,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -22782,20 +20951,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 1,
@@ -22803,18 +20959,6 @@
 "status": "ranked",
 "value": 19.0984,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -22824,18 +20968,6 @@
 "status": "ranked",
 "value": 15.5007,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -22845,18 +20977,6 @@
 "status": "ranked",
 "value": 16.117,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -23235,20 +21355,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 3,
@@ -23256,18 +21363,6 @@
 "status": "ranked",
 "value": 17.8609,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -23277,18 +21372,6 @@
 "status": "ranked",
 "value": 15.5007,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -23298,18 +21381,6 @@
 "status": "ranked",
 "value": 16.6744,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -23688,20 +21759,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 4,
@@ -23709,34 +21767,9 @@
 "status": "ranked",
 "value": 17.8029,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 1,
@@ -23744,18 +21777,6 @@
 "status": "ranked",
 "value": 21.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -24053,20 +22074,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 4,
@@ -24074,34 +22082,9 @@
 "status": "ranked",
 "value": 17.0419,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 5,
@@ -24109,18 +22092,6 @@
 "status": "ranked",
 "value": 14.3666,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -24412,48 +22383,9 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"week": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
+"week": {},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 22,
@@ -24461,18 +22393,6 @@
 "status": "ranked",
 "value": 0.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -24829,20 +22749,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 5,
@@ -24850,34 +22757,9 @@
 "status": "ranked",
 "value": 16.2396,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
-"month": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"month": {},
 "last30": {
 "effective_hourly": {
 "rank": 8,
@@ -24885,18 +22767,6 @@
 "status": "ranked",
 "value": 14.5605,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },
@@ -25188,20 +23058,7 @@
 "held_days_status": "pending",
 "is_tipped": false,
 "ranks": {
-"today": {
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-}
-},
+"today": {},
 "week": {
 "effective_hourly": {
 "rank": 19,
@@ -25209,18 +23066,6 @@
 "status": "ranked",
 "value": 9.5408,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "month": {
@@ -25230,18 +23075,6 @@
 "status": "ranked",
 "value": 10.0,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 },
 "last30": {
@@ -25251,18 +23084,6 @@
 "status": "ranked",
 "value": 10.7704,
 "role": "nontipped"
-},
-"tip_percent": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
-},
-"combined": {
-"rank": null,
-"cohort_size": 0,
-"status": "not_eligible",
-"value": null
 }
 }
 },

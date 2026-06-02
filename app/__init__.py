@@ -152,6 +152,11 @@ def create_app():
     app.register_blueprint(access_req_bp)
     app.register_blueprint(driver_system_bp)
     app.register_blueprint(perf_roster_link_bp)
+    # Isolated employee-perf-push receiver (Sam #3178: decoupled from driver/catering;
+    # imports only app.db/app.models, never driver_system). Legacy /cron/perf-push in
+    # driver_system.py stays untouched + unused.
+    from app.web.perf_push_routes import perf_push_bp
+    app.register_blueprint(perf_push_bp)
     app.register_blueprint(scheduling_cron_bp)  # B6: POST /internal/scheduling/cron/process-shift-alarms (ckai)
     app.register_blueprint(briefs_bp)
     # Phase 2 / Block 1A — task create + reassign routes

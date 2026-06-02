@@ -424,6 +424,30 @@ def build_rank_output(results, cid):
                 "basis": ("combined" if out["is_tipped"] else "effective_hourly")}
         else:
             out["ranks"][period]["score"] = {"status": "not_available"}
+        # NEXT BEST ACTION (own-view only; under ranks[period], NEVER a peer/leaderboard field).
+        # Uses ONLY this employee's own data already in `out`; no sales/$ in any msg; no fabrication.
+        # First match wins. R1 needs_review is SKIPPED here by design: build_rank_output receives
+        # only `results` (sanitized snaps) -- the needs_review signal lives in time_entry/members and
+        # is intentionally NOT carried into snaps (lines ~284-289 / ~340), so it is UNREACHABLE in this
+        # function. We fall through cleanly rather than fabricate. BOH-SAFETY: for a non-tipped
+        # employee the PRIMARY metric is effective_hourly ONLY -- tip_percent/combined/tips_per_hour
+        # are never referenced (and a server-side gate means they aren't even present in the payload).
+        _primary_metric = "combined" if out["is_tipped"] else "effective_hourly"
+        _pm = out["ranks"][period].get(_primary_metric)
+        _pm_rank = _pm.get("rank") if _pm else None
+        _pm_cohort = _pm.get("cohort_size") if _pm else None
+        if _pm_rank is not None and _pm_cohort and _pm_rank > _pm_cohort / 2:
+            # R2 bottom-half -- constructive/encouraging, never harsh.
+            out["ranks"][period]["next_best"] = {"rule": "improve",
+                "msg": "You're in the lower half of your group this period -- small, steady gains "
+                       "move you up. Keep showing up strong."}
+        elif _pm_rank is not None and _pm_rank <= 3:
+            # R3 top-3.
+            out["ranks"][period]["next_best"] = {"rule": "top",
+                "msg": "You're in the top 3 of your group -- keep it up!"}
+        else:
+            # R4 default.
+            out["ranks"][period]["next_best"] = {"rule": "not_available"}
         out["leaderboards"][period] = boards
     return out
 

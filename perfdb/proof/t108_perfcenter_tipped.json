@@ -1,0 +1,312 @@
+{
+  "employee": {
+    "first_name": "Yadira"
+  },
+  "is_tipped": true,
+  "linked": true,
+  "ok": true,
+  "periods": {
+    "last30": {
+      "attendance": {
+        "late": 0,
+        "missed": 1,
+        "rows": [
+          {
+            "clock_in": "2026-05-25T15:05:11.000+0000",
+            "clock_out": "2026-05-26T09:00:00.000+0000",
+            "date": "2026-05-25",
+            "late_minutes": 0,
+            "note": "auto clock-out (possible missed punch) -- verify with manager",
+            "status": "needs review"
+          }
+        ]
+      },
+      "daily": [
+        {
+          "base_pay": 13.31,
+          "date": "2026-06-01",
+          "effective_hourly": 17.15,
+          "hours": 6.25,
+          "shifts": 1,
+          "tip_pct": null,
+          "tips": 93.9,
+          "tips_per_hour": 15.024,
+          "total_pay": 107.21
+        },
+        {
+          "base_pay": 11.52,
+          "date": "2026-05-29",
+          "effective_hourly": 73.67,
+          "hours": 5.41,
+          "shifts": 1,
+          "tip_pct": null,
+          "tips": 387.03,
+          "tips_per_hour": 71.5397,
+          "total_pay": 398.55
+        },
+        {
+          "base_pay": 38.15,
+          "date": "2026-05-25",
+          "effective_hourly": 17.92,
+          "hours": 17.91,
+          "shifts": 1,
+          "tip_pct": null,
+          "tips": 282.8,
+          "tips_per_hour": 15.7901,
+          "total_pay": 320.95
+        }
+      ],
+      "money": {
+        "base_pay": 298.14,
+        "effective_hourly": 24.12,
+        "hours": 139.97,
+        "shifts": 3,
+        "tip_pct": 0.2,
+        "tips": 3077.25,
+        "tips_per_hour": 21.9851,
+        "total_pay": 3375.39
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": 6,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [
+            {
+              "name": "Maria",
+              "rank": 1,
+              "value": 25.1
+            },
+            {
+              "name": "Yadira",
+              "rank": 2,
+              "value": 24.5
+            }
+          ],
+          "rank": 2,
+          "status": "ok",
+          "value": 24.5
+        },
+        "tip_pct": {
+          "bottom": [],
+          "cohort_size": 6,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": 1,
+          "status": "ok",
+          "value": 0.18
+        },
+        "tips_per_hour": {
+          "bottom": [],
+          "cohort_size": 6,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": 2,
+          "status": "ok",
+          "value": 21.4
+        }
+      }
+    },
+    "month": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 13.31,
+          "date": "2026-06-01",
+          "effective_hourly": 17.15,
+          "hours": 6.25,
+          "shifts": 1,
+          "tip_pct": null,
+          "tips": 93.9,
+          "tips_per_hour": 15.024,
+          "total_pay": 107.21
+        }
+      ],
+      "money": {
+        "base_pay": 13.31,
+        "effective_hourly": 17.15,
+        "hours": 6.25,
+        "shifts": 1,
+        "tip_pct": null,
+        "tips": 93.9,
+        "tips_per_hour": 15.024,
+        "total_pay": 107.21
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        },
+        "tip_pct": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        },
+        "tips_per_hour": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        }
+      }
+    },
+    "today": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 13.31,
+          "date": "2026-06-01",
+          "effective_hourly": 17.15,
+          "hours": 6.25,
+          "shifts": 1,
+          "tip_pct": null,
+          "tips": 93.9,
+          "tips_per_hour": 15.024,
+          "total_pay": 107.21
+        }
+      ],
+      "money": {
+        "base_pay": 13.31,
+        "effective_hourly": 17.15,
+        "hours": 6.25,
+        "shifts": 1,
+        "tip_pct": null,
+        "tips": 93.9,
+        "tips_per_hour": 15.024,
+        "total_pay": 107.21
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        },
+        "tip_pct": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        },
+        "tips_per_hour": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        }
+      }
+    },
+    "week": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 13.31,
+          "date": "2026-06-01",
+          "effective_hourly": 17.15,
+          "hours": 6.25,
+          "shifts": 1,
+          "tip_pct": null,
+          "tips": 93.9,
+          "tips_per_hour": 15.024,
+          "total_pay": 107.21
+        }
+      ],
+      "money": {
+        "base_pay": 40.13,
+        "effective_hourly": 27.67,
+        "hours": 18.83,
+        "shifts": 1,
+        "tip_pct": null,
+        "tips": 480.93,
+        "tips_per_hour": 25.5406,
+        "total_pay": 521.06
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        },
+        "tip_pct": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        },
+        "tips_per_hour": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        }
+      }
+    }
+  }
+}

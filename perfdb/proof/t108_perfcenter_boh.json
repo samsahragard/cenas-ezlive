@@ -1,0 +1,164 @@
+{
+  "employee": {
+    "first_name": "Damaris"
+  },
+  "is_tipped": false,
+  "linked": true,
+  "ok": true,
+  "periods": {
+    "last30": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 136.0,
+          "date": "2026-06-01",
+          "effective_hourly": 17.0,
+          "hours": 8.0,
+          "shifts": 1,
+          "total_pay": 136.0
+        }
+      ],
+      "money": {
+        "base_pay": 2584.0,
+        "effective_hourly": 17.0,
+        "hours": 152.0,
+        "shifts": 1,
+        "total_pay": 2584.0
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": 5,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [
+            {
+              "name": "Damaris",
+              "rank": 1,
+              "value": 17.0
+            }
+          ],
+          "rank": 1,
+          "status": "ok",
+          "value": 17.0
+        }
+      }
+    },
+    "month": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 136.0,
+          "date": "2026-06-01",
+          "effective_hourly": 17.0,
+          "hours": 8.0,
+          "shifts": 1,
+          "total_pay": 136.0
+        }
+      ],
+      "money": {
+        "base_pay": 136.0,
+        "effective_hourly": 17.0,
+        "hours": 8.0,
+        "shifts": 1,
+        "total_pay": 136.0
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        }
+      }
+    },
+    "today": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 136.0,
+          "date": "2026-06-01",
+          "effective_hourly": 17.0,
+          "hours": 8.0,
+          "shifts": 1,
+          "total_pay": 136.0
+        }
+      ],
+      "money": {
+        "base_pay": 136.0,
+        "effective_hourly": 17.0,
+        "hours": 8.0,
+        "shifts": 1,
+        "total_pay": 136.0
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        }
+      }
+    },
+    "week": {
+      "attendance": {
+        "late": 0,
+        "missed": 0,
+        "rows": []
+      },
+      "daily": [
+        {
+          "base_pay": 136.0,
+          "date": "2026-06-01",
+          "effective_hourly": 17.0,
+          "hours": 8.0,
+          "shifts": 1,
+          "total_pay": 136.0
+        }
+      ],
+      "money": {
+        "base_pay": 408.0,
+        "effective_hourly": 17.0,
+        "hours": 24.0,
+        "shifts": 1,
+        "total_pay": 408.0
+      },
+      "rankings": {
+        "effective_hourly": {
+          "bottom": [],
+          "cohort_size": null,
+          "days_at_current_rank": 0,
+          "days_ranked": 0,
+          "history": [],
+          "leaders": [],
+          "rank": null,
+          "status": null,
+          "value": null
+        }
+      }
+    }
+  }
+}

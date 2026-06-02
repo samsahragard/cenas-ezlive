@@ -51,7 +51,7 @@ from flask import (Blueprint, abort, jsonify, redirect, render_template,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, CenaToastLink
+from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, CenaToastLink, Shift
 from app.services.ezcater_known_drivers_seed import normalize_phone
 
 log = logging.getLogger(__name__)
@@ -518,6 +518,31 @@ def performance_center():
         except Exception:
             ps_rows = []
 
+        # ATTENDANCE published-schedule source (Sam: late-vs-scheduled hybrid). The
+        # published schedule is the Shift model (app DB). Pull THIS employee's shifts
+        # ONCE (scoped strictly to emp.id -- never a request-supplied id, so no IDOR;
+        # own-view only) and fold to {business_date 'YYYY-MM-DD' -> earliest scheduled
+        # start_at datetime}. Shift.start_at is a real datetime column (B6 alarm key),
+        # so the scheduled DATE is start_at.date() and we can subtract clock_in
+        # directly. A day with multiple shifts keys off the EARLIEST start (you're
+        # "late" against your first scheduled shift). A read hiccup -> empty map, which
+        # degrades every day to the needs_review fallback, never a 500.
+        sched_start_by_date: dict[str, datetime] = {}
+        try:
+            sh_rows = (db.query(Shift)
+                         .filter(Shift.employee_id == emp.id,
+                                 Shift.start_at.isnot(None)).all())
+            for sh in sh_rows:
+                st = sh.start_at
+                if st is None:
+                    continue
+                dkey = st.date().isoformat()
+                prev = sched_start_by_date.get(dkey)
+                if prev is None or st < prev:
+                    sched_start_by_date[dkey] = st
+        except Exception:
+            sched_start_by_date = {}
+
         # Sanitized ranking (own ranks + per-cohort leaderboards). The read-path
         # sanitizer strips peer rows to the field whitelist; structure (is_tipped,
         # ranks, leaderboards) is preserved. Absent (non-pilot) -> treat as BOH-
@@ -551,6 +576,67 @@ def performance_center():
                 if bd and (not lo or bd >= lo) and (not hi or bd <= hi):
                     out.append(s)
             return out
+
+        def _parse_dt(s):
+            """Best-effort ISO -> naive datetime; None on anything unparseable.
+            Defensive by contract: a bad cached timestamp must NEVER 500 the route
+            (the caller treats None as 'no usable clock_in' -> needs_review fallback).
+            Strips a trailing 'Z' and drops tz so the subtraction vs Shift.start_at
+            (a naive datetime column) stays naive-vs-naive."""
+            if not s:
+                return None
+            try:
+                dt = datetime.fromisoformat(str(s).strip().replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                return None
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            return dt
+
+        def _attendance_for(r):
+            """Hybrid attendance for one period: join each PerfShiftCache row in the
+            window to THIS employee's published Shift on the same business_date.
+
+              - published shift with a scheduled start -> late_minutes =
+                max(0, round((clock_in - start_at)/60)); 'on time' if <=5 else 'late'.
+              - NO published shift (or clock_in unparseable) -> NEVER fabricate
+                lateness; fall back to the needs_review punch flag (status
+                'needs review') else skip the day ('no schedule').
+
+            late = #'late' rows; missed = #needs_review rows. Rows newest-first.
+            Scoped to emp.id via ps_rows + sched_start_by_date (both emp-only)."""
+            rows = []
+            late = 0
+            missed = 0
+            for s in _shifts_in(r):
+                bd = s.business_date
+                ci_raw = getattr(s, "clock_in", None)
+                co_raw = getattr(s, "clock_out", None)
+                reason = getattr(s, "review_reason", None)
+                nr = bool(getattr(s, "needs_review", False))
+                sched = sched_start_by_date.get(bd) if bd else None
+                ci_dt = _parse_dt(ci_raw)
+                if sched is not None and ci_dt is not None:
+                    # published shift + a usable clock-in -> real late math
+                    late_minutes = max(0, round((ci_dt - sched).total_seconds() / 60))
+                    status = "on time" if late_minutes <= 5 else "late"
+                    if status == "late":
+                        late += 1
+                    rows.append({"date": bd, "status": status,
+                                 "late_minutes": late_minutes,
+                                 "clock_in": ci_raw, "clock_out": co_raw,
+                                 "note": reason})
+                elif nr:
+                    # no published shift (or bad timestamp) -> needs_review signal,
+                    # never an invented late count.
+                    missed += 1
+                    rows.append({"date": bd, "status": "needs review",
+                                 "late_minutes": 0,
+                                 "clock_in": ci_raw, "clock_out": co_raw,
+                                 "note": reason})
+                # else: worked a day with no published shift + no review flag -> skip
+            rows.sort(key=lambda x: (x.get("date") or ""), reverse=True)  # newest first
+            return {"late": late, "missed": missed, "rows": rows}
 
         def _peer_rows(period, mk):
             rj = RJ[mk]
@@ -624,9 +710,9 @@ def performance_center():
                 daily.append(drow)
 
             periods[period] = {"money": money, "rankings": rankings,
-                               # attendance hybrid (late-vs-scheduled join) lands next;
-                               # clean empty state until then (Sam: clean Not-available is OK)
-                               "attendance": {"late": 0, "missed": 0, "rows": []},
+                               # attendance hybrid: late-vs-published-schedule join,
+                               # with a needs_review fallback (no fabricated lateness).
+                               "attendance": _attendance_for(r),
                                "daily": daily}
 
         return jsonify({"ok": True, "linked": True,

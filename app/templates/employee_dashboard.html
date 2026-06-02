@@ -315,9 +315,14 @@
     function hm(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}); }
     function inWin(bd, p){ return !!(bd && p && bd >= p.period_start && bd <= p.period_end); }
     var PLABEL = { today:'today', week:'this week', month:'this month', last30:'last 30 days' };
-    function pcard(val, lbl, sub, hero){
-      return '<div class="pcard'+(hero?' hero':'')+'"><div class="pcard-val">'+val+'</div>'+
-             '<div class="pcard-lbl">'+esc(lbl)+'</div>'+(sub?'<div class="pcard-sub">'+esc(sub)+'</div>':'')+'</div>';
+    function pcard(val, lbl, sub, hero, href){
+      var inner = '<div class="pcard-val">'+val+'</div>'+
+             '<div class="pcard-lbl">'+esc(lbl)+'</div>'+(sub?'<div class="pcard-sub">'+esc(sub)+'</div>':'');
+      var cls = 'pcard'+(hero?' hero':'');
+      if(href){
+        return '<a class="'+cls+'" href="'+esc(href)+'" style="text-decoration:none;color:inherit;display:block">'+inner+'</a>';
+      }
+      return '<div class="'+cls+'">'+inner+'</div>';
     }
     function u(s){ return '<span class="u">'+s+'</span>'; }
     function renderCards(){
@@ -328,15 +333,20 @@
       var inw = shifts.filter(function(s){ return inWin(s.business_date, p); });
       var sc = inw.length, rc = inw.filter(function(s){ return s.needs_review; }).length;
       document.getElementById('perf-subtitle').textContent = p.period_start + ' to ' + p.period_end;
-      box.innerHTML =
-        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', money(base)+' base + '+money(tips)+' tips', true) +
-        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours') +
-        pcard(num(hrs,2)+u('h'), 'Total hours') +
-        pcard(money(tips), 'Tips') +
-        pcard(money(base), 'Base pay') +
-        pcard(money(tph)+u('/hr'), 'Tips per hour') +
-        pcard(num(sc,0), 'Shifts') +
-        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean');
+      // Role-aware (Sam #3077): BOH/non-tipped (RANK.is_tipped===false) omit the tip cards
+      // entirely so the set stays coherent — no empty tip holes. Tipped/RANK-null = full set.
+      var showTips = !(RANK && RANK.is_tipped===false);
+      var html =
+        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', money(base)+' base + '+money(tips)+' tips', true, '/employee/performance/total_pay') +
+        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours', false, '/employee/performance/effective_hourly') +
+        pcard(num(hrs,2)+u('h'), 'Total hours', null, false, '/employee/performance/shifts');
+      if(showTips){ html += pcard(money(tips), 'Tips', null, false, '/employee/performance/tips'); }
+      html += pcard(money(base), 'Base pay', null, false, '/employee/performance/base_pay');
+      if(showTips){ html += pcard(money(tph)+u('/hr'), 'Tips per hour', null, false, '/employee/performance/tips_per_hour'); }
+      html +=
+        pcard(num(sc,0), 'Shifts', null, false, '/employee/performance/shifts') +
+        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean', false, '/employee/performance/attendance');
+      box.innerHTML = html;
     }
     function renderShifts(){
       var wrap=document.getElementById('perf-shifts-wrap'), list=document.getElementById('shift-list');
@@ -380,6 +390,18 @@
       return '<div class="rcard"><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
              '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</div>';
     }
+    // Score tile (own-view only): relative STANDING, not a letter grade. The band word
+    // (e.g. "Strong") is a secondary sub-label. Gates cleanly to "Not available".
+    function scard(score){
+      var gate = '<div class="rcard-gate">Not<br>available</div><div class="rcard-lbl">Your standing</div>';
+      if(!score || score.status==='not_available' || typeof score.standing_percentile !== 'number'){
+        return '<div class="rcard">'+gate+'</div>';
+      }
+      var top = Math.max(1, 100 - score.standing_percentile);
+      var band = score.band ? '<div class="rcard-val">'+esc(score.band)+'</div>' : '';
+      return '<div class="rcard"><div class="rcard-rank">Top '+top+'<span class="of">%</span></div>'+
+             '<div class="rcard-lbl">Your standing</div>'+band+'</div>';
+    }
     function lbBoard(b, title, key, fmt){
       if(!b){ return ''; }
       var h='<div class="lb-lbl">'+esc(title)+'</div>';
@@ -404,14 +426,20 @@
       var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
       var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
       document.getElementById('rank-grid').innerHTML =
+        scard(R.score) +
         rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }) +
         rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
+        rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }) +
         rcard(R.combined, 'Combined', null);
       var L = (RANK.leaderboards||{})[sel] || {};
       document.getElementById('rank-boards').innerHTML =
         lbBoard(L.effective_hourly, effTitle + ' — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
         lbBoard(L.tipped, 'Tip % — ' + (PLABEL[sel]||sel), 'tip_percent', function(v){ return pctTxt(v); });
-      document.getElementById('rank-foot').textContent = 'Days held at #1 / last: pending — building rank history from here.';
+      // Next-best nudge (own-view only): render only when present; NEVER on peer rows.
+      var nb = R.next_best;
+      document.getElementById('rank-foot').textContent =
+        (nb && nb.msg) ? String(nb.msg)
+                       : 'Days held at #1 / last: pending — building rank history from here.';
     }
     function selectPeriod(p){
       sel=p;

@@ -354,6 +354,30 @@ def my_performance():
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 
+        # Phase 3 (Sam #2938/#2941): prefer the CK-pushed SANITIZED perf cache when
+        # present. STRICT WHITELIST -- only employee-visible numbers + service
+        # metrics. NO toast_id/GUID, NO attribution internals, NO sync plumbing
+        # (attribution_json is a column this builder never reads).
+        from app.models import PerfPeriodCache
+        try:
+            pc_rows = (db.query(PerfPeriodCache)
+                         .filter(PerfPeriodCache.cena_employee_id == emp.id).all())
+        except Exception:
+            pc_rows = []   # fresh-table/read hiccup -> fall back to snapshot, never 500
+        if pc_rows:
+            _ord = {"today": 0, "week": 1, "month": 2, "last30": 3}
+            perf_periods = sorted(([{
+                "period": r.period,
+                "period_start": r.period_start, "period_end": r.period_end,
+                "total_hours": round(float(r.total_hours or 0), 2),
+                "reg_hours": round(float(r.reg_hours or 0), 2),
+                "ot_hours": round(float(r.ot_hours or 0), 2),
+                "base_pay": round(float(r.base_pay or 0), 2),
+                "tips": round(float(r.tips or 0), 2),
+                "service": (r.service_json or {}),
+            } for r in pc_rows]), key=lambda x: _ord.get(x["period"], 99))
+            return jsonify({"ok": True, "linked": True, "perf_periods": perf_periods}), 200
+
         # Aggregate the employee's confirmed links from the cached snapshot
         # (usually one store). No live Toast call in the request path.
         from app.services.toast_sync import read_snapshot

@@ -3545,6 +3545,37 @@ class ToastEmployeeSnapshot(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PerfPeriodCache(Base):
+    """Phase 3 (Sam #2938): the SANITIZED per-employee per-period performance
+    snapshot PUSHED token-gated from the CK-local perf DB (Mini_IT13 = source of
+    truth, Sam #2896/#2901). /employee/my-performance reads THIS (a fast DB read)
+    -- no live Toast, no live CK read (Mini_IT13 sleeps). Holds NO restaurant
+    sales: sales are isolated on CK in perf_internal and never pushed -- there is
+    simply no sales column here, so sanitize-by-construction continues app-side."""
+
+    __tablename__ = "perf_period_cache"
+    __table_args__ = (
+        UniqueConstraint("cena_employee_id", "period", name="uq_perfcache_emp_period"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cena_employee_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    toast_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    store_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    period: Mapped[str] = mapped_column(String(16), nullable=False)
+    period_start: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    period_end: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    total_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    reg_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    ot_hours: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    base_pay: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    tips: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    service_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)        # EMPLOYEE-VISIBLE service metrics ONLY (v1: empty; v2 fills)
+    attribution_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # INTERNAL audit metadata -- NEVER read by the employee payload (samai #2939)
+    computed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

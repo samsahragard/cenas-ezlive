@@ -1080,6 +1080,57 @@ def cron_roster_action():
         db.close()
 
 
+@driver_system_bp.route("/cron/perf-push", methods=["POST"])
+def cron_perf_push():
+    """Phase 3 (Sam #2938/#2941): token-gated receiver for the CK-local perf DB
+    push. CK (Mini_IT13 = source of truth) POSTs SANITIZED per-period rows for one
+    employee; we upsert PerfPeriodCache. Stores ONLY known keys -- employee-visible
+    'service' -> service_json, INTERNAL 'attribution' -> attribution_json (a column
+    the employee payload NEVER reads). No sales field is accepted or stored."""
+    import os
+    from datetime import datetime as _dt
+    if _extract_cron_token() != os.getenv("CRON_TOKEN"):
+        abort(403)
+    from app.models import PerfPeriodCache
+    body = request.get_json(silent=True) or {}
+    emp = body.get("employee") or {}
+    cid = emp.get("cena_employee_id")
+    if not cid:
+        return jsonify({"ok": False, "error": "employee.cena_employee_id required"}), 400
+    db = SessionLocal()
+    written = 0
+    try:
+        for p in (body.get("periods") or []):
+            per = (p.get("period") or "").strip()
+            if not per:
+                continue
+            row = (db.query(PerfPeriodCache)
+                     .filter_by(cena_employee_id=cid, period=per).first())
+            if row is None:
+                row = PerfPeriodCache(cena_employee_id=cid, period=per)
+                db.add(row)
+            row.toast_id = emp.get("toast_id")
+            row.store_key = emp.get("store_key")
+            row.period_start = p.get("period_start")
+            row.period_end = p.get("period_end")
+            row.total_hours = float(p.get("total_hours") or 0)
+            row.reg_hours = float(p.get("reg_hours") or 0)
+            row.ot_hours = float(p.get("ot_hours") or 0)
+            row.base_pay = float(p.get("base_pay") or 0)
+            row.tips = float(p.get("tips") or 0)
+            svc = p.get("service")
+            row.service_json = svc if isinstance(svc, dict) else {}
+            attr = p.get("attribution")
+            row.attribution_json = attr if isinstance(attr, dict) else None
+            row.computed_at = p.get("computed_at")
+            row.synced_at = _dt.utcnow()
+            written += 1
+        db.commit()
+        return jsonify({"ok": True, "cena_employee_id": cid, "periods_written": written}), 200
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/cron/anomaly-brief", methods=["POST"])
 def cron_anomaly_brief():
     """Phase 1 / Block 6: compose one morning brief per enrolled

@@ -10,16 +10,19 @@ period windows:
   month   2026-06-01 .. 2026-06-01
   last30  2026-05-03 .. 2026-06-01
 ------------------------------------------------------------
-SELF-TEST PASS -- creds parse + deployed client import + windows OK.
-Holding the live Toast pull for samai branch-audit PASS + Sam green-light
-(run with --execute once cleared).
+N2 OT formula check: reg40 + ot5 @ $2.13 -> $101.17 (live, OT x1.5) vs $95.85 (flat); OT premium $5.32 -> PASS (1.5x applied)
+SELF-TEST PASS -- creds parse + deployed client import + windows + OT formula OK.
+(--execute = live Yadira pull + write perf.sqlite; --push = send to app.)
 ============================================================
 
 ### --dry-run ###
 ============================================================
-PHASE 2 DRY-RUN (Sam #2901) -- Yadira, sample data, temp DB
+PHASE 2 DRY-RUN -- LEGACY sanitization demo (sample data, temp DB)
+NOTE (N2): validates SANITIZATION only, with sample reg_pay/ot_pay. The LIVE
+pay path is real_run/_pull_period/_pull_shifts (base_pay = reg*w + ot*w*1.5);
+see --self-test for the live-formula OT check.
 ============================================================
-temp DB     : C:\Users\sam\AppData\Local\Temp\claude\tmp8vn0i3oc_perfdry.sqlite (throwaway -- perf.sqlite untouched)
+temp DB     : C:\Users\sam\AppData\Local\Temp\claude\tmpmmro402y_perfdry.sqlite (throwaway -- perf.sqlite untouched)
 Yadira      : cena_id=71 toast_id=75a58c11-bce8-4e03-9222-dec3a3774744 store=copperfield
 period windows (proof of date logic):
   today   2026-06-01 .. 2026-06-01

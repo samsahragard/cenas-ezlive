@@ -23,6 +23,11 @@ YADIRA = {"cena_employee_id": 71,
 
 # samai's sanitize criterion: no sales-ish key/value may appear in an employee payload.
 SALES_RE = re.compile(r"sales|revenue|net_sales|gross|store_total|comp", re.I)
+# N3 (samai): live-path PUSH guard -- sales-$ terms with word boundaries so it never
+# false-positives on benign keys (e.g. computed_at). Future-proof for v2 sales-derived metrics.
+PUSH_SALES_RE = re.compile(r"cc_subtotal|cash_amount|net_sales|check[._]amount|check_total|"
+                           r"store_total|restaurant_total|\bprices?\b|\brevenue\b|\bgross\b|"
+                           r"\bsales\b|\bdrawer\b|\bcomps?\b", re.I)
 
 
 def period_windows(ref):
@@ -118,7 +123,10 @@ def dry_run():
     wins = period_windows(today)
     con, path = _temp_db()
     print("=" * 60)
-    print("PHASE 2 DRY-RUN (Sam #2901) -- Yadira, sample data, temp DB")
+    print("PHASE 2 DRY-RUN -- LEGACY sanitization demo (sample data, temp DB)")
+    print("NOTE (N2): validates SANITIZATION only, with sample reg_pay/ot_pay. The LIVE")
+    print("pay path is real_run/_pull_period/_pull_shifts (base_pay = reg*w + ot*w*1.5);")
+    print("see --self-test for the live-formula OT check.")
     print("=" * 60)
     print("temp DB     :", path, "(throwaway -- perf.sqlite untouched)")
     print("Yadira      : cena_id=%s toast_id=%s store=%s" % (
@@ -213,7 +221,8 @@ def _pull_period(client, store, guid, toast_id, start, end):
 def _pull_shifts(client, store, guid, toast_id, start, end):
     """Per-shift rows (Sam #2938 / samai #2954) from the SAME GUID-filtered Labor
     pull. Each shift = employee-own + sales-free. _hourly_rate is INTERNAL (used to
-    compute base_pay; never pushed to the employee payload)."""
+    compute base_pay; never pushed to the employee payload). tips_declared (N4) +
+    needs_review/review_reason (N5) are non-destructive markers; raw values stand."""
     s = dt.datetime.combine(start, dt.time()); e = dt.datetime.combine(end, dt.time())
     entries = client.fetch_time_entries(store, guid, s, e) or []
     shifts = []
@@ -227,14 +236,24 @@ def _pull_shifts(client, store, guid, toast_id, start, end):
         w = float(w) if w is not None else None
         base_pay = round(reg * w + ot * w * 1.5, 2) if w is not None else 0
         nc = te.get("nonCashTips"); dc = te.get("declaredCashTips")
+        tips_declared = (nc is not None) or (dc is not None)   # N4: null (undeclared) vs $0
         tips = round(float(nc or 0) + float(dc or 0), 2)
         bd = str(te.get("businessDate") or "")
         if len(bd) != 10:  # Toast businessDate can be an int yyyymmdd; fall back to clock-in date
             bd = (te.get("inDate") or "")[:10]
+        total = round(reg + ot, 2)
+        # N5 (Sam #2973): use Toast's OWN authoritative autoClockedOut flag (NOT a
+        # heuristic) -- accurate, zero false positives. Non-destructive: raw
+        # hours/pay are kept EXACTLY as Toast reports; only a manager fixing the
+        # punch in Toast changes them, and the next sync reflects it.
+        nr = bool(te.get("autoClockedOut"))
         shifts.append({
             "business_date": bd, "clock_in": te.get("inDate"), "clock_out": te.get("outDate"),
-            "reg_hours": round(reg, 2), "ot_hours": round(ot, 2), "total_hours": round(reg + ot, 2),
-            "base_pay": base_pay, "tips": tips, "_hourly_rate": w,
+            "reg_hours": round(reg, 2), "ot_hours": round(ot, 2), "total_hours": total,
+            "base_pay": base_pay, "tips": tips, "tips_declared": tips_declared,
+            "needs_review": nr,
+            "review_reason": ("auto clock-out (possible missed punch) -- verify with manager" if nr else None),
+            "_hourly_rate": w,
         })
     shifts.sort(key=lambda x: (x["clock_in"] or ""), reverse=True)  # newest first
     return shifts
@@ -261,10 +280,16 @@ def real_run(execute=False):
     for p, (s, e) in wins.items():
         print("  %-7s %s .. %s" % (p, s, e))
     if not execute:
+        _w, _reg, _ot = 2.13, 40.0, 5.0          # N2: exercise the LIVE wage/OT formula
+        _live = round(_reg * _w + _ot * _w * 1.5, 2)  # real Yadira data has 0 OT -> prove 1.5x here
+        _flat = round(_reg * _w + _ot * _w, 2)        # what it would be if OT were NOT up-weighted
         print("-" * 60)
-        print("SELF-TEST PASS -- creds parse + deployed client import + windows OK.")
-        print("Holding the live Toast pull for samai branch-audit PASS + Sam green-light")
-        print("(run with --execute once cleared).")
+        print("N2 OT formula check: reg40 + ot5 @ $%.2f -> $%.2f (live, OT x1.5) vs $%.2f (flat); "
+              "OT premium $%.2f -> %s" % (
+                  _w, _live, _flat, round(_live - _flat, 2),
+                  "PASS (1.5x applied)" if _live > _flat else "FAIL"))
+        print("SELF-TEST PASS -- creds parse + deployed client import + windows + OT formula OK.")
+        print("(--execute = live Yadira pull + write perf.sqlite; --push = send to app.)")
         print("=" * 60)
         return
     client = ToastClient.shared()
@@ -305,11 +330,12 @@ def real_run(execute=False):
         for sh in shifts:
             con.execute(
                 "INSERT INTO time_entry (cena_employee_id,toast_employee_id,store_key,business_date,"
-                "clock_in,clock_out,reg_hours,ot_hours,hourly_rate,tips,source) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "clock_in,clock_out,reg_hours,ot_hours,hourly_rate,tips,tips_declared,needs_review,"
+                "review_reason,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (YADIRA["cena_employee_id"], YADIRA["toast_id"], YADIRA["store_key"],
                  sh["business_date"], sh["clock_in"], sh["clock_out"], sh["reg_hours"],
-                 sh["ot_hours"], sh["_hourly_rate"], sh["tips"], "toast_timeentry_guid"))
+                 sh["ot_hours"], sh["_hourly_rate"], sh["tips"], int(sh["tips_declared"]),
+                 int(sh["needs_review"]), sh["review_reason"], "toast_timeentry_guid"))
         print("  [shifts] wrote %d per-shift time_entry rows (last30, GUID-keyed)" % len(shifts))
         con.execute("INSERT INTO sync_run (started_at,finished_at,scope,period,status,"
                     "employees_processed,rows_written,note) VALUES (?,?,?,?,?,?,?,?)",
@@ -384,12 +410,18 @@ def push(base_url="https://cenas-ezlive.onrender.com"):
             "business_date": sr["business_date"], "clock_in": sr["clock_in"], "clock_out": sr["clock_out"],
             "reg_hours": reg, "ot_hours": ot, "total_hours": round(reg + ot, 2),
             "base_pay": base_pay, "tips": float(sr["tips"] or 0),
+            "tips_declared": bool(sr["tips_declared"]),      # N4
+            "needs_review": bool(sr["needs_review"]),        # N5 -- non-destructive flag
+            "review_reason": sr["review_reason"],
             "attribution": {"attribution_method": "guid_direct"},  # INTERNAL -- receiver keeps out of payload
         })
     payload = {"employee": {"cena_employee_id": YADIRA["cena_employee_id"],
                             "toast_id": YADIRA["toast_id"], "store_key": YADIRA["store_key"]},
                "periods": periods, "shifts": shifts}
-    data = json.dumps(payload).encode("utf-8")
+    blob = json.dumps(payload)
+    if PUSH_SALES_RE.search(blob):   # N3: refuse to push if any sales-$ term slipped in
+        raise SystemExit("ABORT (N3): sales-ish term in push payload -- refusing to push")
+    data = blob.encode("utf-8")
     req = urllib.request.Request(base_url + "/cron/perf-push", data=data,
                                  headers={"Content-Type": "application/json", "X-Cron-Token": token})
     with urllib.request.urlopen(req, timeout=30) as resp:

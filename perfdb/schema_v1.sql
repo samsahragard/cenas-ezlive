@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS time_entry (
   ot_hours            REAL DEFAULT 0,
   hourly_rate         REAL,
   tips                REAL DEFAULT 0,
+  tips_declared       INTEGER DEFAULT 1,   -- v2/N4: 0 = neither cc nor cash tip declared (null, not $0)
+  needs_review        INTEGER DEFAULT 0,   -- v2/N5 (Sam #2973): 1 = likely missed-punch/auto-closed
+  review_reason       TEXT,                -- v2/N5: human-readable reason when needs_review=1
   source              TEXT,
   UNIQUE (toast_employee_id, store_key, business_date, clock_in)
 );

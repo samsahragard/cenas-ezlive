@@ -7,7 +7,7 @@ import sqlite3, hashlib, os, datetime
 DB_DIR = r"C:\Users\sam\cena-perfdb"
 DB = os.path.join(DB_DIR, "perf.sqlite")
 SCHEMA = os.path.join(DB_DIR, "schema_v1.sql")
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"   # v2: time_entry + tips_declared/needs_review/review_reason (N4/N5, Sam #2973)
 DATA_TABLES = ["employee", "employee_store", "perf_period",
                "perf_internal", "time_entry", "sync_run"]
 

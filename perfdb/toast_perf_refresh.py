@@ -210,6 +210,36 @@ def _pull_period(client, store, guid, toast_id, start, end):
             "tips": round(tips, 2), "tip_entries": tip_entries, "tip_null": tip_null}
 
 
+def _pull_shifts(client, store, guid, toast_id, start, end):
+    """Per-shift rows (Sam #2938 / samai #2954) from the SAME GUID-filtered Labor
+    pull. Each shift = employee-own + sales-free. _hourly_rate is INTERNAL (used to
+    compute base_pay; never pushed to the employee payload)."""
+    s = dt.datetime.combine(start, dt.time()); e = dt.datetime.combine(end, dt.time())
+    entries = client.fetch_time_entries(store, guid, s, e) or []
+    shifts = []
+    for te in entries:
+        if te.get("deleted"):
+            continue
+        if (te.get("employeeReference") or {}).get("guid") != toast_id:
+            continue
+        reg = float(te.get("regularHours") or 0); ot = float(te.get("overtimeHours") or 0)
+        w = te.get("hourlyWage")
+        w = float(w) if w is not None else None
+        base_pay = round(reg * w + ot * w * 1.5, 2) if w is not None else 0
+        nc = te.get("nonCashTips"); dc = te.get("declaredCashTips")
+        tips = round(float(nc or 0) + float(dc or 0), 2)
+        bd = str(te.get("businessDate") or "")
+        if len(bd) != 10:  # Toast businessDate can be an int yyyymmdd; fall back to clock-in date
+            bd = (te.get("inDate") or "")[:10]
+        shifts.append({
+            "business_date": bd, "clock_in": te.get("inDate"), "clock_out": te.get("outDate"),
+            "reg_hours": round(reg, 2), "ot_hours": round(ot, 2), "total_hours": round(reg + ot, 2),
+            "base_pay": base_pay, "tips": tips, "_hourly_rate": w,
+        })
+    shifts.sort(key=lambda x: (x["clock_in"] or ""), reverse=True)  # newest first
+    return shifts
+
+
 def real_run(execute=False):
     """Live Yadira-only refresh. Without execute=True this is a SELF-TEST: loads
     creds + imports the deployed Toast client + prints period windows, with NO
@@ -268,6 +298,19 @@ def real_run(execute=False):
             written += 1
             print("  [%-6s] %s..%s hours=%.2f gross=%s cards=%d" % (
                 p, win[0], win[1], agg["hours"], agg["gross"], agg["cards"]))
+        # per-shift rows (Sam #2938 / samai #2954): same GUID-filtered pull, last30 window
+        shifts = _pull_shifts(client, YADIRA["store_key"], guid, YADIRA["toast_id"],
+                              wins["last30"][0], wins["last30"][1])
+        con.execute("DELETE FROM time_entry WHERE cena_employee_id=?", (YADIRA["cena_employee_id"],))
+        for sh in shifts:
+            con.execute(
+                "INSERT INTO time_entry (cena_employee_id,toast_employee_id,store_key,business_date,"
+                "clock_in,clock_out,reg_hours,ot_hours,hourly_rate,tips,source) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (YADIRA["cena_employee_id"], YADIRA["toast_id"], YADIRA["store_key"],
+                 sh["business_date"], sh["clock_in"], sh["clock_out"], sh["reg_hours"],
+                 sh["ot_hours"], sh["_hourly_rate"], sh["tips"], "toast_timeentry_guid"))
+        print("  [shifts] wrote %d per-shift time_entry rows (last30, GUID-keyed)" % len(shifts))
         con.execute("INSERT INTO sync_run (started_at,finished_at,scope,period,status,"
                     "employees_processed,rows_written,note) VALUES (?,?,?,?,?,?,?,?)",
                     (started, dt.datetime.now().isoformat(timespec="seconds"), "yadira", "all",
@@ -313,6 +356,8 @@ def push(base_url="https://cenas-ezlive.onrender.com"):
     con = sqlite3.connect(DB); con.row_factory = sqlite3.Row
     rows = con.execute("SELECT * FROM perf_period WHERE cena_employee_id=? ORDER BY period",
                        (YADIRA["cena_employee_id"],)).fetchall()
+    shift_rows = con.execute("SELECT * FROM time_entry WHERE cena_employee_id=? ORDER BY clock_in DESC",
+                             (YADIRA["cena_employee_id"],)).fetchall()
     con.close()
     if not rows:
         raise SystemExit("no perf_period rows -- run --execute first")
@@ -330,9 +375,20 @@ def push(base_url="https://cenas-ezlive.onrender.com"):
             "attribution": attribution,  # INTERNAL -- receiver keeps it out of the payload
             "computed_at": r["computed_at"],
         })
+    shifts = []
+    for sr in shift_rows:
+        rate = sr["hourly_rate"]
+        reg = float(sr["reg_hours"] or 0); ot = float(sr["ot_hours"] or 0)
+        base_pay = round(reg * float(rate) + ot * float(rate) * 1.5, 2) if rate is not None else 0
+        shifts.append({
+            "business_date": sr["business_date"], "clock_in": sr["clock_in"], "clock_out": sr["clock_out"],
+            "reg_hours": reg, "ot_hours": ot, "total_hours": round(reg + ot, 2),
+            "base_pay": base_pay, "tips": float(sr["tips"] or 0),
+            "attribution": {"attribution_method": "guid_direct"},  # INTERNAL -- receiver keeps out of payload
+        })
     payload = {"employee": {"cena_employee_id": YADIRA["cena_employee_id"],
                             "toast_id": YADIRA["toast_id"], "store_key": YADIRA["store_key"]},
-               "periods": periods}
+               "periods": periods, "shifts": shifts}
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(base_url + "/cron/perf-push", data=data,
                                  headers={"Content-Type": "application/json", "X-Cron-Token": token})
@@ -340,8 +396,8 @@ def push(base_url="https://cenas-ezlive.onrender.com"):
         out = resp.read().decode("utf-8"); code = resp.getcode()
     print("PUSH ->", base_url + "/cron/perf-push", "HTTP", code)
     print("response:", out)
-    print("pushed periods:", [p["period"] for p in periods],
-          "(service={} employee-visible; attribution kept internal)")
+    print("pushed periods:", [p["period"] for p in periods], "+ shifts:", len(shifts),
+          "(service={} + per-shift employee-own fields; attribution kept internal)")
 
 
 if __name__ == "__main__":

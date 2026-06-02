@@ -19,7 +19,7 @@ Holding the live Toast pull for samai branch-audit PASS + Sam green-light
 ============================================================
 PHASE 2 DRY-RUN (Sam #2901) -- Yadira, sample data, temp DB
 ============================================================
-temp DB     : C:\Users\sam\AppData\Local\Temp\claude\tmpr9aaokox_perfdry.sqlite (throwaway -- perf.sqlite untouched)
+temp DB     : C:\Users\sam\AppData\Local\Temp\claude\tmp8vn0i3oc_perfdry.sqlite (throwaway -- perf.sqlite untouched)
 Yadira      : cena_id=71 toast_id=75a58c11-bce8-4e03-9222-dec3a3774744 store=copperfield
 period windows (proof of date logic):
   today   2026-06-01 .. 2026-06-01

@@ -370,7 +370,9 @@
     function pctTxt(v){ return v==null ? '' : (Math.round((Number(v)||0)*1000)/10) + '%'; }
     function rcard(o, lbl, fmt){
       var gate=null;
-      if(!o) gate='Not<br>ranked';
+      // Server-side role gate (Sam #3077): BOH/non-tipped payloads OMIT tip/combined objects
+      // entirely; the UI infers a clean 'Not eligible' from role metadata (is_tipped=false).
+      if(!o) gate = (RANK && RANK.is_tipped===false) ? 'Not<br>eligible' : 'Not<br>ranked';
       else if(o.status==='not_eligible') gate='Not<br>eligible';
       else if(o.status==='cohort_too_small' || o.rank==null) gate='Cohort<br>too small';
       if(gate) return '<div class="rcard"><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';

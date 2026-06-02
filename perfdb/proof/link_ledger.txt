@@ -1,0 +1,33 @@
+# All-employee deterministic link ledger -- READ-ONLY proposal, NO writes made.
+# Strip perfdb/proof/ before any main merge. Rule: link ONLY on exactly-one Toast
+# exact-token-set name match; 0 or >1 -> EXCEPTION (excluded, never guessed).
+
+EXISTING deterministic links (eligible now): 70
+
+PROPOSED NEW deterministic link candidates: 18
+
+- cena_id=100 | name=Alejandra Valencia | BEFORE=(no link) | AFTER=toast_id:ec0d7f40-0f3f-4bdc-ba82-a45db722fe74 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Alejandra  Valencia' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=12 | name=Ali mohammad Rao | BEFORE=(no link) | AFTER=toast_id:3ccc213e-d071-461c-bf7c-1485b25296bf store:['tomball'] | REASON=exact 1:1 token-set match to 'Ali mohammad Rao' | STORE_COMPAT=link created in the Toast id's own store ['tomball'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=78 | name=Aniya Owens | BEFORE=(no link) | AFTER=toast_id:2a887f22-51d1-4906-bf5b-ce5ac10fd5ee store:['copperfield'] | REASON=exact 1:1 token-set match to 'Aniya Owens' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=8 | name=Carlos Ruiz | BEFORE=(no link) | AFTER=toast_id:2caef749-7d82-4fa5-8296-a128ca3973e0 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Carlos Ruiz' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=11 | name=Chad Alexander Reid | BEFORE=(no link) | AFTER=toast_id:a05d60e6-afee-4948-8db7-45285f3e70f7 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Chad Alexander Reid' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=10 | name=Damon Greer | BEFORE=(no link) | AFTER=toast_id:7e8c3ffd-d6db-4d0e-803b-425e0db5873a store:['tomball'] | REASON=exact 1:1 token-set match to 'Damon  Greer' | STORE_COMPAT=link created in the Toast id's own store ['tomball'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=1 | name=Elijah Lemos | BEFORE=(no link) | AFTER=toast_id:4f9b5c04-9323-4a9a-bf6e-0698a15f2ce7 store:['tomball'] | REASON=exact 1:1 token-set match to 'Elijah Lemos' | STORE_COMPAT=link created in the Toast id's own store ['tomball'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=59 | name=Geidis Dailen Alarcon | BEFORE=(no link) | AFTER=toast_id:0b35c4fc-5094-41d0-b637-6740c97a5331 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Geidis Dailen Alarcon' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=7 | name=Glenda Soto | BEFORE=(no link) | AFTER=toast_id:d8f9c0fb-212f-4a5e-87b2-995463a35449 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Glenda Soto' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=9 | name=Ismael Villa Sanchez | BEFORE=(no link) | AFTER=toast_id:fbb10844-1175-4b1e-810b-7548e4856824 store:['tomball'] | REASON=exact 1:1 token-set match to 'Ismael Villa Sanchez' | STORE_COMPAT=link created in the Toast id's own store ['tomball'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=46 | name=Kimberly Rivera | BEFORE=(no link) | AFTER=toast_id:a572c6c0-fb24-4b21-a513-c47013610dff store:['copperfield'] | REASON=exact 1:1 token-set match to 'Kimberly Rivera' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=79 | name=Kristal Castillo Garcia | BEFORE=(no link) | AFTER=toast_id:1228e1dc-4af0-47ae-99b5-697f98867308 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Kristal Castillo Garcia' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=97 | name=Martin Arredondo Arvizu | BEFORE=(no link) | AFTER=toast_id:4043ca7b-0a9d-4ba5-8e55-9b8006fce398 store:['tomball'] | REASON=exact 1:1 token-set match to 'Martin Arredondo Arvizu' | STORE_COMPAT=link created in the Toast id's own store ['tomball'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=29 | name=Nancy Calderon Pedroso | BEFORE=(no link) | AFTER=toast_id:6076eb8e-fbb7-4166-95e7-13e4cb0bd8d7 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Nancy Calderon Pedroso' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=4 | name=Natalie Allen | BEFORE=(no link) | AFTER=toast_id:1b6cc8aa-dd55-45fd-9221-db38b9f6d9f1 store:['tomball'] | REASON=exact 1:1 token-set match to 'Natalie Allen' | STORE_COMPAT=link created in the Toast id's own store ['tomball'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=5 | name=Odalis Arenciba Arzola | BEFORE=(no link) | AFTER=toast_id:6a439765-8f15-4733-9894-98173d995242 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Odalis  Arenciba Arzola' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=58 | name=Rubi Lira | BEFORE=(no link) | AFTER=toast_id:98775cf2-46a1-4786-9762-d388a84a921b store:['copperfield'] | REASON=exact 1:1 token-set match to 'Rubi Lira' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+- cena_id=62 | name=Tahily Vazquez | BEFORE=(no link) | AFTER=toast_id:380193b5-e8b6-47c2-bfdc-3005ec7562c8 store:['copperfield'] | REASON=exact 1:1 token-set match to 'Tahily Vazquez' | STORE_COMPAT=link created in the Toast id's own store ['copperfield'] | ROLLBACK=delete the cena_toast_link row (restores no-link)
+
+EXCEPTIONS (EXCLUDED from rollout; never guessed):
+- existing-link mismatch: cena_id=2 Sam Sahragard -> toast 'saeid Sahragard' (own acct)
+- no-match (5): id98 Agustin Martinez; id117 Jessika Palencia; id110 Sam Sahragard; id109 sam sahragard; id122 Sebastian
+- ambiguous (1): id84 Ashlyn Weinert (2 Toast matches)
+
+REVERSE PASS -- Toast identities with NO active Cena profile: 979 (reported, never auto-created)

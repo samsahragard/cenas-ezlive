@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Performance Detail - Cenas Kitchen</title>
+<style>
+  :root{
+    --black:#070403; --espresso:#160c07; --panel:rgba(27,13,7,0.78); --panel2:rgba(15,7,4,0.88);
+    --line:rgba(214,163,58,0.32); --line2:rgba(255,197,89,0.55);
+    --text:#fff4dc; --muted:#cdbb9c; --dim:#8e806f;
+    --gold:#d8a33a; --gold-soft:#ffd36a; --green:#5dd98b; --red:#d8342a; --red-deep:#8f1f1c;
+    --shadow:0 12px 28px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{min-height:100vh;background:var(--black);color:var(--text);font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:0;}
+  body::before{content:'';position:fixed;inset:-20px;z-index:0;pointer-events:none;background:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}") center/cover no-repeat;filter:blur(3px) brightness(45%) saturate(1.05);}
+  body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:rgba(10,5,2,.72);box-shadow:inset 0 0 180px rgba(0,0,0,.85);}
+  .shell{position:relative;z-index:1;width:min(1040px,100%);margin:0 auto;padding:18px 16px 104px;}
+  .topbar,.hero,.periods,.card,.row,.leader{border:1px solid var(--line);border-radius:12px;background:linear-gradient(140deg,var(--panel),var(--panel2));box-shadow:var(--shadow);backdrop-filter:blur(14px);}
+  .topbar{min-height:62px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .topbar img{height:36px;width:auto;filter:drop-shadow(0 4px 8px rgba(0,0,0,.55));}
+  .back{color:#f7e7c2;text-decoration:none;border:1px solid rgba(212,160,62,.45);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;background:rgba(25,14,8,.75);}
+  .hero{margin-top:14px;padding:20px;display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.35fr);gap:14px;align-items:end;}
+  .eyebrow{color:var(--gold-soft);font-size:12px;font-weight:900;text-transform:uppercase;}
+  h1{margin-top:6px;color:#f6e9d0;font-family:"Playfair Display","Cormorant Garamond",Georgia,serif;font-size:clamp(34px,5vw,58px);line-height:.98;font-weight:800;}
+  .hero p{margin-top:10px;color:var(--muted);font-size:14px;line-height:1.4;}
+  .big-value{text-align:right;font-size:clamp(34px,7vw,66px);font-weight:900;color:var(--gold-soft);line-height:1;}
+  .periods{margin-top:12px;padding:8px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+  .period{min-height:40px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);font-weight:900;cursor:pointer;}
+  .period.active{background:linear-gradient(180deg,#c7352e,#8f1f1c);color:#ffe7b3;border-color:#e3a347;box-shadow:0 0 16px rgba(216,52,42,.32);}
+  .grid{margin-top:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+  .card{padding:14px;min-height:86px;}
+  .card b{display:block;font-size:24px;color:var(--text);overflow-wrap:anywhere;}
+  .card span{display:block;margin-top:5px;color:var(--dim);font-size:11px;font-weight:900;text-transform:uppercase;}
+  .section{margin-top:14px;}
+  h2{color:var(--gold-soft);font-size:18px;font-weight:900;}
+  .sub{margin-top:3px;color:var(--dim);font-size:12px;}
+  .rows{margin-top:10px;display:grid;gap:8px;}
+  .row{padding:11px;display:grid;grid-template-columns:1fr repeat(5,.68fr);gap:10px;align-items:center;font-size:13px;color:var(--muted);}
+  .row strong{color:var(--text);}
+  .row .num{color:var(--text);font-weight:900;}
+  .leaders{margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .leader{padding:12px;}
+  .leader h3{font-size:14px;color:var(--gold);margin-bottom:8px;}
+  .leader-line{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;padding:7px 0;border-top:1px solid rgba(255,250,241,.09);font-size:13px;color:var(--muted);}
+  .leader-line:first-of-type{border-top:0;}
+  .leader-line b{color:var(--text);}
+  .state{margin-top:14px;padding:18px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);color:var(--muted);}
+  .note{color:var(--muted);font-size:13px;line-height:1.5;}
+  .hidden{display:none!important;}
+  @media(max-width:760px){
+    .shell{padding:12px 12px 100px;}
+    .hero{grid-template-columns:1fr;}
+    .big-value{text-align:left;}
+    .grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .leaders{grid-template-columns:1fr;}
+    .row{grid-template-columns:1fr 1fr;align-items:start;}
+    .row .date{grid-column:1/-1;}
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="back" href="/employee/dashboard">Back</a>
+  </div>
+
+  <div id="loading" class="state">Loading performance detail.</div>
+  <div id="error" class="state hidden">This detail is not available yet.</div>
+  <div id="noteligible" class="state hidden"></div>
+
+  <section id="page" class="hidden">
+    <div class="hero">
+      <div>
+        <div class="eyebrow" id="eyebrow">Performance</div>
+        <h1 id="title">Metric</h1>
+        <p id="explainer"></p>
+      </div>
+      <div class="big-value" id="big-value">-</div>
+    </div>
+
+    <nav class="periods" aria-label="Detail period">
+      <button class="period" data-period="today">Today</button>
+      <button class="period" data-period="week">Week</button>
+      <button class="period" data-period="month">Month</button>
+      <button class="period" data-period="last30">30 days</button>
+    </nav>
+
+    <section class="grid" id="summary-grid"></section>
+
+    <section class="section" id="daily-section">
+      <h2>Daily breakdown</h2>
+      <div class="sub">Each day is calculated from the local Toast time entries for this employee.</div>
+      <div class="rows" id="daily-rows"></div>
+    </section>
+
+    <section class="section hidden" id="rank-section">
+      <h2>Peer ranking</h2>
+      <div class="sub" id="rank-sub"></div>
+      <div class="leaders">
+        <div class="leader"><h3>Top</h3><div id="leaders"></div></div>
+        <div class="leader"><h3>Bottom</h3><div id="bottom"></div></div>
+      </div>
+      <div class="rows" id="rank-history"></div>
+    </section>
+  </section>
+</main>
+{% include 'partials/_employee_nav.html' %}
+<script>
+  const METRIC_KEY = {{ metric_key|tojson }};
+  // Tip metrics surface ONLY for tipped roles; a BOH employee sees a clean
+  // role-aware state instead (Sam #3077 / #3120 -- coherent, not empty holes).
+  const TIP_METRICS = new Set(['tips','tip_pct','tips_per_hour','rank_tip_pct','rank_tips_per_hour']);
+  const state = { payload:null, period:new URLSearchParams(location.search).get('period') || 'last30' };
+  const $ = (id) => document.getElementById(id);
+  const configs = {
+    effective_hourly:{label:'Effective hourly', field:'effective_hourly', type:'money', note:'Base pay plus tips divided by clocked hours.'},
+    total_pay:{label:'Total pay', field:'total_pay', type:'money', note:'Base pay plus tips for the selected period.'},
+    tips:{label:'Tips', field:'tips', type:'money', note:'Non-cash, cash, and gratuity tips from Toast time entries.'},
+    base_pay:{label:'Base pay', field:'base_pay', type:'money', note:'Hourly wage times regular/overtime hours before tips.'},
+    tips_per_hour:{label:'Tips per hour', field:'tips_per_hour', type:'money', note:'Tips divided by clocked hours.'},
+    tip_pct:{label:'Tip percentage', field:'tip_pct', type:'pct', note:'Tip percentage for closed checks in the selected period.'},
+    shifts:{label:'Shifts', field:'shifts', type:'number', note:'Toast time entries counted as shifts.'},
+    attendance:{label:'Attendance', field:'attendance', type:'number', note:'Late and missed records documented locally by management.'},
+    rank_effective_hourly:{label:'Hourly rank', rank:'effective_hourly', type:'money', note:'Your effective hourly compared with peers in the same tip group.'},
+    rank_tip_pct:{label:'Tip percentage rank', rank:'tip_pct', type:'pct', note:'Your tip percentage compared with peers in the same tip group.'},
+    rank_tips_per_hour:{label:'Tips per hour rank', rank:'tips_per_hour', type:'money', note:'Your tips per hour compared with peers in the same tip group.'},
+  };
+  function money(v){const n=Number(v);return Number.isFinite(n)?'$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'-';}
+  function pct(v){const n=Number(v);return Number.isFinite(n)?n.toFixed(1)+'%':'-';}
+  function num(v,d=0){const n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'-';}
+  function fmt(v,type){return type==='money'?money(v):type==='pct'?pct(v):num(v, type==='decimal'?2:0);}
+  function dateLabel(s){
+    const raw=String(s||'');
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m){
+      const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])));
+      const w=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()];
+      const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+      return `${w}, ${mo} ${Number(m[3])}`;
+    }
+    const d=new Date(raw);
+    return Number.isNaN(d.getTime())?raw:d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+  }
+  function show(id){['loading','error','noteligible','page'].forEach(k=>$(k).classList.toggle('hidden',k!==id));}
+  function card(label,value){return `<div class="card"><b>${value}</b><span>${label}</span></div>`;}
+  function renderLeader(target, rows, type){
+    $(target).innerHTML = (rows||[]).map(r=>`<div class="leader-line"><b>#${r.rank}</b><span>${r.name||'-'}</span><b>${fmt(r.value,type)}</b></div>`).join('') || '<div class="leader-line"><span>No peer data</span></div>';
+  }
+  function render(){
+    const tipped = !!state.payload.is_tipped;
+    const cfg = configs[METRIC_KEY] || configs.effective_hourly;
+    const p = state.payload.periods[state.period] || state.payload.periods.last30 || {};
+    document.querySelectorAll('.period').forEach(btn=>btn.classList.toggle('active',btn.dataset.period===state.period));
+    $('title').textContent = cfg.label;
+    $('explainer').textContent = cfg.note;
+    $('eyebrow').textContent = `${state.payload.employee && state.payload.employee.first_name || 'My'} performance`;
+
+    const m = p.money || {};
+    const att = p.attendance || {};
+    const value = cfg.rank ? (p.rankings||{})[cfg.rank] : (cfg.field === 'attendance' ? (att.late||0)+(att.missed||0) : m[cfg.field]);
+    $('big-value').textContent = cfg.rank ? (value && value.rank ? `#${value.rank}` : '-') : fmt(value, cfg.type);
+
+    // Summary cards -- tip cards only for tipped roles (BOH gets a coherent set).
+    const cards = [
+      card('Hours', num(m.hours,2)),
+      card('Base pay', money(m.base_pay)),
+      card('Total pay', money(m.total_pay)),
+    ];
+    if (tipped){
+      cards.push(card('Tips', money(m.tips)), card('Tips / hr', money(m.tips_per_hour)), card('Tip %', pct(m.tip_pct)));
+    }
+    cards.push(card('Effective / hr', money(m.effective_hourly)), card('Shifts', num(m.shifts)),
+               card('Attendance issues', num((att.late||0)+(att.missed||0))));
+    $('summary-grid').innerHTML = cards.join('');
+
+    if (cfg.rank){
+      $('daily-section').classList.add('hidden');
+      $('rank-section').classList.remove('hidden');
+      const r = (p.rankings||{})[cfg.rank] || {};
+      $('rank-sub').textContent = r.days_ranked ? `Held current rank on ${r.days_at_current_rank || 0} of ${r.days_ranked} ranked day(s) in this period.` : 'No day-by-day rank history yet.';
+      renderLeader('leaders', r.leaders, cfg.type);
+      renderLeader('bottom', r.bottom, cfg.type);
+      $('rank-history').innerHTML = (r.history||[]).map(row=>`
+        <div class="row">
+          <strong class="date">${dateLabel(row.date)}</strong>
+          <span>Rank<br><span class="num">#${row.rank}</span></span>
+          <span>Peers<br><span class="num">${row.peer_count}</span></span>
+          <span>Value<br><span class="num">${fmt(row.value,cfg.type)}</span></span>
+          <span>Top<br><span class="num">${row.top_name||'-'}</span></span>
+          <span>Bottom<br><span class="num">${row.bottom_name||'-'}</span></span>
+        </div>`).join('') || '<div class="row"><strong>No rank history for this period</strong></div>';
+      return;
+    }
+    $('daily-section').classList.remove('hidden');
+    $('rank-section').classList.add('hidden');
+
+    if (cfg.field === 'attendance'){
+      $('daily-rows').innerHTML = (att.rows||[]).map(row=>`
+        <div class="row">
+          <strong class="date">${dateLabel(row.date)}</strong>
+          <span>Status<br><span class="num">${row.status||'-'}</span></span>
+          <span>Late<br><span class="num">${row.late_minutes||0} min</span></span>
+          <span>Clock in<br><span class="num">${row.clock_in?new Date(row.clock_in).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}):'-'}</span></span>
+          <span>Clock out<br><span class="num">${row.clock_out?new Date(row.clock_out).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}):'-'}</span></span>
+          <span>Note<br><span class="num">${row.note||'-'}</span></span>
+        </div>`).join('') || '<div class="row"><strong>No attendance records for this period</strong></div>';
+      return;
+    }
+    $('daily-rows').innerHTML = (p.daily||[]).map(row=>`
+      <div class="row">
+        <strong class="date">${dateLabel(row.date)}</strong>
+        <span>${cfg.label}<br><span class="num">${fmt(row[cfg.field],cfg.type)}</span></span>
+        <span>Hours<br><span class="num">${num(row.hours,2)}</span></span>
+        <span>Base<br><span class="num">${money(row.base_pay)}</span></span>
+        ${tipped
+          ? `<span>Tips<br><span class="num">${money(row.tips)}</span></span><span>Tip %<br><span class="num">${pct(row.tip_pct)}</span></span>`
+          : `<span>Total<br><span class="num">${money(row.total_pay)}</span></span>`}
+      </div>`).join('') || '<div class="row"><strong>No daily data for this period</strong></div>';
+  }
+  document.querySelectorAll('.period').forEach(btn=>btn.addEventListener('click',()=>{state.period=btn.dataset.period;history.replaceState(null,'',`?period=${state.period}`);render();}));
+  fetch('/employee/performance-center',{credentials:'same-origin',headers:{Accept:'application/json'}})
+    .then(r=>r.json().then(data=>({status:r.status,data})))
+    .then(({status,data})=>{
+      if(status!==200||!data.ok||!data.linked){show('error');return;}
+      state.payload=data;
+      // Role gate: a tip metric for a non-tipped (BOH) employee -> clean state,
+      // never an empty tipped page.
+      if(TIP_METRICS.has(METRIC_KEY) && !data.is_tipped){
+        const cfg = configs[METRIC_KEY] || {};
+        $('noteligible').innerHTML = `<h2 style="color:var(--gold-soft);margin-bottom:8px;">${cfg.label||'This measure'} - tipped roles only</h2><div class="note">This measure applies to tip-earning roles. Your performance is measured on hours, base pay, total pay, effective hourly, shifts, and attendance - open any of those from your dashboard.</div>`;
+        show('noteligible');return;
+      }
+      show('page');render();
+    })
+    .catch(()=>show('error'));
+</script>
+</body>
+</html>

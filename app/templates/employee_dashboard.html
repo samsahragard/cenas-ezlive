@@ -174,6 +174,25 @@
     background:#E4B340; border-radius:7px; padding:3px 8px; cursor:pointer; letter-spacing:0.2px; }
   .review-reason{ font-size:11px; color:rgba(228,179,64,0.92); margin-top:6px; line-height:1.4; }
 
+  /* Phase 5.1 ranking surface */
+  .rank-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:13px; }
+  .rcard{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:12px; padding:12px 8px; text-align:center; }
+  .rcard-rank{ font-size:21px; font-weight:800; color:var(--blue-deep); line-height:1.05; }
+  .rcard-rank .of{ font-size:12px; font-weight:600; color:rgba(244,231,208,0.6); }
+  .rcard-gate{ font-size:11px; font-weight:700; color:rgba(228,179,64,0.85); line-height:1.25; }
+  .rcard-lbl{ font-size:9.5px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase; color:rgba(244,231,208,0.6); margin-top:7px; }
+  .rcard-val{ font-size:11px; color:rgba(250,246,236,0.66); margin-top:3px; }
+  .lb-lbl{ font-size:10.5px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:rgba(244,231,208,0.58); margin:12px 0 8px; }
+  .lb-row{ display:flex; align-items:center; gap:10px; background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:10px; padding:9px 11px; margin-bottom:6px; }
+  .lb-row.me{ border-color:var(--bd-gold); background:linear-gradient(135deg, rgba(228,179,64,0.17), rgba(228,179,64,0.03)); }
+  .lb-rank{ font-size:14px; font-weight:800; color:var(--bd-gold); min-width:24px; }
+  .lb-name{ flex:1; font-size:13px; font-weight:700; color:var(--blue-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lb-name .you{ font-size:10px; font-weight:700; color:rgba(244,231,208,0.6); margin-left:5px; }
+  .lb-metric{ font-size:13px; font-weight:800; color:var(--red-deep); white-space:nowrap; }
+  .lb-gate{ font-size:12px; color:rgba(250,246,236,0.72); line-height:1.45; background:var(--surface);
+    border:0.5px dashed rgba(228,179,64,0.5); border-radius:10px; padding:11px 12px; }
+  .rank-foot{ font-size:10.5px; color:rgba(244,231,208,0.5); margin-top:10px; letter-spacing:0.2px; line-height:1.4; }
+
   .footnote{
     margin-top:auto; padding-top:22px; text-align:center;
     font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
@@ -209,6 +228,12 @@
       <div class="perf-tab active" data-period="last30">Last 30</div>
     </div>
     <div class="perf-cards" id="perf-cards"></div>
+    <div class="perf-sub" id="perf-rank-wrap" hidden>
+      <div class="perf-sub-lbl"><span>Your rankings</span><span class="cnt" id="rank-period-lbl"></span></div>
+      <div class="rank-grid" id="rank-grid"></div>
+      <div id="rank-boards"></div>
+      <div class="rank-foot" id="rank-foot"></div>
+    </div>
     <div class="perf-sub" id="perf-shifts-wrap" hidden>
       <div class="perf-sub-lbl"><span>Recent shifts</span><span class="cnt" id="shift-count-lbl"></span></div>
       <div class="shift-list" id="shift-list"></div>
@@ -275,7 +300,7 @@
   //     shift list shows recent shifts with a needs_review badge (raw totals kept). ---
   (function(){
     var card = document.getElementById('perf-card');
-    var PERIODS = {}, shifts = [], sel = 'last30';
+    var PERIODS = {}, shifts = [], sel = 'last30', RANK = null;
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
@@ -290,9 +315,14 @@
     function hm(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}); }
     function inWin(bd, p){ return !!(bd && p && bd >= p.period_start && bd <= p.period_end); }
     var PLABEL = { today:'today', week:'this week', month:'this month', last30:'last 30 days' };
-    function pcard(val, lbl, sub, hero){
-      return '<div class="pcard'+(hero?' hero':'')+'"><div class="pcard-val">'+val+'</div>'+
-             '<div class="pcard-lbl">'+esc(lbl)+'</div>'+(sub?'<div class="pcard-sub">'+esc(sub)+'</div>':'')+'</div>';
+    function pcard(val, lbl, sub, hero, href){
+      var inner = '<div class="pcard-val">'+val+'</div>'+
+             '<div class="pcard-lbl">'+esc(lbl)+'</div>'+(sub?'<div class="pcard-sub">'+esc(sub)+'</div>':'');
+      var cls = 'pcard'+(hero?' hero':'');
+      if(href){
+        return '<a class="'+cls+'" href="'+esc(href)+'" style="text-decoration:none;color:inherit;display:block">'+inner+'</a>';
+      }
+      return '<div class="'+cls+'">'+inner+'</div>';
     }
     function u(s){ return '<span class="u">'+s+'</span>'; }
     function renderCards(){
@@ -303,15 +333,20 @@
       var inw = shifts.filter(function(s){ return inWin(s.business_date, p); });
       var sc = inw.length, rc = inw.filter(function(s){ return s.needs_review; }).length;
       document.getElementById('perf-subtitle').textContent = p.period_start + ' to ' + p.period_end;
-      box.innerHTML =
-        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', money(base)+' base + '+money(tips)+' tips', true) +
-        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours') +
-        pcard(num(hrs,2)+u('h'), 'Total hours') +
-        pcard(money(tips), 'Tips') +
-        pcard(money(base), 'Base pay') +
-        pcard(money(tph)+u('/hr'), 'Tips per hour') +
-        pcard(num(sc,0), 'Shifts') +
-        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean');
+      // Role-aware (Sam #3077): BOH/non-tipped (RANK.is_tipped===false) omit the tip cards
+      // entirely so the set stays coherent — no empty tip holes. Tipped/RANK-null = full set.
+      var showTips = !(RANK && RANK.is_tipped===false);
+      var html =
+        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', money(base)+' base + '+money(tips)+' tips', true, '/employee/performance/total_pay') +
+        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours', false, '/employee/performance/effective_hourly') +
+        pcard(num(hrs,2)+u('h'), 'Total hours', null, false, '/employee/performance/shifts');
+      if(showTips){ html += pcard(money(tips), 'Tips', null, false, '/employee/performance/tips'); }
+      html += pcard(money(base), 'Base pay', null, false, '/employee/performance/base_pay');
+      if(showTips){ html += pcard(money(tph)+u('/hr'), 'Tips per hour', null, false, '/employee/performance/tips_per_hour'); }
+      html +=
+        pcard(num(sc,0), 'Shifts', null, false, '/employee/performance/shifts') +
+        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean', false, '/employee/performance/attendance');
+      box.innerHTML = html;
     }
     function renderShifts(){
       var wrap=document.getElementById('perf-shifts-wrap'), list=document.getElementById('shift-list');
@@ -325,7 +360,10 @@
         var dstr = (d && !isNaN(d)) ? d.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : esc(s.business_date||'');
         var rng = hm(s.clock_in) + ' - ' + (hm(s.clock_out) || '?');
         var tipTxt = (s.tips_declared===false) ? 'not declared' : money(s.tips);
-        var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span><span><b>'+esc(tipTxt)+'</b> tips</span></div>';
+        // role-aware (FLAG 2): BOH/non-tipped shift rows omit the tips span -- the payload no longer
+        // carries shift tips for BOH, so don't render an own-zero "$0.00 tips".
+        var tipSpan = (RANK && RANK.is_tipped===false) ? '' : '<span><b>'+esc(tipTxt)+'</b> tips</span>';
+        var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span>'+tipSpan+'</div>';
         var badge = s.needs_review ? '<div class="badge-review" data-r="'+esc(s.review_reason||'needs review')+'">! needs review</div>' : '';
         row.innerHTML = '<div class="shift-top"><span class="shift-date">'+esc(dstr)+'</span><span class="shift-hrs">'+num(s.total_hours,2)+'h</span></div>' + meta + badge;
         list.appendChild(row);
@@ -338,15 +376,84 @@
         });
       });
     }
+    // --- Phase 5.1 (Sam #3009/#3014): ranking surface. Consumes ONLY the sanitized
+    //     `ranking` block (own ranks + per-cohort leaderboards). Peer rows carry only
+    //     name + rank + allowed metrics; min-cohort-gated cohorts show "too small". No
+    //     peer pay breakdown; held-days stays pending (no faked history). ---
+    function pctTxt(v){ return v==null ? '' : (Math.round((Number(v)||0)*1000)/10) + '%'; }
+    function rcard(o, lbl, fmt){
+      var gate=null;
+      // Server-side role gate (Sam #3077): BOH/non-tipped payloads OMIT tip/combined objects
+      // entirely; the UI infers a clean 'Not eligible' from role metadata (is_tipped=false).
+      if(!o) gate = (RANK && RANK.is_tipped===false) ? 'Not<br>eligible' : 'Not<br>ranked';
+      else if(o.status==='not_eligible') gate='Not<br>eligible';
+      else if(o.status==='cohort_too_small' || o.rank==null) gate='Cohort<br>too small';
+      if(gate) return '<div class="rcard"><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
+      var val = (fmt && o.value!=null) ? '<div class="rcard-val">'+fmt(o.value)+'</div>' : '';
+      return '<div class="rcard"><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
+             '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</div>';
+    }
+    // Score tile (own-view only): relative STANDING, not a letter grade. The band word
+    // (e.g. "Strong") is a secondary sub-label. Gates cleanly to "Not available".
+    function scard(score){
+      var gate = '<div class="rcard-gate">Not<br>available</div><div class="rcard-lbl">Your standing</div>';
+      if(!score || score.status==='not_available' || typeof score.standing_percentile !== 'number'){
+        return '<div class="rcard">'+gate+'</div>';
+      }
+      var top = Math.max(1, 100 - score.standing_percentile);
+      var band = score.band ? '<div class="rcard-val">'+esc(score.band)+'</div>' : '';
+      return '<div class="rcard"><div class="rcard-rank">Top '+top+'<span class="of">%</span></div>'+
+             '<div class="rcard-lbl">Your standing</div>'+band+'</div>';
+    }
+    function lbBoard(b, title, key, fmt){
+      if(!b){ return ''; }
+      var h='<div class="lb-lbl">'+esc(title)+'</div>';
+      if(b.status==='cohort_too_small' || !b.rows || !b.rows.length){
+        return h+'<div class="lb-gate">Cohort too small &mdash; a ranking needs at least 4 qualifying teammates. It appears once more of your team is on board.</div>';
+      }
+      return h + b.rows.map(function(r){
+        var v = (r[key]==null) ? '' : fmt(r[key]);
+        return '<div class="lb-row'+(r.is_me?' me':'')+'"><span class="lb-rank">#'+r.rank+'</span>'+
+               '<span class="lb-name">'+esc(r.name)+(r.is_me?'<span class="you">you</span>':'')+'</span>'+
+               '<span class="lb-metric">'+v+'</span></div>';
+      }).join('');
+    }
+    function renderRank(){
+      var wrap=document.getElementById('perf-rank-wrap');
+      if(!RANK || !RANK.ranks){ wrap.hidden=true; return; }
+      wrap.hidden=false;
+      document.getElementById('rank-period-lbl').textContent = PLABEL[sel] || sel;
+      var R = RANK.ranks[sel] || {};
+      // Role-split labels (Sam #3031): tipped board says "with tips"; BOH says "Hourly rate".
+      var tipped = (RANK.is_tipped !== false);
+      var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
+      var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
+      document.getElementById('rank-grid').innerHTML =
+        scard(R.score) +
+        rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }) +
+        rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
+        rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }) +
+        rcard(R.combined, 'Combined', null);
+      var L = (RANK.leaderboards||{})[sel] || {};
+      document.getElementById('rank-boards').innerHTML =
+        lbBoard(L.effective_hourly, effTitle + ' — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
+        lbBoard(L.tipped, 'Tip % — ' + (PLABEL[sel]||sel), 'tip_percent', function(v){ return pctTxt(v); });
+      // Next-best nudge (own-view only): render only when present; NEVER on peer rows.
+      var nb = R.next_best;
+      document.getElementById('rank-foot').textContent =
+        (nb && nb.msg) ? String(nb.msg)
+                       : 'Days held at #1 / last: pending — building rank history from here.';
+    }
     function selectPeriod(p){
       sel=p;
       document.querySelectorAll('.perf-tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-period')===p); });
-      renderCards();
+      renderCards(); renderRank();
     }
     function render(d){
       show();
       (d.perf_periods||[]).forEach(function(p){ PERIODS[p.period]=p; });
       shifts = d.shifts || [];
+      RANK = d.ranking || null;
       if(!PERIODS[sel]){ var ks=Object.keys(PERIODS); sel = (ks.indexOf('last30')>=0) ? 'last30' : (ks[0]||'last30'); }
       document.querySelectorAll('.perf-tab').forEach(function(t){ t.addEventListener('click', function(){ selectPeriod(t.getAttribute('data-period')); }); });
       selectPeriod(sel);

@@ -3605,6 +3605,92 @@ class PerfShiftCache(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PerfRankCache(Base):
+    """Phase 5.1 (Sam #3009/#3014/#3019): the SANITIZED per-employee RANK output,
+    pushed from the CK perf DB. rank_json holds ONLY allowed rank output --
+    own ranks {effective_hourly, tip_percent, combined} per period (own values are
+    the Phase-4 own view) + per-cohort leaderboards whose peer rows carry ONLY
+    {name, rank, effective_hourly, tip_percent, combined} and gate independently on
+    min-cohort. It holds NO restaurant sales / eligible_sales / GUID / attribution /
+    peer pay breakdown -- sales is walled in CK perf_internal and only the tip%
+    RATIO ever derives out (the receiver re-checks with a sales-wall guard before
+    storing). held_days stays 'pending' until real rank_snapshots accrue (no faking)."""
+
+    __tablename__ = "perf_rank_cache"
+    __table_args__ = (
+        UniqueConstraint("cena_employee_id", name="uq_perfrank_emp"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cena_employee_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    rank_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)   # sanitized rank output (no sales/GUID/peer-pay)
+    computed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+# N-c (Sam #3028 hardening): explicit peer-row field whitelist for leaderboard rows in a
+# PerfRankCache.rank_json. The /cron/perf-push receiver REJECTS (422) a push whose leaderboard
+# rows carry any field outside this set (fail-closed); the read-path STRIPS to this set before
+# serving (fail-safe). Guards a future change from leaking peer base_pay/tips/sales into a row.
+RANK_PEER_FIELDS = {"name", "rank", "effective_hourly", "tip_percent", "combined",
+                    "combined_rank", "is_me",
+                    # Sam #3104 / samai #3102: the new tips/hr rank leaderboard (tipped-only).
+                    # tips_per_hour = tips/total_hours -- sales-CLEAN (no sales denominator);
+                    # added so the fail-closed whitelist admits it while still rejecting peer
+                    # base_pay / tips$ / sales / GUID / employee_id / internal.
+                    "tips_per_hour"}
+
+
+def rank_peer_rows_ok(rank_json):
+    """(ok, offending_fields). ok=False if any leaderboard peer row carries a field outside
+    RANK_PEER_FIELDS."""
+    bad = set()
+    lbs = (rank_json or {}).get("leaderboards") or {}
+    if isinstance(lbs, dict):
+        for _per, boards in lbs.items():
+            if not isinstance(boards, dict):
+                continue
+            for _b, board in boards.items():
+                for row in ((board or {}).get("rows") or []):
+                    if isinstance(row, dict):
+                        bad |= (set(row.keys()) - RANK_PEER_FIELDS)
+    return (not bad), sorted(bad)
+
+
+def sanitize_rank_json(rank_json):
+    """Return a COPY with every leaderboard peer row stripped to RANK_PEER_FIELDS, and with
+    internal-only plumbing removed from the client payload (samai #3142 notes 1/3 -- zero
+    internal ids/plumbing client-side): the own surrogate `cena_employee_id` (top-level) and
+    every `cohort_key` (store|role|metric). Neither is read by the UI (which uses is_tipped +
+    ranks + leaderboards). Read-path belt; never mutates the stored object."""
+    if not isinstance(rank_json, dict):
+        return rank_json
+    import copy
+    d = copy.deepcopy(rank_json)
+    d.pop("cena_employee_id", None)                     # note 1: own internal surrogate id off the client
+    lbs = d.get("leaderboards")
+    if isinstance(lbs, dict):
+        for _per, boards in lbs.items():
+            if not isinstance(boards, dict):
+                continue
+            for _b, board in boards.items():
+                if not isinstance(board, dict):
+                    continue
+                board.pop("cohort_key", None)            # note 3: internal cohort plumbing off the client
+                rows = board.get("rows")
+                if isinstance(rows, list):
+                    board["rows"] = [{k: v for k, v in row.items() if k in RANK_PEER_FIELDS}
+                                     for row in rows if isinstance(row, dict)]
+    ranks = d.get("ranks")                              # defensive: strip cohort_key anywhere it appears
+    if isinstance(ranks, dict):
+        for _per, metrics in ranks.items():
+            if isinstance(metrics, dict):
+                for _m, obj in metrics.items():
+                    if isinstance(obj, dict):
+                        obj.pop("cohort_key", None)
+    return d
+
+
 class ShiftOffer(Base):
     """Schedules V2 B9: an employee offers up their assigned shift; an eligible
     employee takes it; a manager approves -> the shift's employee_id moves to the

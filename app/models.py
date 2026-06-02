@@ -3633,7 +3633,12 @@ class PerfRankCache(Base):
 # rows carry any field outside this set (fail-closed); the read-path STRIPS to this set before
 # serving (fail-safe). Guards a future change from leaking peer base_pay/tips/sales into a row.
 RANK_PEER_FIELDS = {"name", "rank", "effective_hourly", "tip_percent", "combined",
-                    "combined_rank", "is_me"}
+                    "combined_rank", "is_me",
+                    # Sam #3104 / samai #3102: the new tips/hr rank leaderboard (tipped-only).
+                    # tips_per_hour = tips/total_hours -- sales-CLEAN (no sales denominator);
+                    # added so the fail-closed whitelist admits it while still rejecting peer
+                    # base_pay / tips$ / sales / GUID / employee_id / internal.
+                    "tips_per_hour"}
 
 
 def rank_peer_rows_ok(rank_json):

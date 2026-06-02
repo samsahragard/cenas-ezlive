@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Service - Cenas Kitchen</title>
+<style>
+  :root{--bg:#070403;--panel:rgba(27,13,7,.78);--panel2:rgba(15,7,4,.88);--line:rgba(214,163,58,.32);--text:#fff4dc;--muted:#cdbb9c;--dim:#8e806f;--gold:#ffd36a;--green:#5dd98b;--red:#d8342a;--red-deep:#8f1f1c;--shadow:0 12px 28px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.05);}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:0;}
+  body::before{content:'';position:fixed;inset:-20px;z-index:0;pointer-events:none;background:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}") center/cover no-repeat;filter:blur(3px) brightness(45%) saturate(1.05);}
+  body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:rgba(10,5,2,.72);box-shadow:inset 0 0 180px rgba(0,0,0,.85);}
+  .shell{position:relative;z-index:1;width:min(1040px,100%);margin:0 auto;padding:18px 16px 104px;}
+  .topbar,.hero,.periods,.metric,.panel,.row{border:1px solid var(--line);border-radius:12px;background:linear-gradient(140deg,var(--panel),var(--panel2));box-shadow:var(--shadow);backdrop-filter:blur(14px);}
+  .topbar{min-height:62px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .topbar img{height:36px;width:auto;filter:drop-shadow(0 4px 8px rgba(0,0,0,.55));}
+  .back{color:#f7e7c2;text-decoration:none;border:1px solid rgba(212,160,62,.45);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;background:rgba(25,14,8,.75);}
+  .hero{margin-top:14px;padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:14px;align-items:end;}
+  .eyebrow{color:var(--gold);font-size:12px;font-weight:900;text-transform:uppercase;}
+  h1{margin-top:6px;color:#f6e9d0;font-family:"Playfair Display","Cormorant Garamond",Georgia,serif;font-size:clamp(32px,6vw,58px);line-height:.98;font-weight:800;}
+  .hero p{margin-top:10px;color:var(--muted);font-size:14px;line-height:1.4;}
+  .score{font-size:56px;line-height:1;text-align:right;color:var(--gold);font-weight:900;}
+  .periods{margin-top:12px;padding:8px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+  .period{min-height:40px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);font-weight:900;}
+  .period.active{background:linear-gradient(180deg,#c7352e,#8f1f1c);color:#ffe7b3;border-color:#e3a347;box-shadow:0 0 16px rgba(216,52,42,.32);}
+  .metrics{margin-top:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+  .metric{padding:14px;min-height:98px;}
+  .metric b{display:block;font-size:28px;color:var(--text);overflow-wrap:anywhere;}
+  .metric span{display:block;margin-top:5px;color:var(--dim);font-size:11px;font-weight:900;text-transform:uppercase;}
+  .metric.good{border-color:rgba(118,221,162,.48)} .metric.watch{border-color:rgba(255,137,120,.45)}
+  .panel{margin-top:14px;padding:16px;}
+  h2{color:var(--gold);font-size:18px;font-weight:900;}
+  .sub{margin-top:3px;color:var(--dim);font-size:12px;}
+  .rows{margin-top:10px;display:grid;gap:8px;}
+  .row{box-shadow:none;background:rgba(255,250,241,.045);padding:11px;display:grid;grid-template-columns:1fr repeat(5,.65fr);gap:10px;align-items:center;font-size:13px;color:var(--muted);}
+  .row strong,.num{color:var(--text);font-weight:900;}
+  .state{margin-top:14px;padding:18px;border:1px solid rgba(255,224,154,.36);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);color:var(--muted);}
+  .hidden{display:none!important;}
+  @media(max-width:760px){.shell{padding:12px 12px 100px}.hero{grid-template-columns:1fr}.score{text-align:left}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));}.row{grid-template-columns:1fr 1fr;align-items:start}.row strong{grid-column:1/-1;}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="back" href="/employee/dashboard">Performance</a>
+  </div>
+  <div id="loading" class="state">Loading service metrics.</div>
+  <div id="error" class="state hidden">Service data is not available yet.</div>
+  <section id="page" class="hidden">
+    <div class="hero">
+      <div>
+        <div class="eyebrow" id="name">Service</div>
+        <h1>Service</h1>
+        <p id="summary"></p>
+      </div>
+      <div class="score" id="score">-</div>
+    </div>
+    <nav class="periods" aria-label="Service period">
+      <button class="period" data-period="today">Today</button>
+      <button class="period" data-period="week">Week</button>
+      <button class="period" data-period="month">Month</button>
+      <button class="period" data-period="last30">30 days</button>
+    </nav>
+    <section class="metrics" id="metrics"></section>
+    <section class="panel">
+      <h2>How the table is moving</h2>
+      <div class="sub">Timing is calculated from recent checks where this employee is the server.</div>
+      <div class="rows" id="service-rows"></div>
+    </section>
+  </section>
+</main>
+{% include 'partials/_employee_nav.html' %}
+<script>
+  const state={payload:null,period:new URLSearchParams(location.search).get('period')||'last30'};
+  const $=(id)=>document.getElementById(id);
+  function show(id){['loading','error','page'].forEach(k=>$(k).classList.toggle('hidden',k!==id));}
+  function money(v){const n=Number(v);return Number.isFinite(n)?'$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'-';}
+  function num(v,d=0){const n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'-';}
+  function pct(v){const n=Number(v);return Number.isFinite(n)?n.toFixed(1)+'%':'-';}
+  function card(label,value,tone=''){return `<div class="metric ${tone}"><b>${value}</b><span>${label}</span></div>`;}
+  function render(){
+    const p=state.payload.periods[state.period]||state.payload.periods.last30;
+    const s=p.service||{}, m=p.money||{};
+    document.querySelectorAll('.period').forEach(btn=>btn.classList.toggle('active',btn.dataset.period===state.period));
+    $('name').textContent=`${state.payload.employee.first_name||'My'} service`;
+    $('score').textContent=s.score==null?'-':s.score;
+    $('summary').textContent=m.tipped?'Table service metrics for tipped work.':'Service metrics appear when Toast checks are tied to this employee.';
+    $('metrics').innerHTML=[
+      card('Tickets',num(s.tickets||0)),
+      card('Guests',num(s.guests||0)),
+      card('Ticket tip %',pct(s.tip_pct), (s.tip_pct||0)>=18?'good':'watch'),
+      card('Tips',money(s.cc_tips||0)),
+      card('Drink mins',s.avg_drink_mins==null?'-':num(s.avg_drink_mins,1)),
+      card('Food mins',s.avg_entree_mins==null?'-':num(s.avg_entree_mins,1)),
+      card('Table mins',s.avg_table_mins==null?'-':num(s.avg_table_mins,1), (s.avg_table_mins||0)>65?'watch':''),
+      card('Voids + discounts',num((s.voids||0)+(s.discounts||0)), ((s.voids||0)+(s.discounts||0))>8?'watch':''),
+    ].join('');
+    $('service-rows').innerHTML=`
+      <div class="row"><strong>Tip performance</strong><span>Tips<br><span class="num">${money(s.cc_tips||0)}</span></span><span>Tip %<br><span class="num">${pct(s.tip_pct)}</span></span><span>Tickets<br><span class="num">${num(s.tickets||0)}</span></span><span>Guests<br><span class="num">${num(s.guests||0)}</span></span><span>Tips/hr<br><span class="num">${money(m.tips_per_hour||0)}</span></span></div>
+      <div class="row"><strong>Timing</strong><span>Drink<br><span class="num">${s.avg_drink_mins==null?'-':num(s.avg_drink_mins,1)}m</span></span><span>App<br><span class="num">${s.avg_app_mins==null?'-':num(s.avg_app_mins,1)}m</span></span><span>Entree<br><span class="num">${s.avg_entree_mins==null?'-':num(s.avg_entree_mins,1)}m</span></span><span>Table<br><span class="num">${s.avg_table_mins==null?'-':num(s.avg_table_mins,1)}m</span></span><span>Score<br><span class="num">${s.score==null?'-':s.score}</span></span></div>
+      <div class="row"><strong>Exceptions</strong><span>Voids<br><span class="num">${num(s.voids||0)}</span></span><span>Discounts<br><span class="num">${num(s.discounts||0)}</span></span><span>Data gaps<br><span class="num">${num((s.missing_order_days||[]).length)}</span></span><span>Tickets<br><span class="num">${num(s.tickets||0)}</span></span><span>Service score<br><span class="num">${s.score==null?'-':s.score}</span></span></div>`;
+  }
+  document.querySelectorAll('.period').forEach(btn=>btn.addEventListener('click',()=>{state.period=btn.dataset.period;history.replaceState(null,'',`?period=${state.period}`);render();}));
+  fetch('/employee/performance-center',{credentials:'same-origin',headers:{Accept:'application/json'}})
+    .then(r=>r.json().then(data=>({status:r.status,data})))
+    .then(({status,data})=>{if(status!==200||!data.ok||!data.linked){show('error');return;}state.payload=data;show('page');render();})
+    .catch(()=>show('error'));
+</script>
+</body>
+</html>

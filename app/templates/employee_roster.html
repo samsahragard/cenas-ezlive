@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Roster - Cenas Kitchen</title>
+<style>
+  :root{--bg:#070403;--panel:rgba(27,13,7,.78);--panel2:rgba(15,7,4,.88);--line:rgba(214,163,58,.32);--text:#fff4dc;--muted:#cdbb9c;--dim:#8e806f;--gold:#ffd36a;--green:#5dd98b;--red:#d8342a;--shadow:0 12px 28px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.05);}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:0;}
+  body::before{content:'';position:fixed;inset:-20px;z-index:0;pointer-events:none;background:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}") center/cover no-repeat;filter:blur(3px) brightness(45%) saturate(1.05);}
+  body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:rgba(10,5,2,.72);box-shadow:inset 0 0 180px rgba(0,0,0,.85);}
+  .shell{position:relative;z-index:1;width:min(1040px,100%);margin:0 auto;padding:18px 16px 104px;}
+  .topbar,.hero,.card,.day,.shift{border:1px solid var(--line);border-radius:12px;background:linear-gradient(140deg,var(--panel),var(--panel2));box-shadow:var(--shadow);backdrop-filter:blur(14px);}
+  .topbar{min-height:62px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .topbar img{height:36px;width:auto;filter:drop-shadow(0 4px 8px rgba(0,0,0,.55));}
+  .back{color:#f7e7c2;text-decoration:none;border:1px solid rgba(212,160,62,.45);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;background:rgba(25,14,8,.75);}
+  .hero{margin-top:14px;padding:20px;}
+  .eyebrow{color:var(--gold);font-size:12px;font-weight:900;text-transform:uppercase;}
+  h1{margin-top:6px;color:#f6e9d0;font-family:"Playfair Display","Cormorant Garamond",Georgia,serif;font-size:clamp(32px,6vw,58px);line-height:.98;font-weight:800;}
+  .hero p{margin-top:10px;color:var(--muted);font-size:14px;line-height:1.4;}
+  .role-grid{margin-top:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+  .card{padding:13px;min-height:78px;}
+  .card b{display:block;font-size:24px;color:var(--text);}
+  .card span{display:block;margin-top:5px;color:var(--dim);font-size:11px;font-weight:900;text-transform:uppercase;}
+  .days{margin-top:14px;display:grid;gap:12px;}
+  .day{padding:14px;}
+  .day h2{color:var(--gold);font-size:18px;font-weight:900;}
+  .day-sub{margin-top:3px;color:var(--dim);font-size:12px;}
+  .shift-list{margin-top:10px;display:grid;gap:8px;}
+  .shift{box-shadow:none;background:rgba(255,250,241,.045);padding:11px;display:grid;grid-template-columns:1fr .7fr .7fr auto;gap:10px;align-items:center;}
+  .shift.mine{border-color:rgba(118,221,162,.5);background:rgba(118,221,162,.09);}
+  .name{font-weight:900;color:var(--text);}
+  .role,.time,.source{color:var(--muted);font-size:13px;}
+  .badge{justify-self:end;border-radius:999px;padding:5px 8px;background:rgba(255,250,241,.08);color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase;}
+  .badge.late,.badge.no-show,.badge.callout{background:rgba(255,137,120,.14);color:#ffb2a5;}
+  .badge.out,.badge.assigned,.badge.clocked-in{background:rgba(118,221,162,.13);color:#a6f2bf;}
+  .state{margin-top:14px;padding:18px;border:1px solid rgba(255,224,154,.36);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);color:var(--muted);}
+  .hidden{display:none!important;}
+  @media(max-width:720px){.shell{padding:12px 12px 100px}.role-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.shift{grid-template-columns:1fr 1fr}.badge{justify-self:start}.source{grid-column:1/-1;}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="back" href="/employee/dashboard">Performance</a>
+  </div>
+  <div id="loading" class="state">Loading roster.</div>
+  <div id="error" class="state hidden">Roster data is not available locally yet.</div>
+  <section id="page" class="hidden">
+    <div class="hero">
+      <div class="eyebrow" id="store">Roster</div>
+      <h1>Roster</h1>
+      <p id="range"></p>
+    </div>
+    <section class="role-grid" id="role-grid"></section>
+    <section class="days" id="days"></section>
+  </section>
+</main>
+{% include 'partials/_employee_nav.html' %}
+<script>
+  const $=(id)=>document.getElementById(id);
+  function show(id){['loading','error','page'].forEach(k=>$(k).classList.toggle('hidden',k!==id));}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function dlabel(s){
+    const raw=String(s||'');
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m){
+      const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])));
+      const w=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
+      const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+      return `${w}, ${mo} ${Number(m[3])}`;
+    }
+    return raw;
+  }
+  function tlabel(s){if(!s)return '-';const d=new Date(s);return Number.isNaN(d.getTime())?'-':d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});}
+  function render(data){
+    $('store').textContent = `${data.employee.store_name} roster`;
+    $('range').textContent = `${dlabel(data.start)} to ${dlabel(data.end)}. ${data.source_note}`;
+    $('role-grid').innerHTML = (data.roles||[]).map(r=>`<div class="card"><b>${r.count}</b><span>${esc(r.role)}</span></div>`).join('') || '<div class="card"><b>0</b><span>No rows</span></div>';
+    $('days').innerHTML = (data.days||[]).map(day=>`
+      <div class="day">
+        <h2>${dlabel(day.date)}</h2>
+        <div class="day-sub">${day.rows.length} scheduled row(s)</div>
+        <div class="shift-list">
+          ${day.rows.map(row=>`
+            <div class="shift ${row.mine?'mine':''}">
+              <div><div class="name">${esc(row.name)}</div><div class="role">${esc(row.role)}</div></div>
+              <div class="time">${tlabel(row.start)} - ${tlabel(row.end)}</div>
+              <div class="source">${esc(row.source)}${row.notes?' | '+esc(row.notes):''}</div>
+              <div class="badge ${esc(row.status)}">${esc(row.status||'scheduled')}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('') || '<div class="state">No local roster rows for this week yet.</div>';
+  }
+  fetch('/employee/roster-data',{credentials:'same-origin',headers:{Accept:'application/json'}})
+    .then(r=>r.json().then(data=>({status:r.status,data})))
+    .then(({status,data})=>{if(status!==200||!data.ok){show('error');return;}show('page');render(data);})
+    .catch(()=>show('error'));
+</script>
+</body>
+</html>

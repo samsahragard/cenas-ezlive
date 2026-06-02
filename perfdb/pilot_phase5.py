@@ -533,7 +533,8 @@ def self_test():
 
 def pilot_push(base_url=None):
     """Allowlist-gated SANITIZED push of the pilot set (periods + shifts + rank output)
-    to the app's token-gated /cron/perf-push. Own-view periods/shifts AGGREGATE across an
+    to the app's token-gated /cron/employee-perf-push (Sam #3178: the isolated perf-push
+    receiver module, NOT the legacy driver_system one). Own-view periods/shifts AGGREGATE across an
     employee's stores (Drew dual-store); the rank output keeps per-store cohorts. N3 guard
     (now catching the sales fields) refuses to send if any sales term slipped in. base_url
     defaults to the LOCAL harness -- prod push only on Sam's go."""
@@ -584,7 +585,7 @@ def pilot_push(base_url=None):
         blob = json.dumps(payload)
         if PUSH_SALES_RE.search(blob):
             raise SystemExit("ABORT (N3): sales term in push payload for id=%s -- refusing" % cid)
-        req = urllib.request.Request(base_url + "/cron/perf-push", data=blob.encode("utf-8"),
+        req = urllib.request.Request(base_url + "/cron/employee-perf-push", data=blob.encode("utf-8"),
                                      headers={"Content-Type": "application/json", "X-Cron-Token": token})
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8")); code = resp.getcode()

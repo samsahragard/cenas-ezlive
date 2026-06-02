@@ -317,6 +317,17 @@ def build_rank_output(results, cid):
     _assert_allowed(cid)
     out = {"cena_employee_id": cid, "held_days_status": "pending", "is_tipped": None,
            "ranks": {}, "leaderboards": {}}
+    # UX polish (aick #3035 / samai #3038 residual): is_tipped is constant across periods ->
+    # resolve it once from ANY snap the employee appears in, so a BOH who is unqualified in a
+    # short period still reads "not eligible" for tip%/combined (not the bare "not ranked"
+    # absence-of-data display). Branch-only; no employee-visible / prohibited action.
+    for _p in PERIODS:
+        for _m in ("effective_hourly", "tip_percent", "combined"):
+            _hit = next((s for s in results[_p][_m] if s["cid"] == cid), None)
+            if _hit is not None:
+                out["is_tipped"] = _hit["is_tipped"]; break
+        if out["is_tipped"] is not None:
+            break
     for period in PERIODS:
         out["ranks"][period] = {}
         # ---- OWN effective_hourly (the employee's role-split cohort; own value) ----

@@ -360,7 +360,10 @@
         var dstr = (d && !isNaN(d)) ? d.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : esc(s.business_date||'');
         var rng = hm(s.clock_in) + ' - ' + (hm(s.clock_out) || '?');
         var tipTxt = (s.tips_declared===false) ? 'not declared' : money(s.tips);
-        var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span><span><b>'+esc(tipTxt)+'</b> tips</span></div>';
+        // role-aware (FLAG 2): BOH/non-tipped shift rows omit the tips span -- the payload no longer
+        // carries shift tips for BOH, so don't render an own-zero "$0.00 tips".
+        var tipSpan = (RANK && RANK.is_tipped===false) ? '' : '<span><b>'+esc(tipTxt)+'</b> tips</span>';
+        var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span>'+tipSpan+'</div>';
         var badge = s.needs_review ? '<div class="badge-review" data-r="'+esc(s.review_reason||'needs review')+'">! needs review</div>' : '';
         row.innerHTML = '<div class="shift-top"><span class="shift-date">'+esc(dstr)+'</span><span class="shift-hrs">'+num(s.total_hours,2)+'h</span></div>' + meta + badge;
         list.appendChild(row);

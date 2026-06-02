@@ -3658,22 +3658,36 @@ def rank_peer_rows_ok(rank_json):
 
 
 def sanitize_rank_json(rank_json):
-    """Return a COPY with every leaderboard peer row stripped to RANK_PEER_FIELDS (read-path
-    belt; never mutates the stored object)."""
+    """Return a COPY with every leaderboard peer row stripped to RANK_PEER_FIELDS, and with
+    internal-only plumbing removed from the client payload (samai #3142 notes 1/3 -- zero
+    internal ids/plumbing client-side): the own surrogate `cena_employee_id` (top-level) and
+    every `cohort_key` (store|role|metric). Neither is read by the UI (which uses is_tipped +
+    ranks + leaderboards). Read-path belt; never mutates the stored object."""
     if not isinstance(rank_json, dict):
         return rank_json
     import copy
     d = copy.deepcopy(rank_json)
+    d.pop("cena_employee_id", None)                     # note 1: own internal surrogate id off the client
     lbs = d.get("leaderboards")
     if isinstance(lbs, dict):
         for _per, boards in lbs.items():
             if not isinstance(boards, dict):
                 continue
             for _b, board in boards.items():
-                rows = (board or {}).get("rows")
+                if not isinstance(board, dict):
+                    continue
+                board.pop("cohort_key", None)            # note 3: internal cohort plumbing off the client
+                rows = board.get("rows")
                 if isinstance(rows, list):
                     board["rows"] = [{k: v for k, v in row.items() if k in RANK_PEER_FIELDS}
                                      for row in rows if isinstance(row, dict)]
+    ranks = d.get("ranks")                              # defensive: strip cohort_key anywhere it appears
+    if isinstance(ranks, dict):
+        for _per, metrics in ranks.items():
+            if isinstance(metrics, dict):
+                for _m, obj in metrics.items():
+                    if isinstance(obj, dict):
+                        obj.pop("cohort_key", None)
     return d
 
 

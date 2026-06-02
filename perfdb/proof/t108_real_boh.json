@@ -28,7 +28,6 @@
         "period_start": "2026-06-02",
         "reg_hours": 0.0,
         "service": {},
-        "tips": 0.0,
         "total_hours": 0.0
       },
       {
@@ -39,7 +38,6 @@
         "period_start": "2026-05-30",
         "reg_hours": 6.57,
         "service": {},
-        "tips": 0.0,
         "total_hours": 6.57
       },
       {
@@ -50,7 +48,6 @@
         "period_start": "2026-06-01",
         "reg_hours": 0.0,
         "service": {},
-        "tips": 0.0,
         "total_hours": 0.0
       },
       {
@@ -61,18 +58,15 @@
         "period_start": "2026-05-04",
         "reg_hours": 59.75,
         "service": {},
-        "tips": 0.0,
         "total_hours": 59.75
       }
     ],
     "ranking": {
-      "cena_employee_id": 16,
       "held_days_status": "pending",
       "is_tipped": false,
       "leaderboards": {
         "last30": {
           "effective_hourly": {
-            "cohort_key": "store:tomball|role:nontipped|metric:effective_hourly",
             "cohort_size": 23,
             "role": "nontipped",
             "rows": [
@@ -222,7 +216,6 @@
         "today": {},
         "week": {
           "effective_hourly": {
-            "cohort_key": "store:tomball|role:nontipped|metric:effective_hourly",
             "cohort_size": 20,
             "role": "nontipped",
             "rows": [
@@ -418,8 +411,6 @@
         "ot_hours": 0.0,
         "reg_hours": 6.57,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 6.57
       },
       {
@@ -431,8 +422,6 @@
         "ot_hours": 0.0,
         "reg_hours": 6.91,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 6.91
       },
       {
@@ -444,8 +433,6 @@
         "ot_hours": 0.0,
         "reg_hours": 6.65,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 6.65
       },
       {
@@ -457,8 +444,6 @@
         "ot_hours": 0.0,
         "reg_hours": 7.2,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 7.2
       },
       {
@@ -470,8 +455,6 @@
         "ot_hours": 0.0,
         "reg_hours": 7.03,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 7.03
       },
       {
@@ -483,8 +466,6 @@
         "ot_hours": 0.0,
         "reg_hours": 5.85,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 5.85
       },
       {
@@ -496,8 +477,6 @@
         "ot_hours": 0.0,
         "reg_hours": 6.6,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 6.6
       },
       {
@@ -509,8 +488,6 @@
         "ot_hours": 0.0,
         "reg_hours": 7.03,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 7.03
       },
       {
@@ -522,8 +499,6 @@
         "ot_hours": 0.0,
         "reg_hours": 5.91,
         "review_reason": null,
-        "tips": 0.0,
-        "tips_declared": true,
         "total_hours": 5.91
       }
     ]

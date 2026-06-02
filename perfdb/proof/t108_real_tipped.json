@@ -58,13 +58,11 @@
       }
     ],
     "ranking": {
-      "cena_employee_id": 71,
       "held_days_status": "pending",
       "is_tipped": true,
       "leaderboards": {
         "last30": {
           "effective_hourly": {
-            "cohort_key": "store:copperfield|role:tipped|metric:effective_hourly",
             "cohort_size": 15,
             "role": "tipped",
             "rows": [
@@ -162,7 +160,6 @@
             "status": "ranked"
           },
           "tipped": {
-            "cohort_key": "store:copperfield|role:tipped|metric:tip_percent",
             "cohort_size": 12,
             "rows": [
               {
@@ -265,7 +262,6 @@
             "status": "ranked"
           },
           "tips_per_hour": {
-            "cohort_key": "store:copperfield|role:tipped|metric:tips_per_hour",
             "cohort_size": 15,
             "rows": [
               {
@@ -364,7 +360,6 @@
         },
         "month": {
           "effective_hourly": {
-            "cohort_key": "store:copperfield|role:tipped|metric:effective_hourly",
             "cohort_size": 7,
             "role": "tipped",
             "rows": [
@@ -414,7 +409,6 @@
             "status": "ranked"
           },
           "tipped": {
-            "cohort_key": "store:copperfield|role:tipped|metric:tip_percent",
             "cohort_size": 5,
             "rows": [
               {
@@ -461,7 +455,6 @@
             "status": "ranked"
           },
           "tips_per_hour": {
-            "cohort_key": "store:copperfield|role:tipped|metric:tips_per_hour",
             "cohort_size": 7,
             "rows": [
               {
@@ -513,7 +506,6 @@
         "today": {},
         "week": {
           "effective_hourly": {
-            "cohort_key": "store:copperfield|role:tipped|metric:effective_hourly",
             "cohort_size": 12,
             "role": "tipped",
             "rows": [
@@ -593,7 +585,6 @@
             "status": "ranked"
           },
           "tipped": {
-            "cohort_key": "store:copperfield|role:tipped|metric:tip_percent",
             "cohort_size": 9,
             "rows": [
               {
@@ -672,7 +663,6 @@
             "status": "ranked"
           },
           "tips_per_hour": {
-            "cohort_key": "store:copperfield|role:tipped|metric:tips_per_hour",
             "cohort_size": 12,
             "rows": [
               {

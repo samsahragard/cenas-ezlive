@@ -9,3 +9,11 @@ Sanitization already verified (CK-subagent-B, independent): 0 sales / 0 eligible
 
 PRIVATE audit artifacts (real own-pay own-view). Strip perfdb/proof/ before any merge to
 main -- these never ship to the deployed app.
+
+## UI leak-audit artifacts (samai #3024 -- same private channel)
+- phase5_rendered_yadira.html: the rendered DOM of Yadira's dashboard (richest leak surface
+  -- the only non-gated leaderboard, n=4). samai's UI leak-grep target. CK-subagent-B + the
+  harness already grep it = 0 sales/eligible_sales/GUID/internal; only the tip% ratio renders.
+- _phase5_yadira_rank.png / _yadira_top.png / _damaris_rank.png / _phase5_desktop.png:
+  the ranking surface (Yadira rich rank + Damaris BOH-gated). Visual review.
+All private audit artifacts (real own-pay own-view); strip perfdb/proof/ before any main merge.

@@ -131,37 +131,48 @@
   }
 
   /* Personalized "My Hours & Pay" panel (Sam #2829) — appears only when a
-     manager has verified this person's Cena<->Toast link. */
+     the employee's performance data is available. */
+  /* Phase 4 (Sam #2983): Performance tab -- period pills + summary cards + shift list. */
   .perf-card{
     background: linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
     border:0.5px solid var(--bd-gold); border-radius:16px;
-    padding:16px 18px; margin-bottom:18px;
-    box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 8px 20px rgba(0,0,0,0.45);
+    padding:16px 16px 18px; margin-bottom:18px;
+    box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 10px 24px rgba(0,0,0,0.45);
   }
-  .perf-head{ margin-bottom:12px; }
-  .perf-title{ font-size:16px; font-weight:800; color:var(--blue-deep); letter-spacing:0.3px; }
-  .perf-subtitle{ font-size:11.5px; color:rgba(250,246,236,0.6); margin-top:2px; }
-  .perf-note{ font-size:12.5px; color:rgba(250,246,236,0.72); margin-bottom:2px; line-height:1.45; }
-  .perf-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-  .stat{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:12px;
-    padding:12px 8px; text-align:center; }
-  .stat-val{ font-size:21px; font-weight:800; color:var(--blue-deep); line-height:1.1; }
-  .stat-lbl{ font-size:10.5px; font-weight:600; letter-spacing:0.4px; text-transform:uppercase;
-    color:rgba(244,231,208,0.6); margin-top:4px; }
-  .perf-sub{ margin-top:14px; }
+  .perf-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:13px; }
+  .perf-title{ font-size:18px; font-weight:800; color:var(--blue-deep); letter-spacing:0.3px; }
+  .perf-subtitle{ font-size:11px; color:rgba(250,246,236,0.72); white-space:nowrap; }
+  .perf-note{ font-size:12.5px; color:rgba(250,246,236,0.72); margin-bottom:4px; line-height:1.45; }
+  .perf-tabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .perf-tab{ flex:1; text-align:center; font-size:12px; font-weight:700; letter-spacing:0.2px;
+    color:rgba(244,231,208,0.82); background:var(--surface); border:0.5px solid var(--bd-gold);
+    border-radius:999px; padding:7px 4px; cursor:pointer; transition: all 120ms ease; user-select:none; }
+  .perf-tab.active{ color:#241409; background:var(--bd-gold); border-color:var(--bd-gold);
+    box-shadow:0 2px 9px rgba(228,179,64,0.35); }
+  .perf-cards{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .pcard{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:13px; padding:13px 12px; }
+  .pcard.hero{ grid-column:1 / -1; background:linear-gradient(135deg, rgba(228,179,64,0.18), rgba(228,179,64,0.04)); }
+  .pcard-val{ font-size:22px; font-weight:800; color:var(--blue-deep); line-height:1.1; }
+  .pcard.hero .pcard-val{ font-size:31px; }
+  .pcard-lbl{ font-size:10.5px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;
+    color:rgba(244,231,208,0.62); margin-top:5px; }
+  .pcard-sub{ font-size:11px; color:rgba(250,246,236,0.66); margin-top:3px; }
+  .pcard-val .u{ font-size:13px; font-weight:600; color:rgba(244,231,208,0.7); }
+  .perf-sub{ margin-top:16px; }
   .perf-sub-lbl{ font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
-    color:rgba(244,231,208,0.6); margin-bottom:8px; }
-  .shift-list{ display:flex; flex-direction:column; gap:6px; }
-  .shift-row{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;
-    background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:10px; padding:8px 11px; }
-  .shift-when{ font-size:12.5px; color:var(--cream); }
-  .shift-when .d{ font-weight:700; color:var(--blue-deep); }
-  .shift-hrs{ font-size:12.5px; font-weight:700; color:var(--red-deep); white-space:nowrap; }
-  .shift-row.open .shift-hrs{ color:#7FD17F; }
-  .perf-metrics{ display:flex; flex-wrap:wrap; gap:6px 8px; }
-  .metric{ font-size:12px; color:var(--cream); background:var(--surface);
-    border:0.5px solid var(--bd-gold); border-radius:8px; padding:5px 9px; }
-  .metric b{ color:var(--blue-deep); font-weight:700; margin-right:3px; }
+    color:rgba(244,231,208,0.6); margin-bottom:9px; display:flex; justify-content:space-between; align-items:baseline; }
+  .perf-sub-lbl .cnt{ letter-spacing:0.3px; color:rgba(244,231,208,0.45); font-weight:600; }
+  .shift-list{ display:flex; flex-direction:column; gap:7px; }
+  .shift-row{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; padding:10px 12px; }
+  .shift-row.flag{ border-color:#E4B340; box-shadow:0 0 0 1px rgba(228,179,64,0.28); }
+  .shift-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .shift-date{ font-size:13px; font-weight:700; color:var(--blue-deep); }
+  .shift-hrs{ font-size:13px; font-weight:800; color:var(--red-deep); white-space:nowrap; }
+  .shift-meta{ display:flex; gap:14px; margin-top:5px; font-size:11.5px; color:rgba(250,246,236,0.8); flex-wrap:wrap; }
+  .shift-meta b{ color:var(--cream); font-weight:700; }
+  .badge-review{ display:inline-block; margin-top:8px; font-size:10.5px; font-weight:800; color:#241409;
+    background:#E4B340; border-radius:7px; padding:3px 8px; cursor:pointer; letter-spacing:0.2px; }
+  .review-reason{ font-size:11px; color:rgba(228,179,64,0.92); margin-top:6px; line-height:1.4; }
 
   .footnote{
     margin-top:auto; padding-top:22px; text-align:center;
@@ -184,25 +195,23 @@
   </div>
 
   {# Personalized Toast panel (Sam #2829) — stays hidden until
-     /employee/my-performance confirms a manager-verified Cena<->Toast link. #}
+     /employee/my-performance returns this employee's performance data. #}
   <section class="perf-card" id="perf-card" hidden>
     <div class="perf-head">
-      <div class="perf-title">My Hours &amp; Pay</div>
-      <div class="perf-subtitle" id="perf-subtitle">Your last 30 days</div>
+      <div class="perf-title">Performance</div>
+      <div class="perf-subtitle" id="perf-subtitle"></div>
     </div>
     <div class="perf-note" id="perf-note" hidden></div>
-    <div class="perf-stats" id="perf-stats">
-      <div class="stat"><div class="stat-val" id="stat-hours">&mdash;</div><div class="stat-lbl">Hours (30d)</div></div>
-      <div class="stat" id="stat-pay-wrap"><div class="stat-val" id="stat-pay">&mdash;</div><div class="stat-lbl">Est. pay</div></div>
-      <div class="stat"><div class="stat-val" id="stat-shifts">&mdash;</div><div class="stat-lbl">Shifts</div></div>
+    <div class="perf-tabs" id="perf-tabs" role="tablist">
+      <div class="perf-tab" data-period="today">Today</div>
+      <div class="perf-tab" data-period="week">Week</div>
+      <div class="perf-tab" data-period="month">Month</div>
+      <div class="perf-tab active" data-period="last30">Last 30</div>
     </div>
+    <div class="perf-cards" id="perf-cards"></div>
     <div class="perf-sub" id="perf-shifts-wrap" hidden>
-      <div class="perf-sub-lbl">Recent shifts</div>
+      <div class="perf-sub-lbl"><span>Recent shifts</span><span class="cnt" id="shift-count-lbl"></span></div>
       <div class="shift-list" id="shift-list"></div>
-    </div>
-    <div class="perf-sub" id="perf-perf-wrap" hidden>
-      <div class="perf-sub-lbl">Performance</div>
-      <div class="perf-metrics" id="perf-metrics"></div>
     </div>
   </section>
 
@@ -261,79 +270,99 @@
     window.location.replace(LOGIN_URL + '?_clear=1');
   });
 
-  // --- Personalized Toast panel (Sam #2829): pull THIS employee's
-  //     manager-verified hours / shifts / performance / pay and fill #perf-card.
-  //     No confirmed link -> panel stays hidden; linked-but-no-data -> a
-  //     "pending sync" note instead of an error. ---
+  // --- Phase 4 (Sam #2983): Performance tab. Reads only the employee performance
+  //     feed (/employee/my-performance). Period tabs drive the summary cards; the
+  //     shift list shows recent shifts with a needs_review badge (raw totals kept). ---
   (function(){
     var card = document.getElementById('perf-card');
-    function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    var PERIODS = {}, shifts = [], sel = 'last30';
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
     function show(){ card.hidden = false; }
     function note(txt){ var n=document.getElementById('perf-note'); n.textContent=txt; n.hidden=!txt; }
     function pending(){
       show();
-      document.getElementById('perf-stats').style.display='none';
-      document.getElementById('perf-subtitle').textContent='Linked to your POS profile';
-      note('Your Toast profile is linked. Your hours, shifts and pay will appear here once the next sync runs.');
+      document.getElementById('perf-tabs').style.display='none';
+      document.getElementById('perf-subtitle').textContent='Linked to your profile';
+      note('Your profile is linked. Your hours, shifts and pay will appear here shortly.');
     }
-    function prettyKey(k){ return k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
-    function prettyVal(k,v){
-      if (typeof v === 'number'){
-        if (/sales|pay|tips|total|amount|net|gross|comp|void|check|wage|rate/i.test(k)) return money(v);
-        return (Math.round(v*100)/100).toLocaleString();
-      }
-      return v;
+    function hm(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}); }
+    function inWin(bd, p){ return !!(bd && p && bd >= p.period_start && bd <= p.period_end); }
+    var PLABEL = { today:'today', week:'this week', month:'this month', last30:'last 30 days' };
+    function pcard(val, lbl, sub, hero){
+      return '<div class="pcard'+(hero?' hero':'')+'"><div class="pcard-val">'+val+'</div>'+
+             '<div class="pcard-lbl">'+esc(lbl)+'</div>'+(sub?'<div class="pcard-sub">'+esc(sub)+'</div>':'')+'</div>';
     }
-    function hm(x){ return (x && !isNaN(x)) ? x.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}) : ''; }
+    function u(s){ return '<span class="u">'+s+'</span>'; }
+    function renderCards(){
+      var p = PERIODS[sel]; var box = document.getElementById('perf-cards');
+      if(!p){ box.innerHTML=''; return; }
+      var hrs=Number(p.total_hours)||0, base=Number(p.base_pay)||0, tips=Number(p.tips)||0, total=base+tips;
+      var rate = hrs>0 ? total/hrs : 0, tph = hrs>0 ? tips/hrs : 0;
+      var inw = shifts.filter(function(s){ return inWin(s.business_date, p); });
+      var sc = inw.length, rc = inw.filter(function(s){ return s.needs_review; }).length;
+      document.getElementById('perf-subtitle').textContent = p.period_start + ' to ' + p.period_end;
+      box.innerHTML =
+        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', money(base)+' base + '+money(tips)+' tips', true) +
+        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours') +
+        pcard(num(hrs,2)+u('h'), 'Total hours') +
+        pcard(money(tips), 'Tips') +
+        pcard(money(base), 'Base pay') +
+        pcard(money(tph)+u('/hr'), 'Tips per hour') +
+        pcard(num(sc,0), 'Shifts') +
+        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean');
+    }
+    function renderShifts(){
+      var wrap=document.getElementById('perf-shifts-wrap'), list=document.getElementById('shift-list');
+      if(!shifts.length){ wrap.hidden = true; return; }
+      wrap.hidden = false;
+      document.getElementById('shift-count-lbl').textContent = shifts.length + ' shifts';
+      list.innerHTML='';
+      shifts.forEach(function(s){
+        var row=document.createElement('div'); row.className='shift-row' + (s.needs_review ? ' flag' : '');
+        var d = s.business_date ? new Date(s.business_date+'T00:00:00') : null;
+        var dstr = (d && !isNaN(d)) ? d.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : esc(s.business_date||'');
+        var rng = hm(s.clock_in) + ' - ' + (hm(s.clock_out) || '?');
+        var tipTxt = (s.tips_declared===false) ? 'not declared' : money(s.tips);
+        var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span><span><b>'+esc(tipTxt)+'</b> tips</span></div>';
+        var badge = s.needs_review ? '<div class="badge-review" data-r="'+esc(s.review_reason||'needs review')+'">! needs review</div>' : '';
+        row.innerHTML = '<div class="shift-top"><span class="shift-date">'+esc(dstr)+'</span><span class="shift-hrs">'+num(s.total_hours,2)+'h</span></div>' + meta + badge;
+        list.appendChild(row);
+      });
+      list.querySelectorAll('.badge-review').forEach(function(b){
+        b.addEventListener('click', function(){
+          var nx=b.nextElementSibling;
+          if(nx && nx.className==='review-reason'){ nx.remove(); return; }
+          var r=document.createElement('div'); r.className='review-reason'; r.textContent=b.getAttribute('data-r'); b.parentNode.appendChild(r);
+        });
+      });
+    }
+    function selectPeriod(p){
+      sel=p;
+      document.querySelectorAll('.perf-tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-period')===p); });
+      renderCards();
+    }
     function render(d){
       show();
-      document.getElementById('stat-hours').textContent = (d.hours!=null ? d.hours : '—');
-      var tcs = d.timecards || [];
-      document.getElementById('stat-shifts').textContent = tcs.length;
-      var pay = d.payroll || {};
-      if (pay.available){ document.getElementById('stat-pay').textContent = money(pay.gross_pay); }
-      else { document.getElementById('stat-pay').textContent = '—'; document.getElementById('stat-pay-wrap').title = (pay.note||''); }
-      if (tcs.length){
-        var list = document.getElementById('shift-list'); list.innerHTML='';
-        tcs.slice(0,6).forEach(function(t){
-          var row = document.createElement('div');
-          row.className = 'shift-row' + (t.open ? ' open' : '');
-          var di = t.in ? new Date(t.in) : null, dout = t.out ? new Date(t.out) : null;
-          var dstr = (di && !isNaN(di)) ? di.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : (t.in||'');
-          var range = t.open ? (hm(di) + ' – on the clock') : (hm(di) + ' – ' + hm(dout));
-          row.innerHTML = '<div class="shift-when"><span class="d">'+esc(dstr)+'</span> &middot; '+esc(range)+'</div>'+
-                          '<div class="shift-hrs">'+(t.open ? 'open' : (Number(t.hours||0).toFixed(2)+'h'))+'</div>';
-          list.appendChild(row);
-        });
-        document.getElementById('perf-shifts-wrap').hidden = false;
-      }
-      var perf = d.performance || {};
-      if (perf.available){
-        var pm = document.getElementById('perf-metrics'); pm.innerHTML='';
-        var skip = {available:1, note:1, name:1}, any=false;
-        Object.keys(perf).forEach(function(k){
-          if (skip[k]) return;
-          var v = perf[k];
-          if (v==null || v==='') return;
-          any=true;
-          var el = document.createElement('span'); el.className='metric';
-          el.innerHTML = '<b>'+esc(prettyKey(k))+'</b>'+esc(prettyVal(k,v));
-          pm.appendChild(el);
-        });
-        if (any) document.getElementById('perf-perf-wrap').hidden = false;
-      }
+      (d.perf_periods||[]).forEach(function(p){ PERIODS[p.period]=p; });
+      shifts = d.shifts || [];
+      if(!PERIODS[sel]){ var ks=Object.keys(PERIODS); sel = (ks.indexOf('last30')>=0) ? 'last30' : (ks[0]||'last30'); }
+      document.querySelectorAll('.perf-tab').forEach(function(t){ t.addEventListener('click', function(){ selectPeriod(t.getAttribute('data-period')); }); });
+      selectPeriod(sel);
+      renderShifts();
     }
     fetch('/employee/my-performance', { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
       .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status:r.status, d:d }; }); })
       .then(function(res){
         var d = res.d || {};
-        if (res.status === 200 && d.ok && d.linked === false) return;   // not linked -> hidden
-        if (d.linked && (d.syncing || !d.ok || res.status >= 500)){ pending(); return; }  // linked, data not ready
-        if (!(d.ok && d.linked)) return;                                 // 401/404/unknown -> hidden
-        render(d);
+        // Yadira-only (Sam #2984): render ONLY when the performance feed has data.
+        // Every other case (other employees, not-linked, pending, error) leaves the
+        // card hidden until wider rollout is approved -- no misleading note, no old
+        // render path. render() reads only the employee-own whitelist fields.
+        if (d && d.ok && d.linked && (d.perf_periods || d.shifts)) render(d);
       })
-      .catch(function(){ /* network error -> leave panel hidden */ });
+      .catch(function(){ /* leave the card hidden */ });
   })();
 </script>
 </body>

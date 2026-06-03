@@ -561,14 +561,17 @@ def performance_center():
         # ranks, leaderboards) is preserved. Absent (non-pilot) -> treat as BOH-
         # safe: no rankings, no tip keys.
         ranking = {}
+        raw_ranking = {}
         try:
             from app.models import PerfRankCache, sanitize_rank_json
             rk = (db.query(PerfRankCache)
                     .filter(PerfRankCache.cena_employee_id == emp.id).first())
             if rk and rk.rank_json:
+                raw_ranking = rk.rank_json or {}
                 ranking = sanitize_rank_json(rk.rank_json) or {}
         except Exception:
             ranking = {}
+            raw_ranking = {}
         is_tipped = bool(ranking.get("is_tipped"))
 
         full_name = (emp.full_name or "").strip()
@@ -576,6 +579,7 @@ def performance_center():
 
         pc_by_period = {r.period: r for r in pc_rows}
         rj_ranks = ranking.get("ranks") or {}
+        raw_ranks = raw_ranking.get("ranks") or {}
         rj_lb = ranking.get("leaderboards") or {}
         # metric_key (UI) -> rank_json metric name
         RJ = {"effective_hourly": "effective_hourly",
@@ -652,6 +656,68 @@ def performance_center():
             rows.sort(key=lambda x: (x.get("date") or ""), reverse=True)  # newest first
             return {"late": late, "missed": missed, "rows": rows}
 
+        def _rank_obj(rank_json, period, rj):
+            if not isinstance(rank_json, dict):
+                return {}
+            return (((rank_json.get("ranks") or {}).get(period) or {}).get(rj)
+                    or {})
+
+        def _rank_value(rank_json, period, rj):
+            obj = _rank_obj(rank_json, period, rj)
+            return obj.get("value") if isinstance(obj, dict) else None
+
+        def _synth_peer_rows(period, mk):
+            """Fallback for rank caches that carry own ranks but no leaderboard rows.
+
+            Uses the server-only cohort_key to collect peers from the same rank cache
+            cohort, then emits only the employee-approved comparison fields. The
+            cohort key and employee ids never leave this function.
+            """
+            rj = RJ[mk]
+            own = ((raw_ranks.get(period) or {}).get(rj) or {})
+            if own.get("status") in ("not_eligible", "cohort_too_small"):
+                return []
+            cohort_key = own.get("cohort_key")
+            if not cohort_key:
+                return []
+            try:
+                rows = (
+                    db.query(PerfRankCache, Employee.full_name)
+                      .join(Employee, Employee.id == PerfRankCache.cena_employee_id)
+                      .filter(Employee.active.is_(True))
+                      .all()
+                )
+            except Exception:
+                return []
+            out = []
+            for peer_cache, peer_name in rows:
+                peer_json = peer_cache.rank_json or {}
+                peer_obj = _rank_obj(peer_json, period, rj)
+                if (not isinstance(peer_obj, dict)
+                        or peer_obj.get("cohort_key") != cohort_key
+                        or not peer_obj.get("rank")
+                        or peer_obj.get("status") in ("not_eligible", "cohort_too_small")):
+                    continue
+                row = {
+                    "rank": peer_obj.get("rank"),
+                    "name": (peer_name or "").strip() or "Team member",
+                    "is_me": peer_cache.cena_employee_id == emp.id,
+                }
+                comparison_fields = ["effective_hourly"]
+                if is_tipped:
+                    comparison_fields += ["tip_percent", "tips_per_hour", "combined"]
+                for key in comparison_fields:
+                    val = _rank_value(peer_json, period, key)
+                    if val is not None:
+                        row[key] = val
+                if is_tipped:
+                    combined_rank = _rank_obj(peer_json, period, "combined").get("rank")
+                    if combined_rank is not None:
+                        row["combined_rank"] = combined_rank
+                out.append(row)
+            out.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
+            return out
+
         def _peer_rows(period, mk):
             rj = RJ[mk]
             lb = (rj_lb.get(period) or {}).get(rj) or {}
@@ -674,6 +740,8 @@ def performance_center():
                     if key in x:
                         row[key] = x.get(key)
                 ranked.append(row)
+            if not ranked:
+                ranked = _synth_peer_rows(period, mk)
             ranked.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
             return ranked
 

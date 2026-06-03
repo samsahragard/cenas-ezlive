@@ -149,8 +149,8 @@
   const state = { payload:null, period:new URLSearchParams(location.search).get('period') || 'last30' };
   const $ = (id) => document.getElementById(id);
   const configs = {
-    effective_hourly:{label:'Effective hourly', field:'effective_hourly', type:'money', note:'Base pay plus tips divided by clocked hours.'},
-    total_pay:{label:'Total pay', field:'total_pay', type:'money', note:'Base pay plus tips for the selected period.'},
+    effective_hourly:{label:'Effective hourly', field:'effective_hourly', type:'money', note:'Allowed pay divided by clocked hours.'},
+    total_pay:{label:'Total pay', field:'total_pay', type:'money', note:'Your allowed pay total for the selected period.'},
     tips:{label:'Tips', field:'tips', type:'money', note:'Non-cash, cash, and gratuity tips from Toast time entries.'},
     base_pay:{label:'Base pay', field:'base_pay', type:'money', note:'Hourly wage times regular/overtime hours before tips.'},
     tips_per_hour:{label:'Tips per hour', field:'tips_per_hour', type:'money', note:'Tips divided by clocked hours.'},
@@ -367,7 +367,12 @@
   fetch('/employee/performance-center',{credentials:'same-origin',headers:{Accept:'application/json'}})
     .then(r=>r.json().then(data=>({status:r.status,data})))
     .then(({status,data})=>{
-      if(status!==200||!data.ok||!data.linked){show('error');return;}
+      if(status!==200||!data.ok){show('error');return;}
+      if(data.linked && data.syncing){
+        $('noteligible').innerHTML = '<h2 style="color:var(--gold-soft);margin-bottom:8px;">Performance is syncing</h2><div class="note">Your profile is active. This detail will appear after the sanitized performance cache refreshes.</div>';
+        show('noteligible');return;
+      }
+      if(!data.linked){show('error');return;}
       state.payload=data;
       // Role gate: a tip metric for a non-tipped (BOH) employee -> clean state,
       // never an empty tipped page.

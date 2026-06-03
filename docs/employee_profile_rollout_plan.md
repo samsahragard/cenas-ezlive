@@ -22,6 +22,10 @@ Saved: 2026-06-03
   - Data-mart tables include performance period, time entries, ranks, schedule, attendance, internal sales, and profile data.
   - Scheduler is live on CK/Mini_IT13 with T1 today refresh, T2 hourly windows, and T3 nightly sanitized push.
   - Internal sales/GUID data may exist inside the mart only; employee outputs remain guarded by AiCk receiver/export walls.
+- Latest chat read for this implementation pass:
+  - CK has no conflicting staff-profile build in progress and is holding its cohesive hub lane until AiCk audits the fail-closed foundation.
+  - AiCk has not posted a newer PASS after the last observed CK hold message.
+  - Sam now wants Codex to update this plan with named subagents and continue building the staff-wide profile pattern.
 - Driver/catering/GE4-EFR are explicitly out of scope.
 
 ## Implemented In This Lane
@@ -133,6 +137,32 @@ Reason: Open shifts already live under schedule/open shifts, and Sam explicitly 
 
 After the first cleanup wave is correct on Yadira, use the cleaned Yadira experience as the staff-wide template.
 
+### Current Implementation Lane
+
+Build the staff-wide profile hub locally on top of the fail-closed branch, but keep deployment gated.
+
+Route decision:
+
+- Keep `/employee/profile` as the existing Alarm / notification settings page because Sam corrected the bottom nav to include `Alarm`.
+- Add a separate read-only staff profile hub at `/employee/my-profile`.
+- Link the hub from the employee dashboard tools.
+- The hub must be session-scoped only and must not accept request parameters for another employee.
+
+Allowed data shape for the hub:
+
+- Identity: own full name, own stores, own positions.
+- Performance: sanitized `/employee/performance-center` data only.
+- Roster: sanitized `/employee/roster` data only.
+- Schedule: own published shifts using the same app schedule tables as `/employee/my-schedule`, but projected without IDs or manager notes.
+- Attendance: derived from the already sanitized performance-center attendance block.
+
+Deferred from this lane:
+
+- Contact/PII expansion.
+- Incident/write-up manager notes unless a future privacy classification and employee-visible wording are approved.
+- Profile editing.
+- Link writes, profile creates, passcode resets, scheduler/token/data-mart writes.
+
 ### Goal
 
 Every active employee should have a polished personal profile/dashboard experience, but role-aware and real-data-backed.
@@ -191,6 +221,13 @@ Push only employee-profile UI/routes/templates/helpers for this lane. Do not mod
 ## Subagent Operating Model
 
 Use real subagents where available. Codex lead keeps the critical path local and assigns bounded read-only or disjoint implementation lanes.
+
+Current named subagents for this pass:
+
+- StaffDataMap-Subagent: map per-employee data surfaces, local mart assumptions, safe fields, and internal-only fields.
+- ProfileRoute-Subagent: inspect route/template insertion points and navigation risks.
+- RoleSafety-Subagent: audit role gates, isolation, peer whitelists, and no-data states for the new hub.
+- Codex Lead: update this plan, implement the new route/template/dashboard tile, run tests/greps, and post proof.
 
 ### ContextLock
 

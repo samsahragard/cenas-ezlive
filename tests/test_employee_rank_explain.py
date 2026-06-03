@@ -1,4 +1,5 @@
 from app.models import rank_peer_rows_ok, sanitize_rank_json
+from app.web.perf_push_routes import _SALES_WALL
 from app.web.employee_auth import _PERF_DETAIL_METRICS
 
 
@@ -33,6 +34,65 @@ def test_employee_marketplace_person_refs_hide_employee_ids():
 
     assert '"id"' not in emp_ref
     assert "(\"#\"+p.id)" not in template
+
+
+def test_my_profile_hub_is_registered_and_session_scoped():
+    init_source = open("app/__init__.py", encoding="utf-8").read()
+    auth_source = open("app/web/auth.py", encoding="utf-8").read()
+    route_source = open("app/web/employee_my_profile_page.py", encoding="utf-8").read()
+
+    assert "employee_my_profile_page" in init_source
+    assert '"/employee/my-profile"' in auth_source
+    assert '@employee_auth.route("/employee/my-profile"' in route_source
+    assert "import request" not in route_source
+    assert "request.args" not in route_source
+    assert "request.get_json" not in route_source
+    assert 'session.get("employee_id")' in route_source
+    for forbidden in ("phone", "email", "address", "passcode_hash", "toast_id"):
+        assert forbidden not in route_source
+
+
+def test_my_profile_template_omits_hidden_identity_fields():
+    template = open("app/templates/employee_my_profile.html", encoding="utf-8").read()
+
+    for forbidden in (
+        "employee_id",
+        "toast_id",
+        "passcode",
+        "eligible_sales",
+        "cashSales",
+        "nonCashSales",
+        "GUID",
+        "guid",
+    ):
+        assert forbidden not in template
+
+    assert "/employee/my-profile" not in open("app/templates/partials/_employee_nav.html", encoding="utf-8").read()
+    assert 'href="/employee/my-profile"' in open("app/templates/employee_dashboard.html", encoding="utf-8").read()
+
+
+def test_performance_center_zeroes_non_tipped_tip_dollars():
+    source = open("app/web/employee_auth.py", encoding="utf-8").read()
+    body = source[source.index("def performance_center():"):source.index("_PERF_DETAIL_METRICS")]
+
+    assert "tips = round(float(r.tips or 0), 2) if is_tipped else 0.0" in body
+    assert "dtips = round(sum(float(x.tips or 0) for x in ss), 2) if is_tipped else 0.0" in body
+
+
+def test_perf_push_sales_wall_catches_camel_case_terms():
+    blocked = [
+        '{"eligibleSales": 1}',
+        '{"grossSales": 1}',
+        '{"netSales": 1}',
+        '{"sourceSales": 1}',
+        '{"checkTotal": 1}',
+        '{"storeTotal": 1}',
+        '{"salesBasis": 1}',
+        '{"eligibleSalesBasis": 1}',
+    ]
+
+    for body in blocked:
+        assert _SALES_WALL.search(body), body
 
 
 def test_dashboard_rank_links_keep_selected_period():

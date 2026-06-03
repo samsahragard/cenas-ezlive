@@ -753,7 +753,7 @@ def performance_center():
                 continue
             hours = round(float(r.total_hours or 0), 2)
             base = round(float(r.base_pay or 0), 2)
-            tips = round(float(r.tips or 0), 2)
+            tips = round(float(r.tips or 0), 2) if is_tipped else 0.0
             total = round(base + tips, 2)
             money = {"hours": hours, "base_pay": base, "total_pay": total,
                      "effective_hourly": (round(total / hours, 2) if hours > 0 else None),
@@ -806,7 +806,7 @@ def performance_center():
                 ss = byd[bd]
                 dh = round(sum(float(x.total_hours or 0) for x in ss), 2)
                 dbase = round(sum(float(x.base_pay or 0) for x in ss), 2)
-                dtips = round(sum(float(x.tips or 0) for x in ss), 2)
+                dtips = round(sum(float(x.tips or 0) for x in ss), 2) if is_tipped else 0.0
                 drow = {"date": bd, "hours": dh, "base_pay": dbase,
                         "total_pay": round(dbase + dtips, 2),
                         "effective_hourly": (round((dbase + dtips) / dh, 2) if dh > 0 else None),

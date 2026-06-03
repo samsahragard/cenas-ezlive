@@ -501,7 +501,7 @@
       <div class="ff-cat-block">
         <div class="ff-cat-bar">
           <span>{{ cat.name }}</span>
-          <span class="ff-cat-count">{{ cat.items|length }} item{{ '' if cat.items|length == 1 else 's' }}</span>
+          <span class="ff-cat-count">{{ cat['items']|length }} item{{ '' if cat['items']|length == 1 else 's' }}</span>
         </div>
         <div class="ff-cat-table">
           <div class="ff-cat-thead">
@@ -511,7 +511,7 @@
             <div>Order</div>
             <div>30-day avg</div>
           </div>
-          {% for item in cat.items %}
+          {% for item in cat['items'] %}
             {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
             <div class="ff-item-row">
               <div class="ff-item-name">{{ item.label }}</div>
@@ -563,7 +563,7 @@
               <tr class="cat-row">
                 <td colspan="{{ 2 + rolling_days|length * 2 }}">{{ cat.name }}</td>
               </tr>
-              {% for item in cat.items %}
+              {% for item in cat['items'] %}
                 <tr>
                   <td class="cell-item">{{ item.label }}{% if item.size %} <span class="cell-item-size">{{ item.size }}</span>{% endif %}</td>
                   <td class="cell-avg">{{ '%.1f'|format(rolling_avg_by_slug.get(item.slug, 0)) }}</td>

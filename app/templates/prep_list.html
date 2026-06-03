@@ -1149,7 +1149,7 @@
   // ---- "Assigned to" typeahead roster ----
   // Server embeds all_staff = JSON list of full-name strings only,
   // e.g. ["Maria Lopez","Juan Perez"] (mirrors attendance_tracking's
-  // `var PEOPLE = {{ rows | tojson }}`). We feed it into the shared
+  // "var PEOPLE = rows|tojson" embed). We feed it into the shared
   // <datalist id="prep-staff-list"> that every assign input is bound
   // to via list=, giving a native filter-as-you-type dropdown with no
   // new libraries. The chosen name lands in the existing

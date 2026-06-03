@@ -2942,30 +2942,39 @@ def _prep_recipe_view(db, recipe_id):
         return None, None, None, []
     import json as _json
     from app.models import Recipe
-    r = db.get(Recipe, recipe_id)
-    if r is None:
-        return None, None, None, []
     try:
-        raw = _json.loads(r.ingredients_json) if r.ingredients_json else []
-    except Exception:
-        raw = []
-    ingredients = []
-    for ing in (raw or []):
-        if not isinstance(ing, dict):
-            continue
-        ingredients.append({
-            "name": ing.get("name_en") or ing.get("name") or "",
-            "qty": ing.get("qty_single") or ing.get("qty") or "",
-            "unit": ing.get("unit") or "",
-        })
-    y = None
-    try:
-        _bs = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else None
-        if isinstance(_bs, dict):
-            y = _bs.get("yield_en") or _bs.get("yield_es")
-    except Exception:
+        r = db.get(Recipe, recipe_id)
+        if r is None:
+            return None, None, None, []
+        try:
+            raw = _json.loads(r.ingredients_json) if r.ingredients_json else []
+        except Exception:
+            raw = []
+        ingredients = []
+        for ing in (raw or []):
+            if not isinstance(ing, dict):
+                continue
+            ingredients.append({
+                "name": ing.get("name_en") or ing.get("name") or "",
+                "qty": ing.get("qty_single") or ing.get("qty") or "",
+                "unit": ing.get("unit") or "",
+            })
         y = None
-    return (y, r.prep_time, r.shelf_life, ingredients)
+        try:
+            _bs = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else None
+            if isinstance(_bs, dict):
+                y = _bs.get("yield_en") or _bs.get("yield_es")
+        except Exception:
+            y = None
+        return (y, r.prep_time, r.shelf_life, ingredients)
+    except Exception:
+        # A recipe-load failure (e.g. a schema column not yet applied) must
+        # never crash the prep board — degrade to no linked-recipe data.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None, None, None, []
 
 
 # Prep-item -> recipe auto-link by name (samai #9b). PrepItem.recipe_id is

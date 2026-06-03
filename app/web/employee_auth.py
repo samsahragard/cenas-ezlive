@@ -876,7 +876,7 @@ def performance_center():
                                "daily": daily}
 
         return jsonify({"ok": True, "linked": True,
-                        "employee": {"first_name": first_name},
+                        "employee": {"first_name": first_name, "full_name": full_name or first_name},
                         "is_tipped": is_tipped,
                         "periods": periods}), 200
     finally:

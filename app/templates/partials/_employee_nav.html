@@ -2,8 +2,8 @@
    _employee_nav.html — Cenas Kitchen employee-portal bottom nav.
 
    The warm "house" twin of partials/_bottom_nav.html's .ck-bnav, for the
-   five standalone employee-portal pages (dashboard / schedule / time-off /
-   shift-marketplace / profile). Those pages do NOT extend base_dashboard,
+   standalone employee-portal pages (dashboard / schedule / time-off /
+   profile). Those pages do NOT extend base_dashboard,
    so this partial is fully self-contained: it ships its own <style> and
    uses inline SVG glyphs (the base_dashboard Tabler webfont is not loaded
    on these pages, so `ti ti-*` would not render here — the pages already
@@ -15,17 +15,16 @@
    active tab gets a white top-border + white label + the same golden-glow
    box-shadow as .ck-bnav.
 
-   6 tabs (NO Availability — that surface is manager-controlled / retired):
-     My Schedule        -> /employee/my-schedule        (built)
+   5 tabs (NO Availability — that surface is manager-controlled / retired):
+     Today              -> /employee/dashboard           (built)
      Time Off           -> /employee/time-off           (built)
-     Shift Marketplace  -> /employee/shift-marketplace  (built)
      Notifications      -> /employee/profile            (built; the
                            notification-preferences page)
      Announcements      -> #  (not built yet -> "soon")
      Messages           -> #  (not built yet -> "soon")
 
    Active tab: the including page passes {{ active_nav }} (one of the keys
-   below: my_schedule | time_off | shift_marketplace | notifications |
+   below: today | time_off | notifications |
    announcements | messages). It defaults to '' (none). As a fallback we
    also light a tab when request.path matches its href, so a page that
    forgets to pass active_nav still highlights correctly.
@@ -100,9 +99,8 @@
 {# Inline SVG glyphs keyed by tab — drawn in the same line-icon style the
    employee pages already use (stroke, no fill). #}
 {% set _en_icons = {
-  'my_schedule':       '<rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>',
+  'today':             '<path d="M3 12h4l3-8 4 16 3-8h4"/><path d="M4 20h16"/>',
   'time_off':          '<path d="M5 21 V8 a2 2 0 0 1 2 -2 h10 a2 2 0 0 1 2 2 v13"/><path d="M9 13 l2 2 l4 -4"/>',
-  'shift_marketplace': '<path d="M3 7 h18 l-2 12 H5 Z"/><path d="M8 7 a4 4 0 0 1 8 0"/>',
   'notifications':     '<path d="M18 8 a6 6 0 0 0 -12 0 c0 7 -3 9 -3 9 h18 s-3 -2 -3 -9"/><path d="M13.7 21 a2 2 0 0 1 -3.4 0"/>',
   'announcements':     '<path d="M3 11 l18 -7 v16 Z"/><line x1="3" y1="11" x2="3" y2="17"/>',
   'messages':          '<path d="M21 15 a2 2 0 0 1 -2 2 H7 l-4 4 V5 a2 2 0 0 1 2 -2 h14 a2 2 0 0 1 2 2 Z"/>'
@@ -111,9 +109,8 @@
 <nav class="ck-enav" aria-label="Employee navigation">
   <div class="ck-enav-inner">
     {% for key, href, label in [
-      ('my_schedule',       '/employee/my-schedule',       'Schedule'),
+      ('today',             '/employee/dashboard',         'Today'),
       ('time_off',          '/employee/time-off',          'Time Off'),
-      ('shift_marketplace', '/employee/shift-marketplace', 'Market'),
       ('notifications',     '/employee/profile',           'Alerts'),
     ] %}
     <a href="{{ href }}"

@@ -248,7 +248,7 @@
 
   <div class="greeting">
     <div class="hi">Welcome</div>
-    <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'Team Member')) }}</div>
+    <div class="name">{{ (employee.full_name if employee and employee.full_name else (employee.first_name if employee and employee.first_name else 'Team Member')) }}</div>
     {% if employee and employee.store_name %}<div class="meta">{{ employee.store_name }}</div>{% endif %}
   </div>
 
@@ -408,16 +408,20 @@
       // FAIL-SAFE (FLAG-2 lesson / aick #3269): show tip $ ONLY when EXPLICITLY tipped.
       // RANK null or is_tipped missing -> hide tips (never a cosmetic $0.00-tips fallback).
       var showTips = !!(RANK && RANK.is_tipped===true);
+      function metricHref(metric, view){
+        var href = '/employee/performance/' + metric + '?period=' + encodeURIComponent(sel);
+        return view ? href + '&view=' + encodeURIComponent(view) : href;
+      }
       var html =
-        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', (showTips ? (money(base)+' base + '+money(tips)+' tips') : 'base pay'), true, '/employee/performance/total_pay') +
-        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours', false, '/employee/performance/effective_hourly') +
-        pcard(num(hrs,2)+u('h'), 'Total hours', null, false, '/employee/performance/shifts');
-      if(showTips){ html += pcard(money(tips), 'Tips', null, false, '/employee/performance/tips'); }
-      html += pcard(money(base), 'Base pay', null, false, '/employee/performance/base_pay');
-      if(showTips){ html += pcard(money(tph)+u('/hr'), 'Tips per hour', null, false, '/employee/performance/tips_per_hour'); }
+        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', (showTips ? (money(base)+' base + '+money(tips)+' tips') : 'base pay'), true, metricHref('total_pay')) +
+        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours', false, metricHref('effective_hourly')) +
+        pcard(num(hrs,2)+u('h'), 'Total hours', null, false, metricHref('shifts', 'hours'));
+      if(showTips){ html += pcard(money(tips), 'Tips', null, false, metricHref('tips')); }
+      html += pcard(money(base), 'Base pay', null, false, metricHref('base_pay'));
+      if(showTips){ html += pcard(money(tph)+u('/hr'), 'Tips per hour', null, false, metricHref('tips_per_hour')); }
       html +=
-        pcard(num(sc,0), 'Shifts', null, false, '/employee/performance/shifts') +
-        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean', false, '/employee/performance/attendance');
+        pcard(num(sc,0), 'Shifts', null, false, metricHref('shifts', 'count')) +
+        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean', false, metricHref('attendance'));
       box.innerHTML = html;
     }
     function renderShifts(){
@@ -522,13 +526,14 @@
       };
       // BOH/non-tipped: OMIT the tip-rank cards entirely (samai #3274) -- no greyed
       // "Not eligible" tip cards; show only role-applicable cards (standing + hourly rank).
+      var standingCard = tipped && R.combined
+        ? rcard(R.combined, 'Your standing', null, detailHref('rank_combined'))
+        : scard(R.score, detailHref('rank_standing'));
       document.getElementById('rank-grid').innerHTML =
-        scard(R.score, detailHref('rank_standing')) +
+        standingCard +
         rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }, detailHref('rank_effective_hourly')) +
         (tipped ? (
-          rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }, detailHref('rank_tip_pct')) +
-          rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }, detailHref('rank_tips_per_hour')) +
-          rcard(R.combined, 'Combined', null, detailHref('rank_combined'))
+          rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }, detailHref('rank_tip_pct'))
         ) : '');
       // De-bulk (Sam #3254): the FULL leaderboards live one tap away on the metric
       // detail pages; the dashboard keeps a compact rankings summary only.
@@ -579,7 +584,13 @@
       });
       if(name==='roster' && !rosterLoaded){ rosterLoaded=true; loadRoster(); }
     }
-    tabs.forEach(function(t){ t.addEventListener('click', function(){ activate(t.getAttribute('data-panel')); }); });
+    tabs.forEach(function(t){ t.addEventListener('click', function(){
+      var panel = t.getAttribute('data-panel');
+      activate(panel);
+      if(history && history.replaceState){ history.replaceState(null, '', '#'+panel); }
+    }); });
+    var initial = String(window.location.hash || '').replace('#','');
+    if(['performance','roster','service'].indexOf(initial) >= 0){ activate(initial); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function initials(n){ n=String(n||'').trim(); var p=n.split(/\s+/); return (((p[0]||' ')[0]||'')+((p[1]||'')[0]||'')).toUpperCase(); }
     function loadRoster(){

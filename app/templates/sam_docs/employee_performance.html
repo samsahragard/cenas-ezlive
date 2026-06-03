@@ -1,0 +1,254 @@
+{# Employee Performance -- system documentation (perf DB + ranking engine + all-employee rollout + per-employee data-mart + recurring Toast refresh). Updated 2026-06-03. Neutral/operational per docs convention. #}
+
+<h1>Employee Performance</h1>
+<p class="meta">How the employee performance system works end to end: where the data lives, what reaches the deployed app, and the safety model that keeps restaurant sales and raw identifiers off every employee-facing surface. Later sections cover the database schema, the ranking engine, the all-employee rollout, the employee UX, the per-employee data-mart, and the recurring refresh.</p>
+
+<h2>Overview</h2>
+<p>The system gives each employee a private, role-aware view of their own work performance &mdash; hours, earnings, tips, and where they rank against same-store peers &mdash; computed from Toast labor data and surfaced inside the app.</p>
+<p>End to end, the flow is: <strong>pull</strong> per-shift labor data from the Toast LABOR API into a local performance database; <strong>compute</strong> normalized per-period metrics and three peer-ranking systems on that local box; <strong>sanitize</strong> the result down to an employee-safe projection; and <strong>push</strong> only that projection to the deployed app, which serves each signed-in employee a view scoped strictly to their own data.</p>
+<ul>
+  <li><strong>Periods:</strong> every figure is computed for four windows &mdash; <code>today</code>, <code>week</code> (Saturday-start, matching the app), <code>month</code> (month-to-date), and <code>last30</code> (trailing 30 days).</li>
+  <li><strong>Ranking:</strong> three systems &mdash; effective hourly ($/hr), tip percent (a ratio), and a combined percentile blend &mdash; plus a sales-clean tips-per-hour board, each computed within per-store, role-split cohorts.</li>
+  <li><strong>Role awareness:</strong> tipped and non-tipped (back-of-house) employees see coherent, role-appropriate dashboards; non-tipped surfaces never carry tip metrics at all.</li>
+  <li><strong>Privacy:</strong> small cohorts are gated, peer rows carry only whitelisted metrics, and an employee only ever sees data linked to their own confirmed Toast identity.</li>
+</ul>
+
+<h2>Data architecture</h2>
+<p>The system spans two machines with a deliberate split between where data is computed and where it is served.</p>
+
+<h3>Source of truth: the local performance database</h3>
+<p>The authoritative store is a SQLite database on the Mini_IT13 box: <code>C:\Users\sam\cena-perfdb\perf.sqlite</code> (schema version 1, defined in <code>C:\Users\sam\cena-perfdb\schema_v1.sql</code>). It is <strong>not</strong> on the hosting platform and <strong>not</strong> in the app repository. All Toast pulls, scoring, and ranking happen here. The compute modules live in two parallel trees: the deployed copies the scheduler runs (<code>C:\Users\sam\cena-perfdb\</code>) and the pilot/extractor copies (<code>C:\Users\sam\_schedv2_wt\perfdb\</code>, e.g. <code>pilot_phase5.py</code> and <code>toast_perf_refresh.py</code>).</p>
+
+<h3>The deployed app reads only a sanitized snapshot</h3>
+<p>The hosted app never queries the local box live and never calls Toast on a per-employee-page request &mdash; the local machine may be asleep, and per-request Toast calls historically overloaded the host. Instead, the app serves every employee page from app-side cache tables (<code>perf_period_cache</code>, <code>perf_shift_cache</code>, <code>perf_rank_cache</code> in <code>app/models.py</code>) that hold the last-good sanitized snapshot. The employee-facing routes live in <code>app/web/employee_auth.py</code> and are scoped strictly to the signed-in employee's session. The app + Toast client worktree of record is <code>C:\Users\sam\_schedv2_wt</code>.</p>
+
+<h3>The derived per-employee data-mart</h3>
+<p>A second local artifact, the per-employee data-mart under <code>C:\Users\sam\cena-perfdb\datamart</code> (<code>datamart.sqlite</code> plus one folder per employee under <code>employees\&lt;cena_employee_id&gt;\</code>), mirrors the same sanitized surface as a deterministic per-employee QA artifact. It introduces no new employee-visible endpoint and no new push &mdash; the only employee surface remains the existing projection.</p>
+
+<h3>Deploy topology</h3>
+<p>In short: <strong>pulls and compute run on Mini_IT13; only a sanitized projection ever reaches the deployed app.</strong> The refresh is driven by session-independent Windows Scheduled Tasks on Mini_IT13 (not host-side cron, which is what caused the historical overload), so it runs whether or not anyone is logged in.</p>
+<table>
+  <thead><tr><th>Concern</th><th>Mini_IT13 (local)</th><th>Deployed app</th></tr></thead>
+  <tbody>
+    <tr><td>Toast LABOR API pulls</td><td>Yes &mdash; all pulls happen here</td><td>Never (no per-request Toast calls)</td></tr>
+    <tr><td>Scoring &amp; ranking math</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Restaurant sales dollars, Toast GUIDs, hourly rate</td><td>Held locally (isolated, internal only)</td><td>Never present</td></tr>
+    <tr><td>Employee-facing reads</td><td>Local QA mirror only</td><td>Yes &mdash; served from the sanitized cache</td></tr>
+  </tbody>
+</table>
+
+<h2>Safety model</h2>
+<p>There are exactly <strong>two outflows</strong> from the local box, and only these two. Both are re-validated by the server on the receiving side, so the local sanitization is defense-in-depth rather than the sole guarantee.</p>
+<ol>
+  <li><strong>The sanitized projection push (outbound):</strong> <code>POST /cron/perf-push</code> (defined in <code>app/web/driver_system.py</code>) carries the per-period rows, per-shift rows, and the sanitized rank blob. The receiver is token-gated (an <code>X-Cron-Token</code> header matched against <code>CRON_TOKEN</code>, else 403) and re-validates every payload before storing anything: a whole-body sales-wall regex rejects any body containing a sales-ish term (HTTP 422), and a peer-row field whitelist rejects any peer row carrying a field outside the allowed metric set (422, fail-closed).</li>
+  <li><strong>The read-only profile/schedule export pull (inbound):</strong> <code>GET /cron/employee-datamart-export</code> feeds only the data-mart's profile and schedule domains. It is read-only, fail-closed, and <strong>field-whitelisted at the source</strong> &mdash; it excludes passcode hashes, contact PII, Toast IDs, pay, attribution, and manager free-text &mdash; with the consuming mappers re-whitelisting on consume.</li>
+</ol>
+<p>Everything else &mdash; restaurant sales dollars, Toast GUIDs, hourly rate, and raw scoring inputs &mdash; stays on the local box and is structurally unable to leave.</p>
+
+<h3>The sales-wall</h3>
+<p>Restaurant sales dollars are sanitized by construction, not merely filtered at runtime. In the local schema, sales live <strong>physically isolated</strong> in a dedicated internal-only table and are used only as the denominator for the tip-percent ratio; every employee-facing payload is assembled from the sanitized period and shift data only, so sales has no structural path into an employee payload. On top of that, a source-side guard refuses to emit any payload containing a sales term, and the receiver's whole-body sales-wall independently rejects one. Only the tip-percent <em>ratio</em> ever leaves &mdash; never the underlying dollars.</p>
+
+<h3>Deterministic pipeline</h3>
+<p>The compute and data-mart build are deterministic Python with no model/LLM in the runtime path. The data-mart orchestrator enforces hard guardrails &mdash; a write-jail limiting output to the data-mart directories, a forbidden-domain deny-list, names-only secret loading (secrets are referenced only by env-var name, e.g. <code>CRON_TOKEN</code> and <code>DATAMART_EXPORT_TOKEN</code>, never by value), read-only sources, and an eligible-set gate &mdash; and a validator checks the on-disk output against the contract on every run, failing closed on any drift.</p>
+
+<h2>Rankings &amp; metrics</h2>
+<p class="meta">How an employee's normalized performance is scored and ranked. All ranking math runs on the CK-local performance database (<code>perf.sqlite</code>); only a sanitized current-rank blob is ever projected to the employee-visible caches. Restaurant sales dollars live exclusively in the internal <code>perf_internal</code> table and never reach any ranking output that an employee can see.</p>
+
+<h3>The four ranking systems</h3>
+<p>Ranks are computed for all four periods (Today / Week / Month / Last 30) by the ranking engine (<code>perfdb/pilot_phase5.py</code>). Three systems form the core scoreboard, plus a sales-clean fourth tile:</p>
+<table>
+  <thead><tr><th>System</th><th>Formula</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>effective_hourly</code></td><td><code>(base_pay + tips) / hours</code> ($/hr)</td><td>Total take per hour. <code>base_pay</code> is employee earnings (rate&times;hours, OT up-weighted 1.5&times;), not sales.</td></tr>
+    <tr><td><code>tip_percent</code></td><td><code>tips / eligible_sales</code> (ratio)</td><td>The denominator <code>eligible_sales</code> is INTERNAL — only the resulting ratio ever leaves the CK box.</td></tr>
+    <tr><td><code>combined</code></td><td>average of the <code>effective_hourly</code> percentile and the <code>tip_percent</code> percentile</td><td>A blend of two percentile ranks, NOT a mix of dollars and percent.</td></tr>
+    <tr><td><code>tips_per_hour</code></td><td><code>tips / hours</code> ($/hr)</td><td>Sales-clean third tile — no sales denominator anywhere in it.</td></tr>
+  </tbody>
+</table>
+
+<h3>Per-store, role-split cohorts</h3>
+<p>Employees are ranked only against comparable peers. A cohort key has the form <code>store:&lt;store&gt;|role:&lt;tipped|nontipped&gt;|metric:&lt;...&gt;</code>.</p>
+<ul>
+  <li><strong><code>effective_hourly</code> is role-split.</strong> Tipped employees rank within the same-store TIPPED cohort; non-tipped / back-of-house employees rank within the same-store NON-TIPPED cohort. The two are never mixed on one board, which avoids a misleading cross-role comparison.</li>
+  <li><strong><code>tip_percent</code>, <code>combined</code>, and <code>tips_per_hour</code> are tipped-cohort only</strong> (a non-tipped employee never qualifies for them).</li>
+  <li><strong>Role is a stable property, not a per-window guess.</strong> An employee is tipped when the minimum hourly wage across ALL their shifts at a store is at or below <code>TIPPED_WAGE_MAX</code> ($5.00) — e.g. a $2.13 server. It is computed over all shifts, not the period window, so a tipped server who worked little in a short window is not misclassified.</li>
+</ul>
+
+<h3>Privacy &amp; fairness gate (MIN_COHORT)</h3>
+<p>A cohort with fewer than <code>MIN_COHORT</code> = 4 qualifying peers is GATED: rank and percentile are null, no peer rows are emitted, and the surface shows a "cohort too small" state instead. This is both a privacy guard (you cannot back out a peer's figures from a 2-person board) and a fairness guard (ranks are not meaningful below a minimum cohort size). Leaderboards gate <strong>independently per metric</strong> — a gated tip-percent board cannot ride out on an ungated effective-hourly board.</p>
+<p>Qualifiers (separate from the cohort gate): the Today period needs at least <code>TODAY_MIN_HOURS</code> = 2.0 logged hours; Week / Month / Last 30 need at least <code>LONG_MIN_HOURS</code> = 4.0 hours, and the tip metrics additionally require at least one completed tipped shift. Percentiles are mid-rank within the cohort (outlier-robust); ties break by higher value, then more qualifying hours, then fewer review-flagged shifts.</p>
+
+<h3>The FLAG-2 rule — back-of-house never see tip metrics</h3>
+<p>This is a server-side role gate, enforced where the rank output is built, not a UI hide. A non-tipped employee's sanitized rank output does NOT carry <code>tip_percent</code>, <code>combined</code>, or <code>tips_per_hour</code> objects <strong>at all</strong> — not even a null placeholder. The employee surface reads <code>is_tipped = false</code> and renders a clean "Not eligible" state rather than empty tip holes. A tipped-but-unqualified period simply omits those keys too. Peer rows on any board carry only whitelisted metric values — never a peer's <code>base_pay</code>, tip dollars, sales, Toast GUID, attribution, or review flags.</p>
+<p>The own-card SCORE follows the same split: tipped employees are scored on the combined percentile, non-tipped on the effective-hourly percentile (no tips), banded into encouraging labels (Excellent / Strong / Good / Steady / Building). A gated or no-data period yields "not available" — no fabricated number.</p>
+
+<h2>Employee-visible surface</h2>
+<p class="meta">What a signed-in employee sees, and how it is served. Every read is scoped strictly to the session's own employee id (zero cross-employee data) and is served ONLY from the sanitized app-side caches — never live Toast and never the CK box live (which may be asleep). A performance panel appears only for an employee with a partner-confirmed Cena&harr;Toast link; with no link the panel is hidden.</p>
+
+<h3>Endpoints</h3>
+<table>
+  <thead><tr><th>Route</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /employee/my-performance</code></td><td>The dashboard ranking payload: <code>{linked, perf_periods, shifts, ranking}</code>. Strict whitelist — no <code>toast_id</code> / GUID, no attribution, no sync plumbing. The FLAG-2 omission is re-enforced here: tip fields are stripped from the period rows unless <code>ranking.is_tipped</code> is explicitly truthy (fail-safe when <code>is_tipped</code> is null, absent, or false).</td></tr>
+    <tr><td><code>GET /employee/performance-center</code></td><td>The day-by-day drilldown payload feeding the metric detail views. Role-aware: a back-of-house payload OMITS every tip key (no <code>tips</code> / <code>tip_pct</code> / <code>tips_per_hour</code> in the money or daily rows, and no tip rankings).</td></tr>
+    <tr><td><code>GET /employee/performance/&lt;metric&gt;</code></td><td>The per-metric detail route. ONE data-driven endpoint feeds all of the metric detail views, keyed by the metric name; it reads the same scoped <code>performance-center</code> payload, so role-awareness and sanitization are inherited.</td></tr>
+  </tbody>
+</table>
+<p>When no sanitized cache row exists yet for an employee, the surface falls back to a fast read of the last-good Toast employee snapshot, showing a "pending sync" state rather than calling Toast live.</p>
+
+<h3>The performance center — reconciling clock-in/out to totals</h3>
+<p>The performance center is the day-by-day breakdown that lets an employee see exactly how their period totals were built. Each row reconciles a shift's clock-in / clock-out to the hours, base pay, and (for tipped roles) tips that rolled up into the period summary, so the headline numbers on the dashboard are explainable down to the individual shift. A shift flagged as a likely missed-punch / auto clock-out carries a review reason the employee can expand. A genuinely undeclared tip is shown as "not declared" rather than coerced to a misleading $0.00.</p>
+
+<h3>Employee UX</h3>
+<p>The employee pages share the house dark/gold theme — warm gold accents (<code>#E4B340</code> / <code>#FFD970</code> / <code>#d4af37</code>), cream text, dark surfaces, and gold hairline borders — consistent with the rest of the employee dashboard.</p>
+<ul>
+  <li><strong>Period pills</strong> (Today / Week / Month / Last 30) drive the summary cards — total pay (base + tips), hours, and, for tipped roles, tips and tips-per-hour.</li>
+  <li><strong>Shift list</strong> — each shift shows its time range and base pay; tipped roles also show tips, with a review chip on any flagged shift.</li>
+  <li><strong>Leaderboard rows</strong> — per-metric boards with the signed-in user's row highlighted as "you"; a gated cohort renders a "too small" state, and a non-tipped role renders "Not eligible" for the tip boards.</li>
+  <li><strong>Metric drilldowns</strong> — tapping a card opens the per-metric day-by-day detail, de-bulking the breakdown for that one metric.</li>
+  <li><strong>Performance / Roster / Service tabs</strong> — the Performance tab carries the ranking surface above; the Roster view is a sanitized, read-only roster (no peer pay, tips, or sales); the Service tab carries employee-visible service metrics.</li>
+  <li><strong>Role-aware rendering</strong> — when <code>is_tipped</code> is false the tip cards, tip shift spans, and tip leaderboards are not rendered at all, matching the server-side FLAG-2 omission so the page is coherent with no empty tip placeholders. Board labels also adapt — a tipped board reads "Effective hourly (with tips)" while a back-of-house board reads "Hourly rate".</li>
+</ul>
+
+<h2>Per-employee data-mart</h2>
+<p class="meta">An <strong>INTERNAL</strong> CK-local mirror/QA artifact of the same sanitized surface employees already see. It introduces <strong>no new employee-visible endpoint and no new push</strong> &mdash; the only employee-facing surface remains the existing <code>/cron/perf-push</code> projection. Owner: CK (Mini_IT13). Deterministic Python only.</p>
+
+<h3>What it is</h3>
+<p>Rooted at <code>C:\Users\sam\cena-perfdb\datamart</code>, the mart has two outputs built from read-only sources by the orchestrator <code>datamart_build.py</code>:</p>
+<ul>
+  <li><strong><code>datamart.sqlite</code></strong> &mdash; a single SQLite file of 9 <code>dm_</code> tables (DDL in <code>schema.sql</code>), <em>every</em> table keyed by <code>cena_employee_id</code> (the Cena surrogate integer). No Toast GUID and no name is a key anywhere in the mart.</li>
+  <li><strong>88 per-employee folders</strong> under <code>C:\Users\sam\cena-perfdb\employees\&lt;cena_employee_id&gt;\</code> &mdash; one folder per linked employee, each holding a FIXED 8-file template (identical keys/shape for every employee; only the values differ).</li>
+</ul>
+
+<h3>The 9 <code>dm_</code> tables (schema.sql)</h3>
+<p>Eight are <strong>SANITIZED</strong> (may feed the projection) and one is <strong>INTERNAL</strong> (the only sales-bearing table). Per corrected scope (aick #3334), no incident / counseling / manager-attendance / wage table is built &mdash; those domains lack an employee-id key, so a name-match on high-sensitivity manager free-text would be unsafe; the orchestrator's <code>_assert_schema_scope</code> refuses to apply a schema that declares a dropped-domain token outside a negation comment.</p>
+<table>
+  <thead><tr><th>Table</th><th>Visibility</th><th>Holds</th></tr></thead>
+  <tbody>
+    <tr><td><code>dm_profile</code></td><td>sanitized</td><td>One row per employee: display name, active flag, primary store, positions, hire date (field-whitelisted at the source).</td></tr>
+    <tr><td><code>dm_employee_store</code></td><td>sanitized</td><td>One row per (employee, store) &mdash; multi-store fan-out.</td></tr>
+    <tr><td><code>dm_perf_period</code> <span class="meta">(alias <code>dm_perf</code>)</span></td><td>sanitized</td><td>Normalized performance per (employee, store, period); <code>base_pay</code> is EARNINGS (rate&times;hours), never sales.</td></tr>
+    <tr><td><code>dm_time_entry</code> <span class="meta">(alias <code>dm_shift</code>)</span></td><td>sanitized</td><td>Per-shift rows; <code>hourly_rate</code> intentionally absent (baked into <code>base_pay</code>); carries <code>tips_declared</code> + <code>needs_review</code>/<code>review_reason</code>.</td></tr>
+    <tr><td><code>dm_rank</code></td><td>sanitized</td><td>The already-sanitized rank blob (own ranks + cohort leaderboards; peer rows carry only whitelisted metrics).</td></tr>
+    <tr><td><code>dm_schedule</code></td><td>sanitized</td><td>The employee's OWN published shifts (field-whitelisted at the source).</td></tr>
+    <tr><td><code>dm_attendance</code></td><td>sanitized</td><td>Own-only punch-quality summary (missed-punch / auto clock-out counts) across all four periods.</td></tr>
+    <tr><td><code>dm_internal_sales</code></td><td><strong>INTERNAL</strong></td><td>The ONLY sales-bearing table: <code>eligible_sales</code> / <code>sales_basis</code> / <code>shifts_with_sales</code> &mdash; the tip% denominator for CK-local math only.</td></tr>
+    <tr><td><code>dm_meta</code></td><td>bookkeeping</td><td>Per-employee, per-source refresh ledger (what built, when, row count, any error).</td></tr>
+  </tbody>
+</table>
+<p class="meta">Naming note: <code>dm_perf</code> / <code>dm_shift</code> are documented short ALIASES of <code>dm_perf_period</code> / <code>dm_time_entry</code>; no separate alias tables exist.</p>
+
+<h3>Per-employee folder &mdash; the fixed 8-file template</h3>
+<p>Every <code>&lt;cena_employee_id&gt;\</code> folder holds the same eight UTF-8 pretty-printed JSON files. Each file opens with a 3-key envelope <code>{cena_employee_id, schema_version "1", generated_at}</code>, then its payload.</p>
+<table>
+  <thead><tr><th>File</th><th>Source table</th><th>Visibility</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>profile.json</code></td><td><code>dm_profile</code> (+ <code>dm_employee_store</code>)</td><td>sanitized</td><td>Identity card: name, active, stores, positions, hire date.</td></tr>
+    <tr><td><code>perf.json</code></td><td><code>dm_perf_period</code></td><td>sanitized</td><td>Period summaries (<code>periods[]</code>) + per-shift breakdown (<code>shifts[]</code>); earnings + tips, never sales.</td></tr>
+    <tr><td><code>schedule.json</code></td><td><code>dm_schedule</code></td><td>sanitized</td><td>The employee's own published shifts.</td></tr>
+    <tr><td><code>attendance.json</code></td><td><code>dm_attendance</code></td><td>sanitized</td><td>Own punch-quality summary per period (missed-punch flag counts).</td></tr>
+    <tr><td><code>internal.json</code></td><td><code>dm_internal_sales</code></td><td><strong>INTERNAL</strong></td><td>The lone sales-bearing file (marked <code>"internal": true</code>) &mdash; tip%-denominator audit only; never projected.</td></tr>
+    <tr><td><code>meta.json</code></td><td><code>dm_meta</code></td><td>bookkeeping</td><td>Per-source build status + row counts for this employee.</td></tr>
+    <tr><td><code>projection.json</code></td><td>assembled</td><td>sanitized</td><td>The employee-WOULD-see mirror: folds in profile + perf + rank + schedule + attendance; <em>never</em> includes internal sales.</td></tr>
+    <tr><td><code>manifest.json</code></td><td>assembled</td><td>bookkeeping</td><td>Per-source build status / row counts (the per-employee slice of <code>dm_meta</code>).</td></tr>
+  </tbody>
+</table>
+<p>MISSING data follows ONE fixed rule, identical for every employee: files always exist; keys always exist; an absent scalar is <code>null</code>, a no-activity numeric measure is <code>0</code>, an absent list is <code>[]</code>, an absent object is <code>{}</code>; period-keyed files always carry all four periods (<code>today</code> / <code>week</code> / <code>month</code> / <code>last30</code>). Nothing is fabricated to fill a gap.</p>
+
+<h3>The G5 projection-isolation wall</h3>
+<p><code>internal.json</code> / <code>dm_internal_sales</code> is the ONLY place restaurant-sales dollars live in the mart, and it is <strong>structurally unreachable</strong> from any employee surface &mdash; not merely runtime-filtered:</p>
+<ul>
+  <li><code>datamart_build._merge_into_projection</code> <strong>returns early</strong> for <code>dm_internal_sales</code>, so it is never folded into <code>projection.json</code>.</li>
+  <li><code>_assemble_template</code> never reads <code>dm_internal_sales</code> as an input, so sales has no structural path into any per-employee folder.</li>
+  <li>Only the tip% <strong>ratio</strong> ever leaves CK, and it leaves via <code>dm_rank</code>'s already-sanitized blob &mdash; never from <code>internal.json</code>.</li>
+  <li>Every employee-visible write is gated by <code>boundary.assert_sanitized</code> (a whole-body sales-term regex), and the validator additionally asserts the internal-only keys (<code>eligible_sales</code> / <code>sales_basis</code> / <code>shifts_with_sales</code>) never appear in any visible file.</li>
+</ul>
+
+<h3>Read-only profile/schedule source</h3>
+<p>The mart's profile and schedule domains are fed by a single read-only, fail-closed endpoint: <code>GET /cron/employee-datamart-export</code>. It is <strong>field-whitelisted at the source</strong> &mdash; it excludes <code>passcode_hash</code>, phone, email, address, <code>toast_id</code>, pay, attribution, and any manager free-text &mdash; and returns only the <code>profile</code> and <code>schedule</code> domains. The consumer (<code>extractors/app_export.py</code>) bulk-fetches once per process using a transient bearer (env var <code>DATAMART_EXPORT_TOKEN</code>); if the token is absent the build degrades to an offline sample and still passes. The mappers re-whitelist on consume (defense in depth). All other domains are sourced from the read-only perf store.</p>
+
+<h3>Auto-enroll of new employees</h3>
+<p><code>roster_enroll.py</code> is the reconcile-first front half of a build run. The live roster is the UNION of every id-keyed active signal in the read-only perf store (the employee dimension's active rows plus the distinct employee ids present in the period and shift tables &mdash; because the dimension table can be empty while the period/shift tables carry the real population). That union is intersected with the export's <code>profile.active</code> when live, then eligible-gated by <code>eligible_set_88.json</code>, then collapsed to one logical employee per id. Any active, eligible employee lacking a folder gets the full 8-file set written (every value at its MISSING state); a folder missing any contract file is completed on the next run. The operation is idempotent on re-run.</p>
+
+<h3>Build modes &amp; guardrails</h3>
+<p>The orchestrator <code>datamart_build.py</code> runs in three modes: <code>--self-test</code> (no network/writes; asserts every guardrail), <code>--dry-run</code> (sample data, throwaway mart + folders, runs the validator), and <code>--run</code> (the local build: reconcile &rarr; read-only extractors &rarr; mappers &rarr; <code>datamart.sqlite</code> + folders &rarr; validator). Hard guardrails G1&ndash;G9 are enforced in code: write-jail to <code>datamart/</code> + <code>employees/</code> only (G1); no driver/catering/GE4-EFR/ezcater domains (G2); no plaintext secrets (G3); employee-visible output limited to the existing sanitized push (G4); <code>dm_internal_sales</code> kept separate and never joined (G5); deterministic Python only, no LLM at runtime (G6); no scheduler / token-persist / prod-push from this orchestrator (G7); read-only sources (G8); and eligible-set gating (G9). <code>boundary.py</code> re-exports the orchestrator's tested guards as a single source of truth, and <code>validator.py</code> encodes the template contract once and checks both the on-disk folders and the live builder output to catch contract&harr;code drift, failing closed.</p>
+<p class="meta">The rank step runs on a temporary copy of <code>perf.sqlite</code> so the canonical file is never opened writable (verified byte-identical before and after a run).</p>
+
+<h2>Recurring refresh (scheduled tasks)</h2>
+<p class="meta">The CK-local performance database (<code>C:\Users\sam\cena-perfdb\perf.sqlite</code> on Mini_IT13) is refreshed from Toast on a recurring cadence by three Windows Scheduled Tasks &mdash; <strong>not</strong> by a Render cron. This is deliberate: Task Scheduler launches the work on the machine that owns the database, so the deployed app is never asked to call Toast per employee-page request, and the historical ~15-min Render 502 pattern from in-app polling does not recur. Only the nightly task pushes the employee-visible projection; the two intraday tasks refresh CK-local state only.</p>
+
+<h3>The three tasks (Task Scheduler, folder <code>\Cena\</code>)</h3>
+<table>
+  <thead><tr><th>Task</th><th>Cadence</th><th>Scope</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>\Cena\DataMart-T1-TodayDelta</code></td>
+      <td>Every 1 min, operational hours only (07:00&ndash;23:00 local; off-hours fires are a clean no-op)</td>
+      <td><strong>Surgical upsert of <code>today</code> only</strong> &mdash; period <code>today</code> + today's per-shift rows. No delete, so <code>week</code> / <code>month</code> / <code>last30</code> are preserved. Light Toast pull (~1 window &times; 2 stores); each store's today window is primed fresh once per run so per-employee reads hit a fresh cache (true ~1-min freshness at roughly one fetch per store, not per employee). CK-local only &mdash; no push.</td>
+    </tr>
+    <tr>
+      <td><code>\Cena\DataMart-T2-Windows</code></td>
+      <td>Hourly (top of the hour)</td>
+      <td>Full pull of all four windows (<code>today</code> / <code>week</code> / <code>month</code> / <code>last30</code>) + full rank recompute. CK-local only &mdash; no push.</td>
+    </tr>
+    <tr>
+      <td><code>\Cena\DataMart-T3-Nightly</code></td>
+      <td>Once after close, 03:30 local</td>
+      <td>Full historical re-pull + recompute, then the <strong>sanitized production push</strong> to the employee-visible receiver. This is the only task that pushes.</td>
+    </tr>
+  </tbody>
+</table>
+<p>Expected steady state: all three tasks <strong>Registered</strong> and <strong>Ready</strong> in Task Scheduler.</p>
+
+<h3>Dispatcher &mdash; one entrypoint</h3>
+<p>Every task invokes a single dispatcher with the tier as an argument:</p>
+<pre class="ckdocs-code">cena-perfdb\run_tier.py --tier today|windows|nightly [--no-push] [--self-test]</pre>
+<ul>
+  <li>Absolute paths only; it <code>chdir</code>s to the writable perf-db directory because Task Scheduler launches the action with a non-writable working directory.</li>
+  <li>Each tier does: refresh <code>perf.sqlite</code> from Toast at the right scope &rarr; recompute ranks &rarr; rebuild the data-mart (runs <code>datamart_build.py --run</code> as a subprocess that inherits the environment).</li>
+  <li><code>--tier nightly --no-push</code> runs the full pull + recompute + rebuild <strong>without</strong> the production push (useful for a manual dry refresh).</li>
+  <li>A failed Toast source is logged and the run exits non-zero, so Task Scheduler records a non-zero <code>LastTaskResult</code>; the last-good <code>perf.sqlite</code> and per-employee folders are retained (no partial clobber).</li>
+</ul>
+
+<h3>Run-as principal (DPAPI vault access)</h3>
+<p>The refresh tokens live in the Windows Credential Manager DPAPI-encrypted and keyed to the owning user, so they are readable only by a process running <em>as that user</em>. The scheduled tasks must therefore run as the interactive Mini_IT13 user that owns the credentials. A practical consequence: <strong>the tasks fire while that user is logged on</strong>; if the box is logged off, DPAPI cannot decrypt and the refresh pauses (see troubleshooting). Loading is non-interactive (no prompt) &mdash; the dispatcher pulls the tokens into the process environment at runtime by name; values are never logged or written to disk.</p>
+
+<h3>Tokens (by name)</h3>
+<p>Two tokens, both stored in the Windows Credential Manager (generic credentials), referenced here by <strong>name only</strong>:</p>
+<ul>
+  <li><code>CRON_TOKEN</code> &mdash; bearer for the sanitized production push (the perf-push receiver).</li>
+  <li><code>DATAMART_EXPORT_TOKEN</code> &mdash; bearer for the read-only profile/schedule export pull that feeds the data-mart.</li>
+</ul>
+<p>Read precedence at runtime is: existing environment &rarr; Credential Manager &rarr; absent. The export pull degrades gracefully &mdash; if <code>DATAMART_EXPORT_TOKEN</code> is absent the build falls back to an offline sample and still passes; the push, by contrast, simply does not authenticate without <code>CRON_TOKEN</code>.</p>
+
+<h3>Toast LABOR API budget</h3>
+<p>The perf pull uses the direct Toast <strong>LABOR</strong> API (<code>/labor/v1/timeEntries</code>), not the tighter Analytics API. Documented limits are <strong>20 requests/second</strong> and <strong>10,000 requests / 15 minutes</strong>, with no per-call billing for own-restaurant data &mdash; generous relative to this workload:</p>
+<ul>
+  <li>The today tier primes the window fresh at roughly <strong>2 calls per run</strong> (~1 window &times; 2 stores). Over a 16-hour operating window that is on the order of ~1,920 calls/day &mdash; far under the 10k/15-min ceiling.</li>
+  <li>Designed handling for 429 / 5xx: exponential backoff with jitter (1s, 2s, 4s, 8s, cap ~30s, ~5 retries), then log-and-skip the source for that run rather than crash (the prior good snapshot is retained). Per-run jitter also spreads the minute-aligned today-tier fires.</li>
+</ul>
+
+<h3>Logs</h3>
+<p>Secret-scrubbed run log at <code>cena-perfdb\datamart\run_tier.log</code> (the dispatcher's per-run record); the data-mart build emits <code>datamart.log</code> and the standalone refresh runner emits <code>perf_refresh.log</code>. A secret-scrub log filter strips token-like values from all three.</p>
+
+<h2>Operations &amp; troubleshooting</h2>
+
+<h3>Rollback / disabling the refresh</h3>
+<p>To stop the recurring refresh entirely, delete the three scheduled tasks:</p>
+<pre class="ckdocs-code">schtasks /Delete /TN "\Cena\DataMart-T1-TodayDelta" /F
+schtasks /Delete /TN "\Cena\DataMart-T2-Windows"    /F
+schtasks /Delete /TN "\Cena\DataMart-T3-Nightly"    /F</pre>
+<p>Deleting the tasks halts all CK-local refresh and the nightly push; the deployed app keeps serving the last-good sanitized snapshot it already holds, so the employee surface stays up (just frozen until the tasks are restored). The dispatcher and the database files are untouched by the delete &mdash; re-register the tasks to resume.</p>
+
+<h3>Troubleshooting</h3>
+<ol>
+  <li><strong>Stale employee data.</strong> Open Task Scheduler &rarr; <code>\Cena\</code> and check each task's <code>LastRunTime</code> / <code>LastTaskResult</code>. A non-zero <code>LastTaskResult</code> means the run exited on a failed source &mdash; read <code>cena-perfdb\datamart\run_tier.log</code> for the scrubbed error. The last-good snapshot is retained, so the symptom is "not updating," not "data lost." A manual catch-up run is <code>run_tier.py --tier windows</code> (CK-local) or <code>--tier nightly</code> (also pushes).</li>
+  <li><strong>Token rotation.</strong> After rotating <code>CRON_TOKEN</code> or <code>DATAMART_EXPORT_TOKEN</code>, re-store the new value in the Windows Credential Manager under the same target name (so the next scheduled run picks it up by name), and for <code>CRON_TOKEN</code> trigger a Render redeploy so the receiver validates against the new value. Confirm by watching the next nightly push (or a manual <code>--tier nightly</code>) land without a 403.</li>
+  <li><strong>Box logged off.</strong> The tasks run as the interactive user for DPAPI vault access, so a logged-off (or locked-without-stored-credentials) machine cannot decrypt the tokens and the refresh pauses &mdash; intraday freshness stops and the nightly push is skipped until the user is logged back on. Log on, then run a manual <code>--tier windows</code> to catch up CK-local state.</li>
+</ol>
+
+<h2>See also</h2>
+<ul>
+  <li><strong>Operations</strong> tab &mdash; the broader day-to-day runbook, recurring Render crons, and credential-rotation procedure.</li>
+  <li><strong>Integrations</strong> tab &mdash; the Toast client and the upstream API surfaces the perf pull depends on.</li>
+</ul>

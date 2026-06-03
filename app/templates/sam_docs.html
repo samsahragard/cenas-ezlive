@@ -188,13 +188,14 @@
     <p class="frame-subtitle">Consolidated project documentation for Cenas Kitchen. Tap a tab to jump.</p>
   </div>
 
-  {# Tab strip — 10 slots. Order matters: Start here first. #}
+  {# Tab strip — 12 slots. Order matters: Start here first. #}
   <div class="ckdocs-tabs" role="tablist">
     <a class="ckdocs-tab active" data-tab="start"        role="tab" href="#start">Start here</a>
     <a class="ckdocs-tab"        data-tab="architecture" role="tab" href="#architecture">Architecture</a>
     <a class="ckdocs-tab"        data-tab="methodology"  role="tab" href="#methodology">Methodology</a>
     <a class="ckdocs-tab"        data-tab="permissions"  role="tab" href="#permissions">Permissions</a>
     <a class="ckdocs-tab"        data-tab="operations"   role="tab" href="#operations">Operations</a>
+    <a class="ckdocs-tab"        data-tab="employee-perf" role="tab" href="#employee-perf">Employee Performance</a>
     <a class="ckdocs-tab"        data-tab="phase2"       role="tab" href="#phase2">Phase 2 Roadmap</a>
     <a class="ckdocs-tab"        data-tab="cena"         role="tab" href="#cena">Cena Surface</a>
     <a class="ckdocs-tab"        data-tab="block1"       role="tab" href="#block1">Block 1 — Foundation</a>
@@ -218,6 +219,9 @@
   </div>
   <div class="ckdocs-panel" data-panel="operations">
     {% include 'sam_docs/operations.html' %}
+  </div>
+  <div class="ckdocs-panel" data-panel="employee-perf">
+    {% include 'sam_docs/employee_performance.html' %}
   </div>
   <div class="ckdocs-panel" data-panel="phase2">
     {% include 'sam_docs/phase2.html' %}

@@ -177,6 +177,11 @@
   @media (max-width: 1000px) {
     .rcp-body { grid-template-columns: 1fr; }
     .rcp-detail { position: relative !important; top: auto !important; }
+    /* Stacked single-column: don't force two full-viewport panels on top of
+       each other. List caps to a fraction of the viewport with its own scroll;
+       detail sizes to content and the page scrolls normally. */
+    .rcp-list { height: auto !important; max-height: 70vh; min-height: 0; }
+    .rcp-detail { min-height: 0 !important; max-height: none !important; overflow-y: visible !important; }
   }
   /* Phone-specific tightening (ck 2026-05-19 responsive pass per Sam #8:00). */
   @media (max-width: 700px) {
@@ -208,7 +213,12 @@
   .rcp-list {
     background: var(--rcp-bg-pane); border: 1px solid var(--rcp-border);
     border-radius: var(--rcp-radius); overflow: hidden;
-    max-height: 78vh; display: flex; flex-direction: column;
+    /* Fill the viewport down to near the bottom (mirrors kitchen_dashboard.html
+       .kitd-embed-frame ~L308-310: calc(100vh - 360px) / min-height). The
+       inner .rcp-list-body keeps its own scroll, so the panel stretches but
+       the list still scrolls internally. */
+    height: calc(100vh - 360px); min-height: 600px;
+    display: flex; flex-direction: column;
   }
   .rcp-list-head {
     padding: 12px 16px; border-bottom: 1px solid var(--rcp-border);
@@ -247,9 +257,17 @@
 
   .rcp-detail {
     background: var(--rcp-bg-pane); border: 1px solid var(--rcp-border);
-    border-radius: var(--rcp-radius); overflow: hidden;
+    border-radius: var(--rcp-radius);
     position: sticky; top: 24px; box-shadow: var(--rcp-shadow);
+    /* Match the list panel's viewport-fill height so the detail pane reaches
+       near the bottom too (mirrors kitchen_dashboard.html ~L308-310). Long
+       recipes scroll WITHIN the panel; short ones still fill the column. */
+    min-height: calc(100vh - 360px);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
   }
+  .rcp-detail::-webkit-scrollbar { width: 8px; }
+  .rcp-detail::-webkit-scrollbar-thumb { background: var(--rcp-border); border-radius: 4px; }
   .rcp-detail-empty {
     padding: 80px 24px; text-align: center;
     color: var(--rcp-cream-faint); font-style: italic; font-size: 13px;
@@ -297,7 +315,7 @@
     padding: 8px 14px; background: transparent; border: 0;
     border-bottom: 2px solid transparent; margin-bottom: -1px;
     color: var(--rcp-cream-dim); font: inherit; font-size: 11px;
-    letter-spacing: 0.08em; text-transform: uppercase; cursor: default; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; font-weight: 600;
   }
   .rcp-variant-tab.active { color: var(--rcp-gold); border-bottom-color: var(--rcp-gold); }
 
@@ -335,6 +353,9 @@
     background: var(--rcp-gold); color: var(--rcp-bg-deep); font-weight: 600;
   }
   .rcp-lang-toggle button:disabled { opacity: .35; cursor: not-allowed; }
+  /* Page-level EN/ES toggle lives in the hero row — no trailing margin,
+     does not shrink, sits just before the store pill (which has margin-left:auto). */
+  .rcp-page-lang { margin-bottom: 0; flex-shrink: 0; }
 
   .rcp-steps {
     list-style: none; counter-reset: step; padding: 0; margin: 0;
@@ -374,10 +395,13 @@
 
   {# ----- Inline hero header (mockup style — title + search + DOS pill in one row) ----- #}
   <div class="rcp-hero">
-    <h1 class="rcp-hero-title">Recipe <span class="accent">Library</span></h1>
     <div class="rcp-search">
       <span class="icon">&#x2315;</span>
       <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
+    </div>
+    <div class="rcp-lang-toggle rcp-page-lang" id="rcpPageLang">
+      <button type="button" data-lang="en" class="active">EN</button>
+      <button type="button" data-lang="es">ES</button>
     </div>
     <span class="rcp-hero-store">{{ store_label or 'Cenas Kitchen' }}{% if store_slug %} · {{ store_slug|upper }}{% endif %}</span>
   </div>
@@ -441,15 +465,15 @@
 
           <div class="rcp-meta">
             <div class="rcp-meta-cell">
-              <span class="rcp-meta-label">Ready In</span>
+              <span class="rcp-meta-label" id="rcpMetaReadyLabel">Ready In</span>
               <span class="rcp-meta-value" id="rcpMetaReady">—</span>
             </div>
             <div class="rcp-meta-cell">
-              <span class="rcp-meta-label">Yield</span>
+              <span class="rcp-meta-label" id="rcpMetaYieldLabel">Yield</span>
               <span class="rcp-meta-value" id="rcpMetaYield">—</span>
             </div>
             <div class="rcp-meta-cell">
-              <span class="rcp-meta-label">Shelf Life</span>
+              <span class="rcp-meta-label" id="rcpMetaShelfLabel">Shelf Life</span>
               <span class="rcp-meta-value" id="rcpMetaShelf">—</span>
             </div>
           </div>
@@ -458,17 +482,13 @@
             <h3 class="rcp-section-title" id="rcpIngTitle">Ingredients</h3>
             <div class="rcp-variants" id="rcpVariants" style="display:none"></div>
             <table class="rcp-ing-table">
-              <thead><tr><th>Ingredient</th><th style="text-align:right">Quantity</th></tr></thead>
+              <thead><tr><th id="rcpIngColName">Ingredient</th><th id="rcpIngColQty" style="text-align:right">Quantity</th></tr></thead>
               <tbody id="rcpIngBody"></tbody>
             </table>
           </section>
 
           <section class="rcp-section">
-            <h3 class="rcp-section-title">Preparation</h3>
-            <div class="rcp-lang-toggle" id="rcpLangToggle">
-              <button type="button" data-lang="en" class="active">English</button>
-              <button type="button" data-lang="es">Español</button>
-            </div>
+            <h3 class="rcp-section-title" id="rcpPrepTitle">Preparation</h3>
             <ol class="rcp-steps" id="rcpStepsList"></ol>
             <div class="rcp-steps-empty" id="rcpStepsEmpty" style="display:none">No preparation steps recorded for this language.</div>
           </section>
@@ -497,11 +517,34 @@
   if (!DATA.length) return;
 
   var initialId = {{ recipe.id if recipe else 'null' }};
+  // Page-level state: language (default English) and batch size (single/double).
+  // Both persist across recipe selections; changing either re-renders the open recipe.
   var currentLang = 'en';
+  var currentBatch = 'single';
   var activeCat = 'all';
+  var currentRecipe = null;
+
+  // Localized static labels for the detail pane (#13 EN/ES contract).
+  var LABELS = {
+    en: { ready: 'Ready In', yield: 'Yield', shelf: 'Shelf Life',
+          ingredient: 'Ingredient', quantity: 'Quantity', prep: 'Preparation',
+          ingTitle: 'Ingredients', single: 'Single', double: 'Double' },
+    es: { ready: 'Listo En', yield: 'Rendimiento', shelf: 'Vida Útil',
+          ingredient: 'Ingrediente', quantity: 'Cantidad', prep: 'Preparación',
+          ingTitle: 'Ingredientes', single: 'Sencilla', double: 'Doble' }
+  };
 
   function $(id) { return document.getElementById(id); }
   function $$(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  // Language-aware field pick with fallback to the other language so a field
+  // that is empty in the chosen language never renders blank (#13 contract).
+  function pick(r, enKey, esKey) {
+    var primary = currentLang === 'es' ? r[esKey] : r[enKey];
+    var other   = currentLang === 'es' ? r[enKey] : r[esKey];
+    if (primary != null && String(primary).trim() !== '') return primary;
+    if (other != null && String(other).trim() !== '') return other;
+    return '';
+  }
 
   function selectRecipe(r, opts) {
     opts = opts || {};
@@ -524,80 +567,95 @@
       }
     }
 
+    currentRecipe = r;
+    renderDetail(r);
+  }
+
+  // Full (re)render of the open recipe in the current language + batch size.
+  // Called on selection and whenever the page-level EN/ES or SINGLE/DOUBLE
+  // toggle flips. name / code / category are language-neutral (shown as-is).
+  function renderDetail(r) {
+    if (!r) return;
+    var L = LABELS[currentLang] || LABELS.en;
+
+    // Language-neutral identity fields.
     $('rcpDetailCode').textContent = r.code || '—';
     $('rcpDetailTitle').textContent = r.name || '—';
-    $('rcpMetaReady').textContent = r.prep_time || '—';
-    $('rcpMetaYield').textContent = (r.batch_sizes && r.batch_sizes[0]) || '—';
-    $('rcpMetaShelf').textContent = r.shelf_life || '—';
 
-    var variants = r.batch_sizes || [];
+    // Localized meta labels + values (with cross-language fallback on values).
+    $('rcpMetaReadyLabel').textContent = L.ready;
+    $('rcpMetaYieldLabel').textContent = L.yield;
+    $('rcpMetaShelfLabel').textContent = L.shelf;
+    $('rcpMetaReady').textContent = pick(r, 'prep_time', 'prep_time_es') || '—';
+    $('rcpMetaYield').textContent = pick(r, 'yield_en', 'yield_es') || '—';
+    $('rcpMetaShelf').textContent = pick(r, 'shelf_life', 'shelf_life_es') || '—';
+
+    // Localized section + table headers.
+    $('rcpPrepTitle').textContent = L.prep;
+    $('rcpIngColName').textContent = L.ingredient;
+    $('rcpIngColQty').textContent = L.quantity;
+    $('rcpIngTitle').textContent = L.ingTitle + ' · ' +
+      (currentBatch === 'double' ? L.double : L.single);
+
+    // SINGLE / DOUBLE batch toggle — a real control that picks
+    // qty_single vs qty_double. Styled as the existing variant tabs.
     var vRow = $('rcpVariants');
-    if (variants.length > 1) {
-      vRow.innerHTML = '';
-      variants.forEach(function (v, i) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'rcp-variant-tab' + (i === 0 ? ' active' : '');
-        b.textContent = v;
-        vRow.appendChild(b);
+    vRow.innerHTML = '';
+    [['single', L.single], ['double', L.double]].forEach(function (pair) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.batch = pair[0];
+      b.className = 'rcp-variant-tab' + (pair[0] === currentBatch ? ' active' : '');
+      b.textContent = pair[1];
+      b.addEventListener('click', function () {
+        if (currentBatch === pair[0]) return;
+        currentBatch = pair[0];
+        renderDetail(currentRecipe);
       });
-      vRow.style.display = '';
-    } else {
-      vRow.style.display = 'none';
-    }
-    $('rcpIngTitle').textContent = 'Ingredients · ' +
-      ((variants[0]) || 'Single Recipe');
-
-    var ingBody = $('rcpIngBody');
-    ingBody.innerHTML = '';
-    (r.ingredients || []).forEach(function (ing) {
-      var tr = document.createElement('tr');
-      var td1 = document.createElement('td');
-      var td2 = document.createElement('td');
-      td1.textContent = (ing && ing.name) || '—';
-      td2.className = 'qty';
-      td2.textContent = (ing && ing.qty) || '';
-      tr.appendChild(td1); tr.appendChild(td2);
-      ingBody.appendChild(tr);
+      vRow.appendChild(b);
     });
+    vRow.style.display = '';
 
-    var btns = $$('.rcp-lang-toggle button');
-    btns.forEach(function (b) {
-      var lang = b.dataset.lang;
-      var hasText = (lang === 'en' && r.english_instructions) ||
-                    (lang === 'es' && r.spanish_instructions);
-      b.disabled = !hasText;
-    });
-    var preferred = currentLang;
-    var hasPreferred = (preferred === 'en' && r.english_instructions) ||
-                       (preferred === 'es' && r.spanish_instructions);
-    if (!hasPreferred) {
-      preferred = r.english_instructions ? 'en' :
-                  (r.spanish_instructions ? 'es' : currentLang);
-    }
-    setLang(preferred, r);
+    renderIngredients(r);
+    renderSteps(r);
 
+    // Notes are language-neutral free text (single field in the contract).
     if (r.notes) {
       $('rcpNotes').textContent = r.notes;
       $('rcpNotesSection').style.display = '';
     } else {
       $('rcpNotesSection').style.display = 'none';
     }
-    $('rcpFooter').textContent = r.notes && r.notes.indexOf('Revision') === 0
-      ? r.notes
-      : (r.notes ? 'Cenas Kitchen recipes' : 'Cenas Kitchen recipes');
+    $('rcpFooter').textContent = 'Cenas Kitchen recipes';
   }
 
-  function setLang(lang, r) {
-    currentLang = lang;
-    $$('.rcp-lang-toggle button').forEach(function (b) {
-      b.classList.toggle('active', b.dataset.lang === lang);
+  function renderIngredients(r) {
+    var ingBody = $('rcpIngBody');
+    ingBody.innerHTML = '';
+    (r.ingredients || []).forEach(function (ing) {
+      if (!ing) return;
+      var tr = document.createElement('tr');
+      var td1 = document.createElement('td');
+      var td2 = document.createElement('td');
+      // Ingredient name follows page language, with fallback to the other,
+      // then to a legacy flat `name`/`qty` (pre-bilingual rows) so recipes
+      // still render in the window before the bilingual replace runs.
+      td1.textContent = pick(ing, 'name_en', 'name_es') || ing.name || '—';
+      td2.className = 'qty';
+      td2.textContent = (currentBatch === 'double' ? ing.qty_double : ing.qty_single) || ing.qty || '';
+      tr.appendChild(td1); tr.appendChild(td2);
+      ingBody.appendChild(tr);
     });
-    var text = lang === 'es' ? r.spanish_instructions : r.english_instructions;
+  }
+
+  // Render preparation steps for the page language (fallback to the other),
+  // splitting the instruction blob into numbered list items.
+  function renderSteps(r) {
+    var text = pick(r, 'english_instructions', 'spanish_instructions');
     var list = $('rcpStepsList');
     var empty = $('rcpStepsEmpty');
     list.innerHTML = '';
-    if (text && text.trim()) {
+    if (text && String(text).trim()) {
       var steps = String(text).split(/\r?\n/).map(function (s) {
         return s.replace(/^\s*(?:\d+\.\s*|[-*]\s*)/, '').trim();
       }).filter(Boolean);
@@ -611,6 +669,15 @@
       list.style.display = 'none';
       empty.style.display = '';
     }
+  }
+
+  // Page-level language switch: update toggle UI + re-render the open recipe.
+  function setLang(lang) {
+    currentLang = (lang === 'es') ? 'es' : 'en';
+    $$('.rcp-page-lang button').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.lang === currentLang);
+    });
+    if (currentRecipe) renderDetail(currentRecipe);
   }
 
   function filterByCat(cat) {
@@ -648,14 +715,8 @@
   $('rcpSearch').addEventListener('input', function () {
     applyFilter(activeCat, this.value.trim().toLowerCase());
   });
-  $$('.rcp-lang-toggle button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      if (b.disabled) return;
-      var sel = $$('.rcp-row.selected')[0];
-      if (!sel) return;
-      var r = DATA.filter(function (x) { return String(x.id) === sel.dataset.recipeId; })[0];
-      if (r) setLang(b.dataset.lang, r);
-    });
+  $$('.rcp-page-lang button').forEach(function (b) {
+    b.addEventListener('click', function () { setLang(b.dataset.lang); });
   });
   $$('.rcp-row').forEach(function (row) {
     row.addEventListener('click', function () {

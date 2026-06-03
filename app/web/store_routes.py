@@ -2933,24 +2933,158 @@ def _prep_initials(name):
 
 
 def _prep_recipe_view(db, recipe_id):
-    """(yield_label, prep_minutes, shelf_days, [ingredients]) for a
-    linked Recipe, or (None, None, None, []). aick: map this onto the
-    actual Recipe / recipe-ingredient columns the Recipes feature
-    stores — field names below are the template's expected shape."""
+    """(yield_label, prep_time, shelf_life, [ingredients]) for a linked
+    Recipe, else (None, None, None, []). samai: wired onto the real Recipe
+    schema — ingredients_json holds the bilingual
+    [{name_en,name_es,qty_single,qty_double}] list; yield lives in
+    batch_sizes_json. Prep board shows the English name + single-batch qty."""
     if not recipe_id:
         return None, None, None, []
+    import json as _json
     from app.models import Recipe
     r = db.get(Recipe, recipe_id)
     if r is None:
         return None, None, None, []
-    ingredients = [
-        {"name": ing.name, "qty": ing.quantity, "unit": ing.unit}
-        for ing in getattr(r, "ingredients", []) or []
-    ]
-    return (getattr(r, "yield_label", None),
-            getattr(r, "prep_minutes", None),
-            getattr(r, "shelf_days", None),
-            ingredients)
+    try:
+        raw = _json.loads(r.ingredients_json) if r.ingredients_json else []
+    except Exception:
+        raw = []
+    ingredients = []
+    for ing in (raw or []):
+        if not isinstance(ing, dict):
+            continue
+        ingredients.append({
+            "name": ing.get("name_en") or ing.get("name") or "",
+            "qty": ing.get("qty_single") or ing.get("qty") or "",
+            "unit": ing.get("unit") or "",
+        })
+    y = None
+    try:
+        _bs = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else None
+        if isinstance(_bs, dict):
+            y = _bs.get("yield_en") or _bs.get("yield_es")
+    except Exception:
+        y = None
+    return (y, r.prep_time, r.shelf_life, ingredients)
+
+
+# Prep-item -> recipe auto-link by name (samai #9b). PrepItem.recipe_id is
+# usually unset, so match the prep item's name to a Recipe name: exact first,
+# then a small Spanish/English alias map, then a prefix fallback. Normalized
+# lower/strip on both sides.
+_PREP_RECIPE_ALIASES = {
+    "refried": "refritos beans",
+    "costillas": "pork ribs",
+    "cochina": "cochinita pibil",
+    "cochinita": "cochinita pibil",
+    "black bean": "black beans homemade",
+}
+
+
+def _norm_recipe_name(s):
+    return (s or "").strip().lower()
+
+
+def _prep_recipe_name_map(db):
+    """Return a resolver with .get(prep_name) -> recipe_id (or None),
+    matching exact name, then alias, then prefix either direction."""
+    from app.models import Recipe
+    exact = {}
+    names = []
+    try:
+        for rid, nm in db.query(Recipe.id, Recipe.name).all():
+            key = _norm_recipe_name(nm)
+            if key and key not in exact:
+                exact[key] = rid
+                names.append((key, rid))
+    except Exception:
+        pass
+
+    class _NameMap:
+        def get(self, raw_name):
+            key = _norm_recipe_name(raw_name)
+            if not key:
+                return None
+            if key in exact:
+                return exact[key]
+            alias = _PREP_RECIPE_ALIASES.get(key)
+            if alias and alias in exact:
+                return exact[alias]
+            for nk, rid in names:
+                if nk.startswith(key) or key.startswith(nk):
+                    return rid
+            return None
+
+    return _NameMap()
+
+
+def _parse_qty(s):
+    """Parse a quantity like '12 CUPS', '1/2 BAG', '1 1/2 GALL', '2.5 LB'
+    into (float_value, unit). Returns (None, original) if the leading
+    amount can't be parsed."""
+    import re as _re
+    s = (s or "").strip()
+    if not s:
+        return None, ""
+    m = _re.match(r"^(\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)\s*(.*)$", s)
+    if not m:
+        return None, s
+    num_str, unit = m.group(1), m.group(2).strip()
+    try:
+        if " " in num_str:
+            whole, frac = num_str.split()
+            n, d = frac.split("/")
+            val = float(whole) + float(n) / float(d)
+        elif "/" in num_str:
+            n, d = num_str.split("/")
+            val = float(n) / float(d)
+        else:
+            val = float(num_str)
+    except Exception:
+        return None, s
+    return val, unit
+
+
+def _fmt_qty(val):
+    if abs(val - round(val)) < 1e-9:
+        return str(int(round(val)))
+    return f"{val:.2f}".rstrip("0").rstrip(".")
+
+
+def _prep_total_ingredients(sel_views):
+    """Sum ingredients across all selected items' linked recipes, grouped by
+    (ingredient name, unit). samai #14 — 'add up all the chopped onions'.
+    Parseable amounts are summed; mixed/unparseable units are listed raw."""
+    agg = {}
+    order = []
+    for v in sel_views:
+        for ing in (v.get("ingredients") or []):
+            name = (ing.get("name") or "").strip()
+            if not name:
+                continue
+            qty = (ing.get("qty") or "").strip()
+            val, unit = _parse_qty(qty)
+            key = (name.lower(), (unit or "").lower())
+            if key not in agg:
+                agg[key] = {"name": name, "unit": unit or "",
+                            "total": 0.0, "ok": True, "raw": []}
+                order.append(key)
+            slot = agg[key]
+            slot["raw"].append(qty or "?")
+            if val is None:
+                slot["ok"] = False
+            else:
+                slot["total"] += val
+    out = []
+    for key in order:
+        slot = agg[key]
+        if slot["ok"]:
+            disp = (f"{_fmt_qty(slot['total'])} {slot['unit']}").strip()
+        else:
+            disp = " + ".join(slot["raw"])
+        out.append({"name": slot["name"], "qty": disp})
+    out.sort(key=lambda x: x["name"].lower())
+    return out
 
 
 def _render_prep_list_v3(db, label, active_key):
@@ -2980,10 +3114,31 @@ def _render_prep_list_v3(db, label, active_key):
     by_item = {e.prep_item_id: e for e in entries}
     locked = any(e.locked for e in entries) if entries else False
 
+    # Auto-link prep items to recipes by name (samai #9b).
+    recipe_by_name = _prep_recipe_name_map(db)
+    # Full active-staff names for the assignee typeahead (#6) — names only,
+    # no phone/email/ids (roster-privacy rule).
+    all_staff = []
+    try:
+        from app.models import Employee
+        all_staff = [
+            n for (n,) in db.query(Employee.full_name)
+            .filter(Employee.active.is_(True))
+            .order_by(Employee.full_name.asc()).all() if n
+        ]
+    except Exception:
+        all_staff = []
+
+    _legacy_status = {"done": "completed", "in-progress": "partly"}
+
     def _item_view(pi):
         e = by_item.get(pi.id)
-        y, mins, shelf, ings = _prep_recipe_view(db, pi.recipe_id)
-        status = (e.status if e else "selected")
+        rid = pi.recipe_id or recipe_by_name.get(pi.name)
+        y, mins, shelf, ings = _prep_recipe_view(db, rid)
+        status = (e.status if e else None) or "not-completed"
+        status = _legacy_status.get(status, status)
+        if status not in ("not-completed", "partly", "completed", "not-needed"):
+            status = "not-completed"
         return {
             "id": pi.id,
             "entry_id": e.id if e else None,
@@ -2997,8 +3152,8 @@ def _render_prep_list_v3(db, label, active_key):
             "status": status,
             "batch_size": (e.batch_size if e else None),
             "notes": (e.notes if e else None),
-            "recipe_id": pi.recipe_id,
-            "recipe_name": None,
+            "recipe_id": rid,
+            "recipe_name": (pi.name if rid else None),
             "yield_label": y, "prep_minutes": mins, "shelf_days": shelf,
             "ingredients": ings,
         }
@@ -3023,8 +3178,12 @@ def _render_prep_list_v3(db, label, active_key):
         "selected": len(sel_views),
         "assigned": sum(1 for v in sel_views if v["assignee"]),
         "unassigned": sum(1 for v in sel_views if not v["assignee"]),
-        "in_progress": sum(1 for v in sel_views if v["status"] == "in-progress"),
-        "done": sum(1 for v in sel_views if v["status"] == "done"),
+        "in_progress": sum(1 for v in sel_views if v["status"] == "partly"),
+        "done": sum(1 for v in sel_views if v["status"] == "completed"),
+        "partly": sum(1 for v in sel_views if v["status"] == "partly"),
+        "completed": sum(1 for v in sel_views if v["status"] == "completed"),
+        "not_needed": sum(1 for v in sel_views if v["status"] == "not-needed"),
+        "not_completed": sum(1 for v in sel_views if v["status"] == "not-completed"),
     }
 
     # Prep team — aggregated from today's assignee names.
@@ -3035,18 +3194,58 @@ def _render_prep_list_v3(db, label, active_key):
         t = team_map.setdefault(v["assignee"], {
             "name": v["assignee"], "initials": _prep_initials(v["assignee"]),
             "done": 0, "in_progress": 0, "assigned": 0})
-        if v["status"] == "done":
+        if v["status"] == "completed":
             t["done"] += 1
-        elif v["status"] == "in-progress":
+        elif v["status"] == "partly":
             t["in_progress"] += 1
         else:
             t["assigned"] += 1
     team = sorted(team_map.values(), key=lambda t: t["name"])
 
+    # ---- #14 (samai): aggregated views for the "Prep team today" strip ----
+    assigned_today = [
+        {"name": v["name"], "assignee": v["assignee"],
+         "status": v["status"], "category": v["category"]}
+        for v in sel_views if v["assignee"]
+    ]
+    today_status = {
+        "selected": kpis["selected"], "assigned": kpis["assigned"],
+        "unassigned": kpis["unassigned"], "not_completed": kpis["not_completed"],
+        "partly": kpis["partly"], "completed": kpis["completed"],
+        "not_needed": kpis["not_needed"],
+    }
+    total_ingredients = _prep_total_ingredients(sel_views)
+    assignment_history = []
+    try:
+        from app.models import PrepEntry as _PE_hist
+        _hrows = _scoped(
+            db.query(_PE_hist).filter(
+                _PE_hist.entry_date < sel,
+                _PE_hist.entry_date >= (sel - timedelta(days=30)),
+                _PE_hist.assignee_name.isnot(None),
+            ), _PE_hist).all()
+        _hd = {}
+        for _e in _hrows:
+            slot = _hd.setdefault(_e.entry_date, {"assigned": 0, "completed": 0})
+            slot["assigned"] += 1
+            if _e.status in ("completed", "done"):
+                slot["completed"] += 1
+        assignment_history = [
+            {"date": d.isoformat(), "display": f"{d:%a, %b} {d.day}",
+             "assigned": s["assigned"], "completed": s["completed"]}
+            for d, s in sorted(_hd.items(), reverse=True)
+        ]
+    except Exception:
+        assignment_history = []
+
     return render_template(
         "prep_list.html",
         page_label=label, active=active_key,
         sections=sections, kpis=kpis, team=team,
+        all_staff=all_staff,
+        assigned_today=assigned_today, today_status=today_status,
+        total_ingredients=total_ingredients,
+        assignment_history=assignment_history,
         locked=locked, lock_author=None, lock_hours=None,
         selected_date=sel.isoformat(), today_iso=today.isoformat(),
         prev_date=(sel - timedelta(days=1)).isoformat(),
@@ -3125,7 +3324,7 @@ def _prep_list_v3_post(db, store_scope, user):
     if action == "toggle_select":
         e.selected = not e.selected
         if not e.selected:
-            e.status = "selected"
+            e.status = "not-completed"
 
     elif action == "set_on_hand":
         raw = (request.form.get("on_hand") or "").strip()
@@ -3140,17 +3339,14 @@ def _prep_list_v3_post(db, store_scope, user):
     elif action == "assign":
         name = (request.form.get("assignee_name") or "").strip()[:120]
         e.assignee_name = name or None
-        e.selected = True
-        if name and e.status == "selected":
-            e.status = "assigned"
-        elif not name and e.status == "assigned":
-            e.status = "selected"
+        if name:
+            e.selected = True
 
     elif action == "set_status":
-        st = (request.form.get("status") or "selected").strip()
-        if st in ("selected", "assigned", "in-progress", "done"):
+        st = (request.form.get("status") or "not-completed").strip()
+        if st in ("not-completed", "partly", "completed", "not-needed"):
             e.status = st
-            if st != "selected":
+            if st in ("partly", "completed"):
                 e.selected = True
 
     elif action == "save_detail":
@@ -3522,11 +3718,20 @@ def recipes_index():
                 bsizes = _json.loads(r.batch_sizes_json) if r.batch_sizes_json else []
             except Exception:
                 bsizes = []
+            # yield (EN/ES) is stored as a dict in batch_sizes_json by the
+            # samai bilingual seed; legacy rows may hold a list instead.
+            _y_en = _y_es = ""
+            if isinstance(bsizes, dict):
+                _y_en = bsizes.get("yield_en") or ""
+                _y_es = bsizes.get("yield_es") or ""
             recipes.append({
                 "id": r.id, "code": r.code,
                 "category": r.category, "name": r.name,
-                "prep_time": r.prep_time, "shelf_life": r.shelf_life,
-                "batch_sizes": bsizes, "ingredients": ings,
+                "prep_time": r.prep_time, "prep_time_es": r.prep_time_es,
+                "shelf_life": r.shelf_life, "shelf_life_es": r.shelf_life_es,
+                "yield_en": _y_en, "yield_es": _y_es,
+                "batch_sizes": bsizes if isinstance(bsizes, list) else [],
+                "ingredients": ings,
                 "english_instructions": r.english_instructions,
                 "spanish_instructions": r.spanish_instructions,
                 "notes": r.notes,
@@ -3711,6 +3916,68 @@ _FRESH_FOOD_ITEMS = [
 ]
 
 
+# Fresh-food PLACE-ORDER layout (samai #3, Sam Kitchen-dashboard batch):
+# reorganized categories + a per-item Size label for the order page. Slugs
+# reuse existing item slugs where the item matches (so rolling-avg history
+# carries over); new items get new slugs. The legacy _FRESH_FOOD_ITEMS above
+# is kept as-is for the recent-orders view + flat-slug helpers.
+_FRESH_FOOD_ORDER_LAYOUT = [
+    {"name": "MEAT", "items": [
+        {"slug": "beef-fajita",    "label": "Beef Fajita",    "size": "Tray"},
+        {"slug": "chicken-fajita", "label": "Chicken Fajita", "size": "Tray"},
+        {"slug": "ribs",           "label": "Ribs",           "size": "Single"},
+        {"slug": "cochinita",      "label": "Cochinita",      "size": "Tray"},
+        {"slug": "ground-beef",    "label": "Ground Beef",    "size": "Bag"},
+        {"slug": "pollo-ranchero", "label": "Pollo Ranchero", "size": "Bag"},
+        {"slug": "cancun",         "label": "Cancun",         "size": "4-pack"},
+        {"slug": "shrimp-salad",   "label": "Shrimp",         "size": "8-pack"},
+        {"slug": "sausage",        "label": "Sausage",        "size": "Box"},
+        {"slug": "burger-beef",    "label": "Burger Beef",    "size": "Single"},
+    ]},
+    {"name": "SAUCES", "items": [
+        {"slug": "bbq",             "label": "BBQ",             "size": "Bag"},
+        {"slug": "chipotle-cream",  "label": "Chipotle Cream",  "size": "Bag"},
+        {"slug": "chipotle-mayo",   "label": "Chipotle Mayo",   "size": "Bag"},
+        {"slug": "chili-gravy",     "label": "Chili Gravy",     "size": "Bag"},
+        {"slug": "chicken-stock",   "label": "Chicken Stock",   "size": "Bag"},
+        {"slug": "cilantro-ginger", "label": "Cilantro Ginger", "size": "Bag"},
+        {"slug": "poblano",         "label": "Poblano",         "size": "Bag"},
+        {"slug": "queso-dzlf",      "label": "Queso Dip",       "size": "Bag"},
+        {"slug": "ranchera",        "label": "Ranchera",        "size": "Bag"},
+        {"slug": "seafood",         "label": "Seafood",         "size": "Bag"},
+        {"slug": "street-taco",     "label": "Street Taco",     "size": "Bag"},
+        {"slug": "tomatillo",       "label": "Tomatillo",       "size": "Bag"},
+    ]},
+    {"name": "BEANS", "items": [
+        {"slug": "black",       "label": "Black",       "size": "Bag"},
+        {"slug": "charros",     "label": "Charros",     "size": "Bag"},
+        {"slug": "charros-mix", "label": "Charros Mix", "size": "Bag"},
+        {"slug": "refried",     "label": "Refried",     "size": "Bag"},
+    ]},
+    {"name": "DRESSING", "items": [
+        {"slug": "ranchera-dressing", "label": "Ranchera",      "size": "Bag"},
+        {"slug": "sweet-ginger",      "label": "Sweet Ginger",  "size": "Bag"},
+        {"slug": "honey-mustard",     "label": "Honey Mustard", "size": "Bag"},
+        {"slug": "avocado-ranch",     "label": "Avocado Ranch", "size": "Bag"},
+    ]},
+    {"name": "MISC", "items": [
+        {"slug": "spinach",           "label": "Spinach",           "size": "Bag"},
+        {"slug": "steam-vegetables",  "label": "Steam Vegetables",  "size": "Bag"},
+        {"slug": "mexican-butter",    "label": "Mexican Butter",    "size": ""},
+        {"slug": "empanadas",         "label": "Empanadas",         "size": "Single"},
+        {"slug": "stuffed-jalapenos", "label": "Stuffed Jalapeños", "size": "Single"},
+        {"slug": "masa-flour",        "label": "Masa Flour",        "size": "Tray"},
+        {"slug": "taco-crispy",       "label": "Taco Crispy",       "size": "Box"},
+        {"slug": "tamales",           "label": "Tamales",           "size": "Box"},
+    ]},
+    {"name": "FOH", "items": [
+        {"slug": "red-sauce",   "label": "Red Sauce",   "size": "Bag"},
+        {"slug": "green-sauce", "label": "Green Sauce", "size": "Bag"},
+        {"slug": "chips",       "label": "Chips",       "size": "Box"},
+    ]},
+]
+
+
 def _ff_items_flat():
     out = []
     for cat, items in _FRESH_FOOD_ITEMS:
@@ -3858,7 +4125,7 @@ def fresh_food_place_order():
     rolling_days = [today + timedelta(days=i - 3) for i in range(7)]
     return render_template(
         "fresh_food_place_order.html",
-        categories=_FRESH_FOOD_ITEMS,
+        categories=_FRESH_FOOD_ORDER_LAYOUT,
         rolling_days=rolling_days,
         rolling_avg_by_slug=avg_by_slug,
         active="fresh_food_place_order",

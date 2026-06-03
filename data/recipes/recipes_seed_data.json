@@ -1,206 +1,2635 @@
 {
-  "_source": "TexMex_Kitchen_Recipes_Standard_Operating_Procedures.pdf (rev 9.30.2018) + HOT_1 AGUIRRE_S_RICE.pdf (rev 9.30.2018). Hand-transcribed 2026-05-19 from the SOP page set Sam attached at dev chat #6:53. 10 representative recipes spanning all 3 SOP categories + single-variant / multi-variant / multi-step shapes. Full 18+ recipe import is a follow-up via pdfplumber once SOP source-of-truth is locked.",
-  "_seed_idempotent_key": "code",
   "recipes": [
     {
-      "code": "Hot 1",
-      "category": "hot",
-      "name": "Aguirre's Rice",
-      "prep_time": "45 min",
-      "shelf_life": "1 day",
-      "batch_sizes": ["Single Recipe (4 1/2 Gal)", "Double Recipe"],
+      "code": "HOT 1",
+      "category": "HOT",
+      "name": "Cena's Rice",
+      "prep_time_en": "45 MINUTES",
+      "prep_time_es": "45 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "4 1/2 GALL",
+      "yield_es": "4 1/2 GALL",
+      "english_instructions": "PREPARATION\n• Measure the amount of rice and brown it in the fryer with help of the colander.\n• In a pot put the stock, spices, vegetables and oil\n• When the rice is ready pour it into the pot together with the other ingredients.\n• Stir well and let cook for 35 minutes. Set a timer. Disconnect the cooker, stir and let rest for 15 more minutes. Set a 15 minute timer.\n• Put it in the appropriate containers using a bag.",
+      "spanish_instructions": "PREPARACIÓN\n• MIDA LA CANTIDAD DE RICE Y DORELO EN LA FREIDORA CON AYUDA DEL COLADOR.\n• EN UNA OLLA PONGA EL CALDO, ESPECIAS, VEGETALES Y ACEITE\n• CUANDO YA ESTÉ EL ARROZ VIÉRTELO EN LA OLLA JUNTO CON LOS DEMÁS INGREDIENTES.\n• REVOLVER BIEN Y DEJAR COCINAR DURANTE 35 MINUTOS. CONFIGURAR UN TEMPORIZADOR. DESCONECTE LA COCINA, REVUELVA Y DEJE EN REPOSO POR 15 MINUTOS MÁS. PROGRAMAR UN TEMPORIZADOR DE 15 MINUTOS.\n• PONGALO EN LOS CONTENEDORES ADECUADOS UTILIZANDO UNA BOLSA.",
       "ingredients": [
-        {"name": "Rice Long Grain (arroz)", "qty": "12 Cups (S) / 24 Cups (D)"},
-        {"name": "Oil (aceite)", "qty": "1 Cup (S) / 2 Cups (D)"},
-        {"name": "Frozen Corn (maiz)", "qty": "2 Cups (S) / 4 Cups (D)"},
-        {"name": "Frozen Carrot (zanahoria)", "qty": "2 Cups (S) / 4 Cups (D)"},
-        {"name": "Chopped Bell Pepper", "qty": "2 Cups (S) / 4 Cups (D)"},
-        {"name": "Chopped Onions (cebolla)", "qty": "4 Cups (S) / 8 Cups (D)"},
-        {"name": "Chopped Fresh Garlic (ajo)", "qty": "4 Tbsp (S) / 8 Tbsp (D)"},
-        {"name": "Chicken Stock (caldo)", "qty": "1 Qt (S) / 2 Qt (D)"},
-        {"name": "Hot Water (agua)", "qty": "5 Qt (S) / 10 Qt (D)"},
-        {"name": "Chicken Base", "qty": "4 Tbsp (S) / 8 Tbsp (D)"},
-        {"name": "Sazones", "qty": "1/2 Bag (S) / 1 Bag (D)"}
+        {
+          "name_en": "LONG GRAIN RICE (ARROZ)",
+          "name_es": "ARROZ DE GRANO LARGO",
+          "qty_single": "12 CUPS",
+          "qty_double": "24 CUPS"
+        },
+        {
+          "name_en": "OIL (ACEITE)",
+          "name_es": "ACEITE",
+          "qty_single": "1 CUP",
+          "qty_double": "2 CUP"
+        },
+        {
+          "name_en": "FROZEN CORN",
+          "name_es": "MAÍZ CONGELADO",
+          "qty_single": "2 CUPS",
+          "qty_double": "4 CUPS"
+        },
+        {
+          "name_en": "FROZEN CARROT (ZANAHORIA)",
+          "name_es": "ZANAHORIA CONGELADA",
+          "qty_single": "2 CUPS",
+          "qty_double": "4 CUPS"
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "2 CUPS",
+          "qty_double": "4 CUPS"
+        },
+        {
+          "name_en": "CHOPPED ONIONSS (CEBOLLA)",
+          "name_es": "CEBOLLA PICADA",
+          "qty_single": "4 CUPS",
+          "qty_double": "8 CUPS"
+        },
+        {
+          "name_en": "CHOPPED GARLIC (AJO)",
+          "name_es": "AJO FRESCO PICADO",
+          "qty_single": "4 TABLESPOON",
+          "qty_double": "8 TABLESPOON"
+        },
+        {
+          "name_en": "CHICKEN STOCK (CALDO)",
+          "name_es": "CALDO DE POLLO",
+          "qty_single": "1 QT",
+          "qty_double": "2 QT"
+        },
+        {
+          "name_en": "HOT WATER (AQUA)",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "5 QT",
+          "qty_double": "10 QT"
+        },
+        {
+          "name_en": "CHICKEN BASE (IMPERIAL)",
+          "name_es": "BASE DE POLLO",
+          "qty_single": "4 TABLESPOON",
+          "qty_double": "8 TABLESPOON"
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "1/2 (medio) BAG",
+          "qty_double": "1 BAG"
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. Mida la cantidad de rice y dorelo en la freidora con ayuda del colador.\n2. En una olla ponga el caldo, especias, vegetales y aceite.\n3. Cuando ya esté el arroz viértelo en la olla junto con los demás ingredientes.\n4. Revolver bien y dejar cocinar durante 35 minutos. Configurar un temporizador.\n5. Desconecte la cocina, revuelva y deje en reposo por 15 minutos más. Programar un temporizador de 15 minutos.\n6. Pongalo en los contenedores adecuados utilizando una bolsa.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+      "notes_en": "• The Double Recipe list appeared twice in the source file. It is included once here.",
+      "notes_es": "• La lista de Receta Doble apareció dos veces en el archivo fuente. Está incluida una vez aquí."
     },
     {
-      "code": "Hot 9",
-      "category": "hot",
-      "name": "Spinach",
-      "prep_time": "10 min",
-      "shelf_life": "4 days",
-      "batch_sizes": ["Single Recipe (6 Lbs)"],
+      "code": "HOT 2",
+      "category": "HOT",
+      "name": "Black Beans Homemade",
+      "prep_time_en": "2 HOURS MINUTES",
+      "prep_time_es": "2 HORAS MINUTOS",
+      "shelf_life_en": "3 DAYS",
+      "shelf_life_es": "3 DIAS",
+      "yield_en": "3 1/2 GALL",
+      "yield_es": "3 1/2 GALL",
+      "english_instructions": "PREPARATION STEP 1\n• Put all the ingredients in the appropriate pot and cook the black beans for 2 hours over medium heat after they are ready label them and refrigerate them ingredients\nPREPARATION STEP 2\n• In a pot put the oil to heat when it is hot add the vegetables except the epazote and let cook over medium heat\n• Let the vegetables brown and then add the epazote and let cook about 2 or 3 minutes before adding the beans and the juice. After adding the beans raise the heat and let cook until they boil then remove them from the heat and serve them",
+      "spanish_instructions": "PREPARACIÓN STEP 1\n• PONGA TODOS LOS INGREDIENTES EN LA  OLLA  ADECUADA Y COCINE LOS BLACK BEANS  POR 2 HORAS A FUEGO MEDIO  DESPUÉS QUE ESTÁN LISTOS ETIQUETARLOS Y REFRIGERARLOS INGREDIENTES\nPREPARACIÓN STEP 2\n• EN UNA OLLA PONGA A CALENTAR EL ACEITE CUANDO ESTÉ CALIENTE AGREGUE LOS VEGETALES MENOS EL EPAZOTE Y DEJE COCINAR A FUEGO MEDIO\n• DEJE DORAR LOS VEGETALES Y SEGUIDAMENTE AGREGUE EL EPAZOTE Y DEJE COCINAR UNOS 2 O 3 MINUTOS ANTES DE AGREGAR LOS FRIJOLES Y EL JUGO .DESPUÉS DE AGREGAR LOS FRIJOLES SUBA EL FUEGO Y DEJE COCINAR HASTA QUE HIERVAN LUEGO RETIRARLOS DEL FUEGO Y SIRVALOS",
       "ingredients": [
-        {"name": "Margarine", "qty": "3 Lbs"},
-        {"name": "Chopped Garlic", "qty": "12 Tbsp"},
-        {"name": "Frozen Spinach", "qty": "36 Lbs"},
-        {"name": "Cumin", "qty": "12 Tsp"},
-        {"name": "Black Pepper", "qty": "6 Tsp"},
-        {"name": "Salt", "qty": "12 Tsp"},
-        {"name": "Cayenne Pepper", "qty": "3 Tsp"},
-        {"name": "Heavy Cream", "qty": "3 Cups"},
-        {"name": "Mix Cheese", "qty": "6 Lbs"}
+        {
+          "name_en": "DRY BLACK BEANS",
+          "name_es": "FRIJOLES NEGROS SECOS",
+          "qty_single": "25 LBS (1BAG)",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "12 GALLONS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "1 LB (16OZ)",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHILI POWDER",
+          "name_es": "CHILE EN POLVO",
+          "qty_single": "8 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "OLIVE OIL",
+          "name_es": "ACEITE DE OLIVA",
+          "qty_single": "1/4 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED POBLANO",
+          "name_es": "POBLANO PICADO",
+          "qty_single": "1 1/2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "1 1/2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SLICED EPAZOTE",
+          "name_es": "EPAZOTE REBANADO",
+          "qty_single": "1 BUNCH",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK BEANS",
+          "name_es": "FRIJOLES NEGROS",
+          "qty_single": "3 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK BEAN JUICE",
+          "name_es": "JUGO DE FRIJOLES NEGROS",
+          "qty_single": "2 1/2 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "2 TEA SPOON",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. Descongele la espinaca completamente y exprimirla para sacarle todo el agua posible.\n2. En un sartén, derretir la mantequilla y agregue el ajo. Cocine hasta que esté ligeramente dorado.\n3. Agregue la espinaca, cayenne pepper, comino, pimienta y sal. Revuelva bien y cocine por aproximadamente 5 minutos a fuego medio.\n4. Seguidamente, agregue la heavy cream y, al pasar unos minutos, el queso mixto. Revuelva hasta que el queso esté completamente disuelto.\n5. Vacíe en un contenedor y deje enfriar para porcionar en bolsas de 4 oz y bolsas de 1 1/2 oz. Etiquétalo y refrigerarlo.",
-      "notes": "Revision: 9.30.2025 — Cenas Kitchen."
+      "notes_en": null,
+      "notes_es": null
     },
     {
-      "code": "Hot 10",
-      "category": "hot",
-      "name": "Refritos Beans (Refried Beans)",
-      "prep_time": "2h 15min",
-      "shelf_life": "7 days",
-      "batch_sizes": ["Single Recipe (4 Torpan)"],
+      "code": "HOT 3",
+      "category": "HOT",
+      "name": "Pinto Beans Homemade",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "6 /3 GALL",
+      "yield_es": "6 /3 GALL",
+      "english_instructions": "PREPARATION STEP 1\n• Put all the ingredients in the appropriate pot and cook the black beans for 2 hours over medium heat after they are ready label them and refrigerate them ingredients\nPREPARATION STEP 2 CHARRO MIX\n• In an appropriate container put the bacon to cook and brown it without burning it, add the sausage to the bacon and lower the heat for a few minutes.\n• When it is already browned add all the ingredients except the tomato, cilantro and the spices.\n• When the vegetables are cooked add the tomato and cilantro and after a few minutes put the spices.\n• When about 5 minutes have passed remove from heat. Label it and refrigerate it\nPREPARATION STEP 3\n• In an appropriate container put all ingredients and put to heat in the steamer for 40 min, when they are hot place in the expo",
+      "spanish_instructions": "PREPARACIÓN STEP 1\n• PONGA TODOS LOS INGREDIENTES EN LA OLLA  ADECUADA Y COCINE LOS BLACK BEANS  POR 2 HORAS A FUEGO MEDIO  DESPUÉS QUE ESTÁN LISTOS ETIQUETARLOS Y REFRIGERARLOS INGREDIENTES\nPREPARACIÓN STEP 2 CHARRO MIX\n• EN UNA CONTENEDOR APROPIADO PONGA A COCINAR EL BACON Y DORELO SIN QUEMARLO, AGREGUE LA SALCHICHA AL BACON Y BAJE EL FUEGO POR UNOS MINUTOS.\n• CUANDO YA ESTÉ DORADO AGREGUE TODOS LOS INGREDIENTES MENOS EL TOMATE, EL CILANTRO Y LA ESPECIAS.\n• CUANDO LOS VEGETALES ESTÉN COCIDOS AGREGUE EL TOMATE Y EL CILANTRO Y LUEGO DE UNOS MINUTOS PONGA LAS ESPECIAS.\n• CUANDO HAYAN PASADO UNOS 5 MINUTOS RETIRE DEL FUEGO. ETIQUETALO Y REFRIGERARLO\nPREPARACIÓN STEP 3\n• EN UN CONTENEDOR ADECUADO PONGA TODOS LOS INGREDIENTES Y PONGA A CALENTAR EN EL STEAMER POR 40 MIN, CUANDO ESTÉN CALIENTES COLOQUE EN EL EXPO",
       "ingredients": [
-        {"name": "[Step 1] Dry Pinto Beans", "qty": "50 Lb Bag"},
-        {"name": "[Step 1] Hot Water", "qty": "16 Gallons"},
-        {"name": "[Step 1] Salt", "qty": "2 Lbs"},
-        {"name": "[Step 1] Chili Powder", "qty": "1 Lb"},
-        {"name": "[Step 2] Lard Pork", "qty": "24 Lbs"},
-        {"name": "[Step 2] Sliced Onions", "qty": "6 Gallons"},
-        {"name": "[Step 2] Whole Garlic", "qty": "48 Oz"},
-        {"name": "[Step 2] Jalapeños (cut in half)", "qty": "32 Oz"},
-        {"name": "[Step 2] Cumin", "qty": "6 Oz"}
+        {
+          "name_en": "DRY PINTO BEANS",
+          "name_es": "FRIJOLES PINTOS SECOS",
+          "qty_single": "50 LBS",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "24 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "32 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHILI POWDER",
+          "name_es": "CHILE EN POLVO",
+          "qty_single": "16 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "SLICED BACON",
+          "name_es": "BACON REBANADO",
+          "qty_single": "24 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SLICED SAUSAGE",
+          "name_es": "SALCHICHA REBANADA",
+          "qty_single": "16 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CRUSHED TOMATO (CAN)",
+          "name_es": "TOMATE TRITURADO",
+          "qty_single": "8 CANS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED JALAPENO",
+          "name_es": "JALAPEÑO PICADO",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "1.5 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "COOKED PINTO BEANS",
+          "name_es": "FRIJOLES PINTOS GRANO",
+          "qty_single": "3 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "PINTO BEAN JUICE",
+          "name_es": "JUGO DE FRIJOL PINTO",
+          "qty_single": "3 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHARRO MIX",
+          "name_es": "CHARRO MIX",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "Step 1 — Pinto Beans:\n1. Ponga todos los ingredientes en la olla adecuada y cocine los beans por 2 horas a fuego medio. Después que están listos, etiquetarlos y refrigerarlos.\n\nStep 2 — Refritos:\n1. En una olla ponga la manteca junto con la cebolla. Cuando la cebolla esté media cocida, agregue el jalapeño y el ajo.\n2. Dórelos sin quemarlos y después agregue a los frijoles.\n3. Después tueste el comino en un sartén sin quemarlo y agrégueselo a los frijoles.\n4. Muela los frijoles con la máquina y deje cocinar hasta que estén color café.\n5. Cuando ya estén, póngalos en bolsas apropiadas, etiquétalo y refrigerarlo.",
-      "notes": "Revision: 9.30.2025 — Cenas Kitchen. Two-stage prep: cook pinto beans first, then refry."
+      "notes_en": null,
+      "notes_es": null
     },
     {
-      "code": "Hot 11",
-      "category": "hot",
+      "code": "HOT 3 (Charro Mix sub-section)",
+      "category": "HOT",
+      "name": "Charros",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": null,
+      "yield_es": null,
+      "english_instructions": "PREPARATION STEP 2 CHARRO MIX\n• In an appropriate container put the bacon to cook and brown it without burning it, add the sausage to the bacon and lower the heat for a few minutes.\n• When it is already browned add all the ingredients except the tomato, cilantro and the spices.\n• When the vegetables are cooked add the tomato and cilantro and after a few minutes put the spices.\n• When about 5 minutes have passed remove from heat. Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN STEP 2 CHARRO MIX\n• EN UNA CONTENEDOR APROPIADO PONGA A COCINAR EL BACON Y DORELO SIN QUEMARLO, AGREGUE LA SALCHICHA AL BACON Y BAJE EL FUEGO POR UNOS MINUTOS.\n• CUANDO YA ESTÉ DORADO AGREGUE TODOS LOS INGREDIENTES MENOS EL TOMATE, EL CILANTRO Y LA ESPECIAS.\n• CUANDO LOS VEGETALES ESTÉN COCIDOS AGREGUE EL TOMATE Y EL CILANTRO Y LUEGO DE UNOS MINUTOS PONGA LAS ESPECIAS.\n• CUANDO HAYAN PASADO UNOS 5 MINUTOS RETIRE DEL FUEGO. ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "SLICED BACON",
+          "name_es": "BACON REBANADO",
+          "qty_single": "24 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SLICED SAUSAGE",
+          "name_es": "SALCHICHA REBANADA",
+          "qty_single": "16 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CRUSHED TOMATO (CAN)",
+          "name_es": "TOMATE TRITURADO",
+          "qty_single": "8 CANS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED JALAPENO",
+          "name_es": "JALAPEÑO PICADO",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "1.5 POUNDS",
+          "qty_double": null
+        }
+      ],
+      "notes_en": "Split from the Pinto Beans Homemade card (HOT 3): Charro Mix is its STEP 2 sub-section, extracted here as a standalone recipe so a 'Charros' prep item can link to it.",
+      "notes_es": "Separado de la tarjeta Frijoles Pintos Homemade (HOT 3): el Charro Mix es su subsección STEP 2, extraído aquí como receta independiente para que un artículo 'Charros' pueda enlazarse."
+    },
+    {
+      "code": "HOT 5",
+      "category": "HOT",
+      "name": "Chicken Stock",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "7 DAYS",
+      "shelf_life_es": "7 DIAS",
+      "yield_en": "7 1/2 GALL",
+      "yield_es": "7 1/2 GALL",
+      "english_instructions": "PREPARATION\n• In a large pot place all the ingredients the carrot is not peeled only cut in half and the tomatoes in 4 pieces\n• Put them to cook for 3 hours over medium heat\n• When the stock is ready place it in the appropriate containers\n• Label it and refrigerate it\nDOUBLE RECIPE",
+      "spanish_instructions": "PREPARACIÓN\n• en una olla grande coloque todos los ingredientes la zanahoria no se pela solo se corta a la mitad y los tomates en 4 pedazos\n• póngalos a cocinar por 3 horas a fuego medio\n• cuando esté listo el caldo colóquelo en los recipientes adecuados\n• etiquetalo y refrigerarlo\nRECETA DOBLE",
+      "ingredients": [
+        {
+          "name_en": "CHICKEN BREAST",
+          "name_es": "PECHUGA DE POLLO",
+          "qty_single": "16 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "30 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH ONION SLICED",
+          "name_es": "CEBOLLA FRESCA REBANADA",
+          "qty_single": "2 ONIONS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CARROTS CUT IN HALF",
+          "name_es": "ZANAHORIAS CORTADAS A LA MITAD",
+          "qty_single": "2 CARROTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH TOMATO CUT IN HALF",
+          "name_es": "TOMATE FRESCO CORTADO A LA MITAD",
+          "qty_single": "4 TOMATOES",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHOLE FRESH GARLIC",
+          "name_es": "AJO FRESCO ENTERO",
+          "qty_single": "3 LB",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN BASE (IMPERIAL) (IMPERIAL)",
+          "name_es": "BASE DE POLLO IMPERIAL",
+          "qty_single": "18 LB",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "24 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK PEPPER",
+          "name_es": "PIMIENTA NEGRA",
+          "qty_single": "8 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CUMIN",
+          "name_es": "COMINO",
+          "qty_single": "8 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": "• The source includes a Double Recipe heading with no ingredient amounts.",
+      "notes_es": "• El archivo fuente incluye un título de Receta Doble sin cantidades de ingredientes."
+    },
+    {
+      "code": "HOT 6",
+      "category": "HOT",
+      "name": "Flour Tortilla",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "2 DAYS",
+      "shelf_life_es": "2 DIAS",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION\n• Put the flour to mix for 5 minutes together with the spices, shortening and butter. Always use speed 1 for all this recipe.\n• Turn off the machine. Add the water all at once. The water must be at room temperature. Turn the machine back on and then leave the dough for 8 minutes until it becomes a perfectly smooth ball.\n• When it is ready take out the dough let rest for 40 minutes before using it. Then weigh 2 oz. each ball and place 35 units per tray. Cover well with plastic.\n• Weigh balls of 4 1/2 pounds and put them in the machine\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA LA FLOUR A REVOLVER POR 5 MINUTOS JUNTO CON LAS ESPECIES, LA MANTECA Y LA MANTEQUILLA. UTILICE SIEMPRE LA VELOCIDAD 1 PARA TODA ESTA RECETA.\n• APAGUE LA MÁQUINA. AGREGUE EL AGUA DE UNA VEZ. EL AGUA DEBE ESTAR A TEMPERATURA AMBIENTE. VUELVA A ENCENDER LA MÁQUINA Y LUEGO DEJE LA MASA DURANTE 8 MINUTOS HASTA QUE SE CONVIERTA EN UNA BOLA PERFECTAMENTE SUAVE.\n• CUANDO ESTÉ LISTA SAQUE LA MASA DEJE REPOSAR POR 40 MINUTOS ANTES DE USARLA. LUEGO PESE 2 OZ. CADA BOLITA Y COLOQUE 35 UNIDADES POR CADA CHAROLA. CUBRA BIEN CON PLÁSTICO.\n• PESE BOLAS DE 4 1/2 LIBRAS Y PONGALAS EN LA MAQUINA\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "ALL PURPOSE FLOUR",
+          "name_es": "HARINA TODO USO",
+          "qty_single": "25 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "ALL VEGETABLE SHORTENING",
+          "name_es": "MANTECA VEGETAL",
+          "qty_single": "3 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "BUTTER BLEND",
+          "name_es": "BUTTER BLEND",
+          "qty_single": "1 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "WARM WATER",
+          "name_es": "AGUA TIBIA",
+          "qty_single": "6 QT + 2 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "BAKING POWDER",
+          "name_es": "POLVO PARA HORNEAR",
+          "qty_single": "6 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "12 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT 10",
+      "category": "HOT",
+      "name": "Refritos Beans",
+      "prep_time_en": "2:15 HOURS MINUTES FROM THE BEGINNING",
+      "prep_time_es": "2:15 HORAS MINUTOS DESDE EL PRINCIPIO",
+      "shelf_life_en": "7 DAYS",
+      "shelf_life_es": "7 DIAS",
+      "yield_en": "4 TORPAN",
+      "yield_es": "4 TORPAN",
+      "english_instructions": "PREPARATION PINTO BEANS STEP 1\n• Put all ingredients in the appropriate pot and cook the black beans for 2 hours over medium heat after they are ready label them and refrigerate them ingredients\nPREPARATION REFRITOS STEP 2\n• In a pot put the lard together with the onion when the onion is half cooked add the jalapeño and the garlic\n• Brown them without burning them and then add to the beans\n• After toast the cumin in a pan without burning it and add it to the beans\n• Grind the beans with the machine and let cook until they are brown color\n• When they are ready put them in appropriate bags label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN PINTO BEANS STEP 1\n• PONGA TODOS LOS INGREDIENTES EN LA OLLA  ADECUADA Y COCINE LOS BLACK BEANS  POR 2 HORAS A FUEGO MEDIO  DESPUÉS QUE ESTÁN LISTOS ETIQUETARLOS Y REFRIGERARLOS INGREDIENTES\nPREPARACIÓN REFRITOS STEP 2\n• EN UNA OLLA PONGA LA MANTECA JUNTO CON LA CEBOLLA CUANDO LA CEBOLLA ESTÉ MEDIA COCIDA AGREGUE EL JALAPEÑO Y EL AJO\n• DORELOS SIN QUEMARLOS Y DESPUÉS AGREGUE A LOS FRIJOLES\n• DESPUÉS TUESTE EL COMINO EN UN SARTÉN SIN QUEMARLO Y AGREGUE CELO A LOS FRIJOLES\n• MUELA LOS FRIJOLES CON LA MÁQUINA Y DEJE COCINAR HASTA QUE ESTÉN COLOR CAFE\n• CUANDO ESTÉN YA ESTÁN PONGALOS EN BOLSAS APROPIADAS ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "DRY PINTO BEANS",
+          "name_es": "FRIJOLES PINTOS SECOS",
+          "qty_single": "50 LB BAG",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "16 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "2 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHILI POWDER",
+          "name_es": "CHILI POWDER",
+          "qty_single": "1 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "COOKED PINTO BEANS",
+          "name_es": "FRIJOLES PINTOS COCIDOS",
+          "qty_single": null,
+          "qty_double": null
+        },
+        {
+          "name_en": "LARD PORK",
+          "name_es": "MANTECA DE PUERCO",
+          "qty_single": "24 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "SLICED ONIONS",
+          "name_es": "CEBOLLAS REBANADAS",
+          "qty_single": "6 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHOLE GARLIC",
+          "name_es": "AJO ENTERO",
+          "qty_single": "48 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "JALAPENOS CUT IN HALF",
+          "name_es": "JALAPEÑOS CORTADOS A LA MITAD",
+          "qty_single": "32 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CUMIN",
+          "name_es": "COMINO",
+          "qty_single": "6 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "MARINATED 1",
+      "category": "MARINATED",
+      "name": "Beef Fajita Marinated",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "5 GALL",
+      "yield_es": "5 GALL",
+      "english_instructions": "PREPARATION\n• Put all ingredients in an appropriate container and grind all ingredients make sure they are completely ground\n• Label it and refrigerate it.\nFAJITA PREPARATION\n• Peel the fajita in the appropriate way and pass it through the machine 2 times then put the fajita inside the marinade and put in appropriate containers\n• Label and refrigerate",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA TODOS LOS INGREDIENTES EN UN CONTENEDOR ADECUADO Y MUELA TODOS LOS INGREDIENTES ASEGÚRESE DE QUE ESTÉN COMPLETAMENTE MOLIDOS\n• ETIQUETALO Y REFRIGERARLO.\nPREPARACIÓN FAJITA\n• PELE LA FAJITA LE LA MANERA ADECUADA Y PÁSELA POR LA MÁQUINA 2 VECES DESPUES META LA FAJITA DENTRO DEL MARINADO Y PONGA EN CONTENEDORES ADECUADOS\n• ETIQUETE Y REFRIGERE",
+      "ingredients": [
+        {
+          "name_en": "LIME JUICE",
+          "name_es": "JUGO DE LIMA",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "COLD WATER",
+          "name_es": "AGUA FRÍA",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRY OIL",
+          "name_es": "ACEITE PARA FREÍR",
+          "qty_single": "4 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SOY SAUCE",
+          "name_es": "SALSA DE SOYA",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHOLE GARLIC",
+          "name_es": "AJO ENTERO",
+          "qty_single": "4 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH ONIONS CUT IN HALF",
+          "name_es": "CEBOLLAS FRESCAS CORTADAS A LA MITAD",
+          "qty_single": "8 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "4 BAG",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "MARINATED 2",
+      "category": "MARINATED",
+      "name": "Chicken Fajita",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "3 DAYS",
+      "shelf_life_es": "3 DIAS",
+      "yield_en": "40 POUNDS",
+      "yield_es": "40 POUNDS",
+      "english_instructions": "PREPARATION\n• Cut the chicken in the appropriate way and put it in the appropriate container\n• In a bowl put the oil and the sazón and beat it completely until it mixes completely\n• Then put the sazón on top of the chicken and beat until the chicken is completely marinated it has to look all red\n• Distribute in 2 trays\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN\n• CORTE EL POLLO DE LA MANERA ADECUADO Y PÓNGALO  EN EL CONTENEDOR ADECUADO\n• EN UN BOWL PONGA EL ACEITE Y LAS SAZON Y BATALO COMPLETAMENTE HASTA QUE SE MEZCLE  COMPLETAMENTE\n• LUEGO PONGA EL SAZÓN ARRIBA DEL POLLO Y BATA HASTA QUE EL POLLO QUEDE COMPLETAMENTE MARINADO SE TIENE QUE VER TODO ROJO\n• DISTRIBUYA EN 2 CHAROLAS\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "FRY OIL",
+          "name_es": "ACEITE PARA FREÍR",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN BREAST",
+          "name_es": "PECHUGA DE POLLO",
+          "qty_single": "80 POUNDS (2 BOX)",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "1 BAG (20OZ)",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT 4",
+      "category": "HOT",
+      "name": "Chicken Flautas / Taquitos",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "EACH TAQUITO MUST WEIGH 1 1/2 OZ / EACH FLAUTA MUST WEIGH 2 OZ",
+      "yield_es": "CADA TAQUITO DEBE DE PESAR 1 1/2 OZ / CADA FLAUTA DEVE DE PESAR 2 OZ",
+      "english_instructions": "PREPARATION\n• Put the chicken to cook with water in an appropriate container to boil and cook completely\n• Next shred the chicken completely and add the fancy shredded cheddar jack the salt and the black pepper and mix it completely\nPREPARATION\n• Put 5 eggs in an appropriate container and stir very well\n• With a brush spread it on each tortilla so they stick",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA A COCINAR EL POLLO CON AGUA  EN UN CONTENEDOR ADECUADO  A HERVIR Y COCINE POR COMPLETO\n• A CONTINUACIÓN DESMENUCE EL POLLO  POR COMPLETA Y AGRE EL  FANCY SHREDDED CHEDDAR JACK LA SALT Y LA BLACK PEPPER Y  MEZCLELO COMPLETAMENTE\nPREPARACIÓN\n• PONGA 5 EGGS  UN CONTENEDOR ADECUADO Y REVUELVA MUY BIE\n• CON UNA BROCHO UNTENLO EN CADA TORTILLA PARA QUE SEPEGUEN",
+      "ingredients": [
+        {
+          "name_en": "CHICKEN BREAST",
+          "name_es": "PECHUGA DE POLLO",
+          "qty_single": "5 POUNDS",
+          "qty_double": "10 POUNDS"
+        },
+        {
+          "name_en": "MIX CHEESE",
+          "name_es": "QUESO MIX",
+          "qty_single": "1 POUNDS",
+          "qty_double": "2 POUNDS"
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "4 TEASPOON",
+          "qty_double": "8 TEASPOON"
+        },
+        {
+          "name_en": "BLACK PEPPER",
+          "name_es": "PIMIENTA NEGRA",
+          "qty_single": "4 TEASPOON",
+          "qty_double": "8 TEASPOON"
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "MARINATED 3",
+      "category": "MARINATED",
+      "name": "Cochinita Pibil",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "60 POUNDS",
+      "yield_es": "60 POUNDS",
+      "english_instructions": "PREPARATION MARINATION 1\n• Put all ingredients complete and with the grinder machine grind them very well\nPREPARATION PORK\n• PORK 2 BAG\n• Cut the pork into 1 1/2 inch squares trying to remove as much fat as you can without removing meat\n• Then put it in an appropriate container and add the marinade cover it with plastic and aluminum turn on the oven 450 degrees and put it in for 4 hours\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARATION MARINATION 1\n• PONGA TODOS LOS INGREDIENTES COMPLETOS Y CON LA MÁQUINA DE MOLER MUELA LOS MUY BIEN\nPREPARATION PORK\n• PORK 2 BAG\n• CORTE EL PUERCO EN CUADROS DE 1 1/2 PULGADA TRATANDO DE QUITAR LO MAS QUE PUEDA DE GRASA SIN QUITAR CARNE\n• ENSEGUIDA PONGALO EN UN CONTENEDOR ADECUADO Y AGREGUE EL MARINADO TAPELO CON PLÁSTICO Y ALUMINIO ENCIENDA EL HORNO 450 GRADOS Y METALO POR 4 HORAS\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "MOJO CRIOLLO",
+          "name_es": "MOJO CRIOLLO",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "NARANJA AGRIA",
+          "name_es": "NARANJA AGRIA",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "2 TABLESPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "5 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK PEPPER",
+          "name_es": "PIMIENTA NEGRA",
+          "qty_single": "2 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHITE VINIGAR",
+          "name_es": "VINAGRE BLANCO",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "ACHIOTE",
+          "name_es": "ACHIOTE",
+          "qty_single": "4 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "MARINATED 4",
+      "category": "MARINATED",
+      "name": "Pork Ribs",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "6 RIPS",
+      "yield_es": "6 RIPS",
+      "english_instructions": "PREPARATION\n• Take the ribs out of the package and scratch them on the bottom so the flavor penetrates.\n• Turn the oven on to 400 degrees so it is hot when the ribs are going to be put in.\n• Mix the BBQ sauce with the ribs seasoning and put it on the ribs with help of a brush.\n• After the rib has the BBQ it is wrapped in plastic and then in aluminum. This process will be done one rib at a time.\n• Take an appropriate container and put the ribs, then 4 cups of water and 1/4 of Liquid Smoke BBQ. Cover the container with plastic and then aluminum.\n• Put in the oven for 5 hours, at 400 degrees when they are soft remove from the oven, remove the aluminum and place in an appropriate container. Label and refrigerate.",
+      "spanish_instructions": "PREPARATION\n• SACAR LAS RIBS DEL PAQUETE Y RALLARLAS POR LA PARTE DE ABAJO PARA QUE PENETRE EL SABOR.\n• ENCENDER EL HORNO A 400 GRADOS PARA QUE ESTÉ CALIENTE CUANDO SE VAYAN A PONER LAS COSTILLAS.\n• MEZCLAR LA BBQ SAUCE CON EL RIBS SEASONING Y ECHARSELO A LAS RIBS CON AYUDA DE UNA BROCHA.\n• DESPUÉS QUE LA RIB TENGA LA BBQ SE ENVUELVE EN PLÁSTICO Y LUEGO EN ALUMINIO. ESTE PROCESO SE REALIZARÁ UNA RIB A LA VEZ.\n• AGARRAR UN CONTENEDOR ADECUADO Y ECHAR LAS RIBS, LUEGO 4 CUPS DE AGUA Y 1/4 DE LIQUID SMOKE BBQ. TAPAR EL CONTENEDOR CON PLÁSTICO Y LUEGO ALUMINIO.\n• PONER EN EL HORNO POR 5 HORAS, A 400 GRADOS CUANDO ESTÉN BLANDAS RETIRAR DEL HORNO, QUITAR EL ALUMINIO Y COLOCAR EN UN CONTENEDOR ADECUADO. ETIQUETE Y REFRIGERE.",
+      "ingredients": [
+        {
+          "name_en": "PORK RIBS",
+          "name_es": "COSTILLAS DE PUERCO",
+          "qty_single": "12 SINGLE",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOMEMADE BBQ SAUCE",
+          "name_es": "SALSA BBQ HOMEMADE",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "RIBS SAZONE",
+          "name_es": "SAZÓN DE RIBS",
+          "qty_single": "5 TABLE SPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "COLD WATER",
+          "name_es": "AGUA FRÍA",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "LIQUID SMOKE BBQ",
+          "name_es": "LIQUID SMOKE BBQ",
+          "qty_single": "1/2 CUP",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT",
+      "category": "HOT",
+      "name": "Empanadas",
+      "prep_time_en": "",
+      "prep_time_es": "",
+      "shelf_life_en": "",
+      "shelf_life_es": "",
+      "yield_en": "SINGLE = 26 EMPANADAS / DOUBLE = 54 EMPANADAS",
+      "yield_es": "SINGLE = 26 EMPANADAS / DOUBLE = 54 EMPANADAS",
+      "english_instructions": "PROCEDURE\n• Knead all ingredients together until they are well incorporated.\n• Separate the \"masa\" Into (3) oz balls.\n• Separate the \"chicken mix\" Into (3) oz balls.\n• Take a long piece of plastic and cover the entire top and bottom of the tortilla presser.\n• Place one '\"masa\" ball at a time onto the tortillas presser and press.\n• Place the filling in the center and fold in half (making the ends touch); leave enough space at the end to pinch closed with a fork.\n• Place empanadas on a tray and cover them with plastic wrap.\n• Label, date, and refrigerate.",
+      "spanish_instructions": "PROCEDIMIENTO\n• Amasar todos los ingredientes juntos hasta que estén bien incorporados.\n• Separar la \"masa\" en bolas de (3) oz.\n• Separe la “mezcla de pollo” en bolas de (3) oz.\n• Tomar un trozo largo de plástico y cubrir toda la parte superior e inferior de la prensa para tortillas.\n• Colocar una bola de \"masa\" a la vez en la prensa para tortillas y presionar.\n• Colocar el relleno en el centro y doblar por la mitad (haciendo que los extremos se toquen); dejar suficiente espacio al final para cerrar con un tenedor.\n• Colocar las empanadas en una bandeja y cubrirlas con plástico adherente.\n• Etiquetar, fechar y refrigerar.",
+      "ingredients": [
+        {
+          "name_en": "MASECA",
+          "name_es": "MASECA",
+          "qty_single": "6 CUPS",
+          "qty_double": "12 CUPS"
+        },
+        {
+          "name_en": "FLOUR",
+          "name_es": "HARINA",
+          "qty_single": "1 CUP",
+          "qty_double": "2 CUP"
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "2 TEASPOON",
+          "qty_double": "4 TEASPOON"
+        },
+        {
+          "name_en": "PAPRIKA",
+          "name_es": "PAPRIKA",
+          "qty_single": "2 TEASPOON",
+          "qty_double": "4 TEASPOON"
+        },
+        {
+          "name_en": "WATER",
+          "name_es": "AGUA",
+          "qty_single": "4 CUP",
+          "qty_double": "8 CUP"
+        },
+        {
+          "name_en": "POLLO RANCHERO",
+          "name_es": "POLLO RANCHERO",
+          "qty_single": "4 CUPS",
+          "qty_double": "8 CUPS"
+        },
+        {
+          "name_en": "CHIPOTLE",
+          "name_es": "CHIPOTLE",
+          "qty_single": "1/2  CUP",
+          "qty_double": "1 CUP"
+        },
+        {
+          "name_en": "MONTEREY CHEESE",
+          "name_es": "QUESO MONTYREY",
+          "qty_single": "10 OZ",
+          "qty_double": "20 OZ"
+        }
+      ],
+      "notes_en": "• When the masa is cold, it dries out quickly so make the empanadas as soon as it's ready. Mix one batch at a time, do not double the recipe.\n• Chicken should be shredded to a consistency.\n• The chicken you use, should not be hot. It should be cold. So when you mix it with the cheese it does not melt. The chicken should be measured to a consistent 3oz per empanada.",
+      "notes_es": "• Cuando la masa está fría, se seca rápidamente, por lo que hay que hacer las empanadas tan pronto como esté lista. Mezclar un lote a la vez, no duplicar la receta.\n• El pollo debe desmenuzarse hasta obtener una consistencia.\n• El pollo que uses, no debe estar caliente. Debería estar frío. Así cuando lo mezclas con el queso no se derrite. El pollo debe medirse en una cantidad constante de 3 onzas por empanada."
+    },
+    {
+      "code": "HOT 8 / POLLO RANCHERO 3",
+      "category": "HOT",
+      "name": "Pollo Ranchero",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAY",
+      "shelf_life_es": "5 DIA",
+      "yield_en": "6/3 GALL",
+      "yield_es": "6/3 GALL",
+      "english_instructions": "PREPARATION POLLO RANCHERO 3\n• Put the chicken to boil until it softens. When the chicken is cooked take it out of the water and put on ice. Let cool and start to shred by hand in medium pieces. Then put the oil to heat, then put in the sliced onion, and let brown a little before putting in the garlic. When the seasoning is ready add the chicken and let brown a little. In a bucket join the ranchera sauce, chicken stock and chicken base and add them to the browned chicken. When it has boiled remove from heat.",
+      "spanish_instructions": "PREPARACIÓN POLLO RANCHERO 3\n• PONGA A HERVIR EL POLLO HASTA QUE SE ABLANDE.CUANDO EL POLLO ESTÉ COCINADO SÁQUELO,DEL AGUA Y PONGA SOBRE HIELO. DEJE ENFRIAR Y COMIENCE A DESMENUZAR CON LA MANO EN TROZOS MEDIANOS. ENSEGUIDA PONGA A CALENTAR EL ACEITE, LUEGO ECHE LA CEBOLLA CORTADA EN SLICES, Y DEJE DORAR UN POCO ANTES DE ECHAR ELAJO. CUANDO YA ESTÉ EL SAZÓN AGREGUE EL POLLO Y DEJE DORAR UN POCO. EN UN BOTE JUNTE LA SALSA RANCHERA, EL CHICKEN STOCK Y LA CHICKEN BASE (IMPERIAL) Y AGREGUENME AL POLLO DORADO.CUANDO YA HAYA HERVIDO RETIRAR DEL FUEGO.",
+      "ingredients": [
+        {
+          "name_en": "SHREDDED CHICKEN",
+          "name_es": "POLLO DESMENUZADO",
+          "qty_single": "160 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "RANCHERA SAUCE",
+          "name_es": "SALSA RANCHERA",
+          "qty_single": "8 GALLONS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN STOCK",
+          "name_es": "CALDO DE POLLO",
+          "qty_single": "1 1/2 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "2 1/2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN BASE (IMPERIAL) (IMPERIAL)",
+          "name_es": "BASE DE POLLO IMPERIAL",
+          "qty_single": "4 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONS",
+          "name_es": "CEBOLLA PICADA",
+          "qty_single": "9 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "12 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRY OIL",
+          "name_es": "ACEITE PARA FREÍR",
+          "qty_single": "1 1/2 GALLON",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT 11",
+      "category": "HOT",
       "name": "Taco Meat",
-      "prep_time": "45 min",
-      "shelf_life": "4 days",
-      "batch_sizes": ["Single Recipe (38 Lbs)"],
+      "prep_time_en": "45 MINUTES",
+      "prep_time_es": "45 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "38 POUNDS",
+      "yield_es": "38 POUNDS",
+      "english_instructions": "PREPARATION\n• Place ground beef and half of the water into the braising pan at high heat.\n• As it cooks, Smash the meat to break in pieces, making sure there are no meat balls.\n• When meat is browned, turn braising pan off. remove the meat and place it in strainers. remove as much grease as possible t.\n• Put braising pan back on place the meat back inside. put 1 gallon of water and the vegtables. cook for about 15 minutes.\n• in a separate containers, add the crushed tomatoes, seasoning, and salt. mix it correctly.\n• When vegetables are cooked (onions are clear), add crushed tomato mix and let cook for about 15 minutes\n• Pour in to empty bags.\n• Label, date, and refrigerate.",
+      "spanish_instructions": "PREPARACIÓN\n• 1. COLOCA LA CARNE MOLIDA Y LA MITAD DEL AGUA EN LA OLLA DE ESTOFADO A FUEGO ALTO.\n• 2. MIENTRAS SE COCINA, TRITURA LA CARNE PARA DESMENUZARLA, ASEGURÁNDOTE DE QUE NO HAYAN BOLAS DE CARNE.\n• 3. CUANDO LA CARNE ESTÉ DORADA, APAGA LA OLLA DE ESTOFADO. RETIRA LA CARNE Y COLOCA EN COLADORES. ELIMINA LA MAYOR CANTIDAD DE GRASA POSIBLE.\n• 4. COLOCA LA OLLA DE ESTOFADO NUEVAMENTE AL FUEGO Y VUELVE A PONER LA CARNE DENTRO. AÑADE 1 GALÓN DE AGUA Y LAS VERDURAS. COCINA DURANTE APROXIMADAMENTE 15 MINUTOS.\n• 5. EN UN RECIPIENTE APARTE, AÑADE LOS TOMATES TRITURADOS, LOS CONDIMENTOS Y LA SAL. MEZCLA CORRECTAMENTE.\n• 6. CUANDO LAS VERDURAS ESTÉN COCIDAS (LAS CEBOLLAS ESTÁN TRANSPARENTES), AÑADE LA MEZCLA DE TOMATE TRITURADO Y DEJA COCER DURANTE APROXIMADAMENTE 15 MINUTOS.\n• 7. VIERTE EN BOLSAS VACÍAS.\n• 8. ETIQUETA, FECHA Y REFRIGERA.",
       "ingredients": [
-        {"name": "Ground Beef", "qty": "120 Lbs"},
-        {"name": "Water", "qty": "2 Gallons"},
-        {"name": "Chopped Bell Pepper", "qty": "4 Gallons"},
-        {"name": "Chopped Onion", "qty": "4 Gallons"},
-        {"name": "Crushed Tomatoes Can", "qty": "7 Cans"},
-        {"name": "Sazones", "qty": "1 Bag (30 oz)"},
-        {"name": "Salt", "qty": "10 Oz"}
+        {
+          "name_en": "GROUND BEEF",
+          "name_es": "CARNE MOLIDA",
+          "qty_single": "120 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "WATER",
+          "name_es": "AGUA",
+          "qty_single": "2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "4 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONS",
+          "name_es": "CEBOLLA PICADA",
+          "qty_single": "4 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CRUSHED TOMATO (CAN)",
+          "name_es": "LATA DE TOMATE TRITURADO",
+          "qty_single": "7 CAN",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "1 BAG (30 oz)",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "10 OZ",
+          "qty_double": null
+        }
       ],
-      "english_instructions": "1. Place ground beef and half of the water into the braising pan at high heat.\n2. As it cooks, smash the meat to break it into pieces, making sure there are no meatballs.\n3. When meat is browned, turn braising pan off. Remove the meat and place it in strainers to remove as much grease as possible.\n4. Put braising pan back on, place the meat back inside, and add 1 gallon of water and the vegetables. Cook for about 15 minutes.\n5. In separate containers, add the crushed tomatoes, seasoning, and salt. Mix correctly.\n6. When vegetables are cooked (onions are clear), add crushed tomato mix and let cook for about 15 minutes.\n7. Pour into empty bags. Label, date, and refrigerate.",
-      "spanish_instructions": "1. Coloca la carne molida y la mitad del agua en la olla de estofado a fuego alto.\n2. Mientras se cocina, tritura la carne para desmenuzarla, asegurándote de que no hayan bolas de carne.\n3. Cuando la carne esté dorada, apaga la olla de estofado. Retira la carne y coloca en coladores. Elimina la mayoría de la grasa posible.\n4. Coloca la olla de estofado nuevamente al fuego y vuelve a poner la carne dentro. Añade 1 galón de agua y las verduras. Cocina durante aproximadamente 15 minutos.\n5. En un recipiente aparte, añade los tomates triturados, los condimentos y la sal. Mezcla correctamente.\n6. Cuando las verduras estén cocidas (las cebollas están transparentes), añade la mezcla de tomate triturado y deja cocer durante aproximadamente 15 minutos.\n7. Vierte en bolsas vacías. Etiqueta, fecha y refrigera.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC. Bilingual prep canonical."
+      "notes_en": null,
+      "notes_es": null
     },
     {
-      "code": "Sauce 2",
-      "category": "sauces",
-      "name": "Street Taco Sauce",
-      "prep_time": "45 min",
-      "shelf_life": "4 days",
-      "batch_sizes": ["Single Recipe (1 1/2 Gal)"],
+      "code": "SAUCE 7",
+      "category": "SAUCES",
+      "name": "Chili Gravy",
+      "prep_time_en": "35 MINUTES",
+      "prep_time_es": "35 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "4 1/2 GALL",
+      "yield_es": "4 1/2 GALL",
+      "english_instructions": "PREPARATION\n• In a large pot put the pork fat to heat\n• When the fat is hot add the ground beef\n• In a bucket put the spices and the flour with the water and grind it with the machine until they are completely ground\n• Add this mix to the meat and keep cooking until it thickens\n• Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• EN UNA OLLA GRANDE PONGA A CALENTAR LA MANTECA DE PUERCO\n• CUANDO LA MANTECA ESTÉ CALIENTE AGREGUE LA CARNE MOLIDA\n• EN UN BOTE PONGA LAS ESPECIES Y LA HARINA CON EL AGUA Y MUELELO CON LA MÁQUINA HASTA QUE ESTÉN COMPLETAMENTE MOLIDO\n• AGREGUE ESTA MEZCLA A LA CARNE Y SIGA COCINANDO HASTA QUE ESPESE\n• ETIQUETALO Y REFRIGERARLO",
       "ingredients": [
-        {"name": "Fresh Jalapeños", "qty": "48 Lbs"},
-        {"name": "Fry Oil", "qty": "3 Gallons"},
-        {"name": "Chicken Base Knorr Suiza", "qty": "1 1/2 Lbs"},
-        {"name": "Chopped Onions", "qty": "2 Cups"},
-        {"name": "Blended Garlic", "qty": "2 Cups"},
-        {"name": "Hot Water", "qty": "1 1/2 Gallons"}
+        {
+          "name_en": "PORK FAT",
+          "name_es": "MANTECA DE PUERCO",
+          "qty_single": "6 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "GROUND BEEF",
+          "name_es": "CARNE MOLIDA",
+          "qty_single": "15 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FLOUR",
+          "name_es": "HARINA",
+          "qty_single": "9 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "15 GALLONS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "6 BAG",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. Ponga a calentar el aceite en una olla a fuego medio. Cuando esté caliente el aceite, ponga los chiles jalapeños dentro y cocinarlos sin quemarlos.\n2. Una vez cocinados de la manera correcta, tiene que retirarlos del fuego y agréguele el agua, garlic y la cebolla antes de que se enfríen los jalapeños.\n3. Luego muela completamente.\n4. Etiquétalos y refrigerarlos.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+      "notes_en": null,
+      "notes_es": null
     },
     {
-      "code": "Sauce 8",
-      "category": "sauces",
+      "code": "SAUCE 6",
+      "category": "SAUCES",
+      "name": "Green Sauce",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAYS",
+      "shelf_life_es": "1 DIAS",
+      "yield_en": "4 1/2 GALL",
+      "yield_es": "4 1/2 GALL",
+      "english_instructions": "PREPARATION\n• Open the avocados and take out the seed\n• Put all the ingredients in a bucket and grind completely\n• Label them and refrigerate them\n• Do not double this recipe",
+      "spanish_instructions": "PREPARACIÓN\n• ABRA LOS AGUACATES Y SAQUELE LA SEMILLA\n• PONGA TODOS LOS INGREDIENTES EN UN BOTE Y MUELA COMPLETAMENTE\n• ETIQUETARLOS Y REFRIGERARLOS\n• NO DUPLIQUE ESTA RECETA",
+      "ingredients": [
+        {
+          "name_en": "TOMATILLO MIX",
+          "name_es": "MEZCLA DE TOMATILLO",
+          "qty_single": "2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "AVOCADO",
+          "name_es": "AGUACATE FRESCO",
+          "qty_single": "12 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "AVOCADO PULP",
+          "name_es": "PULPA DE AGUACATE",
+          "qty_single": "12 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "14 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHOLE GARLIC",
+          "name_es": "AJO ENTERO",
+          "qty_single": "4.5 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CILANTRO",
+          "name_es": "CILANTRO",
+          "qty_single": "6 BUNCHES",
+          "qty_double": null
+        },
+        {
+          "name_en": "SOUR CREAM",
+          "name_es": "CREMA AGRIA",
+          "qty_single": "9 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "ICE",
+          "name_es": "HIELO",
+          "qty_single": "10 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "COLD WATER",
+          "name_es": "AGUA FRÍA",
+          "qty_single": "4 GALLONS",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "SAUCE 4",
+      "category": "SAUCES",
+      "name": "Red Sauce",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "3 DAYS",
+      "shelf_life_es": "3 DIAS",
+      "yield_en": "5 GALL",
+      "yield_es": "5 GALL",
+      "english_instructions": "PREPARATION\n• In an appropriate bucket place all ingredients cut in pieces so you can grind them completely well and also add the water and the tomato cans\n• When the sauce is well ground re\n• Label it and refrigerate it\n• Do not double this recipe",
+      "spanish_instructions": "PREPARACIÓN\n• EN UN BOTE ADECUADO COLOQUE TODOS LOS INGREDIENTES CORTADOS EN PEDAZOS PARA QUE PUEDA MOLERLOS COMPLETAMENTE BIEN Y TAMBIÉN AGREGUE EL AGUA Y LAS LATAS DE TOMATE\n• CUANDO LA SALSA ESTÉ BIEN MOLIDA RE\n• ETIQUETALO Y REFRIGERARLO\n• NO DUPLIQUE ESTA RECETA",
+      "ingredients": [
+        {
+          "name_en": "FRESH JALAPEÑO PEPPER",
+          "name_es": "CHILE JALAPEÑO FRESCO",
+          "qty_single": "2 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SERRANO PEPPER",
+          "name_es": "CHILE SERRANO",
+          "qty_single": "1 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH ONION SLICED",
+          "name_es": "CEBOLLA FRESCA REBANADA",
+          "qty_single": "8 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "8 BUNCHES",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH WHOLE GARLIC",
+          "name_es": "AJO FRESCO ENTERO",
+          "qty_single": "8 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CRUSHED TOMATO (CAN)",
+          "name_es": "LATA DE TOMATE TRITURADO",
+          "qty_single": "8 CANS",
+          "qty_double": null
+        },
+        {
+          "name_en": "DICED TOMATO (CAN)",
+          "name_es": "LATA DE TOMATE EN CUBOS",
+          "qty_single": "8 CANS",
+          "qty_double": null
+        },
+        {
+          "name_en": "COLD WATER",
+          "name_es": "AGUA FRÍA",
+          "qty_single": "3 GALLONS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "28 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT 8 / CHIPOTLE SAUCE 1",
+      "category": "SAUCES",
+      "name": "Chipotle Sauce",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAY",
+      "shelf_life_es": "5 DIA",
+      "yield_en": "6/3 GALL",
+      "yield_es": "6/3 GALL",
+      "english_instructions": "PREPARATION CHIPOTLE SAUCE 1\n• Put the chipotle chile to cook with the tomatillo. When it is cooked take them out of the water and add the cilantro, salt, spices and the correct amount of water. Then grind completely.",
+      "spanish_instructions": "PREPARACIÓN CHIPOTLE SAUCE 1\n• PONGA A COCINAR EL CHILE CHIPOTLE CON EL TOMATILLO.CUANDO YA ESTÉ COCIDO SAQUELOS DEL AGUA Y AGREGUE EL CILANTRO, SALT, SPICES Y LA CANTIDAD DE AGUA CORRECTA.LUEGO MUELA COMPLETAMENTE.",
+      "ingredients": [
+        {
+          "name_en": "TOMATILLO",
+          "name_es": "TOMATILLO",
+          "qty_single": "12 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHILE CHIPOTLE",
+          "name_es": "CHILE CHIPOTLE",
+          "qty_single": "1 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CILANTRO",
+          "name_es": "CILANTRO",
+          "qty_single": "2 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "WATER",
+          "name_es": "AGUA",
+          "qty_single": "4 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "5.5 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "SAZONES",
+          "name_es": "SAZONES",
+          "qty_single": "2 BAG",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT 8 / RANCHERA SAUCE 2",
+      "category": "SAUCES",
+      "name": "Ranchera Sauce",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAY",
+      "shelf_life_es": "5 DIA",
+      "yield_en": "6/3 GALL",
+      "yield_es": "6/3 GALL",
+      "english_instructions": "PREPARATION RANCHERA SAUCE 2\n• Put the butter to melt and add the vegetables. When the vegetables are cooked add the tomato. After it is cooked add the chipotle sauce and let cook for a few minutes. When the sauce is boiling remove it from the heat and grind well.",
+      "spanish_instructions": "PREPARACIÓN RANCHERA SAUCE 2\n• PONGA A DERRETIR LA MANTEQUILLA Y AGREGUE LOS VEGETALES.CUANDO LOS VEGETALES ESTÉN COCIDOS AGREGUE EL TOMATE. LUEGO QUE ESTÉ COCIDO AGREGUE LA SALSA CHIPOTLE Y DEJE COCINAR POR UNOS MINUTOS. CUANDO LA SALSA ESTÉ HIRVIENDO RETIRALA DEL FUEGO Y MUELA BIEN.",
+      "ingredients": [
+        {
+          "name_en": "MARGARINEE",
+          "name_es": "MARGARINEA",
+          "qty_single": "3 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "2 1/2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED POBLANO",
+          "name_es": "POBLANO PICADO",
+          "qty_single": "2 1/2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "2 1/2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "3 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CRUSHED TOMATO (CAN)",
+          "name_es": "LATA DE TOMATE TRITURADO",
+          "qty_single": "6 CAN",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "SAUCE 5",
+      "category": "SAUCES",
+      "name": "Poblano Sauce",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "1 1/2 GALL",
+      "yield_es": "1 1/2 GALL",
+      "english_instructions": "PREPARATION\n• Put the butter to heat in an appropriate pot\n• When the butter is hot add the poblano chile to cook for a few minutes\n• Next add the flour and beat without stopping so it does not make little balls\n• When the flour is yellow put the stock and the chicken base and beat without stopping and when the mix has thickened add the heavy cream\n• When the heavy cream has boiled turn off the heat and put the sour cream and beat very well label and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA A CALENTAR LA MANTEQUILLA EN UNA OLLA ADECUADA\n• CUANDO LA MANTEQUILLA ESTÉ CALIENTE AGREGUE EL CHILE POBLANO A COCINAR POR UNOS MINUTOS\n• A CONTINUACIÓN AGREGUE LA HARINA Y BATA SIN PARAR PARA QUE NO SE HAGA BOLITAS\n• CUANDO LA HARINA ESTÉ AMARILLA PÓNGALE EL CALDO Y EL CHICKEN BASE (IMPERIAL)  Y BATA SIN PARAR Y CUANDO HAYA ESPESADO LA MEZCLA AGREGUE LA HEAVY CREAM\n• CUANDO LA HEAVY CREAM YA HAYA HERVIDO APAGUE EL FUEGO Y PONGA LA SOUR CREAM  Y BATA MUY BIEN ETIQUETE Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "MARGARINEE",
+          "name_es": "MARGARINEA",
+          "qty_single": "8 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED POBLANO",
+          "name_es": "CHILE POBLANO PICADO",
+          "qty_single": "2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "FLOUR",
+          "name_es": "HARINA",
+          "qty_single": "8 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN STOCK",
+          "name_es": "CALDO DE POLLO",
+          "qty_single": "2.5 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "HEAVY CREAM",
+          "name_es": "HEAVY CREAM",
+          "qty_single": "16 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "SOUR CREAM",
+          "name_es": "CREMA AGRIA",
+          "qty_single": "32 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN BASE (IMPERIAL) (IMPERIAL)",
+          "name_es": "BASE DE POLLO IMPERIAL",
+          "qty_single": "1 1/2 POUND",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "SAUCE 8",
+      "category": "SAUCES",
       "name": "Chili Con Queso",
-      "prep_time": "25 min",
-      "shelf_life": "5 days",
-      "batch_sizes": ["Batch A (1.5 Gal yield)", "Batch B/C"],
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "1 1/2 GALL",
+      "yield_es": "1 1/2 GALL",
+      "english_instructions": "PREPARATION\n• In the tall pot put the butter to melt when it is melted add the vegetables and wait until it cooks\n• When the vegetables are cooked add the water and milk and wait until it is very hot\n• Then add the white cheese extra melt cheese when it is very melted add the golden velvet cheese\n• Move followed with regularity and let cook until the cheese is completely undone\n• When there are no lumps left remove from heat, label and refrigerate.",
+      "spanish_instructions": "PREPARACIÓN\n• EN LA OLLA ALTA PONGA A DERRETIR LA MANTEQUILLA CUANDO YA ESTÉ DERRETIDA AGREGUE LOS VEGETALES Y ESPERE HASTA QUE SE COCINE\n• CUANDO YA ESTÉN COCIDOS LOS VEGETALES AGREGUE EL AGUA Y LA LECHE Y ESPERE HASTA QUE ESTÉ BIEN CALIENTE\n• LUEGO AGREGUE EL QUESO WHITE CHEESE EXTRA MELT CUANDO YA ESTÉ BIEN DERRETIDO AGREGUE EL CHEESE GOLDEN VELVET\n• MUEVA SEGUIDAMENTE CON REGULARIDAD Y DEJE COCINAR HASTA QUE EL QUESO ESTÉ COMPLETAMENTE DESHECHO\n• CUANDO YA NO QUEDEN GRUMOS RETIRE DEL FUEGO, ETIQUETE Y REFRIGERE.",
       "ingredients": [
-        {"name": "Margarine", "qty": "4 Lbs (A) / 6 Lbs (B/C)"},
-        {"name": "Poblano Pepper Chopped", "qty": "1.5 Gal (A) / 2 Gal (B/C)"},
-        {"name": "Fresh Onions Chopped", "qty": "1.5 Gal (A) / 2 Gal (B/C)"},
-        {"name": "Bell Pepper Chopped", "qty": "1.5 Gal (A) / 2 Gal (B/C)"},
-        {"name": "Hot Water", "qty": "3 Gal (A) / 4.5 Gal (B/C)"},
-        {"name": "Whole Milk", "qty": "3 Gal (A) / 4.5 Gal (B/C)"},
-        {"name": "Golden Velvet Cheese", "qty": "2 CS (A) / 3 CS (B/C)"},
-        {"name": "Del Pasado Cheese (White Extra Melt)", "qty": "2 CS (A) / 3 CS (B/C)"}
+        {
+          "name_en": "MARGARINEE",
+          "name_es": "MARGARINEA",
+          "qty_single": "4 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED POBLANO",
+          "name_es": "CHILE POBLANO PICADO",
+          "qty_single": "1.5 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH ONIONS CHOPPED",
+          "name_es": "CEBOLLAS FRESCAS PICADAS",
+          "qty_single": "1.5 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "1.5 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHOLE MILK",
+          "name_es": "LECHE ENTERA",
+          "qty_single": "3 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "GOLDEN VELVET CHEESE",
+          "name_es": "QUESO GOLDEN VELVET",
+          "qty_single": "2 CS",
+          "qty_double": null
+        },
+        {
+          "name_en": "DEL PASADO CHEESE",
+          "name_es": "QUESO DEL PASADO",
+          "qty_single": "2 CS",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. En una olla alta ponga a derretir la mantequilla. Cuando ya esté derretida, agregue los vegetales y espere hasta que se cocinen.\n2. Cuando ya estén cocidos los vegetales, agregue el agua y la leche y espere hasta que esté bien caliente.\n3. Luego agregue el queso blanco Extra Melt (Del Pasado). Cuando ya esté bien derretido, agregue el Golden Velvet Cheese.\n4. Mueva seguidamente con regularidad y deje cocinar hasta que el queso esté completamente deshecho.\n5. Cuando ya no queden grumos, retire del fuego, etiquete y refrigere.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC. Two batch sizes used in production rotation."
+      "notes_en": "• The source file contains two different SINGLE RECIPE ingredient sets for Chili Con Queso. The 6 POUND version appears twice in the raw file; it is included once here for review.\nSource contains a second (alternate) SINGLE RECIPE set: MARGARINEE: 6 POUND; CHOPPED POBLANO: 2 GALLON; FRESH ONIONS CHOPPED: 2 GALLON; CHOPPED BELL PEPPER: 2 GALLON; HOT WATER: 4.5 WATER; WHOLE MILK: 4.5 MILK; GOLDEN VELVET CHEESE: 3 CS; DEL PASADO CHEESE: 3 CS",
+      "notes_es": "• El archivo fuente contiene dos grupos diferentes de ingredientes SINGLE RECIPE para Chili Con Queso. La versión de 6 POUND aparece dos veces en el archivo; está incluida una vez aquí para revisión.\nSource contains a second (alternate) SINGLE RECIPE set: MARGARINEA: 6 POUND; CHILE POBLANO PICADO: 2 GALLON; CEBOLLAS FRESCAS PICADAS: 2 GALLON; PIMIENTO PICADO: 2 GALLON; AGUA CALIENTE: 4.5 WATER; LECHE ENTERA: 4.5 MILK; QUESO GOLDEN VELVET: 3 CS; QUESO DEL PASADO: 3 CS"
     },
     {
-      "code": "Cold 4",
-      "category": "cold",
-      "name": "Guacamole",
-      "prep_time": "15 min",
-      "shelf_life": "1 day",
-      "batch_sizes": ["Line Only (batch)", "Catering Single", "Catering Double"],
+      "code": "SAUCE 9",
+      "category": "SAUCES",
+      "name": "BBQ Sauce",
+      "prep_time_en": "20 MINUTES",
+      "prep_time_es": "20 MINUTOS",
+      "shelf_life_en": "7 DAYS",
+      "shelf_life_es": "7 DIAS",
+      "yield_en": "3/4 GALL",
+      "yield_es": "3/4 GALL",
+      "english_instructions": "PREPARATION\n• Label and refrigerate\n• Melt the margarine over medium heat.\n• Add the onion and garlic and let\n• Cook until the onion is transparent.\n• Add the ingredients except the BBQ sauce and let cook until the sugar is well diluted and starts to reduce.\n• Add the BBQ sauce, reduce the heat and let cook slowly until the sauce thickens a little. After grind the sauce completely.\nDOUBLE RECIPE",
+      "spanish_instructions": "PREPARACIÓN\n• ETIQUETE Y REFRIGERE\n• DERRITA LA MARGARINEA A FUEGO MEDIO.\n• AGREGUE LA CEBOLLA Y EL AJO Y DEJE\n• COCINAR HASTA QUE LA CEBOLLA ESTÉ TRANSPARENTE.\n• AGREGUE LOS INGREDIENTES MENOS LA BBQ SAUCE Y DEJE COCINAR HASTA QUE EL AZÚCAR ESTÉ BIEN DILUIDA Y SE EMPIECE A REDUCIR.\n• AGREGUE LA BBQ SAUCE, REDUZCA EL FUEGO Y DEJE COCINAR LENTAMENTE HASTA QUE LA SALSA ESPESE  UN POCO.  DESPUÉS   MUELA LA SALSA COMPLETAMENTE.\nRECETA DOBLE",
       "ingredients": [
-        {"name": "Fresh Avocado", "qty": "4 Lbs (Line) / 16 Lbs (CS) / 32 Lbs (CD)"},
-        {"name": "Avocado Pulp", "qty": "— / 16 Lbs (CS) / 20 Lbs (CD)"},
-        {"name": "Chopped Onions", "qty": "8 Oz (Line) / 4 Cups (CS) / 8 Cups (CD)"},
-        {"name": "Chopped Cilantro", "qty": "Half Bunch (Line) / 4 Bunches (CS) / 8 Bunches (CD)"},
-        {"name": "Salt", "qty": "1 Tbsp (Line) / 8 Tbsp (CS) / 16 Tbsp (CD)"}
+        {
+          "name_en": "MARGARINEE",
+          "name_es": "MARGARINEA",
+          "qty_single": "4 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONS",
+          "name_es": "CEBOLLA PICADA",
+          "qty_single": "2 QUART",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLENDED GARLIC",
+          "name_es": "AJO MOLIDO",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "VALENTINA SAUCE",
+          "name_es": "SALSA VALENTINA",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "WORCESTERSHIRE SAUCE",
+          "name_es": "SALSA WORCESTERSHIRE",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SUGAR",
+          "name_es": "AZÚCAR",
+          "qty_single": "8 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "HONEY",
+          "name_es": "MIEL",
+          "qty_single": "2 QUART",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN STOCK",
+          "name_es": "CALDO DE POLLO",
+          "qty_single": "3 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "6 CUPS + 4 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "KRAFT ORIGINAL BBQ SAUCE",
+          "name_es": "SALSA BBQ ORIGINAL KRAFT",
+          "qty_single": "4 BOTTLE",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. Corte los aguacates por la mitad y saque la semilla con una cuchara grande. Saque todo el aguacate asegurándose de que no quede nada en la cáscara.\n2. Cuando ya estén los aguacates en el contenedor, agregue la sal y el lime juice y aplastarlos completamente.\n3. Una vez aplastados, agregue la cebolla, el cilantro y el tomate. Revuelva muy bien.\n4. Póngalo en un contenedor apropiado y cubra con plástico. Etiquétalo y refrigerarlo.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC. LINE NOTE: prepare always 1.8 kg in a separate container to preserve salt flavor. Do not pre-mix broadly."
+      "notes_en": "• The source includes a Double Recipe heading/table with no ingredient amounts.",
+      "notes_es": "• El archivo fuente incluye un título/tabla de Receta Doble sin cantidades de ingredientes."
     },
     {
-      "code": "Cold 7",
-      "category": "cold",
+      "code": "SAUCE 2",
+      "category": "SAUCES",
+      "name": "Street Taco Sauce",
+      "prep_time_en": "45 MINUTES",
+      "prep_time_es": "45 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "1 1/2 GALL",
+      "yield_es": "1 1/2 GALL",
+      "english_instructions": "PREPARATION\n• Put the oil to heat in a pot over medium heat when the oil is hot put the jalapeño chiles inside and cook them without burning them\n• Once cooked in the correct way you have to remove them from the heat and add the water garlic and onion before the jalapenos cool\n• Then grind completely\n• Label them and refrigerate them",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA A CALENTAR EL ACEITE EN UNA OLLA A FUEGO MEDIO CUANDO ESTÉ CALIENTE EL ACEITE PONGA LOS CHILES JALAPEÑOS DENTRO Y COCINARLOS SIN QUEMARLOS\n• UNA VEZ COCINADOS DE LA MANERA CORRECTO TIENE QUE  RETIRARLOS DEL FUEGO Y AGRÉGUELE EL EL AGUA GARLIC Y LA CEBOLLA ANTES DE QUE SE ENFRÍEN LOS JALAPENOS\n• LUEGO MUELA COMPLETAMENTE\n• ETIQUETALOS Y REFRIGERARLOS",
+      "ingredients": [
+        {
+          "name_en": "FRESH JALAPENOS",
+          "name_es": "JALAPEÑOS FRESCOS",
+          "qty_single": "48 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRY OIL",
+          "name_es": "ACEITE PARA FREÍR",
+          "qty_single": "3 gallon",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN BASE (IMPERIAL) KNORR SUIZA",
+          "name_es": "BASE DE POLLO KNORR SUIZA",
+          "qty_single": "1 1/2 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLENDED GARLIC",
+          "name_es": "AJO MOLIDO",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "1 1/2 gallon",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "SAUCE 3",
+      "category": "SAUCES",
+      "name": "Seafood Sauce",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "4 1/2 GALL",
+      "yield_es": "4 1/2 GALL",
+      "english_instructions": "PREPARATION\n• In a large pot put the butter to melt\n• When the butter is already melted put the vegetables to cook\n• After the vegetables are cooked put the crawfish inside the pot to cook\n• Once everything is cooked add the flour and beat constantly\n• Put inside the stock the cumin the cayenne pepper and the chicken base beat very well to dissolve the chicken base and add little by little to the batter then put the heavy cream little by little so as not to lose the firm texture when it thickens add the cheese and leave it for about 3 minutes when the cheese has diluted add the wine and turn off the heat put it in an appropriate container label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• EN UNA OLLA GRANDE PONGA A DERRETIR LA MANTEQUILLA\n• CUANDO YA ESTÉ DERRETIDA LA MANTEQUILLA PONGA LOS VEGETALES A COCINA\n• DESPUÉS QUE LOS VEGETALES YA ESTÉN COCIDOS PONGA LOS CRAWFISH DENTRO DE LA OLLA A COCINAR\n• UNA VEZ TODO ESTÉ COCIDO AGREGUE LA HARINA Y BATA CONSTANTEMENTE\n• PONGA DENTRO DEL CALDO EL CUMIN EL CAYENNE PEPPER Y EL CHICKEN BASE (IMPERIAL) BATA MUY BIEN PARA DESHACER EL CHICKEN BASE (IMPERIAL) Y AGREGUE POCO A POCO AL BATIDO  EN SEGUIDA PONGA LA HEAVY CREAM POCO A POCO PARA NO PERDER LA TEXTURA FIRME CUANDO ESPESE AGREGUE EL QUESO Y DÉJELO POR UNOS 3 MINUTOS CUANDO EL QUESO SE HAYA DILUIDO AGREGUE EL VINO Y APAGUE EL FUEGO PONGALO EN UN CONTENEDOR ADECUADO ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "MARGARINEE",
+          "name_es": "MARGARINEA",
+          "qty_single": "6 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED POBLANO",
+          "name_es": "POBLANO PICADO",
+          "qty_single": "2 GALLON 1 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "2 GALLON 1 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED ONIONS",
+          "name_es": "CEBOLLA PICADA",
+          "qty_single": "2 GALLON 1 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "3 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FLOUR",
+          "name_es": "HARINA",
+          "qty_single": "6 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "CRAWFISH",
+          "name_es": "CRAWFISH",
+          "qty_single": "30 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CAYENNE PEPPER",
+          "name_es": "PIMIENTA CAYENA",
+          "qty_single": "3.5 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CUMIN",
+          "name_es": "COMINO",
+          "qty_single": "6.5 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN BASE (IMPERIAL) (IMPERIAL)",
+          "name_es": "BASE DE POLLO IMPERIAL",
+          "qty_single": "3 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHICKEN STOCK",
+          "name_es": "CALDO DE POLLO",
+          "qty_single": "3 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "HOT WATER",
+          "name_es": "AGUA CALIENTE",
+          "qty_single": "3 GALLON +3 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "HEAVY CREAM",
+          "name_es": "HEAVY CREAM",
+          "qty_single": "30 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "MIX CHEESE",
+          "name_es": "QUESO MIX",
+          "qty_single": "25 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHITE WINE",
+          "name_es": "CAJA DE VINO BLANCO",
+          "qty_single": "3 QT",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "SAUCE 0",
+      "category": "SAUCES",
+      "name": "Tomatillo Mix",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "4 1/2 GALL",
+      "yield_es": "4 1/2 GALL",
+      "english_instructions": "PREPARATION\n• Put the tomatillos together with the serrano chiles to cook over low heat.\n• When they are cooked take them out of the water\n• Put all in a bucket and grind completely\nRATIO",
+      "spanish_instructions": "PREPARACIÓN\n• PNGA LOS TOMATILLOS JUNTO A LOS CHILES SERRANOS A COCINAR A FUEGO LENTO.\n• CUANDO ESTÉN COCIDOS SACARLOS DEL AGUA\n• PONGA TODOS EN UN BOTE Y MUELA COMPLETAMENTE\nPROPORCIÓN",
+      "ingredients": [
+        {
+          "name_en": "PELADO TOMATILLO",
+          "name_es": "TOMATILLO PELADO",
+          "qty_single": "50 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SERRANO PEPPER",
+          "name_es": "CHILE SERRANO",
+          "qty_single": "40 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": "RATIO: 1 LB TOMATILLO + 1 LB SERRANO PEPPER = 2 CUPS",
+      "notes_es": "RATIO: 1 LB TOMATILLO + 1 LB CHILE SERRANO = 2 CUPS"
+    },
+    {
+      "code": "SAUCE 1",
+      "category": "SAUCES",
+      "name": "Tomatillo Sauce",
+      "prep_time_en": "25 MINUTES",
+      "prep_time_es": "25 MINUTOS",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "1/2 GALLON SINGLE RECIPE / 1 GALLON DOUBLE RECIPE",
+      "yield_es": "1/2 GALLON SINGLE RECIPE / 1 GALLON DOUBLE RECIPE",
+      "english_instructions": "PREPARATION\n• Put the oil to heat when it is hot add the ground garlic and lower the temperature cook it for about 40 seconds\n• Add the tomatillo mix and let it boil and remove it from the heat and put it to cool\n• When it is cold add the avocado and the cilantro and grind it well\n• Label them and refrigerate them",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA A CALENTAR EL ACEITE CUANDO YA ESTÉ CALIENTE AGREGUE EL AJO MOLIDO Y BAJE LA TEMPERATURA COCINELO POR UNOS 40 SEGUNDOS\n• AGREGUE EL TOMATILLO MIX Y DEGELO QUE HIERVA Y RETIRELO DEL FUEGO Y PÓNGALO A ENFRIAR\n• CUANDO YA ESTÉ FRÍO AGREGUE EL AGUACATE Y EL CILANTRO  Y MUELELO BIEN\n• ETIQUETALOS Y REFRIGERARLOS",
+      "ingredients": [
+        {
+          "name_en": "TOMATILLO MIX",
+          "name_es": "MEZCLA DE TOMATILLO",
+          "qty_single": "12 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "AVOCADO",
+          "name_es": "AGUACATE",
+          "qty_single": "3 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "3 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRY OIL",
+          "name_es": "ACEITE PARA FREÍR",
+          "qty_single": "3 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CILANTRO",
+          "name_es": "CILANTRO",
+          "qty_single": "3 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "10 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK PEPPER",
+          "name_es": "PIMIENTA NEGRA",
+          "qty_single": "2.5 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD",
+      "category": "COLD",
+      "name": "Avocado Ranch Dressing",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "DAY",
+      "shelf_life_es": "DIA",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION\n• Place all ingredients in a 5 gallon bucket. Then, using a stick blender, mix until completely smooth.\n• Store in a plastic container, cover, date and refrigerate.",
+      "spanish_instructions": "PREPARACIÓN\n• COLOQUE TODOS LOS INGREDIENTES EN UN BALDE DE 5 GALONES. LUEGO, USANDO UNA BATIDORA DE VARILLA, MEZCLE HASTA QUE ESTÉ COMPLETAMENTE SUAVE.\n• ALMACENAR EN UN RECIPIENTE DE PLÁSTICO, TAPAR, FECHAR Y REFRIGERAR.",
+      "ingredients": [
+        {
+          "name_en": "COLD WATER",
+          "name_es": "AGUA FRÍA",
+          "qty_single": "2 CUPS",
+          "qty_double": "4 CUPS"
+        },
+        {
+          "name_en": "RANCH DRESSING",
+          "name_es": "ADEREZO RANCH",
+          "qty_single": "3 CUPS",
+          "qty_double": "6 CUPS"
+        },
+        {
+          "name_en": "AVOCADO",
+          "name_es": "AGUACATE",
+          "qty_single": "1 LBS",
+          "qty_double": "2 LBS"
+        },
+        {
+          "name_en": "AVOCADO PULP",
+          "name_es": "PULPA DE AGUACATE",
+          "qty_single": "1 LBS",
+          "qty_double": "2 LBS"
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO FRESCO PICADO",
+          "qty_single": "1/4  CUP",
+          "qty_double": "1/2 CUP"
+        },
+        {
+          "name_en": "JALAPENOS CHOPPED",
+          "name_es": "JALAPEÑOS PICADOS",
+          "qty_single": "3 oz",
+          "qty_double": "3/4 CUP (6 oz)"
+        },
+        {
+          "name_en": "RED ONIONS",
+          "name_es": "CEBOLLAS ROJAS",
+          "qty_single": "4 oz",
+          "qty_double": "1/2 CUP"
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "0.5 OZ",
+          "qty_double": "1 OZ"
+        },
+        {
+          "name_en": "ONION SALT",
+          "name_es": "SAL DE CEBOLLA",
+          "qty_single": "1/2  TEA SPOON",
+          "qty_double": "1 TEA SPOON"
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "1 TEA SPOON",
+          "qty_double": "1 TABLE SPOON"
+        },
+        {
+          "name_en": "CUMIN",
+          "name_es": "COMINO",
+          "qty_single": "1 TEA SPOON",
+          "qty_double": "1 TABLE SPOON"
+        },
+        {
+          "name_en": "CHOLULA SAUCE",
+          "name_es": "SALSA CHOLULA",
+          "qty_single": "1 TEA SPOON",
+          "qty_double": "1 TABLE SPOON"
+        }
+      ],
+      "notes_en": "• The third amount column was present in the source without a visible heading.\nThird (unlabeled) amount column from source: COLD WATER: 8 CUPS; RANCH DRESSING: 12 CUPS; AVOCADO: 4 LBS; AVOCADO PULP: 4 LBS; CHOPPED GARLIC: 1 CUP; JALAPENOS CHOPPED: 1 1/2  CUP (12oz); RED ONIONS: 1 CUP; CHOPPED CILANTRO: 2 OZ; ONION SALT: 2 TEA SPOON; SALT: 2 TABLE SPOON; CUMIN: 2 TABLE SPOON; CHOLULA SAUCE: 2 TABLE SPOON",
+      "notes_es": "• La tercera columna de cantidades estaba en el archivo fuente sin título visible.\nThird (unlabeled) amount column from source: AGUA FRÍA: 8 CUPS; ADEREZO RANCH: 12 CUPS; AGUACATE: 4 LBS; PULPA DE AGUACATE: 4 LBS; AJO FRESCO PICADO: 1 CUP; JALAPEÑOS PICADOS: 1 1/2  CUP (12oz); CEBOLLAS ROJAS: 1 CUP; CILANTRO PICADO: 2 OZ; SAL DE CEBOLLA: 2 TEA SPOON; SAL: 2 TABLE SPOON; COMINO: 2 TABLE SPOON; SALSA CHOLULA: 2 TABLE SPOON"
+    },
+    {
+      "code": "COLD 2",
+      "category": "COLD",
+      "name": "Cilantro Ginger Dressing",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "14 DAYS",
+      "shelf_life_es": "14 DIAS",
+      "yield_en": "1 QT SINGLE RECIPE / 2 QT DOUBLE RECIPE",
+      "yield_es": "1 QT SINGLE RECIPE / 2 QT DOUBLE RECIPE",
+      "english_instructions": "PREPARATION\n• Inside the Robot Coupe put all ingredients well cut except the oils.\n• Start to grind and add the oils very slowly until everything is well ground. Then turn off and place in the appropriate container\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN\n• DENTRO DEL ROBOT COUPE PONGA TODOS LOS INGREDIENTES BIEN CORTADOS MENOS LOS ACEITES.\n• COMIENCE A MOLER Y AGREGUE LOS ACEITES MUY LENTAMENTE HASTA QUE TODO ESTÉ BIEN MOLIDO. LUEGO APAGUE Y COLOQUE EN EL RECIPIENTE ADECUADO\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "FRESH GINGER PEELED",
+          "name_es": "JENGIBRE FRESCO PELADO",
+          "qty_single": "32 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "20 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH CHOPPED JALAPENO",
+          "name_es": "JALAPEÑO FRESCO PICADO",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "LIME JUICE",
+          "name_es": "JUGO DE LIMA",
+          "qty_single": "1 QUART",
+          "qty_double": null
+        },
+        {
+          "name_en": "APPLE CIDER VINEGAR",
+          "name_es": "VINAGRE DE SIDRA DE MANZANA",
+          "qty_single": "6 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SUGAR",
+          "name_es": "AZÚCAR",
+          "qty_single": "1 QUART",
+          "qty_double": null
+        },
+        {
+          "name_en": "HONEY",
+          "name_es": "MIEL",
+          "qty_single": "2 QUART",
+          "qty_double": null
+        },
+        {
+          "name_en": "GOLDEN MUSTARD",
+          "name_es": "MOSTAZA GOLDEN",
+          "qty_single": "8 TABLESPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "EXTRA VIRGIN OLIVE OIL",
+          "name_es": "ACEITE DE OLIVA EXTRA VIRGEN",
+          "qty_single": "5 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SESAME OIL",
+          "name_es": "ACEITE DE SÉSAMO",
+          "qty_single": "1 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "GREEN ONIONS",
+          "name_es": "CEBOLLAS VERDES",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "2 QUART",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK PEPPER",
+          "name_es": "PIMIENTA NEGRA",
+          "qty_single": "8 TABLE SPOON",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 1",
+      "category": "COLD",
+      "name": "Chipotle Mayo",
+      "prep_time_en": "",
+      "prep_time_es": "",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION CHIPOTLE MAYO\n• Put the ingredients in a bowl and beat them until they are completely stirred.",
+      "spanish_instructions": "PREPARACIÓN CHIPOTLE MAYO\n• PONGA LOS INGREDIENTES EN UN BOWL Y MÁTALOS HASTA QUE ESTÉN COMPLETAMENTE REVUELTOS.",
+      "ingredients": [
+        {
+          "name_en": "CHIPOTLE PUREE",
+          "name_es": "PURÉ DE CHIPOTLE",
+          "qty_single": "2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "MAYONNAISE",
+          "name_es": "MAYONESA",
+          "qty_single": "2 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SOUR CREAM",
+          "name_es": "CREMA AGRIA",
+          "qty_single": "2 QUARTS",
+          "qty_double": null
+        },
+        {
+          "name_en": "LIME JUICE",
+          "name_es": "JUGO DE LIMA",
+          "qty_single": "1/2  CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "6 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "GARLIC POWDER",
+          "name_es": "AJO EN POLVO",
+          "qty_single": "6 TEA SPOON",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 1",
+      "category": "COLD",
+      "name": "Chipotle Cream",
+      "prep_time_en": "",
+      "prep_time_es": "",
+      "shelf_life_en": "5 DAYS",
+      "shelf_life_es": "5 DIAS",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION CHIPOTLE CREAM\n• Put the ingredients in a bowl and beat them until they are completely stirred.\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN CHIPOTLE CREAM\n• PONGA LOS INGREDIENTES EN UN BOWL Y BÁTALOS HASTA QUE ESTÉN COMPLETAMENTE REVUELTOS.\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "POBLANO SAUCE",
+          "name_es": "SALSA POBLANO",
+          "qty_single": "1/2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHIPOTLE PUREE",
+          "name_es": "PURÉ DE CHIPOTLE",
+          "qty_single": "2 CUPS",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 7",
+      "category": "COLD",
       "name": "Pineapple Butter",
-      "prep_time": "15 min",
-      "shelf_life": "8 days",
-      "batch_sizes": ["Single Recipe (4 Gal)"],
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "8 DAY",
+      "shelf_life_es": "8 DIA",
+      "yield_en": "4 GALL",
+      "yield_es": "4 GALL",
+      "english_instructions": "PREPARATION\n• Put the butter in the mixer at medium speed.\n• Then put the pineapple juice and the fresh garlic together and add them to the butter.\n• After 5 minutes, add the white wine, leave stirring until the mix is very fluffy.\n• Separate the content into 3 containers.\n• Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• PONGA LA MANTEQUILLA EN LA BATIDORA A VELOCIDAD MEDIA.\n• LUEGO PONGA EL JUGO DE PIÑA Y EL FRESH GARLIC JUNTOS Y AGREGUELOS A LA MANTEQUILLA.\n• DESPUÉS DE 5 MINUTOS, AÑADIR EL VINO BLANCO, DEJE REVOLVIENDO HASTA QUE LA MEZCLA ESTÉ BIEN ESPONJOSA.\n• SEPARE EL CONTENIDO EN 3 CONTENEDORES.\n• ETIQUETALO Y REFRIGERARLO",
       "ingredients": [
-        {"name": "Butter Blend", "qty": "28 Lbs"},
-        {"name": "Pineapple Juice", "qty": "4 Cans (24 oz each)"},
-        {"name": "Fresh Garlic Chopped", "qty": "1 Cup"},
-        {"name": "White Wine", "qty": "1 Cup"}
+        {
+          "name_en": "BUTTER BLEND",
+          "name_es": "BUTTER BLEND",
+          "qty_single": "28 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "PINEAPPLE JUICE",
+          "name_es": "JUGO DE PIÑA",
+          "qty_single": "4 CANS (24 OZ)",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO FRESCO PICADO",
+          "qty_single": "1 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHITE WINE",
+          "name_es": "VINO BLANCO",
+          "qty_single": "1 CUP",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. Ponga la mantequilla en la batidora a velocidad media.\n2. Luego ponga el jugo de piña y el fresh garlic juntos y agréguelos a la mantequilla.\n3. Después de 5 minutos, añadir el vino blanco. Deje revolviendo hasta que la mezcla esté bien esponjosa.\n4. Separe el contenido en 3 contenedores.\n5. Etiquétalo y refrigerarlo.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+      "notes_en": null,
+      "notes_es": null
     },
     {
-      "code": "Cold 9",
-      "category": "cold",
-      "name": "Salad Mix & Cabbage Mix",
-      "prep_time": "15 min",
-      "shelf_life": "1 day",
-      "batch_sizes": ["Salad Mix", "Cabbage Mix Only"],
+      "code": "COLD",
+      "category": "COLD",
+      "name": "Honey Mustard Dressing",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION\n• Mix all ingredients in a bucket\n• Mix well with the blender until it is smooth.\n• The containers are labeled with the product name, date and cook who prepared it\n• Cover and place in the refrigerator",
+      "spanish_instructions": "PREPARACIÓN\n• MEZCLAR TODOS LOS INGREDIENTES EN UN CUBO\n• MEZCLE BIEN CON LA LICUADORA HASTA QUE ESTÉ SUAVE.\n• LOS ENVASES ESTÁN ETIQUETADOS CON EL NOMBRE DEL PRODUCTO, FECHA Y COCINERO QUE LO PREPARÓ\n• TAPA Y COLOCA EN EL REFRIGERADOR",
       "ingredients": [
-        {"name": "[Salad] Romaine Lettuce", "qty": "6 Bunches"},
-        {"name": "[Salad] Iceberg Lettuce", "qty": "6 Balls"},
-        {"name": "[Salad] Shredded Red Cabbage", "qty": "1.5 Cups"},
-        {"name": "[Salad] Shredded White Cabbage", "qty": "1.5 Cups"},
-        {"name": "[Salad] Shredded Carrots", "qty": "3 Cups"},
-        {"name": "[Cabbage Only] Shredded Red Cabbage", "qty": "1 Qt"},
-        {"name": "[Cabbage Only] Shredded White Cabbage", "qty": "3 Qt"}
+        {
+          "name_en": "MAYONNAISE",
+          "name_es": "MAYONESA",
+          "qty_single": "1 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "GOLDEN MUSTARD",
+          "name_es": "MOSTAZA AMARILLA FRENCH",
+          "qty_single": "2 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "HONEY",
+          "name_es": "MIEL",
+          "qty_single": "5 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CAYENNE PEPPER",
+          "name_es": "PIMIENTA CAYENA",
+          "qty_single": "1 TEA SPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "APPLE CIDER VINEGAR",
+          "name_es": "VINAGRE DE SIDRA DE MANZANA",
+          "qty_single": "1 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "OLIVE OIL",
+          "name_es": "ACEITE DE OLIVA",
+          "qty_single": "2 CUPS",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "Salad Mix:\n1. Corte la lechuga de la medida adecuada y póngala en un contenedor con agua y hielo.\n2. Cuando esté cortada, revuelva bien para que se mezcle completamente.\n3. Saque la lechuga del agua con un colador para que se empiece a escurrir por unos minutos.\n\nCabbage Mix:\n1. Corte el white y el red cabbage y póngalo en un contenedor con hielo.\n2. Lave por separado el red cabbage, luego mezclarlos correctamente. Etiquétalo y refrigerarlo.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+      "notes_en": null,
+      "notes_es": null
     },
     {
-      "code": "Cold 10",
-      "category": "cold",
+      "code": "COLD",
+      "category": "COLD",
+      "name": "Ranch Dressing",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "1/2 GALL",
+      "yield_es": "1/2 GALL",
+      "english_instructions": "PREPARATION\n• In a container pour first the buttermilk, then add the dressing mix and mix well.\n• Add the mayonnaise and mix well.\n• Pour into a container, label it, date and refrigerate.",
+      "spanish_instructions": "PREPARACIÓN\n• En un recipiente VIERTE primero el suero de leche, luego agregue la mezcla de aderezo y mezcle bien.\n• Agrega la mayonesa y mezcla bien.\n• Vierta en un recipiente, etiquételo, feche y refrigere.",
+      "ingredients": [
+        {
+          "name_en": "BUTTERMILK",
+          "name_es": "SUERO DE LECHE",
+          "qty_single": "1 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "RANCH DRESSING MIX",
+          "name_es": "MEZCLA DE ADEREZO RANCH",
+          "qty_single": "2 PACKETS",
+          "qty_double": null
+        },
+        {
+          "name_en": "MAYONNAISE",
+          "name_es": "MAYONESA",
+          "qty_single": "1 GALLON",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 3",
+      "category": "COLD",
+      "name": "Sour Cream Drizzle",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "8-16 GALL",
+      "yield_es": "8-16 GALL",
+      "english_instructions": "PREPARATION SOUR CREAM\n• Put all ingredients in a bowl and beat very well until they are well mixed.\n• Then distribute in containers that are clean.\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN SOUR CREAM\n• PONER TODOS LOS INGREDIENTES EN UN BOWL Y BATIR MUY BIEN HASTA QUE ESTÉN BIEN MEZCLADOS.\n• LUEGO DISTRIBUIR EN BOTES QUE ESTÉN LIMPIOS.\n• ETIQUÉTALA Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "SOUR CREAM",
+          "name_es": "CREMA AGRIA",
+          "qty_single": "5 LBS",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHOLE MILK",
+          "name_es": "LECHE ENTERA",
+          "qty_single": "10 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "VALENTINA SAUCE",
+          "name_es": "SALSA VALINTINA",
+          "qty_single": "1 TEA SPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "1 TEA SPOON",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 3",
+      "category": "COLD",
+      "name": "Pickled Onions",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "8-16 GALL",
+      "yield_es": "8-16 GALL",
+      "english_instructions": "PREPARATION PICKLED ONIONS\n• Cut the red onions in small size and the habaneros in thin slices.\n• Add the other ingredients and let rest for several hours.\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN PICKLED ONIONS\n• CORTAR LAS RED ONIONS EN TAMAÑO PEQUEÑO Y LOS HABANEROS EN SLICES FINAS.\n• AGREGAR LOS DEMÁS INGREDIENTES Y DEJAR REPOSAR POR VARIAS HORAS.\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "RED SLICED ONIONS",
+          "name_es": "CEBOLLAS ROJAS REBANADAS",
+          "qty_single": "1/2 GALLON",
+          "qty_double": null
+        },
+        {
+          "name_en": "HABANERO PEPPER",
+          "name_es": "CHILE HABANERO",
+          "qty_single": "1 OZ",
+          "qty_double": null
+        },
+        {
+          "name_en": "LIME JUICE",
+          "name_es": "JUGO DE LIMA",
+          "qty_single": "2 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "WHITE VINEGAR",
+          "name_es": "VINAGRE BLANCO",
+          "qty_single": "1 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "1 TABLE SPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "OREGANO",
+          "name_es": "ORÉGANO",
+          "qty_single": "2 TABLE SPOON",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 4",
+      "category": "COLD",
+      "name": "Guacamole",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "8-16 GALL",
+      "yield_es": "8-16 GALL",
+      "english_instructions": "PREPARATION\n• Cut the avocados in half and take out the seed with a large spoon. Take out all the avocado making sure nothing is left in the shell.\n• When the avocados are already in the container add the salt and lime juice and mash them completely.\n• Once mashed add the onion, cilantro and tomato. Stir very well.\n• Put it in an appropriate container and cover with plastic.\n• Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• CORTE LOS AGUACATES POR LA MITAD Y SAQUE LA SEMILLA CON UNA CUCHARA GRANDE.  SAQUE TODO EL AGUACATE ASEGURÁNDOSE DE QUE NO QUEDE NADA EN LA CÁSCARA.\n• CUANDO YA ESTÉN LOS AGUACATES EN EL CONTENEDOR AGREGUE LA SAL Y EL LIME JUICE Y APLASTARLOS COMPLETE MENTE.\n• UNA VEZ APLASTADOS AGREGUE LA CEBOLLA, EL CILANTRO Y EL TOMATE. REVUELVA MUY BIEN.\n• PONGALO EN UN CONTENEDOR APROPIADO Y CUBRA CON PLÁSTICO.\n• ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "AVOCADO",
+          "name_es": "AGUACATE FRESCO",
+          "qty_single": "16 LBS",
+          "qty_double": "32 LBS"
+        },
+        {
+          "name_en": "AVOCADO PULP",
+          "name_es": "PULPA DE AGUACATE",
+          "qty_single": "16 LBS",
+          "qty_double": "20 LBS"
+        },
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "4 CUPS",
+          "qty_double": "8 CUPS"
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "4 BUNCH",
+          "qty_double": "8 BUNCH"
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "8 TABLESPOON",
+          "qty_double": "16 TABLESPOON"
+        }
+      ],
+      "notes_en": "• The Line Only ingredient set appeared twice in the source file. It is included once here.\nLine-only set (DO NOT MIX. ALWAYS PREPARE 1.8 kg IN A SEPARATE CONTAINER TO PRESERVE THE SALT FLAVOR.): AVOCADO: 4 LBS; CHOPPED ONIONSS: 8 oz; CHOPPED CILANTRO: HALF BUNCH; SALT: 1 TABLESPOON",
+      "notes_es": "• El grupo de ingredientes Solo Para Línea apareció dos veces en el archivo fuente. Está incluido una vez aquí.\nLine-only set (NO MEZCLAR. PREPARAR SIEMPRE 1.8 kg EN UN RECIPIENTE APARTE PARA CONSERVAR EL SABOR A SAL.): AGUACATE FRESCO: 4 LBS; CEBOLLAS PICADAS: 8 oz; CILANTRO PICADO: HALF BUNCH; SAL: 1 TABLESPOON"
+    },
+    {
+      "code": "HOT 7",
+      "category": "HOT",
+      "name": "Jalapenos Empanizados",
+      "prep_time_en": "45 MINUTES",
+      "prep_time_es": "45 MINUTOS",
+      "shelf_life_en": "3 DAYS",
+      "shelf_life_es": "3 DIAS",
+      "yield_en": "38 POUNDS",
+      "yield_es": "38 POUNDS",
+      "english_instructions": "PREPARATION\n• Cut all jalapenos at the correct angle and put them to boil for about 5 minutes approximately. When the water is boiling turn off the heat and take out the jalapeños and place them on ice for 15 minutes.\n• After take out the seeds by hand and carefully not to break them. Fill with queso mix and bread passing 2 times through flour and the last time through bread crumbs. Between each breading use the appropriate milk.\nPREPARATION\n• Put all ingredients in a bowl and stir very well\n• Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN\n• CORTE TODOS LOS JALAPENOS EN EL ÁNGULO CORRECTO Y PÓNGALOS A HERVIR POR UNOS 5 MINUTOS APROXIMADAMENTE. CUANDO EL AGUA ESTÉ HIRVIENDO APAGUE EL FUEGO Y SAQUE LOS JALAPEÑOS Y COLOQUELOS SOBRE HIELO POR 15 MINUTOS.\n• DESPUÉS SAQUE LAS SEMILLAS CON LA MANO Y CON CUIDADO DE NO ROMPERLOS. RELLENE CON QUESO MIX Y EMPANICE PASANDO 2 VECES POR HARINA Y LA ÚLTIMA VEZ POR PAN RALLADO. ENTRE CADA EMPANIZADO UTILICE LA LECHE ADECUADA.\nPREPARACIÓN\n• PONGA TODOS LOS INGREDIENTES EN UN BOLD  Y REVUELVA MUY BIEN\n• ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "JALAPENOS",
+          "name_es": "JALAPEÑOS",
+          "qty_single": "30 SINGLE",
+          "qty_double": null
+        },
+        {
+          "name_en": "ENCHILADA QUESO",
+          "name_es": "QUESO ENCHILADA",
+          "qty_single": "1 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "QUESO",
+          "name_es": "QUESO",
+          "qty_single": "4 OZ",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 5",
+      "category": "COLD",
+      "name": "Pico de Gallo",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION\n• Peel the onion and cut it in 4 pieces to then cut it with the machine.\n• Do the same with the tomatoes and jalapeño chiles.\n• Cut fine with the knife the cilantro and put in a bag the onion, jalapeños, cilantro and corn\n• In a separate bag put the tomato and in another leave the lime juice and salt ready\n• When you need it join all the ingredients in a bowl and stir with a spatula.\n• Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• PELE LA CEBOLLA   Y CÓRTALA  EN 4 PEDAZOS PARA LUEGO  CORTARLA CON LA MÁQUINA.\n• HAGA LO MISMO  CON LOS TOMATES Y LOS CHILES JALAPEÑOS.\n• CORTE FINO CON EL  CUCHILLO  EL CILANTRO Y PONGA EN UNA BOLSA LA CEBOLLA, JALAPEÑOS, CILANTRO Y MAIZ\n• EN UNA BOLSA SEPARADO PONGA EL TOMATE Y EN OTRA DEJE LISTO EL JUGO DE LIMA Y LA SAL\n• CUANDO LO OCUPE UNA TODOS LOS INGREDIENTES EN UN BOWL Y REVUELVA CON UNA ESPÁTULA.\n• ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "CHOPPED ONIONSS",
+          "name_es": "CEBOLLAS PICADAS",
+          "qty_single": "1 GALLON",
+          "qty_double": "2 GALLON"
+        },
+        {
+          "name_en": "CHOPPED TOMATOES",
+          "name_es": "TOMATES PICADOS",
+          "qty_single": "1.5 GALLON",
+          "qty_double": "3 GALLON"
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "6 BUNCH",
+          "qty_double": "12 BUNCH"
+        },
+        {
+          "name_en": "CHOPPED JALAPENO",
+          "name_es": "JALAPEÑO PICADO",
+          "qty_single": "3 CUP",
+          "qty_double": "6 CUPS"
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "12 TEA SPOONS",
+          "qty_double": "4 OZ"
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 6",
+      "category": "COLD",
+      "name": "Pico Mango",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "1/2 GALL",
+      "yield_es": "1/2 GALL",
+      "english_instructions": "PREPARATION\n• Peel the mango and cut it in the appropriate way.\n• Do the same with the other vegetables. Peel the cucumber adequately and remove the seed and also cut.\n• When you have everything cut wash the red onion and put it in a container and stir it correctly.\n• Put it in a bag and leave the salt and lime juice prepared in a bag ready to use.\n• Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• PELE EL MANGO Y CORTARLO  DE LA MANERA ADECUADA.\n• HAGA LO MISMO CON LOS DEMÁS VEGETALES. PELE EL PEPINO ADECUADAMENTE Y SAQUELE LA SEMILLA Y TAMBIÉN CORTE.\n• CUANDO TENGA TODO CORTADO LAVE LA CEBOLLA ROJA Y PÓNGALO EN UN CONTENEDOR Y REVUELVELO CORRECTAMENTE.\n• PONGALO EN BOLSA Y DEJE PREPARADA LA SAL Y EL LIME JUICE EN UNA BOLSA LISTO PARA USAR.\n• ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "CHOPPED MANGO",
+          "name_es": "MANGO PICADO",
+          "qty_single": "8 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED CUCUMBER",
+          "name_es": "PEPINO PICADO",
+          "qty_single": "3 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED RED ONIONS",
+          "name_es": "CEBOLLAS ROJAS PICADAS",
+          "qty_single": "1 1/2 CUPS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED BELL PEPPER",
+          "name_es": "PIMIENTO PICADO",
+          "qty_single": "1 1/2 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED CILANTRO",
+          "name_es": "CILANTRO PICADO",
+          "qty_single": "1 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "3 TEA SPOON DENTRO DE TRES COPITAS",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 8",
+      "category": "COLD",
+      "name": "Steam Veggies & Veggie Sazone",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "6 POUNDS",
+      "yield_es": "6 POUNDS",
+      "english_instructions": "PREPARATION\n• Peel the carrot and weigh do the same with the potato and cut it in one inch squares\n• When all the vegetables are ready put them in the appropriate container in bain-marie for 27 minutes make sure to put aluminum to cover them\n• The bags will weigh 3 oz., 1 oz. for each one of the vegetables.",
+      "spanish_instructions": "PREPARACIÓN\n• PELE LA ZANAHORIA Y PESE HAGA LO MISMO CON LA PAPA Y CORTARLA EN CUADROS DE UNA PULGADA\n• CUANDO TODOS LOS VEGETALES ESTÉN LISTOS PONERLOS EN EL CONTENEDOR ADECUADO A BANO MARIA POR 27 MINUTOS ASEGÚRESE DE PONERLES ALUMINIO PARA CUBRIRLOS\n• LAS BOLSAS PESARAN 3 OZ., 1 OZ. POR CADA UNO DE LOS VEGETALES.",
+      "ingredients": [
+        {
+          "name_en": "FRESH CARROTS",
+          "name_es": "ZANAHORIAS FRESCAS",
+          "qty_single": "6 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "FRESH RED POTATOES",
+          "name_es": "PAPAS ROJAS FRESCAS",
+          "qty_single": "6 POUNDS",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 9",
+      "category": "COLD",
+      "name": "Salad Mix",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION SALAD MIX\n• Cut the lettuce to the appropriate size and put it in a container with water and ice.\n• When it is cut stir well so it mixes completely.\n• Take the lettuce out of the water with a colander so it begins to drain for a few minutes.",
+      "spanish_instructions": "PREPARACIÓN SALAD MIX\n• CORTE LA LECHUGA DE LA MEDIDA ADECUADA Y PÓNGALA EN UN CONTENEDOR CON AGUA Y HIELO.\n• CUANDO ESTÉ CORTADA REVUELVA BIEN PARA QUE SE MEZCLE COMPLETAMENTE.\n• SAQUE LA LECHUGA DEL AGUA CON UN COLADOR  PARA QUE SE EMPIECE A ESCURRIR POR UNOS MINUTOS.",
+      "ingredients": [
+        {
+          "name_en": "ROMAINE LETTUCE",
+          "name_es": "LECHUGA ROMANA",
+          "qty_single": "6 BUNCH",
+          "qty_double": null
+        },
+        {
+          "name_en": "ICEBERG LETTUCE",
+          "name_es": "LECHUGA ICEBERG",
+          "qty_single": "6 BALLS",
+          "qty_double": null
+        },
+        {
+          "name_en": "SHREDDED RED CABBAGE",
+          "name_es": "REPOLLO ROJO RALLADO",
+          "qty_single": "1.5 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SHREDDED WHITE CABBAGE",
+          "name_es": "REPOLLO BLANCO RALLADO",
+          "qty_single": "1.5 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "SHREDDED CARROTS",
+          "name_es": "ZANAHORIAS RALLADAS",
+          "qty_single": "3 CUPS",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 9",
+      "category": "COLD",
+      "name": "Cabbage Mix",
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "",
+      "yield_es": "",
+      "english_instructions": "PREPARATION CABBAGE MIX\n• Cut the white and red cabbage and put it in a container with ice.\n• Wash separately the red cabbage, then mix them correctly. Label it and refrigerate it.",
+      "spanish_instructions": "PREPARACIÓN CABBAGE MIX\n• CORTE EL WHITE Y EL RED CABBAGE  Y  PÓNGALO EN UN CONTENEDOR CON HIELO.\n• LAVE POR SEPARADO EL RED CABBAGE, LUEGO MEZCLARLOS CORRECTAMENTE. ETIQUETALO Y REFRIGERARLO.",
+      "ingredients": [
+        {
+          "name_en": "SHREDDED RED CABBAGE",
+          "name_es": "REPOLLO ROJO RALLADO",
+          "qty_single": "1 QT",
+          "qty_double": null
+        },
+        {
+          "name_en": "SHREDDED WHITE CABBAGE",
+          "name_es": "REPOLLO BLANCO RALLADO",
+          "qty_single": "3 QT",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "COLD 10",
+      "category": "COLD",
       "name": "Shredded Lettuce",
-      "prep_time": "15 min",
-      "shelf_life": "1 day",
-      "batch_sizes": ["Single Recipe (4 Gal)"],
+      "prep_time_en": "15 MINUTES",
+      "prep_time_es": "15 MINUTOS",
+      "shelf_life_en": "1 DAY",
+      "shelf_life_es": "1 DIA",
+      "yield_en": "4 GALL",
+      "yield_es": "4 GALL",
+      "english_instructions": "PREPARATION\n• Cut the lettuce to the appropriate size and put in the sink with water and ice\n• When they are cut stir well so it mixes completely\n• Add the red cabbage and mix completely\n• Put the lettuce in an appropriate container label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• CORTE LA LECHUGA DE LA MEDIDA ADECUADA Y PONGA EN EL SINK CON AGUA Y HIELO\n• CUANDO ESTÉN CORTADOS REVUELVA BIEN PARA QUE SE MEZCLE COMPLETAMENTE\n• AGREGUE EL RED CABBAGE  Y MEZCLE COMPLETAMENTE\n• CONGA LA LECHUGA EN UN CONTENEDOR ADECUADO ETIQUETALO  Y REFRIGERARLO",
       "ingredients": [
-        {"name": "Romaine Lettuce", "qty": "20 Bunches"},
-        {"name": "Iceberg Lettuce", "qty": "20 Balls"},
-        {"name": "Lettuce Leaf", "qty": "4 Bunches"},
-        {"name": "Shredded Red Cabbage", "qty": "4 Cups"}
+        {
+          "name_en": "ROMAINE LETTUCE",
+          "name_es": "LECHUGA ROMANA",
+          "qty_single": "20 BUNCH",
+          "qty_double": null
+        },
+        {
+          "name_en": "ICEBERG LETTUCE",
+          "name_es": "LECHUGA ICEBERG",
+          "qty_single": "20 BALLS",
+          "qty_double": null
+        },
+        {
+          "name_en": "LETTUCE LEAF",
+          "name_es": "HOJA DE LECHUGA",
+          "qty_single": "4 BUNCH",
+          "qty_double": null
+        },
+        {
+          "name_en": "SHREDDED RED CABBAGE",
+          "name_es": "REPOLLO ROJO RALLADO",
+          "qty_single": "4 CUP",
+          "qty_double": null
+        }
       ],
-      "english_instructions": null,
-      "spanish_instructions": "1. Corte la lechuga de la medida adecuada y ponga en el sink con agua y hielo.\n2. Cuando estén cortados, revuelva bien para que se mezcle completamente.\n3. Agregue el red cabbage y mezcle completamente.\n4. Ponga la lechuga en un contenedor adecuado, etiquétalo y refrigerarlo.",
-      "notes": "Revision: 9.30.2018 — Aguirre's Tex-Mex LLC."
+      "notes_en": null,
+      "notes_es": null
+    },
+    {
+      "code": "HOT 9",
+      "category": "HOT",
+      "name": "Spinach",
+      "prep_time_en": "10 MINUTES",
+      "prep_time_es": "10 MINUTOS",
+      "shelf_life_en": "4 DAYS",
+      "shelf_life_es": "4 DIAS",
+      "yield_en": "6 POUNDS",
+      "yield_es": "6 POUNDS",
+      "english_instructions": "PREPARATION\n• Thaw the spinach completely and squeeze it to take out all possible water then\n• In a pan melt the butter and add the garlic cook until lightly browned\n• Add the spinach cayenne pepper cumin pepper and salt stir well and cook for approximately 5 minutes over medium heat\n• Then add the heavy cream and after a few minutes the mix cheese stir until the cheese is completely dissolved\n• Empty into a container and let cool to portion in 4 oz bags and 1 1/2 oz bags\n• Label it and refrigerate it",
+      "spanish_instructions": "PREPARACIÓN\n• DESCONGELE LA ESPINACA COMPLETAMENTE Y EXPRIMIRLA PARA SACARLE TODO EL AGUA POSIBLE LUEGO\n• EN UN SARTÉN DERRETIR LA MANTEQUILLA Y AGREGUE EL AJO COCINE HASTA QUE LIGERAMENTE DORADO\n• AGREGUE LA ESPINACA CAYENNE PEPPER COMINO PIMIENTA Y SAL REVUELVA BIEN Y COCINE POR APROXIMADAMENTE 5 MINUTOS A FUEGO MEDIO\n• SEGUIDAMENTE AGREGUE LA HEAVY CREAM Y AL PASAR UNOS MINUTOS EL QUESO MIXTO REVUELVA HASTA QUE EL QUESO ESTÉ COMPLETAMENTE DISUELTO\n• VACÍE EN UN CONTENEDOR Y DEJE ENFRIAR PARA PORCIONAR DEN BOLSAS 4 OZ Y BOLSAS DE 1 1/2 OZ\n• ETIQUETALO Y REFRIGERARLO",
+      "ingredients": [
+        {
+          "name_en": "MARGARINE",
+          "name_es": "MARGARINEA",
+          "qty_single": "3 POUND",
+          "qty_double": null
+        },
+        {
+          "name_en": "CHOPPED GARLIC",
+          "name_es": "AJO PICADO",
+          "qty_single": "12 TABLESPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "FROZEN SPINACH",
+          "name_es": "ESPINACA CONGELADA",
+          "qty_single": "36 POUNDS",
+          "qty_double": null
+        },
+        {
+          "name_en": "CUMIN",
+          "name_es": "COMINO",
+          "qty_single": "12 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "BLACK PEPPER",
+          "name_es": "PIMIENTA NEGRA",
+          "qty_single": "6 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "SALT",
+          "name_es": "SAL",
+          "qty_single": "12 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "CAYENNE PEPPER",
+          "name_es": "PIMIENTA CAYENA",
+          "qty_single": "3 TEASPOON",
+          "qty_double": null
+        },
+        {
+          "name_en": "HEAVY CREAM",
+          "name_es": "HEAVY CREAM",
+          "qty_single": "3 CUP",
+          "qty_double": null
+        },
+        {
+          "name_en": "MIX CHEESE",
+          "name_es": "QUESO MIX",
+          "qty_single": "6 POUND",
+          "qty_double": null
+        }
+      ],
+      "notes_en": null,
+      "notes_es": null
     }
   ]
 }

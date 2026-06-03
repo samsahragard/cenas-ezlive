@@ -45,9 +45,18 @@ def _load_fixture(path: Path | None = None) -> list[dict]:
 
 def seed_recipes_from_json(
     fixture_path: Path | None = None,
+    replace: bool = False,
+    skip_if_populated: bool = False,
 ) -> tuple[int, int, int]:
-    """Insert any recipes whose code is not already in the table.
+    """Insert recipes from the JSON fixture.
 
+    Modes:
+      - replace=True: wipe ALL existing recipes, then insert every fixture
+        row (codes need not be unique; used by the gated replace endpoint).
+      - skip_if_populated=True: no-op if the table already holds any recipe
+        (used at boot so a populated prod table is never auto-mutated; a
+        fresh/empty install still gets seeded).
+      - default (both False): additive — insert only codes not already present.
     Returns (created, skipped, errored).
     """
     from app.db import get_db
@@ -60,35 +69,60 @@ def seed_recipes_from_json(
     skipped = 0
     errored = 0
     try:
-        existing_codes = {
-            c[0] for c in db.query(Recipe.code).filter(Recipe.code.isnot(None)).all()
-        }
+        if skip_if_populated and not replace:
+            if db.query(Recipe.id).first() is not None:
+                logger.info(
+                    "recipes seed: table populated -> skip_if_populated no-op")
+                return (0, 0, 0)
+
+        if replace:
+            deleted = db.query(Recipe).delete()
+            db.flush()
+            logger.info(
+                "recipes seed REPLACE: deleted %d existing rows", deleted)
+            existing_codes = None  # insert every fixture row
+        else:
+            existing_codes = {
+                c[0] for c in db.query(Recipe.code).filter(Recipe.code.isnot(None)).all()
+            }
+
         for r in recipes:
             code = (r.get("code") or "").strip()
-            if not code:
-                logger.warning("seed: skipping recipe with no code: %r",
-                               r.get("name"))
-                errored += 1
-                continue
-            if code in existing_codes:
-                skipped += 1
-                continue
+            if existing_codes is not None:
+                if not code:
+                    logger.warning("seed: skipping recipe with no code: %r",
+                                   r.get("name"))
+                    errored += 1
+                    continue
+                if code in existing_codes:
+                    skipped += 1
+                    continue
+            # yield (EN/ES) lives in batch_sizes_json; fall back to a legacy
+            # batch_sizes list if the fixture predates the yield fields.
+            _ye, _ys = r.get("yield_en"), r.get("yield_es")
+            if _ye or _ys:
+                _batch_blob = json.dumps({"yield_en": _ye, "yield_es": _ys})
+            else:
+                _batch_blob = json.dumps(r.get("batch_sizes") or [])
             try:
                 row = Recipe(
-                    code=code,
-                    category=(r.get("category") or "hot").strip()[:40],
+                    code=(code or None),
+                    category=(r.get("category") or "hot").strip().lower()[:40],
                     name=(r.get("name") or "Untitled").strip()[:200],
-                    prep_time=(r.get("prep_time") or None),
-                    shelf_life=(r.get("shelf_life") or None),
+                    prep_time=(r.get("prep_time_en") or r.get("prep_time") or None),
+                    prep_time_es=(r.get("prep_time_es") or None),
+                    shelf_life=(r.get("shelf_life_en") or r.get("shelf_life") or None),
+                    shelf_life_es=(r.get("shelf_life_es") or None),
                     spanish_instructions=r.get("spanish_instructions") or None,
                     english_instructions=r.get("english_instructions") or None,
                     ingredients_json=json.dumps(r.get("ingredients") or []),
-                    batch_sizes_json=json.dumps(r.get("batch_sizes") or []),
-                    notes=r.get("notes") or None,
+                    batch_sizes_json=_batch_blob,
+                    notes=(r.get("notes_en") or r.get("notes") or None),
                 )
                 db.add(row)
                 created += 1
-                existing_codes.add(code)
+                if existing_codes is not None:
+                    existing_codes.add(code)
             except Exception:
                 logger.exception("seed: insert failed for code=%s", code)
                 errored += 1
@@ -97,6 +131,6 @@ def seed_recipes_from_json(
         db.close()
 
     logger.info(
-        "recipes seed: created=%d skipped=%d errored=%d",
-        created, skipped, errored)
+        "recipes seed: created=%d skipped=%d errored=%d (replace=%s)",
+        created, skipped, errored, replace)
     return created, skipped, errored

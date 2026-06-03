@@ -213,7 +213,7 @@
   }
   .ff-cat-thead, .ff-item-row {
     display: grid;
-    grid-template-columns: minmax(150px,1fr) 100px 100px 96px;
+    grid-template-columns: minmax(150px,1fr) 90px 100px 100px 96px;
     gap: 10px;
     align-items: center;
     padding: 7px 14px;
@@ -225,16 +225,23 @@
     color: rgba(255,255,255,0.45);
     border-bottom: 0.5px solid rgba(255,255,255,0.05);
   }
-  .ff-cat-thead div:not(:first-child) { text-align: right; }
+  .ff-cat-thead div:not(:first-child):not(:nth-child(2)) { text-align: right; }
+  .ff-cat-thead div:nth-child(2) { text-align: left; }
   .ff-item-row { border-bottom: 0.5px solid rgba(255,255,255,0.035); }
   .ff-item-row:last-child { border-bottom: 0; }
   .ff-item-row:nth-of-type(odd) { background: rgba(0,0,0,0.12); }
   .ff-item-name { font-size: 13px; font-weight: 500; color: #FAF6EC; }
+  .ff-item-size {
+    text-align: left;
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.02em;
+  }
   input.ff-num {
     width: 100%;
-    background: rgba(0,0,0,0.30);
-    border: 0.5px solid rgba(255,255,255,0.10);
-    color: #FAF6EC;
+    background: #E4B340;
+    border: 1px solid #c79a2f;
+    color: #1a1208;
     text-align: right;
     padding: 6px 9px;
     border-radius: 5px;
@@ -242,9 +249,10 @@
     font-family: inherit;
     font-variant-numeric: tabular-nums;
   }
-  input.ff-num:focus { outline: none; border-color: #E4B340; background: rgba(228,179,64,0.07); }
-  input.ff-num.has-value { border-color: rgba(228,179,64,0.45); }
-  input.ff-num-order.has-value { border-color: #E4B340; background: rgba(228,179,64,0.10); }
+  input.ff-num::placeholder { color: #5c4a16; opacity: 1; }
+  input.ff-num:focus { outline: none; border-color: #1a1208; background: #edc25a; }
+  input.ff-num.has-value { border-color: #a07d1f; }
+  input.ff-num-order.has-value { border-color: #1a1208; background: #edc25a; }
   .ff-avg {
     text-align: right;
     font-size: 11.5px;
@@ -255,7 +263,7 @@
 
   @media (max-width: 560px) {
     .ff-cat-thead, .ff-item-row {
-      grid-template-columns: 1fr 62px 62px 50px;
+      grid-template-columns: 1fr 56px 62px 62px 50px;
       gap: 6px;
       padding: 7px 10px;
     }
@@ -348,6 +356,11 @@
     left: 0;
     z-index: 2;
   }
+  table.ffpo-grid td.cell-item .cell-item-size {
+    color: rgba(255,255,255,0.40);
+    font-weight: 400;
+    font-size: 10.5px;
+  }
   table.ffpo-grid td.cell-avg {
     text-align: right;
     color: rgba(255,255,255,0.50);
@@ -364,9 +377,9 @@
   table.ffpo-grid td.is-tomorrow { background: rgba(228,179,64,0.10); }
   table.ffpo-grid input.ffpo-num {
     width: 56px;
-    background: transparent;
-    border: 0.5px solid rgba(255,255,255,0.08);
-    color: #FAF6EC;
+    background: #E4B340;
+    border: 1px solid #c79a2f;
+    color: #1a1208;
     text-align: center;
     padding: 4px 5px;
     border-radius: 4px;
@@ -374,18 +387,19 @@
     font-family: inherit;
     font-variant-numeric: tabular-nums;
   }
+  table.ffpo-grid input.ffpo-num::placeholder { color: #5c4a16; opacity: 1; }
   table.ffpo-grid input.ffpo-num:focus {
     outline: none;
-    border-color: #E4B340;
-    background: rgba(228,179,64,0.06);
+    border-color: #1a1208;
+    background: #edc25a;
   }
   table.ffpo-grid input.ffpo-num.is-tomorrow {
-    border-color: rgba(228,179,64,0.40);
-    background: rgba(228,179,64,0.06);
+    border-color: #1a1208;
+    background: #edc25a;
   }
   table.ffpo-grid td.is-past input.ffpo-num {
-    color: rgba(255,255,255,0.45);
-    background: transparent;
+    color: rgba(26,18,8,0.55);
+    background: rgba(228,179,64,0.55);
   }
 
   /* --- submit row + banners --------------------------------------- */
@@ -483,30 +497,32 @@
       ON HAND = your current inventory &nbsp;·&nbsp; ORDER = qty to send for this date &nbsp;·&nbsp; 30-DAY AVG = historical ordering pace
     </div>
 
-    {% for cat, items in categories %}
+    {% for cat in categories %}
       <div class="ff-cat-block">
         <div class="ff-cat-bar">
-          <span>{{ cat }}</span>
-          <span class="ff-cat-count">{{ items|length }} item{{ '' if items|length == 1 else 's' }}</span>
+          <span>{{ cat.name }}</span>
+          <span class="ff-cat-count">{{ cat.items|length }} item{{ '' if cat.items|length == 1 else 's' }}</span>
         </div>
         <div class="ff-cat-table">
           <div class="ff-cat-thead">
             <div>Item</div>
+            <div>Size</div>
             <div>On hand</div>
             <div>Order</div>
             <div>30-day avg</div>
           </div>
-          {% for slug in items %}
-            {% set avg = rolling_avg_by_slug.get(slug, 0) %}
+          {% for item in cat.items %}
+            {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
             <div class="ff-item-row">
-              <div class="ff-item-name">{{ slug.replace('-', ' ').title() }}</div>
-              <input type="number" step="0.1" min="0" inputmode="decimal"
+              <div class="ff-item-name">{{ item.label }}</div>
+              <div class="ff-item-size">{{ item.size }}</div>
+              <input type="number" step="1" min="0" inputmode="numeric"
                      class="ff-num"
-                     data-kind="inv" data-slug="{{ slug }}" data-cat="{{ cat }}"
+                     data-kind="inv" data-slug="{{ item.slug }}" data-cat="{{ cat.name }}"
                      placeholder="—">
-              <input type="number" step="0.1" min="0" inputmode="decimal"
+              <input type="number" step="1" min="0" inputmode="numeric"
                      class="ff-num ff-num-order"
-                     data-kind="or" data-slug="{{ slug }}" data-cat="{{ cat }}"
+                     data-kind="or" data-slug="{{ item.slug }}" data-cat="{{ cat.name }}"
                      placeholder="—">
               <div class="ff-avg">
                 {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}<span class="unit">/d</span>{% else %}—{% endif %}
@@ -543,35 +559,35 @@
             </tr>
           </thead>
           <tbody>
-            {% for cat, items in categories %}
+            {% for cat in categories %}
               <tr class="cat-row">
-                <td colspan="{{ 2 + rolling_days|length * 2 }}">{{ cat }}</td>
+                <td colspan="{{ 2 + rolling_days|length * 2 }}">{{ cat.name }}</td>
               </tr>
-              {% for slug in items %}
+              {% for item in cat.items %}
                 <tr>
-                  <td class="cell-item">{{ slug.replace('-', ' ').title() }}</td>
-                  <td class="cell-avg">{{ '%.1f'|format(rolling_avg_by_slug.get(slug, 0)) }}</td>
+                  <td class="cell-item">{{ item.label }}{% if item.size %} <span class="cell-item-size">{{ item.size }}</span>{% endif %}</td>
+                  <td class="cell-avg">{{ '%.1f'|format(rolling_avg_by_slug.get(item.slug, 0)) }}</td>
                   {% for d in rolling_days %}
                     {% set is_today = (d == today) %}
                     {% set is_tomorrow = (d == tomorrow) %}
                     {% set is_past = (d < today) %}
                     <td class="cell-input {% if is_today %}is-today{% elif is_tomorrow %}is-tomorrow{% elif is_past %}is-past{% endif %}">
-                      <input type="number" step="0.1" min="0"
+                      <input type="number" step="1" min="0"
                              class="ffpo-num {% if is_tomorrow %}is-tomorrow{% endif %}"
                              data-kind="inv"
-                             data-slug="{{ slug }}"
-                             data-cat="{{ cat }}"
+                             data-slug="{{ item.slug }}"
+                             data-cat="{{ cat.name }}"
                              data-date="{{ d.isoformat() }}"
-                             inputmode="decimal">
+                             inputmode="numeric">
                     </td>
                     <td class="cell-input {% if is_today %}is-today{% elif is_tomorrow %}is-tomorrow{% elif is_past %}is-past{% endif %}">
-                      <input type="number" step="0.1" min="0"
+                      <input type="number" step="1" min="0"
                              class="ffpo-num {% if is_tomorrow %}is-tomorrow{% endif %}"
                              data-kind="or"
-                             data-slug="{{ slug }}"
-                             data-cat="{{ cat }}"
+                             data-slug="{{ item.slug }}"
+                             data-cat="{{ cat.name }}"
                              data-date="{{ d.isoformat() }}"
-                             inputmode="decimal">
+                             inputmode="numeric">
                     </td>
                   {% endfor %}
                 </tr>

@@ -116,6 +116,9 @@
     border-radius: var(--prep-radius-lg);
     padding: 20px;
     margin: 0 0 48px;
+    /* Floor so the warm card reaches near the viewport bottom even on
+       sparse days (mirrors kitchen_dashboard's calc + min-height). */
+    min-height: calc(100vh - 120px);
     overflow: hidden;
   }
   /* Decorative tint only — position:absolute (NOT fixed) so it stays
@@ -262,13 +265,138 @@
   .prep-team-add svg { width: 14px; height: 14px; fill: currentColor; }
   .prep-team-empty { font-size: 12px; color: var(--prep-cream-faint); font-style: italic; }
 
+  /* ---- Team-today 3-tab views (#14: Assigned / Status / Total ingredients) ---- */
+  /* Segmented control mirrors the .prep-batch-row / .prep-status-row visual
+     language (inset chips on the warm input surface). Scoped to .prep-tt-*. */
+  .prep-tt-tabs {
+    display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 14px;
+    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-md); flex-wrap: wrap;
+  }
+  .prep-tt-tab {
+    padding: 7px 14px; background: transparent; border: 0.5px solid transparent;
+    border-radius: var(--prep-radius-sm); color: var(--prep-cream-dim);
+    font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.06em; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .prep-tt-tab svg { width: 13px; height: 13px; fill: currentColor; }
+  .prep-tt-tab:hover { color: var(--prep-cream); }
+  .prep-tt-tab.active {
+    background: rgba(228,179,64,0.15); border-color: var(--prep-gold);
+    color: var(--prep-gold-bright);
+  }
+  .prep-tt-tab .count {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--prep-cream-faint); background: rgba(0,0,0,0.3);
+    padding: 1px 5px; border-radius: 999px; letter-spacing: 0.04em;
+  }
+  .prep-tt-tab.active .count { color: var(--prep-gold-bright); background: rgba(228,179,64,0.18); }
+  .prep-tt-panel { display: none; }
+  .prep-tt-panel.active { display: block; }
+
+  /* Small status badge reused across the Assigned view (and matches the
+     detail-card status palette: completed=green, partly=amber,
+     not-needed=muted, not-completed=neutral). */
+  .prep-tt-badge {
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em;
+    text-transform: uppercase; border: 0.5px solid transparent;
+  }
+  .prep-tt-badge svg { width: 11px; height: 11px; fill: currentColor; }
+  .prep-tt-badge.not-completed { color: var(--prep-cream-dim); background: var(--prep-bg-input); border-color: var(--prep-border-subtle); }
+  .prep-tt-badge.partly { color: var(--prep-gold-bright); background: rgba(228,179,64,0.15); border-color: var(--prep-gold); }
+  .prep-tt-badge.completed { color: var(--prep-chop); background: rgba(149,199,95,0.15); border-color: var(--prep-chop); }
+  .prep-tt-badge.not-needed { color: var(--prep-cream-faint); background: rgba(250,246,236,0.06); border-color: var(--prep-cream-faint); }
+
+  /* ① Assigned-today rows */
+  .prep-tt-assigned-list { display: flex; flex-direction: column; gap: 6px; }
+  .prep-tt-arow {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-sm);
+  }
+  .prep-tt-arow-body { flex: 1; min-width: 0; }
+  .prep-tt-arow-name { font-size: 12px; font-weight: 600; color: var(--prep-cream); line-height: 1.2; }
+  .prep-tt-arow-who {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; margin-top: 2px;
+    letter-spacing: 0.05em; display: block;
+  }
+  .prep-tt-arow-who.assigned { color: var(--prep-teal-bright); font-weight: 600; }
+  .prep-tt-arow-who.unassigned { color: var(--prep-red-bright); font-weight: 600; }
+
+  /* ① Previous-days history sub-list */
+  .prep-tt-hist-title {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    color: var(--prep-cream-faint); letter-spacing: 0.12em; text-transform: uppercase;
+    margin: 16px 0 8px;
+  }
+  .prep-tt-hist-list { display: flex; flex-direction: column; gap: 4px; }
+  .prep-tt-hrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 12px; background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
+    color: var(--prep-cream); text-decoration: none; transition: all 0.15s;
+  }
+  .prep-tt-hrow:hover { border-color: var(--prep-border-active); background: var(--prep-bg-card-hover); }
+  .prep-tt-hrow .day { font-size: 12px; font-weight: 600; color: var(--prep-cream); }
+  .prep-tt-hrow .tally {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-cream-faint);
+    letter-spacing: 0.04em; text-align: right;
+  }
+  .prep-tt-hrow .tally .done { color: var(--prep-chop); font-weight: 600; }
+
+  /* ② Status stat chips */
+  .prep-tt-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+  .prep-tt-stat {
+    flex: 1 1 120px; min-width: 110px; padding: 10px 12px;
+    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
+    border-radius: var(--prep-radius-sm); position: relative; overflow: hidden;
+  }
+  .prep-tt-stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--prep-stat-color, var(--prep-gold)); }
+  .prep-tt-stat.selected { --prep-stat-color: var(--prep-hot); }
+  .prep-tt-stat.assigned { --prep-stat-color: var(--prep-teal); }
+  .prep-tt-stat.not-completed { --prep-stat-color: var(--prep-cream-dim); }
+  .prep-tt-stat.partly { --prep-stat-color: var(--prep-gold-bright); }
+  .prep-tt-stat.completed { --prep-stat-color: var(--prep-chop); }
+  .prep-tt-stat.not-needed { --prep-stat-color: var(--prep-cream-faint); }
+  .prep-tt-stat-label {
+    font-size: 9px; font-weight: 700; color: var(--prep-cream-faint);
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px;
+  }
+  .prep-tt-stat-value { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 24px; color: var(--prep-stat-color, var(--prep-gold)); line-height: 1; }
+
+  /* ③ Total-ingredients two-column list */
+  .prep-tt-ing-list { background: var(--prep-bg-input); border-radius: var(--prep-radius-sm); overflow: hidden; }
+  .prep-tt-ing-head {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 7px 12px;
+    background: rgba(0,0,0,0.3); border-bottom: 0.5px solid var(--prep-border-subtle);
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+    color: var(--prep-cream-faint); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .prep-tt-ing-head .total { text-align: right; }
+  .prep-tt-ing-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 9px 12px;
+    border-bottom: 0.5px solid rgba(228,179,64,0.06); align-items: center;
+  }
+  .prep-tt-ing-row:last-child { border-bottom: none; }
+  .prep-tt-ing-name { font-size: 12px; color: var(--prep-cream); }
+  .prep-tt-ing-qty { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--prep-gold-bright); text-align: right; }
+
+  .prep-tt-empty { font-size: 12px; color: var(--prep-cream-faint); font-style: italic; padding: 4px 0; }
+
   /* ---- Main grid ---- */
   .prep-main-grid { display: grid; grid-template-columns: 1fr 420px; gap: 16px; align-items: start; }
 
   /* ---- List panel ---- */
+  /* Tall enough to reach near the viewport bottom (mirrors the
+     kitchen_dashboard embed-frame pattern: calc(100vh - <X>) + a sane
+     floor) so the board fills the page instead of stopping short. */
   .prep-list-panel {
     background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
     border-radius: var(--prep-radius-md); overflow: hidden;
+    min-height: calc(100vh - 360px);
   }
   .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .prep-col-divider { border-right: 0.5px solid var(--prep-border-subtle); }
@@ -294,7 +422,7 @@
   }
 
   .prep-col-header-row {
-    display: grid; grid-template-columns: 60px 1fr 36px; padding: 6px 16px;
+    display: grid; grid-template-columns: 80px 1fr 36px; padding: 6px 16px;
     background: rgba(0,0,0,0.3); border-bottom: 0.5px solid var(--prep-border-subtle);
     font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
     color: var(--prep-cream-faint); letter-spacing: 0.1em; text-transform: uppercase; gap: 8px;
@@ -303,7 +431,7 @@
   .prep-col-header-row .check { text-align: center; }
 
   .prep-item-row {
-    display: grid; grid-template-columns: 60px 1fr 36px; padding: 10px 16px;
+    display: grid; grid-template-columns: 80px 1fr 36px; padding: 10px 16px;
     border-bottom: 0.5px solid rgba(228,179,64,0.05); align-items: center; gap: 8px;
     cursor: pointer; transition: background 0.15s; width: 100%; text-align: left;
     background: transparent; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit;
@@ -315,9 +443,9 @@
   .prep-item-oh { display: flex; align-items: center; gap: 4px; }
   .prep-oh-form { display: flex; }
   .prep-oh-input {
-    width: 44px; padding: 4px 6px; background: var(--prep-bg-input);
+    width: 64px; padding: 7px 6px; background: var(--prep-bg-input);
     border: 0.5px solid var(--prep-border-subtle); border-radius: 4px; color: var(--prep-cream);
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; text-align: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; text-align: center;
   }
   .prep-oh-input:focus { outline: none; border-color: var(--prep-gold); }
   .prep-oh-input.empty { color: var(--prep-cream-faint); }
@@ -333,6 +461,7 @@
   .prep-item-meta .assignee { color: var(--prep-teal-bright); font-weight: 600; }
   .prep-item-meta .done { color: var(--prep-chop); font-weight: 600; }
   .prep-item-meta .in-progress { color: var(--prep-gold-bright); font-weight: 600; }
+  .prep-item-meta .not-needed { color: var(--prep-cream-faint); font-weight: 600; }
   .prep-item-meta .unassigned { color: var(--prep-red-bright); font-weight: 600; }
   .prep-check-form { display: flex; justify-self: center; }
   .prep-check-box {
@@ -388,7 +517,7 @@
   .prep-detail-meta-row .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--prep-cream-faint); }
   .prep-detail-meta-row .yield { color: var(--prep-gold-bright); font-weight: 600; }
 
-  .prep-detail-body { padding: 16px 18px; max-height: calc(100vh - 230px); overflow-y: auto; }
+  .prep-detail-body { padding: 16px 18px; max-height: calc(100vh - 160px); overflow-y: auto; }
   .prep-detail-section { margin-bottom: 18px; }
   .prep-detail-section-title {
     font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--prep-gold);
@@ -461,8 +590,8 @@
   }
   .prep-reassign-btn:hover { color: var(--prep-gold-bright); }
 
-  /* Status buttons */
-  .prep-status-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  /* Status buttons (4 states: not-completed / partly / completed / not-needed) */
+  .prep-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .prep-status-form { display: flex; }
   .prep-status-btn {
     width: 100%; padding: 10px 8px; background: var(--prep-bg-input);
@@ -473,9 +602,11 @@
   }
   .prep-status-btn svg { width: 14px; height: 14px; fill: currentColor; }
   .prep-status-btn:hover { border-color: var(--prep-border-active); color: var(--prep-cream); }
-  .prep-status-btn.todo.active { background: var(--prep-bg-input); border-color: var(--prep-cream-dim); color: var(--prep-cream); }
-  .prep-status-btn.progress.active { background: rgba(228,179,64,0.15); border-color: var(--prep-gold); color: var(--prep-gold-bright); }
-  .prep-status-btn.done.active { background: rgba(149,199,95,0.15); border-color: var(--prep-chop); color: var(--prep-chop); }
+  /* not-completed = neutral/todo, partly = amber, completed = green, not-needed = muted grey */
+  .prep-status-btn.not-completed.active { background: var(--prep-bg-input); border-color: var(--prep-cream-dim); color: var(--prep-cream); }
+  .prep-status-btn.partly.active { background: rgba(228,179,64,0.15); border-color: var(--prep-gold); color: var(--prep-gold-bright); }
+  .prep-status-btn.completed.active { background: rgba(149,199,95,0.15); border-color: var(--prep-chop); color: var(--prep-chop); }
+  .prep-status-btn.not-needed.active { background: rgba(250,246,236,0.06); border-color: var(--prep-cream-faint); color: var(--prep-cream-faint); }
 
   /* Notes field */
   .prep-notes-field {
@@ -503,7 +634,7 @@
       transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
     }
     .prep-detail-panel.mobile-open { transform: translateX(0); }
-    .prep-detail-body { max-height: calc(100vh - 120px); }
+    .prep-detail-body { max-height: calc(100vh - 80px); }
     .prep-backdrop.show { display: block; }
   }
   @media (max-width: 900px) { .prep-kpi-strip { grid-template-columns: repeat(3,1fr); } }
@@ -563,10 +694,12 @@
       <div class="prep-item-name">{{ it.name }}</div>
       {% if it.selected %}
       <div class="prep-item-meta">
-        {% if it.status == 'done' %}
-          <span class="done">&#10003; Done</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
-        {% elif it.status == 'in-progress' %}
-          <span class="in-progress">&#9203; In progress</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
+        {% if it.status == 'completed' %}
+          <span class="done">&#10003; Completed</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
+        {% elif it.status == 'partly' %}
+          <span class="in-progress">&#9203; Partly completed</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
+        {% elif it.status == 'not-needed' %}
+          <span class="not-needed">Not needed</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
         {% elif it.assignee %}
           <span class="assignee">&rarr; {{ it.assignee }}</span>
         {% else %}
@@ -616,9 +749,10 @@
       <button class="prep-detail-close" type="button" onclick="prepCloseDetail()" aria-label="Close">{{ prep_icon('close') }}</button>
       <div class="prep-detail-cat">
         {{ cat_label.get(it.category, it.category) }} {{ kind_label.get(it.kind, '') }}
-        {%- if it.status == 'done' %} &middot; done
-        {%- elif it.status == 'in-progress' %} &middot; in progress
-        {%- elif it.status == 'assigned' %} &middot; assigned{% endif %}
+        {%- if it.status == 'completed' %} &middot; completed
+        {%- elif it.status == 'partly' %} &middot; partly completed
+        {%- elif it.status == 'not-needed' %} &middot; not needed
+        {%- elif it.assignee %} &middot; assigned{% endif %}
       </div>
       <div class="prep-detail-title">{{ it.name }}</div>
       <div class="prep-detail-meta-row">
@@ -653,30 +787,6 @@
         </form>
       </div>
 
-      {# ---- Ingredients (auto-pulled from the linked recipe) ---- #}
-      <div class="prep-detail-section">
-        <div class="prep-detail-section-title">
-          {{ prep_icon('fork') }} Ingredients needed
-          {% if it.recipe_id %}<span class="from-recipe">FROM RECIPE</span>{% endif %}
-        </div>
-        <div class="prep-ingredient-list">
-          {% if it.ingredients %}
-            {% for ing in it.ingredients %}
-            <div class="prep-ingredient-row">
-              <div class="prep-ingredient-name">{{ ing.name }}</div>
-              <div class="prep-ingredient-qty">{{ ing.qty }}</div>
-              <div class="prep-ingredient-unit">{{ ing.unit }}</div>
-            </div>
-            {% endfor %}
-          {% else %}
-            <div class="prep-ingredient-empty">
-              {% if it.recipe_id %}No ingredients listed on the linked recipe.
-              {% else %}No recipe linked &mdash; link one in Recipes to auto-pull ingredients.{% endif %}
-            </div>
-          {% endif %}
-        </div>
-      </div>
-
       {# ---- Assignment ---- #}
       <div class="prep-detail-section">
         <div class="prep-detail-section-title">{{ prep_icon('user') }} Assigned to</div>
@@ -702,7 +812,8 @@
           <input type="hidden" name="form_action" value="assign">
           <input type="hidden" name="item_id" value="{{ it.id }}">
           <input type="hidden" name="view_date" value="{{ selected_date }}">
-          <input class="prep-assign-input" type="text" name="assignee_name" maxlength="120"
+          <input class="prep-assign-input prep-assign-typeahead" type="text" name="assignee_name" maxlength="120"
+                 list="prep-staff-list" autocomplete="off"
                  placeholder="Assign a teammate&hellip;" {{ 'disabled' if locked else '' }}>
           <button class="prep-assign-save" type="submit" {{ 'disabled' if locked else '' }}>Assign</button>
         </form>
@@ -710,20 +821,24 @@
       </div>
 
       {# ---- Status ---- #}
+      {# Four states; keys match the server whitelist. 'not-completed' is
+         the DEFAULT — active whenever status isn't one of the other three
+         (covers legacy 'selected'/'assigned'/None values too). #}
       <div class="prep-detail-section">
         <div class="prep-detail-section-title">{{ prep_icon('clock') }} Status</div>
         <div class="prep-status-row">
           {% for st, cls, lbl, icn in [
-              ('selected','todo','To do','circle'),
-              ('in-progress','progress','In progress','clock'),
-              ('done','done','Done','check')] %}
+              ('not-completed','not-completed','Not completed','circle'),
+              ('partly','partly','Partly completed','clock'),
+              ('completed','completed','Completed','check'),
+              ('not-needed','not-needed','Not needed','close')] %}
           <form class="prep-status-form" method="POST" action="{{ post_url }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
             <input type="hidden" name="form_action" value="set_status">
             <input type="hidden" name="item_id" value="{{ it.id }}">
             <input type="hidden" name="view_date" value="{{ selected_date }}">
             <input type="hidden" name="status" value="{{ st }}">
-            <button class="prep-status-btn {{ cls }}{{ ' active' if it.status == st or (st == 'selected' and it.status in ('selected','assigned')) else '' }}"
+            <button class="prep-status-btn {{ cls }}{{ ' active' if it.status == st or (st == 'not-completed' and it.status not in ('partly','completed','not-needed')) else '' }}"
                     type="submit" {{ 'disabled' if locked else '' }}>
               {{ prep_icon(icn) }} {{ lbl }}
             </button>
@@ -745,6 +860,30 @@
                     {{ 'disabled' if locked else '' }}>{{ it.notes or '' }}</textarea>
           {% if not locked %}<button class="prep-notes-save" type="submit">Save notes</button>{% endif %}
         </form>
+      </div>
+
+      {# ---- Ingredients (auto-pulled from the linked recipe) ---- #}
+      <div class="prep-detail-section">
+        <div class="prep-detail-section-title">
+          {{ prep_icon('fork') }} Ingredients needed
+          {% if it.recipe_id %}<span class="from-recipe">FROM RECIPE</span>{% endif %}
+        </div>
+        <div class="prep-ingredient-list">
+          {% if it.ingredients %}
+            {% for ing in it.ingredients %}
+            <div class="prep-ingredient-row">
+              <div class="prep-ingredient-name">{{ ing.name }}</div>
+              <div class="prep-ingredient-qty">{{ ing.qty }}</div>
+              <div class="prep-ingredient-unit">{{ ing.unit }}</div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="prep-ingredient-empty">
+              {% if it.recipe_id %}No ingredients listed on the linked recipe.
+              {% else %}No recipe linked &mdash; link one in Recipes to auto-pull ingredients.{% endif %}
+            </div>
+          {% endif %}
+        </div>
       </div>
 
     </div>
@@ -815,30 +954,143 @@
     <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} Export today</button>
   </div>
 
-  {# ---- Prep team today ---- #}
+  {# ---- Prep team today (#14: 3-tab views — Assigned / Status / Total ingredients) ---- #}
+  {# Status-key -> (badge class, label, icon) map, reused by the Assigned view.
+     Keys match the server whitelist; anything else falls back to 'not-completed'. #}
+  {% set tt_status = {
+       'completed':     ('completed',     'Completed',     'check'),
+       'partly':        ('partly',        'Partly',        'clock'),
+       'not-needed':    ('not-needed',    'Not needed',    'close'),
+       'not-completed': ('not-completed', 'Not completed', 'circle')
+     } %}
   <div class="prep-team-section">
     <div class="prep-team-header">
       <div class="prep-team-title">Prep team today</div>
       <div class="prep-team-sub">{{ team|length }} ON SHIFT &middot; MATCHED TO SCHEDULE</div>
     </div>
-    <div class="prep-team-list">
-      {% for member in team %}
-      <div class="prep-team-card">
-        <div class="prep-team-avatar">{{ member.initials }}</div>
-        <div class="prep-team-info">
-          <div class="prep-team-name">{{ member.name }}</div>
-          <div class="prep-team-stats">
-            {% if member.done or member.in_progress %}
-              <span class="done">{{ member.done }} done</span> &middot; <span class="pending">{{ member.in_progress }} in progress</span>
-            {% else %}
-              <span class="pending">{{ member.assigned }} assigned</span>
-            {% endif %}
+
+    <div class="prep-tt-tabs" role="tablist" aria-label="Prep team views">
+      <button class="prep-tt-tab active" type="button" role="tab" aria-selected="true"
+              data-tt-tab="assigned" id="prep-tt-tab-assigned" aria-controls="prep-tt-panel-assigned">
+        {{ prep_icon('user') }} Assigned <span class="count">{{ assigned_today|length }}</span>
+      </button>
+      <button class="prep-tt-tab" type="button" role="tab" aria-selected="false"
+              data-tt-tab="status" id="prep-tt-tab-status" aria-controls="prep-tt-panel-status">
+        {{ prep_icon('clock') }} Status
+      </button>
+      <button class="prep-tt-tab" type="button" role="tab" aria-selected="false"
+              data-tt-tab="totals" id="prep-tt-tab-totals" aria-controls="prep-tt-panel-totals">
+        {{ prep_icon('fork') }} Total ingredients <span class="count">{{ total_ingredients|length }}</span>
+      </button>
+    </div>
+
+    {# ① ASSIGNED — today's assigned recipes (item + who) + browsable history #}
+    <div class="prep-tt-panel active" id="prep-tt-panel-assigned" role="tabpanel"
+         aria-labelledby="prep-tt-tab-assigned" data-tt-panel="assigned">
+      <div class="prep-team-list">
+        {% for member in team %}
+        <div class="prep-team-card">
+          <div class="prep-team-avatar">{{ member.initials }}</div>
+          <div class="prep-team-info">
+            <div class="prep-team-name">{{ member.name }}</div>
+            <div class="prep-team-stats">
+              {% if member.done or member.in_progress %}
+                <span class="done">{{ member.done }} done</span> &middot; <span class="pending">{{ member.in_progress }} in progress</span>
+              {% else %}
+                <span class="pending">{{ member.assigned }} assigned</span>
+              {% endif %}
+            </div>
           </div>
         </div>
+        {% else %}
+        <div class="prep-team-empty">No teammates on the prep roster yet.</div>
+        {% endfor %}
+      </div>
+
+      {% if assigned_today %}
+      <div class="prep-tt-assigned-list" style="margin-top:12px;">
+        {% for a in assigned_today %}
+        {% set badge = tt_status.get(a.status, tt_status['not-completed']) %}
+        <div class="prep-tt-arow">
+          <div class="prep-tt-arow-body">
+            <div class="prep-tt-arow-name">{{ a.name }}</div>
+            {% if a.assignee %}
+              <span class="prep-tt-arow-who assigned">&rarr; {{ a.assignee }}</span>
+            {% else %}
+              <span class="prep-tt-arow-who unassigned">Unassigned</span>
+            {% endif %}
+          </div>
+          <span class="prep-tt-badge {{ badge[0] }}">{{ prep_icon(badge[2]) }} {{ badge[1] }}</span>
+        </div>
+        {% endfor %}
       </div>
       {% else %}
-      <div class="prep-team-empty">No teammates on the prep roster yet.</div>
-      {% endfor %}
+      <div class="prep-tt-empty" style="margin-top:12px;">Nothing assigned yet today.</div>
+      {% endif %}
+
+      {% if assignment_history %}
+      <div class="prep-tt-hist-title">Previous days</div>
+      <div class="prep-tt-hist-list">
+        {% for row in assignment_history %}
+        <a class="prep-tt-hrow" href="?date={{ row.date }}">
+          <span class="day">{{ row.display }}</span>
+          <span class="tally">{{ row.assigned }} assigned &middot; <span class="done">{{ row.completed }} completed</span></span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    {# ② STATUS — current-day rollup as compact stat chips #}
+    <div class="prep-tt-panel" id="prep-tt-panel-status" role="tabpanel"
+         aria-labelledby="prep-tt-tab-status" data-tt-panel="status">
+      <div class="prep-tt-stats">
+        <div class="prep-tt-stat selected">
+          <div class="prep-tt-stat-label">Selected</div>
+          <div class="prep-tt-stat-value">{{ today_status.selected }}</div>
+        </div>
+        <div class="prep-tt-stat assigned">
+          <div class="prep-tt-stat-label">Assigned</div>
+          <div class="prep-tt-stat-value">{{ today_status.assigned }}</div>
+        </div>
+        <div class="prep-tt-stat not-completed">
+          <div class="prep-tt-stat-label">Not completed</div>
+          <div class="prep-tt-stat-value">{{ today_status.not_completed }}</div>
+        </div>
+        <div class="prep-tt-stat partly">
+          <div class="prep-tt-stat-label">Partly</div>
+          <div class="prep-tt-stat-value">{{ today_status.partly }}</div>
+        </div>
+        <div class="prep-tt-stat completed">
+          <div class="prep-tt-stat-label">Completed</div>
+          <div class="prep-tt-stat-value">{{ today_status.completed }}</div>
+        </div>
+        <div class="prep-tt-stat not-needed">
+          <div class="prep-tt-stat-label">Not needed</div>
+          <div class="prep-tt-stat-value">{{ today_status.not_needed }}</div>
+        </div>
+      </div>
+    </div>
+
+    {# ③ TOTAL INGREDIENTS — combined across ALL assigned recipes (pre-summed) #}
+    <div class="prep-tt-panel" id="prep-tt-panel-totals" role="tabpanel"
+         aria-labelledby="prep-tt-tab-totals" data-tt-panel="totals">
+      {% if total_ingredients %}
+      <div class="prep-tt-ing-list">
+        <div class="prep-tt-ing-head">
+          <div>Ingredient</div>
+          <div class="total">Total</div>
+        </div>
+        {% for ing in total_ingredients %}
+        <div class="prep-tt-ing-row">
+          <div class="prep-tt-ing-name">{{ ing.name }}</div>
+          <div class="prep-tt-ing-qty">{{ ing.qty }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="prep-tt-empty">Assign recipes to see combined ingredients.</div>
+      {% endif %}
     </div>
   </div>
 
@@ -880,12 +1132,38 @@
 </div>
 
 <div class="prep-backdrop" id="prepBackdrop" onclick="prepCloseDetail()"></div>
+
+{# Shared staff roster for the "Assigned to" typeahead. Every assign
+   input points at this <datalist> via list="prep-staff-list"; the
+   options are populated client-side from the all_staff JSON embed
+   (see scripts block) — the single source of truth, mirroring the
+   attendance_tracking PEOPLE pattern. No new libraries. #}
+<datalist id="prep-staff-list"></datalist>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function () {
   'use strict';
+
+  // ---- "Assigned to" typeahead roster ----
+  // Server embeds all_staff = JSON list of full-name strings only,
+  // e.g. ["Maria Lopez","Juan Perez"] (mirrors attendance_tracking's
+  // `var PEOPLE = {{ rows | tojson }}`). We feed it into the shared
+  // <datalist id="prep-staff-list"> that every assign input is bound
+  // to via list=, giving a native filter-as-you-type dropdown with no
+  // new libraries. The chosen name lands in the existing
+  // name="assignee_name" input and submits via the existing Assign form.
+  var ALL_STAFF = {{ (all_staff if all_staff is defined else []) | tojson }};
+  (function populateStaffList() {
+    var dl = document.getElementById('prep-staff-list');
+    if (!dl || !Array.isArray(ALL_STAFF)) return;
+    dl.innerHTML = ALL_STAFF.map(function (name) {
+      var opt = document.createElement('option');
+      opt.value = (name == null ? '' : String(name));
+      return opt.outerHTML;
+    }).join('');
+  })();
 
   // ---- Item selection + detail panel ----
   function prepSelect(id, row) {
@@ -944,6 +1222,27 @@
       URL.revokeObjectURL(a.href);
     });
   }
+
+  // ---- "Prep team today" 3-tab segmented control (#14) ----
+  // Pure show/hide of the .prep-tt-panel blocks; no network, no forms.
+  (function initTeamTabs() {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.prep-tt-tab'));
+    if (!tabs.length) return;
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.prep-tt-panel'));
+    function activate(key) {
+      tabs.forEach(function (t) {
+        var on = t.getAttribute('data-tt-tab') === key;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      panels.forEach(function (p) {
+        p.classList.toggle('active', p.getAttribute('data-tt-panel') === key);
+      });
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () { activate(t.getAttribute('data-tt-tab')); });
+    });
+  })();
 })();
 </script>
 {% endblock %}

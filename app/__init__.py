@@ -1242,6 +1242,10 @@ def create_app():
                 _cols_32 = [
                     ("code",                 "VARCHAR(20) NULL"),
                     ("english_instructions", "TEXT NULL"),
+                    # samai (Sam Kitchen-dashboard batch): ES counterparts
+                    # for the recipe-card EN/ES toggle. Additive, idempotent.
+                    ("prep_time_es",         "VARCHAR(80) NULL"),
+                    ("shelf_life_es",        "VARCHAR(80) NULL"),
                 ]
                 with _eng_32r.begin() as _conn_32:
                     for _name, _ddl in _cols_32:
@@ -1272,7 +1276,7 @@ def create_app():
     # whose code isn't already present. Safe on every boot.
     try:
         from app.services.recipes_seed import seed_recipes_from_json
-        _c, _s, _e = seed_recipes_from_json()
+        _c, _s, _e = seed_recipes_from_json(skip_if_populated=True)
         if _c:
             logging.getLogger(__name__).info(
                 "recipes seed: inserted %d (skipped %d, errored %d)",

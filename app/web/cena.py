@@ -3264,6 +3264,113 @@ def cena_run_recipes_bulk_insert():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-recipes-replace", methods=["POST"])
+def cena_run_recipes_replace():
+    """REPLACE all recipes (samai Sam Kitchen-dashboard batch). Wipes the
+    recipes table then reloads — from the committed fixture
+    (data/recipes/recipes_seed_data.json) by default, or from a posted
+    {"rows": [...]} payload (same shape db-probe/recipes-backup emits, so a
+    backup round-trips for rollback). Atomic. Gated by X-Cena-Token."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    rows = body.get("rows")
+
+    if rows is None:
+        # Default path: replace from the committed seed fixture (the 45).
+        try:
+            from app.services.recipes_seed import seed_recipes_from_json
+            created, skipped, errored = seed_recipes_from_json(replace=True)
+            return jsonify({"ok": True, "source": "fixture",
+                            "created": created, "skipped": skipped,
+                            "errored": errored})
+        except FileNotFoundError:
+            return jsonify({"ok": False, "error": "seed fixture not found"}), 500
+        except Exception as e:  # noqa: BLE001
+            logger.exception("cena: run-recipes-replace (fixture) crashed")
+            return jsonify({"ok": False,
+                            "error": f"{type(e).__name__}: {e}"}), 500
+
+    # Explicit rows payload (e.g. restoring a backup snapshot).
+    if not isinstance(rows, list) or not rows:
+        return jsonify({"ok": False, "error": "rows must be a non-empty list"}), 400
+    if len(rows) > 500:
+        return jsonify({"ok": False, "error": "max 500 rows"}), 400
+
+    import json as _json
+    from app.db import SessionLocal as _SL
+    from app.models import Recipe as _R
+    db = _SL()
+    inserted = 0
+    try:
+        db.query(_R).delete()
+        db.flush()
+        for r in rows:
+            ings = r.get("ingredients")
+            bsizes = r.get("batch_sizes")
+            db.add(_R(
+                code=((r.get("code") or "").strip()[:20] or None),
+                category=(r.get("category") or "hot").strip().lower()[:40],
+                name=(r.get("name") or "Untitled").strip()[:200],
+                prep_time=(r.get("prep_time") or None),
+                prep_time_es=(r.get("prep_time_es") or None),
+                shelf_life=(r.get("shelf_life") or None),
+                shelf_life_es=(r.get("shelf_life_es") or None),
+                english_instructions=(r.get("english_instructions") or None),
+                spanish_instructions=(r.get("spanish_instructions") or None),
+                ingredients_json=(_json.dumps(ings) if ings is not None else None),
+                batch_sizes_json=(_json.dumps(bsizes) if bsizes is not None else None),
+                notes=(r.get("notes") or None),
+            ))
+            inserted += 1
+        db.commit()
+        return jsonify({"ok": True, "source": "rows", "inserted": inserted})
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-recipes-replace (rows) crashed")
+        return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
+@cena_bp.route("/sam/cena/db-probe/recipes-backup", methods=["GET"])
+def cena_db_probe_recipes_backup():
+    """Read-only full dump of all recipes for a pre-replace BACKUP snapshot
+    (round-trippable via run-recipes-replace's rows payload). Gated by
+    X-Cena-Token. samai Sam Kitchen-dashboard batch."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    import json as _json
+    from app.db import SessionLocal as _SL
+    from app.models import Recipe as _R
+    db = _SL()
+
+    def _pj(s):
+        try:
+            return _json.loads(s) if s else None
+        except Exception:
+            return s
+
+    try:
+        rows = db.query(_R).order_by(_R.category, _R.name).all()
+        out = [{
+            "id": r.id, "code": r.code, "category": r.category, "name": r.name,
+            "prep_time": r.prep_time, "prep_time_es": r.prep_time_es,
+            "shelf_life": r.shelf_life, "shelf_life_es": r.shelf_life_es,
+            "ingredients": _pj(r.ingredients_json),
+            "batch_sizes": _pj(r.batch_sizes_json),
+            "english_instructions": r.english_instructions,
+            "spanish_instructions": r.spanish_instructions,
+            "notes": r.notes,
+        } for r in rows]
+        return jsonify({"ok": True, "count": len(out), "recipes": out})
+    finally:
+        db.close()
+
+
 @cena_bp.route("/sam/cena/run-vendor-orders-bulk-insert", methods=["POST"])
 def cena_run_vendor_orders_bulk_insert():
     """Bulk-insert vendor_recent_orders rows from external JSON

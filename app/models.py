@@ -2828,6 +2828,10 @@ class Recipe(Base):
     name: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
     prep_time: Mapped[str | None] = mapped_column(String(80), nullable=True)
     shelf_life: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # samai (Sam Kitchen-dashboard batch): Spanish counterparts so the
+    # recipe cards can toggle EN/ES. prep_time/shelf_life hold EN.
+    prep_time_es: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    shelf_life_es: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     spanish_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     english_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)

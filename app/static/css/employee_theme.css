@@ -1,0 +1,155 @@
+/* Cena's Kitchen — shared EMPLOYEE THEME (Sam #3243 item 1).
+   Single source of truth for the dark/gold employee-facing look, extracted from the
+   liked dashboard (employee_dashboard.html). Link this on every employee page:
+     <link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
+   Page-specific components (perf cards, rank leaderboards, etc.) stay in their page.
+   NOTE: the bg-tequila image is referenced via a CSS var the page sets, so this file
+   has no Jinja in it (a .css cannot run url_for). Pages set --emp-bg before linking. */
+
+:root{
+  /* House palette (warm gold / cream / dark). Names kept from the old blue/cream
+     scheme so existing page CSS recolours for free. */
+  --blue:        #E4B340;   /* gold accent */
+  --blue-bright: #FFD970;   /* bright gold */
+  --blue-deep:   #FFD970;   /* heading text on dark -> bright gold */
+  --red:         #E4B340;   /* eyebrow / accent -> gold */
+  --red-bright:  #FFD970;
+  --red-deep:    #d4af37;
+  --cream:       #FAF6EC;   /* house cream */
+  --cream-soft:  #ece3d0;
+  --ink:         #FAF6EC;   /* body text -> cream */
+  --surface:     #241409;   /* card / panel surface */
+  --surface-2:   #2c1810;   /* slightly raised surface */
+  --bg-base:     #1a0d08;   /* page base behind the blurred photo */
+  --bd-gold:     rgba(217,164,54,0.18);  /* gold hairline border */
+  --bd-gold-2:   rgba(228,179,64,0.30);  /* stronger gold edge */
+  --radius:      14px;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html,body{
+  width:100%; min-height:100vh; background:var(--bg-base);
+  font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  position:relative; color:var(--ink);
+}
+/* Blurred house photo + darkening veil. Pages that want the photo set
+   --emp-bg: url("...bg-tequila.jpg") on <body>; default is a flat dark. */
+body::before{
+  content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+  background-image: var(--emp-bg, none);
+  background-size:cover; background-position:center; background-repeat:no-repeat;
+  filter: blur(6px) brightness(0.55) saturate(1.05);
+}
+body::after{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
+}
+.wrap{
+  position:relative; z-index:1;
+  max-width:520px; margin:0 auto; padding:20px 18px 90px;
+  display:flex; flex-direction:column; min-height:100vh;
+}
+
+/* Top bar: logo + (optional) action button */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  margin-bottom:18px; background:var(--surface); border:0.5px solid var(--bd-gold);
+  border-radius:var(--radius); padding:12px 14px; box-shadow:0 2px 10px rgba(0,0,0,0.35);
+}
+.topbar img{ width:auto; height:34px; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+.logout-btn,.btn-ghost{
+  background:rgba(244,231,208,0.12); color:var(--cream);
+  border:1px solid rgba(244,231,208,0.30); border-radius:10px; padding:8px 14px;
+  font-size:13px; font-weight:600; letter-spacing:0.4px; cursor:pointer;
+  transition:background 120ms ease; text-decoration:none; display:inline-block;
+}
+.logout-btn:hover,.btn-ghost:hover{ background:rgba(244,231,208,0.22); }
+
+/* Primary gold button */
+.btn-gold{
+  background:linear-gradient(135deg,#E4B340,#d4af37); color:#241409;
+  border:none; border-radius:10px; padding:11px 16px; font-size:14px; font-weight:800;
+  letter-spacing:0.3px; cursor:pointer; text-decoration:none; display:inline-block;
+  box-shadow:0 4px 12px rgba(228,179,64,0.28); transition:filter 120ms ease, transform 100ms ease;
+}
+.btn-gold:hover{ filter:brightness(1.05); } .btn-gold:active{ transform:translateY(1px); }
+
+/* Greeting / header card */
+.greeting{
+  background:linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), var(--surface);
+  border:0.5px solid var(--bd-gold); border-radius:16px; padding:18px 20px; margin-bottom:18px;
+  box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 0 26px rgba(255,217,112,0.10), 0 10px 22px rgba(0,0,0,0.5);
+}
+.greeting .hi{ font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--red); }
+.greeting .name{ font-size:26px; font-weight:800; color:var(--blue-deep); line-height:1.15; margin-top:2px; }
+.greeting .meta{ font-size:13px; color:rgba(250,246,236,0.7); margin-top:6px; }
+
+/* Generic panel/card */
+.card{
+  background:linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), var(--surface);
+  border:0.5px solid var(--bd-gold); border-radius:16px; padding:16px 16px 18px; margin-bottom:18px;
+  box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 10px 24px rgba(0,0,0,0.45);
+}
+.card-title{ font-size:18px; font-weight:800; color:var(--blue-deep); letter-spacing:0.3px; }
+
+/* Section label (eyebrow above a group) */
+.section-label{
+  font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  color:rgba(244,231,208,0.7); margin:4px 2px 12px;
+}
+
+/* Segmented tab bar (Performance / Roster / Service — Sam #3245 item 3) */
+.seg-tabs{ display:flex; gap:6px; margin-bottom:16px; }
+.seg-tab{
+  flex:1; text-align:center; font-size:12.5px; font-weight:800; letter-spacing:0.4px;
+  text-transform:uppercase; color:rgba(244,231,208,0.82); background:var(--surface);
+  border:0.5px solid var(--bd-gold); border-radius:12px; padding:10px 4px; cursor:pointer;
+  transition:all 120ms ease; user-select:none; text-decoration:none; display:block;
+}
+.seg-tab.active{ color:#241409; background:linear-gradient(135deg,#E4B340,#d4af37);
+  border-color:var(--bd-gold-2); box-shadow:0 2px 9px rgba(228,179,64,0.35); }
+
+/* Feature tiles */
+.tiles{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+.tile{
+  position:relative; background:var(--surface); border:0.5px solid var(--bd-gold);
+  border-radius:14px; padding:16px 14px 18px; box-shadow:0 6px 14px rgba(0,0,0,0.4);
+  display:flex; flex-direction:column; gap:10px; min-height:108px;
+}
+.tile.soon{ opacity:0.62; }
+a.tile{ text-decoration:none; transition:transform 100ms ease, filter 100ms ease; }
+a.tile:hover{ transform:translateY(-1px); filter:brightness(1.03); }
+a.tile:active{ transform:translateY(0); }
+.tile .icon{ width:34px; height:34px; fill:none; stroke:var(--red); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.tile .t-title{ font-size:15px; font-weight:700; color:var(--blue-deep); }
+.tile .t-badge{
+  position:absolute; top:10px; right:10px; font-size:10px; font-weight:700; letter-spacing:0.5px;
+  text-transform:uppercase; color:var(--red-deep); background:rgba(228,179,64,0.12);
+  border:1px solid rgba(228,179,64,0.30); border-radius:999px; padding:2px 8px;
+}
+
+/* Empty / "coming soon" state (Service tab, no-data) */
+.empty-state{
+  text-align:center; padding:40px 22px; color:rgba(250,246,236,0.72);
+}
+.empty-state .es-icon{ width:46px; height:46px; stroke:var(--red); fill:none; stroke-width:1.6; opacity:0.7; margin-bottom:14px; }
+.empty-state .es-title{ font-size:17px; font-weight:800; color:var(--blue-deep); margin-bottom:6px; }
+.empty-state .es-msg{ font-size:13px; line-height:1.5; max-width:300px; margin:0 auto; }
+
+/* Form fields (profile / time-off / availability pages) */
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:12px; font-weight:700; letter-spacing:0.4px;
+  text-transform:uppercase; color:rgba(244,231,208,0.7); margin-bottom:6px; }
+.field input,.field select,.field textarea{
+  width:100%; background:var(--surface); color:var(--ink);
+  border:0.5px solid var(--bd-gold); border-radius:10px; padding:11px 12px;
+  font-size:14px; font-family:inherit;
+}
+.field input:focus,.field select:focus,.field textarea:focus{
+  outline:none; border-color:var(--bd-gold-2); box-shadow:0 0 0 2px rgba(228,179,64,0.18);
+}
+
+.footnote{
+  margin-top:auto; padding-top:22px; text-align:center;
+  font-size:11px; color:rgba(244,231,208,0.45); letter-spacing:0.5px;
+}

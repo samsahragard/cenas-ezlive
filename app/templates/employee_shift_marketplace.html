@@ -27,6 +27,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Shift Marketplace &mdash; Cenas Kitchen</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
 <style>
   :root{
     /* House palette (warm gold / cream / dark) — var NAMES kept from the old
@@ -43,7 +44,7 @@
   html,body{ width:100%; min-height:100vh; background:#1a0d08;
     font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif; position:relative; color:var(--ink); }
   body::before{ content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
-    background-image:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-image: var(--emp-bg, none);
     background-size:cover; background-position:center; background-repeat:no-repeat;
     filter:blur(6px) brightness(0.55) saturate(1.05); }
   body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
@@ -136,7 +137,7 @@
   .footnote{ margin-top:auto; padding-top:22px; text-align:center; font-size:11px; color:rgba(244,231,208,0.45); letter-spacing:0.5px; }
 </style>
 </head>
-<body>
+<body style="--emp-bg:url('{{ url_for('static', filename='brand/bg-tequila.jpg') }}')">
 <div class="wrap">
   <div class="topbar">
     <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />

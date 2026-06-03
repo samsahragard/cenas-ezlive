@@ -197,6 +197,42 @@
     margin-top:auto; padding-top:22px; text-align:center;
     font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
   }
+
+  /* 3-section tabs (Performance / Roster / Service) — Sam #3245 item 3 */
+  .seg-tabs{ display:flex; gap:6px; margin-bottom:16px; }
+  .seg-tab{ flex:1; text-align:center; font-size:12.5px; font-weight:800; letter-spacing:0.4px;
+    text-transform:uppercase; color:rgba(244,231,208,0.82); background:var(--surface);
+    border:0.5px solid var(--bd-gold); border-radius:12px; padding:10px 4px; cursor:pointer;
+    transition:all 120ms ease; user-select:none; }
+  .seg-tab.active{ color:#241409; background:linear-gradient(135deg,#E4B340,#d4af37);
+    border-color:rgba(228,179,64,0.30); box-shadow:0 2px 9px rgba(228,179,64,0.35); }
+  .seg-panel{ display:none; } .seg-panel.active{ display:block; }
+
+  /* Roster (coworker list — name + position + shift; NO pay/sales/ids — Sam #3251) */
+  .roster-list{ display:flex; flex-direction:column; gap:8px; }
+  .rost-row{ display:flex; align-items:center; gap:12px; background:var(--surface);
+    border:0.5px solid var(--bd-gold); border-radius:12px; padding:11px 13px; }
+  .rost-av{ width:38px; height:38px; border-radius:50%; flex:none; display:flex; align-items:center;
+    justify-content:center; font-weight:800; font-size:15px; color:#241409;
+    background:linear-gradient(135deg,#E4B340,#d4af37); }
+  .rost-main{ flex:1; min-width:0; }
+  .rost-name{ font-size:14px; font-weight:700; color:var(--blue-deep); }
+  .rost-pos{ font-size:11.5px; color:rgba(250,246,236,0.66); margin-top:1px; }
+  .rost-shift{ font-size:11.5px; font-weight:700; color:var(--red-deep); white-space:nowrap; text-align:right; }
+  .rost-shift .sub{ display:block; font-size:10px; font-weight:600; color:rgba(244,231,208,0.5); }
+
+  /* Empty / coming-soon state (Service tab + no-data) */
+  .empty-state{ text-align:center; padding:42px 22px; color:rgba(250,246,236,0.72); }
+  .empty-state .es-icon{ width:46px; height:46px; stroke:var(--red); fill:none; stroke-width:1.6; opacity:0.7; margin-bottom:14px; }
+  .empty-state .es-title{ font-size:17px; font-weight:800; color:var(--blue-deep); margin-bottom:6px; }
+  .empty-state .es-msg{ font-size:13px; line-height:1.5; max-width:300px; margin:0 auto; }
+  /* De-bulk (Sam #3254): compact rankings hint + shifts "view all" -> detail pages */
+  .rank-hint{ font-size:11.5px; color:rgba(244,231,208,0.62); line-height:1.45; background:var(--surface);
+    border:0.5px dashed rgba(228,179,64,0.4); border-radius:10px; padding:11px 12px; }
+  .shift-viewall{ display:block; text-align:center; margin-top:4px; padding:10px; font-size:12.5px;
+    font-weight:800; letter-spacing:0.3px; color:var(--red-deep); text-decoration:none;
+    background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; }
+  .shift-viewall:hover{ filter:brightness(1.08); }
 </style>
 </head>
 <body>
@@ -213,6 +249,13 @@
     {% if employee and employee.store_name %}<div class="meta">{{ employee.store_name }}</div>{% endif %}
   </div>
 
+  <div class="seg-tabs" role="tablist">
+    <div class="seg-tab active" data-panel="performance" role="tab">Performance</div>
+    <div class="seg-tab" data-panel="roster" role="tab">Roster</div>
+    <div class="seg-tab" data-panel="service" role="tab">Service</div>
+  </div>
+
+  <div class="seg-panel active" id="panel-performance" role="tabpanel">
   {# Personalized Toast panel (Sam #2829) — stays hidden until
      /employee/my-performance returns this employee's performance data. #}
   <section class="perf-card" id="perf-card" hidden>
@@ -239,6 +282,30 @@
       <div class="shift-list" id="shift-list"></div>
     </div>
   </section>
+    <div class="empty-state" id="perf-empty">
+      <svg class="es-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+      <div class="es-title">Your performance will appear here</div>
+      <div class="es-msg">Once your hours and shifts sync, you'll see your pay, hours, and team rankings.</div>
+    </div>
+  </div><!-- /panel-performance -->
+
+  <div class="seg-panel" id="panel-roster" role="tabpanel">
+    <div class="section-label">Who&rsquo;s on &mdash; your store</div>
+    <div class="roster-list" id="roster-list"></div>
+    <div class="empty-state" id="roster-empty" hidden>
+      <svg class="es-icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M15 20c0-2 1.5-3.5 4-3.5"/></svg>
+      <div class="es-title">No published shifts yet</div>
+      <div class="es-msg">When your team&rsquo;s schedule is published, your coworkers and their shifts show up here.</div>
+    </div>
+  </div>
+
+  <div class="seg-panel" id="panel-service" role="tabpanel">
+    <div class="empty-state">
+      <svg class="es-icon" viewBox="0 0 24 24"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 7.7l5.4-.8z"/></svg>
+      <div class="es-title">Service insights &mdash; coming soon</div>
+      <div class="es-msg">A dedicated view of your service activity is on the way. We&rsquo;ll turn it on once it&rsquo;s ready.</div>
+    </div>
+  </div>
 
   <div class="section-label">My tools</div>
   <div class="tiles">
@@ -304,7 +371,7 @@
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
-    function show(){ card.hidden = false; }
+    function show(){ card.hidden = false; var pe=document.getElementById('perf-empty'); if(pe){ pe.hidden=true; } }
     function note(txt){ var n=document.getElementById('perf-note'); n.textContent=txt; n.hidden=!txt; }
     function pending(){
       show();
@@ -335,9 +402,11 @@
       document.getElementById('perf-subtitle').textContent = p.period_start + ' to ' + p.period_end;
       // Role-aware (Sam #3077): BOH/non-tipped (RANK.is_tipped===false) omit the tip cards
       // entirely so the set stays coherent — no empty tip holes. Tipped/RANK-null = full set.
-      var showTips = !(RANK && RANK.is_tipped===false);
+      // FAIL-SAFE (FLAG-2 lesson / aick #3269): show tip $ ONLY when EXPLICITLY tipped.
+      // RANK null or is_tipped missing -> hide tips (never a cosmetic $0.00-tips fallback).
+      var showTips = !!(RANK && RANK.is_tipped===true);
       var html =
-        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', money(base)+' base + '+money(tips)+' tips', true, '/employee/performance/total_pay') +
+        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', (showTips ? (money(base)+' base + '+money(tips)+' tips') : 'base pay'), true, '/employee/performance/total_pay') +
         pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours', false, '/employee/performance/effective_hourly') +
         pcard(num(hrs,2)+u('h'), 'Total hours', null, false, '/employee/performance/shifts');
       if(showTips){ html += pcard(money(tips), 'Tips', null, false, '/employee/performance/tips'); }
@@ -354,7 +423,7 @@
       wrap.hidden = false;
       document.getElementById('shift-count-lbl').textContent = shifts.length + ' shifts';
       list.innerHTML='';
-      shifts.forEach(function(s){
+      shifts.slice(0,4).forEach(function(s){
         var row=document.createElement('div'); row.className='shift-row' + (s.needs_review ? ' flag' : '');
         var d = s.business_date ? new Date(s.business_date+'T00:00:00') : null;
         var dstr = (d && !isNaN(d)) ? d.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : esc(s.business_date||'');
@@ -362,7 +431,7 @@
         var tipTxt = (s.tips_declared===false) ? 'not declared' : money(s.tips);
         // role-aware (FLAG 2): BOH/non-tipped shift rows omit the tips span -- the payload no longer
         // carries shift tips for BOH, so don't render an own-zero "$0.00 tips".
-        var tipSpan = (RANK && RANK.is_tipped===false) ? '' : '<span><b>'+esc(tipTxt)+'</b> tips</span>';
+        var tipSpan = (RANK && RANK.is_tipped===true) ? '<span><b>'+esc(tipTxt)+'</b> tips</span>' : '';  // fail-safe: own shift tips ONLY if explicitly tipped (aick #3269)
         var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span>'+tipSpan+'</div>';
         var badge = s.needs_review ? '<div class="badge-review" data-r="'+esc(s.review_reason||'needs review')+'">! needs review</div>' : '';
         row.innerHTML = '<div class="shift-top"><span class="shift-date">'+esc(dstr)+'</span><span class="shift-hrs">'+num(s.total_hours,2)+'h</span></div>' + meta + badge;
@@ -375,6 +444,12 @@
           var r=document.createElement('div'); r.className='review-reason'; r.textContent=b.getAttribute('data-r'); b.parentNode.appendChild(r);
         });
       });
+      if(shifts.length>4){
+        var more=document.createElement('a'); more.className='shift-viewall';
+        more.href='/employee/performance/shifts';
+        more.textContent='View all '+shifts.length+' shifts →';
+        list.appendChild(more);
+      }
     }
     // --- Phase 5.1 (Sam #3009/#3014): ranking surface. Consumes ONLY the sanitized
     //     `ranking` block (own ranks + per-cohort leaderboards). Peer rows carry only
@@ -425,19 +500,23 @@
       document.getElementById('rank-period-lbl').textContent = PLABEL[sel] || sel;
       var R = RANK.ranks[sel] || {};
       // Role-split labels (Sam #3031): tipped board says "with tips"; BOH says "Hourly rate".
-      var tipped = (RANK.is_tipped !== false);
+      var tipped = (RANK.is_tipped === true);  // fail-closed (samai #3274 / FLAG-2): tip-rank presentation ONLY when explicitly tipped
       var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
       var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
+      // BOH/non-tipped: OMIT the tip-rank cards entirely (samai #3274) -- no greyed
+      // "Not eligible" tip cards; show only role-applicable cards (standing + hourly rank).
       document.getElementById('rank-grid').innerHTML =
         scard(R.score) +
         rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }) +
-        rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
-        rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }) +
-        rcard(R.combined, 'Combined', null);
-      var L = (RANK.leaderboards||{})[sel] || {};
+        (tipped ? (
+          rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
+          rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }) +
+          rcard(R.combined, 'Combined', null)
+        ) : '');
+      // De-bulk (Sam #3254): the FULL leaderboards live one tap away on the metric
+      // detail pages; the dashboard keeps a compact rankings summary only.
       document.getElementById('rank-boards').innerHTML =
-        lbBoard(L.effective_hourly, effTitle + ' — ' + (PLABEL[sel]||sel), 'effective_hourly', function(v){ return money(v)+'/hr'; }) +
-        lbBoard(L.tipped, 'Tip % — ' + (PLABEL[sel]||sel), 'tip_percent', function(v){ return pctTxt(v); });
+        '<div class="rank-hint">Tap a metric tile above for its day-by-day detail and full team leaderboard.</div>';
       // Next-best nudge (own-view only): render only when present; NEVER on peer rows.
       var nb = R.next_best;
       document.getElementById('rank-foot').textContent =
@@ -470,6 +549,38 @@
         if (d && d.ok && d.linked && (d.perf_periods || d.shifts)) render(d);
       })
       .catch(function(){ /* leave the card hidden */ });
+  })();
+</script>
+<script>
+  // 3-section tabs (Sam #3245 item 3): Performance / Roster / Service.
+  (function(){
+    var tabs = document.querySelectorAll('.seg-tab'); var rosterLoaded=false;
+    function activate(name){
+      tabs.forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-panel')===name); });
+      ['performance','roster','service'].forEach(function(n){
+        var p=document.getElementById('panel-'+n); if(p){ p.classList.toggle('active', n===name); }
+      });
+      if(name==='roster' && !rosterLoaded){ rosterLoaded=true; loadRoster(); }
+    }
+    tabs.forEach(function(t){ t.addEventListener('click', function(){ activate(t.getAttribute('data-panel')); }); });
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function initials(n){ n=String(n||'').trim(); var p=n.split(/\s+/); return (((p[0]||' ')[0]||'')+((p[1]||'')[0]||'')).toUpperCase(); }
+    function loadRoster(){
+      var list=document.getElementById('roster-list'), empty=document.getElementById('roster-empty');
+      fetch('/employee/roster',{credentials:'same-origin',headers:{Accept:'application/json'}})
+        .then(function(r){ return r.ok ? r.json().catch(function(){ return {}; }) : {}; })
+        .then(function(d){
+          var rows=(d&&d.coworkers)||[];
+          if(!rows.length){ empty.hidden=false; return; }
+          list.innerHTML = rows.map(function(c){
+            var shift = c.shift_label ? '<div class="rost-shift">'+esc(c.shift_label)+(c.shift_when?'<span class="sub">'+esc(c.shift_when)+'</span>':'')+'</div>' : '';
+            return '<div class="rost-row"><div class="rost-av">'+esc(initials(c.name))+'</div>'+
+                   '<div class="rost-main"><div class="rost-name">'+esc(c.name)+'</div>'+
+                   (c.position?'<div class="rost-pos">'+esc(c.position)+'</div>':'')+'</div>'+shift+'</div>';
+          }).join('');
+        })
+        .catch(function(){ empty.hidden=false; });
+    }
   })();
 </script>
 </body>

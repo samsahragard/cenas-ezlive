@@ -51,7 +51,7 @@ from flask import (Blueprint, abort, jsonify, redirect, render_template,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, CenaToastLink, Shift
+from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, CenaToastLink, Shift, Schedule, Position
 from app.services.ezcater_known_drivers_seed import normalize_phone
 
 log = logging.getLogger(__name__)
@@ -716,6 +716,11 @@ def performance_center():
                         "total_pay": round(dbase + dtips, 2),
                         "effective_hourly": (round((dbase + dtips) / dh, 2) if dh > 0 else None),
                         "shifts": len(ss)}
+                # per-day clock punches (Sam #3254 / aick #3255): own clock_in/clock_out
+                # ONLY, as a per-day LIST so multi-shift days stay accurate (never a
+                # misleading single in/out). No pay/tips/sales/ids ride along; identical
+                # source to /my-performance shifts[] (PerfShiftCache, already sanitized).
+                drow["punches"] = [{"clock_in": x.clock_in, "clock_out": x.clock_out} for x in ss]
                 if is_tipped:
                     drow["tips"] = dtips
                     drow["tips_per_hour"] = (round(dtips / dh, 4) if dh > 0 else None)
@@ -757,6 +762,70 @@ def performance_detail(metric):
     if metric not in _PERF_DETAIL_METRICS:
         abort(404)
     return render_template("employee_performance_detail.html", metric_key=metric)
+
+
+@employee_auth.route("/employee/roster", methods=["GET"])
+def employee_roster():
+    """Read-only 'who's on' roster for the dashboard Roster tab (Sam #3245 item 3 /
+    #3251 scope). Returns coworker NAME + position + store + their NEXT published
+    shift (today/upcoming), scoped strictly to THIS employee's store(s). SANITIZED:
+    no pay / tips / sales / performance metrics, and NO employee_id / GUID / hidden
+    identifier in the payload; accepts no request id (session-scoped only -> no IDOR)."""
+    emp_id = session.get("employee_id")
+    if not emp_id:
+        return jsonify({"ok": False, "error": "not signed in"}), 401
+    stores = _employee_store_keys(emp_id)
+    if not stores:
+        return jsonify({"ok": True, "coworkers": []}), 200
+    today = datetime.utcnow().date()
+    start = datetime.combine(today, datetime.min.time())
+    horizon = start + timedelta(days=8)  # today + the next 7 days
+
+    def _when(dt):
+        d = dt.date()
+        if d == today:
+            return "Today"
+        if d == today + timedelta(days=1):
+            return "Tomorrow"
+        return dt.strftime("%a, %b ") + str(d.day)
+
+    def _tm(dt):
+        return dt.strftime("%I:%M %p").lstrip("0")
+
+    db = SessionLocal()
+    try:
+        rows = (db.query(Shift, Employee.full_name, Position.name, Schedule.store_key)
+                  .join(Schedule, Shift.schedule_id == Schedule.id)
+                  .join(Employee, Shift.employee_id == Employee.id)
+                  .outerjoin(Position, Shift.position_id == Position.id)
+                  .filter(Schedule.store_key.in_(stores),
+                          Schedule.status == "published",
+                          Shift.status == "assigned",
+                          Shift.employee_id.isnot(None),
+                          Shift.start_at >= start,
+                          Shift.start_at < horizon)
+                  .order_by(Shift.start_at.asc())
+                  .all())
+    finally:
+        db.close()
+
+    seen = set()
+    coworkers = []
+    for sh, full_name, pos_name, store_key in rows:
+        if sh.employee_id in seen:    # one row per coworker -> their NEXT upcoming shift
+            continue
+        seen.add(sh.employee_id)
+        name = (full_name or "").strip()
+        if not name:
+            continue
+        coworkers.append({
+            "name": name,
+            "position": (pos_name or "").strip(),
+            "store": _STORE_LABELS.get(store_key, (store_key or "").title()),
+            "shift_when": _when(sh.start_at),
+            "shift_label": _tm(sh.start_at) + " - " + _tm(sh.end_at),
+        })
+    return jsonify({"ok": True, "coworkers": coworkers}), 200
 
 
 @employee_auth.route("/partner/schedules-v2/migration/run", methods=["POST"])

@@ -41,6 +41,7 @@
 {% block page_subtitle %}{{ page_label }} — staff counseling &amp; recognition{% endblock %}
 
 {% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
@@ -58,17 +59,21 @@
     --cream-dim: rgba(250,246,236,0.82);
     --cream-faint: rgba(250,246,236,0.52);
     --cream-meta: rgba(250,246,236,0.40);
-    --bg-deep: #1a0d08; --bg-warm: #28160e;
-    --surface: #241409; --surface-2: #2e1a0d; --surface-hover: #34200f;
+    --bg-deep: #1a0d08; --bg-warm: #2c1810;
+    --surface: #241409; --surface-2: #2c1810; --surface-hover: #34200f;
     --border: rgba(217,164,54,0.18); --border-active: rgba(228,179,64,0.5);
     --lvl-verbal: #5BCAC5; --lvl-coaching: #9A8FE0; --lvl-written: #E4B340;
     --lvl-final: #E89B40; --lvl-positive: #95C75F;
     --radius: 12px;
     font-family: 'Manrope', system-ui, sans-serif;
     color: var(--cream);
-    /* opaque surface — the photo never bleeds through page content */
-    background: #1f1308;
-    border: 1px solid var(--border); border-radius: 16px;
+    /* Opaque dark card surface, matched to the employee dashboard card:
+       a warm gradient over the canonical #241409 panel so the restaurant
+       photo never bleeds through page content. */
+    background-color: #241409;
+    background-image: linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97));
+    border: 0.5px solid var(--border); border-radius: 16px;
+    box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 10px 24px rgba(0,0,0,0.45);
     padding: 18px 20px 30px; margin-bottom: 40px;
   }
   .ec-page * { box-sizing: border-box; }
@@ -140,11 +145,11 @@
   .ec-page .ec-tab.active .ct { background: rgba(0,0,0,0.22); color: #2a1607; }
   .ec-page .ec-add {
     margin-left: auto; height: 38px; padding: 0 16px;
-    background: linear-gradient(135deg, var(--red), var(--red-deep));
-    border: 0.5px solid var(--red-bright); border-radius: 10px;
-    color: var(--cream); font-family: 'Manrope', sans-serif; font-size: 13px;
-    font-weight: 700; cursor: pointer; display: inline-flex; align-items: center;
-    gap: 7px; box-shadow: 0 4px 12px rgba(199,59,54,0.22);
+    background: linear-gradient(135deg, #E4B340, #d4af37);
+    border: none; border-radius: 10px;
+    color: #241409; font-family: 'Manrope', sans-serif; font-size: 13px;
+    font-weight: 800; cursor: pointer; display: inline-flex; align-items: center;
+    gap: 7px; box-shadow: 0 4px 12px rgba(228,179,64,0.28);
   }
   .ec-page .ec-add:hover { filter: brightness(1.08); }
   .ec-page .ec-add .pl { font-size: 17px; line-height: 1; }
@@ -231,7 +236,7 @@
   .ec-scrim-fx.show { opacity: 1; pointer-events: auto; }
   .ec-panel-fx {
     position: fixed; top: 0; right: 0; bottom: 0; width: 460px; max-width: 94vw;
-    background: #2e1a0d; border-left: 0.5px solid rgba(228,179,64,0.5);
+    background: #2c1810; border-left: 0.5px solid rgba(228,179,64,0.5);
     z-index: 1410; transform: translateX(102%); transition: transform .22s ease;
     display: flex; flex-direction: column; box-shadow: -20px 0 50px rgba(0,0,0,0.5);
     font-family: 'Manrope', system-ui, sans-serif; color: #FAF6EC;
@@ -345,8 +350,8 @@
   }
   .ec-btn.ghost { background: rgba(0,0,0,0.3); color: rgba(250,246,236,0.82); }
   .ec-btn.go {
-    background: linear-gradient(135deg, #C73B36, #9B2A26);
-    border-color: #E85852; color: #FAF6EC;
+    background: linear-gradient(135deg, #E4B340, #d4af37);
+    border-color: rgba(228,179,64,0.30); color: #241409; font-weight: 800;
   }
   .ec-btn.go:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -358,7 +363,7 @@
   }
   .ec-modal.show { display: flex; }
   .ec-sheet {
-    width: 480px; max-width: 100%; background: #2e1a0d;
+    width: 480px; max-width: 100%; background: #2c1810;
     border: 0.5px solid rgba(228,179,64,0.5); border-radius: 16px;
     overflow: hidden; max-height: 86vh; display: flex; flex-direction: column;
   }

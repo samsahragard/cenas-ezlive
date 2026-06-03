@@ -17,6 +17,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Time Off &mdash; Cenas Kitchen</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
 <style>
   :root{
     /* House palette (warm gold / cream / dark) — var NAMES kept from the
@@ -49,7 +50,7 @@
   }
   body::before{
     content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
-    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
+    background-image: var(--emp-bg, none);
     background-size:cover; background-position:center; background-repeat:no-repeat;
     filter: blur(6px) brightness(0.55) saturate(1.05);
   }
@@ -217,7 +218,7 @@
   }
 </style>
 </head>
-<body>
+<body style="--emp-bg:url('{{ url_for('static', filename='brand/bg-tequila.jpg') }}')">
 <div class="wrap">
 
   <div class="topbar">

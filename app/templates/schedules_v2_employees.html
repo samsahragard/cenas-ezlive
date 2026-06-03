@@ -26,34 +26,46 @@
 {% block page_title %}Add Staff{% endblock %}
 {% block page_subtitle %}{{ store_label }} - invite a new team member (V2){% endblock %}
 
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
+{% endblock %}
+
 {% block content %}
 <style>
   .sv2-emp{
-    --sk-red:#c8302a; --sk-red-deep:#8a1d18; --sk-blue:#15205c; --sk-blue-deep:#0a1340;
-    --sk-cream:#f4e7d0; --sk-ink:#14205c; --sk-ok:#2f8f57; --sk-ok-deep:#1f6b3e;
+    /* House dark/gold palette — var NAMES kept from the old cream/navy/red
+       scheme so the markup + JS below recolour for free. --sk-red* now carry
+       the warm-gold accent; --sk-blue* the gold edge; --sk-cream the house
+       cream; --sk-ink the cream body text; --sk-ok stays the success green. */
+    --sk-red:#E4B340; --sk-red-deep:#d4af37; --sk-blue:#E4B340; --sk-blue-deep:#FFD970;
+    --sk-cream:#FAF6EC; --sk-ink:#FAF6EC; --sk-ok:#2f8f57; --sk-ok-deep:#3fae71;
+    --sk-surface:#241409; --sk-bd-gold:rgba(217,164,54,0.18); --sk-bd-gold-2:rgba(228,179,64,0.30);
     position:relative; color:var(--sk-ink); font-family:'Manrope','Segoe UI',Arial,sans-serif;
-    background:#fbf4e7; border-radius:14px; padding:20px; max-width:540px;
-    box-shadow:0 0 0 1px rgba(20,32,92,0.10), 0 8px 22px rgba(0,0,0,0.10);
+    background-color:var(--sk-surface);
+    background-image:linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97));
+    border:0.5px solid var(--sk-bd-gold); border-radius:16px; padding:20px; max-width:540px;
+    box-shadow:inset 0 0 0 1px rgba(228,179,64,0.10), 0 10px 24px rgba(0,0,0,0.45);
   }
   .sv2-emp *{ box-sizing:border-box; }
-  .sv2-emp .intro{ font-size:14px; color:rgba(20,32,92,0.75); line-height:1.55; margin-bottom:18px; }
+  .sv2-emp .intro{ font-size:14px; color:rgba(250,246,236,0.78); line-height:1.55; margin-bottom:18px; }
+  .sv2-emp .intro b{ color:var(--sk-cream); }
   .sv2-emp .fld{ margin-bottom:15px; }
   .sv2-emp label{ display:block; font-size:12px; font-weight:800; letter-spacing:0.6px; text-transform:uppercase;
-    color:rgba(20,32,92,0.6); margin-bottom:6px; }
+    color:rgba(244,231,208,0.7); margin-bottom:6px; }
   .sv2-emp input{
     width:100%; padding:12px 14px; border-radius:10px; font-size:16px; font-family:inherit; font-weight:600;
-    color:var(--sk-blue-deep); background:#fff; border:1.5px solid rgba(20,32,92,0.2); outline:none;
+    color:var(--sk-ink); background:var(--sk-surface); border:0.5px solid var(--sk-bd-gold); outline:none;
     transition:border-color 120ms ease, box-shadow 120ms ease;
   }
-  .sv2-emp input:focus{ border-color:var(--sk-blue); box-shadow:0 0 0 3px rgba(21,32,92,0.12); }
-  .sv2-emp input::placeholder{ color:rgba(20,32,92,0.35); font-weight:500; }
-  .sv2-emp input.bad{ border-color:var(--sk-red); box-shadow:0 0 0 3px rgba(200,48,42,0.16); }
+  .sv2-emp input:focus{ border-color:var(--sk-bd-gold-2); box-shadow:0 0 0 2px rgba(228,179,64,0.18); }
+  .sv2-emp input::placeholder{ color:rgba(244,231,208,0.4); font-weight:500; }
+  .sv2-emp input.bad{ border-color:#e54a3f; box-shadow:0 0 0 3px rgba(200,48,42,0.18); }
 
   .sv2-emp .btn{
     width:100%; margin-top:4px; padding:13px; border-radius:10px; font-size:15px; font-weight:800;
-    letter-spacing:0.8px; color:#fff; cursor:pointer; border:none;
-    background:linear-gradient(180deg, var(--sk-red) 0%, var(--sk-red-deep) 100%);
-    box-shadow:0 4px 10px rgba(138,29,24,0.3); transition:transform 80ms ease, filter 80ms ease;
+    letter-spacing:0.8px; color:#241409; cursor:pointer; border:none;
+    background:linear-gradient(135deg, #E4B340, #d4af37);
+    box-shadow:0 4px 12px rgba(228,179,64,0.28); transition:transform 80ms ease, filter 80ms ease;
   }
   .sv2-emp .btn:hover{ filter:brightness(1.05); }
   .sv2-emp .btn:active{ transform:translateY(1px); }
@@ -61,27 +73,29 @@
 
   .sv2-emp .banner{ margin-top:15px; padding:12px 14px; border-radius:10px; font-size:14px; line-height:1.5; }
   .sv2-emp .banner[hidden]{ display:none; }
-  .sv2-emp .banner.ok{ background:rgba(47,143,87,0.12); color:var(--sk-ok-deep);
-    border:1px solid rgba(47,143,87,0.4); font-weight:700; }
-  .sv2-emp .banner.err{ background:rgba(200,48,42,0.1); color:var(--sk-red-deep);
-    border:1px solid rgba(200,48,42,0.4); font-weight:600; }
+  .sv2-emp .banner.ok{ background:rgba(47,143,87,0.16); color:var(--sk-ok-deep);
+    border:1px solid rgba(47,143,87,0.45); font-weight:700; }
+  .sv2-emp .banner.err{ background:rgba(200,48,42,0.14); color:#e87f7f;
+    border:1px solid rgba(200,48,42,0.45); font-weight:600; }
 
-  .sv2-emp .note{ margin-top:18px; padding-top:14px; border-top:1px solid rgba(20,32,92,0.1);
-    font-size:12.5px; color:rgba(20,32,92,0.55); line-height:1.55; }
-  .sv2-emp .note b{ color:rgba(20,32,92,0.7); }
+  .sv2-emp .note{ margin-top:18px; padding-top:14px; border-top:0.5px solid var(--sk-bd-gold);
+    font-size:12.5px; color:rgba(244,231,208,0.55); line-height:1.55; }
+  .sv2-emp .note b{ color:rgba(244,231,208,0.78); }
   .sv2-emp .retry-row{ margin-top:10px; }
   .sv2-emp .retry-row[hidden]{ display:none; }
-  .sv2-emp .btn-retry{ padding:10px 16px; border-radius:9px; font-size:13.5px; font-weight:800; letter-spacing:0.4px;
-    color:#fff; cursor:pointer; border:none; background:var(--sk-blue); box-shadow:0 3px 8px rgba(21,32,92,0.3); }
-  .sv2-emp .btn-retry:hover{ filter:brightness(1.08); }
+  .sv2-emp .btn-retry{ padding:10px 16px; border-radius:10px; font-size:13.5px; font-weight:700; letter-spacing:0.4px;
+    color:var(--sk-cream); cursor:pointer; border:1px solid rgba(244,231,208,0.30);
+    background:rgba(244,231,208,0.12); transition:background 120ms ease; }
+  .sv2-emp .btn-retry:hover{ background:rgba(244,231,208,0.22); }
   .sv2-emp .btn-retry:active{ transform:translateY(1px); }
 
   .sv2-emp .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:60;
-    max-width:440px; width:calc(100% - 36px); background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px;
-    padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.5);
+    max-width:440px; width:calc(100% - 36px); background:#2a2419; color:var(--sk-cream);
+    border:1px solid var(--sk-bd-gold-2); border-radius:12px;
+    padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center; box-shadow:0 10px 26px rgba(0,0,0,0.55);
     opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
   .sv2-emp .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-  .sv2-emp .toast.err{ background:var(--sk-red-deep); }
+  .sv2-emp .toast.err{ background:#3a2420; border-color:rgba(200,48,42,0.45); }
 </style>
 
 <div class="sv2-emp" id="sv2-emp-root">

@@ -7,6 +7,13 @@ def test_rank_detail_metrics_registered():
     assert "rank_combined" in _PERF_DETAIL_METRICS
 
 
+def test_performance_center_does_not_emit_peer_source_key():
+    source = open("app/web/employee_auth.py", encoding="utf-8").read()
+
+    assert '"peer_source"' not in source
+    assert "'peer_source'" not in source
+
+
 def test_dashboard_rank_links_keep_selected_period():
     template = open("app/templates/employee_dashboard.html", encoding="utf-8").read()
 

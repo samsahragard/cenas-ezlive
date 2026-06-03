@@ -581,6 +581,27 @@ def performance_center():
         rj_ranks = ranking.get("ranks") or {}
         raw_ranks = raw_ranking.get("ranks") or {}
         rj_lb = ranking.get("leaderboards") or {}
+        try:
+            own_position_rows = (
+                db.query(EmployeePosition.store_key, EmployeePosition.position_id)
+                  .filter(EmployeePosition.employee_id == emp.id,
+                          EmployeePosition.store_key.isnot(None))
+                  .distinct()
+                  .all()
+            )
+            own_store_keys = {
+                (sk or "").strip().lower()
+                for sk, _pid in own_position_rows
+                if (sk or "").strip()
+            }
+            own_store_role_pairs = {
+                ((sk or "").strip().lower(), pid)
+                for sk, pid in own_position_rows
+                if (sk or "").strip() and pid is not None
+            }
+        except Exception:
+            own_store_keys = set()
+            own_store_role_pairs = set()
         # metric_key (UI) -> rank_json metric name
         RJ = {"effective_hourly": "effective_hourly",
               "tip_pct": "tip_percent", "tips_per_hour": "tips_per_hour",
@@ -678,26 +699,44 @@ def performance_center():
             if own.get("status") in ("not_eligible", "cohort_too_small"):
                 return []
             cohort_key = own.get("cohort_key")
-            if not cohort_key:
+            if not cohort_key and not own_store_role_pairs:
                 return []
             try:
-                rows = (
-                    db.query(PerfRankCache, Employee.full_name)
+                q = (
+                    db.query(PerfRankCache, Employee.full_name,
+                             EmployeePosition.store_key,
+                             EmployeePosition.position_id)
                       .join(Employee, Employee.id == PerfRankCache.cena_employee_id)
+                      .outerjoin(EmployeePosition,
+                                 EmployeePosition.employee_id == Employee.id)
                       .filter(Employee.active.is_(True))
-                      .all()
                 )
+                if not cohort_key and own_store_keys:
+                    q = q.filter(EmployeePosition.store_key.in_(own_store_keys))
+                rows = q.all()
             except Exception:
                 return []
             out = []
-            for peer_cache, peer_name in rows:
+            seen_peer_ids = set()
+            for peer_cache, peer_name, peer_store, peer_position_id in rows:
+                if peer_cache.cena_employee_id in seen_peer_ids:
+                    continue
                 peer_json = peer_cache.rank_json or {}
+                if bool(peer_json.get("is_tipped")) != is_tipped:
+                    continue
                 peer_obj = _rank_obj(peer_json, period, rj)
+                peer_cohort = peer_obj.get("cohort_key")
+                peer_store_key = (peer_store or "").strip().lower()
                 if (not isinstance(peer_obj, dict)
-                        or peer_obj.get("cohort_key") != cohort_key
                         or not peer_obj.get("rank")
                         or peer_obj.get("status") in ("not_eligible", "cohort_too_small")):
                     continue
+                if cohort_key:
+                    if peer_cohort != cohort_key:
+                        continue
+                elif (peer_store_key, peer_position_id) not in own_store_role_pairs:
+                    continue
+                seen_peer_ids.add(peer_cache.cena_employee_id)
                 row = {
                     "rank": peer_obj.get("rank"),
                     "name": (peer_name or "").strip() or "Team member",
@@ -716,6 +755,12 @@ def performance_center():
                         row["combined_rank"] = combined_rank
                 out.append(row)
             out.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
+            try:
+                cohort_size = int(own.get("cohort_size") or 0)
+            except (TypeError, ValueError):
+                cohort_size = 0
+            if cohort_size > 0 and len(out) > cohort_size:
+                out = out[:cohort_size]
             return out
 
         def _peer_rows(period, mk):
@@ -785,15 +830,14 @@ def performance_center():
                 }
             score = (rj_ranks.get(period) or {}).get("score") or {}
             if score:
-                peer_source = "combined" if is_tipped and "combined" in rankings else "effective_hourly"
+                peer_key = "combined" if is_tipped and "combined" in rankings else "effective_hourly"
                 rankings["standing"] = {
                     "status": score.get("status"),
                     "standing_percentile": score.get("standing_percentile"),
                     "band": score.get("band"),
-                    "peer_source": peer_source,
-                    "peers": (rankings.get(peer_source) or {}).get("peers") or [],
-                    "leaders": (rankings.get(peer_source) or {}).get("leaders") or [],
-                    "bottom": (rankings.get(peer_source) or {}).get("bottom") or [],
+                    "peers": (rankings.get(peer_key) or {}).get("peers") or [],
+                    "leaders": (rankings.get(peer_key) or {}).get("leaders") or [],
+                    "bottom": (rankings.get(peer_key) or {}).get("bottom") or [],
                 }
 
             # daily breakdown from per-shift cache (grouped by business_date)

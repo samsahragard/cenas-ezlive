@@ -4719,7 +4719,6 @@ _OPERATIONS_DASH_TABS = [
     ("sales",       "Sales",           False),
     ("labor",       "Labor",           False),
     ("performance", "Performance",     False),
-    ("schedule",         "Schedule",         False),
     ("schedule-reports", "Schedule Reports", False),
     ("corp-order",       "Corporate Order",  False),
 ]

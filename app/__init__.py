@@ -157,6 +157,11 @@ def create_app():
     # driver_system.py stays untouched + unused.
     from app.web.perf_push_routes import perf_push_bp
     app.register_blueprint(perf_push_bp)
+    # Isolated READ-ONLY data-mart export endpoint (Sam #3330 / aick #3315/#3334):
+    # serves CK's mart per-employee PROFILE + SCHEDULE only; imports only app.db/app.models,
+    # never driver_system; fail-closed DATAMART_EXPORT_TOKEN; SELECT-only (no writes).
+    from app.web.datamart_export_routes import datamart_export_bp
+    app.register_blueprint(datamart_export_bp)
     app.register_blueprint(scheduling_cron_bp)  # B6: POST /internal/scheduling/cron/process-shift-alarms (ckai)
     app.register_blueprint(briefs_bp)
     # Phase 2 / Block 1A — task create + reassign routes

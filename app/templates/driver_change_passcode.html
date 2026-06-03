@@ -100,7 +100,7 @@
 
   <div class="auth-card">
     <h2>{% if forced %}Pick a new PIN{% else %}Change your PIN{% endif %}</h2>
-    <p class="sub">5 characters — digits or one of <code>* # @ + % - $</code>.</p>
+    <p class="sub">5 digits.</p>
     {% if forced %}
       <div class="forced-banner">
         Your manager reset your account. Choose a new PIN to continue.
@@ -110,12 +110,12 @@
     <form method="POST" action="{{ url_for('driver.driver_change_passcode_submit') }}">
       <label for="new">New PIN</label>
       <input type="password" id="new" name="new" inputmode="numeric"
-             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
+             pattern="\d{5}" maxlength="5" minlength="5"
              autocomplete="new-password" required autofocus>
 
       <label for="confirm">Confirm new PIN</label>
       <input type="password" id="confirm" name="confirm" inputmode="numeric"
-             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
+             pattern="\d{5}" maxlength="5" minlength="5"
              autocomplete="new-password" required>
 
       <button class="submit" type="submit">Set PIN</button>

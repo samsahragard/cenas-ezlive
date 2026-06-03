@@ -32,10 +32,9 @@ LOCATION_LABELS = {
 LOCKOUT_THRESHOLD = 5
 LOCKOUT_DURATION = timedelta(minutes=10)
 
-# 5-character PIN keypad — same character set as the User keypad (digits + the
-# special keys on the pad: * # @ + % - $). Mirrors app/web/keypad_auth.py.
+# 5-digit numeric PIN keypad. Mirrors app/web/keypad_auth.py.
 PIN_LEN = 5
-PIN_RE = re.compile(rf"^[\d*#@+%\-$]{{{PIN_LEN}}}$")
+PIN_RE = re.compile(rf"^\d{{{PIN_LEN}}}$")
 _rnd = SystemRandom()
 
 
@@ -171,14 +170,19 @@ def driver_login_submit():
         found.lockout_until = None
         found.last_login_at = datetime.utcnow() if hasattr(found, "last_login_at") else None
         db.commit()
-        # Clear any leftover User-keypad keys (mirrors dd1d1c7 fix).
-        for _k in ("user_id", "user_session_version", "partner_auth_ok"):
+        # Clear any leftover User/employee keys so the driver portal is the
+        # only active principal after this login.
+        from app.web.keypad_auth import _clear_pending_login_choices
+        _clear_pending_login_choices()
+        for _k in ("user_id", "user_session_version", "partner_auth_ok",
+                   "employee_id", "employee_session_version", "active_store"):
             session.pop(_k, None)
         session.permanent = True
         session["driver_id"] = found.id
         session["driver_name"] = found.name
         session["driver_location"] = found.location
         session["driver_session_version"] = found.session_version
+        session["auth_ok"] = True
         if not found.first_login_done:
             return jsonify({"ok": True, "next": url_for("driver.driver_change_passcode")})
         return jsonify({"ok": True, "next": nxt})
@@ -236,7 +240,7 @@ def driver_signup_submit():
     elif "@" not in form["email"] or "." not in form["email"].split("@")[-1]:
         err = "Enter a valid email."
     elif not _valid_pin(pin):
-        err = "PIN must be exactly 5 characters (digits or * # @ + % - $)."
+        err = "PIN must be exactly 5 digits."
     elif pin != confirm:
         err = "PINs don't match."
     if err:
@@ -275,12 +279,16 @@ def driver_signup_submit():
                                          "your account.",
                                    form=form), 409
         # Same role-conflict guard as driver_login_submit.
-        for _k in ("user_id", "user_session_version", "partner_auth_ok"):
+        from app.web.keypad_auth import _clear_pending_login_choices
+        _clear_pending_login_choices()
+        for _k in ("user_id", "user_session_version", "partner_auth_ok",
+                   "employee_id", "employee_session_version", "active_store"):
             session.pop(_k, None)
         session["driver_id"] = new_driver.id
         session["driver_name"] = new_driver.name
         session["driver_location"] = new_driver.location
         session["driver_session_version"] = new_driver.session_version
+        session["auth_ok"] = True
         session.permanent = True
         return redirect(url_for("driver_system.my_profile"))
     finally:
@@ -326,7 +334,7 @@ def driver_change_passcode_submit():
             return redirect(url_for("driver.driver_login"))
         if not _valid_pin(new):
             return render_template("driver_change_passcode.html",
-                                   error="New PIN must be exactly 5 characters (digits or * # @ + % - $).",
+                                   error="New PIN must be exactly 5 digits.",
                                    driver=found, forced=not found.first_login_done, pin_len=PIN_LEN), 400
         if new != confirm:
             return render_template("driver_change_passcode.html",

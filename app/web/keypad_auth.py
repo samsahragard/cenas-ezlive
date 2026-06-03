@@ -2,10 +2,10 @@
 
 Endpoints:
   GET  /keypad-login          — renders the unified two-screen pad (phone → PIN)
-  POST /keypad-login          — JSON: {"phone": "...", "pin": "..."} → routes to right dashboard
-                                (Driver-table match first, User-table by phone second,
-                                 User-table by passcode-only as legacy fallback for users
-                                 without a phone set in the DB)
+  POST /keypad-login          — JSON: {"phone": "...", "pin": "..."} → routes to the
+                                matching dashboard, or returns an account picker
+                                when one phone+PIN legitimately unlocks more than
+                                one profile (for example Employee + Driver)
   GET  /change-passcode       — renders the change-passcode keypad (forced on first login)
   POST /change-passcode       — JSON: {"new": "12345"} → {"ok": true} or {"ok": false, "error": "..."}
   GET  /keypad-logout         — clears session, redirects to /keypad-login
@@ -16,12 +16,14 @@ post-logout destinations, and a confusing UX where a driver who logged out
 landed on the partner-keypad page (Sam, 2026-05-15: "it automatically goes
 to the password screen for the Partners, not the passcode").
 
-Now: ONE unified entry. Phone is the first factor (disambiguates which row
-to bcrypt against, makes login O(1) instead of O(N) for the common path).
-Driver-table lookup wins on phone collision (drivers are the higher-volume
-login source per samai #1601 default). User-by-phone is the next-tier match;
-user-by-passcode-only is the legacy fallback so partners/managers who
-predate the Sam #1591 phone-required convention can still sign in.
+Now: ONE unified entry. Phone is the first factor and each matching active
+principal verifies its own passcode hash. If the same person has multiple
+legitimate profiles on that phone+PIN, the client shows a Driver / store /
+management picker and opens exactly one session after the choice. This avoids
+the old driver-first collision where a newly created driver profile could
+shadow the employee account. User-by-passcode-only is retained as the legacy
+fallback so partners/managers who predate the Sam #1591 phone-required
+convention can still sign in when no phone is supplied.
 
 The legacy /login + /partner-login routes (auth.py) stay live for backwards
 compat with the chat-tail/post tooling and the existing PARTNER_PASSWORD
@@ -36,6 +38,9 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
+import hashlib
+import time
 from datetime import datetime, timedelta
 
 from flask import (
@@ -52,10 +57,13 @@ log = logging.getLogger(__name__)
 keypad_auth = Blueprint("keypad_auth", __name__)
 
 PASSCODE_LEN = 5
-# Digits + the special keys on the pad: * # @ + % - $
+# Numeric-only keypad PINs. The visible unified login pad renders digits only,
+# and Sam's 2026-06-03 direction keeps all login on numbers.
 PASSCODE_RE = re.compile(rf"^\d{{{PASSCODE_LEN}}}$")
 MAX_FAILED_ATTEMPTS = 6
 LOCKOUT_MINUTES = 10
+PENDING_LOGIN_TTL_SECONDS = 120
+_PENDING_LOGIN_CHOICES: dict[str, dict] = {}
 
 
 def _valid_passcode(s: str) -> bool:
@@ -116,6 +124,258 @@ def _bump_failed_attempts_for_passcode(db, passcode: str) -> None:
     pass
 
 
+def _locked_minutes(lockout_until, now: datetime) -> int:
+    return max(1, int((lockout_until - now).total_seconds() // 60) + 1)
+
+
+def _passcode_marker(passcode_hash: str | None) -> str | None:
+    if not passcode_hash:
+        return None
+    return hashlib.sha256(passcode_hash.encode("utf-8")).hexdigest()
+
+
+def _clear_pending_login_choices() -> None:
+    batch_id = session.pop("login_account_pick_id", None)
+    if batch_id:
+        _PENDING_LOGIN_CHOICES.pop(batch_id, None)
+    session.pop("login_account_choices", None)  # older cookie-backed pending state
+
+
+def _prune_pending_login_choices(now_ts: float | None = None) -> None:
+    now_ts = now_ts if now_ts is not None else time.time()
+    expired = [
+        batch_id for batch_id, entry in _PENDING_LOGIN_CHOICES.items()
+        if float(entry.get("expires_at") or 0) <= now_ts
+    ]
+    for batch_id in expired:
+        _PENDING_LOGIN_CHOICES.pop(batch_id, None)
+
+
+def _store_label(store_key: str | None) -> str:
+    labels = {"tomball": "Tomball", "copperfield": "Copperfield", "__both__": "Both stores"}
+    return labels.get(store_key, (store_key or "").title())
+
+
+def _establish_driver_session(driver, next_url: str = "/") -> str:
+    """Open a driver session and clear every other principal key."""
+    _clear_pending_login_choices()
+    for _k in ("user_id", "user_session_version", "partner_auth_ok",
+               "employee_id", "employee_session_version", "active_store"):
+        session.pop(_k, None)
+    session.permanent = True
+    session["driver_id"] = driver.id
+    session["driver_name"] = driver.name
+    session["driver_location"] = driver.location
+    session["driver_session_version"] = driver.session_version
+    session["auth_ok"] = True
+    if not driver.first_login_done:
+        return url_for("driver.driver_change_passcode")
+    if next_url and next_url.startswith(("/driver", "/my-profile")):
+        return next_url
+    return "/my-profile"
+
+
+def _establish_user_session(user, next_url: str = "/") -> str:
+    """Open a management/user session and clear driver/employee keys."""
+    _clear_pending_login_choices()
+    for _k in ("driver_id", "driver_name", "driver_location",
+               "driver_session_version", "employee_id",
+               "employee_session_version", "active_store"):
+        session.pop(_k, None)
+    session.permanent = True
+    session["user_id"] = user.id
+    session["user_session_version"] = user.session_version
+    session["auth_ok"] = True
+    if user.permission_level == "partner":
+        session["partner_auth_ok"] = True
+    else:
+        session.pop("partner_auth_ok", None)
+    if not user.first_login_done:
+        return url_for("keypad_auth.change_passcode")
+    return next_url if next_url and next_url != "/" else _landing_for_user(user)
+
+
+def _establish_employee_choice(employee, store_key: str | None = None) -> str:
+    """Open an employee session, optionally setting the selected active store."""
+    from app.web.employee_auth import _employee_store_keys, _establish_employee_session
+
+    _clear_pending_login_choices()
+    stores = _establish_employee_session(employee, include_linked_user=False)
+    valid_stores = _employee_store_keys(employee.id)
+    if store_key == "__both__":
+        if len(valid_stores) >= 2:
+            session["active_store"] = "__both__"
+    elif store_key and store_key in valid_stores:
+        session["active_store"] = store_key
+    elif len(stores) > 1 and not session.get("active_store"):
+        return "/employee/login?needpick=1"
+    return "/employee/dashboard"
+
+
+def _employee_choice_specs(employee) -> list[dict]:
+    """Return employee portal choices split by store for the unified picker."""
+    from app.web.employee_auth import _employee_store_keys
+
+    stores = _employee_store_keys(employee.id)
+    if not stores:
+        return [{
+            "kind": "employee",
+            "id": employee.id,
+            "session_version": getattr(employee, "session_version", None),
+            "passcode_marker": _passcode_marker(getattr(employee, "passcode_hash", None)),
+            "store_key": None,
+            "label": "Employee",
+            "sub": "Employee app",
+        }]
+    choices = [{
+        "kind": "employee",
+        "id": employee.id,
+        "session_version": getattr(employee, "session_version", None),
+        "passcode_marker": _passcode_marker(getattr(employee, "passcode_hash", None)),
+        "store_key": store_key,
+        "label": _store_label(store_key),
+        "sub": "Employee app",
+    } for store_key in stores]
+    if len(stores) > 1:
+        choices.append({
+            "kind": "employee",
+            "id": employee.id,
+            "session_version": getattr(employee, "session_version", None),
+            "passcode_marker": _passcode_marker(getattr(employee, "passcode_hash", None)),
+            "store_key": "__both__",
+            "label": "Both stores",
+            "sub": "Employee app",
+        })
+    return choices
+
+
+def _driver_choice_spec(driver) -> dict:
+    return {
+        "kind": "driver",
+        "id": driver.id,
+        "session_version": getattr(driver, "session_version", None),
+        "passcode_marker": _passcode_marker(getattr(driver, "passcode_hash", None)),
+        "label": "Driver",
+        "sub": f"Driver portal · {_store_label(driver.location)}",
+    }
+
+
+def _user_choice_spec(user) -> dict:
+    label_map = {
+        "partner": "Partner",
+        "corporate": "Corporate",
+        "corporate_chef": "Corporate Chef",
+        "gm": "GM",
+        "manager": "Manager",
+        "km": "Kitchen Manager",
+        "assistant_km": "Assistant KM",
+        "prep_manager": "Prep Manager",
+        "foh_manager": "FOH Manager",
+        "expo": "Expo",
+    }
+    return {
+        "kind": "user",
+        "id": user.id,
+        "session_version": getattr(user, "session_version", None),
+        "passcode_marker": _passcode_marker(getattr(user, "passcode_hash", None)),
+        "label": label_map.get(user.permission_level, user.permission_level.title()),
+        "sub": "Management app",
+    }
+
+
+def _store_pending_choices(choice_specs: list[dict], next_url: str) -> list[dict]:
+    _clear_pending_login_choices()
+    _prune_pending_login_choices()
+    batch_id = secrets.token_urlsafe(16)
+    private = []
+    public = []
+    for spec in choice_specs:
+        token = secrets.token_urlsafe(12)
+        row = {**spec, "token": token, "next": next_url}
+        private.append(row)
+        public.append({
+            "token": token,
+            "kind": spec["kind"],
+            "label": spec["label"],
+            "sub": spec.get("sub") or "",
+        })
+    _PENDING_LOGIN_CHOICES[batch_id] = {
+        "expires_at": time.time() + PENDING_LOGIN_TTL_SECONDS,
+        "choices": private,
+    }
+    session["login_account_pick_id"] = batch_id
+    session.permanent = True
+    return public
+
+
+def _start_or_finish_login(db, choice_specs: list[dict], next_url: str):
+    if len(choice_specs) > 1:
+        choices = _store_pending_choices(choice_specs, next_url)
+        return jsonify({"ok": True, "needs_account_pick": True,
+                        "choices": choices}), 200
+    return _finish_login_choice(db, choice_specs[0], next_url)
+
+
+def _finish_login_choice(db, choice: dict, next_url: str = "/"):
+    kind = choice.get("kind")
+    if kind == "driver":
+        from app.models import Driver
+        driver = db.get(Driver, int(choice["id"]))
+        if driver is None or not driver.active:
+            _clear_pending_login_choices()
+            return jsonify({"ok": False, "error": "That account is no longer active."}), 403
+        if not _choice_still_current(driver, choice):
+            _clear_pending_login_choices()
+            return jsonify({"ok": False, "error": "Sign in again."}), 401
+        driver.failed_attempts = 0
+        driver.lockout_until = None
+        if hasattr(driver, "last_login_at"):
+            driver.last_login_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True, "next": _establish_driver_session(driver, next_url)}), 200
+    if kind == "employee":
+        from app.models import Employee
+        employee = db.get(Employee, int(choice["id"]))
+        if employee is None or not employee.active:
+            _clear_pending_login_choices()
+            return jsonify({"ok": False, "error": "That account is no longer active."}), 403
+        if not _choice_still_current(employee, choice):
+            _clear_pending_login_choices()
+            return jsonify({"ok": False, "error": "Sign in again."}), 401
+        employee.failed_attempts = 0
+        employee.lockout_until = None
+        db.commit()
+        return jsonify({"ok": True, "next": _establish_employee_choice(
+            employee, choice.get("store_key"))}), 200
+    if kind == "user":
+        user = db.get(User, int(choice["id"]))
+        if user is None or not user.active:
+            _clear_pending_login_choices()
+            return jsonify({"ok": False, "error": "That account is no longer active."}), 403
+        if not _choice_still_current(user, choice):
+            _clear_pending_login_choices()
+            return jsonify({"ok": False, "error": "Sign in again."}), 401
+        user.failed_attempts = 0
+        user.lockout_until = None
+        user.last_login_at = datetime.utcnow()
+        user.last_login_ip = (
+            request.headers.get("X-Forwarded-For")
+            or request.remote_addr or "")[:64]
+        db.commit()
+        return jsonify({"ok": True, "next": _establish_user_session(user, next_url)}), 200
+    return jsonify({"ok": False, "error": "Unknown account choice."}), 400
+
+
+def _choice_still_current(principal, choice: dict) -> bool:
+    lockout_until = getattr(principal, "lockout_until", None)
+    if lockout_until and lockout_until > datetime.utcnow():
+        return False
+    if choice.get("session_version") != getattr(principal, "session_version", None):
+        return False
+    return choice.get("passcode_marker") == _passcode_marker(
+        getattr(principal, "passcode_hash", None))
+
+
 @keypad_auth.route("/keypad-login", methods=["GET"])
 def login():
     """Render the unified phone+PIN keypad. If already signed in (either
@@ -160,8 +420,11 @@ def _no_store(body):
 @keypad_auth.route("/keypad-login", methods=["POST"])
 def login_submit():
     """Unified login (Sam #1591). Accept JSON {"phone": "...", "pin": "..."}.
-    Driver-table by phone -> User-table by phone -> User-table by passcode-only
-    (legacy fallback for users that predate the phone-required convention).
+    Phone + passcode can now match more than one legitimate principal for the
+    same person (for example a Tomball employee who also signs up as a driver).
+    In that case, credentials are verified first and the response returns a
+    server-side pending account picker. The picker opens exactly ONE session
+    after the person chooses Driver / Tomball / Copperfield / Corporate.
 
     Backward-compat: the field name `passcode` is still accepted as an alias
     for `pin` so old client code that POSTs {passcode: ...} doesn't break.
@@ -169,7 +432,7 @@ def login_submit():
     to that role's landing page.
     """
     from app.services.ezcater_known_drivers_seed import normalize_phone
-    from app.models import Driver
+    from app.models import Driver, Employee
     from werkzeug.security import check_password_hash as _check
 
     data = request.get_json(silent=True) or {}
@@ -184,116 +447,82 @@ def login_submit():
 
     digits = normalize_phone(phone_raw) if phone_raw else ""
     now = datetime.utcnow()
+    _clear_pending_login_choices()
 
     db = SessionLocal()
     try:
-        # ===== Path 1: Driver lookup by phone (highest-volume login source) =====
+        # Phone-present path: collect every active principal with that phone,
+        # then only offer choices whose own hash accepted this passcode. This
+        # fixes the old driver-first behavior where a driver profile shadowed
+        # the employee account on the same phone.
         if digits:
-            driver_match = None
+            phone_principals: list[tuple[str, object]] = []
             for d in (db.query(Driver)
                         .filter(Driver.active.is_(True))
                         .filter(Driver.phone.isnot(None))
                         .all()):
                 if normalize_phone(d.phone) == digits:
-                    driver_match = d
-                    break
-            if driver_match is not None:
-                if driver_match.lockout_until and driver_match.lockout_until > now:
-                    mins = max(1, int((driver_match.lockout_until - now)
-                                      .total_seconds() // 60) + 1)
-                    return jsonify({
-                        "ok": False,
-                        "error": f"Too many failed attempts. Try again in {mins} min.",
-                    }), 429
-                if (not driver_match.passcode_hash
-                        or not _check(driver_match.passcode_hash, passcode)):
-                    driver_match.failed_attempts = (
-                        driver_match.failed_attempts or 0) + 1
-                    if driver_match.failed_attempts >= MAX_FAILED_ATTEMPTS:
-                        driver_match.lockout_until = (
-                            now + timedelta(minutes=LOCKOUT_MINUTES))
-                    db.commit()
-                    return jsonify({
-                        "ok": False,
-                        "error": "Phone or passcode doesn't match.",
-                    }), 401
-                # Driver login success — set driver session keys.
-                driver_match.failed_attempts = 0
-                driver_match.lockout_until = None
-                if hasattr(driver_match, "last_login_at"):
-                    driver_match.last_login_at = now
-                db.commit()
-                # Clear any leftover user-keypad keys.
-                for _k in ("user_id", "user_session_version",
-                           "partner_auth_ok"):
-                    session.pop(_k, None)
-                session.permanent = True
-                session["driver_id"] = driver_match.id
-                session["driver_name"] = driver_match.name
-                session["driver_location"] = driver_match.location
-                session["driver_session_version"] = driver_match.session_version
-                # Set Tier-1 auth_ok so the auth.py before_request gate
-                # (which checks 'session.user_id OR session.auth_ok')
-                # passes for driver-portal pages. Without this, /driver/*
-                # routes redirect back to /keypad-login = ERR_TOO_MANY_
-                # REDIRECTS loop. Mirrors the user-login path below which
-                # also sets auth_ok at line 323. Cena #2380 diagnosis.
-                session["auth_ok"] = True
-                if not driver_match.first_login_done:
-                    return jsonify({
-                        "ok": True,
-                        "next": url_for("driver.driver_change_passcode"),
-                    })
-                if nxt == "/":
-                    nxt = "/my-profile"
-                return jsonify({"ok": True, "next": nxt})
-
-        # ===== Path 2: User lookup by phone (managers/partners with phone set) =====
-        # If the phone matches an active User, that User is the SOLE
-        # candidate — wrong-passcode on the phone-matched user returns 401
-        # with failed_attempts bumped (mirrors Path 1's Driver lockout
-        # behavior). Locked-out match returns 429 with countdown. Does
-        # NOT cascade to Path 3 — cascading would be the passcode-
-        # collision-takeover surface samai flagged at FLAG-CRITICAL 1.
-        user_match = None
-        if digits:
-            phone_matched_user = None
+                    phone_principals.append(("driver", d))
             for cand in (db.query(User)
                            .filter(User.active.is_(True))
                            .filter(User.phone.isnot(None))
                            .all()):
                 if normalize_phone(cand.phone) == digits:
-                    phone_matched_user = cand
+                    phone_principals.append(("user", cand))
                     break
-            if phone_matched_user is not None:
-                # Locked? Return countdown immediately (FLAG-MEDIUM 2 fix —
-                # mirrors Path 1 driver lockout response).
-                if (phone_matched_user.lockout_until
-                        and phone_matched_user.lockout_until > now):
-                    mins = max(1, int((phone_matched_user.lockout_until - now)
-                                      .total_seconds() // 60) + 1)
-                    return jsonify({
-                        "ok": False,
-                        "error": f"Too many failed attempts. Try again in {mins} min.",
-                    }), 429
-                # Passcode check + failed-attempts bump (FLAG-MEDIUM 3 fix —
-                # mirrors Path 1 driver brute-force throttle).
-                if (phone_matched_user.passcode_hash
-                        and _check(phone_matched_user.passcode_hash, passcode)):
-                    user_match = phone_matched_user
-                else:
-                    phone_matched_user.failed_attempts = (
-                        phone_matched_user.failed_attempts or 0) + 1
-                    if phone_matched_user.failed_attempts >= MAX_FAILED_ATTEMPTS:
-                        phone_matched_user.lockout_until = (
-                            now + timedelta(minutes=LOCKOUT_MINUTES))
-                    db.commit()
-                    return jsonify({
-                        "ok": False,
-                        "error": "Phone or passcode doesn't match.",
-                    }), 401
+            for emp in db.query(Employee).filter(Employee.active.is_(True)).all():
+                if normalize_phone(emp.phone or "") == digits:
+                    phone_principals.append(("employee", emp))
+                    break
 
-        # ===== Path 3: Legacy fallback — User passcode-only scan =====
+            if not phone_principals:
+                return jsonify({
+                    "ok": False,
+                    "error": "Phone or passcode doesn't match.",
+                }), 401
+
+            choices: list[dict] = []
+            unlocked = []
+            locked = []
+            for kind, principal in phone_principals:
+                lockout_until = getattr(principal, "lockout_until", None)
+                if lockout_until and lockout_until > now:
+                    locked.append(principal)
+                    continue
+                unlocked.append(principal)
+                pass_hash = getattr(principal, "passcode_hash", None)
+                if not pass_hash or not _check(pass_hash, passcode):
+                    continue
+                if kind == "driver":
+                    choices.append(_driver_choice_spec(principal))
+                elif kind == "user":
+                    choices.append(_user_choice_spec(principal))
+                elif kind == "employee":
+                    choices.extend(_employee_choice_specs(principal))
+
+            if choices:
+                return _start_or_finish_login(db, choices, nxt)
+
+            if not unlocked and locked:
+                mins = min(_locked_minutes(p.lockout_until, now) for p in locked)
+                return jsonify({
+                    "ok": False,
+                    "error": f"Too many failed attempts. Try again in {mins} min.",
+                }), 429
+
+            for principal in unlocked:
+                principal.failed_attempts = (principal.failed_attempts or 0) + 1
+                if principal.failed_attempts >= MAX_FAILED_ATTEMPTS:
+                    principal.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+                    if isinstance(principal, Employee):
+                        principal.failed_attempts = 0
+            db.commit()
+            return jsonify({
+                "ok": False,
+                "error": "Phone or passcode doesn't match.",
+            }), 401
+
+        # Legacy fallback — User passcode-only scan.
         # ONLY fires when no phone was typed at all (legacy passcode-only
         # entry, for users who predate the Sam #1591 phone-required
         # convention). FLAG-CRITICAL 1 fix: do NOT cascade here when
@@ -301,83 +530,44 @@ def login_submit():
         # surface (typing phone-A, passcode-B matching user-B by collision,
         # logged in as user-B). If digits was typed and Path 1+2 didn't
         # match, return 401 instead.
-        if user_match is None and not digits:
-            user_match = _find_user_by_passcode(db, passcode)
-
-        # ===== Path 4: Employee lookup by phone (Schedules V2 staff, Sam #2606) =====
-        # A team member who set up via the email invite has an Employee passcode but NO
-        # Driver/User keypad PIN -> without this they read INVALID here even though
-        # /employee/login accepts the same creds. Try the Employee table by phone + the
-        # SAME passcode, mirror the employee lockout, and open the ISOLATED employee
-        # session (_establish_employee_session -- the same one /employee/login uses).
-        # Runs only when a phone was typed and no Driver/User matched.
-        if user_match is None and digits:
-            from app.web.employee_auth import (_establish_employee_session,
-                                               _find_employee_by_phone)
-            emp = _find_employee_by_phone(db, digits)
-            if emp is not None and getattr(emp, "passcode_hash", None):
-                if emp.lockout_until and emp.lockout_until > now:
-                    mins = max(1, int((emp.lockout_until - now).total_seconds() // 60) + 1)
-                    return jsonify({
-                        "ok": False,
-                        "error": f"Too many failed attempts. Try again in {mins} min.",
-                    }), 429
-                if _check(emp.passcode_hash, passcode):
-                    emp.failed_attempts = 0
-                    emp.lockout_until = None
-                    db.commit()
-                    stores = _establish_employee_session(emp)
-                    if len(stores) > 1 and not session.get("active_store"):
-                        # both-store: the login page pops the "Which store today?" picker
-                        return jsonify({"ok": True, "next": "/employee/login?needpick=1"})
-                    return jsonify({"ok": True, "next": "/employee/dashboard"})
-                emp.failed_attempts = (emp.failed_attempts or 0) + 1
-                if emp.failed_attempts >= MAX_FAILED_ATTEMPTS:
-                    emp.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
-                    emp.failed_attempts = 0
-                db.commit()
-                return jsonify({
-                    "ok": False,
-                    "error": "Phone or passcode doesn't match.",
-                }), 401
-
+        user_match = _find_user_by_passcode(db, passcode)
         if user_match is None:
             return jsonify({
                 "ok": False,
                 "error": "Phone or passcode doesn't match.",
             }), 401
+        return _finish_login_choice(db, _user_choice_spec(user_match), nxt)
+    finally:
+        db.close()
 
-        # User login success.
-        user_match.failed_attempts = 0
-        user_match.lockout_until = None
-        user_match.last_login_at = now
-        user_match.last_login_ip = (
-            request.headers.get("X-Forwarded-For")
-            or request.remote_addr or "")[:64]
-        db.commit()
 
-        session.permanent = True
-        # Clear any leftover driver-portal session keys (mirrors the
-        # pre-unification login_submit cleanup; same race fix applies).
-        for _k in ("driver_id", "driver_name", "driver_location",
-                   "driver_session_version"):
-            session.pop(_k, None)
-        session["user_id"] = user_match.id
-        session["user_session_version"] = user_match.session_version
-        session["auth_ok"] = True
-        if user_match.permission_level == "partner":
-            session["partner_auth_ok"] = True
-        else:
-            session.pop("partner_auth_ok", None)
+@keypad_auth.route("/keypad-login/select-account", methods=["POST"])
+def select_login_account():
+    """Complete a pending multi-account login choice.
 
-        if not user_match.first_login_done:
-            return jsonify({
-                "ok": True,
-                "next": url_for("keypad_auth.change_passcode"),
-            })
-        if nxt == "/":
-            nxt = _landing_for_user(user_match)
-        return jsonify({"ok": True, "next": nxt})
+    The pending choices were created only after phone+PIN succeeded. The
+    browser receives only opaque tokens; account ids/types live in a short
+    server-side cache and are revalidated before any session opens.
+    """
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    _prune_pending_login_choices()
+    batch_id = session.get("login_account_pick_id")
+    pending = _PENDING_LOGIN_CHOICES.get(batch_id or "")
+    if not pending:
+        _clear_pending_login_choices()
+        return jsonify({"ok": False, "error": "Sign in again."}), 401
+    choices = pending.get("choices") or []
+    choice = next((c for c in choices if c.get("token") == token), None)
+    if not choice:
+        _clear_pending_login_choices()
+        return jsonify({"ok": False, "error": "Sign in again."}), 401
+    next_url = (choice.get("next") or "/").strip()
+    if not next_url.startswith("/"):
+        next_url = "/"
+    db = SessionLocal()
+    try:
+        return _finish_login_choice(db, choice, next_url)
     finally:
         db.close()
 
@@ -413,7 +603,7 @@ def change_passcode_submit():
     data = request.get_json(silent=True) or {}
     new = (data.get("new") or "").strip()
     if not _valid_passcode(new):
-        return jsonify({"ok": False, "error": "New passcode must be exactly 5 characters (digits or * # @ + % - $)."}), 400
+        return jsonify({"ok": False, "error": "New passcode must be exactly 5 digits."}), 400
 
     db = SessionLocal()
     try:

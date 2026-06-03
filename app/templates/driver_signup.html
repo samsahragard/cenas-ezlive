@@ -196,14 +196,14 @@
         </div>
       </div>
 
-      <label for="pin">PIN (5 characters — digits or * # @ + % - $)</label>
+      <label for="pin">PIN (5 digits)</label>
       <input type="password" id="pin" name="pin" inputmode="numeric"
-             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
+             pattern="\d{5}" maxlength="5" minlength="5"
              autocomplete="new-password" required>
 
       <label for="pin_confirm">Confirm PIN</label>
       <input type="password" id="pin_confirm" name="pin_confirm" inputmode="numeric"
-             pattern="[\d*#@+%\-$]{5}" maxlength="5" minlength="5"
+             pattern="\d{5}" maxlength="5" minlength="5"
              autocomplete="new-password" required>
 
       <button class="submit" type="submit">Create account</button>

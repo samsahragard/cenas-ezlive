@@ -241,6 +241,35 @@
     opacity:0; transition: opacity 0.2s ease; pointer-events:none; z-index:10;
   }
   .toast.show{ opacity:1; }
+  .account-pick-back{
+    position:fixed; inset:0; z-index:20; display:none;
+    align-items:center; justify-content:center; padding:24px;
+    background:rgba(10,6,4,0.78); backdrop-filter:blur(4px);
+  }
+  .account-pick-back.show{ display:flex; }
+  .account-pick{
+    width:100%; max-width:370px; border-radius:16px; padding:22px 20px 20px;
+    background:linear-gradient(135deg, rgba(40,22,14,0.97), rgba(15,8,5,0.98));
+    border:1px solid rgba(217,164,54,0.22);
+    box-shadow:0 18px 44px rgba(0,0,0,0.65), inset 0 0 0 1px rgba(228,179,64,0.10);
+    text-align:center;
+  }
+  .account-pick h2{
+    margin:0 0 5px; color:var(--cream); font-size:20px; font-weight:800;
+  }
+  .account-pick p{
+    margin:0 0 16px; color:rgba(244,231,208,0.66);
+    font-size:13px; line-height:1.4;
+  }
+  .account-choice{
+    width:100%; margin:8px 0; padding:14px 15px; border-radius:12px;
+    border:1px solid rgba(217,164,54,0.30);
+    background:rgba(228,179,64,0.13); color:#fff; cursor:pointer;
+    text-align:left; box-shadow:0 4px 12px rgba(0,0,0,0.30);
+  }
+  .account-choice strong{ display:block; font-size:17px; }
+  .account-choice span{ display:block; margin-top:3px; color:rgba(244,231,208,0.62); font-size:12px; }
+  .account-choice:active{ transform:translateY(1px); }
 </style>
 </head>
 <body>
@@ -340,6 +369,13 @@
   <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
        alt="Cenas Kitchen" class="brand-logo" />
 </div>
+<div class="account-pick-back" id="account-pick-back" role="dialog" aria-modal="true" aria-labelledby="account-pick-title">
+  <div class="account-pick">
+    <h2 id="account-pick-title">Where are you going?</h2>
+    <p>This phone has more than one Cenas profile. Pick the app you want to use now.</p>
+    <div id="account-pick-list"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -408,6 +444,8 @@
   const toast = document.getElementById('toast');
   const screenPhone = document.getElementById('screen-phone');
   const screenPin = document.getElementById('screen-pin');
+  const accountPickBack = document.getElementById('account-pick-back');
+  const accountPickList = document.getElementById('account-pick-list');
 
   function formatPhone(d){
     if (!d) return '<span class="ph-empty">(___) ___-____</span>';
@@ -468,8 +506,52 @@
       // Successful login → remember the phone for next time on this
       // device. Banking-app pattern: identifier persists, PIN never.
       writePersistedPhone(phoneDigits);
+      if (data.needs_account_pick && Array.isArray(data.choices)){
+        showAccountPicker(data.choices);
+        return;
+      }
       window.location.replace(data.next || '/driver/logs');
     } catch (e){
+      showError("Network error — try again.", 'pin');
+    }
+  }
+
+  function showAccountPicker(choices){
+    accountPickList.innerHTML = '';
+    choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'account-choice';
+      btn.innerHTML = `<strong>${escapeHtml(choice.label || 'Open')}</strong><span>${escapeHtml(choice.sub || '')}</span>`;
+      btn.addEventListener('click', () => selectAccount(choice.token, btn));
+      accountPickList.appendChild(btn);
+    });
+    accountPickBack.classList.add('show');
+  }
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, ch => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[ch]));
+  }
+  async function selectAccount(token, btn){
+    if (!token) return;
+    btn.disabled = true;
+    try{
+      const r = await fetch('/keypad-login/select-account', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({token}),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok){
+        accountPickBack.classList.remove('show');
+        showError(data.error || `Sign-in failed (${r.status}).`, 'pin');
+        return;
+      }
+      window.location.replace(data.next || '/');
+    } catch(e){
+      btn.disabled = false;
       showError("Network error — try again.", 'pin');
     }
   }

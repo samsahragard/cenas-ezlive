@@ -292,7 +292,7 @@ def team_reset(user_id: int):
         else:
             if not PASSCODE_RE.match(typed):
                 return redirect(url_for("team.team_page",
-                                        error="Passcode must be exactly 5 characters (digits or * # @ + % - $)."))
+                                        error="Passcode must be exactly 5 digits."))
             if _passcode_taken(db, typed, excluding_user_id=u.id):
                 return redirect(url_for("team.team_page",
                                         error="That passcode is taken — pick a different one."))

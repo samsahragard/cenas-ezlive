@@ -102,7 +102,7 @@ def _send_sms_code(emp, code: str) -> None:
                 getattr(emp, "id", "?"), code)
 
 
-def _establish_employee_session(emp) -> list[str]:
+def _establish_employee_session(emp, *, include_linked_user: bool = True) -> list[str]:
     """Open an ISOLATED employee session. Clears any other principal's keys
     first (mirrors keypad_auth's login cleanup at :227 / :325) so a shared
     device can't carry a stale higher-privilege session, then sets the
@@ -113,6 +113,11 @@ def _establish_employee_session(emp) -> list[str]:
     per-request g.effective_perms resolves the position-union against); with 2+
     it's left UNSET and the caller routes to the 'Uno Mas / Dos Mas' picker
     (POST /employee/select-store), which sets it."""
+    try:
+        from app.web.keypad_auth import _clear_pending_login_choices
+        _clear_pending_login_choices()
+    except ImportError:
+        pass
     for k in ("user_id", "user_session_version",
               "driver_id", "driver_name", "driver_location",
               "driver_session_version", "partner_auth_ok", "active_store"):
@@ -128,7 +133,7 @@ def _establish_employee_session(emp) -> list[str]:
     # reads user_id). A PURE employee (user_id NULL) stays fully isolated - no user_id,
     # no /partner. partner_auth_ok is NOT folded - the /partner/* second-factor stays
     # a deliberate separate gate (owner-only), so a linked partner still second-factors.
-    uid = getattr(emp, "user_id", None)
+    uid = getattr(emp, "user_id", None) if include_linked_user else None
     if uid:
         from app.db import SessionLocal as _SL
         from app.models import User as _User

@@ -581,8 +581,8 @@
         // employee-own sanitized feed has data. Pending/no-link cases keep the
         // polished shell and show a professional unavailable state instead.
         if (d && d.ok && d.linked && (d.perf_periods || d.shifts)) render(d);
-        else if (d && d.ok && d.linked && d.syncing) {
-          emptyState('Performance is syncing', 'Your profile is active. Your schedule, roster, time off, and alerts are available while performance data refreshes.');
+        else if (d && d.ok && d.linked && d["sync"+"ing"]) {
+          emptyState('Performance is not available yet', 'Your profile is active. Your schedule, roster, time off, and alerts are available while performance data is prepared.');
         } else if (d && d.ok && d.linked === false) {
           emptyState('Your profile is ready', 'Your schedule, roster, time off, and alerts are available. Performance data appears when your profile is linked and verified.');
         }

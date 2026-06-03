@@ -42,10 +42,10 @@ perf_push_bp = Blueprint("perf_push", __name__)
 # cache; any sales / eligible_sales / source-sales token anywhere in the body -> 422.
 _SALES_WALL = _re.compile(
     r"cashsales|noncashsales|eligible_sales|sales_attributed|sales_dollars|"
-    r"eligiblesales|grosssales|netsales|sourcesales|checktotal|storetotal|"
+    r"salesattributed|salesdollars|eligiblesales|grosssales|netsales|sourcesales|checktotal|storetotal|"
     r"salesbasis|eligiblesalesbasis|eligible_sales_basis|source_sales|"
     r"\bsales\b|\bgross\b|\brevenue\b|\bdrawer\b|gratuityservicecharges|"
-    r"cc_subtotal|cash_amount|net_sales|check_total|store_total", _re.I)
+    r"ccsubtotal|cashamount|cc_subtotal|cash_amount|net_sales|check_total|store_total", _re.I)
 
 
 def _extract_cron_token() -> str | None:

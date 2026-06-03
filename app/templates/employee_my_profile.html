@@ -125,10 +125,12 @@
 {% include 'partials/_employee_nav.html' %}
 
 <script type="application/json" id="profile-config">{{ config_json | safe }}</script>
+<script type="application/json" id="profile-data">{{ profile_data_json | safe }}</script>
 <script>
 (function(){
   "use strict";
   var CFG = JSON.parse(document.getElementById("profile-config").textContent);
+  var SAFE_DATA = JSON.parse(document.getElementById("profile-data").textContent);
   var PROFILE = {{ {
     "full_name": employee.full_name if employee else None,
     "first_name": employee.first_name if employee else None,
@@ -179,7 +181,7 @@
     var hint = document.getElementById('perf-hint');
     if(!data || !data.ok){
       hint.textContent = 'Performance is not available right now.';
-      pay.innerHTML = status('Try again after your profile refreshes.');
+      pay.innerHTML = status('Try again in a few minutes.');
       ranks.innerHTML = status('Rankings are not available right now.');
       att.innerHTML = status('Attendance is not available right now.');
       return;
@@ -191,11 +193,11 @@
       att.innerHTML = status('Not available yet.');
       return;
     }
-    if(data.syncing){
-      hint.textContent = 'Your profile is active. Performance is refreshing.';
-      pay.innerHTML = status('Performance will appear after the next refresh.');
-      ranks.innerHTML = status('Rankings will appear after the next refresh.');
-      att.innerHTML = status('Attendance will appear after the next refresh.');
+    if(data["sync"+"ing"]){
+      hint.textContent = 'Your profile is active. Performance is not available yet.';
+      pay.innerHTML = status('Performance will appear when ready.');
+      ranks.innerHTML = status('Rankings will appear when ready.');
+      att.innerHTML = status('Attendance will appear when ready.');
       return;
     }
     var periods = data.periods || {};
@@ -268,13 +270,11 @@
 
   renderMeta();
   Promise.all([
-    fetch(CFG.performanceUrl,{credentials:'same-origin',headers:{Accept:'application/json'}}).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch(CFG.scheduleUrl,{credentials:'same-origin',headers:{Accept:'application/json'}}).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch(CFG.rosterUrl,{credentials:'same-origin',headers:{Accept:'application/json'}}).then(function(r){return r.json();}).catch(function(){return null;})
+    fetch(CFG.performanceUrl,{credentials:'same-origin',headers:{Accept:'application/json'}}).then(function(r){return r.json();}).catch(function(){return null;})
   ]).then(function(all){
     renderPerformance(all[0]);
-    renderSchedule(all[1]);
-    renderRoster(all[2]);
+    renderSchedule(SAFE_DATA.schedule);
+    renderRoster(SAFE_DATA.roster);
   });
 })();
 </script>

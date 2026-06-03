@@ -64,8 +64,19 @@ def test_my_profile_template_omits_hidden_identity_fields():
         "nonCashSales",
         "GUID",
         "guid",
+        "syncing",
+        "synced",
+        "refresh",
+        "scheduleUrl",
+        "rosterUrl",
+        "/employee/my-schedule/shifts",
+        "/employee/roster",
     ):
         assert forbidden not in template
+
+    assert "profile-data" in template
+    assert "SAFE_DATA.schedule" in template
+    assert "SAFE_DATA.roster" in template
 
     assert "/employee/my-profile" not in open("app/templates/partials/_employee_nav.html", encoding="utf-8").read()
     assert 'href="/employee/my-profile"' in open("app/templates/employee_dashboard.html", encoding="utf-8").read()
@@ -89,6 +100,10 @@ def test_perf_push_sales_wall_catches_camel_case_terms():
         '{"storeTotal": 1}',
         '{"salesBasis": 1}',
         '{"eligibleSalesBasis": 1}',
+        '{"salesAttributed": 1}',
+        '{"salesDollars": 1}',
+        '{"cashAmount": 1}',
+        '{"ccSubtotal": 1}',
     ]
 
     for body in blocked:

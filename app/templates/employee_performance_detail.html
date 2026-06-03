@@ -148,6 +148,10 @@
   function pct(v){const n=Number(v);if(!Number.isFinite(n))return '-';const p=Math.abs(n)<=1?n*100:n;return p.toFixed(1)+'%';}
   function num(v,d=0){const n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'-';}
   function fmt(v,type){return type==='money'?money(v):type==='pct'?pct(v):type==='combined'?pct(v):num(v, type==='decimal'?2:0);}
+  function peerFmt(r,c){
+    if(c[0]==='combined' && r.combined==null && r.combined_rank!=null) return '#'+esc(r.combined_rank);
+    return fmt(r[c[0]], c[2]);
+  }
   function hhmm(s){ if(!s) return '?'; const d=new Date(s); return Number.isNaN(d.getTime())?'?':d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
   // Per-day clock punches (Sam #3254): own clock_in/clock_out list; multi-shift days
   // show each punch, never a misleading single in/out. No pay/tips/sales in here.
@@ -188,7 +192,7 @@
     const body = rows.map(r=>`<div class="peer-row${r.is_me?' me':''}">
         <span class="peer-rank">#${esc(r.rank)}</span>
         <span class="peer-name">${esc(r.name||'-')}${r.is_me?'<span class="you">you</span>':''}</span>
-        ${cols.map(c=>`<span class="peer-val ${c[3]}">${fmt(r[c[0]], c[2])}</span>`).join('')}
+        ${cols.map(c=>`<span class="peer-val ${c[3]}">${peerFmt(r,c)}</span>`).join('')}
       </div>`).join('');
     $(target).innerHTML = `<div class="peer-table ${tipped?'tipped':'boh'}">${head}${body}</div>`;
   }

@@ -2403,6 +2403,50 @@ def _render_training_v3(db, label, active_key):
     )
 
 
+def _active_manager_roster(db, loc):
+    """The ACTIVE Team Roster (the source of truth) for the manager boards
+    — the same active-employee set the Operations Team page shows, via
+    team_roster(). Returns [{employee_id, name, role, toast_name}] for active
+    employees in scope, each mapped to their confirmed Toast name
+    (CenaToastLink) so a board can overlay Toast clock-status. samai (Sam):
+    Counseling + Attendance reflect THIS (active 93), not the raw ~113-row
+    live Toast feed which includes inactive/terminated people."""
+    from app.services.team_roster import team_roster
+    from app.models import CenaToastLink
+    scope = loc if loc in ("tomball", "copperfield") else "all"
+    try:
+        tr = team_roster(db, location=scope)
+    except Exception:
+        logging.getLogger(__name__).exception("active_manager_roster: team_roster failed")
+        return []
+    tn_by_eid = {}
+    try:
+        lq = db.query(CenaToastLink)
+        if loc in ("tomball", "copperfield"):
+            lq = lq.filter(CenaToastLink.store_key == loc)
+        for lk in lq.all():
+            if lk.toast_name and lk.cena_employee_id not in tn_by_eid:
+                tn_by_eid[lk.cena_employee_id] = lk.toast_name
+    except Exception:
+        pass
+    out, seen = [], set()
+    for store in tr.get("stores", []):
+        for e in store.get("employees", []):
+            eid = e.get("id")
+            if eid in seen:
+                continue
+            seen.add(eid)
+            poss = e.get("positions") or []
+            role = (poss[0]["name"] if poss else "") or e.get("domain") or ""
+            out.append({
+                "employee_id": eid,
+                "name": (e.get("full_name") or "").strip(),
+                "role": role,
+                "toast_name": tn_by_eid.get(eid),
+            })
+    return out
+
+
 def _render_employee_counseling_v3(db, label, active_key):
     """Employee Counseling v3 — per-employee board.
 
@@ -2441,29 +2485,23 @@ def _render_employee_counseling_v3(db, label, active_key):
     # Employee roster — every teammate Toast knows, name + role only
     # (clock status is irrelevant here). Falls back to the names already
     # carrying counseling history when Toast is down.
-    roster = {}  # name -> role
+    # Roster = the ACTIVE Team Roster (the source of truth), NOT the raw
+    # Toast feed. samai (Sam): Counseling reflects the Operations Team Roster
+    # (active employees), so inactive/ex Toast-only people no longer appear.
+    roster = {}              # display name (app full_name) -> role
+    toast_name_by_name = {}  # display name -> confirmed Toast name (history match)
     counseling_notice = None
-    try:
-        from app.services.toast_reports import attendance_clock_status
-        tloc = (g.current_location
-                if g.current_location in ("tomball", "copperfield") else None)
-        for rec in attendance_clock_status(date.today(), location_filter=tloc):
-            nm = (rec.get("name") or "").strip()
-            if nm:
-                roster.setdefault(nm, (rec.get("job_title") or "").strip())
-    except Exception as ex:
-        logging.getLogger(__name__).warning(
-            "counseling: Toast roster unavailable: %s", ex)
-        counseling_notice = ("Live employee roster from Toast is unavailable "
-                             "right now — showing employees with counseling "
-                             "history on file.")
-    # Union in everyone who already has counseling history so they are
-    # always clickable even if they have left the Toast roster.
-    for nm in hist:
-        roster.setdefault(nm, "")
+    for _emp in _active_manager_roster(db, g.current_location):
+        nm = _emp["name"]
+        if not nm:
+            continue
+        roster.setdefault(nm, _emp["role"] or "")
+        if _emp.get("toast_name"):
+            toast_name_by_name[nm] = _emp["toast_name"]
 
     def _people_row(rid, name, role):
-        ents = hist.get(name, [])
+        _tn = toast_name_by_name.get(name)
+        ents = hist.get(name) or (hist.get(_tn, []) if _tn else []) or []
         levels = [_counsel_level_norm(e.type_tag) for e in ents]
         issue_count = sum(1 for lv in levels if lv in _COUNSEL_ISSUE_LEVELS)
         # Per-employee timeline, newest first — the slide-over history.
@@ -2696,27 +2734,40 @@ def _render_attendance_v3(db, label, active_key):
             "source": ("toast" if tz else "manual"),
         }
 
-    # Union the roster: every name Toast knows + every name with a
-    # shift logged for the day + everyone seen in the 30-day history.
-    names = set(toast_by_name) | set(shift_by_name) | set(hist)
-    if not names:
-        # Last-resort backstop (Toast down AND nothing logged): show the
-        # active User accounts so the board is never blank.
-        try:
-            from app.models import User
-            uq = db.query(User).filter(User.active.is_(True))
-            if loc in ("tomball", "copperfield"):
-                uq = uq.filter((User.store_scope == loc) |
-                               (User.store_scope == "both") |
-                               (User.store_scope.is_(None)))
-            names = {u.full_name for u in uq.all() if u.full_name}
-        except Exception:
-            names = set()
+    # Roster = the ACTIVE Team Roster (the source of truth), NOT the raw
+    # Toast feed. samai (Sam): Attendance reflects the Operations Team Roster
+    # (active employees). Each active employee shows under their app name;
+    # their Toast clock-status + any logged shift/30-day history is aliased
+    # onto that app name via their confirmed Toast name so overlays match.
+    active = _active_manager_roster(db, loc)
+    role_by_name = {}
+    if active:
+        for _e in active:
+            _an = _e["name"]
+            _tn = _e.get("toast_name")
+            if _e.get("role"):
+                role_by_name[_an] = _e["role"]
+            if _tn and _tn != _an:
+                if _tn in toast_by_name:
+                    toast_by_name.setdefault(_an, toast_by_name[_tn])
+                if _tn in shift_by_name:
+                    shift_by_name.setdefault(_an, shift_by_name[_tn])
+                if _tn in hist:
+                    hist.setdefault(_an, hist[_tn])
+        names = sorted({_e["name"] for _e in active if _e["name"]},
+                       key=lambda n: n.lower())
+    else:
+        # Defensive last-resort (active roster unavailable): the prior
+        # Toast/shift/history union so the board never goes blank.
+        names = sorted(set(toast_by_name) | set(shift_by_name) | set(hist),
+                       key=lambda n: n.lower())
 
     rows = []
-    for rid, name in enumerate(sorted(names, key=lambda n: n.lower())):
-        rows.append(_row(rid, name, shift_by_name.get(name),
-                         toast_by_name.get(name)))
+    for rid, name in enumerate(names):
+        row = _row(rid, name, shift_by_name.get(name), toast_by_name.get(name))
+        if name in role_by_name:
+            row["role"] = role_by_name[name]
+        rows.append(row)
 
     def _n(pred):
         return sum(1 for r in rows if pred(r))

@@ -1,0 +1,239 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Profile Lab Detail{% endblock %}
+{% block page_module %}Profiles{% endblock %}
+{% block page_module_class %}mod-team{% endblock %}
+{% block page_title %}Profile Detail{% endblock %}
+{% block page_meta %}<p>Read-only corporate profile inspection.</p>{% endblock %}
+
+{% block content %}
+<style>
+  .pld-wrap { display:grid; gap:18px; }
+  .pld-head, .pld-card {
+    border:1px solid rgba(217,164,54,.18);
+    background:rgba(12,7,4,.82);
+    border-radius:8px;
+    padding:16px;
+  }
+  .pld-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+  .pld-head h2 { margin:0 0 6px; font-size:26px; }
+  .pld-muted { color:rgba(236,227,208,.62); }
+  .pld-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; }
+  .pld-two { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:18px; }
+  .pld-stat { border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.04); border-radius:8px; padding:12px; }
+  .pld-stat span { display:block; color:rgba(236,227,208,.62); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  .pld-stat strong { display:block; margin-top:5px; color:#fff; font-size:20px; }
+  .pld-card h3 { margin:0 0 12px; font-size:16px; }
+  .pld-table { width:100%; border-collapse:collapse; }
+  .pld-table th, .pld-table td { padding:9px 10px; border-bottom:1px solid rgba(255,255,255,.06); text-align:left; vertical-align:top; font-size:13px; }
+  .pld-table th { color:rgba(236,227,208,.62); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  .pld-table tr:last-child td { border-bottom:0; }
+  .pld-tags { display:flex; flex-wrap:wrap; gap:6px; }
+  .pld-tag { border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.05); border-radius:999px; padding:4px 8px; font-size:12px; color:rgba(236,227,208,.82); }
+  .pld-btn {
+    border:1px solid rgba(217,164,54,.45); border-radius:8px; padding:10px 12px;
+    background:rgba(217,164,54,.14); color:#fff; text-decoration:none; font-weight:700;
+  }
+  @media (max-width: 980px) {
+    .pld-head, .pld-two { display:block; }
+    .pld-grid { grid-template-columns: 1fr; }
+    .pld-head .pld-actions { margin-top:14px; }
+  }
+</style>
+
+<div class="pld-wrap">
+  <section class="pld-head">
+    {% if kind == "employee" %}
+      <div>
+        <h2>{{ profile.identity.name }}</h2>
+        <div class="pld-muted">Employee · {{ "Active" if profile.identity.active else "Inactive" }}</div>
+        <div class="pld-tags" style="margin-top:10px;">
+          {% for store in profile.identity.stores %}<span class="pld-tag">{{ store }}</span>{% endfor %}
+          {% for pos in profile.identity.positions %}<span class="pld-tag">{{ pos.name }}{% if pos.store %} · {{ pos.store }}{% endif %}</span>{% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div>
+        <h2>{{ profile.identity.name }}</h2>
+        <div class="pld-muted">Driver · {{ profile.identity.status }} · {{ profile.identity.home_store }}</div>
+        <div class="pld-tags" style="margin-top:10px;">
+          <span class="pld-tag">{{ "Active" if profile.identity.active else "Inactive" }}</span>
+          <span class="pld-tag">{{ profile.score.tier }}</span>
+          {% if profile.identity.joined_at %}<span class="pld-tag">Joined {{ profile.identity.joined_at }}</span>{% endif %}
+        </div>
+      </div>
+    {% endif %}
+    <div class="pld-actions"><a class="pld-btn" href="{{ base_path }}">Back to lab</a></div>
+  </section>
+
+  {% if kind == "employee" %}
+    <section class="pld-grid">
+      <div class="pld-stat"><span>Profile type</span><strong>{{ "Tipped" if profile.performance.is_tipped else "Non-tipped" }}</strong></div>
+      <div class="pld-stat"><span>Link state</span><strong>{{ "Linked" if profile.performance.linked else "Unlinked" }}</strong></div>
+      <div class="pld-stat"><span>Performance cache</span><strong>{{ "Ready" if profile.performance.has_period_cache else "Not available" }}</strong></div>
+    </section>
+
+    <section class="pld-card">
+      <h3>Period summary</h3>
+      <table class="pld-table">
+        <thead><tr><th>Period</th><th>Hours</th><th>Base pay</th><th>{% if profile.performance.is_tipped %}Tips{% endif %}</th><th>Total</th><th>Effective hourly</th></tr></thead>
+        <tbody>
+          {% for row in profile.performance.periods %}
+          <tr>
+            <td><strong>{{ row.period }}</strong><br><span class="pld-muted">{{ row.range or "Current window" }}</span></td>
+            <td>{{ row.hours }}</td>
+            <td>{{ row.base_pay }}</td>
+            <td>{% if profile.performance.is_tipped %}{{ row.tips }}{% endif %}</td>
+            <td>{{ row.total_pay }}</td>
+            <td>{{ row.effective_hourly }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="pld-muted">No sanitized performance cache is available for this employee.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="pld-two">
+      <div class="pld-card">
+        <h3>Rank state</h3>
+        <table class="pld-table">
+          <thead><tr><th>Metric</th><th>Rank</th><th>Status</th><th>Value</th></tr></thead>
+          <tbody>
+            {% for row in profile.performance.rank_metrics %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{% if row.rank %}#{{ row.rank }}{% if row.cohort_size %} of {{ row.cohort_size }}{% endif %}{% else %}Not available{% endif %}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.value if row.value is not none else "Not available" }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="pld-muted">No rank cache is available.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pld-card">
+        <h3>Schedule</h3>
+        <table class="pld-table">
+          <thead><tr><th>When</th><th>Time</th><th>Position</th><th>Response</th></tr></thead>
+          <tbody>
+            {% for row in profile.schedule.shifts %}
+            <tr><td>{{ row.date_label }}</td><td>{{ row.time_label }}</td><td>{{ row.position_name or "Shift" }}</td><td>{{ row.response }}</td></tr>
+            {% else %}
+            <tr><td colspan="4" class="pld-muted">No own published shifts in the current profile window.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="pld-card">
+      <h3>Roster preview</h3>
+      <table class="pld-table">
+        <thead><tr><th>Name</th><th>Position</th><th>Store</th><th>Next shift</th></tr></thead>
+        <tbody>
+          {% for row in profile.roster.coworkers %}
+          <tr><td>{{ row.name }}</td><td>{{ row.position or "Team" }}</td><td>{{ row.store }}</td><td>{{ row.shift_when }} · {{ row.shift_label }}</td></tr>
+          {% else %}
+          <tr><td colspan="4" class="pld-muted">No roster rows in the profile window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {% for board in profile.performance.leaderboards %}
+    <section class="pld-card">
+      <h3>{{ board.label }} leaderboard</h3>
+      <table class="pld-table">
+        <thead><tr><th>Rank</th><th>Name</th><th>Effective hourly</th>{% if profile.performance.is_tipped %}<th>Tip %</th><th>Tips/hr</th><th>Combined</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for row in board.rows %}
+          <tr>
+            <td>#{{ row.rank }}</td>
+            <td>{{ row.name }}{% if row.is_me %} <span class="pld-muted">(this profile)</span>{% endif %}</td>
+            <td>{{ row.effective_hourly if row.effective_hourly is defined else "Not available" }}</td>
+            {% if profile.performance.is_tipped %}
+              <td>{{ row.tip_percent if row.tip_percent is defined else "Not available" }}</td>
+              <td>{{ row.tips_per_hour if row.tips_per_hour is defined else "Not available" }}</td>
+              <td>{{ row.combined if row.combined is defined else "Not available" }}</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endfor %}
+  {% else %}
+    <section class="pld-grid">
+      <div class="pld-stat"><span>Score</span><strong>{{ profile.score.score if profile.score.score is not none else "Not available" }}</strong></div>
+      <div class="pld-stat"><span>Active work</span><strong>{{ profile.operations.active_orders }} orders</strong></div>
+      <div class="pld-stat"><span>Requests</span><strong>{{ profile.operations.pending_requests }} pending</strong></div>
+    </section>
+
+    <section class="pld-two">
+      <div class="pld-card">
+        <h3>Driver score</h3>
+        <table class="pld-table">
+          <tbody>
+            <tr><th>Window</th><td>{{ profile.score.window }}</td></tr>
+            <tr><th>Tracking</th><td>{{ profile.score.tracking_pts if profile.score.tracking_pts is not none else "Not available" }}</td></tr>
+            <tr><th>On time</th><td>{{ profile.score.on_time_pts if profile.score.on_time_pts is not none else "Not available" }}</td></tr>
+            <tr><th>Cancellation</th><td>{{ profile.score.cancellation_pts if profile.score.cancellation_pts is not none else "Not available" }}</td></tr>
+            <tr><th>Photo</th><td>{{ profile.score.photo_pts if profile.score.photo_pts is not none else "Not available" }}</td></tr>
+            <tr><th>Response</th><td>{{ profile.score.response_pts if profile.score.response_pts is not none else "Not available" }}</td></tr>
+            <tr><th>Five-star</th><td>{{ profile.score.star_pts if profile.score.star_pts is not none else "Not available" }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pld-card">
+        <h3>Operations snapshot</h3>
+        <table class="pld-table">
+          <tbody>
+            <tr><th>Delivered today</th><td>{{ profile.operations.delivered_today }}</td></tr>
+            <tr><th>Lifetime deliveries</th><td>{{ profile.identity.lifetime_delivery_count }}</td></tr>
+            <tr><th>Open shift</th><td>{{ profile.operations.open_shift_started or "Not on shift" }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="pld-card">
+      <h3>Pay history</h3>
+      <table class="pld-table">
+        <thead><tr><th>Period</th><th>Closed</th><th>Gross</th><th>Net</th></tr></thead>
+        <tbody>
+          {% for row in profile.paychecks %}
+          <tr><td>{{ row.period }}</td><td>{{ row.closed_at }}</td><td>{{ row.gross_amount }}</td><td>{{ row.net_amount }}</td></tr>
+          {% else %}
+          <tr><td colspan="4" class="pld-muted">No closed driver paychecks.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="pld-card">
+      <h3>Recent driver score logs</h3>
+      <table class="pld-table">
+        <thead><tr><th>Date</th><th>Extra miles</th><th>On time</th><th>Tracking</th><th>Photo</th><th>Five-star</th></tr></thead>
+        <tbody>
+          {% for row in profile.logs %}
+          <tr>
+            <td>{{ row.pickup_date }}</td>
+            <td>{{ row.ex_miles_verified if row.ex_miles_verified is not none else row.ex_miles }}</td>
+            <td>{{ "Yes" if row.on_time else "No" }}</td>
+            <td>{{ "Yes" if row.tracking else "No" }}</td>
+            <td>{{ "Yes" if row.picture else "No" }}</td>
+            <td>{{ "Yes" if row.five_star else "No" }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="pld-muted">No driver score logs.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

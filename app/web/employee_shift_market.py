@@ -52,14 +52,12 @@ def _parse_exp(v):
 
 def _ser_offer(o):
     return {"id": o.id, "shift_id": o.shift_id,
-            "offered_by": o.offered_by_employee_id, "taken_by": o.taken_by_employee_id,
             "status": o.status, "restricted": o.restricted,
             "expires_at": o.expires_at.isoformat() if o.expires_at else None}
 
 
 def _ser_swap(s):
     return {"id": s.id, "from_shift_id": s.from_shift_id, "to_shift_id": s.to_shift_id,
-            "from_employee_id": s.from_employee_id, "to_employee_id": s.to_employee_id,
             "status": s.status,
             "expires_at": s.expires_at.isoformat() if s.expires_at else None}
 

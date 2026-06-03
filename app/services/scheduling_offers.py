@@ -118,11 +118,15 @@ def shift_card(db, shift_id) -> dict | None:
 
 
 def emp_ref(db, employee_id) -> dict | None:
-    """{id, name} for an employee, or None."""
+    """Employee display reference for employee-facing marketplace cards.
+
+    Action endpoints use offer/swap/shift ids, so coworker employee ids do not
+    need to leave the server.
+    """
     if not employee_id:
         return None
     e = db.query(Employee).filter_by(id=employee_id).first()
-    return {"id": employee_id, "name": (e.full_name if e else None)}
+    return {"name": (e.full_name if e else None)}
 
 
 def offer_card(db, o) -> dict:

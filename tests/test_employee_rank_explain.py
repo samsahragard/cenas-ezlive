@@ -14,6 +14,27 @@ def test_performance_center_does_not_emit_peer_source_key():
     assert "'peer_source'" not in source
 
 
+def test_my_performance_uses_sanitized_cache_only():
+    source = open("app/web/employee_auth.py", encoding="utf-8").read()
+    start = source.index('def my_performance():')
+    end = source.index('@employee_auth.route("/employee/performance-center"', start)
+    body = source[start:end]
+
+    assert "read_snapshot" not in body
+    assert '"timecards"' not in body
+    assert '"performance"' not in body
+    assert '"payroll"' not in body
+
+
+def test_employee_marketplace_person_refs_hide_employee_ids():
+    service = open("app/services/scheduling_offers.py", encoding="utf-8").read()
+    template = open("app/templates/employee_shift_marketplace.html", encoding="utf-8").read()
+    emp_ref = service[service.index("def emp_ref"):service.index("def offer_card")]
+
+    assert '"id"' not in emp_ref
+    assert "(\"#\"+p.id)" not in template
+
+
 def test_dashboard_rank_links_keep_selected_period():
     template = open("app/templates/employee_dashboard.html", encoding="utf-8").read()
 

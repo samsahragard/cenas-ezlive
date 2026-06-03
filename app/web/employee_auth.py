@@ -334,10 +334,10 @@ def my_performance():
     cena_toast_link row, which is partner-verified). No confirmed link ->
     {ok:true, linked:false} (the dashboard panel stays hidden).
 
-    Serves from the cached ToastEmployeeSnapshot (refreshed in the background by
-    toast_sync -- Sam #2845): a fast DB read, NEVER a live Toast pull, so a page
-    load can't 502. Linked but not synced yet / last pull failed -> {syncing:true}
-    (the panel shows a 'pending sync' note). Scoped strictly to
+    Serves from the CK-pushed sanitized perf caches only. Linked but not synced
+    yet / cache read hiccup -> {syncing:true}. The old ToastEmployeeSnapshot
+    fallback is intentionally not used here because snapshots can contain
+    internal Toast GUIDs and sales-derived report fields. Scoped strictly to
     session['employee_id'] -- zero cross-employee data (the B2 guarantee)."""
     emp_id = session.get("employee_id")
     if not emp_id:
@@ -363,7 +363,7 @@ def my_performance():
             pc_rows = (db.query(PerfPeriodCache)
                          .filter(PerfPeriodCache.cena_employee_id == emp.id).all())
         except Exception:
-            pc_rows = []   # fresh-table/read hiccup -> fall back to snapshot, never 500
+            pc_rows = []   # fresh-table/read hiccup -> clean pending state, never raw fallback
         if pc_rows:
             _ord = {"today": 0, "week": 1, "month": 2, "last30": 3}
             perf_periods = sorted(([{
@@ -399,7 +399,7 @@ def my_performance():
             # ranks + per-cohort leaderboards (peers carry ONLY name+rank+allowed
             # metrics; min-cohort-gated). Sanitized at the CK source + sales-wall-
             # guarded at the receiver; this read returns it verbatim, scoped to
-            # emp.id. Absent (Yadira-only Phase 4 / non-pilot) -> key simply omitted.
+            # emp.id. Absent rank cache -> key simply omitted.
             ranking = None
             try:
                 from app.models import PerfRankCache, sanitize_rank_json
@@ -429,57 +429,10 @@ def my_performance():
                 resp["ranking"] = ranking
             return jsonify(resp), 200
 
-        # Aggregate the employee's confirmed links from the cached snapshot
-        # (usually one store). No live Toast call in the request path.
-        from app.services.toast_sync import read_snapshot
-        total_hours = 0.0
-        timecards: list[dict] = []
-        performance: dict = {"available": False}
-        gross_pay = 0.0
-        pay_available = False
-        stores_seen: list[str] = []
-        any_ok = False
-        synced_at = None
-        for ln in links:
-            snap = read_snapshot(ln.store_key, ln.toast_id)
-            if not snap or not snap.get("ok"):
-                continue  # not synced yet / last pull failed -> pending
-            any_ok = True
-            stores_seen.append(ln.store_key)
-            total_hours += float(snap.get("hours") or 0)
-            timecards.extend(snap.get("timecards") or [])
-            perf = snap.get("performance") or {}
-            if perf.get("available") and not performance.get("available"):
-                performance = perf
-            pay = snap.get("payroll") or {}
-            if pay.get("available"):
-                pay_available = True
-                gross_pay += float(pay.get("gross_pay") or 0)
-            if snap.get("synced_at"):
-                synced_at = snap["synced_at"]
-
-        if not any_ok:
-            # Linked, but no successful snapshot yet -> "pending sync" (not an
-            # error). The background poller fills it within ~15 min.
-            return jsonify({"ok": True, "linked": True, "syncing": True}), 200
-
-        timecards.sort(key=lambda t: (t.get("in") or ""), reverse=True)  # newest first
-        payroll = ({"available": True, "estimated": True,
-                    "gross_pay": round(gross_pay, 2), "hours": round(total_hours, 2)}
-                   if pay_available else
-                   {"available": False,
-                    "note": "Pay appears once Toast Payroll creds are wired."})
-        return jsonify({
-            "ok": True,
-            "linked": True,
-            "syncing": False,
-            "stores": stores_seen,
-            "hours": round(total_hours, 2),
-            "timecards": timecards,
-            "performance": performance,
-            "payroll": payroll,
-            "synced_at": synced_at,
-        }), 200
+        # Linked, but no sanitized cache is available yet. Fail closed: no old
+        # ToastEmployeeSnapshot fallback, because those snapshots may carry Toast
+        # GUIDs and sales-derived report fields that are not employee-visible.
+        return jsonify({"ok": True, "linked": True, "syncing": True}), 200
     finally:
         db.close()
 
@@ -558,8 +511,8 @@ def performance_center():
 
         # Sanitized ranking (own ranks + per-cohort leaderboards). The read-path
         # sanitizer strips peer rows to the field whitelist; structure (is_tipped,
-        # ranks, leaderboards) is preserved. Absent (non-pilot) -> treat as BOH-
-        # safe: no rankings, no tip keys.
+        # ranks, leaderboards) is preserved. Absent rank cache -> treat as BOH-safe:
+        # no rankings, no tip keys.
         ranking = {}
         raw_ranking = {}
         try:

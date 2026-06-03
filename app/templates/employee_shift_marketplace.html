@@ -5,9 +5,9 @@
    ck owns this template + the GET /employee/shift-marketplace page route.
    ckai owns the data + action endpoints (locked #1996/#1998, B7-style split).
    LIST rows are rich (embed shift detail + names):
-     offer = {id,status,restricted,expires_at,offered_by:{id,name},
-              taken_by:{id,name}|null, shift:{id,start_at,end_at,position_name,store}}
-     swap  = {id,status,expires_at,from_employee:{id,name},to_employee:{id,name},
+     offer = {id,status,restricted,expires_at,offered_by:{name},
+              taken_by:{name}|null, shift:{id,start_at,end_at,position_name,store}}
+     swap  = {id,status,expires_at,from_employee:{name},to_employee:{name},
               from_shift:{..shift..}, to_shift:{..shift..}}
    Endpoints (via config):
      GET  openListUrl   /employee/shift-marketplace/list -> {ok, offers:[offer]}   (take-able)
@@ -18,7 +18,7 @@
      POST swapBase/propose {from_shift_id,to_shift_id,expires_at?}
      POST swapBase/<id>/accept | /cancel
      GET  candidatesUrl /employee/shift-swaps/candidates?from_shift_id=<mine>
-            -> {ok, candidates:[{shift_id,start_at,end_at,position_name,employee:{id,name}}]}
+            -> {ok, candidates:[{shift_id,start_at,end_at,position_name,employee:{name}}]}
      GET  myShiftsUrl   /employee/my-schedule/shifts (B5) -> {ok, shifts:[{id,start_at,end_at,position_name,response,...}]}
 #}
 <!DOCTYPE html>
@@ -222,7 +222,7 @@
   function hm(iso){ var t=String(iso||"").split("T")[1]||"00:00"; var p=t.split(":"); return {h:+p[0]||0,m:+p[1]||0}; }
   function fmtT(iso){ var x=hm(iso),h=x.h; var ap=h>=12?"p":"a"; var hh=h%12; if(hh===0)hh=12; return x.m?(hh+":"+(x.m<10?"0"+x.m:x.m)+ap):(hh+ap); }
   function shiftLine(sh){ if(!sh) return ""; var d=isoToDate(sh.start_at); var day=d?(DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()):""; return day+"  "+fmtT(sh.start_at)+"-"+fmtT(sh.end_at); }
-  function nm(p){ return (p && p.name) ? p.name : (p && p.id ? ("#"+p.id) : ""); }
+  function nm(p){ return (p && p.name) ? p.name : "Team member"; }
 
   var toastTimer=null;
   function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); if(toastTimer)clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove("show");},3400); }

@@ -350,8 +350,8 @@
   <div class="footnote">Schedules V2 &middot; more tools arriving block by block</div>
 </div>
 
-{# House bottom nav. Dashboard is the hub — no single tab represents it,
-   so no active_nav is passed (no tab is highlighted here). #}
+{# House bottom nav. Dashboard is the Today hub. #}
+{% set active_nav = 'today' %}
 {% include 'partials/_employee_nav.html' %}
 
 <script>
@@ -375,6 +375,14 @@
     function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
     function show(){ card.hidden = false; var pe=document.getElementById('perf-empty'); if(pe){ pe.hidden=true; } }
+    function emptyState(title, msg){
+      var pe=document.getElementById('perf-empty');
+      if(!pe){ return; }
+      var t=pe.querySelector('.es-title'), m=pe.querySelector('.es-msg');
+      if(t){ t.textContent=title; }
+      if(m){ m.textContent=msg; }
+      pe.hidden=false;
+    }
     function note(txt){ var n=document.getElementById('perf-note'); n.textContent=txt; n.hidden=!txt; }
     function pending(){
       show();
@@ -564,11 +572,15 @@
       .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status:r.status, d:d }; }); })
       .then(function(res){
         var d = res.d || {};
-        // Yadira-only (Sam #2984): render ONLY when the performance feed has data.
-        // Every other case (other employees, not-linked, pending, error) leaves the
-        // card hidden until wider rollout is approved -- no misleading note, no old
-        // render path. render() reads only the employee-own whitelist fields.
+        // Staff-wide profile rollout: render the performance card only when the
+        // employee-own sanitized feed has data. Pending/no-link cases keep the
+        // polished shell and show a professional unavailable state instead.
         if (d && d.ok && d.linked && (d.perf_periods || d.shifts)) render(d);
+        else if (d && d.ok && d.linked && d.syncing) {
+          emptyState('Performance is syncing', 'Your profile is active. Your schedule, roster, time off, and alerts are available while performance data refreshes.');
+        } else if (d && d.ok && d.linked === false) {
+          emptyState('Your profile is ready', 'Your schedule, roster, time off, and alerts are available. Performance data appears when your profile is linked and verified.');
+        }
       })
       .catch(function(){ /* leave the card hidden */ });
   })();

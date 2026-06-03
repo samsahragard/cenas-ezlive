@@ -138,6 +138,7 @@
     </section>
   </section>
 </main>
+{% set active_nav = 'today' %}
 {% include 'partials/_employee_nav.html' %}
 <script>
   const METRIC_KEY = {{ metric_key|tojson }};

@@ -1,0 +1,122 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Profile Lab{% endblock %}
+{% block page_module %}Profiles{% endblock %}
+{% block page_module_class %}mod-team{% endblock %}
+{% block page_title %}Profile Lab{% endblock %}
+{% block page_meta %}<p>Corporate read-only profile testing surface.</p>{% endblock %}
+
+{% block content %}
+<style>
+  .pl-wrap { display: grid; gap: 18px; }
+  .pl-hero {
+    border: 1px solid rgba(217,164,54,.22);
+    background: rgba(20,12,8,.74);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .pl-kpis { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+  .pl-kpi { border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.04); border-radius:8px; padding:12px; }
+  .pl-kpi span { display:block; color:rgba(236,227,208,.62); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+  .pl-kpi strong { display:block; margin-top:5px; font-size:24px; color:#fff; }
+  .pl-search { display:flex; gap:8px; align-items:center; margin-top: 16px; }
+  .pl-search input {
+    flex:1; min-width: 160px; border:1px solid rgba(217,164,54,.22); border-radius:8px;
+    background: rgba(0,0,0,.28); color:#fff; padding:10px 12px;
+  }
+  .pl-btn {
+    border:1px solid rgba(217,164,54,.45); border-radius:8px; padding:10px 12px;
+    background:rgba(217,164,54,.14); color:#fff; text-decoration:none; font-weight:700;
+  }
+  .pl-grid { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:18px; align-items:start; }
+  .pl-card { border:1px solid rgba(217,164,54,.18); background:rgba(12,7,4,.82); border-radius:8px; overflow:hidden; }
+  .pl-card h2 { margin:0; padding:14px 16px; font-size:16px; border-bottom:1px solid rgba(255,255,255,.08); }
+  .pl-table { width:100%; border-collapse:collapse; }
+  .pl-table th, .pl-table td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.06); vertical-align:top; font-size:13px; }
+  .pl-table th { text-align:left; color:rgba(236,227,208,.62); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  .pl-table tr:last-child td { border-bottom:0; }
+  .pl-muted { color:rgba(236,227,208,.62); }
+  .pl-tags { display:flex; flex-wrap:wrap; gap:5px; }
+  .pl-tag { border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.05); border-radius:999px; padding:3px 7px; font-size:11px; color:rgba(236,227,208,.82); }
+  .pl-state { color:#e4b340; font-weight:700; }
+  @media (max-width: 980px) {
+    .pl-grid, .pl-kpis { grid-template-columns: 1fr; }
+    .pl-search { flex-direction:column; align-items:stretch; }
+  }
+</style>
+
+<div class="pl-wrap">
+  <section class="pl-hero">
+    <h2 style="margin:0 0 6px;">Corporate profile lab</h2>
+    <p class="pl-muted" style="margin:0;">Explicit admin view for checking employee and driver profile data without switching their sessions or changing live workflow state.</p>
+    <div class="pl-kpis">
+      <div class="pl-kpi"><span>Employees</span><strong>{{ counts.employees }}</strong></div>
+      <div class="pl-kpi"><span>Drivers</span><strong>{{ counts.drivers }}</strong></div>
+      <div class="pl-kpi"><span>Linked</span><strong>{{ counts.linked }}</strong></div>
+      <div class="pl-kpi"><span>Cached</span><strong>{{ counts.cached }}</strong></div>
+    </div>
+    <form class="pl-search" method="get" action="{{ base_path }}">
+      <input name="q" value="{{ q }}" placeholder="Search name, store, role, status">
+      <button class="pl-btn" type="submit">Search</button>
+      {% if q %}<a class="pl-btn" href="{{ base_path }}">Clear</a>{% endif %}
+    </form>
+  </section>
+
+  <section class="pl-grid">
+    <div class="pl-card">
+      <h2>Employees</h2>
+      <table class="pl-table">
+        <thead><tr><th>Name</th><th>Role / store</th><th>State</th><th></th></tr></thead>
+        <tbody>
+          {% for row in employees %}
+          <tr>
+            <td>
+              <strong>{{ row.name }}</strong><br>
+              <span class="pl-muted">{{ "Active" if row.active else "Inactive" }}</span>
+            </td>
+            <td>
+              <div class="pl-tags">
+                {% for store in row.stores %}<span class="pl-tag">{{ store }}</span>{% endfor %}
+                {% for pos in row.positions[:3] %}<span class="pl-tag">{{ pos.name }}{% if pos.store %} · {{ pos.store }}{% endif %}</span>{% endfor %}
+              </div>
+            </td>
+            <td>
+              <span class="pl-state">{{ "Tipped" if row.is_tipped else "Non-tipped" }}</span><br>
+              <span class="pl-muted">{{ "Linked" if row.linked else "Unlinked" }} · {{ "Cache ready" if row.has_cache else "No cache" }}</span>
+            </td>
+            <td><a class="pl-btn" href="{{ row.href }}">Open</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="pl-muted">No employees found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pl-card">
+      <h2>Drivers</h2>
+      <table class="pl-table">
+        <thead><tr><th>Name</th><th>Store</th><th>State</th><th></th></tr></thead>
+        <tbody>
+          {% for row in drivers %}
+          <tr>
+            <td>
+              <strong>{{ row.name }}</strong><br>
+              <span class="pl-muted">{{ "Active" if row.active else "Inactive" }}</span>
+            </td>
+            <td>{{ row.home_store }}</td>
+            <td>
+              <span class="pl-state">{{ row.tier }}</span><br>
+              <span class="pl-muted">{{ row.status }}{% if row.score is not none %} · {{ row.score }} pts{% endif %}</span>
+            </td>
+            <td><a class="pl-btn" href="{{ row.href }}">Open</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="pl-muted">No drivers found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

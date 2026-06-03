@@ -579,7 +579,8 @@ def performance_center():
         rj_lb = ranking.get("leaderboards") or {}
         # metric_key (UI) -> rank_json metric name
         RJ = {"effective_hourly": "effective_hourly",
-              "tip_pct": "tip_percent", "tips_per_hour": "tips_per_hour"}
+              "tip_pct": "tip_percent", "tips_per_hour": "tips_per_hour",
+              "combined": "combined"}
 
         def _shifts_in(r):
             lo, hi = r.period_start, r.period_end  # ISO 'YYYY-MM-DD' strings
@@ -655,8 +656,24 @@ def performance_center():
             rj = RJ[mk]
             lb = (rj_lb.get(period) or {}).get(rj) or {}
             rows = lb.get("rows") or []
-            ranked = [{"rank": x.get("rank"), "name": x.get("name"),
-                       "value": x.get(rj)} for x in rows if x.get("rank")]
+            ranked = []
+            for x in rows:
+                if not x.get("rank"):
+                    continue
+                row = {
+                    "rank": x.get("rank"),
+                    "name": x.get("name"),
+                    "is_me": bool(x.get("is_me")),
+                }
+                # Peer rows are already sanitized to RANK_PEER_FIELDS. Preserve the
+                # allowed comparison columns so rank detail pages can explain who is
+                # in the cohort and how they are doing without exposing private
+                # identifiers or internal calculation details.
+                for key in ("effective_hourly", "tip_percent", "tips_per_hour",
+                            "combined", "combined_rank"):
+                    if key in x:
+                        row[key] = x.get(key)
+                ranked.append(row)
             ranked.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
             return ranked
 
@@ -682,7 +699,7 @@ def performance_center():
                 money["tips_per_hour"] = (round(tips / hours, 4) if hours > 0 else None)
                 tp = ((rj_ranks.get(period) or {}).get("tip_percent") or {}).get("value")
                 money["tip_pct"] = (round(float(tp), 1) if tp is not None else None)
-                metrics += ["tip_pct", "tips_per_hour"]
+                metrics += ["tip_pct", "tips_per_hour", "combined"]
 
             rankings = {}
             for mk in metrics:
@@ -696,6 +713,19 @@ def performance_center():
                     "days_ranked": 0, "days_at_current_rank": 0, "history": [],
                     "leaders": ranked[:3],
                     "bottom": (ranked[-3:] if len(ranked) > 3 else []),
+                    "peers": ranked,
+                }
+            score = (rj_ranks.get(period) or {}).get("score") or {}
+            if score:
+                peer_source = "combined" if is_tipped and "combined" in rankings else "effective_hourly"
+                rankings["standing"] = {
+                    "status": score.get("status"),
+                    "standing_percentile": score.get("standing_percentile"),
+                    "band": score.get("band"),
+                    "peer_source": peer_source,
+                    "peers": (rankings.get(peer_source) or {}).get("peers") or [],
+                    "leaders": (rankings.get(peer_source) or {}).get("leaders") or [],
+                    "bottom": (rankings.get(peer_source) or {}).get("bottom") or [],
                 }
 
             # daily breakdown from per-shift cache (grouped by business_date)
@@ -747,7 +777,8 @@ def performance_center():
 _PERF_DETAIL_METRICS = {
     "total_pay", "tips", "base_pay", "effective_hourly", "tips_per_hour",
     "tip_pct", "shifts", "attendance",
-    "rank_effective_hourly", "rank_tip_pct", "rank_tips_per_hour",
+    "rank_standing", "rank_effective_hourly", "rank_tip_pct",
+    "rank_tips_per_hour", "rank_combined",
 }
 
 

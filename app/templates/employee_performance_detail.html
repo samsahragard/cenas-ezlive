@@ -42,10 +42,21 @@
   .row .num{color:var(--text);font-weight:900;}
   .leaders{margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .leader{padding:12px;}
+  .leader.full{grid-column:1/-1;}
   .leader h3{font-size:14px;color:var(--gold);margin-bottom:8px;}
   .leader-line{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;padding:7px 0;border-top:1px solid rgba(255,250,241,.09);font-size:13px;color:var(--muted);}
   .leader-line:first-of-type{border-top:0;}
   .leader-line b{color:var(--text);}
+  .peer-table{display:grid;gap:0;}
+  .peer-row{display:grid;grid-template-columns:44px minmax(120px,1fr) repeat(4,minmax(70px,.55fr));gap:8px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,250,241,.09);font-size:12.5px;color:var(--muted);}
+  .peer-table.boh .peer-row{grid-template-columns:44px minmax(120px,1fr) minmax(70px,.55fr);}
+  .peer-row:first-child{border-top:0;}
+  .peer-row.me{color:var(--text);}
+  .peer-row .peer-rank,.peer-row .peer-val{font-weight:900;color:var(--text);}
+  .peer-row .peer-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800;color:var(--text);}
+  .peer-row .you{margin-left:5px;color:var(--gold-soft);font-size:10px;text-transform:uppercase;}
+  .peer-head{color:var(--dim);font-size:10px;text-transform:uppercase;font-weight:900;letter-spacing:.3px;}
+  .peer-head .peer-name,.peer-head .peer-rank,.peer-head .peer-val{color:var(--dim);}
   .state{margin-top:14px;padding:18px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);color:var(--muted);}
   .note{color:var(--muted);font-size:13px;line-height:1.5;}
   .hidden{display:none!important;}
@@ -57,6 +68,9 @@
     .leaders{grid-template-columns:1fr;}
     .row{grid-template-columns:1fr 1fr;align-items:start;}
     .row .date{grid-column:1/-1;}
+    .peer-row{grid-template-columns:40px minmax(110px,1fr) repeat(2,minmax(70px,.55fr));}
+    .peer-table.boh .peer-row{grid-template-columns:40px minmax(110px,1fr) minmax(70px,.55fr);}
+    .peer-row .optional-mobile{display:none;}
   }
 </style>
 </head>
@@ -100,8 +114,7 @@
       <h2>Peer ranking</h2>
       <div class="sub" id="rank-sub"></div>
       <div class="leaders">
-        <div class="leader"><h3>Top</h3><div id="leaders"></div></div>
-        <div class="leader"><h3>Bottom</h3><div id="bottom"></div></div>
+        <div class="leader full"><h3>Team list</h3><div id="peers"></div></div>
       </div>
       <div class="rows" id="rank-history"></div>
     </section>
@@ -112,7 +125,7 @@
   const METRIC_KEY = {{ metric_key|tojson }};
   // Tip metrics surface ONLY for tipped roles; a BOH employee sees a clean
   // role-aware state instead (Sam #3077 / #3120 -- coherent, not empty holes).
-  const TIP_METRICS = new Set(['tips','tip_pct','tips_per_hour','rank_tip_pct','rank_tips_per_hour']);
+  const TIP_METRICS = new Set(['tips','tip_pct','tips_per_hour','rank_tip_pct','rank_tips_per_hour','rank_combined']);
   const state = { payload:null, period:new URLSearchParams(location.search).get('period') || 'last30' };
   const $ = (id) => document.getElementById(id);
   const configs = {
@@ -124,14 +137,17 @@
     tip_pct:{label:'Tip percentage', field:'tip_pct', type:'pct', note:'Tip percentage for closed checks in the selected period.'},
     shifts:{label:'Shifts', field:'shifts', type:'number', note:'Toast time entries counted as shifts.'},
     attendance:{label:'Attendance', field:'attendance', type:'number', note:'Late and missed records documented locally by management.'},
+    rank_standing:{label:'Your standing', rank:'standing', type:'standing', note:'Your standing summarizes the role-appropriate ranking signals available for this period.'},
     rank_effective_hourly:{label:'Hourly rank', rank:'effective_hourly', type:'money', note:'Your effective hourly compared with peers in the same tip group.'},
     rank_tip_pct:{label:'Tip percentage rank', rank:'tip_pct', type:'pct', note:'Your tip percentage compared with peers in the same tip group.'},
     rank_tips_per_hour:{label:'Tips per hour rank', rank:'tips_per_hour', type:'money', note:'Your tips per hour compared with peers in the same tip group.'},
+    rank_combined:{label:'Combined rank', rank:'combined', type:'combined', note:'Combined rank averages the available tipped-role ranking signals into one percentile-style comparison.'},
   };
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function money(v){const n=Number(v);return Number.isFinite(n)?'$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'-';}
-  function pct(v){const n=Number(v);return Number.isFinite(n)?n.toFixed(1)+'%':'-';}
+  function pct(v){const n=Number(v);if(!Number.isFinite(n))return '-';const p=Math.abs(n)<=1?n*100:n;return p.toFixed(1)+'%';}
   function num(v,d=0){const n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'-';}
-  function fmt(v,type){return type==='money'?money(v):type==='pct'?pct(v):num(v, type==='decimal'?2:0);}
+  function fmt(v,type){return type==='money'?money(v):type==='pct'?pct(v):type==='combined'?pct(v):num(v, type==='decimal'?2:0);}
   function hhmm(s){ if(!s) return '?'; const d=new Date(s); return Number.isNaN(d.getTime())?'?':d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
   // Per-day clock punches (Sam #3254): own clock_in/clock_out list; multi-shift days
   // show each punch, never a misleading single in/out. No pay/tips/sales in here.
@@ -152,9 +168,29 @@
     return Number.isNaN(d.getTime())?raw:d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
   }
   function show(id){['loading','error','noteligible','page'].forEach(k=>$(k).classList.toggle('hidden',k!==id));}
-  function card(label,value){return `<div class="card"><b>${value}</b><span>${label}</span></div>`;}
-  function renderLeader(target, rows, type){
-    $(target).innerHTML = (rows||[]).map(r=>`<div class="leader-line"><b>#${r.rank}</b><span>${r.name||'-'}</span><b>${fmt(r.value,type)}</b></div>`).join('') || '<div class="leader-line"><span>No peer data</span></div>';
+  function card(label,value){return `<div class="card"><b>${esc(value)}</b><span>${esc(label)}</span></div>`;}
+  function renderPeers(target, rows){
+    rows = rows || [];
+    if(!rows.length){
+      $(target).innerHTML = '<div class="leader-line"><span>No peer data</span></div>';
+      return;
+    }
+    const tipped = !!(state.payload && state.payload.is_tipped);
+    const cols = tipped
+      ? [
+          ['effective_hourly','Hourly','money',''],
+          ['tip_percent','Tip %','pct',''],
+          ['tips_per_hour','Tips/hr','money','optional-mobile'],
+          ['combined','Combined','combined','optional-mobile']
+        ]
+      : [['effective_hourly','Hourly','money','']];
+    const head = `<div class="peer-row peer-head"><span class="peer-rank">Rank</span><span class="peer-name">Person</span>${cols.map(c=>`<span class="peer-val ${c[3]}">${c[1]}</span>`).join('')}</div>`;
+    const body = rows.map(r=>`<div class="peer-row${r.is_me?' me':''}">
+        <span class="peer-rank">#${esc(r.rank)}</span>
+        <span class="peer-name">${esc(r.name||'-')}${r.is_me?'<span class="you">you</span>':''}</span>
+        ${cols.map(c=>`<span class="peer-val ${c[3]}">${fmt(r[c[0]], c[2])}</span>`).join('')}
+      </div>`).join('');
+    $(target).innerHTML = `<div class="peer-table ${tipped?'tipped':'boh'}">${head}${body}</div>`;
   }
   function render(){
     const tipped = !!state.payload.is_tipped;
@@ -167,29 +203,63 @@
 
     const m = p.money || {};
     const att = p.attendance || {};
-    const value = cfg.rank ? (p.rankings||{})[cfg.rank] : (cfg.field === 'attendance' ? (att.late||0)+(att.missed||0) : m[cfg.field]);
-    $('big-value').textContent = cfg.rank ? (value && value.rank ? `#${value.rank}` : '-') : fmt(value, cfg.type);
-
-    // Summary cards -- tip cards only for tipped roles (BOH gets a coherent set).
-    const cards = [
-      card('Hours', num(m.hours,2)),
-      card('Base pay', money(m.base_pay)),
-      card('Total pay', money(m.total_pay)),
-    ];
-    if (tipped){
-      cards.push(card('Tips', money(m.tips)), card('Tips / hr', money(m.tips_per_hour)), card('Tip %', pct(m.tip_pct)));
+    const rankInfo = cfg.rank ? ((p.rankings||{})[cfg.rank] || {}) : null;
+    const value = cfg.rank ? rankInfo : (cfg.field === 'attendance' ? (att.late||0)+(att.missed||0) : m[cfg.field]);
+    if(cfg.rank === 'standing'){
+      const pctile = value && typeof value.standing_percentile === 'number'
+        ? Math.round(Math.max(1, Math.min(100, 100 - value.standing_percentile))*10)/10
+        : null;
+      $('big-value').textContent = pctile == null ? '-' : `Top ${pctile}%`;
+    } else {
+      $('big-value').textContent = cfg.rank ? (value && value.rank ? `#${value.rank}` : '-') : fmt(value, cfg.type);
     }
-    cards.push(card('Effective / hr', money(m.effective_hourly)), card('Shifts', num(m.shifts)),
-               card('Attendance issues', num((att.late||0)+(att.missed||0))));
+
+    let cards;
+    if (cfg.rank){
+      const count = (rankInfo.peers||[]).length || rankInfo.cohort_size || 0;
+      const rankLabel = cfg.rank === 'standing' ? 'Standing' : 'Your rank';
+      const rankValue = cfg.rank === 'standing'
+        ? $('big-value').textContent
+        : (rankInfo.rank ? `#${rankInfo.rank}` : '-');
+      const ownValue = cfg.rank === 'standing' ? (rankInfo.band || 'Role-safe') : fmt(rankInfo.value, cfg.type);
+      cards = [
+        card(rankLabel, rankValue),
+        card('Your value', ownValue),
+        card('Compare group', count ? num(count) : '-'),
+      ];
+    } else {
+      // Summary cards -- tip cards only for tipped roles (BOH gets a coherent set).
+      cards = [
+        card('Hours', num(m.hours,2)),
+        card('Base pay', money(m.base_pay)),
+        card('Total pay', money(m.total_pay)),
+      ];
+      if (tipped){
+        cards.push(card('Tips', money(m.tips)), card('Tips / hr', money(m.tips_per_hour)), card('Tip %', pct(m.tip_pct)));
+      }
+      cards.push(card('Effective / hr', money(m.effective_hourly)), card('Shifts', num(m.shifts)),
+                 card('Attendance issues', num((att.late||0)+(att.missed||0))));
+    }
     $('summary-grid').innerHTML = cards.join('');
 
     if (cfg.rank){
       $('daily-section').classList.add('hidden');
       $('rank-section').classList.remove('hidden');
-      const r = (p.rankings||{})[cfg.rank] || {};
-      $('rank-sub').textContent = r.days_ranked ? `Held current rank on ${r.days_at_current_rank || 0} of ${r.days_ranked} ranked day(s) in this period.` : 'No day-by-day rank history yet.';
-      renderLeader('leaders', r.leaders, cfg.type);
-      renderLeader('bottom', r.bottom, cfg.type);
+      const r = rankInfo;
+      const count = (r.peers||[]).length || r.cohort_size || 0;
+      const rows = (r.status === 'not_eligible' || r.status === 'cohort_too_small') ? [] : (r.peers || r.leaders || []);
+      if(r.status === 'not_eligible'){
+        $('rank-sub').textContent = 'This metric is not available for your role in this period.';
+      } else if(r.status === 'cohort_too_small'){
+        $('rank-sub').textContent = 'This comparison group is too small to rank yet. A ranking appears once enough qualifying teammates are available.';
+      } else if(!rows.length){
+        $('rank-sub').textContent = 'No team list is available for this period yet.';
+      } else {
+        $('rank-sub').textContent = cfg.rank === 'standing'
+          ? 'Standing is based on the available role-safe rank signals for this period. The team list below shows the people in the comparison group and only the allowed rank numbers.'
+          : `This list shows the ${count || 'available'} people in your same eligible comparison group. It includes only approved rank numbers, with no hidden IDs, raw totals, or calculation details.`;
+      }
+      renderPeers('peers', rows);
       $('rank-history').innerHTML = (r.history||[]).map(row=>`
         <div class="row">
           <strong class="date">${dateLabel(row.date)}</strong>

@@ -177,6 +177,9 @@
   /* Phase 5.1 ranking surface */
   .rank-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:13px; }
   .rcard{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:12px; padding:12px 8px; text-align:center; }
+  a.rcard{ display:block; color:inherit; text-decoration:none; transition:transform 100ms ease, filter 100ms ease; }
+  a.rcard:hover{ transform:translateY(-1px); filter:brightness(1.06); }
+  a.rcard:active{ transform:translateY(0); }
   .rcard-rank{ font-size:21px; font-weight:800; color:var(--blue-deep); line-height:1.05; }
   .rcard-rank .of{ font-size:12px; font-weight:600; color:rgba(244,231,208,0.6); }
   .rcard-gate{ font-size:11px; font-weight:700; color:rgba(228,179,64,0.85); line-height:1.25; }
@@ -455,30 +458,41 @@
     //     `ranking` block (own ranks + per-cohort leaderboards). Peer rows carry only
     //     name + rank + allowed metrics; min-cohort-gated cohorts show "too small". No
     //     peer pay breakdown; held-days stays pending (no faked history). ---
-    function pctTxt(v){ return v==null ? '' : (Math.round((Number(v)||0)*1000)/10) + '%'; }
-    function rcard(o, lbl, fmt){
+    function pctTxt(v){
+      if(v==null) return '';
+      var n=Number(v);
+      if(!Number.isFinite(n)) return '';
+      var p=Math.abs(n)<=1 ? n*100 : n;
+      return (Math.round(p*10)/10) + '%';
+    }
+    function rcard(o, lbl, fmt, href){
       var gate=null;
       // Server-side role gate (Sam #3077): BOH/non-tipped payloads OMIT tip/combined objects
       // entirely; the UI infers a clean 'Not eligible' from role metadata (is_tipped=false).
       if(!o) gate = (RANK && RANK.is_tipped===false) ? 'Not<br>eligible' : 'Not<br>ranked';
       else if(o.status==='not_eligible') gate='Not<br>eligible';
       else if(o.status==='cohort_too_small' || o.rank==null) gate='Cohort<br>too small';
-      if(gate) return '<div class="rcard"><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></div>';
+      var tag = href ? 'a class="rcard" href="'+esc(href)+'"' : 'div class="rcard"';
+      var close = href ? 'a' : 'div';
+      if(gate) return '<'+tag+'><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></'+close+'>';
       var val = (fmt && o.value!=null) ? '<div class="rcard-val">'+fmt(o.value)+'</div>' : '';
-      return '<div class="rcard"><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
-             '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</div>';
+      return '<'+tag+'><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
+             '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</'+close+'>';
     }
     // Score tile (own-view only): relative STANDING, not a letter grade. The band word
     // (e.g. "Strong") is a secondary sub-label. Gates cleanly to "Not available".
-    function scard(score){
+    function scard(score, href){
+      var tag = href ? 'a class="rcard" href="'+esc(href)+'"' : 'div class="rcard"';
+      var close = href ? 'a' : 'div';
       var gate = '<div class="rcard-gate">Not<br>available</div><div class="rcard-lbl">Your standing</div>';
       if(!score || score.status==='not_available' || typeof score.standing_percentile !== 'number'){
-        return '<div class="rcard">'+gate+'</div>';
+        return '<'+tag+'>'+gate+'</'+close+'>';
       }
-      var top = Math.max(1, 100 - score.standing_percentile);
+      var top = Math.max(1, Math.min(100, 100 - score.standing_percentile));
+      top = Math.round(top*10)/10;
       var band = score.band ? '<div class="rcard-val">'+esc(score.band)+'</div>' : '';
-      return '<div class="rcard"><div class="rcard-rank">Top '+top+'<span class="of">%</span></div>'+
-             '<div class="rcard-lbl">Your standing</div>'+band+'</div>';
+      return '<'+tag+'><div class="rcard-rank">Top '+top+'<span class="of">%</span></div>'+
+             '<div class="rcard-lbl">Your standing</div>'+band+'</'+close+'>';
     }
     function lbBoard(b, title, key, fmt){
       if(!b){ return ''; }
@@ -503,15 +517,18 @@
       var tipped = (RANK.is_tipped === true);  // fail-closed (samai #3274 / FLAG-2): tip-rank presentation ONLY when explicitly tipped
       var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
       var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
+      var detailHref = function(metric){
+        return '/employee/performance/'+metric+'?period='+encodeURIComponent(sel);
+      };
       // BOH/non-tipped: OMIT the tip-rank cards entirely (samai #3274) -- no greyed
       // "Not eligible" tip cards; show only role-applicable cards (standing + hourly rank).
       document.getElementById('rank-grid').innerHTML =
-        scard(R.score) +
-        rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }) +
+        scard(R.score, detailHref('rank_standing')) +
+        rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }, detailHref('rank_effective_hourly')) +
         (tipped ? (
-          rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }) +
-          rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }) +
-          rcard(R.combined, 'Combined', null)
+          rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }, detailHref('rank_tip_pct')) +
+          rcard(R.tips_per_hour, 'Tips per hour rank', function(v){ return money(v)+'/hr'; }, detailHref('rank_tips_per_hour')) +
+          rcard(R.combined, 'Combined', null, detailHref('rank_combined'))
         ) : '');
       // De-bulk (Sam #3254): the FULL leaderboards live one tap away on the metric
       // detail pages; the dashboard keeps a compact rankings summary only.

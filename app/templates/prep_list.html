@@ -1127,11 +1127,10 @@
         {% for it in sec['items'] %}{{ detail_card(it) }}{% endfor %}
       {% endfor %}
     </div>
+    <div class="prep-backdrop" id="prepBackdrop" onclick="prepCloseDetail()"></div>
 
   </div>
 </div>
-
-<div class="prep-backdrop" id="prepBackdrop" onclick="prepCloseDetail()"></div>
 
 {# Shared staff roster for the "Assigned to" typeahead. Every assign
    input points at this <datalist> via list="prep-staff-list"; the

@@ -3060,38 +3060,106 @@ def _fmt_qty(val):
     return f"{val:.2f}".rstrip("0").rstrip(".")
 
 
+# Unit conversion for merging same-name ingredients across recipes. Units in
+# the same family convert to a base; we sum then express in the largest unit
+# that appeared among the merged entries. Unknown/non-convertible units (e.g.
+# "bag", "can") can't be added to a "cup", so they stay grouped by their own
+# unit and are shown alongside on the one ingredient row.
+_UNIT_FAMILY = {
+    "tsp": ("vol", 1.0), "teaspoon": ("vol", 1.0), "teaspoons": ("vol", 1.0),
+    "tbsp": ("vol", 3.0), "tablespoon": ("vol", 3.0), "tablespoons": ("vol", 3.0),
+    "cup": ("vol", 48.0), "cups": ("vol", 48.0),
+    "pint": ("vol", 96.0), "pints": ("vol", 96.0), "pt": ("vol", 96.0),
+    "quart": ("vol", 192.0), "quarts": ("vol", 192.0), "qt": ("vol", 192.0), "qts": ("vol", 192.0),
+    "gallon": ("vol", 768.0), "gallons": ("vol", 768.0), "gal": ("vol", 768.0), "gall": ("vol", 768.0),
+    "oz": ("wt", 1.0), "ounce": ("wt", 1.0), "ounces": ("wt", 1.0),
+    "lb": ("wt", 16.0), "lbs": ("wt", 16.0), "pound": ("wt", 16.0), "pounds": ("wt", 16.0),
+}
+_FAMILY_DISPLAY = {
+    "vol": [("GAL", 768.0), ("QT", 192.0), ("CUP", 48.0), ("TBSP", 3.0), ("TSP", 1.0)],
+    "wt": [("LB", 16.0), ("OZ", 1.0)],
+}
+
+
+def _norm_unit(unit):
+    """Normalize a unit to a lookup key: lowercase, fold 'tea spoon'/'table
+    spoon', take the leading token (drops trailing notes like '(1bag)')."""
+    u = (unit or "").strip().lower()
+    if not u:
+        return ""
+    u = u.replace("tea spoon", "tsp").replace("teaspoon", "tsp")
+    u = u.replace("table spoon", "tbsp").replace("tablespoon", "tbsp")
+    parts = u.split()
+    tok = parts[0] if parts else u
+    return tok.strip("().,:;")
+
+
 def _prep_total_ingredients(sel_views):
-    """Sum ingredients across all selected items' linked recipes, grouped by
-    (ingredient name, unit). samai #14 — 'add up all the chopped onions'.
-    Parseable amounts are summed; mixed/unparseable units are listed raw."""
-    agg = {}
-    order = []
+    """Sum ingredients across all selected items' linked recipes into ONE row
+    per ingredient NAME (samai #14 — 'add up all the chopped onions'). Same-
+    name quantities merge: compatible units (volume / weight) convert to a
+    common base and sum into a single total, expressed in the largest unit
+    present; non-convertible units (e.g. 'bag' vs 'cup') sum within their own
+    unit and are shown together on the one row."""
+    by_name = {}
+    name_order = []
     for v in sel_views:
         for ing in (v.get("ingredients") or []):
             name = (ing.get("name") or "").strip()
             if not name:
                 continue
             qty = (ing.get("qty") or "").strip()
-            val, unit = _parse_qty(qty)
-            key = (name.lower(), (unit or "").lower())
-            if key not in agg:
-                agg[key] = {"name": name, "unit": unit or "",
-                            "total": 0.0, "ok": True, "raw": []}
-                order.append(key)
-            slot = agg[key]
-            slot["raw"].append(qty or "?")
-            if val is None:
-                slot["ok"] = False
+            val, raw_unit = _parse_qty(qty)
+            nkey = name.lower()
+            if nkey not in by_name:
+                by_name[nkey] = {"name": name, "groups": {}, "gorder": []}
+                name_order.append(nkey)
+            rec = by_name[nkey]
+            norm = _norm_unit(raw_unit)
+            fam = _UNIT_FAMILY.get(norm)
+            if val is not None and fam is not None:
+                gkey = ("fam", fam[0])
+                g = rec["groups"].get(gkey)
+                if g is None:
+                    g = {"kind": "fam", "fam": fam[0], "base_total": 0.0, "seen": set()}
+                    rec["groups"][gkey] = g
+                    rec["gorder"].append(gkey)
+                g["base_total"] += val * fam[1]
+                g["seen"].add(fam[1])
             else:
-                slot["total"] += val
+                gkey = ("raw", norm)
+                g = rec["groups"].get(gkey)
+                if g is None:
+                    g = {"kind": "raw", "unit": (raw_unit or "").strip(),
+                         "total": 0.0, "ok": True, "raw": []}
+                    rec["groups"][gkey] = g
+                    rec["gorder"].append(gkey)
+                g["raw"].append(qty or "?")
+                if val is None:
+                    g["ok"] = False
+                else:
+                    g["total"] += val
+
     out = []
-    for key in order:
-        slot = agg[key]
-        if slot["ok"]:
-            disp = (f"{_fmt_qty(slot['total'])} {slot['unit']}").strip()
-        else:
-            disp = " + ".join(slot["raw"])
-        out.append({"name": slot["name"], "qty": disp})
+    for nkey in name_order:
+        rec = by_name[nkey]
+        parts = []
+        for gkey in rec["gorder"]:
+            g = rec["groups"][gkey]
+            if g["kind"] == "fam":
+                disp_units = _FAMILY_DISPLAY[g["fam"]]
+                biggest = max(g["seen"]) if g["seen"] else 1.0
+                label, factor = disp_units[-1]
+                for lbl, fac in disp_units:
+                    if fac <= biggest + 1e-9:
+                        label, factor = lbl, fac
+                        break
+                parts.append((f"{_fmt_qty(g['base_total'] / factor)} {label}").strip())
+            elif g["ok"]:
+                parts.append((f"{_fmt_qty(g['total'])} {g['unit']}").strip())
+            else:
+                parts.append(" + ".join(g["raw"]))
+        out.append({"name": rec["name"], "qty": " + ".join(p for p in parts if p)})
     out.sort(key=lambda x: x["name"].lower())
     return out
 

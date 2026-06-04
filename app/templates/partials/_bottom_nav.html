@@ -43,7 +43,7 @@
    popover block was removed.
 
    Per-role (tab set mirrors sidebar.html's section set):
-     - driver  → "My Work" 4-tab bar (Ez Market / Profile / Pay / Tracking)
+     - driver  → "My Work" 5-tab bar (Ez Market / Orders / Profile / Pay / Status)
      - expo    → 4 tabs, Manager dropped
      - others  → 5 tabs (Today / Manager / Catering / Operations / Vendors)
 
@@ -204,9 +204,10 @@
   {% if user_role == 'driver' %}
     {% for href, key, icon, label in [
       ('/ez-market',   'ez_market',   'ti-flame',     'Ez Market'),
+      ('/driver/orders','driver_orders','ti-clipboard-list','Orders'),
       ('/my-profile',  'my_profile',  'ti-user-star', 'Profile'),
       ('/pay-history', 'pay_history', 'ti-receipt',   'Pay'),
-      ('/driver/logs', 'driver_logs', 'ti-map-pin',   'Tracking'),
+      ('/driver/logs', 'driver_logs', 'ti-map-pin',   'Status'),
     ] %}
     <a href="{{ href }}" class="ck-bnav-tab{% if _bn_active == key %} active{% endif %}">
       <i class="ti {{ icon }} bn-ico" aria-hidden="true"></i>

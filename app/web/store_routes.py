@@ -27,7 +27,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, date
 
 from app.db import get_db
-from app.models import Driver, DriverShift, DriverLocation
+from app.models import Driver, DriverShift, DriverLocation, Order
 from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
 # Phase 0 Block 4 (ck, 2026-05-13): permission gating per samai's spec.
 from app.services.permissions import requires_permission
@@ -966,11 +966,14 @@ def drivers_live_positions():
                       .first())
             if not latest:
                 continue
+            active_order = db.get(Order, latest.order_id) if latest.order_id else None
             seconds_ago = max(0, int((now - latest.captured_at).total_seconds()))
             results.append({
                 "driver_id":      drv.id,
                 "name":           drv.name,
                 "location":       drv.location,
+                "order_id":       latest.order_id,
+                "order_number":   active_order.external_order_id if active_order else None,
                 "shift_started":  shift.started_at.isoformat() + "Z",
                 "lat":            latest.lat,
                 "lng":            latest.lng,
@@ -1107,6 +1110,7 @@ def driver_shift_track(driver_id: int, shift_id: int):
             "points": [
                 {
                     "lat": p.lat, "lng": p.lng,
+                    "order_id": p.order_id,
                     "captured_at": p.captured_at.isoformat() + "Z",
                     "accuracy_m": p.accuracy_m,
                     "speed_mps": p.speed_mps,

@@ -13,15 +13,29 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from random import SystemRandom
 
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 from app.db import get_db
-from app.models import Driver, DriverLog, DriverShift, DriverLocation
+from app.models import Driver, DriverLog, DriverShift, DriverLocation, Order
+from app.services import delivery_lifecycle as lifecycle
 
 driver = Blueprint("driver", __name__)
 
@@ -37,6 +51,7 @@ LOCKOUT_DURATION = timedelta(minutes=10)
 PIN_LEN = 5
 PIN_RE = re.compile(rf"^[\d*#@+%\-$]{{{PIN_LEN}}}$")
 _rnd = SystemRandom()
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 
 
 def _normalize_email(raw: str) -> str:
@@ -50,6 +65,138 @@ def _valid_pin(s: str) -> bool:
 def _generate_temp_pin() -> str:
     """A random 5-digit numeric temp PIN (no special chars for verbal hand-off)."""
     return "".join(str(_rnd.randint(0, 9)) for _ in range(PIN_LEN))
+
+
+def _format_driver_dt(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    try:
+        from zoneinfo import ZoneInfo
+
+        local = value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("America/Chicago"))
+        return local.strftime("%b %d %I:%M %p").replace(" 0", " ")
+    except Exception:
+        return value.strftime("%b %d %I:%M %p")
+
+
+def _save_driver_order_image(file_storage, driver_id: int, order_id: int, kind: str) -> str | None:
+    """Persist one driver order image under static/uploads and return its URL."""
+    if not file_storage or not file_storage.filename:
+        return None
+    safe = secure_filename(file_storage.filename)
+    ext = Path(safe).suffix.lower()
+    if ext not in _IMAGE_EXTS:
+        raise ValueError("Only image uploads are allowed.")
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    filename = f"{kind}-{stamp}{ext}"
+    rel_dir = Path("uploads") / "driver_orders" / str(driver_id) / str(order_id)
+    target_dir = Path(current_app.static_folder) / rel_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    file_storage.save(target_dir / filename)
+    return url_for("static", filename=(rel_dir / filename).as_posix())
+
+
+def _parse_parking_cost(raw: str | None) -> float | None:
+    text = (raw or "").strip().replace("$", "").replace(",", "")
+    if not text:
+        return None
+    value = float(text)
+    if value < 0:
+        raise ValueError("Parking cost cannot be negative.")
+    return round(value, 2)
+
+
+def _has_driver_tracking_since(db, driver_id: int, since: datetime | None) -> bool:
+    return _has_driver_tracking_for_order_since(db, driver_id, None, since)
+
+
+def _has_driver_tracking_for_order_since(
+    db,
+    driver_id: int,
+    order_id: int | None,
+    since: datetime | None,
+) -> bool:
+    if order_id is not None:
+        order_q = (
+            db.query(DriverLocation)
+            .filter(DriverLocation.driver_id == driver_id)
+            .filter(DriverLocation.order_id == order_id)
+        )
+        if order_q.count() > 0:
+            return True
+    q = db.query(DriverLocation).filter(DriverLocation.driver_id == driver_id)
+    if since is not None:
+        q = q.filter(DriverLocation.captured_at >= since - timedelta(minutes=5))
+    return q.count() > 0
+
+
+def _bind_recent_tracking_to_order(db, driver_id: int, order: Order) -> int:
+    """Attach our local GPS fixes to the active order when possible.
+
+    This keeps tracking based on the Cenas driver GPS stream, not ezCater's
+    external tracker, while preserving the existing shift playback.
+    """
+    since = order.en_route_at or order.pickup_actual_at
+    q = (
+        db.query(DriverLocation)
+        .filter(DriverLocation.driver_id == driver_id)
+        .filter(DriverLocation.order_id.is_(None))
+    )
+    if since is not None:
+        q = q.filter(DriverLocation.captured_at >= since - timedelta(minutes=5))
+    bound = 0
+    for loc in q.all():
+        loc.order_id = order.id
+        bound += 1
+    return bound
+
+
+def _sync_driver_status_log(db, driver_row: Driver, order: Order) -> None:
+    order_href = (
+        url_for("orders_browse.view_order", external_order_id=order.external_order_id)
+        if order.external_order_id else f"/orders/view/{order.id}"
+    )
+    log = (
+        db.query(DriverLog)
+        .filter(DriverLog.driver_name == driver_row.name)
+        .filter(DriverLog.location == driver_row.location)
+        .filter(DriverLog.order_link == order_href)
+        .first()
+    )
+    if log is None:
+        log = DriverLog(
+            driver_name=driver_row.name,
+            pickup_date=order.delivery_date or datetime.utcnow().date().isoformat(),
+            order_link=order_href,
+            location=driver_row.location,
+            logged_by="driver_portal",
+        )
+        db.add(log)
+    log.pickup_date = order.delivery_date or log.pickup_date
+    log.ex_miles = round(order.pickup_miles) if order.pickup_miles is not None else None
+    verified = order.pay_verified_miles
+    if verified is None and order.pickup_miles is not None:
+        verified = max(0.0, order.pickup_miles - 20.0)
+    log.ex_miles_verified = round(verified) if verified is not None else None
+    log.on_time = bool(
+        order.delivered_actual_at
+        and order.delivery_window_end
+        and order.delivered_actual_at <= order.delivery_window_end
+    )
+    log.tracking = (order.tracking_status or "").strip().lower() == "tracked"
+    log.picture = bool(order.setup_photo_url)
+    log.five_star = bool(order.pay_five_star or order.customer_rating == 5)
+    parking_note = ""
+    if order.parking_cost is not None:
+        parking_note = f" Parking ${order.parking_cost:.2f}"
+        if order.parking_photo_url:
+            parking_note += " with receipt."
+        else:
+            parking_note += " no receipt."
+    log.notes = (
+        f"Completed {_format_driver_dt(order.delivered_actual_at) if order.delivered_actual_at else 'pending'}."
+        f"{parking_note}"
+    )
 
 
 @driver.route("/driver", methods=["GET"])
@@ -383,6 +530,147 @@ def driver_logs():
         db.close()
 
 
+@driver.route("/driver/orders", methods=["GET"])
+def driver_orders():
+    driver_id = session.get("driver_id")
+    if not driver_id:
+        return redirect(url_for("driver.driver_login"))
+    db = next(get_db())
+    try:
+        found = db.get(Driver, driver_id)
+        if not found or not found.active:
+            session.pop("driver_id", None)
+            session.pop("driver_name", None)
+            session.pop("driver_location", None)
+            return redirect(url_for("driver.driver_login"))
+        orders = (
+            db.query(Order)
+            .filter(Order.assigned_driver_id == found.id)
+            .filter(Order.status.in_(["approved", "picked_up", "en_route", "delivered"]))
+            .order_by(Order.delivery_date.asc(), Order.deliver_at.asc(), Order.id.asc())
+            .all()
+        )
+        return render_template(
+            "driver_orders.html",
+            active="driver_orders",
+            driver=found,
+            location_label=LOCATION_LABELS.get(found.location, found.location),
+            orders=orders,
+            fmt_driver_dt=_format_driver_dt,
+        )
+    finally:
+        db.close()
+
+
+@driver.route("/driver/orders/<int:order_id>/start", methods=["POST"])
+def driver_order_start(order_id: int):
+    driver_id = session.get("driver_id")
+    if not driver_id:
+        return redirect(url_for("driver.driver_login"))
+    db = next(get_db())
+    try:
+        order = db.get(Order, order_id)
+        if not order or order.assigned_driver_id != driver_id:
+            abort(404)
+        found = db.get(Driver, driver_id)
+        if not found:
+            abort(404)
+        try:
+            order.assigned_driver = found.name
+            order.ezcater_driver_name = found.name
+            if order.status == "approved":
+                lifecycle.mark_picked_up(db, order)
+                lifecycle.mark_en_route(db, order)
+            elif order.status == "picked_up":
+                lifecycle.mark_en_route(db, order)
+            elif order.status in {"en_route", "delivered"}:
+                pass
+            else:
+                raise lifecycle.IllegalTransition(f"can't start from status={order.status!r}")
+            session["driver_active_order_id"] = order.id
+            _bind_recent_tracking_to_order(db, driver_id, order)
+            db.commit()
+            flash("Delivery started and timestamped.", "ok")
+        except lifecycle.IllegalTransition as exc:
+            db.rollback()
+            flash(str(exc), "error")
+        return redirect(url_for("driver.driver_orders"))
+    finally:
+        db.close()
+
+
+@driver.route("/driver/orders/<int:order_id>/complete", methods=["POST"])
+def driver_order_complete(order_id: int):
+    driver_id = session.get("driver_id")
+    if not driver_id:
+        return redirect(url_for("driver.driver_login"))
+    db = next(get_db())
+    try:
+        order = db.get(Order, order_id)
+        if not order or order.assigned_driver_id != driver_id:
+            abort(404)
+        found = db.get(Driver, driver_id)
+        if not found:
+            abort(404)
+
+        try:
+            now = datetime.utcnow()
+            delivery_photo_url = _save_driver_order_image(
+                request.files.get("delivery_photo"),
+                driver_id,
+                order.id,
+                "delivery",
+            )
+            parking_photo_url = _save_driver_order_image(
+                request.files.get("parking_photo"),
+                driver_id,
+                order.id,
+                "parking",
+            )
+            parking_cost = _parse_parking_cost(request.form.get("parking_cost"))
+
+            if delivery_photo_url:
+                order.setup_photo_url = delivery_photo_url
+                order.setup_photo_uploaded_at = now
+            if parking_photo_url:
+                order.parking_photo_url = parking_photo_url
+                order.parking_photo_uploaded_at = now
+            if parking_cost is not None:
+                order.parking_cost = parking_cost
+            order.assigned_driver = found.name
+            order.ezcater_driver_name = found.name
+
+            if order.status == "approved":
+                lifecycle.mark_picked_up(db, order)
+                lifecycle.mark_en_route(db, order)
+                lifecycle.mark_delivered(db, order, setup_photo_url=delivery_photo_url)
+            elif order.status == "picked_up":
+                lifecycle.mark_en_route(db, order)
+                lifecycle.mark_delivered(db, order, setup_photo_url=delivery_photo_url)
+            elif order.status == "en_route":
+                lifecycle.mark_delivered(db, order, setup_photo_url=delivery_photo_url)
+            elif order.status == "delivered":
+                # Already complete; allow proof/cost corrections without bumping
+                # lifetime delivery count a second time.
+                pass
+            else:
+                raise lifecycle.IllegalTransition(f"can't complete from status={order.status!r}")
+
+            _bind_recent_tracking_to_order(db, driver_id, order)
+            if _has_driver_tracking_for_order_since(db, driver_id, order.id, order.en_route_at or order.pickup_actual_at):
+                order.tracking_status = "Tracked"
+            _sync_driver_status_log(db, found, order)
+            session.pop("driver_active_order_id", None)
+            db.commit()
+            flash("Delivery completion saved and timestamped.", "ok")
+        except (ValueError, lifecycle.IllegalTransition) as exc:
+            db.rollback()
+            flash(str(exc), "error")
+        return redirect(url_for("driver.driver_orders"))
+    finally:
+        db.close()
+
+
 @driver.route("/driver/logout", methods=["GET", "POST"])
 def driver_logout():
     # Accept GET as well as POST — sidebar logout links are plain anchors,
@@ -453,6 +741,7 @@ def driver_shift_end():
                       .first())
         if open_shift:
             open_shift.ended_at = datetime.utcnow()
+            session.pop("driver_active_order_id", None)
             db.commit()
             return jsonify({"ended_shift_id": open_shift.id})
         return jsonify({"ended_shift_id": None, "note": "no open shift"})
@@ -510,9 +799,23 @@ def driver_track():
                       .first())
         if not open_shift:
             return jsonify({"error": "no open shift — tap Start shift first"}), 409
+        order_id = None
+        raw_order_id = session.get("driver_active_order_id")
+        if raw_order_id:
+            active_order = db.get(Order, int(raw_order_id))
+            if (
+                active_order
+                and active_order.assigned_driver_id == driver_id
+                and active_order.status in {"approved", "picked_up", "en_route"}
+            ):
+                order_id = active_order.id
+                active_order.tracking_status = "Tracked"
+            else:
+                session.pop("driver_active_order_id", None)
         loc = DriverLocation(
             shift_id=open_shift.id,
             driver_id=driver_id,
+            order_id=order_id,
             lat=lat,
             lng=lng,
             accuracy_m=_safe_float(payload.get("accuracy_m")),
@@ -520,8 +823,13 @@ def driver_track():
             heading_deg=_safe_float(payload.get("heading_deg")),
         )
         db.add(loc)
+        d = db.get(Driver, driver_id)
+        if d is not None:
+            d.last_known_lat = lat
+            d.last_known_lng = lng
+            d.last_location_at = datetime.utcnow()
         db.commit()
-        return jsonify({"ok": True, "id": loc.id})
+        return jsonify({"ok": True, "id": loc.id, "order_id": order_id})
     finally:
         db.close()
 

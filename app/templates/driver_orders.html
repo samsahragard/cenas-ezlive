@@ -1,0 +1,236 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Driver Orders — Cenas Kitchen{% endblock %}
+
+{% block page_module %}DRIVER{% endblock %}
+{% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Orders</span>{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">{{ driver.name }} · {{ location_label }} · {{ orders|length }} assigned orders</p>
+{% endblock %}
+{% block topbar_right %}
+  <form action="{{ url_for('driver.driver_logout') }}" method="POST" style="margin:0;">
+    <button type="submit" class="btn-logout">Sign out</button>
+  </form>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .do-flash { padding: 8px 14px; margin-bottom: 10px; border-radius: 8px; font-size: 13px; }
+  .do-flash.ok { background: #241610; color: #9CCB76; border-left: 3px solid #9CCB76; }
+  .do-flash.error { background: #241610; color: #E2645C; border-left: 3px solid #E2645C; }
+
+  .do-help {
+    background: #241610;
+    border-left: 2px solid rgba(228,179,64,0.45);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: rgba(236,227,208,0.75);
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 16px;
+  }
+
+  .do-table-wrap {
+    background: #241610;
+    border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 12px;
+    overflow-x: auto;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .do-table {
+    width: 100%;
+    min-width: 1040px;
+    border-collapse: collapse;
+    color: #FAF6EC;
+  }
+  .do-table th,
+  .do-table td {
+    border-bottom: 1px solid rgba(236,227,208,0.09);
+    border-right: 1px solid rgba(236,227,208,0.08);
+    padding: 10px 10px;
+    vertical-align: top;
+    font-size: 12px;
+  }
+  .do-table th {
+    color: #FAF6EC;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: left;
+    background: rgba(0,0,0,0.16);
+  }
+  .do-table td:last-child,
+  .do-table th:last-child { border-right: none; }
+  .do-table tbody tr:last-child td { border-bottom: none; }
+  .do-date { color: #FFD970; font-weight: 700; }
+  .do-sub { margin-top: 3px; color: rgba(236,227,208,0.55); font-size: 11px; }
+  .do-link { color: #FFD970; text-decoration: none; font-weight: 700; }
+  .do-link:hover { text-decoration: underline; }
+  .do-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(217,164,54,0.22);
+    color: rgba(236,227,208,0.78);
+    background: rgba(0,0,0,0.18);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .do-badge.done { color: #9CCB76; border-color: rgba(156,203,118,0.45); }
+  .do-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #E4B340;
+    color: #140A06;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .do-btn.secondary {
+    background: transparent;
+    color: #FFD970;
+    border: 1px solid rgba(217,164,54,0.35);
+  }
+  .do-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .do-file input {
+    max-width: 155px;
+    color: rgba(236,227,208,0.75);
+    font-size: 11px;
+  }
+  .do-proof-link {
+    display: inline-block;
+    margin-top: 5px;
+    color: #9CCB76;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .do-cost {
+    width: 92px;
+    box-sizing: border-box;
+    background: rgba(0,0,0,0.26);
+    color: #FAF6EC;
+    border: 1px solid rgba(217,164,54,0.22);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font: inherit;
+  }
+  .do-empty {
+    padding: 30px;
+    text-align: center;
+    color: rgba(236,227,208,0.55);
+    font-style: italic;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, msg in messages %}
+    <div class="do-flash {{ category }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="do-help">
+  Start Delivery timestamps the order as in route. Delivery Complete timestamps completion and saves any delivery photo, parking receipt photo, and parking cost entered on that row.
+</div>
+
+<div class="do-table-wrap">
+  <table class="do-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Order #</th>
+        <th>Start Delivery</th>
+        <th>Picture</th>
+        <th>Parking Picture</th>
+        <th>Parking Cost</th>
+        <th>Delivery Complete</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if orders %}
+        {% for o in orders %}
+        {% set form_id = 'driver-order-complete-' ~ o.id %}
+        {% set gps_linked = (o.tracking_status or '')|lower == 'tracked' %}
+        <tr>
+          <td>
+            <div class="do-date">{{ o.delivery_date or 'No date' }}</div>
+            <div class="do-sub">{{ o.deliver_at or 'No time' }}</div>
+            <div class="do-sub">{{ o.delivery_address or '' }}</div>
+          </td>
+          <td>
+            {% if o.external_order_id %}
+              <a class="do-link" href="{{ url_for('orders_browse.view_order', external_order_id=o.external_order_id) }}" target="_blank">{{ o.external_order_id }}</a>
+            {% else %}
+              <span class="do-link">#{{ o.id }}</span>
+            {% endif %}
+            <div class="do-sub">{{ o.client or 'Order details pending' }}</div>
+            <div class="do-badge{% if o.status == 'delivered' %} done{% endif %}">{{ o.status }}</div>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('driver.driver_order_start', order_id=o.id) }}">
+              <button class="do-btn secondary" type="submit" {% if o.status in ['en_route', 'delivered'] %}disabled{% endif %}>
+                Start Delivery
+              </button>
+            </form>
+            {% if o.en_route_at %}
+              <div class="do-sub">Started {{ fmt_driver_dt(o.en_route_at) }}</div>
+            {% elif o.pickup_actual_at %}
+              <div class="do-sub">Picked up {{ fmt_driver_dt(o.pickup_actual_at) }}</div>
+            {% else %}
+              <div class="do-sub">Not started</div>
+            {% endif %}
+            {% if gps_linked %}
+              <div class="do-sub">GPS linked</div>
+            {% endif %}
+          </td>
+          <td class="do-file">
+            <input form="{{ form_id }}" type="file" name="delivery_photo" accept="image/*" capture="environment">
+            {% if o.setup_photo_url %}
+              <a class="do-proof-link" href="{{ o.setup_photo_url }}" target="_blank">View picture</a>
+              {% if o.setup_photo_uploaded_at %}
+                <div class="do-sub">{{ fmt_driver_dt(o.setup_photo_uploaded_at) }}</div>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td class="do-file">
+            <input form="{{ form_id }}" type="file" name="parking_photo" accept="image/*" capture="environment">
+            {% if o.parking_photo_url %}
+              <a class="do-proof-link" href="{{ o.parking_photo_url }}" target="_blank">View receipt</a>
+              {% if o.parking_photo_uploaded_at %}
+                <div class="do-sub">{{ fmt_driver_dt(o.parking_photo_uploaded_at) }}</div>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td>
+            <input form="{{ form_id }}" class="do-cost" type="number" min="0" step="0.01" name="parking_cost" value="{{ '%.2f'|format(o.parking_cost) if o.parking_cost is not none else '' }}" placeholder="0.00">
+          </td>
+          <td>
+            <form id="{{ form_id }}" method="POST" action="{{ url_for('driver.driver_order_complete', order_id=o.id) }}" enctype="multipart/form-data">
+              <button class="do-btn" type="submit">
+                {% if o.status == 'delivered' %}Update Proof{% else %}Delivery Complete{% endif %}
+              </button>
+            </form>
+            {% if o.delivered_actual_at %}
+              <div class="do-sub">Complete {{ fmt_driver_dt(o.delivered_actual_at) }}</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="7" class="do-empty">No assigned orders yet.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

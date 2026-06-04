@@ -120,6 +120,9 @@ class Order(Base):
     customer_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     setup_photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     setup_photo_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    parking_photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    parking_photo_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    parking_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     # potential_payout is the estimated total computed at delivery creation
     # via app.services.ezcater_payroll.compute_one(). Snapshotted so pay-
     # structure changes don't retroactively change quoted earnings.
@@ -401,7 +404,9 @@ class DriverShift(Base):
 
 class DriverLocation(Base):
     """One GPS fix from the driver's phone, FK'd to its shift so the route
-    can be replayed (Phase C)."""
+    can be replayed (Phase C). When a driver is actively working an order,
+    order_id ties the GPS fix to that delivery without relying on ezCater
+    tracking."""
     __tablename__ = "driver_location"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -409,6 +414,8 @@ class DriverLocation(Base):
                                           nullable=False, index=True)
     driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="CASCADE"),
                                            nullable=False, index=True)
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"),
+                                                 nullable=True, index=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,
                                                   nullable=False)
     lat: Mapped[float] = mapped_column(Float, nullable=False)

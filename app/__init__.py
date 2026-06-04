@@ -187,11 +187,12 @@ def create_app():
 
     # docck self-tick — background monitoring thread (Sam #1257: docck drives
     # itself, no external trigger dependency on aick). Multi-worker safe via DB lease.
-    try:
-        from app.services.docck_monitor import start_background_ticker
-        start_background_ticker()
-    except Exception:
-        logging.getLogger(__name__).exception("docck background ticker failed to start (non-fatal)")
+    if os.getenv("DISABLE_DOCCK_TICKER") != "1":
+        try:
+            from app.services.docck_monitor import start_background_ticker
+            start_background_ticker()
+        except Exception:
+            logging.getLogger(__name__).exception("docck background ticker failed to start (non-fatal)")
     # Install the shared-password gate AFTER all other blueprints so the
     # before_request hook sees their routes. Webhook + ingest endpoints
     # are exempted inside auth.install().
@@ -641,6 +642,9 @@ def create_app():
                 ("customer_rating",         "INTEGER"),
                 ("setup_photo_url",         "VARCHAR(500)"),
                 ("setup_photo_uploaded_at", "TIMESTAMP"),
+                ("parking_photo_url",       "VARCHAR(500)"),
+                ("parking_photo_uploaded_at","TIMESTAMP"),
+                ("parking_cost",            "FLOAT"),
                 ("potential_payout",        "FLOAT"),
                 ("paid_payout",             "FLOAT"),
                 ("paycheck_id",             "INTEGER"),
@@ -669,7 +673,10 @@ def create_app():
                 ("battery_opt_ignored",     "BOOLEAN"),
                 ("battery_opt_checked_at",  "TIMESTAMP"),
             ]
-            added_orders, added_drivers = [], []
+            driver_location_additions = [
+                ("order_id",                "INTEGER"),
+            ]
+            added_orders, added_drivers, added_driver_locations = [], [], []
             with _eng_15.begin() as conn:
                 if "orders" in insp.get_table_names():
                     existing = {c["name"] for c in insp.get_columns("orders")}
@@ -683,10 +690,18 @@ def create_app():
                         if col_name not in existing:
                             conn.execute(_sa_text_15(f"ALTER TABLE drivers ADD COLUMN {col_name} {col_def}"))
                             added_drivers.append(col_name)
+                if "driver_location" in insp.get_table_names():
+                    existing = {c["name"] for c in insp.get_columns("driver_location")}
+                    for col_name, col_def in driver_location_additions:
+                        if col_name not in existing:
+                            conn.execute(_sa_text_15(f"ALTER TABLE driver_location ADD COLUMN {col_name} {col_def}"))
+                            added_driver_locations.append(col_name)
             if added_orders:
                 logging.getLogger(__name__).info("orders table (migration 15): backfilled %s", added_orders)
             if added_drivers:
                 logging.getLogger(__name__).info("drivers table (migration 15): backfilled %s", added_drivers)
+            if added_driver_locations:
+                logging.getLogger(__name__).info("driver_location table (migration 15): backfilled %s", added_driver_locations)
     except Exception:
         logging.getLogger(__name__).exception("driver-system column backfill failed (non-fatal)")
 

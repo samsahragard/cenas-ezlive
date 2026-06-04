@@ -216,3 +216,4 @@ uploads/
 exports/
 *.log
 .bak-*
+_local_sim/

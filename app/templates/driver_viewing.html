@@ -1,10 +1,10 @@
 {% extends "base_dashboard.html" %}
-{% set active = 'driver' %}
-{% block title %}Driver Portal — Cenas Kitchen{% endblock %}
+{% set active = 'driver_logs' %}
+{% block title %}Driver Status — Cenas Kitchen{% endblock %}
 
-{# Page Title Library: module DRIVER, two-word title "Driver Portal". #}
+{# Page Title Library: module DRIVER, two-word title "Driver Status". #}
 {% block page_module %}DRIVER{% endblock %}
-{% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Portal</span>{% endblock %}
+{% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Status</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ driver.name }} · <span class="location-badge">{{ location_label }}</span></p>
 {% endblock %}

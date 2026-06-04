@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/assistant_bubble.css') }}">
   {# Page Title Library fonts — Manrope (titles) + JetBrains Mono (brand mark
      / metadata). Several rebuilt pages already self-import these; loading
      them in base means the shared topbar renders in the library typeface
@@ -459,6 +460,7 @@
     }
   </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/assistant_bubble.js') }}" defer></script>
   {# ribbon.js retired 2026-05-18 (commit 2). X/Check dismiss behavior
      moved to /partner/notifications inline JS (notifications.html).
      POST /partner/ribbon/dismiss/<item_type>/<int:item_id> endpoint

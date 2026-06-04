@@ -27,6 +27,7 @@ from app.web.corporate_order import corp_order as corp_order_bp
 from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
 from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
 from app.web.ezcater_tracking_watch_routes import ezcater_tracking_watch_bp
+from app.web.assistant_routes import assistant_bp
 from app.web.team_routes import team_bp
 from app.web.legal_routes import legal as legal_bp
 from app.web.access_request_routes import access_req as access_req_bp
@@ -151,6 +152,7 @@ def create_app():
     app.register_blueprint(ezc_import_bp)
     app.register_blueprint(ezc_live_bp)
     app.register_blueprint(ezcater_tracking_watch_bp)
+    app.register_blueprint(assistant_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(profile_lab_bp)
     app.register_blueprint(legal_bp)

@@ -222,9 +222,17 @@
   const root = document.querySelector('.tracking-lab');
   const apiBase = "{{ url_for('ezcater_tracking_watch.page') }}";
   let state = JSON.parse(root.dataset.initial || '{"orders":[],"events":[]}');
-  const map = L.map('tracking-map').setView([29.7604, -95.3698], 10);
+  const map = L.map('tracking-map', {
+    fadeAnimation: false,
+    markerZoomAnimation: false,
+    preferCanvas: true,
+    zoomAnimation: false,
+  }).setView([29.7604, -95.3698], 10);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    keepBuffer: 5,
     maxZoom: 19,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
   const markers = new Map();
@@ -377,6 +385,7 @@
       map.fitBounds(bounds, {padding: [40, 40], maxZoom: 13});
       autoFitDone = true;
     }
+    window.requestAnimationFrame(() => map.invalidateSize(false));
   }
 
   function render(next) {
@@ -418,6 +427,8 @@
   });
 
   document.getElementById('poll-now').addEventListener('click', refresh);
+  setTimeout(() => map.invalidateSize(false), 250);
+  setTimeout(() => map.invalidateSize(false), 1200);
   render(state);
   setInterval(refresh, 15000);
 })();

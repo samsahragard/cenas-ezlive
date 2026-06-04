@@ -3,10 +3,12 @@
 {% block title %}ezCater Live Map - Cenas Kitchen{% endblock %}
 
 {% block head_extra %}
+  {% if not google_maps_key %}
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIINfQhQXqLwrM4kN+tZ1ptITQY+2X7ftUM=" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  {% endif %}
   <style>
     .tracking-lab {
       display: grid;
@@ -17,12 +19,18 @@
     .tracking-map {
       position: sticky;
       top: 18px;
+      width: 100%;
       height: min(680px, calc(100vh - 220px));
       min-height: 520px;
       border: 1px solid rgba(228, 179, 64, 0.24);
       border-radius: 8px;
       overflow: hidden;
       background: #18110c;
+    }
+    .tracking-map .leaflet-container,
+    .tracking-map .leaflet-pane {
+      width: 100%;
+      height: 100%;
     }
     .tracking-panel {
       display: grid;
@@ -149,7 +157,7 @@
       .tracking-map {
         position: relative;
         top: auto;
-        height: 520px;
+        height: min(520px, 62vh);
         min-height: 0;
       }
     }
@@ -230,22 +238,72 @@
 (function () {
   const root = document.querySelector('.tracking-lab');
   const apiBase = "{{ url_for('ezcater_tracking_watch.page') }}";
+  const googleMapsKey = {{ (google_maps_key or "")|tojson }};
   let state = JSON.parse(root.dataset.initial || '{"orders":[],"events":[]}');
-  const map = L.map('tracking-map', {
-    fadeAnimation: false,
-    markerZoomAnimation: false,
-    preferCanvas: true,
-    zoomAnimation: false,
-  }).setView([29.7604, -95.3698], 10);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    keepBuffer: 5,
-    maxZoom: 19,
-    updateWhenIdle: true,
-    updateWhenZooming: false,
-    attribution: '&copy; OpenStreetMap',
-  }).addTo(map);
   const markers = new Map();
+  const defaultCenter = {lat: 29.7604, lng: -95.3698};
+  let googleMap = null;
+  let leafletMap = null;
+  let mapProvider = 'pending';
   let autoFitDone = false;
+  let mapRefreshTimer = 0;
+
+  function loadGoogleMaps() {
+    if (!googleMapsKey) return Promise.resolve(false);
+    if (window.google && window.google.maps) return Promise.resolve(true);
+    return new Promise((resolve, reject) => {
+      const callbackName = 'cenasInitEzcaterGoogleMap';
+      window[callbackName] = () => {
+        delete window[callbackName];
+        resolve(true);
+      };
+      const script = document.createElement('script');
+      script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(googleMapsKey) + '&callback=' + callbackName + '&loading=async';
+      script.async = true;
+      script.defer = true;
+      script.onerror = () => {
+        delete window[callbackName];
+        reject(new Error('Google Maps failed to load'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  async function initMapProvider() {
+    const el = document.getElementById('tracking-map');
+    if (await loadGoogleMaps()) {
+      googleMap = new google.maps.Map(el, {
+        center: defaultCenter,
+        zoom: 10,
+        clickableIcons: false,
+        fullscreenControl: true,
+        gestureHandling: 'greedy',
+        mapTypeControl: false,
+        streetViewControl: false,
+      });
+      mapProvider = 'google';
+      return;
+    }
+    if (window.L) {
+      leafletMap = L.map('tracking-map', {
+        fadeAnimation: false,
+        markerZoomAnimation: false,
+        preferCanvas: true,
+        zoomAnimation: false,
+      }).setView([defaultCenter.lat, defaultCenter.lng], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        keepBuffer: 5,
+        maxZoom: 19,
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(leafletMap);
+      mapProvider = 'leaflet';
+      return;
+    }
+    mapProvider = 'none';
+    el.innerHTML = '<div class="tracking-card" style="margin:14px;"><h3>Map unavailable</h3><p>Google Maps is not configured for this browser page.</p></div>';
+  }
 
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>"']/g, c => ({
@@ -371,31 +429,103 @@
   }
 
   function renderMap(orders) {
-    const bounds = [];
+    if (mapProvider === 'pending') return;
+    const googleBounds = googleMap ? new google.maps.LatLngBounds() : null;
+    const leafletBounds = [];
+    let pointCount = 0;
     orders.forEach(o => {
       if (!o.lat || !o.lng) return;
       const key = o.uuid;
-      const pos = [Number(o.lat), Number(o.lng)];
-      bounds.push(pos);
+      const lat = Number(o.lat);
+      const lng = Number(o.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      pointCount += 1;
       const html = `<strong>${escapeHtml(o.order_number)}</strong><br>${escapeHtml(o.driver_name || '')}<br>${escapeHtml(o.status_label || '')}`;
-      if (!markers.has(key)) {
-        markers.set(key, L.marker(pos).addTo(map).bindPopup(html));
-      } else {
-        markers.get(key).setLatLng(pos).setPopupContent(html);
+      if (googleMap) {
+        const pos = {lat, lng};
+        googleBounds.extend(pos);
+        if (!markers.has(key)) {
+          const marker = new google.maps.Marker({
+            map: googleMap,
+            position: pos,
+            title: o.order_number || 'ezCater tracker',
+          });
+          const info = new google.maps.InfoWindow({content: html});
+          marker.addListener('click', () => info.open({anchor: marker, map: googleMap}));
+          markers.set(key, {marker, info});
+        } else {
+          markers.get(key).marker.setPosition(pos);
+          markers.get(key).info.setContent(html);
+        }
+      } else if (leafletMap) {
+        const pos = [lat, lng];
+        leafletBounds.push(pos);
+        if (!markers.has(key)) {
+          markers.set(key, L.marker(pos).addTo(leafletMap).bindPopup(html));
+        } else {
+          markers.get(key).setLatLng(pos).setPopupContent(html);
+        }
       }
     });
     [...markers.keys()].forEach(key => {
       if (!orders.some(o => o.uuid === key && o.lat && o.lng)) {
-        markers.get(key).remove();
+        if (googleMap) {
+          markers.get(key).marker.setMap(null);
+          markers.get(key).info.close();
+        } else {
+          markers.get(key).remove();
+        }
         markers.delete(key);
       }
     });
-    if (bounds.length && !autoFitDone) {
-      map.fitBounds(bounds, {padding: [40, 40], maxZoom: 13});
+    if (pointCount && !autoFitDone) {
+      if (googleMap) {
+        googleMap.fitBounds(googleBounds, 40);
+        google.maps.event.addListenerOnce(googleMap, 'idle', () => {
+          if (googleMap.getZoom() > 13) googleMap.setZoom(13);
+        });
+      } else if (leafletMap) {
+        leafletMap.fitBounds(leafletBounds, {padding: [40, 40], maxZoom: 13});
+      }
       autoFitDone = true;
     }
-    window.requestAnimationFrame(() => map.invalidateSize(false));
+    scheduleMapRefresh();
   }
+
+  function scheduleMapRefresh() {
+    window.clearTimeout(mapRefreshTimer);
+    const delays = [0, 80, 220, 520, 1000, 1800];
+    delays.forEach(delay => {
+      window.setTimeout(() => {
+        if (googleMap) {
+          google.maps.event.trigger(googleMap, 'resize');
+          if (!markers.size && !autoFitDone) googleMap.setCenter(defaultCenter);
+        } else if (leafletMap) {
+          leafletMap.invalidateSize(false);
+          if (!markers.size && !autoFitDone) {
+            leafletMap.setView([defaultCenter.lat, defaultCenter.lng], 10, {animate: false});
+          }
+        }
+      }, delay);
+    });
+    mapRefreshTimer = window.setTimeout(() => {
+      if (googleMap) google.maps.event.trigger(googleMap, 'resize');
+      if (leafletMap) leafletMap.invalidateSize(false);
+    }, 2400);
+  }
+
+  if ('ResizeObserver' in window) {
+    const resizeObserver = new ResizeObserver(scheduleMapRefresh);
+    resizeObserver.observe(document.getElementById('tracking-map'));
+  }
+  window.addEventListener('resize', scheduleMapRefresh);
+  window.addEventListener('orientationchange', scheduleMapRefresh);
+  window.addEventListener('pageshow', scheduleMapRefresh);
+  window.addEventListener('message', (event) => {
+    if (event && event.data && event.data.type === 'cenas:iframe-visible') {
+      scheduleMapRefresh();
+    }
+  });
 
   function render(next) {
     state = next || state;
@@ -436,10 +566,16 @@
   });
 
   document.getElementById('poll-now').addEventListener('click', refresh);
-  setTimeout(() => map.invalidateSize(false), 250);
-  setTimeout(() => map.invalidateSize(false), 1200);
-  render(state);
-  setInterval(refresh, 15000);
+  initMapProvider()
+    .catch(() => {
+      mapProvider = 'none';
+      document.getElementById('tracking-map').innerHTML = '<div class="tracking-card" style="margin:14px;"><h3>Map unavailable</h3><p>Google Maps did not load. The order tracker list still works.</p></div>';
+    })
+    .finally(() => {
+      scheduleMapRefresh();
+      render(state);
+      setInterval(refresh, 15000);
+    });
 })();
 </script>
 {% endblock %}

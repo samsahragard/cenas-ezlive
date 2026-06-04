@@ -7,6 +7,8 @@ flows.
 """
 from __future__ import annotations
 
+import os
+
 from flask import Blueprint, g, jsonify, redirect, render_template, request, session, url_for
 
 from app.services import ezcater_tracking_watch as watch
@@ -29,6 +31,12 @@ def page():
     g.store_label = "Partner"
     g.current_location = "both"
     data = watch.list_watch()
+    google_maps_key = (
+        os.getenv("GOOGLE_MAPS_BROWSER_KEY")
+        or os.getenv("GOOGLE_MAPS_PUBLIC_KEY")
+        or os.getenv("GOOGLE_MAPS_API_KEY")
+        or ""
+    ).strip()
     return render_template(
         "ezcater_tracking_watch.html",
         active="dev_ezcater_live_map",
@@ -36,6 +44,7 @@ def page():
         orders=data["orders"],
         app_orders=watch.list_app_orders(),
         events=data["events"],
+        google_maps_key=google_maps_key,
     )
 
 

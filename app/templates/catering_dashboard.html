@@ -536,6 +536,17 @@
     var key = frame.getAttribute("data-embed-frame");
     var shim = root.querySelector('[data-embed-loading="' + key + '"]');
     if (shim) shim.classList.add("gone");
+    notifyFrameVisible(frame);
+    setTimeout(function () { notifyFrameVisible(frame); }, 250);
+    setTimeout(function () { notifyFrameVisible(frame); }, 1000);
+  }
+
+  function notifyFrameVisible(frame) {
+    try {
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: "cenas:iframe-visible" }, window.location.origin);
+      }
+    } catch (err) { /* frame may be mid-navigation; safe to ignore */ }
   }
 
   /* Lazy-load: set src from data-src the first time a tab is shown.
@@ -562,6 +573,10 @@
       p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
     });
     loadFrame(key);   // first activation of this tab loads its iframe
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    notifyFrameVisible(frame);
+    setTimeout(function () { notifyFrameVisible(frame); }, 250);
+    setTimeout(function () { notifyFrameVisible(frame); }, 1000);
   }
 
   root.querySelector("#catdTabs").addEventListener("click", function (e) {

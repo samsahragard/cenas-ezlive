@@ -240,12 +240,12 @@
     {% endif %}
     {# Catering — per Sam 2026-05-21 (dck) this tab no longer opens a
        popover: it links straight to the tabbed Catering dashboard
-       (default tab = Ez Orders), from where the five catering surfaces
-       (Ez Orders / Ez Market / Ez Manage / Ez Drivers / In-House) are
+       (default tab = Ez Orders), from where the catering surfaces
+       (Ez Orders / Ez Market / Ez Manage / Ez Drivers / In-House / Live Map) are
        reachable as tabs. Same change as the Manager tab above — an <a>
        with no data-pop, so the popover JS skips it. #}
     <a href="/{{ store_slug }}/catering"
-       class="ck-bnav-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering'] %} active{% endif %}">
+       class="ck-bnav-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering', 'dev_ezcater_live_map'] %} active{% endif %}">
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
     </a>

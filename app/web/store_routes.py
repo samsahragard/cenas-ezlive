@@ -5002,7 +5002,7 @@ def sales(channel: str = "all"):
 # Structural twin of the Manager dashboard above. The bottom-nav
 # Catering tab no longer opens a sub-option popover — it links straight
 # here. This route renders catering_dashboard.html: a tab strip across
-# the five catering surfaces, defaulting to the Ez Orders tab.
+# the catering surfaces, defaulting to the Ez Orders tab.
 #
 # DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer shows a
 # read-only preview + an "Open full page" link. Instead each tab embeds
@@ -5015,13 +5015,14 @@ def sales(channel: str = "all"):
 # Ordered tab spec: (tab key, caption). The key matches the active_tab
 # values catering_dashboard.html expects. First entry is the default
 # tab. The per-tab url is built per-request by _catering_dash_full_url
-# since two tabs point at store-scoped routes and three are flat.
+# since several tabs point at store-scoped routes and the rest are flat.
 _CATERING_DASH_TABS = [
     ("ez-orders",  "Ez Orders"),
     ("ez-market",  "Ez Market"),
     ("ez-manage",  "Ez Manage"),
     ("ez-drivers", "Ez Drivers"),
     ("in-house",   "In-House"),
+    ("live-map",   "Live Map"),
 ]
 
 
@@ -5033,6 +5034,7 @@ def _catering_dash_full_url(tab_key):
       ez-manage  -> /ez-manage             (flat, not store-scoped)
       ez-drivers -> /<store>/drivers       (store.drivers_admin)
       in-house   -> /<store>/in-house-catering (store.in_house_catering_page)
+      live-map   -> /partner/developer/ezcater-live-map (read-only watcher)
     The flat ez-market / ez-manage paths are written as literals because
     they live outside the /<store> blueprint; url_for on a store endpoint
     would prepend the slug. Falls back to the orders page on an unknown
@@ -5047,6 +5049,8 @@ def _catering_dash_full_url(tab_key):
         return url_for("store.drivers_admin")
     if tab_key == "in-house":
         return url_for("store.in_house_catering_page")
+    if tab_key == "live-map":
+        return url_for("ezcater_tracking_watch.page")
     return url_for("store.orders_list")
 
 

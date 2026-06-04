@@ -4,6 +4,8 @@ import socket
 import threading
 from http.server import ThreadingHTTPServer
 
+from flask import Flask
+
 from app.web import assistant_routes as ar
 
 
@@ -97,6 +99,115 @@ def test_assistant_enabled_is_off_by_default_on_render(monkeypatch):
 
     monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
     assert ar._assistant_enabled() is True
+
+
+def test_render_context_stays_disabled_without_ck_runtime(monkeypatch):
+    monkeypatch.setenv("RENDER", "1")
+    monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
+    monkeypatch.delenv("AI_ASSISTANT_CK_RUNTIME_URL", raising=False)
+    monkeypatch.delenv("ASSISTANT_RUNTIME_URL", raising=False)
+    monkeypatch.delenv("AI_ASSISTANT_ALLOW_RENDER_MODELS", raising=False)
+
+    ctx = {
+        "kind": "staff",
+        "role": "gm",
+        "principal_id": 7,
+        "display_name": "Test User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/dos/manager",
+        "permissions": ["ai.ask_claude", "ai.ask_claude_personal"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+    }
+
+    assert ar._assistant_available_for_context(ctx) is False
+
+
+def test_render_ask_proxies_to_ck_runtime(monkeypatch):
+    class RuntimeHandler:
+        seen = {}
+
+    from http.server import BaseHTTPRequestHandler
+
+    class RuntimeServer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or "0")
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            RuntimeHandler.seen = {
+                "path": self.path,
+                "authorization": self.headers.get("Authorization"),
+                "body": body,
+            }
+            payload = json.dumps({
+                "ok": True,
+                "answer": "CK-local answer",
+                "queued": False,
+                "model": "claude-sonnet-4-6",
+                "storage": "ck",
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt, *args):
+            return
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), RuntimeServer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+
+    ctx = {
+        "kind": "staff",
+        "role": "gm",
+        "principal_id": 7,
+        "display_name": "Test User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/dos/manager",
+        "permissions": ["ai.ask_claude", "ai.ask_claude_personal"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+    }
+    monkeypatch.setattr(ar, "_principal_context", lambda: ctx)
+    monkeypatch.setenv("RENDER", "1")
+    monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
+    monkeypatch.setenv("ASSISTANT_REVIEW_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(ar, "_anthropic_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Anthropic directly")))
+    monkeypatch.setattr(ar, "_gemini_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")))
+
+    try:
+        res = app.test_client().post("/assistant/ask", json={"question": "How do I use this page?"})
+        data = res.get_json()
+
+        assert res.status_code == 200
+        assert data["answer"] == "CK-local answer"
+        assert RuntimeHandler.seen["path"] == "/assistant/answer"
+        assert RuntimeHandler.seen["authorization"] == "Bearer runtime-token"
+        assert RuntimeHandler.seen["body"]["question"] == "How do I use this page?"
+        assert RuntimeHandler.seen["body"]["principal"]["role"] == "gm"
+        assert RuntimeHandler.seen["body"]["principal"]["store_slugs"] == ["dos"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        for name in [
+            "RENDER",
+            "AI_ASSISTANT_ENABLED",
+            "AI_ASSISTANT_CK_RUNTIME_URL",
+            "AI_ASSISTANT_CK_RUNTIME_TOKEN",
+            "ASSISTANT_REVIEW_TIMEOUT_SECONDS",
+        ]:
+            os.environ.pop(name, None)
 
 
 def test_post_to_ck_review_uses_contract_path_for_base_url(tmp_path, monkeypatch):

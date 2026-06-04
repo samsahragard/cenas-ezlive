@@ -5,9 +5,9 @@ Sam's operator-only /sam/chat. It deliberately starts read-only and
 queue-first: if a question needs a data tool that is not approved for the
 current role/session, it is saved for Sam review instead of guessed.
 
-Durable review ownership: CK/Mini_IT13. Render first POSTs review records to
-the CK assistant-review ingress. The local JSONL file is a non-authoritative
-retry outbox only, used when CK is temporarily unreachable.
+Durable review and model-runtime ownership: CK/Mini_IT13. In production the
+web app should proxy assistant turns to the CK-local runtime; Render direct
+model calls are blocked unless explicitly overridden for an emergency.
 """
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ _MAX_QUESTION_CHARS = 2000
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 _REVIEW_STATUS = "needs_review"
 _CK_REVIEW_PATH = "/review/question"
+_CK_RUNTIME_PATH = "/assistant/answer"
 _SENSITIVE_RE = re.compile(
     r"\b("
     r"password|passcode|token|secret|api key|credential|pin|"
@@ -184,6 +185,14 @@ def _review_timeout_seconds() -> float:
 
 
 def _ck_review_url(raw_url: str) -> str:
+    return _normalize_service_url(raw_url, _CK_REVIEW_PATH)
+
+
+def _ck_runtime_url(raw_url: str) -> str:
+    return _normalize_service_url(raw_url, _CK_RUNTIME_PATH)
+
+
+def _normalize_service_url(raw_url: str, default_path: str) -> str:
     url = raw_url.strip()
     if not url:
         return ""
@@ -192,11 +201,25 @@ def _ck_review_url(raw_url: str) -> str:
         return urllib.parse.urlunsplit((
             parts.scheme,
             parts.netloc,
-            _CK_REVIEW_PATH,
+            default_path,
             parts.query,
             parts.fragment,
         ))
     return url
+
+
+def _runtime_configured() -> bool:
+    url = _ck_runtime_url(_env_first("AI_ASSISTANT_CK_RUNTIME_URL", "ASSISTANT_RUNTIME_URL"))
+    token = _env_first("AI_ASSISTANT_CK_RUNTIME_TOKEN", "ASSISTANT_RUNTIME_TOKEN")
+    return bool(url and token)
+
+
+def _assistant_available_for_context(ctx: dict[str, Any]) -> bool:
+    if not _assistant_enabled() or not ctx.get("can_ask_personal"):
+        return False
+    if os.getenv("RENDER") and not _runtime_configured() and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
+        return False
+    return True
 
 
 def _extract_token() -> str | None:
@@ -340,12 +363,13 @@ def _outbox_record(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _post_to_ck_review(row: dict[str, Any]) -> tuple[bool, str | None]:
-    """Primary durable persistence path for blocked questions.
+    """Review-only durable persistence path for blocked questions.
 
     CK owns the review DB. Configure AI_ASSISTANT_CK_REVIEW_URL to a CK-local
     endpoint, for example a Tailscale URL on Mini_IT13. Token can be supplied
-    with AI_ASSISTANT_CK_REVIEW_TOKEN. If URL is absent/unreachable, caller
-    stores the row in the Render retry outbox and returns a transparent state.
+    with AI_ASSISTANT_CK_REVIEW_TOKEN. Production answer execution should use
+    the CK runtime path instead; this receiver path remains for local review
+    ingestion and compatibility tests.
     """
     url = _ck_review_url(_env_first("AI_ASSISTANT_CK_REVIEW_URL", "ASSISTANT_REVIEW_RECEIVER_URL"))
     if not url:
@@ -373,6 +397,74 @@ def _post_to_ck_review(row: dict[str, Any]) -> tuple[bool, str | None]:
     except Exception:  # noqa: BLE001
         log.exception("assistant: CK review save failed")
     return False, None
+
+
+def _runtime_principal(ctx: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": ctx["kind"],
+        "role": ctx["role"],
+        "principal_id": ctx["principal_id"],
+        "display_name": ctx["display_name"],
+        "store_slugs": ctx["store_slugs"],
+        "current_store": ctx["current_store"],
+        "path": ctx["path"],
+        "permissions": ctx["permissions"],
+        "can_ask_personal": ctx["can_ask_personal"],
+        "can_ask_operational": ctx["can_ask_operational"],
+    }
+
+
+def _post_to_ck_runtime(question: str, ctx: dict[str, Any]) -> tuple[dict[str, Any], int] | None:
+    """Send the assistant turn to the CK-local runtime.
+
+    The runtime is the execution boundary for production: model calls, durable
+    question storage, and future data tools stay on CK. Render is only a
+    signed web/session proxy when this URL is configured.
+    """
+    url = _ck_runtime_url(_env_first("AI_ASSISTANT_CK_RUNTIME_URL", "ASSISTANT_RUNTIME_URL"))
+    token = _env_first("AI_ASSISTANT_CK_RUNTIME_TOKEN", "ASSISTANT_RUNTIME_TOKEN")
+    if not url or not token:
+        return None
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Ai-Assistant-Token": token,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "question": question,
+        "principal": _runtime_principal(ctx),
+        "tools": _tool_catalog_for(ctx),
+        "source": "cenas_app",
+        "requested_at": _now_iso(),
+    }
+    try:
+        import httpx
+
+        proxy = (os.getenv("CENA_PROXY") or "").strip() or None
+        client_kwargs: dict[str, Any] = {
+            "timeout": httpx.Timeout(_review_timeout_seconds(), connect=min(3.0, _review_timeout_seconds())),
+        }
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as hx:
+            resp = hx.post(url, json=payload, headers=headers)
+        data = resp.json() if resp.content else {}
+        if 200 <= resp.status_code < 300:
+            return data, resp.status_code
+        return {
+            "ok": False,
+            "error": "ck_runtime_rejected",
+            "answer": "I could not reach the CK assistant safely right now.",
+            "queued": False,
+        }, 503
+    except Exception:  # noqa: BLE001
+        log.exception("assistant: CK runtime call failed")
+        return {
+            "ok": False,
+            "error": "ck_runtime_unavailable",
+            "answer": "I could not reach the CK assistant safely right now.",
+            "queued": False,
+        }, 503
 
 
 def _queue_for_review(question: str, ctx: dict[str, Any], reason: str,
@@ -497,7 +589,7 @@ def _should_queue(question: str, ctx: dict[str, Any]) -> tuple[bool, str, str | 
 def assistant_context():
     ctx = _principal_context()
     tools = _tool_catalog_for(ctx)
-    enabled = _assistant_enabled()
+    enabled = _assistant_available_for_context(ctx)
     return jsonify({
         "ok": ctx["kind"] != "anonymous",
         "principal": {
@@ -506,7 +598,7 @@ def assistant_context():
             "display_name": ctx["display_name"],
             "store_slugs": ctx["store_slugs"],
         },
-        "enabled": bool(enabled and ctx["can_ask_personal"]),
+        "enabled": bool(enabled),
         "tools": [
             {
                 "tool_id": tool["tool_id"],
@@ -538,10 +630,21 @@ def assistant_ask():
         return jsonify({"ok": False, "error": "assistant_disabled"}), 503
 
     ctx = _principal_context()
+    if not _assistant_available_for_context(ctx):
+        return jsonify({"ok": False, "error": "assistant_unavailable"}), 503
+
     body = request.get_json(silent=True) or {}
     question = str(body.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     if not question:
         return jsonify({"ok": False, "error": "question required"}), 400
+
+    runtime_response = _post_to_ck_runtime(question, ctx)
+    if runtime_response is not None:
+        data, status = runtime_response
+        return jsonify(data), status
+
+    if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
+        return jsonify({"ok": False, "error": "ck_runtime_required"}), 503
 
     should_queue, reason, required = _should_queue(question, ctx)
     if should_queue:

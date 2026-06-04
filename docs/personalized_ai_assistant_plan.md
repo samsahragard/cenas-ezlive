@@ -15,8 +15,9 @@ The assistant is not a freeform backdoor. It is a permission-scoped answer engin
 - The first production version is read-only.
 - Any unanswered, blocked, or not-yet-approved question is saved with who asked, where they asked, their role/scope, and why the answer was blocked.
 - The durable approval/question database belongs on CK/Mini_IT13.
-- Render may host the web route and model broker, but CK is the authoritative storage point for unanswered-question review.
-- Render should POST unanswered-question records to CK first. A Render retry outbox is only a non-authoritative fallback if CK is temporarily unreachable.
+- The assistant model runtime belongs on CK/Mini_IT13 too; Render should not host this assistant's model execution.
+- Render may keep the small web route/bubble surface, but production answer execution should proxy to CK only when the CK runtime URL/token are configured.
+- If CK is unreachable, the production assistant fails closed instead of creating a second durable assistant database outside CK.
 - Sonnet and Gemini are available now; OpenAI can be added later through the same provider router.
 
 ## Existing Primitives To Reuse
@@ -46,14 +47,13 @@ The assistant is not a freeform backdoor. It is a permission-scoped answer engin
 ```mermaid
 flowchart LR
   User["Authenticated app user"] --> Bubble["Animated AI bubble"]
-  Bubble --> RenderAI["Render assistant broker"]
-  RenderAI --> Perms["Role + store permission resolver"]
-  RenderAI --> Registry["Permission-scoped tool registry"]
-  Registry --> Tools["Allowed read-only tools"]
-  RenderAI --> Model["Sonnet / Gemini provider router"]
-  RenderAI --> CKIngress["CK assistant review ingress"]
-  RenderAI --> Outbox["Render retry outbox if CK unavailable"]
-  CKIngress --> CKDB["CK Mini_IT13 assistant_review.sqlite"]
+  Bubble --> WebApp["Cenas web app route"]
+  WebApp --> Perms["Role + store permission resolver"]
+  WebApp --> CKRuntime["CK-local assistant runtime"]
+  CKRuntime --> Registry["Permission-scoped tool registry"]
+  Registry --> Tools["Approved read-only tools"]
+  CKRuntime --> Model["Sonnet / Gemini provider router on CK"]
+  CKRuntime --> CKDB["CK Mini_IT13 assistant_review.sqlite"]
   Sam["Sam approval flow later"] --> CKDB
 ```
 
@@ -121,9 +121,9 @@ Save for Sam review when:
 3. Identify current principal: partner/corporate/manager/expo/driver/employee.
 4. Permit only personal/general questions at first.
 5. Block and save anything requiring private data tools not yet approved.
-6. Add CK receiver `scripts/assistant_review_ck_receiver.py` for `POST /assistant/review-question`.
-7. Configure Render `AI_ASSISTANT_CK_REVIEW_URL` and `AI_ASSISTANT_CK_REVIEW_TOKEN`.
-8. Keep `/cron/assistant-questions-export` only as a retry-outbox inspection path, not the durable database.
+6. Add CK receiver `scripts/assistant_review_ck_receiver.py` for review-only `POST /review/question`.
+7. Add CK runtime `scripts/assistant_ck_runtime.py` for `POST /assistant/answer`.
+8. Configure the web app to call CK runtime with `AI_ASSISTANT_CK_RUNTIME_URL` and `AI_ASSISTANT_CK_RUNTIME_TOKEN` only after CK runtime health passes.
 
 ## Current Build Status
 
@@ -136,11 +136,11 @@ Save for Sam review when:
 - CK receiver draft is aligned to the actual CK schema: hashes/redacted summaries, principal hashes, risk level, delivery attempts, no raw tool payloads.
 - CK receiver smoke passed on CK only: local bind `127.0.0.1:8778`, local restricted token, `/healthz` 200, one blocked-question POST saved hash/redacted proof rows, forbidden scan counts all 0, and no Render/prod/scheduler/notification/profile/link/data-tool activation.
 - CK receiver contract is aligned locally: `POST /review/question`, status normalization to `needs_review` when needed, risk normalization to `blocked` when needed, and one per-POST row in question/principal/review-decision/model-audit/delivery-attempt tables.
-- Render app config can use either the full review endpoint or the receiver base URL in `AI_ASSISTANT_CK_REVIEW_URL`; a base URL is normalized to `/review/question`.
-- CK-compatible aliases are also accepted: `ASSISTANT_REVIEW_RECEIVER_URL`, `ASSISTANT_REVIEW_RECEIVER_TOKEN`, and `ASSISTANT_REVIEW_TIMEOUT_SECONDS`.
-- Render-to-CK calls use `httpx` and honor `CENA_PROXY` when set, matching the existing Render userspace-Tailscale path for private CK/AiCk endpoints.
-- Production exposure is feature-flagged: on Render, the assistant is disabled unless `AI_ASSISTANT_ENABLED=1` is set.
-- Retry outbox records are redacted/hash-based instead of raw full records.
+- Render app config can use either the full CK runtime endpoint or the runtime base URL in `AI_ASSISTANT_CK_RUNTIME_URL`; a base URL is normalized to `/assistant/answer`.
+- CK-compatible runtime aliases are also accepted: `ASSISTANT_RUNTIME_URL`, `ASSISTANT_RUNTIME_TOKEN`, and `ASSISTANT_REVIEW_TIMEOUT_SECONDS`.
+- Render-to-CK calls use `httpx` and honor `CENA_PROXY` when set, matching the existing private Tailscale path for CK endpoints.
+- Production exposure is feature-flagged: on Render, the assistant is disabled unless `AI_ASSISTANT_ENABLED=1` is set and the CK runtime URL/token are configured.
+- Render direct model calls are blocked unless `AI_ASSISTANT_ALLOW_RENDER_MODELS=1`; leave this unset for the CK-local direction.
 - Initial active tool: `assistant.general_help`.
 - Review-gated tools: `employee.my_profile`, `orders.store_summary`, `drivers.store_summary`, `labor.store_aggregate`.
 - CK receiver enablement test was completed by CK Codex on CK only. The receiver remains local/private; Render env/deploy is not configured yet.
@@ -149,8 +149,9 @@ Save for Sam review when:
 
 - Do not expose the CK receiver beyond the approved local/private bind.
 - Do not paste or copy `AI_ASSISTANT_CK_REVIEW_TOKEN` or `ASSISTANT_REVIEW_TOKEN` into chat or repo files.
-- Do not set `AI_ASSISTANT_ENABLED=1` on Render until the review receiver URL/token are set and verified.
-- Do not configure Render `AI_ASSISTANT_CK_REVIEW_URL` / `AI_ASSISTANT_CK_REVIEW_TOKEN` or their `ASSISTANT_REVIEW_RECEIVER_*` aliases until the CK receiver proof passes and Sam approves the Render link. When approved, prefer a CK private/Tailscale receiver base URL or full `/review/question` URL; keep `CENA_PROXY` active for private-tailnet reachability; never put the token in the URL.
+- Do not set `AI_ASSISTANT_ENABLED=1` on Render until the CK runtime URL/token are set and verified.
+- Do not configure Render `AI_ASSISTANT_CK_RUNTIME_URL` / `AI_ASSISTANT_CK_RUNTIME_TOKEN` or their `ASSISTANT_RUNTIME_*` aliases until CK runtime proof passes and Sam approves the web link. When approved, prefer a CK private/Tailscale runtime base URL or full `/assistant/answer` URL; keep `CENA_PROXY` active for private-tailnet reachability; never put the token in the URL.
+- Do not enable `AI_ASSISTANT_ALLOW_RENDER_MODELS` for this CK-local direction.
 - Do not activate data tools until their role/store/scope policy and answer template are approved.
 - Do not import driverdc export modules or read `DRIVERDC_HMAC_SALT`.
 - Do not expose raw GPS, cleartext customer PII, passcodes, tokens, or raw peer pay/sales rows.

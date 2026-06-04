@@ -9,7 +9,7 @@ Reserved receiver port: `8778`
 
 This database is the CK-local durable review queue for Cenas in-app AI assistant questions that cannot be answered safely yet. It stores redacted question summaries, hashes, role/store scope, review decisions, delivery attempts, and future policy/tool catalog facts.
 
-Render may host the app/model broker and may keep a retry outbox, but CK is the authoritative review store.
+CK/Mini_IT13 hosts both the assistant runtime and the authoritative review store. Render may keep the web app bubble/proxy surface, but it should not host this assistant's model execution or durable assistant database.
 
 ## Current Proof
 
@@ -46,11 +46,12 @@ CK receiver contract alignment:
 - `GET /healthz` returns `{ok, db, row_counts}`.
 - `POST /review/question` accepts the local bearer token.
 - Clean app payload fields: `question`, `principal`, `role`; `store_key` is recommended; `status`, `risk_level`, `model_key`, `tool_name`, and `delivery_target` are accepted.
-- Render `AI_ASSISTANT_CK_REVIEW_URL` may be either the full `/review/question` endpoint or the receiver base URL; the app normalizes a base URL to `/review/question`.
-- The receiver token belongs in `AI_ASSISTANT_CK_REVIEW_TOKEN`, never in the URL.
-- CK-compatible alias env vars are supported too: `ASSISTANT_REVIEW_RECEIVER_URL`, `ASSISTANT_REVIEW_RECEIVER_TOKEN`, and `ASSISTANT_REVIEW_TIMEOUT_SECONDS`.
-- Render-to-CK delivery uses `httpx` and honors `CENA_PROXY` when configured, so private Tailscale receiver URLs use the same route as the existing Cenas private endpoints.
-- On Render, the assistant remains hidden/disabled unless `AI_ASSISTANT_ENABLED=1`; set that only after the CK review URL/token are configured and verified.
+- The CK-local answer runtime is `POST /assistant/answer`; the review-only receiver remains `POST /review/question`.
+- Render `AI_ASSISTANT_CK_RUNTIME_URL` may be either the full `/assistant/answer` endpoint or the CK runtime base URL; the app normalizes a base URL to `/assistant/answer`.
+- The runtime token belongs in `AI_ASSISTANT_CK_RUNTIME_TOKEN`, never in the URL.
+- CK-compatible runtime alias env vars are supported too: `ASSISTANT_RUNTIME_URL`, `ASSISTANT_RUNTIME_TOKEN`, and `ASSISTANT_REVIEW_TIMEOUT_SECONDS`.
+- Render-to-CK delivery uses `httpx` and honors `CENA_PROXY` when configured, so private Tailscale runtime URLs use the same route as the existing Cenas private endpoints.
+- On Render, the assistant remains hidden/disabled unless `AI_ASSISTANT_ENABLED=1` and the CK runtime URL/token are configured. Render direct model calls require the emergency override `AI_ASSISTANT_ALLOW_RENDER_MODELS=1`, which should remain unset for Sam's CK-local direction.
 - `assistant_question.status` normalizes to one of `pending`, `approved`, `rejected`, `needs_review`, `archived`; invalid or missing becomes `needs_review`.
 - `risk_level` normalizes to one of `low`, `normal`, `high`, `blocked`; invalid or missing becomes `blocked`.
 - Success response shape: `{ok, question_id, question_hash, principal_hash, role, store_key, risk_level, status, delivery_status}` plus `ck_question_id` for app compatibility.

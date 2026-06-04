@@ -245,14 +245,20 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "reason": reason,
         }, 200
 
-    try:
-        answer, model = _anthropic_answer(question, principal)
-        if answer is None:
-            answer, model = _gemini_answer(question, principal)
-    except Exception:  # noqa: BLE001
-        log.exception("assistant runtime answer failed")
-        answer = None
-        model = None
+    answer = None
+    model = None
+    for provider_name, provider in (
+        ("anthropic", _anthropic_answer),
+        ("gemini", _gemini_answer),
+    ):
+        try:
+            answer, model = provider(question, principal)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant runtime %s answer failed", provider_name)
+            answer = None
+            model = None
+        if answer:
+            break
 
     if not answer:
         row = _queue_for_review(question, principal, "model_unavailable_or_no_answer", None, source)

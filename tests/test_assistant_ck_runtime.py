@@ -160,3 +160,54 @@ def test_runtime_answers_general_question_from_ck_model(monkeypatch, tmp_path):
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_falls_back_to_gemini_when_sonnet_errors(monkeypatch, tmp_path):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda question, principal: (_ for _ in ()).throw(RuntimeError("provider failed")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda question, principal: ("Open the Orders tab for catering requests.", "gemini-2.5-flash"),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        res = _post(
+            port,
+            {
+                "question": "How do I move around this page?",
+                "principal": _principal("gm"),
+                "tools": [],
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert res.status == 200
+        assert data == {
+            "ok": True,
+            "answer": "Open the Orders tab for catering requests.",
+            "queued": False,
+            "model": "gemini-2.5-flash",
+            "storage": "ck_runtime",
+        }
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)

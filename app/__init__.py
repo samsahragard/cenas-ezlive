@@ -163,6 +163,12 @@ def create_app():
     # never driver_system; fail-closed DATAMART_EXPORT_TOKEN; SELECT-only (no writes).
     from app.web.datamart_export_routes import datamart_export_bp
     app.register_blueprint(datamart_export_bp)
+    # Isolated READ-ONLY driver + ezCater-orders data-center export (Sam #3592/#3610;
+    # aick #3609 contract, frozen CK #3612): serves CK's R1-minimized driver/orders marts;
+    # imports only app.db/app.models, never driver_system; fail-closed DRIVERDC_EXPORT_TOKEN;
+    # SELECT-only; customer_hash + gps-summary computed APP-SIDE (raw GPS/cleartext NEVER served).
+    from app.web.driverdc_export_routes import driverdc_export_bp
+    app.register_blueprint(driverdc_export_bp)
     app.register_blueprint(scheduling_cron_bp)  # B6: POST /internal/scheduling/cron/process-shift-alarms (ckai)
     app.register_blueprint(briefs_bp)
     # Phase 2 / Block 1A — task create + reassign routes

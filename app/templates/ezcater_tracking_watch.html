@@ -12,9 +12,13 @@
       display: grid;
       grid-template-columns: minmax(0, 1.4fr) minmax(360px, 0.8fr);
       gap: 16px;
+      align-items: start;
     }
     .tracking-map {
-      min-height: 680px;
+      position: sticky;
+      top: 18px;
+      height: min(680px, calc(100vh - 220px));
+      min-height: 520px;
       border: 1px solid rgba(228, 179, 64, 0.24);
       border-radius: 8px;
       overflow: hidden;
@@ -142,7 +146,12 @@
     }
     @media (max-width: 1050px) {
       .tracking-lab { grid-template-columns: 1fr; }
-      .tracking-map { min-height: 520px; }
+      .tracking-map {
+        position: relative;
+        top: auto;
+        height: 520px;
+        min-height: 0;
+      }
     }
   </style>
 {% endblock %}

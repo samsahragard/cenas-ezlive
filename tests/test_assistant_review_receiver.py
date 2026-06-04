@@ -180,7 +180,7 @@ def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
           reviewer_hash TEXT,
           reason_code TEXT,
           notes_redacted TEXT,
-          decided_at TEXT,
+          decided_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
           FOREIGN KEY (question_id) REFERENCES assistant_question(id) ON DELETE CASCADE
         );
         CREATE TABLE assistant_policy_rule (
@@ -270,6 +270,9 @@ def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
         ]
     }
     fk_bad = con.execute("PRAGMA foreign_key_check").fetchall()
+    decided_at = con.execute(
+        "SELECT decided_at FROM assistant_review_decision"
+    ).fetchone()[0]
     con.close()
 
     assert counts == {
@@ -280,5 +283,6 @@ def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
         "assistant_delivery_attempt": 1,
     }
     assert fk_bad == []
+    assert decided_at
 
     os.environ.pop("ASSISTANT_REVIEW_DB", None)

@@ -272,7 +272,7 @@ def _save_question(row: dict) -> str:
                 None,
                 reason,
                 None,
-                None,
+                received_at,
             ],
         )
         _insert_row(

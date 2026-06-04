@@ -29,6 +29,16 @@ scripts\assistant_review_schema.sql
 
 ## Services
 
+Current CK installation:
+
+```text
+Repo: C:\Users\sam\Documents\Codex\2026-06-02\can-you-connect-to-this-your\work\cenas-kitchen-isolated-main
+Runtime task: CenasAssistantRuntime8782
+Runtime binds: 127.0.0.1:8782 and 100.73.38.82:8782
+Review receiver binds: 127.0.0.1:8778 and 100.73.38.82:8778
+DB: C:\Users\sam\cena-ai-assistant\assistant_review.sqlite
+```
+
 ### Runtime Service
 
 - Default port: `8782`
@@ -115,6 +125,21 @@ The token file must already exist at:
 
 ```text
 C:\Users\sam\cena-ai-assistant\secrets\assistant_runtime_token.txt
+```
+
+For the persistent CK-local install, use the Scheduled Task instead of an SSH-launched background process:
+
+```powershell
+Stop-ScheduledTask -TaskName CenasAssistantRuntime8782
+Start-ScheduledTask -TaskName CenasAssistantRuntime8782
+Get-ScheduledTask -TaskName CenasAssistantRuntime8782
+```
+
+Health checks:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8782/healthz
+Invoke-WebRequest -UseBasicParsing http://100.73.38.82:8782/healthz
 ```
 
 ## Verification

@@ -34,6 +34,7 @@ def page():
         active="dev_ezcater_live_map",
         page_title="ezCater Live Map",
         orders=data["orders"],
+        app_orders=watch.list_app_orders(),
         events=data["events"],
     )
 
@@ -44,7 +45,7 @@ def api_orders():
     if gate is not None:
         return jsonify({"ok": False, "error": "partner login required"}), 401
     data = watch.list_watch()
-    return jsonify(data)
+    return jsonify({**data, "app_orders": watch.list_app_orders()})
 
 
 @ezcater_tracking_watch_bp.route("/partner/developer/ezcater-live-map/api/orders", methods=["POST"])
@@ -77,7 +78,7 @@ def api_poll():
         return jsonify({"ok": False, "error": "partner login required"}), 401
     result = watch.poll_all()
     data = watch.list_watch()
-    return jsonify({"ok": True, "poll": result, **data})
+    return jsonify({"ok": True, "poll": result, **data, "app_orders": watch.list_app_orders(live_poll=True)})
 
 
 @ezcater_tracking_watch_bp.route("/partner/developer/ezcater-live-map/api/orders/<uuid_>", methods=["DELETE"])

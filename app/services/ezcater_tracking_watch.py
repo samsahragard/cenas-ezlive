@@ -1,18 +1,26 @@
 """Isolated ezCater customer-tracker watchlist.
 
-This service deliberately does not read or write Order rows. It stores a
-small partner-only watchlist of customer tracking URLs, polls ezCater's public
-delivery-tracking refresh endpoint, and returns manager-facing map/status data.
+This service deliberately does not write Order rows. It reads upcoming orders
+so the partner page can show an order board, stores a separate watchlist of
+customer tracking URLs, polls ezCater's public delivery-tracking refresh
+endpoint, and returns manager-facing map/status data.
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import or_
+
+from app.db import SessionLocal
+from app.models import Order
 from app.services.ezcater_live_tracker import extract_tracking_uuid, fetch_state
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -118,11 +126,153 @@ def _public_order(order: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _order_key(value: str | None) -> str:
+    return (value or "").strip().upper()
+
+
+def _watch_by_order_number(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for row in state.get("orders", []):
+        key = _order_key(row.get("order_number"))
+        if key:
+            out[key] = row
+    return out
+
+
+def _delivery_due_at(order: Order) -> str | None:
+    if order.delivery_window_start:
+        return order.delivery_window_start.isoformat()
+    return order.deliver_at or None
+
+
+def _store_label(order: Order) -> str:
+    pickup = (order.pickup_kitchen or "").strip().lower()
+    origin = (order.origin_store_id or order.reported_store_id or "").strip().lower()
+    reported = (order.reported_store or "").strip()
+    if pickup == "tomball" or origin in {"store_2", "store_4"}:
+        return "Tomball"
+    if pickup == "copperfield" or origin in {"store_1", "store_3"}:
+        return "Copperfield"
+    return reported or "Cenas"
+
+
+def _watch_like_from_order(order: Order, body: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    uuid_ = order.delivery_tracking_id
+    if not uuid_:
+        return None
+    out: dict[str, Any] = {
+        "uuid": uuid_,
+        "order_number": order.external_order_id or f"order-{order.id}",
+        "tracking_url": f"https://delivery-tracking.ezcater.com/delivery/{uuid_}",
+        "client": order.client,
+        "store_label": _store_label(order),
+        "deliver_at": _delivery_due_at(order),
+        "driver_name": order.ezcater_driver_name,
+        "raw_status": order.ezcater_status_key,
+        "status_key": order.ezcater_status_key,
+        "lat": order.ezcater_driver_lat,
+        "lng": order.ezcater_driver_lng,
+        "last_polled_at": order.ezcater_status_updated_at.isoformat() if order.ezcater_status_updated_at else None,
+    }
+    data = (body or {}).get("data") or {}
+    if data:
+        out["raw_status"] = data.get("status") or out.get("raw_status")
+        drivers = data.get("drivers") or []
+        if drivers:
+            d0 = drivers[0]
+            current = d0.get("currentStatus") or {}
+            loc = d0.get("currentLocation") or {}
+            out["driver_name"] = d0.get("name") or out.get("driver_name")
+            out["status_key"] = current.get("key") or out.get("status_key")
+            if loc.get("latitude") is not None and loc.get("longitude") is not None:
+                out["lat"] = loc.get("latitude")
+                out["lng"] = loc.get("longitude")
+                out["location_updated_at"] = _iso()
+        out["last_polled_at"] = _iso()
+    return out
+
+
+def _public_app_order(
+    order: Order,
+    watch_row: dict[str, Any] | None = None,
+    live_body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    out = {
+        "order_number": order.external_order_id or f"order-{order.id}",
+        "client": order.client,
+        "store_label": _store_label(order),
+        "delivery_date": order.delivery_date,
+        "deliver_at": _delivery_due_at(order),
+        "deliver_at_label": order.deliver_at or "",
+        "headcount": order.headcount,
+        "status": order.status,
+        "assigned_driver": order.assigned_driver,
+        "ezcater_driver_name": order.ezcater_driver_name,
+        "has_tracking": bool(watch_row or order.delivery_tracking_id),
+    }
+    if order.delivery_tracking_id and not watch_row:
+        out["stored_tracking_url"] = f"https://delivery-tracking.ezcater.com/delivery/{order.delivery_tracking_id}"
+    if watch_row:
+        out["tracker"] = _public_order(watch_row)
+    elif order.delivery_tracking_id:
+        order_tracker = _watch_like_from_order(order, live_body)
+        if order_tracker:
+            out["tracker"] = _public_order(order_tracker)
+    return out
+
+
 def list_watch() -> dict[str, Any]:
     state = _load_state()
     orders = [_public_order(o) for o in state.get("orders", [])]
     orders.sort(key=lambda r: (r.get("deliver_at") or "", r.get("order_number") or ""))
     return {"orders": orders, "events": state.get("events", [])[-40:]}
+
+
+def list_app_orders(days: int = 14, *, live_poll: bool = False, poll_limit: int = 25) -> list[dict[str, Any]]:
+    """Read upcoming Cenas orders without mutating the catering workflow."""
+    if SessionLocal is None:
+        return []
+    today_iso = _utcnow().astimezone().strftime("%Y-%m-%d")
+    cutoff_iso = (_utcnow().astimezone() + timedelta(days=days)).strftime("%Y-%m-%d")
+    state = _load_state()
+    watch_by_number = _watch_by_order_number(state)
+    try:
+        db = SessionLocal()
+    except Exception:
+        logger.exception("ezcater tracking watch could not open DB session")
+        return []
+    try:
+        rows = (
+            db.query(Order)
+            .filter(Order.delivery_date >= today_iso)
+            .filter(Order.delivery_date <= cutoff_iso)
+            .filter(or_(Order.status.is_(None), Order.status != "cancelled"))
+            .order_by(Order.delivery_date.asc(), Order.deliver_at.asc())
+            .limit(100)
+            .all()
+        )
+        live_bodies: dict[str, dict[str, Any] | None] = {}
+        if live_poll:
+            for o in rows:
+                if len(live_bodies) >= poll_limit:
+                    break
+                if not o.delivery_tracking_id:
+                    continue
+                try:
+                    live_bodies[o.delivery_tracking_id] = fetch_state(o.delivery_tracking_id, refresh_only=True)
+                except Exception:
+                    logger.exception("ezcater tracking watch live poll failed for %s", o.external_order_id)
+                    live_bodies[o.delivery_tracking_id] = None
+        return [
+            _public_app_order(
+                o,
+                watch_by_number.get(_order_key(o.external_order_id)),
+                live_bodies.get(o.delivery_tracking_id or ""),
+            )
+            for o in rows
+        ]
+    finally:
+        db.close()
 
 
 def save_tracker(payload: dict[str, Any]) -> dict[str, Any]:
@@ -147,6 +297,8 @@ def save_tracker(payload: dict[str, Any]) -> dict[str, Any]:
     existing.update({
         "order_number": order_number,
         "tracking_url": raw_url or existing.get("tracking_url"),
+        "client": payload.get("client") or existing.get("client"),
+        "store_label": payload.get("store_label") or existing.get("store_label"),
         "deliver_at": payload.get("deliver_at") or existing.get("deliver_at"),
         "drive_minutes": int(payload.get("drive_minutes") or existing.get("drive_minutes") or 35),
         "buffer_minutes": int(payload.get("buffer_minutes") or existing.get("buffer_minutes") or 10),

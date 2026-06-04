@@ -35,6 +35,10 @@
       display: grid;
       gap: 8px;
     }
+    .tracking-card.is-order {
+      border-color: rgba(255, 255, 255, 0.11);
+      background: rgba(255, 255, 255, 0.045);
+    }
     .tracking-card h3 {
       margin: 0;
       font-size: 14px;
@@ -106,6 +110,36 @@
       color: rgba(250, 246, 236, 0.46);
       font-size: 11px;
     }
+    .tracking-section-title {
+      margin: 2px 0 0;
+      color: #f7e4b1;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .tracking-order-list {
+      display: grid;
+      gap: 9px;
+      max-height: 380px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+    .tracking-inline-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px;
+    }
+    .tracking-inline-form input {
+      min-width: 0;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      padding: 7px 8px;
+      font: inherit;
+      letter-spacing: 0;
+    }
     @media (max-width: 1050px) {
       .tracking-lab { grid-template-columns: 1fr; }
       .tracking-map { min-height: 520px; }
@@ -124,13 +158,16 @@
 {% endblock %}
 
 {% block content %}
-<div class="tracking-lab" data-initial='{{ {"orders": orders, "events": events}|tojson }}'>
+<div class="tracking-lab" data-initial='{{ {"orders": orders, "app_orders": app_orders, "events": events}|tojson }}'>
   <div id="tracking-map" class="tracking-map" aria-label="Live ezCater map"></div>
   <section class="tracking-panel">
     <div class="tracking-alerts clear" id="manager-alerts">
       <strong>No manager alerts</strong>
       <p>Tracking is either active, completed, or waiting inside the safe leave-by window.</p>
     </div>
+
+    <h2 class="tracking-section-title">Live and upcoming orders</h2>
+    <div id="app-order-list" class="tracking-order-list"></div>
 
     <form class="tracking-form" id="single-form">
       <label>Order number
@@ -171,8 +208,8 @@
     <div id="tracker-list" style="display:grid;gap:10px;"></div>
 
     <div class="tracking-card">
-      <h3>How to use during live orders</h3>
-      <p>Open the ezCater customer tracking page, copy the URL, paste it here, then poll. Once ezCater starts sending driver state, the marker appears on the map.</p>
+      <h3>How UUIDs get here</h3>
+      <p>Each UUID is inside the ezCater customer tracking URL. The order list comes from Cenas; the tracking URL is added only when the ezCater tracker link is available.</p>
       <p class="tracking-muted">The app stores only this watchlist plus status/GPS summary for the partner-only page.</p>
     </div>
   </section>
@@ -191,6 +228,7 @@
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
   const markers = new Map();
+  let autoFitDone = false;
 
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>"']/g, c => ({
@@ -202,7 +240,10 @@
     const fd = new FormData(form);
     const payload = Object.fromEntries(fd.entries());
     if (payload.deliver_at) {
-      payload.deliver_at = new Date(payload.deliver_at).toISOString();
+      const parsed = new Date(payload.deliver_at);
+      if (!Number.isNaN(parsed.getTime())) {
+        payload.deliver_at = parsed.toISOString();
+      }
     }
     return payload;
   }
@@ -255,6 +296,63 @@
     `).join('');
   }
 
+  function orderMeta(o) {
+    const bits = [];
+    if (o.delivery_date) bits.push(o.delivery_date);
+    if (o.deliver_at) bits.push(o.deliver_at);
+    if (o.store_label) bits.push(o.store_label);
+    if (o.headcount) bits.push(o.headcount + ' heads');
+    return bits.join(' · ');
+  }
+
+  function renderAppOrders(appOrders) {
+    const list = document.getElementById('app-order-list');
+    if (!appOrders || !appOrders.length) {
+      list.innerHTML = '<div class="tracking-card is-order"><h3>No upcoming Cenas orders found</h3><p>When orders are in the app, they will show here automatically.</p></div>';
+      return;
+    }
+    list.innerHTML = appOrders.map(o => {
+      const tracker = o.tracker || null;
+      return `
+        <article class="tracking-card is-order">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+            <h3>${escapeHtml(o.order_number)}</h3>
+            <span class="tracking-pill ${tracker ? escapeHtml((tracker.risk || {}).level || 'ok') : 'watch'}">${tracker ? 'tracking' : 'needs link'}</span>
+          </div>
+          <p>${escapeHtml(o.client || 'No client name')} · ${escapeHtml(orderMeta(o))}</p>
+          <p class="tracking-muted">${escapeHtml(o.assigned_driver || o.ezcater_driver_name || 'No Cenas driver shown')} · ${escapeHtml(o.status || '')}</p>
+          ${tracker ? `<p>${escapeHtml(tracker.driver_name || 'No ezCater driver yet')} · ${escapeHtml(tracker.status_label || 'waiting')}</p>` : ''}
+          <form class="tracking-inline-form" data-order-form>
+            <input type="hidden" name="order_number" value="${escapeHtml(o.order_number)}">
+            <input type="hidden" name="client" value="${escapeHtml(o.client || '')}">
+            <input type="hidden" name="store_label" value="${escapeHtml(o.store_label || '')}">
+            <input type="hidden" name="deliver_at" value="${escapeHtml(o.deliver_at || '')}">
+            <input name="tracking_url" placeholder="${tracker ? 'replace tracking URL' : 'paste ezCater tracking URL'}">
+            <button class="btn-login" type="submit" style="padding:6px 10px;">Attach</button>
+          </form>
+        </article>`;
+    }).join('');
+  }
+
+  function allTrackers(stateObj) {
+    const byKey = new Map();
+    (stateObj.orders || []).forEach(o => {
+      byKey.set(o.uuid || o.order_number, o);
+    });
+    (stateObj.app_orders || []).forEach(o => {
+      if (!o.tracker) return;
+      const tracker = {
+        ...o.tracker,
+        order_number: o.tracker.order_number || o.order_number,
+        client: o.tracker.client || o.client,
+        store_label: o.tracker.store_label || o.store_label,
+        deliver_at: o.tracker.deliver_at || o.deliver_at,
+      };
+      byKey.set(tracker.uuid || tracker.order_number, tracker);
+    });
+    return Array.from(byKey.values());
+  }
+
   function renderMap(orders) {
     const bounds = [];
     orders.forEach(o => {
@@ -275,16 +373,19 @@
         markers.delete(key);
       }
     });
-    if (bounds.length) {
+    if (bounds.length && !autoFitDone) {
       map.fitBounds(bounds, {padding: [40, 40], maxZoom: 13});
+      autoFitDone = true;
     }
   }
 
   function render(next) {
     state = next || state;
-    renderAlerts(state.orders || []);
-    renderOrders(state.orders || []);
-    renderMap(state.orders || []);
+    const trackers = allTrackers(state);
+    renderAlerts(trackers);
+    renderAppOrders(state.app_orders || []);
+    renderOrders(trackers);
+    renderMap(trackers);
   }
 
   async function refresh() {
@@ -303,6 +404,16 @@
     ev.preventDefault();
     await api('/api/import-text', {method: 'POST', body: JSON.stringify(normalizePayload(ev.currentTarget))});
     ev.currentTarget.reset();
+    await refresh();
+  });
+
+  document.getElementById('app-order-list').addEventListener('submit', async (ev) => {
+    const form = ev.target.closest('[data-order-form]');
+    if (!form) return;
+    ev.preventDefault();
+    const payload = normalizePayload(form);
+    if (!payload.tracking_url) return;
+    await api('/api/orders', {method: 'POST', body: JSON.stringify(payload)});
     await refresh();
   });
 

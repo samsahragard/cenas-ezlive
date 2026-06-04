@@ -37,7 +37,7 @@ import json as _json
 from flask import Blueprint, abort, jsonify, request
 
 from app.db import SessionLocal
-from app.models import Order, OrderItem, Driver, DriverScore, DriverLocation
+from app.models import Order, OrderItem, Driver, DriverScore, DriverLocation, EzcaterOrderDetails
 
 driverdc_export_bp = Blueprint("driverdc_export", __name__)
 
@@ -189,12 +189,30 @@ def driverdc_export():
             Order.client, Order.customer_phone,
         ).all()
 
+        # Granular ezCater fees (Sam #3659): select ONLY the 3 fee cols (cents) from
+        # ezcater_order_details. That table ALSO holds PII (gate_code / day_of_contact /
+        # special_instructions / items_json) -- DELIBERATELY NOT selected, so PII is never
+        # loaded or served. discounts/taxes/toast_app_total have NO source column (stay NULL).
+        fee_by_order = {
+            ext_id: (comm_c, svc_c, proc_c)
+            for ext_id, comm_c, svc_c, proc_c in db.query(
+                EzcaterOrderDetails.external_order_id,
+                EzcaterOrderDetails.commission_cents,
+                EzcaterOrderDetails.service_fee_cents,
+                EzcaterOrderDetails.processing_fee_cents,
+            ).all()
+        }
+
+        def _c2usd(c):
+            return round(c / 100.0, 2) if c is not None else None
+
         orders, deliveries, order_drivers, order_timings = [], [], [], []
         for o in order_cols:
             cust_hash, cust_ver = _customer_hash(o.client, o.customer_phone, salt, salt_version)
             payout = o.paid_payout if o.paid_payout is not None else o.potential_payout
             ezt = o.total_amount
             gmp = (round((ezt or 0) - (payout or 0), 2)) if (ezt is not None or payout is not None) else None
+            fees = fee_by_order.get(o.external_order_id, (None, None, None))
 
             orders.append({
                 "external_order_id": o.external_order_id,
@@ -212,6 +230,11 @@ def driverdc_export():
                 "delivery_fee": o.delivery_fee,
                 "tip_amount": o.tip_amount,
                 "caterer_total_due": o.caterer_total_due,
+                # granular ezCater fees (Sam #3659; cents->$ from ezcater_order_details, fee cols ONLY):
+                "commissions": _c2usd(fees[0]),
+                "service_fees": _c2usd(fees[1]),
+                "processing_fees": _c2usd(fees[2]),
+                # discounts / taxes / toast_app_total: NO source column -> NULL until an ingest follow-up
                 "gross_minus_payout": gmp,
                 # [INT] opaque pseudonym ONLY -- NO cleartext customer anywhere:
                 "customer_hash": cust_hash,

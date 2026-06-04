@@ -126,10 +126,40 @@ def _init_db() -> None:
         con.commit()
 
 
+def _id_is_integer_pk(con: sqlite3.Connection, table: str) -> bool:
+    for col in con.execute(f"PRAGMA table_info({table})").fetchall():
+        if col[1] == "id":
+            return str(col[2] or "").upper() == "INTEGER" and int(col[5] or 0) == 1
+    return False
+
+
+def _insert_row(
+    con: sqlite3.Connection,
+    table: str,
+    text_id: str,
+    columns: list[str],
+    values: list,
+) -> str:
+    if _id_is_integer_pk(con, table):
+        placeholders = ", ".join("?" for _ in columns)
+        con.execute(
+            f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+            values,
+        )
+        return str(con.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+    placeholders = ", ".join("?" for _ in ["id", *columns])
+    con.execute(
+        f"INSERT OR REPLACE INTO {table} (id, {', '.join(columns)}) VALUES ({placeholders})",
+        [text_id, *values],
+    )
+    return text_id
+
+
 def _save_question(row: dict) -> str:
     _init_db()
-    qid = str(row.get("id") or "")
-    if not qid:
+    requested_qid = str(row.get("id") or "")
+    if not requested_qid:
         raise ValueError("missing id")
     principal = row.get("principal") or {}
     raw_question = str(row.get("question") or "")
@@ -167,16 +197,24 @@ def _save_question(row: dict) -> str:
     })
     with sqlite3.connect(_db_path()) as con:
         con.execute("PRAGMA foreign_keys = ON")
-        con.execute(
-            """
-            INSERT OR REPLACE INTO assistant_question (
-              id, question_hash, question_summary_redacted, status,
-              requested_by_hash, scope_role, scope_store_key, scope_hash,
-              risk_level, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                qid,
+        question_ref_is_int = _id_is_integer_pk(con, "assistant_question")
+        qid = _insert_row(
+            con,
+            "assistant_question",
+            requested_qid,
+            [
+                "question_hash",
+                "question_summary_redacted",
+                "status",
+                "requested_by_hash",
+                "scope_role",
+                "scope_store_key",
+                "scope_hash",
+                "risk_level",
+                "created_at",
+                "updated_at",
+            ],
+            [
                 question_hash,
                 question[:500],
                 status,
@@ -187,55 +225,72 @@ def _save_question(row: dict) -> str:
                 risk_level or _risk_level(sensitivity_flags, reason),
                 str(row.get("created_at") or received_at),
                 received_at,
-            ),
+            ],
         )
-        con.execute("DELETE FROM assistant_principal_snapshot WHERE question_id = ?", (qid,))
-        con.execute(
-            """
-            INSERT INTO assistant_principal_snapshot (
-              id, question_id, principal_hash, role, store_key,
-              permission_level, scope_hash, captured_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                qid + ":principal",
-                qid,
+        question_fk = int(qid) if question_ref_is_int else qid
+        con.execute("DELETE FROM assistant_principal_snapshot WHERE question_id = ?", (question_fk,))
+        _insert_row(
+            con,
+            "assistant_principal_snapshot",
+            qid + ":principal",
+            [
+                "question_id",
+                "principal_hash",
+                "role",
+                "store_key",
+                "permission_level",
+                "scope_hash",
+                "captured_at",
+            ],
+            [
+                question_fk,
                 principal_hash,
                 role,
                 store_key,
                 str(principal.get("permission_level") or role),
                 scope_hash,
                 received_at,
-            ),
+            ],
         )
-        con.execute(
-            """
-            INSERT OR REPLACE INTO assistant_review_decision (
-              id, question_id, decision, status, reviewer_hash,
-              reason_code, notes_redacted, decided_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                qid + ":review",
-                qid,
+        _insert_row(
+            con,
+            "assistant_review_decision",
+            qid + ":review",
+            [
+                "question_id",
+                "decision",
+                "status",
+                "reviewer_hash",
+                "reason_code",
+                "notes_redacted",
+                "decided_at",
+            ],
+            [
+                question_fk,
                 "hold",
                 "open",
                 None,
                 reason,
                 None,
                 None,
-            ),
+            ],
         )
-        con.execute(
-            """
-            INSERT OR REPLACE INTO assistant_model_audit (
-              id, question_id, model_key_hash, prompt_hash, response_hash,
-              status, risk_flags_hash, reviewed_by_hash, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                qid + ":model",
-                qid,
+        _insert_row(
+            con,
+            "assistant_model_audit",
+            qid + ":model",
+            [
+                "question_id",
+                "model_key_hash",
+                "prompt_hash",
+                "response_hash",
+                "status",
+                "risk_flags_hash",
+                "reviewed_by_hash",
+                "created_at",
+            ],
+            [
+                question_fk,
                 _stable_hash(model_key),
                 _stable_hash({"question_hash": question_hash, "scope_hash": scope_hash}),
                 _stable_hash("blocked_for_review"),
@@ -243,18 +298,24 @@ def _save_question(row: dict) -> str:
                 risk_flags_hash,
                 None,
                 received_at,
-            ),
+            ],
         )
-        con.execute(
-            """
-            INSERT INTO assistant_delivery_attempt (
-              id, question_id, tool_name_hash, status, delivery_target_hash,
-              attempt_count, last_error_code, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                qid + ":delivery:" + received_at,
-                qid,
+        _insert_row(
+            con,
+            "assistant_delivery_attempt",
+            qid + ":delivery:" + received_at,
+            [
+                "question_id",
+                "tool_name_hash",
+                "status",
+                "delivery_target_hash",
+                "attempt_count",
+                "last_error_code",
+                "created_at",
+                "updated_at",
+            ],
+            [
+                question_fk,
                 _stable_hash(row.get("origin") or "render_to_ck"),
                 "blocked",
                 _stable_hash(delivery_target),
@@ -262,7 +323,7 @@ def _save_question(row: dict) -> str:
                 None,
                 received_at,
                 received_at,
-            ),
+            ],
         )
         con.commit()
     return qid

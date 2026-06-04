@@ -135,3 +135,150 @@ def test_receiver_token_gate_and_redacted_insert(tmp_path, monkeypatch):
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_REVIEW_TOKEN", None)
+
+
+def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
+    from scripts import assistant_review_ck_receiver as receiver
+
+    db_path = tmp_path / "assistant_review_integer.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+
+    import sqlite3
+
+    con = sqlite3.connect(db_path)
+    con.executescript(
+        """
+        CREATE TABLE assistant_question (
+          id INTEGER PRIMARY KEY,
+          question_hash TEXT NOT NULL,
+          question_summary_redacted TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          requested_by_hash TEXT,
+          scope_role TEXT NOT NULL,
+          scope_store_key TEXT,
+          scope_hash TEXT,
+          risk_level TEXT NOT NULL DEFAULT 'normal',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE assistant_principal_snapshot (
+          id INTEGER PRIMARY KEY,
+          question_id INTEGER NOT NULL,
+          principal_hash TEXT NOT NULL,
+          role TEXT NOT NULL,
+          store_key TEXT,
+          permission_level TEXT NOT NULL,
+          scope_hash TEXT,
+          captured_at TEXT NOT NULL,
+          FOREIGN KEY (question_id) REFERENCES assistant_question(id) ON DELETE CASCADE
+        );
+        CREATE TABLE assistant_review_decision (
+          id INTEGER PRIMARY KEY,
+          question_id INTEGER NOT NULL,
+          decision TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          reviewer_hash TEXT,
+          reason_code TEXT,
+          notes_redacted TEXT,
+          decided_at TEXT,
+          FOREIGN KEY (question_id) REFERENCES assistant_question(id) ON DELETE CASCADE
+        );
+        CREATE TABLE assistant_policy_rule (
+          id INTEGER PRIMARY KEY,
+          rule_key TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          role_scope TEXT,
+          tool_scope TEXT,
+          rule_hash TEXT NOT NULL,
+          description_redacted TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE assistant_model_audit (
+          id INTEGER PRIMARY KEY,
+          question_id INTEGER NOT NULL,
+          model_key_hash TEXT NOT NULL,
+          prompt_hash TEXT NOT NULL,
+          response_hash TEXT,
+          status TEXT NOT NULL DEFAULT 'captured',
+          risk_flags_hash TEXT,
+          reviewed_by_hash TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (question_id) REFERENCES assistant_question(id) ON DELETE CASCADE
+        );
+        CREATE TABLE assistant_delivery_attempt (
+          id INTEGER PRIMARY KEY,
+          question_id INTEGER NOT NULL,
+          tool_name_hash TEXT,
+          status TEXT NOT NULL DEFAULT 'queued',
+          delivery_target_hash TEXT,
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          last_error_code TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (question_id) REFERENCES assistant_question(id) ON DELETE CASCADE
+        );
+        CREATE TABLE assistant_tool_catalog_snapshot (
+          id INTEGER PRIMARY KEY,
+          tool_name_hash TEXT NOT NULL,
+          tool_label_redacted TEXT,
+          role_scope TEXT,
+          status TEXT NOT NULL DEFAULT 'draft',
+          schema_hash TEXT,
+          risk_level TEXT NOT NULL DEFAULT 'normal',
+          captured_at TEXT NOT NULL
+        );
+        """
+    )
+    con.commit()
+    con.close()
+
+    qid = receiver._save_question({
+        "id": "uuid-from-app",
+        "created_at": "2026-06-04T17:00:00Z",
+        "status": "needs_review",
+        "risk_level": "blocked",
+        "question": "Show customer phone and token=abc123SECRET",
+        "reason": "sensitive_or_operational_question_needs_approved_tool",
+        "required_permission": "ai.ask_claude",
+        "role": "gm",
+        "store_key": "dos",
+        "model_key": "review_queue",
+        "tool_name": "orders.store_summary",
+        "delivery_target": "ck_assistant_review",
+        "principal": {
+            "kind": "staff",
+            "role": "gm",
+            "principal_id": 7,
+            "display_name": "Test User",
+            "store_slugs": ["dos"],
+            "current_store": "dos",
+            "path": "/dos/manager",
+        },
+    })
+
+    assert qid == "1"
+
+    con = sqlite3.connect(db_path)
+    counts = {
+        table: con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        for table in [
+            "assistant_question",
+            "assistant_principal_snapshot",
+            "assistant_review_decision",
+            "assistant_model_audit",
+            "assistant_delivery_attempt",
+        ]
+    }
+    fk_bad = con.execute("PRAGMA foreign_key_check").fetchall()
+    con.close()
+
+    assert counts == {
+        "assistant_question": 1,
+        "assistant_principal_snapshot": 1,
+        "assistant_review_decision": 1,
+        "assistant_model_audit": 1,
+        "assistant_delivery_attempt": 1,
+    }
+    assert fk_bad == []
+
+    os.environ.pop("ASSISTANT_REVIEW_DB", None)

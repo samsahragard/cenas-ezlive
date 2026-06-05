@@ -150,7 +150,7 @@ def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
         """
         CREATE TABLE assistant_question (
           id INTEGER PRIMARY KEY,
-          question_hash TEXT NOT NULL,
+          question_hash TEXT NOT NULL UNIQUE,
           question_summary_redacted TEXT,
           status TEXT NOT NULL DEFAULT 'pending',
           requested_by_hash TEXT,
@@ -258,6 +258,32 @@ def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
 
     assert qid == "1"
 
+    duplicate_qid = receiver._save_question({
+        "id": "second-uuid-from-app",
+        "created_at": "2026-06-04T17:05:00Z",
+        "status": "needs_review",
+        "risk_level": "blocked",
+        "question": "show customer phone and token=abc123SECRET",
+        "reason": "sensitive_or_operational_question_needs_approved_tool",
+        "required_permission": "ai.ask_claude",
+        "role": "partner",
+        "store_key": "dos",
+        "model_key": "review_queue",
+        "tool_name": "orders.store_summary",
+        "delivery_target": "ck_assistant_review",
+        "principal": {
+            "kind": "partner",
+            "role": "partner",
+            "principal_id": 1,
+            "display_name": "Sam",
+            "store_slugs": ["dos"],
+            "current_store": "dos",
+            "path": "/dos/catering",
+        },
+    })
+
+    assert duplicate_qid == "1"
+
     con = sqlite3.connect(db_path)
     counts = {
         table: con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -278,9 +304,9 @@ def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
     assert counts == {
         "assistant_question": 1,
         "assistant_principal_snapshot": 1,
-        "assistant_review_decision": 1,
-        "assistant_model_audit": 1,
-        "assistant_delivery_attempt": 1,
+        "assistant_review_decision": 2,
+        "assistant_model_audit": 2,
+        "assistant_delivery_attempt": 2,
     }
     assert fk_bad == []
     assert decided_at

@@ -198,35 +198,74 @@ def _save_question(row: dict) -> str:
     with sqlite3.connect(_db_path()) as con:
         con.execute("PRAGMA foreign_keys = ON")
         question_ref_is_int = _id_is_integer_pk(con, "assistant_question")
-        qid = _insert_row(
-            con,
-            "assistant_question",
-            requested_qid,
-            [
-                "question_hash",
-                "question_summary_redacted",
-                "status",
-                "requested_by_hash",
-                "scope_role",
-                "scope_store_key",
-                "scope_hash",
-                "risk_level",
-                "created_at",
-                "updated_at",
-            ],
-            [
-                question_hash,
-                question[:500],
-                status,
-                principal_hash,
-                role,
-                store_key,
-                scope_hash,
-                risk_level or _risk_level(sensitivity_flags, reason),
-                str(row.get("created_at") or received_at),
-                received_at,
-            ],
-        )
+        question_columns = [
+            "question_hash",
+            "question_summary_redacted",
+            "status",
+            "requested_by_hash",
+            "scope_role",
+            "scope_store_key",
+            "scope_hash",
+            "risk_level",
+            "created_at",
+            "updated_at",
+        ]
+        question_values = [
+            question_hash,
+            question[:500],
+            status,
+            principal_hash,
+            role,
+            store_key,
+            scope_hash,
+            risk_level or _risk_level(sensitivity_flags, reason),
+            str(row.get("created_at") or received_at),
+            received_at,
+        ]
+        try:
+            qid = _insert_row(
+                con,
+                "assistant_question",
+                requested_qid,
+                question_columns,
+                question_values,
+            )
+        except sqlite3.IntegrityError as exc:
+            if "assistant_question.question_hash" not in str(exc):
+                raise
+            existing = con.execute(
+                "SELECT id FROM assistant_question WHERE question_hash = ?",
+                (question_hash,),
+            ).fetchone()
+            if not existing:
+                raise
+            qid = str(existing[0])
+            question_pk = int(qid) if question_ref_is_int else qid
+            con.execute(
+                """
+                UPDATE assistant_question
+                   SET question_summary_redacted = ?,
+                       status = ?,
+                       requested_by_hash = ?,
+                       scope_role = ?,
+                       scope_store_key = ?,
+                       scope_hash = ?,
+                       risk_level = ?,
+                       updated_at = ?
+                 WHERE id = ?
+                """,
+                [
+                    question[:500],
+                    status,
+                    principal_hash,
+                    role,
+                    store_key,
+                    scope_hash,
+                    risk_level or _risk_level(sensitivity_flags, reason),
+                    received_at,
+                    question_pk,
+                ],
+            )
         question_fk = int(qid) if question_ref_is_int else qid
         con.execute("DELETE FROM assistant_principal_snapshot WHERE question_id = ?", (question_fk,))
         _insert_row(

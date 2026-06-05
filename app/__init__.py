@@ -234,13 +234,6 @@ def create_app():
     # override the context-processor value.
     from app.web.ezcater_routes import register_dashboard_banner
     register_dashboard_banner(app)
-    # View-as (owner-only READ-ONLY QA impersonation, Sam-directed). Registers
-    # /view-as (picker/start/stop), a read-only before_request guard, and the
-    # `view_as_banner` context processor. MUST come after ezkeypad.install so
-    # the _attach_current_user before_request (which sets g.viewing_as via
-    # permissions.load_current_user) is registered first.
-    from app.web.view_as_routes import install as install_view_as
-    install_view_as(app)
     # Anomaly blueprint + Jinja global `anomaly_signals_for(page_slug)`.
     # Phase 1 / Block 3 (ck 2026-05-13). Templates opt in by setting
     # `anomaly_page_slug = '<slug>'` before {% block content %} — the

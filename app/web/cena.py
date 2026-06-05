@@ -762,6 +762,43 @@ def cena_db_probe_list_drivers():
 
 
 # ============================================================
+# POST /sam/cena/db-probe/list-employees — Sam-only diagnostic
+# ============================================================
+# Returns a compact view of every row in the employees table
+# (id, full_name, active, has_user_link). Body accepts an optional
+# {active_only: bool}. Parallel to list-drivers; used to fetch the
+# roster for the owner view-login code assignment (Sam-directed).
+
+@cena_bp.route("/sam/cena/db-probe/list-employees", methods=["POST"])
+def cena_db_probe_list_employees():
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    from app.models import Employee
+
+    body = request.get_json(silent=True) or {}
+    active_only = bool(body.get("active_only", False))
+
+    db = SessionLocal()
+    try:
+        q = db.query(Employee).order_by(Employee.id.asc())
+        if active_only:
+            q = q.filter(Employee.active.is_(True))
+        out = []
+        for e in q.all():
+            out.append({
+                "id": e.id,
+                "full_name": getattr(e, "full_name", None),
+                "active": bool(getattr(e, "active", False)),
+                "has_user_link": getattr(e, "user_id", None) is not None,
+            })
+        return jsonify({"ok": True, "count": len(out), "employees": out})
+    finally:
+        db.close()
+
+
+# ============================================================
 # POST /sam/cena/db-probe/deactivate-drivers — Sam-only write
 # ============================================================
 # Bulk-deactivates rows in the drivers table per samai #1562 spec.

@@ -32,7 +32,7 @@ from app.models import (
 )
 from app.web.employee_auth import _STORE_LABELS
 from app.web.employee_my_profile_page import _profile_roster, _profile_schedule
-from app.web.permissions import level_at_least, require_level
+from app.web.permissions import require_level
 
 
 profile_lab_bp = Blueprint("corporate_profile_lab", __name__)
@@ -40,16 +40,6 @@ profile_lab_bp = Blueprint("corporate_profile_lab", __name__)
 
 def _base_path() -> str:
     return "/corporate/profile-lab" if request.path.startswith("/corporate/") else "/partner/profile-lab"
-
-
-def _can_view_as() -> bool:
-    """True only for a REAL partner -- gates whether the Profile-Lab shows the
-    'See their actual login view' buttons. The Profile Lab itself is open to
-    corporate (require_level 'corporate'), but the employee/driver view-as
-    swap is owner-only (the /view-as/* routes re-check via _require_owner), so
-    we only render the button for partners to avoid offering a 403 action."""
-    ru = getattr(g, "real_user", None) or getattr(g, "current_user", None)
-    return ru is not None and level_at_least(ru.permission_level, "partner")
 
 
 def _store_label(store_key: str | None) -> str:
@@ -381,7 +371,6 @@ def profile_lab_index():
         employees=employees,
         drivers=drivers,
         q=q,
-        can_view_as=_can_view_as(),
         counts={
             "employees": len(employees),
             "drivers": len(drivers),
@@ -425,8 +414,6 @@ def profile_lab_employee(employee_id: int):
         base_path=_base_path(),
         kind="employee",
         profile=profile,
-        can_view_as=_can_view_as(),
-        view_as_id=employee_id,
     )
 
 
@@ -453,6 +440,4 @@ def profile_lab_driver(driver_id: int):
         base_path=_base_path(),
         kind="driver",
         profile=profile,
-        can_view_as=_can_view_as(),
-        view_as_id=driver_id,
     )

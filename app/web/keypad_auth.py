@@ -223,15 +223,9 @@ def login_submit():
                 if hasattr(driver_match, "last_login_at"):
                     driver_match.last_login_at = now
                 db.commit()
-                # Symmetric cleanup (mirrors employee_auth._establish_employee_session):
-                # clear leftover user keys, the CROSS-principal employee keys, AND any
-                # view-as owner anchor, so a driver login on a shared device cannot
-                # inherit a stale employee_id or a phantom view-as / hijack the anchor.
-                for _k in ("user_id", "user_session_version", "partner_auth_ok",
-                           "employee_id", "employee_session_version",
-                           "view_as_owner_uid", "view_as_owner_sv",
-                           "view_as_kind", "view_as_principal_id",
-                           "impersonating_user_id"):
+                # Clear any leftover user-keypad keys.
+                for _k in ("user_id", "user_session_version",
+                           "partner_auth_ok"):
                     session.pop(_k, None)
                 session.permanent = True
                 session["driver_id"] = driver_match.id
@@ -467,13 +461,7 @@ def install(app):
     @app.before_request
     def _attach_current_user():
         # Cheap; only hits the DB when a session exists.
-        # NB: also run the loader during an EMPLOYEE/DRIVER view-as, where the
-        # owner's user_id has been popped (the session reads as a pure
-        # employee/driver) but view_as_owner_uid anchors the real owner.
-        # load_current_user resolves g.real_user + g.viewing_as from that
-        # anchor, which the read-only flush guard, the banner, and the
-        # owner-gated /view-as control routes all depend on.
-        if session.get("user_id") or session.get("view_as_owner_uid"):
+        if session.get("user_id"):
             load_current_user()
         else:
             g.current_user = None
@@ -493,12 +481,6 @@ def install(app):
         the alternative (admin reset that doesn't kick active sessions)
         is a security gap."""
         if not session.get("driver_id"):
-            return
-        # F4 parity: during an owner-anchored DRIVER view-as the driver keys were
-        # planted by the swap (not a real driver login). Let view-as own that
-        # lifecycle (permissions.load_current_user fail-closes on a revoked owner);
-        # running this target-driver gate here would pop the driver keys mid-swap.
-        if session.get("view_as_owner_uid") is not None:
             return
         from app.db import SessionLocal
         from app.models import Driver

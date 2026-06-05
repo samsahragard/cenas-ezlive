@@ -318,15 +318,8 @@ def driver_login_submit():
         found.lockout_until = None
         found.last_login_at = datetime.utcnow() if hasattr(found, "last_login_at") else None
         db.commit()
-        # Symmetric cleanup (mirrors employee_auth._establish_employee_session):
-        # clear leftover User keys, CROSS-principal employee keys, AND any view-as
-        # owner anchor, so a driver login on a shared device cannot inherit a stale
-        # employee_id or a phantom view-as / hijack the anchor.
-        for _k in ("user_id", "user_session_version", "partner_auth_ok",
-                   "employee_id", "employee_session_version",
-                   "view_as_owner_uid", "view_as_owner_sv",
-                   "view_as_kind", "view_as_principal_id",
-                   "impersonating_user_id"):
+        # Clear any leftover User-keypad keys (mirrors dd1d1c7 fix).
+        for _k in ("user_id", "user_session_version", "partner_auth_ok"):
             session.pop(_k, None)
         session.permanent = True
         session["driver_id"] = found.id

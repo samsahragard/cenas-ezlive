@@ -28,13 +28,6 @@
     border:1px solid rgba(217,164,54,.45); border-radius:8px; padding:10px 12px;
     background:rgba(217,164,54,.14); color:#fff; text-decoration:none; font-weight:700;
   }
-  .pl-viewas {
-    border:1px solid rgba(80,200,120,.55); border-radius:8px; padding:9px 11px;
-    background:rgba(40,140,80,.30); color:#fff; cursor:pointer; font-weight:700;
-    font-size:12px; white-space:nowrap;
-  }
-  .pl-rowbtns { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
-  .pl-rowbtns form { margin:0; }
   .pl-grid { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:18px; align-items:start; }
   .pl-card { border:1px solid rgba(217,164,54,.18); background:rgba(12,7,4,.82); border-radius:8px; overflow:hidden; }
   .pl-card h2 { margin:0; padding:14px 16px; font-size:16px; border-bottom:1px solid rgba(255,255,255,.08); }
@@ -91,16 +84,7 @@
               <span class="pl-state">{{ "Tipped" if row.is_tipped else "Non-tipped" }}</span><br>
               <span class="pl-muted">{{ "Linked" if row.linked else "Unlinked" }} · {{ "Cache ready" if row.has_cache else "No cache" }}</span>
             </td>
-            <td>
-              <div class="pl-rowbtns">
-                <a class="pl-btn" href="{{ row.href }}">Open</a>
-                {% if can_view_as and row.active %}
-                <form method="POST" action="{{ url_for('view_as.view_as_employee_start', employee_id=row.id) }}">
-                  <button type="submit" class="pl-viewas" title="Open this employee's real logged-in view (read-only)">See their actual login view</button>
-                </form>
-                {% endif %}
-              </div>
-            </td>
+            <td><a class="pl-btn" href="{{ row.href }}">Open</a></td>
           </tr>
           {% else %}
           <tr><td colspan="4" class="pl-muted">No employees found.</td></tr>
@@ -125,16 +109,7 @@
               <span class="pl-state">{{ row.tier }}</span><br>
               <span class="pl-muted">{{ row.status }}{% if row.score is not none %} · {{ row.score }} pts{% endif %}</span>
             </td>
-            <td>
-              <div class="pl-rowbtns">
-                <a class="pl-btn" href="{{ row.href }}">Open</a>
-                {% if can_view_as and row.active %}
-                <form method="POST" action="{{ url_for('view_as.view_as_driver_start', driver_id=row.id) }}">
-                  <button type="submit" class="pl-viewas" title="Open this driver's real logged-in view (read-only)">See their actual login view</button>
-                </form>
-                {% endif %}
-              </div>
-            </td>
+            <td><a class="pl-btn" href="{{ row.href }}">Open</a></td>
           </tr>
           {% else %}
           <tr><td colspan="4" class="pl-muted">No drivers found.</td></tr>

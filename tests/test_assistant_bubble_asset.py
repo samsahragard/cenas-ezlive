@@ -13,3 +13,9 @@ def test_assistant_bubble_waits_for_enabled_context_before_showing():
     assert "function dedupeRoots()" in script
     assert script.index(root_hidden) < script.index('fetch("/assistant/context"')
     assert script.index(root_shown) > script.index("!data.enabled")
+
+
+def test_assistant_bubble_script_is_versioned_for_mobile_cache():
+    template = Path("app/templates/base_dashboard.html").read_text(encoding="utf-8")
+
+    assert "assistant_bubble.js') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}" in template

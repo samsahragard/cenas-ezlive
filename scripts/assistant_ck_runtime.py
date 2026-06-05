@@ -62,6 +62,8 @@ _TOAST_ENV_FILES = [
 _TOAST_ENV_NAMES = {
     "TOAST_ANALYTICS_CLIENT_ID",
     "TOAST_ANALYTICS_CLIENT_SECRET",
+    "TOAST_CLIENT_ID",
+    "TOAST_CLIENT_SECRET",
     "TOAST_RESTAURANT_GUID_COPPERFIELD",
     "TOAST_RESTAURANT_GUID_TOMBALL",
 }
@@ -81,7 +83,8 @@ _DATA_TOOL_RE = re.compile(
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
-    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|pay|bonus|fee|fees"
+    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|"
+    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees"
     r")\b",
     re.IGNORECASE,
 )
@@ -92,10 +95,22 @@ _TOAST_SALES_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_TOAST_TABLE_ACTIVITY_RE = re.compile(
+    r"\b("
+    r"table|tables|talbe|floor|seated|seat|opened|open check|"
+    r"most recent.*open|latest.*open"
+    r")\b",
+    re.IGNORECASE,
+)
+_OWNER_IDENTITY_RE = re.compile(
+    r"^\s*(?:i\s+am|i'm|im|this\s+is)\s+(?:sam|masood)\b",
+    re.IGNORECASE,
+)
 _OPERATIONAL_NOUN_RE = re.compile(
     r"\b("
     r"catering|caterings|order|orders|delivery|deliveries|"
-    r"driver|drivers|labor|employee|employees|staff|team"
+    r"driver|drivers|labor|employee|employees|staff|team|"
+    r"table|tables|talbe|floor"
     r")\b",
     re.IGNORECASE,
 )
@@ -135,7 +150,7 @@ def _read_secret(env_name: str) -> str:
 
 
 def _load_toast_env_defaults() -> None:
-    if os.getenv("TOAST_ANALYTICS_CLIENT_ID") and os.getenv("TOAST_ANALYTICS_CLIENT_SECRET"):
+    if all(os.getenv(name) for name in _TOAST_ENV_NAMES):
         return
     for raw_path in _TOAST_ENV_FILES:
         path = Path(raw_path)
@@ -157,7 +172,7 @@ def _load_toast_env_defaults() -> None:
                 os.environ[name] = value
         except OSError:
             continue
-        if os.getenv("TOAST_ANALYTICS_CLIENT_ID") and os.getenv("TOAST_ANALYTICS_CLIENT_SECRET"):
+        if all(os.getenv(name) for name in _TOAST_ENV_NAMES):
             break
 
 
@@ -242,6 +257,14 @@ def _wants_toast_sales_summary(question: str) -> bool:
     return bool(_TOAST_SALES_RE.search(str(question or "")))
 
 
+def _wants_toast_table_activity(question: str) -> bool:
+    text = str(question or "")
+    return bool(
+        _TOAST_TABLE_ACTIVITY_RE.search(text)
+        and re.search(r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|latest|recent|open|opened)\b", text, re.IGNORECASE)
+    )
+
+
 def _toast_period_from_question(question: str) -> str:
     text = str(question or "").casefold()
     if "last week" in text or "previous week" in text:
@@ -257,11 +280,24 @@ def _toast_tool_authorized(principal: dict, tools: list[dict]) -> bool:
     return _tool_available(tools, "toast.sales_summary") or _role(principal) == "partner"
 
 
+def _toast_table_tool_authorized(principal: dict, tools: list[dict]) -> bool:
+    if not principal.get("is_owner_operator"):
+        return False
+    return _tool_available(tools, "toast.table_activity") or _role(principal) == "partner"
+
+
 def _toast_sales_summary_payload(period: str) -> dict:
     _load_toast_env_defaults()
     from app.services.toast_analytics_summary import analytics_summary_payload
 
     return analytics_summary_payload(period)
+
+
+def _toast_table_activity_payload(location: str | None) -> dict:
+    _load_toast_env_defaults()
+    from app.services.toast_table_activity import latest_table_activity_payload
+
+    return latest_table_activity_payload(location)
 
 
 def _money(value: object) -> str:
@@ -320,6 +356,32 @@ def _toast_sales_summary_answer(summary: dict) -> str:
 
     if scope_note:
         answer += f" Scope: {scope_note}"
+    return answer
+
+
+def _toast_table_activity_answer(summary: dict) -> str:
+    location_label = str(summary.get("location_label") or "the requested location").strip()
+    latest = summary.get("latest") if isinstance(summary, dict) else None
+    if not isinstance(latest, dict):
+        return f"I do not see any in-store table opens for {location_label} today in Toast yet."
+
+    opened_local = str(latest.get("opened_at_local") or "").strip()
+    table_name = str(latest.get("table_name") or "").strip()
+    if table_name:
+        answer = (
+            f"The most recent {location_label} in-store table open I see is "
+            f"table {table_name}"
+        )
+    else:
+        answer = (
+            f"I can see the latest {location_label} in-store table open event, "
+            "but Toast did not return a table label for it"
+        )
+    if opened_local:
+        answer += f", opened at {opened_local}"
+    answer += "."
+    if not latest.get("table_config_available"):
+        answer += " Table-name config was unavailable, so I did not expose the raw Toast table ID."
     return answer
 
 
@@ -493,6 +555,36 @@ def _approved_tool_answer(
     if not principal.get("is_owner_operator"):
         return None
     resolved_question = _resolved_question(question, previous_question)
+    if _OWNER_IDENTITY_RE.search(str(question or "")):
+        return {
+            "ok": True,
+            "answer": (
+                "This authenticated session is already marked as an owner-operator "
+                "session, so I will use the permissions attached to this login. I "
+                "still will not treat chat text alone as proof of identity."
+            ),
+            "queued": False,
+            "storage": "session_context",
+            "tool_id": "assistant.session_context",
+            "generated_at": _now_iso(),
+        }
+    if _toast_table_tool_authorized(principal, tools) and _wants_toast_table_activity(resolved_question):
+        requested_store = _requested_store(resolved_question)
+        table_activity = tool_data.get("toast.table_activity") if isinstance(tool_data, dict) else None
+        if not isinstance(table_activity, dict):
+            try:
+                table_activity = _toast_table_activity_payload(requested_store)
+            except Exception:  # noqa: BLE001
+                log.exception("assistant runtime: Toast table activity failed")
+                return None
+        return {
+            "ok": True,
+            "answer": _toast_table_activity_answer(table_activity),
+            "queued": False,
+            "storage": "toast_table_activity_tool",
+            "tool_id": "toast.table_activity",
+            "generated_at": table_activity.get("generated_at"),
+        }
     if _toast_tool_authorized(principal, tools) and _wants_toast_sales_summary(resolved_question):
         period = _toast_period_from_question(resolved_question)
         toast_summary = tool_data.get("toast.sales_summary") if isinstance(tool_data, dict) else None
@@ -621,14 +713,18 @@ def _stable_policy_prompt() -> str:
         "peer pay, sales internals, GUIDs, or cross-store data. This first "
         "version answers operational data questions only from approved, "
         "sanitized read-only tool payloads. If a question needs a tool that is "
-        "not available, say it needs Sam review and do not guess."
+        "not available, say it needs Sam review and do not guess. If "
+        "owner_operator=true in the authenticated session, use that session "
+        "context for permission decisions; do not ask the user to prove they "
+        "are Sam in chat."
     )
 
 
 def _session_prompt(principal: dict) -> str:
     return (
         f"Current session: role={_role(principal)}, kind={principal.get('kind')}, "
-        f"stores={principal.get('store_slugs')}, path={principal.get('path')}."
+        f"stores={principal.get('store_slugs')}, path={principal.get('path')}, "
+        f"owner_operator={bool(principal.get('is_owner_operator'))}."
     )
 
 

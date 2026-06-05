@@ -164,6 +164,26 @@ class ToastClient:
         path.write_text(json.dumps(data), encoding="utf-8")
         return data  # type: ignore[return-value]
 
+    def fetch_tables(self, location: str, restaurant_guid: str, refresh: bool = False) -> list:
+        """Pull configured dining tables for a restaurant from Toast config.
+
+        Table metadata changes rarely, so the cache is valid for 24 hours unless
+        refresh is requested. The Orders API only carries table GUIDs; this
+        lookup supplies the human table name used in operator-facing summaries.
+        """
+        path = _cache_dir() / f"tables_{location}.json"
+        if path.exists() and not refresh:
+            try:
+                age_min = (time.time() - path.stat().st_mtime) / 60
+                if age_min < 60 * 24:
+                    return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        log.info("toast: fetching tables for %s", location)
+        data = self._http_get(f"{API_HOST}/config/v2/tables", restaurant_guid)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return data  # type: ignore[return-value]
+
     def fetch_time_entries(self, location: str, restaurant_guid: str,
                            start: datetime, end: datetime, refresh: bool = False) -> list:
         """Pull time entries for [start, end] inclusive (one-shot range).

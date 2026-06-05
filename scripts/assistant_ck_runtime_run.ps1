@@ -82,6 +82,8 @@ $toastEnvFile = "C:\Users\sam\cena-secrets\toast_render_env.txt"
 Set-EnvFromExportFile -Path $toastEnvFile -Names @(
     "TOAST_ANALYTICS_CLIENT_ID",
     "TOAST_ANALYTICS_CLIENT_SECRET",
+    "TOAST_CLIENT_ID",
+    "TOAST_CLIENT_SECRET",
     "TOAST_RESTAURANT_GUID_COPPERFIELD",
     "TOAST_RESTAURANT_GUID_TOMBALL"
 )
@@ -90,6 +92,12 @@ if (-not $env:TOAST_ANALYTICS_CACHE_DIR) {
     $toastCacheDir = Join-Path $ProjectRoot "toast_analytics_cache"
     New-Item -ItemType Directory -Force -Path $toastCacheDir | Out-Null
     $env:TOAST_ANALYTICS_CACHE_DIR = $toastCacheDir
+}
+
+if (-not $env:TOAST_CACHE_DIR) {
+    $toastOrderCacheDir = Join-Path $ProjectRoot "toast_cache"
+    New-Item -ItemType Directory -Force -Path $toastOrderCacheDir | Out-Null
+    $env:TOAST_CACHE_DIR = $toastOrderCacheDir
 }
 
 Set-Location -LiteralPath $RepoRoot

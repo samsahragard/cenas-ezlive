@@ -82,6 +82,8 @@ def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
     assert tools["drivers.store_summary"]["available"] is True
     assert tools["toast.sales_summary"]["available"] is True
     assert tools["toast.sales_summary"]["status"] == "active"
+    assert tools["toast.table_activity"]["available"] is True
+    assert tools["toast.table_activity"]["status"] == "active"
 
 
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
@@ -217,6 +219,43 @@ def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
 
     assert payload["toast.sales_summary"]["period"] == "today"
     assert payload["toast.sales_summary"]["sales"] == {"net": 123.45, "orders": 3}
+
+
+def test_operator_toast_table_activity_payload_handles_typo(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_table_activity_tool_payload",
+        lambda location: {
+            "location": location,
+            "latest": {
+                "location_label": "Tomball",
+                "table_name": "106",
+                "opened_at_local": "2026-06-05 6:20 PM CT",
+            },
+        },
+    )
+
+    payload = ar._approved_tool_data("what was the most recent talbe opened in tomball", ctx)
+
+    assert payload["toast.table_activity"]["location"] == "tomball"
+    assert payload["toast.table_activity"]["latest"]["table_name"] == "106"
+    assert "toast.sales_summary" not in payload
 
 
 def test_retry_outbox_record_is_redacted_and_hashed():

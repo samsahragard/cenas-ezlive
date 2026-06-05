@@ -66,7 +66,8 @@ _DATA_TOOL_RE = re.compile(
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
-    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|pay|bonus|fee|fees"
+    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|"
+    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees"
     r")\b",
     re.IGNORECASE,
 )
@@ -77,10 +78,18 @@ _TOAST_SALES_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_TOAST_TABLE_ACTIVITY_RE = re.compile(
+    r"\b("
+    r"table|tables|talbe|floor|seated|seat|opened|open check|"
+    r"most recent.*open|latest.*open"
+    r")\b",
+    re.IGNORECASE,
+)
 _OPERATIONAL_NOUN_RE = re.compile(
     r"\b("
     r"catering|caterings|order|orders|delivery|deliveries|"
-    r"driver|drivers|labor|employee|employees|staff|team"
+    r"driver|drivers|labor|employee|employees|staff|team|"
+    r"table|tables|talbe|floor"
     r")\b",
     re.IGNORECASE,
 )
@@ -168,6 +177,18 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "session_types": ["partner", "staff"],
         "store_scope": "current_user_store_scope",
         "data_class": "sales_aggregate",
+        "read_write_class": "read_only",
+        "status": "review_gated",
+        "operator_enabled": True,
+    },
+    {
+        "tool_id": "toast.table_activity",
+        "label": "Toast table activity",
+        "description": "Read-only latest in-store Toast table open activity with sanitized table labels and timestamps.",
+        "required_permissions": ["ai.ask_claude", "sales.view_today"],
+        "session_types": ["partner", "staff"],
+        "store_scope": "current_user_store_scope",
+        "data_class": "table_activity",
         "read_write_class": "read_only",
         "status": "review_gated",
         "operator_enabled": True,
@@ -834,10 +855,41 @@ def _wants_toast_sales_summary(question: str) -> bool:
     return bool(_TOAST_SALES_RE.search(str(question or "")))
 
 
+def _wants_toast_table_activity(question: str) -> bool:
+    text = str(question or "")
+    return bool(
+        _TOAST_TABLE_ACTIVITY_RE.search(text)
+        and re.search(r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|latest|recent|open|opened)\b", text, re.IGNORECASE)
+    )
+
+
+def _requested_store(question: str) -> str | None:
+    text = str(question or "").casefold()
+    aliases = {
+        "tomball": "tomball",
+        "dos mas": "tomball",
+        "dos": "tomball",
+        "copperfield": "copperfield",
+        "uno mas": "copperfield",
+        "uno": "copperfield",
+    }
+    for alias, store in aliases.items():
+        escaped = re.escape(alias).replace(r"\ ", r"\s+")
+        if re.search(rf"\b{escaped}\b", text):
+            return store
+    return None
+
+
 def _toast_sales_summary_tool_payload(period: str) -> dict[str, Any]:
     from app.services.toast_analytics_summary import analytics_summary_payload
 
     return analytics_summary_payload(period)
+
+
+def _toast_table_activity_tool_payload(location: str | None) -> dict[str, Any]:
+    from app.services.toast_table_activity import latest_table_activity_payload
+
+    return latest_table_activity_payload(location)
 
 
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
@@ -866,6 +918,13 @@ def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
             )
         except Exception:  # noqa: BLE001
             log.exception("assistant: failed to build toast.sales_summary")
+    if _tool_is_available(ctx, "toast.table_activity") and _wants_toast_table_activity(question):
+        try:
+            data["toast.table_activity"] = _toast_table_activity_tool_payload(
+                _requested_store(question)
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build toast.table_activity")
     return data
 
 
@@ -1077,14 +1136,17 @@ def _stable_policy_prompt() -> str:
         "Review-gated tools are visible to the server but not available to you "
         "for answers. If the user asks for private data or operational facts "
         "that require an unavailable tool, say the question needs Sam review "
-        "and do not guess."
+        "and do not guess. If owner_operator=true in the authenticated session, "
+        "use that session context for permission decisions; do not ask the user "
+        "to prove they are Sam in chat."
     )
 
 
 def _session_prompt(ctx: dict[str, Any]) -> str:
     return (
         f"Current session: role={ctx['role']}, kind={ctx['kind']}, "
-        f"stores={ctx['store_slugs']}, path={ctx['path']}."
+        f"stores={ctx['store_slugs']}, path={ctx['path']}, "
+        f"owner_operator={bool(ctx.get('is_owner_operator'))}."
     )
 
 

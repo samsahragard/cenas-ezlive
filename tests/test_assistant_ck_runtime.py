@@ -264,6 +264,71 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "what was the most recent talbe opened in tomball",
+                "principal": principal,
+                "tools": [_available_tool("toast.table_activity")],
+                "tool_data": {
+                    "toast.table_activity": {
+                        "generated_at": "2026-06-05T23:22:00Z",
+                        "location": "tomball",
+                        "location_label": "Tomball",
+                        "latest": {
+                            "location": "tomball",
+                            "location_label": "Tomball",
+                            "table_name": "106",
+                            "opened_at_local": "2026-06-05 6:20 PM CT",
+                            "table_config_available": True,
+                        },
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["storage"] == "toast_table_activity_tool"
+        assert data["tool_id"] == "toast.table_activity"
+        assert "table 106" in data["answer"]
+        assert "6:20 PM CT" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
 def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
@@ -445,6 +510,26 @@ def test_runtime_owner_tool_matcher_covers_live_sweep_phrases():
         assert data["tool_id"] == expected_tool
 
 
+def test_runtime_owner_identity_uses_authenticated_session_context(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("session context answer must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = True
+
+    data = runtime._approved_tool_answer("i am sam.", "", principal, [], {})
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["storage"] == "session_context"
+    assert "already marked as an owner-operator session" in data["answer"]
+
+
 def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
@@ -525,6 +610,7 @@ def test_anthropic_answer_marks_stable_policy_for_prompt_cache(monkeypatch):
     assert model == "claude-sonnet-4-6"
     assert captured["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "Current session" in captured["system"][1]["text"]
+    assert "owner_operator=False" in captured["system"][1]["text"]
 
 
 def test_runtime_missing_permission_keeps_permission_wording(tmp_path, monkeypatch):

@@ -188,6 +188,80 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("follow-up tool answer must not call model")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("follow-up tool answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "what baout earlier this morning?",
+                "previous_question": "how amny caterings do we have today?",
+                "principal": principal,
+                "tools": [_available_tool("orders.store_summary")],
+                "tool_data": {
+                    "orders.store_summary": {
+                        "today": "2026-06-05",
+                        "today_orders": 3,
+                        "upcoming_orders": 8,
+                        "needs_driver_orders": 0,
+                        "live_tracking_orders": 0,
+                        "today_time_windows": {
+                            "morning": 2,
+                            "afternoon": 1,
+                            "evening": 0,
+                            "earlier_today": 2,
+                            "unknown_time": 0,
+                        },
+                        "today_time_windows_by_store": {
+                            "morning": {"copperfield": 1, "tomball": 1}
+                        },
+                        "today_by_store": {"copperfield": 2, "tomball": 1},
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert res.status == 200
+        assert data["queued"] is False
+        assert data["storage"] == "operational_tool"
+        assert data["tool_id"] == "orders.store_summary"
+        assert "earlier this morning (2026-06-05)" in data["answer"]
+        assert "2 caterings" in data["answer"]
+        assert "copperfield: 1" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
 def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

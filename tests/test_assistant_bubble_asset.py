@@ -19,3 +19,12 @@ def test_assistant_bubble_script_is_versioned_for_mobile_cache():
     template = Path("app/templates/base_dashboard.html").read_text(encoding="utf-8")
 
     assert "assistant_bubble.js') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}" in template
+
+
+def test_assistant_bubble_sends_previous_question_for_followups():
+    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
+
+    assert 'var lastUserQuestion = "";' in script
+    assert "var previousQuestion = lastUserQuestion;" in script
+    assert "lastUserQuestion = question;" in script
+    assert "previous_question: previousQuestion" in script

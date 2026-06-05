@@ -62,11 +62,26 @@ _SENSITIVE_RE = re.compile(
 )
 _DATA_TOOL_RE = re.compile(
     r"\b("
-    r"how many|count|total|report|summary|list|show me|who|which|"
+    r"how many|how amny|count|total|report|summary|list|show me|who|which|"
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|inventory|vendor|customer|ezcater|catering|"
     r"late|tracking|delivery|deliveries|pay|bonus|fee|fees"
+    r")\b",
+    re.IGNORECASE,
+)
+_OPERATIONAL_NOUN_RE = re.compile(
+    r"\b("
+    r"catering|caterings|order|orders|delivery|deliveries|"
+    r"driver|drivers|labor|employee|employees|staff|team"
+    r")\b",
+    re.IGNORECASE,
+)
+_FOLLOWUP_RE = re.compile(
+    r"\b("
+    r"what about|how about|what baout|earlier|morning|afternoon|"
+    r"evening|tonight|today|tomorrow|yesterday|this week|"
+    r"tomball|dos|dos mas|copperfield|uno|uno mas"
     r")\b",
     re.IGNORECASE,
 )
@@ -534,6 +549,46 @@ def _order_needs_driver(order: Order) -> bool:
     return not has_driver and status in {"new", "available", "requested", "needs_driver", "needs_review"}
 
 
+def _order_delivery_minute(order: Order) -> int | None:
+    if isinstance(order.delivery_window_start, datetime):
+        return order.delivery_window_start.hour * 60 + order.delivery_window_start.minute
+    text = str(order.deliver_at or "").strip()
+    if not text:
+        return None
+    match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, re.IGNORECASE)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2) or 0)
+    meridiem = (match.group(3) or "").casefold()
+    if meridiem == "pm" and hour < 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return None
+    return hour * 60 + minute
+
+
+def _time_window_key(minute: int | None, now_minute: int) -> str:
+    if minute is None:
+        return "unknown_time"
+    if minute < 12 * 60:
+        return "morning"
+    if minute < 17 * 60:
+        return "afternoon"
+    return "evening"
+
+
+def _increment_count(mapping: dict[str, int], key: str) -> None:
+    mapping[key] = mapping.get(key, 0) + 1
+
+
+def _increment_nested_count(mapping: dict[str, dict[str, int]], outer: str, inner: str) -> None:
+    bucket = mapping.setdefault(outer, {})
+    bucket[inner] = bucket.get(inner, 0) + 1
+
+
 def _tool_store_filter(ctx: dict[str, Any]) -> set[str]:
     if ctx.get("is_owner_operator"):
         return set()
@@ -552,19 +607,37 @@ def _orders_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
                 if _store_key_for_order(order).casefold() in allowed
             ]
         by_store: dict[str, int] = {}
+        today_by_store: dict[str, int] = {}
+        today_time_windows: dict[str, int] = {
+            "morning": 0,
+            "afternoon": 0,
+            "evening": 0,
+            "earlier_today": 0,
+            "unknown_time": 0,
+        }
+        today_time_windows_by_store: dict[str, dict[str, int]] = {}
         status_counts: dict[str, int] = {}
         today_orders = 0
         upcoming_orders = 0
         needs_driver = 0
         live_tracking = 0
         active_tracking = 0
+        now_minute = datetime.now().hour * 60 + datetime.now().minute
         for order in orders:
             order_date = _date_key(order.delivery_date)
+            store = _store_key_for_order(order)
             if order_date == today:
                 today_orders += 1
+                _increment_count(today_by_store, store)
+                minute = _order_delivery_minute(order)
+                window = _time_window_key(minute, now_minute)
+                _increment_count(today_time_windows, window)
+                _increment_nested_count(today_time_windows_by_store, window, store)
+                if minute is not None and minute <= now_minute:
+                    _increment_count(today_time_windows, "earlier_today")
+                    _increment_nested_count(today_time_windows_by_store, "earlier_today", store)
             if order_date and order_date >= today:
                 upcoming_orders += 1
-            store = _store_key_for_order(order)
             by_store[store] = by_store.get(store, 0) + 1
             status = (order.status or "unknown").casefold()
             status_counts[status] = status_counts.get(status, 0) + 1
@@ -578,6 +651,7 @@ def _orders_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
         return {
             "generated_at": _now_iso(),
             "data_class": "operations_aggregate_sanitized",
+            "today": today,
             "total_orders": len(orders),
             "today_orders": today_orders,
             "upcoming_orders": upcoming_orders,
@@ -585,6 +659,9 @@ def _orders_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
             "live_tracking_orders": live_tracking,
             "active_tracking_orders": active_tracking,
             "by_store": by_store,
+            "today_by_store": today_by_store,
+            "today_time_windows": today_time_windows,
+            "today_time_windows_by_store": today_time_windows_by_store,
             "status_counts": status_counts,
         }
     finally:
@@ -748,7 +825,45 @@ def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def _post_to_ck_runtime(question: str, ctx: dict[str, Any]) -> tuple[dict[str, Any], int] | None:
+def _contextual_followup(question: str, previous_question: str) -> bool:
+    if not previous_question.strip():
+        return False
+    if re.search(r"^\s*(what about|how about|what baout|and\b|earlier|this morning|this afternoon|tonight)", question, re.IGNORECASE):
+        return True
+    if _OPERATIONAL_NOUN_RE.search(question):
+        return False
+    return bool(_FOLLOWUP_RE.search(question) or _DATA_TOOL_RE.search(question))
+
+
+def _resolved_question(question: str, previous_question: str = "") -> str:
+    question = str(question or "").strip()
+    previous_question = str(previous_question or "").strip()
+    if _contextual_followup(question, previous_question):
+        return f"{previous_question}\nFollow-up: {question}"
+    return question
+
+
+def _previous_question_from_body(body: dict[str, Any], current_question: str) -> str:
+    direct = str(body.get("previous_question") or "").strip()
+    if direct and direct != current_question:
+        return direct[:_MAX_QUESTION_CHARS]
+    history = body.get("history")
+    if isinstance(history, list):
+        for item in reversed(history):
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").casefold()
+            text = str(item.get("content") or item.get("question") or "").strip()
+            if role == "user" and text and text != current_question:
+                return text[:_MAX_QUESTION_CHARS]
+    return ""
+
+
+def _post_to_ck_runtime(
+    question: str,
+    ctx: dict[str, Any],
+    previous_question: str = "",
+) -> tuple[dict[str, Any], int] | None:
     """Send the assistant turn to the CK-local runtime.
 
     The runtime is the execution boundary for production: model calls, durable
@@ -768,10 +883,12 @@ def _post_to_ck_runtime(question: str, ctx: dict[str, Any]) -> tuple[dict[str, A
         "question": question,
         "principal": _runtime_principal(ctx),
         "tools": _tool_catalog_for(ctx),
-        "tool_data": _approved_tool_data(question, ctx),
+        "tool_data": _approved_tool_data(_resolved_question(question, previous_question), ctx),
         "source": "cenas_app",
         "requested_at": _now_iso(),
     }
+    if previous_question:
+        payload["previous_question"] = previous_question
     try:
         import httpx
 
@@ -1012,8 +1129,10 @@ def assistant_ask():
     question = str(body.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     if not question:
         return jsonify({"ok": False, "error": "question required"}), 400
+    previous_question = _previous_question_from_body(body, question)
+    safety_question = _resolved_question(question, previous_question)
 
-    runtime_response = _post_to_ck_runtime(question, ctx)
+    runtime_response = _post_to_ck_runtime(question, ctx, previous_question)
     if runtime_response is not None:
         data, status = runtime_response
         return jsonify(data), status
@@ -1021,7 +1140,7 @@ def assistant_ask():
     if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
         return jsonify({"ok": False, "error": "ck_runtime_required"}), 503
 
-    should_queue, reason, required = _should_queue(question, ctx)
+    should_queue, reason, required = _should_queue(safety_question, ctx)
     if should_queue:
         row = _queue_for_review(question, ctx, reason, required)
         return jsonify({

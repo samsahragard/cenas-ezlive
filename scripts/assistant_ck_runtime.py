@@ -62,11 +62,26 @@ _SENSITIVE_RE = re.compile(
 )
 _DATA_TOOL_RE = re.compile(
     r"\b("
-    r"how many|count|total|report|summary|list|show me|who|which|"
+    r"how many|how amny|count|total|report|summary|list|show me|who|which|"
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|inventory|vendor|customer|ezcater|catering|"
     r"late|tracking|delivery|deliveries|pay|bonus|fee|fees"
+    r")\b",
+    re.IGNORECASE,
+)
+_OPERATIONAL_NOUN_RE = re.compile(
+    r"\b("
+    r"catering|caterings|order|orders|delivery|deliveries|"
+    r"driver|drivers|labor|employee|employees|staff|team"
+    r")\b",
+    re.IGNORECASE,
+)
+_FOLLOWUP_RE = re.compile(
+    r"\b("
+    r"what about|how about|what baout|earlier|morning|afternoon|"
+    r"evening|tonight|today|tomorrow|yesterday|this week|"
+    r"tomball|dos|dos mas|copperfield|uno|uno mas"
     r")\b",
     re.IGNORECASE,
 )
@@ -129,13 +144,15 @@ def _tool_available(tools: list[dict], tool_id: str) -> bool:
 def _wants_order_summary(question: str) -> bool:
     text = question.casefold()
     return bool(
-        re.search(r"\b(how many|count|total|summary|report)\b", text)
+        re.search(r"\b(how (?:many|amny)|count|total|summary|report)\b", text)
         and re.search(r"\b(catering|caterings|order|orders|delivery|deliveries)\b", text)
     )
 
 
 def _wants_driver_summary(question: str) -> bool:
     text = question.casefold()
+    if re.search(r"\borders?\s+that\s+need\s+driver\s+attention\b", text):
+        return False
     return bool(
         re.search(r"\b(how many|count|total|summary|report|active|score)\b", text)
         and re.search(r"\b(driver|drivers)\b", text)
@@ -154,21 +171,88 @@ def _plural(count: int, singular: str, plural: str | None = None) -> str:
     return singular if count == 1 else (plural or singular + "s")
 
 
-def _orders_summary_answer(summary: dict) -> str:
+def _requested_store(question: str) -> str | None:
+    text = question.casefold()
+    aliases = {
+        "tomball": "tomball",
+        "dos mas": "tomball",
+        "dos": "tomball",
+        "copperfield": "copperfield",
+        "uno mas": "copperfield",
+        "uno": "copperfield",
+    }
+    for alias, store in aliases.items():
+        escaped = re.escape(alias).replace(r"\ ", r"\s+")
+        if re.search(rf"\b{escaped}\b", text):
+            return store
+    return None
+
+
+def _requested_today_window(question: str) -> tuple[str, str] | None:
+    text = question.casefold()
+    if "earlier this morning" in text or "this morning" in text or re.search(r"\bmorning\b", text):
+        return "morning", "earlier this morning"
+    if "earlier today" in text:
+        return "earlier_today", "earlier today"
+    if re.search(r"\bafternoon\b", text):
+        return "afternoon", "this afternoon"
+    if re.search(r"\b(evening|tonight)\b", text):
+        return "evening", "tonight"
+    return None
+
+
+def _store_count(mapping: dict, store: str | None, default_total: int) -> int:
+    if not store:
+        return default_total
+    return int((mapping or {}).get(store, 0) or 0)
+
+
+def _store_split(mapping: dict) -> str:
+    return "; ".join(
+        f"{store}: {count}" for store, count in sorted((mapping or {}).items())
+    )
+
+
+def _orders_summary_answer(summary: dict, question: str = "") -> str:
+    requested_store = _requested_store(question)
+    requested_window = _requested_today_window(question)
+    today_date = str(summary.get("today") or "").strip()
+    if requested_window:
+        window_key, label = requested_window
+        window_counts = summary.get("today_time_windows") or {}
+        window_by_store = summary.get("today_time_windows_by_store") or {}
+        count = int(window_counts.get(window_key) or 0)
+        store_counts = window_by_store.get(window_key) or {}
+        if requested_store:
+            count = int(store_counts.get(requested_store) or 0)
+        date_suffix = f" ({today_date})" if today_date else ""
+        if requested_store:
+            answer = (
+                f"For {label}{date_suffix}, {requested_store} has "
+                f"{count} {_plural(count, 'catering')}."
+            )
+        else:
+            answer = f"For {label}{date_suffix}, there are {count} {_plural(count, 'catering')}."
+        split = _store_split(store_counts)
+        if split and not requested_store:
+            answer += " Store split: " + split + "."
+        return answer
+
     today_orders = int(summary.get("today_orders") or 0)
     upcoming_orders = int(summary.get("upcoming_orders") or 0)
     needs_driver = int(summary.get("needs_driver_orders") or 0)
     live_tracking = int(summary.get("live_tracking_orders") or 0)
     active_tracking = int(summary.get("active_tracking_orders") or 0)
-    by_store = summary.get("by_store") or {}
-    store_bits = [
-        f"{store}: {count}"
-        for store, count in sorted(by_store.items())
-    ]
-    answer = (
-        f"You have {today_orders} {_plural(today_orders, 'catering')} today"
-        f" and {upcoming_orders} upcoming {_plural(upcoming_orders, 'order')} in the current view."
-    )
+    by_store = summary.get("today_by_store") or summary.get("by_store") or {}
+    today_orders = _store_count(by_store, requested_store, today_orders)
+    store_bits = [f"{store}: {count}" for store, count in sorted(by_store.items())]
+    if requested_store:
+        answer = f"{requested_store} has {today_orders} {_plural(today_orders, 'catering')} today."
+    else:
+        answer = (
+            f"You have {today_orders} {_plural(today_orders, 'catering')} today"
+            f" and {upcoming_orders} upcoming {_plural(upcoming_orders, 'order')} in the current view."
+        )
     if needs_driver:
         answer += f" {needs_driver} still {_plural(needs_driver, 'need', 'need')} driver attention."
     else:
@@ -225,23 +309,37 @@ def _labor_summary_answer(summary: dict) -> str:
     return answer
 
 
-def _approved_tool_answer(question: str, principal: dict, tools: list[dict], tool_data: dict) -> dict | None:
+def _contextual_followup(question: str, previous_question: str) -> bool:
+    if not previous_question.strip():
+        return False
+    if re.search(r"^\s*(what about|how about|what baout|and\b|earlier|this morning|this afternoon|tonight)", question, re.IGNORECASE):
+        return True
+    if _OPERATIONAL_NOUN_RE.search(question):
+        return False
+    return bool(_FOLLOWUP_RE.search(question) or _DATA_TOOL_RE.search(question))
+
+
+def _resolved_question(question: str, previous_question: str = "") -> str:
+    question = str(question or "").strip()
+    previous_question = str(previous_question or "").strip()
+    if _contextual_followup(question, previous_question):
+        return f"{previous_question}\nFollow-up: {question}"
+    return question
+
+
+def _approved_tool_answer(
+    question: str,
+    previous_question: str,
+    principal: dict,
+    tools: list[dict],
+    tool_data: dict,
+) -> dict | None:
     if not principal.get("is_owner_operator"):
         return None
-    if _tool_available(tools, "orders.store_summary"):
-        summary = tool_data.get("orders.store_summary") if isinstance(tool_data, dict) else None
-        if isinstance(summary, dict) and _wants_order_summary(question):
-            return {
-                "ok": True,
-                "answer": _orders_summary_answer(summary),
-                "queued": False,
-                "storage": "operational_tool",
-                "tool_id": "orders.store_summary",
-                "generated_at": summary.get("generated_at"),
-            }
+    resolved_question = _resolved_question(question, previous_question)
     if _tool_available(tools, "drivers.store_summary"):
         driver_summary = tool_data.get("drivers.store_summary") if isinstance(tool_data, dict) else None
-        if isinstance(driver_summary, dict) and _wants_driver_summary(question):
+        if isinstance(driver_summary, dict) and _wants_driver_summary(resolved_question):
             return {
                 "ok": True,
                 "answer": _drivers_summary_answer(driver_summary),
@@ -252,7 +350,7 @@ def _approved_tool_answer(question: str, principal: dict, tools: list[dict], too
             }
     if _tool_available(tools, "labor.store_aggregate"):
         labor_summary = tool_data.get("labor.store_aggregate") if isinstance(tool_data, dict) else None
-        if isinstance(labor_summary, dict) and _wants_labor_summary(question):
+        if isinstance(labor_summary, dict) and _wants_labor_summary(resolved_question):
             return {
                 "ok": True,
                 "answer": _labor_summary_answer(labor_summary),
@@ -260,6 +358,17 @@ def _approved_tool_answer(question: str, principal: dict, tools: list[dict], too
                 "storage": "operational_tool",
                 "tool_id": "labor.store_aggregate",
                 "generated_at": labor_summary.get("generated_at"),
+            }
+    if _tool_available(tools, "orders.store_summary"):
+        summary = tool_data.get("orders.store_summary") if isinstance(tool_data, dict) else None
+        if isinstance(summary, dict) and _wants_order_summary(resolved_question):
+            return {
+                "ok": True,
+                "answer": _orders_summary_answer(summary, resolved_question),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": "orders.store_summary",
+                "generated_at": summary.get("generated_at"),
             }
     return None
 
@@ -410,6 +519,7 @@ def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | No
 
 def _answer(payload: dict) -> tuple[dict, int]:
     question = str(payload.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
+    previous_question = str(payload.get("previous_question") or "").strip()[:_MAX_QUESTION_CHARS]
     principal = payload.get("principal") or {}
     tools = payload.get("tools") or []
     tool_data = payload.get("tool_data") or {}
@@ -417,11 +527,12 @@ def _answer(payload: dict) -> tuple[dict, int]:
     if not question:
         return {"ok": False, "error": "question required"}, 400
 
-    approved = _approved_tool_answer(question, principal, tools, tool_data)
+    resolved_question = _resolved_question(question, previous_question)
+    approved = _approved_tool_answer(question, previous_question, principal, tools, tool_data)
     if approved is not None:
         return approved, 200
 
-    should_queue, reason, required = _should_queue(question, principal)
+    should_queue, reason, required = _should_queue(resolved_question, principal)
     if should_queue:
         row = _queue_for_review(question, principal, reason, required, source)
         return {

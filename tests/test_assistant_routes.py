@@ -89,6 +89,7 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
         Order(
             external_order_id="TO-1",
             delivery_date=today.isoformat(),
+            delivery_window_start=datetime(today.year, today.month, today.day, 9, 30),
             origin_store_id="copperfield",
             status="approved",
             delivery_tracking_id="track-1",
@@ -166,6 +167,8 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
     assert summary["total_orders"] == 2
     assert summary["today_orders"] == 1
     assert summary["upcoming_orders"] == 2
+    assert summary["today_time_windows"]["morning"] == 1
+    assert summary["today_time_windows_by_store"]["morning"]["copperfield"] == 1
     assert summary["needs_driver_orders"] == 1
     assert summary["live_tracking_orders"] == 1
     assert payload["drivers.store_summary"]["total_drivers"] == 1
@@ -321,14 +324,21 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
     monkeypatch.setattr(ar, "_gemini_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")))
 
     try:
-        res = app.test_client().post("/assistant/ask", json={"question": "How do I use this page?"})
+        res = app.test_client().post(
+            "/assistant/ask",
+            json={
+                "question": "what baout earlier this morning?",
+                "previous_question": "How many caterings do we have today?",
+            },
+        )
         data = res.get_json()
 
         assert res.status_code == 200
         assert data["answer"] == "CK-local answer"
         assert RuntimeHandler.seen["path"] == "/assistant/answer"
         assert RuntimeHandler.seen["authorization"] == "Bearer runtime-token"
-        assert RuntimeHandler.seen["body"]["question"] == "How do I use this page?"
+        assert RuntimeHandler.seen["body"]["question"] == "what baout earlier this morning?"
+        assert RuntimeHandler.seen["body"]["previous_question"] == "How many caterings do we have today?"
         assert RuntimeHandler.seen["body"]["principal"]["role"] == "gm"
         assert RuntimeHandler.seen["body"]["principal"]["store_slugs"] == ["dos"]
     finally:

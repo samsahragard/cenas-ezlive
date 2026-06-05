@@ -65,6 +65,7 @@
 
     var messages = el("div", "ckai-messages");
     var intro = addMessage(messages, "assistant", "Ask me a Cenas question. I will only answer what your role is allowed to see.");
+    var lastUserQuestion = "";
 
     var form = el("form", "ckai-form");
     var input = el("textarea", "ckai-input");
@@ -128,6 +129,8 @@
       event.preventDefault();
       var question = input.value.trim();
       if (!question) return;
+      var previousQuestion = lastUserQuestion;
+      lastUserQuestion = question;
       input.value = "";
       addMessage(messages, "user", question);
       var pending = addMessage(messages, "assistant", "Thinking...");
@@ -138,7 +141,10 @@
           "Content-Type": "application/json",
           "X-Current-Path": window.location.pathname + window.location.search + window.location.hash
         },
-        body: JSON.stringify({ question: question })
+        body: JSON.stringify({
+          question: question,
+          previous_question: previousQuestion
+        })
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {

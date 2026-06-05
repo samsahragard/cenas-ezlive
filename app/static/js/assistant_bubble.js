@@ -25,6 +25,7 @@
     if (document.querySelector(".ckai-root")) return;
 
     var root = el("div", "ckai-root");
+    root.setAttribute("hidden", "hidden");
     var button = el("button", "ckai-orb");
     button.type = "button";
     button.setAttribute("aria-label", "Open Cenas assistant");
@@ -77,6 +78,7 @@
           root.setAttribute("hidden", "hidden");
           return;
         }
+        root.removeAttribute("hidden");
         var principal = data.principal || {};
         var role = principal.role || "user";
         var activeTools = (data.tools || []).filter(function (tool) {

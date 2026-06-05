@@ -74,7 +74,7 @@ def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
         assert data["ok"] is True
         assert data["queued"] is True
         assert data["storage"] == "ck"
-        assert data["answer"].startswith("I can't safely answer")
+        assert data["answer"] == "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
         assert data["reason"] == "sensitive_or_operational_question_needs_approved_tool"
 
         import sqlite3
@@ -103,6 +103,47 @@ def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
             "assistant_delivery_attempt": 1,
         }
         assert question == ("needs_review", "gm", "dos", "blocked")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_missing_permission_keeps_permission_wording(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("expo")
+        principal["can_ask_personal"] = False
+        principal["can_ask_operational"] = False
+        principal["permissions"] = []
+        res = _post(
+            port,
+            {
+                "question": "How do I move around this page?",
+                "principal": principal,
+                "tools": [],
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert res.status == 200
+        assert data["queued"] is True
+        assert data["answer"].startswith("I can't safely answer")
+        assert data["reason"] == "missing_ai_permission"
     finally:
         httpd.shutdown()
         httpd.server_close()

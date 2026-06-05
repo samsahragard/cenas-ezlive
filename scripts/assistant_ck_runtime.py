@@ -167,6 +167,17 @@ def _queue_for_review(question: str, principal: dict, reason: str,
     return row
 
 
+def _queued_answer(reason: str) -> str:
+    if reason in {
+        "sensitive_or_operational_question_needs_approved_tool",
+        "data_question_needs_approved_tool",
+    }:
+        return "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
+    if reason == "not_authenticated":
+        return "Please sign in first. I saved the question for Sam review."
+    return "I can't safely answer that from your current permissions yet, so I saved it for Sam review."
+
+
 def _system_prompt(principal: dict) -> str:
     return (
         "You are the Cenas Kitchen in-app assistant running on CK. Answer only "
@@ -237,7 +248,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
         row = _queue_for_review(question, principal, reason, required, source)
         return {
             "ok": True,
-            "answer": "I can't safely answer that from your current permissions yet, so I saved it for Sam review.",
+            "answer": _queued_answer(reason),
             "queued": True,
             "queue_id": row["id"],
             "storage": "ck",

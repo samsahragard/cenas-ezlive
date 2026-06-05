@@ -1,5 +1,22 @@
 (function () {
-  if (window.__cenasAssistantLoaded) return;
+  try {
+    if (window.self !== window.top) return;
+  } catch (err) {
+    return;
+  }
+
+  function dedupeRoots() {
+    var roots = Array.prototype.slice.call(document.querySelectorAll(".ckai-root"));
+    roots.slice(1).forEach(function (node) {
+      node.remove();
+    });
+    return roots[0] || null;
+  }
+
+  if (window.__cenasAssistantLoaded) {
+    dedupeRoots();
+    return;
+  }
   window.__cenasAssistantLoaded = true;
 
   function el(tag, cls, text) {
@@ -22,7 +39,7 @@
   }
 
   function init() {
-    if (document.querySelector(".ckai-root")) return;
+    if (dedupeRoots()) return;
 
     var root = el("div", "ckai-root");
     root.setAttribute("hidden", "hidden");

@@ -9,5 +9,7 @@ def test_assistant_bubble_waits_for_enabled_context_before_showing():
 
     assert root_hidden in script
     assert root_shown in script
+    assert "window.self !== window.top" in script
+    assert "function dedupeRoots()" in script
     assert script.index(root_hidden) < script.index('fetch("/assistant/context"')
     assert script.index(root_shown) > script.index("!data.enabled")

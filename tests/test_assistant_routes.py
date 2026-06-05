@@ -90,6 +90,14 @@ def test_store_scope_key_accepts_objects():
     assert ar._store_scope_key(None) is None
 
 
+def test_queued_answer_distinguishes_tool_review_from_missing_permission():
+    assert (
+        ar._queued_answer("data_question_needs_approved_tool")
+        == "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
+    )
+    assert ar._queued_answer("missing_ai_permission").startswith("I can't safely answer")
+
+
 def test_assistant_enabled_is_off_by_default_on_render(monkeypatch):
     monkeypatch.setenv("RENDER", "1")
     monkeypatch.delenv("AI_ASSISTANT_ENABLED", raising=False)

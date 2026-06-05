@@ -507,6 +507,17 @@ def _queue_for_review(question: str, ctx: dict[str, Any], reason: str,
     return row
 
 
+def _queued_answer(reason: str) -> str:
+    if reason in {
+        "sensitive_or_operational_question_needs_approved_tool",
+        "data_question_needs_approved_tool",
+    }:
+        return "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
+    if reason == "not_authenticated":
+        return "Please sign in first. I saved the question for Sam review."
+    return "I can't safely answer that from your current permissions yet, so I saved it for Sam review."
+
+
 def _anthropic_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
     key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not key:
@@ -651,7 +662,7 @@ def assistant_ask():
         row = _queue_for_review(question, ctx, reason, required)
         return jsonify({
             "ok": True,
-            "answer": "I can't safely answer that from your current permissions yet, so I saved it for Sam review.",
+            "answer": _queued_answer(reason),
             "queued": True,
             "queue_id": row["id"],
             "storage": row.get("storage"),

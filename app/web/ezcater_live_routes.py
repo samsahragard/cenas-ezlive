@@ -135,32 +135,8 @@ def sync_from_ezmanage():
     gate = _enforce_partner()
     if gate is not None:
         return gate
-    from app.services.ezcater_live_tracker import extract_tracking_uuid, poll_one
+    from app.services.ezcater_tracking_sync import sync_tracking_updates
     payload = request.get_json(silent=True) or {}
     updates = payload.get("updates") or []
-    results = {"saved": 0, "polled": 0, "skipped": [], "not_found": []}
-    db = SessionLocal()
-    try:
-        for u in updates:
-            on_raw = (u.get("order_number") or "").strip().upper()
-            url = (u.get("tracking_url") or "").strip()
-            uuid_ = extract_tracking_uuid(url)
-            if not on_raw or not uuid_:
-                results["skipped"].append({"order_number": on_raw, "reason": "missing data"})
-                continue
-            # Try with-dash form first (our DB), fall back to no-dash.
-            with_dash = on_raw if "-" in on_raw else (f"{on_raw[:3]}-{on_raw[3:]}" if len(on_raw) >= 4 else on_raw)
-            o = (db.query(Order).filter(Order.external_order_id == with_dash).first()
-                 or db.query(Order).filter(Order.external_order_id == on_raw).first())
-            if not o:
-                results["not_found"].append(on_raw)
-                continue
-            o.delivery_tracking_id = uuid_
-            body = poll_one(o)
-            results["saved"] += 1
-            if body:
-                results["polled"] += 1
-        db.commit()
-    finally:
-        db.close()
+    results = sync_tracking_updates(updates, poll=True)
     return jsonify(results)

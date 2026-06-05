@@ -128,6 +128,41 @@ def _require_gateway_token_or_partner():
 
 
 # ============================================================
+# ezCater live tracking machine sync
+# ============================================================
+
+@cena_bp.route("/sam/cena/run-ezcater-tracking-sync", methods=["POST"])
+def cena_run_ezcater_tracking_sync():
+    """Machine endpoint for CK/pwck to submit ezCater customer tracker URLs.
+
+    Body:
+      {"updates": [{"order_number": "ABC-123", "tracking_url": "https://..."}]}
+
+    This stores only the ezCater tracking UUID/status cache fields on matching
+    Order rows and immediately polls the public ezCater tracking refresh
+    endpoint. It does not assign drivers, fulfill orders, send notifications,
+    or mutate driver payroll tracking_status.
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    updates = body.get("updates")
+    if updates is None:
+        updates = []
+    if not isinstance(updates, list):
+        return jsonify({"ok": False, "error": "updates must be a list"}), 400
+    if len(updates) > 200:
+        return jsonify({"ok": False, "error": "max 200 updates per call"}), 400
+
+    from app.services.ezcater_tracking_sync import sync_tracking_updates
+
+    result = sync_tracking_updates(updates, poll=True, limit=200)
+    return jsonify({"ok": True, **result})
+
+
+# ============================================================
 # POST /sam/cena/log — the gateway calls this after each tool run
 # ============================================================
 # Body shape (JSON):

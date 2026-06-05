@@ -65,8 +65,8 @@ _DATA_TOOL_RE = re.compile(
     r"how many|how amny|count|total|report|summary|list|show me|who|which|"
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
-    r"tip|tips|labor|inventory|vendor|customer|ezcater|catering|"
-    r"late|tracking|delivery|deliveries|pay|bonus|fee|fees"
+    r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
+    r"late|tracking|tracking link|tracking links|delivery|deliveries|pay|bonus|fee|fees"
     r")\b",
     re.IGNORECASE,
 )
@@ -147,8 +147,19 @@ def _wants_order_summary(question: str) -> bool:
         return True
     if re.search(r"\borders?\b.*\b(?:need|needs|needing)\s+(?:a\s+)?driver\b", text):
         return True
+    if re.search(r"\btracking\s+links?\b", text):
+        return True
+    if re.search(
+        r"\b(catering|caterings|order|orders|delivery|deliveries)\b",
+        text,
+    ) and re.search(
+        r"\b(today|morning|afternoon|evening|tonight|tomorrow|yesterday|"
+        r"split|by store|store split|have|current|active|totals?)\b",
+        text,
+    ):
+        return True
     return bool(
-        re.search(r"\b(how (?:many|amny)|count|total|summary|report)\b", text)
+        re.search(r"\b(how (?:many|amny)|count|total|totals|summary|report)\b", text)
         and re.search(r"\b(catering|caterings|order|orders|delivery|deliveries)\b", text)
     )
 
@@ -173,8 +184,8 @@ def _wants_driver_summary(question: str) -> bool:
 def _wants_labor_summary(question: str) -> bool:
     text = question.casefold()
     return bool(
-        re.search(r"\b(how many|count|total|summary|report|schedule|attendance|labor|employee|employees|staff|team)\b", text)
-        and re.search(r"\b(labor|employee|employees|staff|team|schedule|attendance|shift|shifts)\b", text)
+        re.search(r"\b(how many|count|total|summary|report|schedule|attendance|labor|employee|employees|staff|staffing|team|current)\b", text)
+        and re.search(r"\b(labor|employee|employees|staff|staffing|team|schedule|attendance|shift|shifts)\b", text)
     )
 
 

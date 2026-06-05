@@ -65,8 +65,8 @@ _DATA_TOOL_RE = re.compile(
     r"how many|how amny|count|total|report|summary|list|show me|who|which|"
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
-    r"tip|tips|labor|inventory|vendor|customer|ezcater|catering|"
-    r"late|tracking|delivery|deliveries|pay|bonus|fee|fees"
+    r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
+    r"late|tracking|tracking link|tracking links|delivery|deliveries|pay|bonus|fee|fees"
     r")\b",
     re.IGNORECASE,
 )

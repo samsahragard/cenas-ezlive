@@ -347,11 +347,18 @@ def test_runtime_owner_tool_matcher_covers_live_sweep_phrases():
     }
 
     cases = {
+        "caterings today?": "orders.store_summary",
+        "what caterings are today": "orders.store_summary",
+        "how many active tracking links": "orders.store_summary",
+        "what is the store split for caterings today": "orders.store_summary",
+        "do we have caterings today": "orders.store_summary",
+        "today order totals": "orders.store_summary",
         "orders needing driver attention": "orders.store_summary",
         "current drivers by location": "drivers.store_summary",
         "do we have drivers on shift": "drivers.store_summary",
         "show me the driver aggregate": "drivers.store_summary",
         "driver coverage today": "drivers.store_summary",
+        "current staffing summary": "labor.store_aggregate",
     }
 
     for question, expected_tool in cases.items():

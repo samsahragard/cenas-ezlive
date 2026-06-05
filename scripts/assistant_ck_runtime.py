@@ -143,6 +143,10 @@ def _tool_available(tools: list[dict], tool_id: str) -> bool:
 
 def _wants_order_summary(question: str) -> bool:
     text = question.casefold()
+    if re.search(r"\borders?\b.*\bdriver\s+attention\b", text):
+        return True
+    if re.search(r"\borders?\b.*\b(?:need|needs|needing)\s+(?:a\s+)?driver\b", text):
+        return True
     return bool(
         re.search(r"\b(how (?:many|amny)|count|total|summary|report)\b", text)
         and re.search(r"\b(catering|caterings|order|orders|delivery|deliveries)\b", text)
@@ -151,10 +155,17 @@ def _wants_order_summary(question: str) -> bool:
 
 def _wants_driver_summary(question: str) -> bool:
     text = question.casefold()
-    if re.search(r"\borders?\s+that\s+need\s+driver\s+attention\b", text):
+    if re.search(r"\borders?\b.*\bdriver\s+attention\b", text):
+        return False
+    if re.search(r"\borders?\b.*\b(?:need|needs|needing)\s+(?:a\s+)?driver\b", text):
         return False
     return bool(
-        re.search(r"\b(how many|count|total|summary|report|active|score)\b", text)
+        re.search(
+            r"\b(how many|count|total|summary|report|active|score|current|"
+            r"coverage|availability|aggregate|roster|staffing|location|"
+            r"on shift|active orders)\b",
+            text,
+        )
         and re.search(r"\b(driver|drivers)\b", text)
     )
 

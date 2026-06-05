@@ -313,6 +313,55 @@ def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, mo
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_owner_tool_matcher_covers_live_sweep_phrases():
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = True
+    tools = [
+        _available_tool("orders.store_summary"),
+        _available_tool("drivers.store_summary"),
+        _available_tool("labor.store_aggregate"),
+    ]
+    tool_data = {
+        "orders.store_summary": {
+            "today_orders": 4,
+            "upcoming_orders": 12,
+            "needs_driver_orders": 17,
+            "live_tracking_orders": 2,
+        },
+        "drivers.store_summary": {
+            "total_drivers": 45,
+            "active_drivers": 25,
+            "drivers_on_shift": 0,
+            "drivers_on_active_orders": 3,
+            "average_score": 100.0,
+        },
+        "labor.store_aggregate": {
+            "total_employees": 119,
+            "active_employees": 95,
+            "published_shifts": 2323,
+            "open_shifts": 0,
+        },
+    }
+
+    cases = {
+        "orders needing driver attention": "orders.store_summary",
+        "current drivers by location": "drivers.store_summary",
+        "do we have drivers on shift": "drivers.store_summary",
+        "show me the driver aggregate": "drivers.store_summary",
+        "driver coverage today": "drivers.store_summary",
+    }
+
+    for question, expected_tool in cases.items():
+        data = runtime._approved_tool_answer(question, "", principal, tools, tool_data)
+        assert data is not None, question
+        assert data["queued"] is False
+        assert data["storage"] == "operational_tool"
+        assert data["tool_id"] == expected_tool
+
+
 def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

@@ -116,6 +116,105 @@ def _bump_failed_attempts_for_passcode(db, passcode: str) -> None:
     pass
 
 
+# ===========================================================================
+# Owner view-login (Sam-directed; current employees only)
+# ===========================================================================
+# A SINGLE shared phone + a per-employee 5-digit code logs the OWNER straight
+# into THAT employee's REAL portal, so Sam can see exactly what each employee
+# sees when they sign in. Each employee keeps their normal login untouched;
+# this is a second door, for the owner. Codes live in the committed file
+# data/view_login_codes.json as {sha256(code): employee_id} so the repo never
+# stores the plaintext codes. A per-IP lockout makes the 5-digit space
+# infeasible to brute-force online.
+VIEW_LOGIN_PHONE = "5550000000"          # shared; intercepted before any real lookup
+_VIEW_LOGIN_MAX_FAILS = 8
+_VIEW_LOGIN_LOCKOUT_SECONDS = 600        # 10-minute lockout after MAX consecutive misses
+_view_login_fails: dict = {}             # ip -> (consecutive_fails, lock_until_epoch)
+_view_login_codes_cache = None
+
+
+def _view_login_codes_path() -> str:
+    import os
+    return os.path.join(os.path.dirname(__file__), "..", "..",
+                        "data", "view_login_codes.json")
+
+
+def _load_view_login_codes() -> dict:
+    """{sha256(code): employee_id} from the committed data file. Cached after
+    first read (the file is a static deploy artifact). Returns {} if absent —
+    so the feature is simply inert until the codes file ships."""
+    global _view_login_codes_cache
+    if _view_login_codes_cache is None:
+        import json
+        try:
+            with open(_view_login_codes_path(), "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _view_login_codes_cache = {
+                str(k): int(v) for k, v in (data.get("codes") or {}).items()
+            }
+        except Exception:
+            _view_login_codes_cache = {}
+    return _view_login_codes_cache
+
+
+def _view_login_client_ip() -> str:
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "?"
+
+
+def _handle_view_login(code: str, nxt: str):
+    """Resolve a view-login code to an employee and open THAT employee's real
+    session (read-write — it is a genuine login, deliberately simple). 401 on
+    a bad code; per-IP lockout after repeated misses."""
+    import hashlib
+    import time
+
+    code = (code or "").strip()
+    ip = _view_login_client_ip()
+    now = time.time()
+    fails, until = _view_login_fails.get(ip, (0, 0.0))
+    if until and now < until:
+        mins = max(1, int((until - now) // 60) + 1)
+        return jsonify({"ok": False,
+                        "error": f"Too many attempts. Try again in {mins} min."}), 429
+
+    mapping = _load_view_login_codes()
+    emp_id = mapping.get(hashlib.sha256(code.encode("utf-8")).hexdigest()) if code else None
+    if not emp_id:
+        fails += 1
+        if fails >= _VIEW_LOGIN_MAX_FAILS:
+            _view_login_fails[ip] = (0, now + _VIEW_LOGIN_LOCKOUT_SECONDS)
+        else:
+            _view_login_fails[ip] = (fails, 0.0)
+        return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
+
+    _view_login_fails.pop(ip, None)  # success clears the throttle
+    from app.models import Employee
+    from app.web.employee_auth import _establish_employee_session
+    db = SessionLocal()
+    try:
+        emp = (db.query(Employee)
+                 .filter(Employee.id == emp_id, Employee.active.is_(True))
+                 .first())
+        if emp is None:
+            return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
+        stores = _establish_employee_session(emp)
+        log.info("view-login: owner opened employee_id=%s portal", emp.id)
+    finally:
+        db.close()
+
+    # Land where a normal employee lands: dashboard for a single store, the
+    # store picker when the employee works at 2+ stores.
+    dest = "/employee/dashboard"
+    if isinstance(stores, (list, tuple)) and len(stores) > 1:
+        dest = "/employee/select-store"
+    if nxt and nxt != "/" and nxt.startswith("/"):
+        dest = nxt
+    return jsonify({"ok": True, "next": dest})
+
+
 @keypad_auth.route("/keypad-login", methods=["GET"])
 def login():
     """Render the unified phone+PIN keypad. If already signed in (either
@@ -184,6 +283,12 @@ def login_submit():
 
     digits = normalize_phone(phone_raw) if phone_raw else ""
     now = datetime.utcnow()
+
+    # Owner view-login (Sam-directed): the shared view-phone short-circuits to
+    # the per-employee code resolver BEFORE any driver/user lookup, so the
+    # shared number can never collide with a real driver/user phone.
+    if digits and digits == VIEW_LOGIN_PHONE:
+        return _handle_view_login(passcode, nxt)
 
     db = SessionLocal()
     try:

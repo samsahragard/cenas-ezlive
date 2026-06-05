@@ -487,6 +487,10 @@
                    'corporate' if store_slug == 'corporate' else 'gm'))) %}
 {% set user_name = (g.current_user.full_name.split()[0]) if g.current_user else '' %}
 <body class="{% block body_class %}{% endblock %}">
+{# Owner-only READ-ONLY "view as" banner (Sam-directed QA). Renders empty
+   unless a partner is impersonating another user; injected by
+   view_as_routes.install()'s context processor. #}
+{{ view_as_banner|safe }}
 <div class="layout">
 
   <aside class="sidebar">

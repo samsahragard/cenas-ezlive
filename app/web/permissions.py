@@ -118,9 +118,12 @@ def load_current_user():
     from app.db import SessionLocal
     from app.models import User
 
+    g._view_as_loaded = True
     uid = current_user_id()
     if not uid:
         g.current_user = None
+        g.real_user = None
+        g.viewing_as = False
         return None
     db = SessionLocal()
     try:
@@ -132,8 +135,29 @@ def load_current_user():
             session.pop("user_session_version", None)
             session.pop("auth_ok", None)
             session.pop("partner_auth_ok", None)
+            session.pop("view_as_user_id", None)
+            session.pop("impersonating_user_id", None)
             g.current_user = None
+            g.real_user = None
+            g.viewing_as = False
             return None
+        g.real_user = u
+        g.viewing_as = False
+        # Owner-only "view as" impersonation (read-only QA, Sam-directed).
+        # Resolve the effective user to the target ONLY when the real user is
+        # a partner; defense-in-depth on top of the partner-gated /view-as
+        # control routes. g.real_user keeps the actual owner for the banner,
+        # the read-only guard, and audit.
+        view_as_id = session.get("view_as_user_id")
+        if view_as_id and view_as_id != u.id and level_at_least(u.permission_level, "partner"):
+            target = db.query(User).filter(User.id == view_as_id).first()
+            if target is not None and target.active:
+                g.current_user = target
+                g.viewing_as = True
+                return target
+            # Target gone/inactive — drop the impersonation cleanly.
+            session.pop("view_as_user_id", None)
+            session.pop("impersonating_user_id", None)
         g.current_user = u
         return u
     finally:

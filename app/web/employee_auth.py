@@ -115,7 +115,12 @@ def _establish_employee_session(emp) -> list[str]:
     (POST /employee/select-store), which sets it."""
     for k in ("user_id", "user_session_version",
               "driver_id", "driver_name", "driver_location",
-              "driver_session_version", "partner_auth_ok", "active_store"):
+              "driver_session_version", "partner_auth_ok", "active_store",
+              # also clear any view-as owner anchor so an employee login on a
+              # shared device can't inherit a phantom view-as / hijack the anchor:
+              "view_as_owner_uid", "view_as_owner_sv",
+              "view_as_kind", "view_as_principal_id",
+              "impersonating_user_id"):
         session.pop(k, None)
     session.permanent = True
     session["employee_id"] = emp.id
@@ -1025,6 +1030,14 @@ def install(app):
         Real sessions always carry employee_session_version (set on login/setup)."""
         eid = session.get("employee_id")
         if not eid:
+            return None
+        # During an owner-anchored employee view-as the employee keys were
+        # planted by the swap (not a real employee login). Let view-as own that
+        # lifecycle: permissions.load_current_user re-validates the anchored
+        # OWNER and fails closed if revoked. Running this target gate here would
+        # instead pop auth_ok mid-swap and strand the owner. Yield when a swap
+        # is active; the session stays read-only (flush guard) and exitable.
+        if session.get("view_as_owner_uid") is not None:
             return None
         db = SessionLocal()
         try:

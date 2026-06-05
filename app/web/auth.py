@@ -69,6 +69,7 @@ EXEMPT_PREFIXES = (
     "/sam/chat/todos/current",       # Cena gateway top-of-list TODO read (no-skip rule) — dual-gated: Sam session OR X-Cena-Token header
     "/ez-manage/pending-count.json",  # XHR poll endpoint — own MANAGER_ROLES check inside, returns 401 JSON on unauth (not 302) so the sidebar badge fetcher renders cleanly + samai's stateless gate-3 probe sees the canonical 401 JSON signal (Cena #1820 + samai #1787)
     "/catering/assign_driver/result",  # aick gateway callback after running driver re-assign — own X-Cena-Token check inside
+    "/view-as",                  # owner-only View-as control routes (picker/start/stop/employee/driver). Each self-gates via _require_owner / the owner anchor, so the EXIT (/view-as/stop) stays reachable even if auth_ok/user_id were dropped mid-swap (e.g. the impersonated employee was revoked). Not a data route.
 )
 
 

@@ -131,6 +131,11 @@ def create_app():
                 "ALLOW_DEV_SECRET=1."
             )
     app.config["SECRET_KEY"] = _secret
+    app.config["RENDER_GIT_COMMIT"] = (
+        os.getenv("RENDER_GIT_COMMIT")
+        or os.getenv("GIT_COMMIT")
+        or "local"
+    )
 
     app.register_blueprint(ezc)
     app.register_blueprint(mngr)

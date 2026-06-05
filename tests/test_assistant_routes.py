@@ -2,10 +2,21 @@ import json
 import os
 import socket
 import threading
+from datetime import date, datetime, timedelta
 from http.server import ThreadingHTTPServer
 
 from flask import Flask
 
+from app.models import (
+    AttendanceShift,
+    Driver,
+    Employee,
+    EmployeeStoreAssignment,
+    Order,
+    PerfPeriodCache,
+    Schedule,
+    Shift,
+)
 from app.web import assistant_routes as ar
 
 
@@ -49,6 +60,122 @@ def test_tool_catalog_respects_missing_permission():
     assert tools["assistant.general_help"]["available"] is True
     assert tools["orders.store_summary"]["available"] is False
     assert tools["orders.store_summary"]["deny_reason"] == "missing_permission"
+
+
+def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
+    monkeypatch.setenv("AI_ASSISTANT_OPERATOR_USER_IDS", "1, 2")
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 2,
+        "display_name": "Masood Sahragard",
+        "permissions": ["*"],
+        "is_owner_operator": True,
+    }
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools["assistant.general_help"]["available"] is True
+    assert tools["orders.store_summary"]["available"] is True
+    assert tools["orders.store_summary"]["status"] == "active"
+    assert tools["orders.store_summary"]["deny_reason"] is None
+    assert tools["drivers.store_summary"]["available"] is True
+
+
+def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
+    today = date.today()
+    now = datetime.utcnow()
+    db_session.add_all([
+        Order(
+            external_order_id="TO-1",
+            delivery_date=today.isoformat(),
+            origin_store_id="copperfield",
+            status="approved",
+            delivery_tracking_id="track-1",
+            ezcater_status_key="en_route",
+            customer_phone="713-555-1212",
+            delivery_address="123 Private St",
+            client="Private Customer",
+        ),
+        Order(
+            external_order_id="TO-2",
+            delivery_date=(today + timedelta(days=1)).isoformat(),
+            origin_store_id="tomball",
+            status="new",
+            customer_phone="713-555-9999",
+            delivery_address="456 Hidden Ave",
+            client="Secret Co",
+        ),
+        Driver(
+            name="TD Test",
+            location="copperfield",
+            active=True,
+            status="active",
+            current_score=100,
+            home_store_id="copperfield",
+        ),
+        Employee(
+            id=101,
+            full_name="Yadira Reference",
+            active=True,
+        ),
+        EmployeeStoreAssignment(employee_id=101, store_key="copperfield"),
+        Schedule(id=201, store_key="copperfield", week_start=today, status="published"),
+        Shift(
+            schedule_id=201,
+            employee_id=101,
+            start_at=now,
+            end_at=now + timedelta(hours=6),
+            status="assigned",
+        ),
+        AttendanceShift(
+            store_scope="copperfield",
+            entry_date=today,
+            employee_name="Yadira Reference",
+            section="foh",
+            status="clocked-in",
+        ),
+        PerfPeriodCache(
+            cena_employee_id=101,
+            period="last30",
+            store_key="copperfield",
+            total_hours=40.0,
+        ),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(ar, "SessionLocal", lambda: db_session)
+
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/catering",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+
+    payload = ar._approved_tool_data("How many caterings today?", ctx)
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    summary = payload["orders.store_summary"]
+    assert summary["total_orders"] == 2
+    assert summary["today_orders"] == 1
+    assert summary["upcoming_orders"] == 2
+    assert summary["needs_driver_orders"] == 1
+    assert summary["live_tracking_orders"] == 1
+    assert payload["drivers.store_summary"]["total_drivers"] == 1
+    assert payload["drivers.store_summary"]["average_score"] == 100.0
+    assert payload["labor.store_aggregate"]["active_employees"] == 1
+    assert payload["labor.store_aggregate"]["published_shifts"] == 1
+    assert payload["labor.store_aggregate"]["last30_cached_hours"] == 40.0
+    assert "713-555" not in encoded
+    assert "private" not in encoded
+    assert "secret co" not in encoded
 
 
 def test_retry_outbox_record_is_redacted_and_hashed():

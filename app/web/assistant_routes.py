@@ -19,12 +19,24 @@ import hashlib
 import threading
 import urllib.parse
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from flask import Blueprint, g, jsonify, request, session
 
+from app.db import SessionLocal
+from app.models import (
+    AttendanceShift,
+    Driver,
+    DriverShift,
+    Employee,
+    EmployeeStoreAssignment,
+    Order,
+    PerfPeriodCache,
+    Schedule,
+    Shift,
+)
 from app.web.permissions import accessible_store_slugs
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
@@ -100,6 +112,7 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "data_class": "operations",
         "read_write_class": "read_only",
         "status": "review_gated",
+        "operator_enabled": True,
     },
     {
         "tool_id": "drivers.store_summary",
@@ -111,6 +124,7 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "data_class": "driver_operations",
         "read_write_class": "read_only",
         "status": "review_gated",
+        "operator_enabled": True,
     },
     {
         "tool_id": "labor.store_aggregate",
@@ -122,6 +136,7 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "data_class": "labor_aggregate",
         "read_write_class": "read_only",
         "status": "review_gated",
+        "operator_enabled": True,
     },
 ]
 
@@ -141,6 +156,59 @@ def _redact_text(value: str) -> str:
 
 def _env_truthy(name: str) -> bool:
     return (os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _split_csv(raw: str) -> list[str]:
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _operator_user_ids() -> set[int]:
+    raw = ",".join(
+        value
+        for value in (
+            os.getenv("AI_ASSISTANT_OPERATOR_USER_IDS"),
+            os.getenv("SAM_CHAT_USER_IDS"),
+            os.getenv("SAM_CHAT_USER_ID"),
+            os.getenv("MASOOD_CHAT_USER_ID"),
+        )
+        if value
+    )
+    ids: set[int] = set()
+    for part in _split_csv(raw):
+        try:
+            ids.add(int(part))
+        except ValueError:
+            log.warning("assistant: ignoring non-integer operator user id %r", part)
+    return ids
+
+
+def _normalized_person_name(value: str | None) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip().casefold())
+
+
+def _operator_names() -> set[str]:
+    configured = os.getenv("AI_ASSISTANT_OPERATOR_NAMES")
+    names = _split_csv(configured) if configured else [
+        "sam",
+        "sam sahragard",
+        "masood",
+        "masood sahragard",
+        "masood ck",
+        "masood c",
+    ]
+    return {_normalized_person_name(name) for name in names if _normalized_person_name(name)}
+
+
+def _is_owner_operator_user(user: Any | None) -> bool:
+    if user is None:
+        return False
+    role = getattr(user, "permission_level", None)
+    if role != "partner":
+        return False
+    user_id = getattr(user, "id", None)
+    if user_id in _operator_user_ids():
+        return True
+    return _normalized_person_name(getattr(user, "full_name", None)) in _operator_names()
 
 
 def _assistant_enabled() -> bool:
@@ -262,16 +330,24 @@ def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
         allowed_session = session_type in set(tool["session_types"])
         allowed_permissions = _has_all_permissions(ctx, tool["required_permissions"])
         status = tool["status"]
-        available = bool(status == "active" and allowed_session and allowed_permissions)
+        operator_active = bool(
+            ctx.get("is_owner_operator")
+            and tool.get("operator_enabled")
+            and allowed_session
+            and allowed_permissions
+        )
+        available = bool((status == "active" or operator_active) and allowed_session and allowed_permissions)
+        effective_status = "active" if operator_active else status
         reason = None
         if not allowed_session:
             reason = "session_type_not_allowed"
         elif not allowed_permissions:
             reason = "missing_permission"
-        elif status != "active":
+        elif status != "active" and not operator_active:
             reason = "needs_sam_review"
         catalog.append({
             **tool,
+            "status": effective_status,
             "available": available,
             "deny_reason": reason,
         })
@@ -298,12 +374,17 @@ def _principal_context() -> dict[str, Any]:
         display_name = getattr(user, "full_name", None) or "User"
         principal_id = getattr(user, "id", None)
         stores = accessible_store_slugs(user)
+        is_owner_operator = _is_owner_operator_user(user)
     else:
         role = "anonymous"
         kind = "anonymous"
         display_name = "Anonymous"
         principal_id = None
         stores = []
+        is_owner_operator = False
+
+    if session.get("driver_id") or (session.get("employee_id") and not user):
+        is_owner_operator = False
 
     return {
         "kind": kind,
@@ -314,6 +395,7 @@ def _principal_context() -> dict[str, Any]:
         "current_store": _store_scope_key(getattr(g, "current_store", None)),
         "path": request.headers.get("X-Current-Path") or request.referrer or request.path,
         "permissions": sorted(_role_permissions(role)),
+        "is_owner_operator": bool(is_owner_operator),
         "can_ask_personal": bool(
             role == "partner"
             or has_permission("ai.ask_claude_personal")
@@ -409,9 +491,261 @@ def _runtime_principal(ctx: dict[str, Any]) -> dict[str, Any]:
         "current_store": ctx["current_store"],
         "path": ctx["path"],
         "permissions": ctx["permissions"],
+        "is_owner_operator": ctx.get("is_owner_operator", False),
         "can_ask_personal": ctx["can_ask_personal"],
         "can_ask_operational": ctx["can_ask_operational"],
     }
+
+
+def _date_key(value: Any) -> str | None:
+    if isinstance(value, date):
+        return value.isoformat()
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text[:10] if text else None
+
+
+def _store_key_for_order(order: Order) -> str:
+    raw = (
+        order.origin_store_id
+        or order.pickup_kitchen
+        or order.reported_store_id
+        or order.reported_store
+        or "unknown"
+    )
+    value = str(raw).strip().casefold()
+    aliases = {
+        "1": "copperfield",
+        "uno": "copperfield",
+        "uno mas": "copperfield",
+        "copperfield": "copperfield",
+        "2": "tomball",
+        "dos": "tomball",
+        "dos mas": "tomball",
+        "tomball": "tomball",
+    }
+    return aliases.get(value, value or "unknown")
+
+
+def _order_needs_driver(order: Order) -> bool:
+    status = (order.status or "").casefold()
+    has_driver = bool(order.assigned_driver_id or order.ezcater_driver_name or order.assigned_driver)
+    return not has_driver and status in {"new", "available", "requested", "needs_driver", "needs_review"}
+
+
+def _tool_store_filter(ctx: dict[str, Any]) -> set[str]:
+    if ctx.get("is_owner_operator"):
+        return set()
+    return {str(store).casefold() for store in (ctx.get("store_slugs") or [])}
+
+
+def _orders_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
+    today = date.today().isoformat()
+    db = SessionLocal()
+    try:
+        orders = db.query(Order).all()
+        allowed = _tool_store_filter(ctx)
+        if allowed:
+            orders = [
+                order for order in orders
+                if _store_key_for_order(order).casefold() in allowed
+            ]
+        by_store: dict[str, int] = {}
+        status_counts: dict[str, int] = {}
+        today_orders = 0
+        upcoming_orders = 0
+        needs_driver = 0
+        live_tracking = 0
+        active_tracking = 0
+        for order in orders:
+            order_date = _date_key(order.delivery_date)
+            if order_date == today:
+                today_orders += 1
+            if order_date and order_date >= today:
+                upcoming_orders += 1
+            store = _store_key_for_order(order)
+            by_store[store] = by_store.get(store, 0) + 1
+            status = (order.status or "unknown").casefold()
+            status_counts[status] = status_counts.get(status, 0) + 1
+            if _order_needs_driver(order):
+                needs_driver += 1
+            if order.delivery_tracking_id:
+                live_tracking += 1
+            if order.delivery_tracking_id and order.ezcater_status_key not in {None, "", "expired", "completed", "delivered"}:
+                active_tracking += 1
+
+        return {
+            "generated_at": _now_iso(),
+            "data_class": "operations_aggregate_sanitized",
+            "total_orders": len(orders),
+            "today_orders": today_orders,
+            "upcoming_orders": upcoming_orders,
+            "needs_driver_orders": needs_driver,
+            "live_tracking_orders": live_tracking,
+            "active_tracking_orders": active_tracking,
+            "by_store": by_store,
+            "status_counts": status_counts,
+        }
+    finally:
+        db.close()
+
+
+def _drivers_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
+    db = SessionLocal()
+    try:
+        drivers = db.query(Driver).all()
+        allowed = _tool_store_filter(ctx)
+        if allowed:
+            drivers = [
+                driver for driver in drivers
+                if str(driver.home_store_id or driver.location or "").casefold() in allowed
+            ]
+        active = [
+            driver for driver in drivers
+            if driver.active and (driver.status or "active").casefold() == "active"
+        ]
+        by_store: dict[str, int] = {}
+        score_count = 0
+        score_total = 0
+        for driver in drivers:
+            store = str(driver.home_store_id or driver.location or "unknown").casefold()
+            by_store[store] = by_store.get(store, 0) + 1
+            if driver.current_score is not None:
+                score_count += 1
+                score_total += int(driver.current_score)
+        active_shift_driver_ids = {
+            row.driver_id
+            for row in db.query(DriverShift.driver_id).filter(DriverShift.ended_at.is_(None)).all()
+        }
+        active_delivery_driver_ids = {
+            row.assigned_driver_id
+            for row in db.query(Order.assigned_driver_id)
+            .filter(Order.assigned_driver_id.isnot(None))
+            .filter(Order.status.in_(["approved", "picked_up", "en_route", "requested"]))
+            .all()
+        }
+        active_ids = {driver.id for driver in active}
+        return {
+            "generated_at": _now_iso(),
+            "data_class": "driver_aggregate_sanitized",
+            "total_drivers": len(drivers),
+            "active_drivers": len(active),
+            "inactive_drivers": max(0, len(drivers) - len(active)),
+            "drivers_on_shift": len(active_shift_driver_ids & active_ids),
+            "drivers_on_active_orders": len(active_delivery_driver_ids & active_ids),
+            "average_score": round(score_total / score_count, 1) if score_count else None,
+            "by_store": by_store,
+        }
+    finally:
+        db.close()
+
+
+def _labor_store_aggregate(ctx: dict[str, Any]) -> dict[str, Any]:
+    today = date.today()
+    db = SessionLocal()
+    try:
+        employees = db.query(Employee).all()
+        allowed = _tool_store_filter(ctx)
+        if allowed:
+            employee_ids = {
+                row.employee_id
+                for row in db.query(EmployeeStoreAssignment.employee_id)
+                .filter(EmployeeStoreAssignment.store_key.in_(list(allowed)))
+                .all()
+            }
+            employees = [employee for employee in employees if employee.id in employee_ids]
+        employee_ids = {employee.id for employee in employees}
+        active_employees = [employee for employee in employees if employee.active]
+        by_store: dict[str, int] = {}
+        if allowed and not employee_ids:
+            assignments = []
+            shifts = []
+        else:
+            assignment_query = db.query(EmployeeStoreAssignment)
+            if employee_ids:
+                assignment_query = assignment_query.filter(EmployeeStoreAssignment.employee_id.in_(employee_ids))
+            assignments = assignment_query.all()
+            published_schedule_query = db.query(Schedule.id).filter(Schedule.status == "published")
+            if allowed:
+                published_schedule_query = published_schedule_query.filter(Schedule.store_key.in_(list(allowed)))
+            published_schedule_ids = [row.id for row in published_schedule_query.all()]
+            shift_query = db.query(Shift)
+            if published_schedule_ids:
+                shift_query = shift_query.filter(Shift.schedule_id.in_(published_schedule_ids))
+            else:
+                shift_query = shift_query.filter(Shift.id == -1)
+            if employee_ids:
+                shift_query = shift_query.filter(
+                    (Shift.employee_id.in_(employee_ids)) | (Shift.employee_id.is_(None))
+                )
+            shifts = shift_query.all()
+        for assignment in assignments:
+            store = str(assignment.store_key or "unknown").casefold()
+            by_store[store] = by_store.get(store, 0) + 1
+        today_attendance = db.query(AttendanceShift).filter(AttendanceShift.entry_date == today).all()
+        if allowed:
+            today_attendance = [
+                row for row in today_attendance
+                if (row.store_scope or "").casefold() in allowed
+            ]
+        attendance_statuses: dict[str, int] = {}
+        for row in today_attendance:
+            status = (row.status or "unknown").casefold()
+            attendance_statuses[status] = attendance_statuses.get(status, 0) + 1
+        perf_rows = db.query(PerfPeriodCache).all()
+        if employee_ids:
+            perf_rows = [row for row in perf_rows if row.cena_employee_id in employee_ids]
+        elif allowed:
+            perf_rows = []
+        total_hours = sum(float(row.total_hours or 0.0) for row in perf_rows if row.period == "last30")
+        latest_sync = max((row.synced_at for row in perf_rows if row.synced_at), default=None)
+        return {
+            "generated_at": _now_iso(),
+            "data_class": "labor_aggregate_sanitized",
+            "total_employees": len(employees),
+            "active_employees": len(active_employees),
+            "inactive_employees": max(0, len(employees) - len(active_employees)),
+            "by_store_assignments": by_store,
+            "published_shifts": len([shift for shift in shifts if shift.status != "open"]),
+            "open_shifts": len([shift for shift in shifts if shift.status == "open"]),
+            "today_attendance_statuses": attendance_statuses,
+            "last30_cached_hours": round(total_hours, 2),
+            "perf_cache_rows": len(perf_rows),
+            "latest_perf_sync": latest_sync.isoformat() if latest_sync else None,
+        }
+    finally:
+        db.close()
+
+
+def _tool_is_available(ctx: dict[str, Any], tool_id: str) -> bool:
+    return any(
+        tool["tool_id"] == tool_id and tool.get("available")
+        for tool in _tool_catalog_for(ctx)
+    )
+
+
+def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    del question  # Reserved for future narrower tool selection.
+    if not ctx.get("is_owner_operator"):
+        return {}
+    data: dict[str, Any] = {}
+    if _tool_is_available(ctx, "orders.store_summary"):
+        try:
+            data["orders.store_summary"] = _orders_store_summary(ctx)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build orders.store_summary")
+    if _tool_is_available(ctx, "drivers.store_summary"):
+        try:
+            data["drivers.store_summary"] = _drivers_store_summary(ctx)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build drivers.store_summary")
+    if _tool_is_available(ctx, "labor.store_aggregate"):
+        try:
+            data["labor.store_aggregate"] = _labor_store_aggregate(ctx)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build labor.store_aggregate")
+    return data
 
 
 def _post_to_ck_runtime(question: str, ctx: dict[str, Any]) -> tuple[dict[str, Any], int] | None:
@@ -434,6 +768,7 @@ def _post_to_ck_runtime(question: str, ctx: dict[str, Any]) -> tuple[dict[str, A
         "question": question,
         "principal": _runtime_principal(ctx),
         "tools": _tool_catalog_for(ctx),
+        "tool_data": _approved_tool_data(question, ctx),
         "source": "cenas_app",
         "requested_at": _now_iso(),
     }
@@ -491,6 +826,7 @@ def _queue_for_review(question: str, ctx: dict[str, Any], reason: str,
             "current_store": ctx["current_store"],
             "path": ctx["path"],
             "permissions": ctx["permissions"],
+            "is_owner_operator": ctx.get("is_owner_operator", False),
         },
     }
     saved_on_ck, ck_id = _post_to_ck_review(row)
@@ -530,12 +866,11 @@ def _anthropic_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, s
 
     model = os.getenv("AI_ASSISTANT_ANTHROPIC_MODEL", _DEFAULT_MODEL)
     client = anthropic.Anthropic(api_key=key)
-    system = _system_prompt(ctx)
     msg = client.messages.create(
         model=model,
         max_tokens=800,
         temperature=0.2,
-        system=system,
+        system=_anthropic_system_blocks(ctx),
         messages=[{"role": "user", "content": question}],
     )
     text = "".join(
@@ -565,17 +900,45 @@ def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str 
 
 def _system_prompt(ctx: dict[str, Any]) -> str:
     return (
+        _stable_policy_prompt()
+        + "\n\n"
+        + _session_prompt(ctx)
+    )
+
+
+def _stable_policy_prompt() -> str:
+    return (
         "You are the Cenas Kitchen in-app assistant. Answer only within the "
         "current user's role and permissions. You do not reveal secrets, "
         "passcodes, tokens, customer PII, unauthorized payroll, raw peer pay, "
-        "sales internals, GUIDs, or cross-store data. This first version has no "
-        "approved active database tools yet, so answer only general app-help or policy "
-        "questions. Review-gated tools are visible to the server but not available "
-        "to you for answers. If the user asks for private data or operational facts that "
-        "require a tool, say the question needs Sam review and do not guess.\n\n"
+        "sales internals, GUIDs, or cross-store data. Answer operational data "
+        "questions only from approved, sanitized read-only tool payloads. "
+        "Review-gated tools are visible to the server but not available to you "
+        "for answers. If the user asks for private data or operational facts "
+        "that require an unavailable tool, say the question needs Sam review "
+        "and do not guess."
+    )
+
+
+def _session_prompt(ctx: dict[str, Any]) -> str:
+    return (
         f"Current session: role={ctx['role']}, kind={ctx['kind']}, "
         f"stores={ctx['store_slugs']}, path={ctx['path']}."
     )
+
+
+def _anthropic_system_blocks(ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "text",
+            "text": _stable_policy_prompt(),
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": _session_prompt(ctx),
+        },
+    ]
 
 
 def _should_queue(question: str, ctx: dict[str, Any]) -> tuple[bool, str, str | None]:
@@ -608,6 +971,7 @@ def assistant_context():
             "role": ctx["role"],
             "display_name": ctx["display_name"],
             "store_slugs": ctx["store_slugs"],
+            "is_owner_operator": ctx.get("is_owner_operator", False),
         },
         "enabled": bool(enabled),
         "tools": [

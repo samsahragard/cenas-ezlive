@@ -119,6 +119,151 @@ def _can_ask_operational(principal: dict) -> bool:
     return role == "partner" or "ai.ask_claude" in permissions
 
 
+def _tool_available(tools: list[dict], tool_id: str) -> bool:
+    for tool in tools:
+        if isinstance(tool, dict) and tool.get("tool_id") == tool_id and tool.get("available") is True:
+            return True
+    return False
+
+
+def _wants_order_summary(question: str) -> bool:
+    text = question.casefold()
+    return bool(
+        re.search(r"\b(how many|count|total|summary|report)\b", text)
+        and re.search(r"\b(catering|caterings|order|orders|delivery|deliveries)\b", text)
+    )
+
+
+def _wants_driver_summary(question: str) -> bool:
+    text = question.casefold()
+    return bool(
+        re.search(r"\b(how many|count|total|summary|report|active|score)\b", text)
+        and re.search(r"\b(driver|drivers)\b", text)
+    )
+
+
+def _wants_labor_summary(question: str) -> bool:
+    text = question.casefold()
+    return bool(
+        re.search(r"\b(how many|count|total|summary|report|schedule|attendance|labor|employee|employees|staff|team)\b", text)
+        and re.search(r"\b(labor|employee|employees|staff|team|schedule|attendance|shift|shifts)\b", text)
+    )
+
+
+def _plural(count: int, singular: str, plural: str | None = None) -> str:
+    return singular if count == 1 else (plural or singular + "s")
+
+
+def _orders_summary_answer(summary: dict) -> str:
+    today_orders = int(summary.get("today_orders") or 0)
+    upcoming_orders = int(summary.get("upcoming_orders") or 0)
+    needs_driver = int(summary.get("needs_driver_orders") or 0)
+    live_tracking = int(summary.get("live_tracking_orders") or 0)
+    active_tracking = int(summary.get("active_tracking_orders") or 0)
+    by_store = summary.get("by_store") or {}
+    store_bits = [
+        f"{store}: {count}"
+        for store, count in sorted(by_store.items())
+    ]
+    answer = (
+        f"You have {today_orders} {_plural(today_orders, 'catering')} today"
+        f" and {upcoming_orders} upcoming {_plural(upcoming_orders, 'order')} in the current view."
+    )
+    if needs_driver:
+        answer += f" {needs_driver} still {_plural(needs_driver, 'need', 'need')} driver attention."
+    else:
+        answer += " No orders currently need driver attention."
+    answer += f" {live_tracking} {_plural(live_tracking, 'order')} have tracking links"
+    if active_tracking:
+        answer += f", with {active_tracking} currently active"
+    answer += "."
+    if store_bits:
+        answer += " Store split: " + "; ".join(store_bits) + "."
+    return answer
+
+
+def _drivers_summary_answer(summary: dict) -> str:
+    total = int(summary.get("total_drivers") or 0)
+    active = int(summary.get("active_drivers") or 0)
+    on_shift = int(summary.get("drivers_on_shift") or 0)
+    on_orders = int(summary.get("drivers_on_active_orders") or 0)
+    average_score = summary.get("average_score")
+    answer = (
+        f"There are {total} {_plural(total, 'driver')} in the current view; "
+        f"{active} {_plural(active, 'driver')} are active."
+    )
+    answer += f" {on_shift} {_plural(on_shift, 'driver')} are on shift"
+    answer += f" and {on_orders} {_plural(on_orders, 'driver')} are tied to active orders."
+    if average_score is not None:
+        answer += f" Average current score is {average_score}."
+    by_store = summary.get("by_store") or {}
+    if by_store:
+        answer += " Store split: " + "; ".join(
+            f"{store}: {count}" for store, count in sorted(by_store.items())
+        ) + "."
+    return answer
+
+
+def _labor_summary_answer(summary: dict) -> str:
+    total = int(summary.get("total_employees") or 0)
+    active = int(summary.get("active_employees") or 0)
+    published = int(summary.get("published_shifts") or 0)
+    open_shifts = int(summary.get("open_shifts") or 0)
+    hours = float(summary.get("last30_cached_hours") or 0.0)
+    answer = (
+        f"There are {total} {_plural(total, 'employee')} in the current view; "
+        f"{active} are active. Published schedule has {published} assigned "
+        f"{_plural(published, 'shift')} and {open_shifts} open {_plural(open_shifts, 'shift')}."
+    )
+    if hours:
+        answer += f" The last-30 cached labor total is {hours:g} hours."
+    statuses = summary.get("today_attendance_statuses") or {}
+    if statuses:
+        answer += " Today's attendance statuses: " + "; ".join(
+            f"{status}: {count}" for status, count in sorted(statuses.items())
+        ) + "."
+    return answer
+
+
+def _approved_tool_answer(question: str, principal: dict, tools: list[dict], tool_data: dict) -> dict | None:
+    if not principal.get("is_owner_operator"):
+        return None
+    if _tool_available(tools, "orders.store_summary"):
+        summary = tool_data.get("orders.store_summary") if isinstance(tool_data, dict) else None
+        if isinstance(summary, dict) and _wants_order_summary(question):
+            return {
+                "ok": True,
+                "answer": _orders_summary_answer(summary),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": "orders.store_summary",
+                "generated_at": summary.get("generated_at"),
+            }
+    if _tool_available(tools, "drivers.store_summary"):
+        driver_summary = tool_data.get("drivers.store_summary") if isinstance(tool_data, dict) else None
+        if isinstance(driver_summary, dict) and _wants_driver_summary(question):
+            return {
+                "ok": True,
+                "answer": _drivers_summary_answer(driver_summary),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": "drivers.store_summary",
+                "generated_at": driver_summary.get("generated_at"),
+            }
+    if _tool_available(tools, "labor.store_aggregate"):
+        labor_summary = tool_data.get("labor.store_aggregate") if isinstance(tool_data, dict) else None
+        if isinstance(labor_summary, dict) and _wants_labor_summary(question):
+            return {
+                "ok": True,
+                "answer": _labor_summary_answer(labor_summary),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": "labor.store_aggregate",
+                "generated_at": labor_summary.get("generated_at"),
+            }
+    return None
+
+
 def _review_risk_level(reason: str | None) -> str:
     reason_text = (reason or "").casefold()
     if any(term in reason_text for term in ("sensitive", "operational", "data", "permission")):
@@ -180,16 +325,43 @@ def _queued_answer(reason: str) -> str:
 
 def _system_prompt(principal: dict) -> str:
     return (
+        _stable_policy_prompt()
+        + "\n\n"
+        + _session_prompt(principal)
+    )
+
+
+def _stable_policy_prompt() -> str:
+    return (
         "You are the Cenas Kitchen in-app assistant running on CK. Answer only "
         "within the current user's role and permissions. You do not reveal "
         "secrets, passcodes, tokens, customer PII, unauthorized payroll, raw "
         "peer pay, sales internals, GUIDs, or cross-store data. This first "
-        "version has no approved active database tools yet, so answer only "
-        "general app-help or policy questions. If a question needs operational "
-        "data, say it needs Sam review and do not guess.\n\n"
+        "version answers operational data questions only from approved, "
+        "sanitized read-only tool payloads. If a question needs a tool that is "
+        "not available, say it needs Sam review and do not guess."
+    )
+
+
+def _session_prompt(principal: dict) -> str:
+    return (
         f"Current session: role={_role(principal)}, kind={principal.get('kind')}, "
         f"stores={principal.get('store_slugs')}, path={principal.get('path')}."
     )
+
+
+def _anthropic_system_blocks(principal: dict) -> list[dict]:
+    return [
+        {
+            "type": "text",
+            "text": _stable_policy_prompt(),
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": _session_prompt(principal),
+        },
+    ]
 
 
 def _anthropic_answer(question: str, principal: dict) -> tuple[str | None, str | None]:
@@ -208,7 +380,7 @@ def _anthropic_answer(question: str, principal: dict) -> tuple[str | None, str |
         model=model,
         max_tokens=800,
         temperature=0.2,
-        system=_system_prompt(principal),
+        system=_anthropic_system_blocks(principal),
         messages=[{"role": "user", "content": question}],
     )
     text = "".join(
@@ -239,9 +411,15 @@ def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | No
 def _answer(payload: dict) -> tuple[dict, int]:
     question = str(payload.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     principal = payload.get("principal") or {}
+    tools = payload.get("tools") or []
+    tool_data = payload.get("tool_data") or {}
     source = str(payload.get("source") or "cenas_app")
     if not question:
         return {"ok": False, "error": "question required"}, 400
+
+    approved = _approved_tool_answer(question, principal, tools, tool_data)
+    if approved is not None:
+        return approved, 200
 
     should_queue, reason, required = _should_queue(question, principal)
     if should_queue:

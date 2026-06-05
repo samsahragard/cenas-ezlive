@@ -378,6 +378,10 @@ def _has_all_permissions(ctx: dict[str, Any], permissions: list[str]) -> bool:
     return "*" in granted or all(perm in granted for perm in permissions)
 
 
+def _has_partner_tool_access(ctx: dict[str, Any]) -> bool:
+    return bool(ctx.get("is_owner_operator") or ctx.get("role") == "partner")
+
+
 def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
     session_type = ctx.get("kind")
     catalog: list[dict[str, Any]] = []
@@ -386,7 +390,7 @@ def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
         allowed_permissions = _has_all_permissions(ctx, tool["required_permissions"])
         status = tool["status"]
         operator_active = bool(
-            ctx.get("is_owner_operator")
+            _has_partner_tool_access(ctx)
             and tool.get("operator_enabled")
             and allowed_session
             and allowed_permissions
@@ -893,7 +897,7 @@ def _toast_table_activity_tool_payload(location: str | None) -> dict[str, Any]:
 
 
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    if not ctx.get("is_owner_operator"):
+    if not _has_partner_tool_access(ctx):
         return {}
     data: dict[str, Any] = {}
     if _tool_is_available(ctx, "orders.store_summary"):

@@ -198,6 +198,10 @@ def _can_ask_operational(principal: dict) -> bool:
     return role == "partner" or "ai.ask_claude" in permissions
 
 
+def _has_partner_tool_access(principal: dict) -> bool:
+    return bool(principal.get("is_owner_operator") or _role(principal) == "partner")
+
+
 def _tool_available(tools: list[dict], tool_id: str) -> bool:
     for tool in tools:
         if isinstance(tool, dict) and tool.get("tool_id") == tool_id and tool.get("available") is True:
@@ -275,15 +279,15 @@ def _toast_period_from_question(question: str) -> str:
 
 
 def _toast_tool_authorized(principal: dict, tools: list[dict]) -> bool:
-    if not principal.get("is_owner_operator"):
+    if not _has_partner_tool_access(principal):
         return False
-    return _tool_available(tools, "toast.sales_summary") or _role(principal) == "partner"
+    return _tool_available(tools, "toast.sales_summary")
 
 
 def _toast_table_tool_authorized(principal: dict, tools: list[dict]) -> bool:
-    if not principal.get("is_owner_operator"):
+    if not _has_partner_tool_access(principal):
         return False
-    return _tool_available(tools, "toast.table_activity") or _role(principal) == "partner"
+    return _tool_available(tools, "toast.table_activity")
 
 
 def _toast_sales_summary_payload(period: str) -> dict:
@@ -552,17 +556,25 @@ def _approved_tool_answer(
     tools: list[dict],
     tool_data: dict,
 ) -> dict | None:
-    if not principal.get("is_owner_operator"):
+    if not _has_partner_tool_access(principal):
         return None
     resolved_question = _resolved_question(question, previous_question)
     if _OWNER_IDENTITY_RE.search(str(question or "")):
-        return {
-            "ok": True,
-            "answer": (
+        if principal.get("is_owner_operator"):
+            identity_answer = (
                 "This authenticated session is already marked as an owner-operator "
                 "session, so I will use the permissions attached to this login. I "
                 "still will not treat chat text alone as proof of identity."
-            ),
+            )
+        else:
+            identity_answer = (
+                "This authenticated session is partner-level, so I will use the "
+                "permissions attached to this login. I still will not treat chat "
+                "text alone as proof of identity."
+            )
+        return {
+            "ok": True,
+            "answer": identity_answer,
             "queued": False,
             "storage": "session_context",
             "tool_id": "assistant.session_context",

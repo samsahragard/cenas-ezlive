@@ -86,6 +86,28 @@ def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
     assert tools["toast.table_activity"]["status"] == "active"
 
 
+def test_tool_catalog_activates_approved_tools_for_partner_level():
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "permissions": ["*"],
+        "is_owner_operator": False,
+    }
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools["assistant.general_help"]["available"] is True
+    assert tools["orders.store_summary"]["available"] is True
+    assert tools["orders.store_summary"]["status"] == "active"
+    assert tools["drivers.store_summary"]["available"] is True
+    assert tools["labor.store_aggregate"]["available"] is True
+    assert tools["toast.sales_summary"]["available"] is True
+    assert tools["toast.table_activity"]["available"] is True
+    assert tools["employee.my_profile"]["available"] is False
+
+
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
     today = date.today()
     now = datetime.utcnow()
@@ -256,6 +278,37 @@ def test_operator_toast_table_activity_payload_handles_typo(monkeypatch):
     assert payload["toast.table_activity"]["location"] == "tomball"
     assert payload["toast.table_activity"]["latest"]["table_name"] == "106"
     assert "toast.sales_summary" not in payload
+
+
+def test_partner_level_tool_payloads_do_not_require_owner_operator(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_sales_summary_tool_payload",
+        lambda period: {"period": period, "sales": {"net": 123.45, "orders": 3}},
+    )
+
+    payload = ar._approved_tool_data("what are Toast sales today?", ctx)
+
+    assert payload["orders.store_summary"]["total_orders"] == 0
+    assert payload["drivers.store_summary"]["total_drivers"] == 0
+    assert payload["labor.store_aggregate"]["total_employees"] == 0
+    assert payload["toast.sales_summary"]["period"] == "today"
 
 
 def test_retry_outbox_record_is_redacted_and_hashed():

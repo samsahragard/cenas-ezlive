@@ -530,6 +530,56 @@ def test_runtime_owner_identity_uses_authenticated_session_context(monkeypatch):
     assert "already marked as an owner-operator session" in data["answer"]
 
 
+def test_runtime_partner_level_uses_approved_tool_without_owner_flag(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = False
+    tools = [_available_tool("orders.store_summary")]
+    tool_data = {
+        "orders.store_summary": {
+            "today_orders": 4,
+            "upcoming_orders": 12,
+            "needs_driver_orders": 0,
+            "live_tracking_orders": 2,
+        },
+    }
+
+    data = runtime._approved_tool_answer("caterings today?", "", principal, tools, tool_data)
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["storage"] == "operational_tool"
+    assert data["tool_id"] == "orders.store_summary"
+
+
+def test_runtime_partner_identity_does_not_claim_owner_operator(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("session context answer must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = False
+
+    data = runtime._approved_tool_answer("i am sam.", "", principal, [], {})
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["storage"] == "session_context"
+    assert "partner-level" in data["answer"]
+    assert "owner-operator" not in data["answer"]
+
+
 def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

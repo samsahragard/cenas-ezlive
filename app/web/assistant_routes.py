@@ -66,7 +66,14 @@ _DATA_TOOL_RE = re.compile(
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
-    r"late|tracking|tracking link|tracking links|delivery|deliveries|pay|bonus|fee|fees"
+    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|pay|bonus|fee|fees"
+    r")\b",
+    re.IGNORECASE,
+)
+_TOAST_SALES_RE = re.compile(
+    r"\b("
+    r"toast|sales|revenue|net sales|gross sales|"
+    r"average order|avg order|labor percent|labor ratio|sales per labor"
     r")\b",
     re.IGNORECASE,
 )
@@ -149,6 +156,18 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "session_types": ["partner", "staff"],
         "store_scope": "current_user_store_scope",
         "data_class": "labor_aggregate",
+        "read_write_class": "read_only",
+        "status": "review_gated",
+        "operator_enabled": True,
+    },
+    {
+        "tool_id": "toast.sales_summary",
+        "label": "Toast sales summary",
+        "description": "Read-only Toast Analytics sales, order, labor, and menu aggregates for an approved period.",
+        "required_permissions": ["ai.ask_claude", "sales.view_today"],
+        "session_types": ["partner", "staff"],
+        "store_scope": "current_user_store_scope",
+        "data_class": "sales_aggregate",
         "read_write_class": "read_only",
         "status": "review_gated",
         "operator_enabled": True,
@@ -802,8 +821,26 @@ def _tool_is_available(ctx: dict[str, Any], tool_id: str) -> bool:
     )
 
 
+def _toast_period_from_question(question: str) -> str:
+    text = str(question or "").casefold()
+    if "last week" in text or "previous week" in text:
+        return "last_week"
+    if "this week" in text or re.search(r"\bweek\b", text):
+        return "week"
+    return "today"
+
+
+def _wants_toast_sales_summary(question: str) -> bool:
+    return bool(_TOAST_SALES_RE.search(str(question or "")))
+
+
+def _toast_sales_summary_tool_payload(period: str) -> dict[str, Any]:
+    from app.services.toast_analytics_summary import analytics_summary_payload
+
+    return analytics_summary_payload(period)
+
+
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    del question  # Reserved for future narrower tool selection.
     if not ctx.get("is_owner_operator"):
         return {}
     data: dict[str, Any] = {}
@@ -822,6 +859,13 @@ def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
             data["labor.store_aggregate"] = _labor_store_aggregate(ctx)
         except Exception:  # noqa: BLE001
             log.exception("assistant: failed to build labor.store_aggregate")
+    if _tool_is_available(ctx, "toast.sales_summary") and _wants_toast_sales_summary(question):
+        try:
+            data["toast.sales_summary"] = _toast_sales_summary_tool_payload(
+                _toast_period_from_question(question)
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build toast.sales_summary")
     return data
 
 

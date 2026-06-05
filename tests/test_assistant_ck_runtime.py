@@ -188,6 +188,82 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "what are Toast sales today?",
+                "principal": principal,
+                "tools": [_available_tool("toast.sales_summary")],
+                "tool_data": {
+                    "toast.sales_summary": {
+                        "generated_at": "2026-06-05T17:00:00Z",
+                        "label": "Today",
+                        "scope_note": "2 locations included.",
+                        "sales": {
+                            "net": 1234.56,
+                            "gross": 1300.00,
+                            "discount": 10.00,
+                            "void": 0.00,
+                            "refund": 5.00,
+                            "avg_order": 48.41,
+                            "sales_per_labor_hour": 111.11,
+                            "orders": 26,
+                            "guests": 42,
+                        },
+                        "labor": {
+                            "hours": 11.11,
+                            "cost": 444.44,
+                            "ratio_pct": 36.0,
+                            "by_job": [],
+                        },
+                        "menu": {},
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["storage"] == "toast_analytics_tool"
+        assert data["tool_id"] == "toast.sales_summary"
+        assert "net sales are $1,234.56" in data["answer"]
+        assert "2 locations included" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
 def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

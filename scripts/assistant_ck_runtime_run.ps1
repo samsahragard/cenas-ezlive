@@ -21,6 +21,11 @@ $env:ASSISTANT_REVIEW_DB = $DbPath
 $env:ASSISTANT_RUNTIME_TOKEN = (Get-Content -LiteralPath $TokenFile -Raw).Trim()
 $env:ASSISTANT_RUNTIME_HOSTS = $Hosts
 $env:ASSISTANT_RUNTIME_PORT = [string]$Port
+if ($env:PYTHONPATH) {
+    $env:PYTHONPATH = "$RepoRoot;$env:PYTHONPATH"
+} else {
+    $env:PYTHONPATH = $RepoRoot
+}
 
 $anthropicFile = "C:\Users\sam\cena-secrets\anthropic_api_key.txt"
 if (Test-Path -LiteralPath $anthropicFile) {
@@ -37,6 +42,54 @@ foreach ($candidate in $geminiCandidates) {
         $env:GEMINI_API_KEY_FILE = $candidate
         break
     }
+}
+
+function Set-EnvFromExportFile {
+    param(
+        [string]$Path,
+        [string[]]$Names
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) {
+            continue
+        }
+        $match = [regex]::Match($trimmed, '^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$')
+        if (-not $match.Success) {
+            continue
+        }
+        $name = $match.Groups[1].Value
+        if ($Names -notcontains $name) {
+            continue
+        }
+        $value = $match.Groups[2].Value.Trim()
+        if (
+            ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))
+        ) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        [Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
+}
+
+$toastEnvFile = "C:\Users\sam\cena-secrets\toast_render_env.txt"
+Set-EnvFromExportFile -Path $toastEnvFile -Names @(
+    "TOAST_ANALYTICS_CLIENT_ID",
+    "TOAST_ANALYTICS_CLIENT_SECRET",
+    "TOAST_RESTAURANT_GUID_COPPERFIELD",
+    "TOAST_RESTAURANT_GUID_TOMBALL"
+)
+
+if (-not $env:TOAST_ANALYTICS_CACHE_DIR) {
+    $toastCacheDir = Join-Path $ProjectRoot "toast_analytics_cache"
+    New-Item -ItemType Directory -Force -Path $toastCacheDir | Out-Null
+    $env:TOAST_ANALYTICS_CACHE_DIR = $toastCacheDir
 }
 
 Set-Location -LiteralPath $RepoRoot

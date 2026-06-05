@@ -80,6 +80,8 @@ def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
     assert tools["orders.store_summary"]["status"] == "active"
     assert tools["orders.store_summary"]["deny_reason"] is None
     assert tools["drivers.store_summary"]["available"] is True
+    assert tools["toast.sales_summary"]["available"] is True
+    assert tools["toast.sales_summary"]["status"] == "active"
 
 
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
@@ -179,6 +181,42 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
     assert "713-555" not in encoded
     assert "private" not in encoded
     assert "secret co" not in encoded
+
+
+def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_sales_summary_tool_payload",
+        lambda period: {
+            "period": period,
+            "label": "Today",
+            "scope_note": "2 locations included.",
+            "sales": {"net": 123.45, "orders": 3},
+            "labor": {"hours": 4.5, "cost": 67.89},
+            "menu": {},
+        },
+    )
+
+    payload = ar._approved_tool_data("what are Toast sales today?", ctx)
+
+    assert payload["toast.sales_summary"]["period"] == "today"
+    assert payload["toast.sales_summary"]["sales"] == {"net": 123.45, "orders": 3}
 
 
 def test_retry_outbox_record_is_redacted_and_hashed():

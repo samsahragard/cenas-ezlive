@@ -20,12 +20,17 @@ import json
 import logging
 import os
 import re
+import sys
 import threading
 import uuid
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 try:
     from scripts import assistant_review_ck_receiver as review_receiver
@@ -50,6 +55,16 @@ _SECRET_DEFAULTS = {
         r"C:\Users\sam\cena-secrets\google_api_key.txt",
     ],
 }
+_TOAST_ENV_FILES = [
+    r"C:\Users\sam\cena-secrets\toast_render_env.txt",
+    r"C:\Users\sam\cena\.secrets\toast_render_env.txt",
+]
+_TOAST_ENV_NAMES = {
+    "TOAST_ANALYTICS_CLIENT_ID",
+    "TOAST_ANALYTICS_CLIENT_SECRET",
+    "TOAST_RESTAURANT_GUID_COPPERFIELD",
+    "TOAST_RESTAURANT_GUID_TOMBALL",
+}
 _SENSITIVE_RE = re.compile(
     r"\b("
     r"password|passcode|token|secret|api key|credential|pin|"
@@ -66,7 +81,14 @@ _DATA_TOOL_RE = re.compile(
     r"order|orders|driver|drivers|employee|employees|staff|team|"
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
-    r"late|tracking|tracking link|tracking links|delivery|deliveries|pay|bonus|fee|fees"
+    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|pay|bonus|fee|fees"
+    r")\b",
+    re.IGNORECASE,
+)
+_TOAST_SALES_RE = re.compile(
+    r"\b("
+    r"toast|sales|revenue|net sales|gross sales|"
+    r"average order|avg order|labor percent|labor ratio|sales per labor"
     r")\b",
     re.IGNORECASE,
 )
@@ -110,6 +132,33 @@ def _read_secret(env_name: str) -> str:
         except OSError:
             continue
     return ""
+
+
+def _load_toast_env_defaults() -> None:
+    if os.getenv("TOAST_ANALYTICS_CLIENT_ID") and os.getenv("TOAST_ANALYTICS_CLIENT_SECRET"):
+        return
+    for raw_path in _TOAST_ENV_FILES:
+        path = Path(raw_path)
+        try:
+            if not path.exists():
+                continue
+            for line in path.read_text(encoding="utf-8").splitlines():
+                match = re.match(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$", line)
+                if not match:
+                    continue
+                name = match.group(1)
+                value = match.group(2).strip()
+                if name not in _TOAST_ENV_NAMES or os.getenv(name):
+                    continue
+                if (value.startswith('"') and value.endswith('"')) or (
+                    value.startswith("'") and value.endswith("'")
+                ):
+                    value = value[1:-1]
+                os.environ[name] = value
+        except OSError:
+            continue
+        if os.getenv("TOAST_ANALYTICS_CLIENT_ID") and os.getenv("TOAST_ANALYTICS_CLIENT_SECRET"):
+            break
 
 
 def _role(principal: dict) -> str:
@@ -187,6 +236,91 @@ def _wants_labor_summary(question: str) -> bool:
         re.search(r"\b(how many|count|total|summary|report|schedule|attendance|labor|employee|employees|staff|staffing|team|current)\b", text)
         and re.search(r"\b(labor|employee|employees|staff|staffing|team|schedule|attendance|shift|shifts)\b", text)
     )
+
+
+def _wants_toast_sales_summary(question: str) -> bool:
+    return bool(_TOAST_SALES_RE.search(str(question or "")))
+
+
+def _toast_period_from_question(question: str) -> str:
+    text = str(question or "").casefold()
+    if "last week" in text or "previous week" in text:
+        return "last_week"
+    if "this week" in text or re.search(r"\bweek\b", text):
+        return "week"
+    return "today"
+
+
+def _toast_tool_authorized(principal: dict, tools: list[dict]) -> bool:
+    if not principal.get("is_owner_operator"):
+        return False
+    return _tool_available(tools, "toast.sales_summary") or _role(principal) == "partner"
+
+
+def _toast_sales_summary_payload(period: str) -> dict:
+    _load_toast_env_defaults()
+    from app.services.toast_analytics_summary import analytics_summary_payload
+
+    return analytics_summary_payload(period)
+
+
+def _money(value: object) -> str:
+    try:
+        amount = float(value or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    return f"${amount:,.2f}"
+
+
+def _toast_sales_summary_answer(summary: dict) -> str:
+    label = str(summary.get("label") or "Today").strip() or "Today"
+    scope_note = str(summary.get("scope_note") or "").strip()
+    sales = summary.get("sales") or {}
+    labor = summary.get("labor") or {}
+
+    orders = int(sales.get("orders") or 0)
+    guests = int(sales.get("guests") or 0)
+    net = sales.get("net") or 0
+    gross = sales.get("gross") or 0
+    avg_order = sales.get("avg_order") or 0
+    discount = sales.get("discount") or 0
+    refund = sales.get("refund") or 0
+    void = sales.get("void") or 0
+
+    answer = (
+        f"{label} Toast Analytics: net sales are {_money(net)} on "
+        f"{orders} {_plural(orders, 'order')} (avg {_money(avg_order)}). "
+        f"Gross sales are {_money(gross)}"
+    )
+    adjustments = []
+    if float(discount or 0):
+        adjustments.append(f"discounts {_money(discount)}")
+    if float(refund or 0):
+        adjustments.append(f"refunds {_money(refund)}")
+    if float(void or 0):
+        adjustments.append(f"voids {_money(void)}")
+    if adjustments:
+        answer += ", with " + ", ".join(adjustments)
+    answer += "."
+
+    if guests:
+        answer += f" Guest count is {guests}."
+
+    labor_hours = float(labor.get("hours") or 0)
+    labor_cost = labor.get("cost") or 0
+    labor_ratio = labor.get("ratio_pct")
+    sales_per_labor_hour = sales.get("sales_per_labor_hour")
+    if labor_hours or float(labor_cost or 0):
+        answer += f" Labor is {labor_hours:g} hours, {_money(labor_cost)} cost"
+        if labor_ratio is not None:
+            answer += f" ({labor_ratio}% of sales)"
+        if sales_per_labor_hour is not None:
+            answer += f", {_money(sales_per_labor_hour)} sales per labor hour"
+        answer += "."
+
+    if scope_note:
+        answer += f" Scope: {scope_note}"
+    return answer
 
 
 def _plural(count: int, singular: str, plural: str | None = None) -> str:
@@ -359,6 +493,23 @@ def _approved_tool_answer(
     if not principal.get("is_owner_operator"):
         return None
     resolved_question = _resolved_question(question, previous_question)
+    if _toast_tool_authorized(principal, tools) and _wants_toast_sales_summary(resolved_question):
+        period = _toast_period_from_question(resolved_question)
+        toast_summary = tool_data.get("toast.sales_summary") if isinstance(tool_data, dict) else None
+        if not isinstance(toast_summary, dict):
+            try:
+                toast_summary = _toast_sales_summary_payload(period)
+            except Exception:  # noqa: BLE001
+                log.exception("assistant runtime: Toast sales summary failed")
+                return None
+        return {
+            "ok": True,
+            "answer": _toast_sales_summary_answer(toast_summary),
+            "queued": False,
+            "storage": "toast_analytics_tool",
+            "tool_id": "toast.sales_summary",
+            "generated_at": toast_summary.get("generated_at"),
+        }
     if _tool_available(tools, "drivers.store_summary"):
         driver_summary = tool_data.get("drivers.store_summary") if isinstance(tool_data, dict) else None
         if isinstance(driver_summary, dict) and _wants_driver_summary(resolved_question):

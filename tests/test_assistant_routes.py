@@ -873,6 +873,35 @@ def test_classifier_fallback_rejects_excluded_tool_ids(monkeypatch):
     assert route["classifier"]["reason"] == "not_allowed"
 
 
+def test_runtime_passthrough_tools_get_explicit_routed_ids():
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["partner"],
+        "current_store": None,
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+
+    cases = [
+        ("what tools are available?", "assistant.tool_discovery"),
+        ("i am Sam.", "assistant.session_context"),
+    ]
+
+    for question, expected_tool_id in cases:
+        tool_id, payload, route = ar._approved_tool_package(question, ctx)
+
+        assert tool_id == expected_tool_id
+        assert payload == {}
+        assert route["tool_id"] == expected_tool_id
+        assert route["route_path"] == "deterministic"
+
+
 def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
     class RuntimeHandler:
         seen = {}

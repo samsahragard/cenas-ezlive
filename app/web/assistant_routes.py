@@ -165,6 +165,24 @@ _FOLLOWUP_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_TOOL_DISCOVERY_ROUTE_RE = re.compile(
+    r"\b("
+    r"what\s+tools?|tools?\s+(?:are\s+)?available|active\s+tools?|"
+    r"tool\s+(?:catalog|list|inventory|count)|how\s+many\s+tools?"
+    r")\b",
+    re.IGNORECASE,
+)
+_SESSION_CONTEXT_ROUTE_RE = re.compile(
+    r"\b("
+    r"i\s+am\s+sam|i'm\s+sam|im\s+sam|this\s+is\s+sam|"
+    r"i\s+am\s+masood|i'm\s+masood|im\s+masood|this\s+is\s+masood"
+    r")\b",
+    re.IGNORECASE,
+)
+_RUNTIME_PASSTHROUGH_TOOL_IDS = {
+    "assistant.session_context",
+    "assistant.tool_discovery",
+}
 _SECRET_TEXT_RE = re.compile(
     r"(?i)\b("
     r"sk-[A-Za-z0-9_-]{12,}|"
@@ -1363,6 +1381,10 @@ def _available_implemented_tools(ctx: dict[str, Any]) -> dict[str, dict[str, Any
 def _deterministic_route_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
     if not _has_partner_tool_access(ctx):
         return None
+    if _TOOL_DISCOVERY_ROUTE_RE.search(str(question or "")):
+        return "assistant.tool_discovery"
+    if _SESSION_CONTEXT_ROUTE_RE.search(str(question or "")):
+        return "assistant.session_context"
     available = _available_implemented_tools(ctx)
     for tool in sorted(_TOOL_REGISTRY, key=lambda item: int(item.get("priority") or 500)):
         tool_id = str(tool.get("tool_id") or "")
@@ -1500,6 +1522,8 @@ def _approved_tool_package(question: str, ctx: dict[str, Any]) -> tuple[str | No
     tool_id = route.get("tool_id")
     if not tool_id:
         return None, {}, route
+    if str(tool_id) in _RUNTIME_PASSTHROUGH_TOOL_IDS:
+        return str(tool_id), {}, route
     tool = next((item for item in _TOOL_REGISTRY if item["tool_id"] == tool_id), None)
     if not tool:
         return None, {}, route

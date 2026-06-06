@@ -431,6 +431,16 @@ def _toast_table_activity_answer(summary: dict) -> str:
     if opened_local:
         answer += f", opened at {opened_local}"
     answer += "."
+    opened_by = str(latest.get("opened_by_name") or "").strip()
+    server_name = str(latest.get("server_name") or "").strip()
+    if opened_by and server_name and opened_by != server_name:
+        answer += f" It was opened by {opened_by}; the waiter/server was {server_name}."
+    elif opened_by:
+        answer += f" It was opened by {opened_by}."
+    elif server_name:
+        answer += f" The waiter/server was {server_name}."
+    elif latest.get("employee_lookup_available") is False:
+        answer += " Toast returned the table event, but employee lookup was unavailable, so I cannot name the waiter/server yet."
     if not latest.get("table_config_available"):
         answer += " Table-name config was unavailable, so I did not expose the raw Toast table ID."
     return answer
@@ -653,9 +663,15 @@ def _tool_answer_verified(tool_id: str, payload: object, answer: str) -> bool:
             return "do not see any in-store table opens" in answer.casefold()
         table_name = str(latest.get("table_name") or "").strip()
         opened_at = str(latest.get("opened_at_local") or "").strip()
+        opened_by = str(latest.get("opened_by_name") or "").strip()
+        server_name = str(latest.get("server_name") or "").strip()
         if table_name and table_name not in answer:
             return False
         if opened_at and opened_at not in answer:
+            return False
+        if opened_by and opened_by not in answer:
+            return False
+        if server_name and server_name not in answer:
             return False
         return True
     if tool_id == "toast.sales_summary":

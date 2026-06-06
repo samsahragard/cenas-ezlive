@@ -110,6 +110,53 @@ def _table_name_map(client: Any, location: str, restaurant_guid: str) -> tuple[d
     return table_map, True
 
 
+def _employee_name(employee: dict[str, Any]) -> str | None:
+    full = " ".join(
+        str(employee.get(key) or "").strip()
+        for key in ("firstName", "lastName")
+        if str(employee.get(key) or "").strip()
+    ).strip()
+    if full:
+        return full
+    for key in ("name", "email"):
+        value = str(employee.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _employee_name_map(client: Any, location: str, restaurant_guid: str) -> tuple[dict[str, str], bool]:
+    try:
+        employees = client.fetch_employees(location, restaurant_guid)
+    except Exception:  # noqa: BLE001
+        log.exception("toast table activity: employee fetch failed for %s", location)
+        return {}, False
+    employee_map: dict[str, str] = {}
+    for employee in employees or []:
+        if not isinstance(employee, dict):
+            continue
+        guid = str(employee.get("guid") or "").strip()
+        name = _employee_name(employee)
+        if guid and name:
+            employee_map[guid] = name
+    return employee_map, True
+
+
+def _ref_guid(value: Any) -> str | None:
+    if isinstance(value, dict):
+        return str(value.get("guid") or "").strip() or None
+    return None
+
+
+def _ref_name(value: Any, employee_map: dict[str, str]) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    guid = _ref_guid(value)
+    if guid and employee_map.get(guid):
+        return employee_map[guid]
+    return _employee_name(value)
+
+
 def latest_table_activity_payload(
     location: str | None = None,
     *,
@@ -119,8 +166,9 @@ def latest_table_activity_payload(
 ) -> dict[str, Any]:
     """Return the latest in-store table open event from Toast orders.
 
-    The payload intentionally excludes customer, server, check GUID, and raw
-    table GUID values. It is designed for owner-operator assistant answers.
+    The payload intentionally excludes customer, check GUID, and raw table GUID
+    values. For partner/operator sessions it includes the safe Toast employee
+    display name tied to the order/check when available.
     """
     toast = client or ToastClient.shared()
     guids = restaurant_guids()
@@ -141,6 +189,7 @@ def latest_table_activity_payload(
 
     for loc, guid in locations.items():
         table_map, table_config_available = _table_name_map(toast, loc, guid)
+        employee_map, employee_lookup_available = _employee_name_map(toast, loc, guid)
         try:
             orders = toast.fetch_orders_for_date(loc, guid, bd, refresh=refresh_orders)
         except Exception:  # noqa: BLE001
@@ -169,6 +218,11 @@ def latest_table_activity_payload(
                 opened_at = _parse_iso(check.get("openedDate")) or _parse_iso(order.get("openedDate"))
                 if not opened_at:
                     continue
+                opened_by_name = _ref_name(check.get("openedBy"), employee_map)
+                server_name = _ref_name(
+                    check.get("server") or order.get("server"),
+                    employee_map,
+                )
                 table_checks += 1
                 records.append({
                     "location": loc,
@@ -178,6 +232,9 @@ def latest_table_activity_payload(
                     "table_name": table_name,
                     "table_label_available": bool(table_name),
                     "table_config_available": table_config_available,
+                    "server_name": server_name,
+                    "opened_by_name": opened_by_name,
+                    "employee_lookup_available": employee_lookup_available,
                     "display_number": str(check.get("displayNumber") or order.get("displayNumber") or "").strip() or None,
                 })
 

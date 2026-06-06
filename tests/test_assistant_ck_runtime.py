@@ -368,6 +368,7 @@ def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_pa
                             "location_label": "Tomball",
                             "table_name": "106",
                             "opened_at_local": "2026-06-05 6:20 PM CT",
+                            "server_name": "Maria Garcia",
                             "table_config_available": True,
                         },
                     }
@@ -383,6 +384,68 @@ def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_pa
         assert data["tool_id"] == "toast.table_activity"
         assert "table 106" in data["answer"]
         assert "6:20 PM CT" in data["answer"]
+        assert "waiter/server was Maria Garcia" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_answers_table_waiter_followup_with_previous_question(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("table follow-up must use tool answer")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        res = _post(
+            port,
+            {
+                "question": "who was the waiter",
+                "previous_question": "who opened the last table and what time",
+                "principal": principal,
+                "tools": [_available_tool("toast.table_activity")],
+                "tool_data": {
+                    "toast.table_activity": {
+                        "generated_at": "2026-06-06T00:55:00Z",
+                        "location": "tomball",
+                        "location_label": "Tomball",
+                        "latest": {
+                            "location": "tomball",
+                            "location_label": "Tomball",
+                            "table_name": "311",
+                            "opened_at_local": "2026-06-05 7:54 PM CT",
+                            "server_name": "Maria Garcia",
+                            "table_config_available": True,
+                        },
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["tool_id"] == "toast.table_activity"
+        assert "table 311" in data["answer"]
+        assert "7:54 PM CT" in data["answer"]
+        assert "waiter/server was Maria Garcia" in data["answer"]
     finally:
         httpd.shutdown()
         httpd.server_close()

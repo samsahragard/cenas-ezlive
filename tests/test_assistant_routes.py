@@ -5,21 +5,29 @@ import threading
 from datetime import date, datetime, timedelta
 from http.server import ThreadingHTTPServer
 
+import pytest
 from flask import Flask
 from sqlalchemy.orm import sessionmaker
 
 from app.models import (
     AttendanceShift,
     Driver,
+    DriverAssignmentJob,
     Employee,
     EmployeeStoreAssignment,
+    EzcaterOrderDetails,
+    InHouseCateringQuote,
     Order,
+    OrderItem,
     PerfPeriodCache,
+    ProcessingJob,
+    ProcessingOrder,
     SamChatMessage,
     SamChatSession,
     Schedule,
     Shift,
 )
+from app.services.assistant_handlers import orders as order_handlers
 from app.services.assistant_tool_inventory import (
     PARTNER_TOOL_IDS,
     is_excluded_non_routable,
@@ -51,6 +59,8 @@ def test_tool_catalog_only_general_help_active_for_operational_role():
     assert tools["assistant.general_help"]["available"] is True
     assert tools["orders.store_summary"]["available"] is False
     assert tools["orders.store_summary"]["deny_reason"] == "needs_sam_review"
+    assert tools["orders.catering_today"]["available"] is False
+    assert tools["orders.catering_today"]["deny_reason"] == "needs_sam_review"
     assert tools["drivers.store_summary"]["available"] is False
     assert tools["labor.store_aggregate"]["available"] is False
 
@@ -86,6 +96,8 @@ def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
     assert tools["orders.store_summary"]["available"] is True
     assert tools["orders.store_summary"]["status"] == "active"
     assert tools["orders.store_summary"]["deny_reason"] is None
+    assert tools["orders.catering_today"]["available"] is True
+    assert tools["orders.catering_today"]["status"] == "active"
     assert tools["drivers.store_summary"]["available"] is True
     assert tools["toast.sales_summary"]["available"] is True
     assert tools["toast.sales_summary"]["status"] == "active"
@@ -112,6 +124,7 @@ def test_tool_catalog_activates_approved_tools_for_partner_level():
     assert tools["assistant.general_help"]["available"] is True
     assert tools["orders.store_summary"]["available"] is True
     assert tools["orders.store_summary"]["status"] == "active"
+    assert tools["orders.catering_today"]["available"] is True
     assert tools["drivers.store_summary"]["available"] is True
     assert tools["labor.store_aggregate"]["available"] is True
     assert tools["toast.sales_summary"]["available"] is True
@@ -343,6 +356,427 @@ def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
     assert "[REDACTED]" in payload["raw_response"]
 
 
+WAVE1_ORDER_TOOL_CASES = [
+    {
+        "tool_id": "orders.catering_by_status",
+        "handler": "orders_catering_by_status",
+        "hit": "catering order status split",
+        "near_miss": "what is the order of operations status",
+    },
+    {
+        "tool_id": "orders.catering_by_store",
+        "handler": "orders_catering_by_store",
+        "hit": "catering orders by store",
+        "near_miss": "store split for dining room sections",
+    },
+    {
+        "tool_id": "orders.catering_count",
+        "handler": "orders_catering_count",
+        "hit": "how many catering orders are visible",
+        "near_miss": "how many chairs are in the dining room",
+    },
+    {
+        "tool_id": "orders.catering_driver_assignment_summary",
+        "handler": "orders_catering_driver_assignment_summary",
+        "hit": "catering driver assignment jobs",
+        "near_miss": "assignment jobs for the cleaning checklist",
+    },
+    {
+        "tool_id": "orders.catering_fees_summary",
+        "handler": "orders_catering_fees_summary",
+        "hit": "catering fees summary",
+        "near_miss": "bank fees summary from accounting",
+    },
+    {
+        "tool_id": "orders.catering_item_mix",
+        "handler": "orders_catering_item_mix",
+        "hit": "catering item mix",
+        "near_miss": "item mix for kitchen inventory",
+    },
+    {
+        "tool_id": "orders.catering_late_risk",
+        "handler": "orders_catering_late_risk",
+        "hit": "which catering orders are late risk",
+        "near_miss": "is the staff meeting running late",
+    },
+    {
+        "tool_id": "orders.catering_live_tracking",
+        "handler": "orders_catering_live_tracking",
+        "hit": "which catering orders have live tracking links",
+        "near_miss": "tracking links for a package shipment",
+    },
+    {
+        "tool_id": "orders.catering_needs_driver",
+        "handler": "orders_catering_needs_driver",
+        "hit": "which catering orders need driver attention",
+        "near_miss": "does the office computer need a device installed",
+    },
+    {
+        "tool_id": "orders.catering_next_30_days",
+        "handler": "orders_catering_next_30_days",
+        "hit": "what caterings are in the next 30 days",
+        "near_miss": "what are the next 30 days of weather",
+    },
+    {
+        "tool_id": "orders.catering_order_items_safe",
+        "handler": "orders_catering_order_items_safe",
+        "hit": "what was on order TO-TODAY",
+        "near_miss": "what was on the prep clipboard",
+    },
+    {
+        "tool_id": "orders.catering_order_lookup",
+        "handler": "orders_catering_order_lookup",
+        "hit": "show order details for TO-TODAY",
+        "near_miss": "show details for the staff memo",
+    },
+    {
+        "tool_id": "orders.catering_payout_safe_summary",
+        "handler": "orders_catering_payout_safe_summary",
+        "hit": "catering payout summary",
+        "near_miss": "pay out the cash drawer summary",
+    },
+    {
+        "tool_id": "orders.catering_pdf_status",
+        "handler": "orders_catering_pdf_status",
+        "hit": "catering pdf uploaded summary",
+        "near_miss": "pdf upload status for legal documents",
+    },
+    {
+        "tool_id": "orders.catering_returning_customers_aggregate",
+        "handler": "orders_catering_returning_customers_aggregate",
+        "hit": "catering returning customers aggregate",
+        "near_miss": "returning employees aggregate",
+    },
+    {
+        "tool_id": "orders.catering_today",
+        "handler": "orders_catering_today",
+        "hit": "what caterings are today",
+        "near_miss": "what is today's manager note",
+    },
+    {
+        "tool_id": "orders.catering_tomorrow",
+        "handler": "orders_catering_tomorrow",
+        "hit": "what catering orders are tomorrow",
+        "near_miss": "what is tomorrow's weather",
+    },
+    {
+        "tool_id": "orders.catering_tracking_missing",
+        "handler": "orders_catering_tracking_missing",
+        "hit": "which catering orders are missing tracking",
+        "near_miss": "missing tracking for office supplies",
+    },
+    {
+        "tool_id": "orders.catering_uuid_status",
+        "handler": "orders_catering_uuid_status",
+        "hit": "catering tracking id coverage",
+        "near_miss": "uuid status for a software deploy",
+    },
+    {
+        "tool_id": "orders.catering_week",
+        "handler": "orders_catering_week",
+        "hit": "what catering orders are this week",
+        "near_miss": "what is this week's cleaning schedule",
+    },
+    {
+        "tool_id": "orders.in_house_quote_lookup",
+        "handler": "orders_in_house_quote_lookup",
+        "hit": "show in-house quote details",
+        "near_miss": "show the house rules details",
+    },
+    {
+        "tool_id": "orders.in_house_quotes_summary",
+        "handler": "orders_in_house_quotes_summary",
+        "hit": "in-house quotes status summary",
+        "near_miss": "house status summary for maintenance",
+    },
+]
+
+
+def _wave1_partner_ctx(*, permissions=None, stores=None) -> dict:
+    return {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": list(stores or ["tomball", "copperfield"]),
+        "current_store": (stores or ["tomball"])[0],
+        "path": "/partner/catering",
+        "permissions": list(permissions or ["*"]),
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+
+
+def _wave1_staff_ctx() -> dict:
+    return {
+        "kind": "staff",
+        "role": "gm",
+        "principal_id": 7,
+        "display_name": "Store GM",
+        "store_slugs": ["tomball"],
+        "current_store": "tomball",
+        "path": "/tomball/manager",
+        "permissions": ["ai.ask_claude", "orders.view"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+
+
+def _wave1_staff_ctx_without_store_scope() -> dict:
+    ctx = _wave1_staff_ctx()
+    ctx["store_slugs"] = []
+    ctx["current_store"] = None
+    return ctx
+
+
+def _seed_wave1_order_fixture(db_session) -> None:
+    today = date.today()
+    now = datetime.utcnow()
+    processing_job = ProcessingJob(status="completed", pdf_count=1, success_count=1)
+    tomball_today = Order(
+        external_order_id="TO-TODAY",
+        delivery_date=today.isoformat(),
+        deliver_at="9:30 AM",
+        delivery_window_start=datetime(today.year, today.month, today.day, 0, 1),
+        origin_store_id="tomball",
+        status="approved",
+        delivery_tracking_id="track-live",
+        ezcater_status_key="en_route",
+        assigned_driver="Jolie Driver",
+        customer_phone="713-555-1212",
+        delivery_address="123 Private St",
+        client="Repeat Co",
+        headcount=25,
+        total_amount=250.0,
+        delivery_fee=25.0,
+        tip_amount=20.0,
+        potential_payout=45.0,
+        paid_payout=35.0,
+        pay_verified_miles=12.5,
+    )
+    tomball_tomorrow = Order(
+        external_order_id="TO-TOMORROW",
+        delivery_date=(today + timedelta(days=1)).isoformat(),
+        deliver_at="1:00 PM",
+        delivery_window_start=datetime(today.year, today.month, today.day, 13, 0) + timedelta(days=1),
+        origin_store_id="tomball",
+        status="new",
+        customer_phone="713-555-3434",
+        delivery_address="789 Private Ln",
+        client="Repeat Co",
+        headcount=12,
+        total_amount=125.0,
+        delivery_fee=15.0,
+        tip_amount=10.0,
+        potential_payout=25.0,
+        paid_payout=0.0,
+        pay_verified_miles=4.0,
+    )
+    copperfield_today = Order(
+        external_order_id="CF-TODAY",
+        delivery_date=today.isoformat(),
+        deliver_at="12:30 PM",
+        origin_store_id="copperfield",
+        status="approved",
+        delivery_tracking_id="track-hidden",
+        ezcater_status_key="en_route",
+        assigned_driver="Hidden Driver",
+        customer_phone="713-555-9999",
+        delivery_address="456 Hidden Ave",
+        client="Secret Co",
+        total_amount=300.0,
+        delivery_fee=30.0,
+        tip_amount=30.0,
+    )
+    db_session.add_all([processing_job, tomball_today, tomball_tomorrow, copperfield_today])
+    db_session.flush()
+    db_session.add_all([
+        OrderItem(order_id=tomball_today.id, raw_alias="Fajita Pack", item_key="fajita_pack", qty=2),
+        OrderItem(order_id=tomball_tomorrow.id, raw_alias="Queso Tray", item_key="queso_tray", qty=1),
+        OrderItem(order_id=copperfield_today.id, raw_alias="Taco Pack", item_key="taco_pack", qty=3),
+        EzcaterOrderDetails(
+            external_order_id="TO-TODAY",
+            commission_cents=1000,
+            service_fee_cents=500,
+            processing_fee_cents=250,
+            source_pdf_path=r"C:\private\TO-TODAY.pdf",
+            source_pdf_sha256="a" * 64,
+            gate_code="SECRET-GATE",
+            day_of_contact_name="Private Contact",
+            day_of_contact_phone="713-555-7777",
+        ),
+        EzcaterOrderDetails(
+            external_order_id="CF-TODAY",
+            commission_cents=2000,
+            service_fee_cents=1000,
+            processing_fee_cents=500,
+            source_pdf_path=r"C:\private\CF-TODAY.pdf",
+            source_pdf_sha256="b" * 64,
+        ),
+        ProcessingOrder(
+            processing_job_id=processing_job.id,
+            order_id=tomball_today.id,
+            external_order_id="TO-TODAY",
+            status="completed",
+        ),
+        ProcessingOrder(
+            processing_job_id=processing_job.id,
+            order_id=copperfield_today.id,
+            external_order_id="CF-TODAY",
+            status="completed",
+        ),
+        DriverAssignmentJob(
+            job_id="job-to-today",
+            order_id="TO-TODAY",
+            current_driver="Old Driver",
+            new_driver="Jolie Driver",
+            status="completed",
+            retry_count=1,
+            updated_at=now,
+        ),
+        DriverAssignmentJob(
+            job_id="job-cf-today",
+            order_id="CF-TODAY",
+            current_driver="Hidden Driver",
+            new_driver="Hidden New Driver",
+            status="completed",
+            retry_count=1,
+            updated_at=now,
+        ),
+        InHouseCateringQuote(
+            store_scope="tomball",
+            customer_name="Private Quote Customer",
+            customer_email="private@example.com",
+            customer_phone="713-555-5656",
+            event_address="555 Quote Address",
+            event_date=datetime(today.year, today.month, today.day) + timedelta(days=5),
+            guest_count=20,
+            items_json=json.dumps([{"slug": "fajita_pack", "qty": 2}]),
+            subtotal=200.0,
+            status="sent",
+            email_sent_at=now,
+        ),
+        InHouseCateringQuote(
+            store_scope="copperfield",
+            customer_name="Hidden Quote Customer",
+            customer_email="hidden@example.com",
+            customer_phone="713-555-8888",
+            event_address="999 Hidden Quote Address",
+            guest_count=30,
+            subtotal=300.0,
+            status="draft",
+        ),
+    ])
+    db_session.commit()
+
+
+@pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_order_matchers_route_each_read_tool_and_reject_near_miss(case, monkeypatch):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("deterministic order route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(case["hit"], ctx)
+    near_route = ar._deterministic_route_tool_id(case["near_miss"], ctx)
+
+    assert route["tool_id"] == case["tool_id"]
+    assert route["route_path"] == "deterministic"
+    assert route["classifier"]["reason"] == "not_used"
+    assert ar._TOOL_MATCHERS[case["handler"]](case["near_miss"]) is False
+    assert near_route != case["tool_id"]
+
+
+@pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_order_handlers_return_fixture_payload_for_every_read_tool(db_session, monkeypatch, case):
+    _seed_wave1_order_fixture(db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.ORDER_TOOL_HANDLERS[case["handler"]](
+        case["hit"],
+        _wave1_partner_ctx(stores=["tomball"]),
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["ok"] is True
+    assert payload["tool_id"] == case["tool_id"]
+    assert payload["data_class"] == "orders_read_sanitized"
+    assert "cf-today" not in encoded
+    assert "copperfield" not in encoded
+    assert "taco_pack" not in encoded
+    assert "hidden" not in encoded
+    assert "713-555" not in encoded
+    assert "private st" not in encoded
+    assert "private@example.com" not in encoded
+    assert "secret-gate" not in encoded
+    assert "private contact" not in encoded
+
+
+@pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_order_payloads_are_denied_without_orders_permission(case, monkeypatch):
+    ctx = _wave1_partner_ctx(permissions=["ai.ask_claude"], stores=["tomball"])
+    monkeypatch.setitem(
+        order_handlers.ORDER_TOOL_HANDLERS,
+        case["handler"],
+        lambda *_: (_ for _ in ()).throw(AssertionError("denied order tool must not execute")),
+    )
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools[case["tool_id"]]["available"] is False
+    assert tools[case["tool_id"]]["deny_reason"] == "missing_permission"
+    assert ar._approved_tool_data(case["hit"], ctx) == {}
+
+
+@pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_order_handlers_respect_staff_store_scope_for_every_read_tool(db_session, monkeypatch, case):
+    _seed_wave1_order_fixture(db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.ORDER_TOOL_HANDLERS[case["handler"]](
+        case["hit"],
+        _wave1_staff_ctx(),
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["ok"] is True
+    assert payload["tool_id"] == case["tool_id"]
+    assert "cf-today" not in encoded
+    assert "copperfield" not in encoded
+    assert "taco_pack" not in encoded
+    assert "hidden" not in encoded
+
+
+@pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_order_handlers_fail_closed_without_staff_store_scope(db_session, monkeypatch, case):
+    _seed_wave1_order_fixture(db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.ORDER_TOOL_HANDLERS[case["handler"]](
+        case["hit"],
+        _wave1_staff_ctx_without_store_scope(),
+    )
+    data_only = dict(payload)
+    data_only["question"] = ""
+    encoded = json.dumps(data_only, sort_keys=True).lower()
+
+    assert payload["ok"] is True
+    assert payload["tool_id"] == case["tool_id"]
+    assert "to-today" not in encoded
+    assert "to-tomorrow" not in encoded
+    assert "cf-today" not in encoded
+    assert "tomball" not in encoded
+    assert "copperfield" not in encoded
+    assert "fajita_pack" not in encoded
+    assert "taco_pack" not in encoded
+    assert "hidden" not in encoded
+
+
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
     today = date.today()
     now = datetime.utcnow()
@@ -405,7 +839,7 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
         ),
     ])
     db_session.commit()
-    monkeypatch.setattr(ar, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
 
     ctx = {
         "kind": "partner",
@@ -421,7 +855,7 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
         "is_owner_operator": True,
     }
 
-    payload = ar._approved_tool_data("How many caterings today?", ctx)
+    payload = ar._approved_tool_data("Give me the order summary", ctx)
     encoded = json.dumps(payload, sort_keys=True).lower()
 
     summary = payload["orders.store_summary"]
@@ -437,6 +871,163 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
     assert "713-555" not in encoded
     assert "private" not in encoded
     assert "secret co" not in encoded
+
+
+def test_order_items_tool_payload_is_sanitized_and_store_scoped(db_session, monkeypatch):
+    today = date.today()
+    tomball_order = Order(
+        external_order_id="TO-ITEM",
+        delivery_date=today.isoformat(),
+        deliver_at="11:30 AM",
+        origin_store_id="tomball",
+        status="approved",
+        customer_phone="713-555-1212",
+        delivery_address="123 Private St",
+        client="Private Customer",
+    )
+    copperfield_order = Order(
+        external_order_id="CF-ITEM",
+        delivery_date=today.isoformat(),
+        deliver_at="12:30 PM",
+        origin_store_id="copperfield",
+        status="approved",
+        customer_phone="713-555-9999",
+        delivery_address="456 Hidden Ave",
+        client="Secret Co",
+    )
+    db_session.add_all([tomball_order, copperfield_order])
+    db_session.flush()
+    db_session.add_all([
+        OrderItem(order_id=tomball_order.id, raw_alias="Fajita Pack", item_key="fajita_pack", qty=2),
+        OrderItem(order_id=copperfield_order.id, raw_alias="Taco Pack", item_key="taco_pack", qty=1),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["tomball"],
+        "current_store": "tomball",
+        "path": "/partner/catering",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+
+    payload = ar._approved_tool_data("what was on order TO-ITEM", ctx)
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert "orders.catering_order_items_safe" in payload
+    assert payload["orders.catering_order_items_safe"]["order"]["external_order_id"] == "TO-ITEM"
+    assert payload["orders.catering_order_items_safe"]["items"][0]["label"] == "fajita_pack"
+    assert "cf-item" not in encoded
+    assert "713-555" not in encoded
+    assert "private customer" not in encoded
+    assert "hidden ave" not in encoded
+
+
+def test_order_handler_respects_staff_store_scope_directly(db_session, monkeypatch):
+    today = date.today()
+    db_session.add_all([
+        Order(
+            external_order_id="TB-TODAY",
+            delivery_date=today.isoformat(),
+            origin_store_id="tomball",
+            status="approved",
+        ),
+        Order(
+            external_order_id="CF-TODAY",
+            delivery_date=today.isoformat(),
+            origin_store_id="copperfield",
+            status="approved",
+        ),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.catering_today(
+        "caterings today",
+        {
+            "kind": "staff",
+            "role": "gm",
+            "store_slugs": ["tomball"],
+            "current_store": "tomball",
+            "permissions": ["ai.ask_claude", "orders.view"],
+            "is_owner_operator": False,
+        },
+    )
+
+    assert payload["count"] == 1
+    assert payload["by_store"] == {"tomball": 1}
+    assert payload["orders"][0]["external_order_id"] == "TB-TODAY"
+
+
+def test_order_payload_suppressed_without_orders_permission(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["tomball"],
+        "current_store": "tomball",
+        "path": "/partner/catering",
+        "permissions": ["ai.ask_claude"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setitem(
+        order_handlers.ORDER_TOOL_HANDLERS,
+        "orders_catering_today",
+        lambda *_: (_ for _ in ()).throw(AssertionError("denied order tool must not execute")),
+    )
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools["orders.catering_today"]["available"] is False
+    assert tools["orders.catering_today"]["deny_reason"] == "missing_permission"
+    assert ar._approved_tool_data("what caterings are today", ctx) == {}
+
+
+def test_in_house_quote_summary_redacts_contact_details(db_session, monkeypatch):
+    db_session.add(
+        InHouseCateringQuote(
+            store_scope="tomball",
+            customer_name="Private Customer",
+            customer_email="private@example.com",
+            customer_phone="713-555-1212",
+            event_address="123 Private St",
+            guest_count=25,
+            subtotal=250.0,
+            status="sent",
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.in_house_quotes_summary(
+        "in-house quote summary",
+        {
+            "kind": "partner",
+            "role": "partner",
+            "store_slugs": ["tomball"],
+            "current_store": "tomball",
+            "permissions": ["*"],
+            "is_owner_operator": False,
+        },
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["quote_count"] == 1
+    assert payload["recent_quotes"][0]["subtotal"] == 250.0
+    assert "private@example.com" not in encoded
+    assert "713-555" not in encoded
+    assert "private customer" not in encoded
+    assert "private st" not in encoded
 
 
 def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
@@ -795,10 +1386,37 @@ def test_deterministic_matcher_scan_uses_registry_priority():
 
     assert [row["tool_id"] for row in rows] == [
         "toast.table_activity",
-        "orders.store_summary",
+        "orders.catering_today",
         None,
     ]
     assert rows[-1]["route_path"] == "review"
+
+
+def test_wave1_order_matchers_route_specific_tools_and_near_miss(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("deterministic order route must not call classifier")),
+    )
+
+    assert ar._route_approved_tool_choice("what caterings are today", ctx)["tool_id"] == "orders.catering_today"
+    assert ar._route_approved_tool_choice("catering status split", ctx)["tool_id"] == "orders.catering_by_status"
+    assert ar._route_approved_tool_choice("what was on order TO-1234", ctx)["tool_id"] == "orders.catering_order_items_safe"
+    assert ar._deterministic_route_tool_id("what is the order of operations status", ctx) is None
 
 
 def test_classifier_fallback_is_disabled_by_default(monkeypatch):

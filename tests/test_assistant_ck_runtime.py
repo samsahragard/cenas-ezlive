@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
+import pytest
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -50,6 +52,197 @@ def _available_tool(tool_id: str) -> dict:
         "deny_reason": None,
         "read_write_class": "read_only",
     }
+
+
+WAVE1_ORDER_READ_TOOL_IDS = [
+    "orders.catering_by_status",
+    "orders.catering_by_store",
+    "orders.catering_count",
+    "orders.catering_driver_assignment_summary",
+    "orders.catering_fees_summary",
+    "orders.catering_item_mix",
+    "orders.catering_late_risk",
+    "orders.catering_live_tracking",
+    "orders.catering_needs_driver",
+    "orders.catering_next_30_days",
+    "orders.catering_order_items_safe",
+    "orders.catering_order_lookup",
+    "orders.catering_payout_safe_summary",
+    "orders.catering_pdf_status",
+    "orders.catering_returning_customers_aggregate",
+    "orders.catering_today",
+    "orders.catering_tomorrow",
+    "orders.catering_tracking_missing",
+    "orders.catering_uuid_status",
+    "orders.catering_week",
+    "orders.in_house_quote_lookup",
+    "orders.in_house_quotes_summary",
+]
+
+
+def _wave1_order_runtime_payload(tool_id: str) -> dict:
+    base = {
+        "ok": True,
+        "generated_at": "2026-06-06T12:00:00Z",
+        "data_class": "orders_read_sanitized",
+    }
+    if tool_id in {
+        "orders.catering_today",
+        "orders.catering_tomorrow",
+        "orders.catering_week",
+        "orders.catering_next_30_days",
+    }:
+        return {
+            **base,
+            "window": "today",
+            "count": 1,
+            "by_store": {"tomball": 1},
+            "orders": [{"external_order_id": "TO-TODAY"}],
+        }
+    payloads = {
+        "orders.catering_by_status": {**base, "by_status": {"approved": 1}},
+        "orders.catering_by_store": {**base, "by_store": {"tomball": 1}},
+        "orders.catering_count": {
+            **base,
+            "today_count": 1,
+            "tomorrow_count": 1,
+            "next_7_days_count": 2,
+            "next_30_days_count": 2,
+            "total_count": 2,
+        },
+        "orders.catering_driver_assignment_summary": {
+            **base,
+            "job_count": 1,
+            "by_status": {"completed": 1},
+        },
+        "orders.catering_fees_summary": {
+            **base,
+            "delivery_fee_total": 25,
+            "tip_total": 20,
+            "commission_total": 10,
+            "service_fee_total": 5,
+            "processing_fee_total": 2.5,
+        },
+        "orders.catering_item_mix": {
+            **base,
+            "top_items": [{"label": "fajita_pack", "qty": 2}],
+        },
+        "orders.catering_late_risk": {
+            **base,
+            "count": 1,
+            "orders": [{"external_order_id": "TO-TODAY"}],
+        },
+        "orders.catering_live_tracking": {
+            **base,
+            "count": 1,
+            "active_count": 1,
+            "by_status": {"en_route": 1},
+        },
+        "orders.catering_needs_driver": {
+            **base,
+            "count": 1,
+            "orders": [{"external_order_id": "TO-TOMORROW"}],
+        },
+        "orders.catering_order_items_safe": {
+            **base,
+            "found": True,
+            "order": {"external_order_id": "TO-TODAY"},
+            "item_count": 1,
+            "items": [{"qty": 2, "label": "fajita_pack"}],
+        },
+        "orders.catering_order_lookup": {
+            **base,
+            "found": True,
+            "order": {
+                "external_order_id": "TO-TODAY",
+                "store": "tomball",
+                "delivery_date": "2026-06-06",
+                "deliver_at": "9:30 AM",
+                "status": "approved",
+                "headcount": 25,
+            },
+        },
+        "orders.catering_payout_safe_summary": {
+            **base,
+            "potential_payout_total": 45,
+            "paid_payout_total": 35,
+            "tip_total": 20,
+            "verified_miles_total": 12.5,
+        },
+        "orders.catering_pdf_status": {
+            **base,
+            "processing_rows": 1,
+            "pdf_detail_rows": 1,
+            "with_pdf_source": 1,
+            "parse_error_count": 0,
+            "by_processing_status": {"completed": 1},
+        },
+        "orders.catering_returning_customers_aggregate": {
+            **base,
+            "returning_customer_count": 1,
+            "returning_order_count": 2,
+        },
+        "orders.catering_tracking_missing": {
+            **base,
+            "count": 1,
+            "by_store": {"tomball": 1},
+        },
+        "orders.catering_uuid_status": {
+            **base,
+            "with_tracking_uuid": 1,
+            "missing_tracking_uuid": 1,
+            "active_tracking_count": 1,
+        },
+        "orders.in_house_quote_lookup": {
+            **base,
+            "found": True,
+            "quote": {
+                "quote_id": 7,
+                "store": "tomball",
+                "status": "sent",
+                "event_date": "2026-06-10",
+                "guest_count": 20,
+                "subtotal": 200,
+            },
+        },
+        "orders.in_house_quotes_summary": {
+            **base,
+            "quote_count": 1,
+            "subtotal_total": 200,
+            "by_status": {"sent": 1},
+        },
+    }
+    return payloads[tool_id]
+
+
+@pytest.mark.parametrize("tool_id", WAVE1_ORDER_READ_TOOL_IDS)
+def test_runtime_formats_and_verifies_every_wave1_order_read_tool(tool_id, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved order read tool must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    payload = _wave1_order_runtime_payload(tool_id)
+
+    data = runtime._approved_tool_answer(
+        "wave1 order read test",
+        "",
+        principal,
+        [_available_tool(tool_id)],
+        {tool_id: payload},
+        routed_tool_id=tool_id,
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == tool_id
+    assert data["storage"] == "operational_tool"
+    assert data["answer"].strip()
+    assert runtime._tool_answer_verified(tool_id, payload, data["answer"]) is True
 
 
 def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
@@ -1373,6 +1566,99 @@ def test_runtime_partner_level_uses_approved_tool_without_owner_flag(monkeypatch
     assert data["queued"] is False
     assert data["storage"] == "operational_tool"
     assert data["tool_id"] == "orders.store_summary"
+
+
+def test_runtime_answers_wave1_catering_today_with_explicit_route(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("orders.catering_today")]
+    tool_data = {
+        "orders.catering_today": {
+            "ok": True,
+            "count": 2,
+            "window": "today",
+            "by_store": {"tomball": 1, "copperfield": 1},
+            "orders": [
+                {"external_order_id": "TO-1"},
+                {"external_order_id": "TO-2"},
+            ],
+            "generated_at": "2026-06-06T12:00:00Z",
+        },
+    }
+
+    data = runtime._approved_tool_answer(
+        "what caterings are today?",
+        "",
+        principal,
+        tools,
+        tool_data,
+        routed_tool_id="orders.catering_today",
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "orders.catering_today"
+    assert "2 caterings" in data["answer"]
+    assert "TO-1" in data["answer"]
+
+
+def test_runtime_answers_wave1_order_items_with_explicit_route(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("orders.catering_order_items_safe")]
+    tool_data = {
+        "orders.catering_order_items_safe": {
+            "ok": True,
+            "found": True,
+            "order": {"external_order_id": "TO-ITEM"},
+            "item_count": 2,
+            "items": [
+                {"qty": 2, "label": "fajita_pack"},
+                {"qty": 1, "label": "queso"},
+            ],
+            "generated_at": "2026-06-06T12:00:00Z",
+        },
+    }
+
+    data = runtime._approved_tool_answer(
+        "what was on order TO-ITEM?",
+        "",
+        principal,
+        tools,
+        tool_data,
+        routed_tool_id="orders.catering_order_items_safe",
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "orders.catering_order_items_safe"
+    assert "TO-ITEM" in data["answer"]
+    assert "fajita_pack" in data["answer"]
+
+
+def test_runtime_wave1_order_routes_are_verifiable():
+    from scripts import assistant_ck_runtime as runtime
+
+    payload = {
+        "ok": True,
+        "count": 1,
+        "window": "today",
+        "orders": [{"external_order_id": "TO-1"}],
+    }
+
+    assert "orders.catering_today" in runtime._VERIFIED_ROUTE_TOOL_IDS
+    route_kind, route_args = runtime._route_args("orders.catering_today", "what caterings are today")
+    assert route_kind == "catering_today"
+    assert route_args["tool"] == "orders.catering_today"
+    assert runtime._tool_answer_verified(
+        "orders.catering_today",
+        payload,
+        "There is 1 catering in the today view.",
+    )
 
 
 def test_runtime_partner_identity_does_not_claim_owner_operator(monkeypatch):

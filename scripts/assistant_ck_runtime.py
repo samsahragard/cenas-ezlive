@@ -48,6 +48,28 @@ _REVIEW_STATUS = "needs_review"
 _TOOL_ROUTE_REQUIRED_VERIFICATIONS = 3
 _VERIFIED_ROUTE_TOOL_IDS = {
     "orders.store_summary",
+    "orders.catering_by_status",
+    "orders.catering_by_store",
+    "orders.catering_count",
+    "orders.catering_driver_assignment_summary",
+    "orders.catering_fees_summary",
+    "orders.catering_item_mix",
+    "orders.catering_late_risk",
+    "orders.catering_live_tracking",
+    "orders.catering_needs_driver",
+    "orders.catering_next_30_days",
+    "orders.catering_order_items_safe",
+    "orders.catering_order_lookup",
+    "orders.catering_payout_safe_summary",
+    "orders.catering_pdf_status",
+    "orders.catering_returning_customers_aggregate",
+    "orders.catering_today",
+    "orders.catering_tomorrow",
+    "orders.catering_tracking_missing",
+    "orders.catering_uuid_status",
+    "orders.catering_week",
+    "orders.in_house_quote_lookup",
+    "orders.in_house_quotes_summary",
     "drivers.store_summary",
     "labor.store_aggregate",
     "toast.sales_summary",
@@ -904,6 +926,200 @@ def _orders_summary_answer(summary: dict, question: str = "") -> str:
     return answer
 
 
+def _order_id_list(rows: list[dict], limit: int = 5) -> str:
+    ids = [
+        str(row.get("external_order_id") or "").strip()
+        for row in rows
+        if isinstance(row, dict) and str(row.get("external_order_id") or "").strip()
+    ]
+    return ", ".join(ids[:limit])
+
+
+def _dict_split(mapping: dict, limit: int = 6) -> str:
+    if not isinstance(mapping, dict) or not mapping:
+        return ""
+    pairs = sorted(mapping.items(), key=lambda item: str(item[0]))
+    return "; ".join(f"{key}: {value}" for key, value in pairs[:limit])
+
+
+def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
+    if not isinstance(payload, dict) or payload.get("ok") is False:
+        return "I could not read the approved catering data for that question, so I saved it for Sam review."
+    if payload.get("found") is False:
+        return "I did not find a matching visible catering record for that question."
+
+    if tool_id in {
+        "orders.catering_today",
+        "orders.catering_tomorrow",
+        "orders.catering_week",
+        "orders.catering_next_30_days",
+    }:
+        count = int(payload.get("count") or 0)
+        window = str(payload.get("window") or "requested window").replace("_", " ")
+        answer = f"There are {count} {_plural(count, 'catering')} in the {window} view."
+        split = _dict_split(payload.get("by_store") or {})
+        if split:
+            answer += " Store split: " + split + "."
+        ids = _order_id_list(payload.get("orders") or [])
+        if ids:
+            answer += " First visible orders: " + ids + "."
+        return answer
+
+    if tool_id == "orders.catering_count":
+        return (
+            "Catering counts: "
+            f"today {int(payload.get('today_count') or 0)}, "
+            f"tomorrow {int(payload.get('tomorrow_count') or 0)}, "
+            f"next 7 days {int(payload.get('next_7_days_count') or 0)}, "
+            f"next 30 days {int(payload.get('next_30_days_count') or 0)}, "
+            f"all visible {int(payload.get('total_count') or 0)}."
+        )
+
+    if tool_id == "orders.catering_by_store":
+        split = _dict_split(payload.get("by_store") or {}) or "no visible stores"
+        return f"Catering store split: {split}."
+
+    if tool_id == "orders.catering_by_status":
+        split = _dict_split(payload.get("by_status") or {}) or "no visible statuses"
+        return f"Catering status split: {split}."
+
+    if tool_id == "orders.catering_needs_driver":
+        count = int(payload.get("count") or 0)
+        answer = f"{count} {_plural(count, 'catering')} need driver attention."
+        ids = _order_id_list(payload.get("orders") or [])
+        if ids:
+            answer += " First visible orders: " + ids + "."
+        return answer
+
+    if tool_id == "orders.catering_live_tracking":
+        count = int(payload.get("count") or 0)
+        active = int(payload.get("active_count") or 0)
+        answer = f"{count} {_plural(count, 'catering')} have tracking links; {active} are currently active."
+        split = _dict_split(payload.get("by_status") or {})
+        if split:
+            answer += " Tracking status split: " + split + "."
+        return answer
+
+    if tool_id == "orders.catering_tracking_missing":
+        count = int(payload.get("count") or 0)
+        answer = f"{count} active {_plural(count, 'catering')} are missing tracking links."
+        split = _dict_split(payload.get("by_store") or {})
+        if split:
+            answer += " Store split: " + split + "."
+        return answer
+
+    if tool_id == "orders.catering_uuid_status":
+        return (
+            "Tracking UUID coverage: "
+            f"{int(payload.get('with_tracking_uuid') or 0)} with UUIDs, "
+            f"{int(payload.get('missing_tracking_uuid') or 0)} missing, "
+            f"{int(payload.get('active_tracking_count') or 0)} active."
+        )
+
+    if tool_id == "orders.catering_late_risk":
+        count = int(payload.get("count") or 0)
+        answer = f"{count} same-day {_plural(count, 'catering')} show late risk."
+        ids = _order_id_list(payload.get("orders") or [])
+        if ids:
+            answer += " First visible orders: " + ids + "."
+        return answer
+
+    if tool_id == "orders.catering_order_lookup":
+        order = payload.get("order") if isinstance(payload.get("order"), dict) else {}
+        order_id = order.get("external_order_id") or "the selected order"
+        return (
+            f"Order {order_id}: store {order.get('store') or 'unknown'}, "
+            f"date {order.get('delivery_date') or 'unknown'}, "
+            f"time {order.get('deliver_at') or 'unknown'}, "
+            f"status {order.get('status') or 'unknown'}, "
+            f"headcount {order.get('headcount') or 'unknown'}."
+        )
+
+    if tool_id == "orders.catering_order_items_safe":
+        order = payload.get("order") if isinstance(payload.get("order"), dict) else {}
+        items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        labels = []
+        for item in items[:6]:
+            if isinstance(item, dict):
+                labels.append(f"{item.get('qty') or 1} x {item.get('label') or item.get('item_key') or 'item'}")
+        order_id = order.get("external_order_id") or "the selected order"
+        suffix = "; ".join(labels) if labels else "no safe item rows found"
+        return f"Order {order_id} has {int(payload.get('item_count') or 0)} item rows: {suffix}."
+
+    if tool_id == "orders.catering_item_mix":
+        top_items = payload.get("top_items") if isinstance(payload.get("top_items"), list) else []
+        labels = []
+        for item in top_items[:6]:
+            if isinstance(item, dict):
+                labels.append(f"{item.get('label')}: {item.get('qty')}")
+        return "Top catering items: " + ("; ".join(labels) if labels else "no visible item rows") + "."
+
+    if tool_id == "orders.catering_fees_summary":
+        return (
+            f"Visible catering fees: delivery fees {_money(payload.get('delivery_fee_total'))}, "
+            f"tips {_money(payload.get('tip_total'))}, "
+            f"commission {_money(payload.get('commission_total'))}, "
+            f"service fees {_money(payload.get('service_fee_total'))}, "
+            f"processing fees {_money(payload.get('processing_fee_total'))}."
+        )
+
+    if tool_id == "orders.catering_payout_safe_summary":
+        return (
+            f"Visible catering payout summary: potential {_money(payload.get('potential_payout_total'))}, "
+            f"paid {_money(payload.get('paid_payout_total'))}, "
+            f"tips {_money(payload.get('tip_total'))}, "
+            f"verified miles {payload.get('verified_miles_total') or 0}."
+        )
+
+    if tool_id == "orders.catering_pdf_status":
+        split = _dict_split(payload.get("by_processing_status") or {})
+        answer = (
+            f"Catering PDF status: {int(payload.get('processing_rows') or 0)} processing rows, "
+            f"{int(payload.get('pdf_detail_rows') or 0)} detail rows, "
+            f"{int(payload.get('with_pdf_source') or 0)} with PDF source, "
+            f"{int(payload.get('parse_error_count') or 0)} parse errors."
+        )
+        if split:
+            answer += " Processing split: " + split + "."
+        return answer
+
+    if tool_id == "orders.catering_driver_assignment_summary":
+        split = _dict_split(payload.get("by_status") or {})
+        answer = f"Driver assignment jobs: {int(payload.get('job_count') or 0)} visible jobs."
+        if split:
+            answer += " Status split: " + split + "."
+        return answer
+
+    if tool_id == "orders.catering_returning_customers_aggregate":
+        return (
+            "Returning customer aggregate: "
+            f"{int(payload.get('returning_customer_count') or 0)} repeat customer keys, "
+            f"{int(payload.get('returning_order_count') or 0)} orders tied to repeat customer keys."
+        )
+
+    if tool_id == "orders.in_house_quotes_summary":
+        split = _dict_split(payload.get("by_status") or {})
+        answer = (
+            f"There are {int(payload.get('quote_count') or 0)} visible in-house catering quotes "
+            f"totaling {_money(payload.get('subtotal_total'))}."
+        )
+        if split:
+            answer += " Status split: " + split + "."
+        return answer
+
+    if tool_id == "orders.in_house_quote_lookup":
+        quote = payload.get("quote") if isinstance(payload.get("quote"), dict) else {}
+        return (
+            f"Quote {quote.get('quote_id') or 'selected'}: store {quote.get('store') or 'unknown'}, "
+            f"status {quote.get('status') or 'unknown'}, "
+            f"event date {quote.get('event_date') or 'unknown'}, "
+            f"guest count {quote.get('guest_count') or 'unknown'}, "
+            f"subtotal {_money(quote.get('subtotal'))}."
+        )
+
+    return _orders_summary_answer(payload, question)
+
+
 def _drivers_summary_answer(summary: dict) -> str:
     total = int(summary.get("total_drivers") or 0)
     active = int(summary.get("active_drivers") or 0)
@@ -1013,6 +1229,18 @@ def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
             "store": _requested_store(resolved_question) or "all_accessible",
             "window": window[0] if window else "current_view",
         }
+    if tool_id.startswith("orders.catering_"):
+        window = _requested_today_window(resolved_question)
+        return tool_id.split(".", 1)[1], {
+            "tool": tool_id,
+            "store": _requested_store(resolved_question) or "all_accessible",
+            "window": window[0] if window else "current_view",
+        }
+    if tool_id.startswith("orders.in_house_"):
+        return tool_id.split(".", 1)[1], {
+            "tool": tool_id,
+            "store": _requested_store(resolved_question) or "all_accessible",
+        }
     if tool_id == "drivers.store_summary":
         return "driver_summary", {"scope": "current_view"}
     if tool_id == "labor.store_aggregate":
@@ -1056,6 +1284,12 @@ def _tool_answer_verified(tool_id: str, payload: object, answer: str) -> bool:
         return isinstance(payload, dict) and payload.get("data_class") == "toast_employee_profiles_sanitized" and "Toast" in answer and "profile" in answer.casefold()
     if tool_id == "orders.store_summary":
         return isinstance(payload, dict) and any(word in answer for word in ("catering", "order", "tracking"))
+    if tool_id.startswith("orders."):
+        return (
+            isinstance(payload, dict)
+            and payload.get("ok") is not False
+            and any(word in answer.casefold() for word in ("catering", "order", "quote", "tracking", "driver"))
+        )
     if tool_id == "drivers.store_summary":
         return isinstance(payload, dict) and "driver" in answer.casefold()
     if tool_id == "labor.store_aggregate":
@@ -1405,6 +1639,21 @@ def _approved_tool_answer(
                 "storage": "operational_tool",
                 "tool_id": "labor.store_aggregate",
                 "generated_at": labor_summary.get("generated_at"),
+            }
+    if (
+        routed_tool_id.startswith("orders.")
+        and routed_tool_id != "orders.store_summary"
+        and _tool_available(tools, routed_tool_id)
+    ):
+        orders_payload = tool_data.get(routed_tool_id) if isinstance(tool_data, dict) else None
+        if isinstance(orders_payload, dict):
+            return {
+                "ok": True,
+                "answer": _orders_read_answer(orders_payload, routed_tool_id, resolved_question),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": routed_tool_id,
+                "generated_at": orders_payload.get("generated_at"),
             }
     if routed_tool_id == "orders.store_summary" and _tool_available(tools, "orders.store_summary"):
         summary = tool_data.get("orders.store_summary") if isinstance(tool_data, dict) else None

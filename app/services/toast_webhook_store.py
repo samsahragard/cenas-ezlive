@@ -12,6 +12,7 @@ from app.services.toast_client import restaurant_guids
 
 
 DEFAULT_DB_PATH = r"C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite"
+DEFAULT_EMPLOYEE_PROFILE_DB_DIR = r"C:\Users\sam\cena-ai-assistant\employee_profiles\toast"
 
 
 def _utc_now() -> str:
@@ -508,6 +509,28 @@ class ToastWebhookStore:
                         (projection_error, _utc_now(), event_guid),
                     )
             conn.commit()
+        employee_profile_db_result = None
+        employee_profile_db_error = None
+        if inserted and os.getenv("TOAST_EMPLOYEE_PROFILE_DBS_AUTO_EXPORT", "0") != "0":
+            try:
+                with self.connect() as conn:
+                    affected_employee_ids = [
+                        int(row["cena_employee_id"])
+                        for row in conn.execute(
+                            """
+                            SELECT DISTINCT cena_employee_id
+                            FROM employee_toast_fact
+                            WHERE event_guid = ? AND cena_employee_id IS NOT NULL
+                            """,
+                            (event_guid,),
+                        ).fetchall()
+                    ]
+                if affected_employee_ids:
+                    employee_profile_db_result = self.materialize_employee_profile_databases(
+                        employee_ids=affected_employee_ids
+                    )
+            except Exception as exc:  # noqa: BLE001 - do not break webhook ingest for derived DB export.
+                employee_profile_db_error = str(exc)[:400]
         return {
             "ok": True,
             "event_guid": event_guid,
@@ -515,6 +538,8 @@ class ToastWebhookStore:
             "duplicate": not inserted,
             "projected": inserted and projection_error is None,
             "projection_error": projection_error,
+            "employee_profile_dbs": employee_profile_db_result,
+            "employee_profile_db_error": employee_profile_db_error,
         }
 
     def _project_event(
@@ -1267,6 +1292,467 @@ class ToastWebhookStore:
                 "unmatched": conn.execute("SELECT COUNT(*) FROM employee_toast_unmatched").fetchone()[0],
             }
         return {"ok": True, "db_path": str(self.db_path), "counts": counts}
+
+    def materialize_employee_profile_databases(
+        self,
+        *,
+        output_dir: str | os.PathLike[str] | None = None,
+        employee_ids: list[int] | tuple[int, ...] | set[int] | None = None,
+    ) -> dict[str, Any]:
+        """Write per-employee SQLite profile DBs derived from the central Toast DB.
+
+        The central database stays the source of truth. Per-employee files contain
+        sanitized profile, identity, fact, and related current-order rows only; raw
+        webhook payloads are intentionally not copied.
+        """
+        self.init_schema()
+        out_dir = Path(output_dir or os.getenv("TOAST_EMPLOYEE_PROFILE_DB_DIR") or DEFAULT_EMPLOYEE_PROFILE_DB_DIR)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        generated_at = _utc_now()
+        with self.connect() as conn:
+            if employee_ids is None:
+                rows = conn.execute(
+                    """
+                    SELECT cena_employee_id FROM employee_profile_current
+                    UNION
+                    SELECT cena_employee_id FROM employee_toast_identity_map
+                    UNION
+                    SELECT cena_employee_id FROM employee_toast_fact WHERE cena_employee_id IS NOT NULL
+                    ORDER BY cena_employee_id
+                    """
+                ).fetchall()
+                ids = [int(row["cena_employee_id"]) for row in rows if row["cena_employee_id"] is not None]
+            else:
+                ids = sorted({int(employee_id) for employee_id in employee_ids if employee_id is not None})
+
+            written: list[dict[str, Any]] = []
+            for employee_id in ids:
+                path = out_dir / f"cena_employee_{employee_id}.sqlite"
+                summary = self._materialize_one_employee_profile_database(conn, employee_id, path, generated_at)
+                written.append(summary)
+
+        return {
+            "ok": True,
+            "output_dir": str(out_dir),
+            "employees": len(ids),
+            "databases": len(written),
+            "generated_at": generated_at,
+            "files": written,
+        }
+
+    def _materialize_one_employee_profile_database(
+        self,
+        source_conn: sqlite3.Connection,
+        cena_employee_id: int,
+        path: Path,
+        generated_at: str,
+    ) -> dict[str, Any]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        if tmp_path.exists():
+            tmp_path.unlink()
+        dest = sqlite3.connect(str(tmp_path))
+        try:
+            dest.row_factory = sqlite3.Row
+            self._init_employee_profile_db_schema(dest)
+            dest.execute(
+                "INSERT INTO metadata(key, value) VALUES (?, ?)",
+                ("schema_version", "1"),
+            )
+            for key, value in {
+                "cena_employee_id": str(cena_employee_id),
+                "central_db_path": str(self.db_path),
+                "generated_at": generated_at,
+                "source": "central_toast_webhook_db",
+                "raw_payloads_included": "false",
+            }.items():
+                dest.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)", (key, value))
+
+            profile_rows = source_conn.execute(
+                """
+                SELECT cena_employee_id, profile_json, source, generated_at
+                FROM employee_profile_current
+                WHERE cena_employee_id = ?
+                """,
+                (cena_employee_id,),
+            ).fetchall()
+            self._copy_rows(
+                dest,
+                "employee_profile_current",
+                ("cena_employee_id", "profile_json", "source", "generated_at"),
+                profile_rows,
+            )
+
+            identity_rows = source_conn.execute(
+                """
+                SELECT store_key, toast_employee_guid, cena_employee_id, source, verified,
+                       confidence, first_seen, last_seen
+                FROM employee_toast_identity_map
+                WHERE cena_employee_id = ?
+                ORDER BY store_key, toast_employee_guid
+                """,
+                (cena_employee_id,),
+            ).fetchall()
+            self._copy_rows(
+                dest,
+                "toast_identity_map",
+                (
+                    "store_key",
+                    "toast_employee_guid",
+                    "cena_employee_id",
+                    "source",
+                    "verified",
+                    "confidence",
+                    "first_seen",
+                    "last_seen",
+                ),
+                identity_rows,
+            )
+
+            fact_rows = source_conn.execute(
+                """
+                SELECT id, cena_employee_id, store_key, toast_employee_guid, fact_type,
+                       entity_type, entity_guid, order_guid, check_guid, event_guid,
+                       business_date, occurred_at, summary_json, created_at
+                FROM employee_toast_fact
+                WHERE cena_employee_id = ?
+                ORDER BY COALESCE(occurred_at, created_at), id
+                """,
+                (cena_employee_id,),
+            ).fetchall()
+            self._copy_rows(
+                dest,
+                "toast_fact",
+                (
+                    "id",
+                    "cena_employee_id",
+                    "store_key",
+                    "toast_employee_guid",
+                    "fact_type",
+                    "entity_type",
+                    "entity_guid",
+                    "order_guid",
+                    "check_guid",
+                    "event_guid",
+                    "business_date",
+                    "occurred_at",
+                    "summary_json",
+                    "created_at",
+                ),
+                fact_rows,
+            )
+
+            count_rows = source_conn.execute(
+                """
+                SELECT fact_type, COUNT(*) AS fact_count, MIN(occurred_at) AS first_occurred_at,
+                       MAX(occurred_at) AS last_occurred_at
+                FROM employee_toast_fact
+                WHERE cena_employee_id = ?
+                GROUP BY fact_type
+                ORDER BY fact_type
+                """,
+                (cena_employee_id,),
+            ).fetchall()
+            self._copy_rows(
+                dest,
+                "toast_fact_type_count",
+                ("fact_type", "fact_count", "first_occurred_at", "last_occurred_at"),
+                count_rows,
+            )
+
+            order_guids = [
+                row["order_guid"]
+                for row in source_conn.execute(
+                    """
+                    SELECT DISTINCT order_guid
+                    FROM employee_toast_fact
+                    WHERE cena_employee_id = ? AND order_guid IS NOT NULL
+                    ORDER BY order_guid
+                    """,
+                    (cena_employee_id,),
+                ).fetchall()
+            ]
+            if order_guids:
+                placeholders = ",".join("?" for _ in order_guids)
+                order_rows = source_conn.execute(
+                    f"""
+                    SELECT order_guid, event_guid, restaurant_guid, store_key, business_date,
+                           source, payment_status, approval_status, opened_date, modified_date,
+                           closed_date, paid_date, server_toast_guid, table_guid, table_name,
+                           updated_at
+                    FROM toast_order_current
+                    WHERE order_guid IN ({placeholders})
+                    ORDER BY COALESCE(modified_date, opened_date), order_guid
+                    """,
+                    order_guids,
+                ).fetchall()
+                self._copy_rows(
+                    dest,
+                    "related_order_current",
+                    (
+                        "order_guid",
+                        "event_guid",
+                        "restaurant_guid",
+                        "store_key",
+                        "business_date",
+                        "source",
+                        "payment_status",
+                        "approval_status",
+                        "opened_date",
+                        "modified_date",
+                        "closed_date",
+                        "paid_date",
+                        "server_toast_guid",
+                        "table_guid",
+                        "table_name",
+                        "updated_at",
+                    ),
+                    order_rows,
+                )
+
+                check_rows = source_conn.execute(
+                    f"""
+                    SELECT check_guid, order_guid, event_guid, store_key, business_date,
+                           display_number, payment_status, amount, total_amount, tax_amount,
+                           opened_date, modified_date, closed_date, paid_date, voided, deleted,
+                           updated_at
+                    FROM toast_check_current
+                    WHERE order_guid IN ({placeholders})
+                    ORDER BY order_guid, display_number, check_guid
+                    """,
+                    order_guids,
+                ).fetchall()
+                self._copy_rows(
+                    dest,
+                    "related_check_current",
+                    (
+                        "check_guid",
+                        "order_guid",
+                        "event_guid",
+                        "store_key",
+                        "business_date",
+                        "display_number",
+                        "payment_status",
+                        "amount",
+                        "total_amount",
+                        "tax_amount",
+                        "opened_date",
+                        "modified_date",
+                        "closed_date",
+                        "paid_date",
+                        "voided",
+                        "deleted",
+                        "updated_at",
+                    ),
+                    check_rows,
+                )
+
+                selection_rows = source_conn.execute(
+                    f"""
+                    SELECT selection_guid, check_guid, order_guid, event_guid, store_key,
+                           business_date, display_name, quantity, price, voided, updated_at
+                    FROM toast_selection_current
+                    WHERE order_guid IN ({placeholders})
+                    ORDER BY order_guid, check_guid, display_name, selection_guid
+                    """,
+                    order_guids,
+                ).fetchall()
+                self._copy_rows(
+                    dest,
+                    "related_selection_current",
+                    (
+                        "selection_guid",
+                        "check_guid",
+                        "order_guid",
+                        "event_guid",
+                        "store_key",
+                        "business_date",
+                        "display_name",
+                        "quantity",
+                        "price",
+                        "voided",
+                        "updated_at",
+                    ),
+                    selection_rows,
+                )
+
+                payment_rows = source_conn.execute(
+                    f"""
+                    SELECT payment_guid, check_guid, order_guid, event_guid, store_key,
+                           business_date, payment_type, payment_status, amount, tip_amount,
+                           paid_date, updated_at
+                    FROM toast_payment_current
+                    WHERE order_guid IN ({placeholders})
+                    ORDER BY order_guid, paid_date, payment_guid
+                    """,
+                    order_guids,
+                ).fetchall()
+                self._copy_rows(
+                    dest,
+                    "related_payment_current",
+                    (
+                        "payment_guid",
+                        "check_guid",
+                        "order_guid",
+                        "event_guid",
+                        "store_key",
+                        "business_date",
+                        "payment_type",
+                        "payment_status",
+                        "amount",
+                        "tip_amount",
+                        "paid_date",
+                        "updated_at",
+                    ),
+                    payment_rows,
+                )
+
+            dest.commit()
+        finally:
+            dest.close()
+        tmp_path.replace(path)
+        return {
+            "cena_employee_id": cena_employee_id,
+            "path": str(path),
+            "facts": len(fact_rows),
+            "identities": len(identity_rows),
+            "orders": len(order_guids),
+        }
+
+    def _init_employee_profile_db_schema(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            PRAGMA foreign_keys=ON;
+            CREATE TABLE metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE employee_profile_current (
+                cena_employee_id INTEGER PRIMARY KEY,
+                profile_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                generated_at TEXT NOT NULL
+            );
+            CREATE TABLE toast_identity_map (
+                store_key TEXT NOT NULL,
+                toast_employee_guid TEXT NOT NULL,
+                cena_employee_id INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                verified INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL,
+                PRIMARY KEY(store_key, toast_employee_guid)
+            );
+            CREATE TABLE toast_fact (
+                id INTEGER PRIMARY KEY,
+                cena_employee_id INTEGER NOT NULL,
+                store_key TEXT,
+                toast_employee_guid TEXT,
+                fact_type TEXT NOT NULL,
+                entity_type TEXT,
+                entity_guid TEXT,
+                order_guid TEXT,
+                check_guid TEXT,
+                event_guid TEXT,
+                business_date TEXT,
+                occurred_at TEXT,
+                summary_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX ix_toast_fact_time ON toast_fact(occurred_at, id);
+            CREATE INDEX ix_toast_fact_type ON toast_fact(fact_type, occurred_at);
+            CREATE TABLE toast_fact_type_count (
+                fact_type TEXT PRIMARY KEY,
+                fact_count INTEGER NOT NULL,
+                first_occurred_at TEXT,
+                last_occurred_at TEXT
+            );
+            CREATE TABLE related_order_current (
+                order_guid TEXT PRIMARY KEY,
+                event_guid TEXT NOT NULL,
+                restaurant_guid TEXT,
+                store_key TEXT,
+                business_date TEXT,
+                source TEXT,
+                payment_status TEXT,
+                approval_status TEXT,
+                opened_date TEXT,
+                modified_date TEXT,
+                closed_date TEXT,
+                paid_date TEXT,
+                server_toast_guid TEXT,
+                table_guid TEXT,
+                table_name TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE related_check_current (
+                check_guid TEXT PRIMARY KEY,
+                order_guid TEXT NOT NULL,
+                event_guid TEXT NOT NULL,
+                store_key TEXT,
+                business_date TEXT,
+                display_number TEXT,
+                payment_status TEXT,
+                amount REAL,
+                total_amount REAL,
+                tax_amount REAL,
+                opened_date TEXT,
+                modified_date TEXT,
+                closed_date TEXT,
+                paid_date TEXT,
+                voided INTEGER NOT NULL,
+                deleted INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX ix_related_check_order ON related_check_current(order_guid);
+            CREATE TABLE related_selection_current (
+                selection_guid TEXT PRIMARY KEY,
+                check_guid TEXT,
+                order_guid TEXT NOT NULL,
+                event_guid TEXT NOT NULL,
+                store_key TEXT,
+                business_date TEXT,
+                display_name TEXT,
+                quantity REAL,
+                price REAL,
+                voided INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX ix_related_selection_order ON related_selection_current(order_guid);
+            CREATE TABLE related_payment_current (
+                payment_guid TEXT PRIMARY KEY,
+                check_guid TEXT,
+                order_guid TEXT NOT NULL,
+                event_guid TEXT NOT NULL,
+                store_key TEXT,
+                business_date TEXT,
+                payment_type TEXT,
+                payment_status TEXT,
+                amount REAL,
+                tip_amount REAL,
+                paid_date TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX ix_related_payment_order ON related_payment_current(order_guid);
+            """
+        )
+
+    def _copy_rows(
+        self,
+        conn: sqlite3.Connection,
+        table: str,
+        columns: tuple[str, ...],
+        rows: list[sqlite3.Row],
+    ) -> None:
+        if not rows:
+            return
+        placeholders = ",".join("?" for _ in columns)
+        column_sql = ",".join(columns)
+        conn.executemany(
+            f"INSERT INTO {table} ({column_sql}) VALUES ({placeholders})",
+            [[row[column] for column in columns] for row in rows],
+        )
 
 
 def synthetic_event_guid(prefix: str, payload: dict[str, Any]) -> str:

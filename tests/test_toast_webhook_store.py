@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 from app.services.toast_webhook_store import ToastWebhookStore
 
@@ -132,3 +133,77 @@ def test_store_tracks_unmatched_employee_guid(tmp_path, monkeypatch):
 
     assert {row["toast_employee_guid"] for row in rows} == {SERVER_GUID}
     assert "order_created" in {row["context"] for row in rows}
+
+
+def test_materializes_personal_employee_profile_database(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOAST_RESTAURANT_GUID_TOMBALL", RESTAURANT_GUID)
+    store = ToastWebhookStore(tmp_path / "toast.sqlite")
+    store.init_schema()
+
+    with store.connect() as conn:
+        store._upsert_identity(
+            conn,
+            store_key="tomball",
+            toast_employee_guid=SERVER_GUID,
+            cena_employee_id=101,
+            source="test",
+            verified=True,
+            confidence=1.0,
+        )
+        conn.execute(
+            """
+            INSERT INTO employee_profile_current
+                (cena_employee_id, profile_json, source, generated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (101, json.dumps({"name": "Server One"}), "test", "2026-06-06T00:00:00Z"),
+        )
+        conn.commit()
+
+    _store_event(store, _event("event-1", _order(selection_count=2, paid=True)))
+
+    result = store.materialize_employee_profile_databases(output_dir=tmp_path / "employee_profiles")
+
+    profile_db = tmp_path / "employee_profiles" / "cena_employee_101.sqlite"
+    assert result["databases"] == 1
+    assert profile_db.exists()
+
+    conn = sqlite3.connect(profile_db)
+    try:
+        assert conn.execute("SELECT value FROM metadata WHERE key = 'raw_payloads_included'").fetchone()[0] == "false"
+        assert conn.execute("SELECT COUNT(*) FROM employee_profile_current").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM toast_identity_map").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM toast_fact").fetchone()[0] >= 4
+        assert conn.execute("SELECT COUNT(*) FROM related_order_current").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM related_selection_current").fetchone()[0] == 2
+        table_names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    finally:
+        conn.close()
+
+    assert "toast_webhook_event" not in table_names
+
+
+def test_store_auto_materializes_impacted_employee_database(tmp_path, monkeypatch):
+    monkeypatch.setenv("TOAST_RESTAURANT_GUID_TOMBALL", RESTAURANT_GUID)
+    monkeypatch.setenv("TOAST_EMPLOYEE_PROFILE_DBS_AUTO_EXPORT", "1")
+    monkeypatch.setenv("TOAST_EMPLOYEE_PROFILE_DB_DIR", str(tmp_path / "live_profiles"))
+    store = ToastWebhookStore(tmp_path / "toast.sqlite")
+    store.init_schema()
+
+    with store.connect() as conn:
+        store._upsert_identity(
+            conn,
+            store_key="tomball",
+            toast_employee_guid=SERVER_GUID,
+            cena_employee_id=101,
+            source="test",
+            verified=True,
+            confidence=1.0,
+        )
+        conn.commit()
+
+    result = _store_event(store, _event("event-1", _order()))
+
+    assert result["employee_profile_db_error"] is None
+    assert result["employee_profile_dbs"]["databases"] == 1
+    assert (tmp_path / "live_profiles" / "cena_employee_101.sqlite").exists()

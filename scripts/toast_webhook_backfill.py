@@ -165,6 +165,8 @@ def main() -> None:
     parser.add_argument("--sync-dimensions", action="store_true")
     parser.add_argument("--backfill-orders-days", type=int, default=0)
     parser.add_argument("--sync-labor-days", type=int, default=0)
+    parser.add_argument("--materialize-employee-profile-dbs", action="store_true")
+    parser.add_argument("--employee-profile-db-dir", default=os.getenv("TOAST_EMPLOYEE_PROFILE_DB_DIR"))
     parser.add_argument("--refresh", action="store_true")
     args = parser.parse_args()
 
@@ -182,6 +184,10 @@ def main() -> None:
         output["labor"] = sync_labor_recent(store, args.sync_labor_days, args.refresh)
     if args.backfill_orders_days > 0:
         output["orders"] = backfill_orders(store, args.backfill_orders_days, args.refresh)
+    if args.materialize_employee_profile_dbs:
+        output["employee_profile_dbs"] = store.materialize_employee_profile_databases(
+            output_dir=args.employee_profile_db_dir
+        )
     output["health"] = store.health()
     print(json.dumps(output, indent=2, sort_keys=True))
 

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cenas Kitchen — Corporate Order</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#171008; --bg2:#1d1409; --panel:#241a10; --panel2:#2c2114; --raise:#332715;
+  --line:#3c2d1b; --line2:#54401f;
+  --text:#f4ead7; --dim:#bda380; --faint:#8d7556;
+  --gold:#eba43b; --gold2:#ffc566; --red:#e2543f; --red2:#ff7a5e;
+  --green:#79bd83; --amber:#f0b454; --orange:#e8924a; --gray:#9b8c77;
+  --disp:'Big Shoulders Display',sans-serif; --body:'Hanken Grotesk',sans-serif; --mono:'Spline Sans Mono',monospace;
+  --rad:12px; --rad-s:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--body);color:var(--text);background:var(--bg);min-height:100vh;
+  background-image:
+    radial-gradient(1100px 500px at 85% -10%, rgba(235,164,59,.07), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(226,84,63,.05), transparent 55%),
+    linear-gradient(var(--bg), var(--bg2));
+  background-attachment:fixed;
+}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");}
+#app{max-width:1060px;margin:0 auto;padding:0 14px calc(96px + env(safe-area-inset-bottom));position:relative;z-index:1}
+.h-disp{font-family:var(--disp);text-transform:uppercase;letter-spacing:.04em}
+.mono{font-family:var(--mono)}
+button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font-family:var(--mono);color:var(--text);background:var(--bg2);border:1px solid var(--line2);border-radius:var(--rad-s);padding:9px 10px;font-size:15px;outline:none;min-height:42px}
+input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+input::placeholder{color:var(--faint)}
+select{font-family:var(--body)}
+
+/* top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 2px 10px}
+.brand .t{font-family:var(--disp);font-weight:800;font-size:30px;letter-spacing:.03em;text-transform:uppercase;line-height:1}
+.brand .s{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:4px;letter-spacing:.08em;text-transform:uppercase}
+.who{display:flex;align-items:center;gap:10px}
+.badge-neon{font-family:var(--disp);font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:15px;
+  padding:7px 14px;border-radius:6px;border:2px solid var(--red);color:var(--red2);
+  background:rgba(226,84,63,.06);box-shadow:0 0 14px rgba(226,84,63,.28), inset 0 0 10px rgba(226,84,63,.10);white-space:nowrap}
+.badge-store{border-color:var(--gold);color:var(--gold2);background:rgba(235,164,59,.06);
+  box-shadow:0 0 14px rgba(235,164,59,.22), inset 0 0 10px rgba(235,164,59,.10)}
+.who .u{font-size:13px;color:var(--dim);text-align:right;line-height:1.25}
+.who .u b{color:var(--text)}
+.logout{font-family:var(--mono);font-size:11px;color:var(--faint);text-decoration:underline;text-underline-offset:3px;padding:4px}
+.logout:hover{color:var(--gold2)}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 16px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{font-family:var(--disp);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:15px;
+  padding:11px 16px;color:var(--faint);border-bottom:2px solid transparent;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.tab.on{color:var(--gold2);border-bottom-color:var(--gold)}
+.tab .ct{font-family:var(--mono);font-size:10px;background:var(--gold);color:#241a10;border-radius:10px;padding:1px 7px;font-weight:600}
+
+/* chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{font-size:12.5px;font-weight:600;color:var(--dim);background:var(--panel);border:1px solid var(--line);
+  border-radius:999px;padding:8px 14px;white-space:nowrap}
+.chip.on{color:#241a10;background:var(--gold);border-color:var(--gold)}
+.searchrow{display:flex;gap:10px;margin-bottom:10px}
+.searchrow input{flex:1}
+
+/* panels & product rows */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);overflow:hidden}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) 96px 96px 128px;gap:10px;align-items:center;
+  padding:13px 16px;border-bottom:1px solid var(--line)}
+.prow:last-child{border-bottom:none}
+.prow .nm{font-weight:600;font-size:14.5px;line-height:1.3}
+.prow .meta{display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap}
+.cat{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.05em;text-transform:uppercase}
+.stk{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:4px;letter-spacing:.03em}
+.stk.in{color:var(--green);background:rgba(121,189,131,.10)}
+.stk.low{color:var(--amber);background:rgba(240,180,84,.12)}
+.stk.out{color:var(--red2);background:rgba(226,84,63,.12)}
+.dev{font-family:var(--mono);font-size:10px;color:var(--orange);background:rgba(232,146,74,.12);padding:2px 7px;border-radius:4px}
+.colh{display:grid;grid-template-columns:minmax(0,1fr) 96px 96px 128px;gap:10px;padding:9px 16px;
+  border-bottom:1px solid var(--line);background:var(--panel2)}
+.colh span{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase;text-align:center}
+.colh span:first-child{text-align:left}
+.avgc{text-align:center;font-family:var(--mono);font-size:14px;color:var(--gold2)}
+.avgc small{display:block;font-size:9.5px;color:var(--faint);margin-top:2px}
+.avgc .ov{color:var(--orange)}
+.ohc input{width:100%;text-align:center;padding:8px 4px}
+.ohc input.need{border-color:var(--red);box-shadow:0 0 0 1px rgba(226,84,63,.4)}
+.orc{display:flex;align-items:center;gap:6px;justify-content:center}
+.step{width:34px;height:42px;border:1px solid var(--line2);background:var(--bg2);border-radius:var(--rad-s);
+  font-family:var(--mono);font-size:18px;color:var(--dim);flex:none;line-height:1}
+.step:active{background:var(--raise)}
+.orc input{width:48px;text-align:center;padding:8px 2px}
+.orc input.has{border-color:var(--gold);color:var(--gold2)}
+.unav{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;grid-column:3/5}
+.empty{padding:34px 16px;text-align:center;color:var(--faint);font-size:13.5px}
+
+/* sticky cart bar */
+.cartbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:center;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));pointer-events:none;
+  background:linear-gradient(transparent, rgba(15,10,5,.92) 38%)}
+.cartbar .inner{pointer-events:auto;width:100%;max-width:1032px;display:flex;align-items:center;gap:12px;
+  background:var(--raise);border:1px solid var(--line2);border-radius:14px;padding:11px 12px 11px 18px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.cartbar .info{flex:1;font-size:13.5px;color:var(--dim)}
+.cartbar .info b{color:var(--gold2);font-family:var(--mono)}
+.btn{font-family:var(--disp);font-weight:700;letter-spacing:.07em;text-transform:uppercase;font-size:15px;
+  background:var(--gold);color:#241a10;border-radius:10px;padding:12px 22px;min-height:46px}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:transparent;color:var(--dim);border:1px solid var(--line2)}
+.btn.red{background:var(--red);color:#fff}
+.btn.sm{font-size:13px;padding:9px 14px;min-height:40px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+
+/* overlay sheet */
+.ovl{position:fixed;inset:0;background:rgba(10,6,3,.7);backdrop-filter:blur(3px);z-index:60;
+  display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--panel);border:1px solid var(--line2);width:100%;max-width:680px;
+  border-radius:18px 18px 0 0;max-height:92vh;display:flex;flex-direction:column;
+  animation:up .22s cubic-bezier(.2,.9,.3,1)}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheet .hd{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
+.sheet .hd .t{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:.05em;text-transform:uppercase}
+.sheet .bd{overflow-y:auto;padding:6px 0}
+.sheet .ft{padding:14px 18px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.x{font-family:var(--mono);font-size:13px;color:var(--faint);padding:8px}
+.errbox{margin:10px 18px;padding:11px 14px;border:1px solid rgba(226,84,63,.5);background:rgba(226,84,63,.08);
+  border-radius:var(--rad-s);font-size:13px;color:var(--red2)}
+
+/* review / fulfillment lines */
+.fline{padding:13px 18px;border-bottom:1px solid var(--line)}
+.fline:last-child{border-bottom:none}
+.fline .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.fline .nm{font-weight:600;font-size:14px}
+.fline .nums{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.fline .nums b{color:var(--text)}
+.fline .nums .g{color:var(--gold2)}
+.sendrow{display:flex;align-items:center;gap:10px;margin-top:9px;flex-wrap:wrap}
+.sendrow label{font-family:var(--mono);font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em}
+.sendrow input[type=number]{width:74px;text-align:center}
+.notein{width:100%;margin-top:8px}
+.notein.need{border-color:var(--red);box-shadow:0 0 0 1px rgba(226,84,63,.4)}
+.shorttag{font-family:var(--mono);font-size:10px;color:var(--orange);background:rgba(232,146,74,.13);padding:2px 7px;border-radius:4px}
+
+/* order cards */
+.ocard{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);margin-bottom:12px;overflow:hidden}
+.ocard .hd{display:flex;align-items:center;gap:10px;padding:14px 16px;flex-wrap:wrap}
+.ocard .id{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--gold2)}
+.ocard .sub{font-size:12.5px;color:var(--dim)}
+.ocard .grow{flex:1}
+.st{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:5px}
+.st.submitted{color:var(--amber);background:rgba(240,180,84,.13)}
+.st.sent{color:var(--green);background:rgba(121,189,131,.12)}
+.st.partially_sent{color:var(--orange);background:rgba(232,146,74,.13)}
+.st.received{color:var(--gray);background:rgba(155,140,119,.13)}
+.olines{border-top:1px solid var(--line)}
+.oline{display:flex;justify-content:space-between;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);font-size:13.5px;flex-wrap:wrap}
+.oline:last-child{border-bottom:none}
+.oline .q{font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:nowrap}
+.oline .q b{color:var(--text)}
+.oline .short b{color:var(--orange)}
+.note{flex-basis:100%;font-size:12.5px;color:var(--orange);background:rgba(232,146,74,.08);
+  border-left:2px solid var(--orange);padding:7px 10px;border-radius:0 6px 6px 0}
+.ocard .meta{padding:11px 16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--faint);display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.ocard .meta b{color:var(--dim)}
+
+/* inventory */
+.invrow{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.invrow:last-child{border-bottom:none}
+.invrow .nm{flex:1;min-width:180px;font-weight:600;font-size:14px}
+.invrow .oh{font-family:var(--mono);font-size:19px;font-weight:600;min-width:54px;text-align:right}
+.invrow .oh.lowv{color:var(--amber)} .invrow .oh.outv{color:var(--red2)}
+.mini{font-family:var(--mono);font-size:11px;color:var(--gold2);border:1px solid var(--line2);border-radius:6px;padding:7px 11px;background:var(--bg2)}
+.mini:active{background:var(--raise)}
+.inlinef{display:flex;gap:8px;align-items:center;flex-basis:100%;padding-top:6px}
+.inlinef input{width:84px;text-align:center}
+.rcard{border:1px solid rgba(235,164,59,.45);background:rgba(235,164,59,.05);border-radius:var(--rad);margin-bottom:14px;overflow:hidden}
+.rcard .hd{display:flex;gap:10px;align-items:center;padding:13px 16px;flex-wrap:wrap}
+.rcard .tag{font-family:var(--mono);font-size:10px;color:var(--gold2);border:1px solid var(--gold);padding:2px 8px;border-radius:4px;letter-spacing:.07em;text-transform:uppercase}
+.rline{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--line);font-size:13px;flex-wrap:wrap}
+.rline .ds{flex:1;min-width:170px}
+.rline input[type=number]{width:70px;text-align:center}
+.maps{font-family:var(--mono);font-size:10px;color:var(--red2);background:rgba(226,84,63,.1);padding:2px 7px;border-radius:4px}
+.feed{padding:4px 0}
+.fitem{display:flex;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+.fitem:last-child{border-bottom:none}
+.fitem .ts{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;padding-top:1px}
+.fitem b{color:var(--text)}
+
+/* usage table */
+.utab{width:100%;border-collapse:collapse}
+.utab th{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase;
+  text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.utab td{padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle}
+.utab tr:last-child td{border-bottom:none}
+.utab .n{font-family:var(--mono);color:var(--gold2)}
+.utab input{width:70px;text-align:center;min-height:38px;padding:6px}
+.scroll-x{overflow-x:auto}
+
+/* users */
+.urow{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.urow:last-child{border-bottom:none}
+.urow .av{width:38px;height:38px;border-radius:50%;background:var(--raise);border:1px solid var(--line2);
+  display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;color:var(--gold2)}
+.formrow{display:flex;gap:10px;padding:14px 16px;flex-wrap:wrap;border-top:1px solid var(--line);background:var(--panel2)}
+.formrow input,.formrow select{flex:1;min-width:130px}
+
+/* login */
+.login{min-height:92vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:20px 0}
+.login .big{font-family:var(--disp);font-weight:800;font-size:clamp(40px,9vw,68px);letter-spacing:.03em;text-transform:uppercase;line-height:.95}
+.login .big em{font-style:normal;color:var(--gold)}
+.login .sb{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.14em;text-transform:uppercase;margin-bottom:26px}
+.profiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;width:100%;max-width:720px}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 16px;text-align:left;transition:border-color .15s, transform .15s}
+.pcard:hover{border-color:var(--gold);transform:translateY(-2px)}
+.pcard .nm{font-family:var(--disp);font-weight:700;font-size:21px;letter-spacing:.04em;text-transform:uppercase}
+.pcard .rl{font-family:var(--mono);font-size:11px;margin-top:6px;letter-spacing:.06em;text-transform:uppercase}
+.pcard .rl.c{color:var(--red2)} .pcard .rl.s{color:var(--gold2)}
+.login .ftn{margin-top:30px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  background:var(--raise);border:1px solid var(--gold);color:var(--gold2);font-family:var(--mono);font-size:13px;
+  padding:11px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;z-index:90;max-width:92vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+h3.sec{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:20px 2px 10px}
+
+@media (max-width:719px){
+  .prow,.colh{grid-template-columns:1fr}
+  .colh{display:none}
+  .prow{gap:8px;padding:13px 14px}
+  .numwrap{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:8px;align-items:start;margin-top:8px}
+  .numwrap .lab{display:block;font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase;text-align:center;margin-bottom:4px}
+  .unav{grid-column:2/4;text-align:right;align-self:center}
+  .brand .t{font-size:23px}
+  .badge-neon{font-size:12px;padding:6px 10px}
+  .who .u{display:none}
+}
+@media (min-width:720px){
+  .numwrap{display:contents}
+  .numwrap .lab{display:none}
+  .avgw{align-self:center}
+  .sheet{border-radius:18px;margin-bottom:4vh;align-self:center}
+  .ovl{align-items:center}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+<script>
+/* ============ SEED DATA — real catalog from cenaskitchen.com/shop_items ============ */
+const CATS = {all:'All', comp:'1-3 Compartment Containers', foil:'Aluminum Foil Pans & Containers', bar:'Bar',
+clean:'Cleaning Supplies', foam:'Foam Cups and Lids', host:'Host & Togo', office:'Office',
+bags:'Plastic & Paper Bags', portion:'Portion Cup & Lids', server:'Server', spices:'Spices',
+corp:'Supplies Available at Corporate', togo:'Togo & Catering', uni:'Uniforms'};
+
+const P = [
+[1,'3 Comp Black Plastic (100/case)','comp',20],[2,'3 Comp Aluminum Ench','foil',2],
+[3,'9 Inch Around Aluminum Pan (500/case)','foil',11],[4,'9 Inch Round Clear Lid (500/case)','foil',14],
+[5,'Half Size Foil Pan Lids','foil',19],[6,'Half Size Foil Pans (100 pc)','foil',15],
+[7,'Tortilla Foil Sheets (3,000/case)','foil',14],
+[8,'Amaretto (single)','bar',8],[9,'Banana (single)','bar',10],[10,'Cherry (single)','bar',10],
+[11,'Mango (single)','bar',10],[12,'Peach (single)','bar',11],[13,'Pomegranate (single)','bar',8],
+[14,'Pineapple (single)','bar',7],[15,'Raspberry (single)','bar',13],[16,'Strawberry (single)','bar',10],
+[17,'Bond Rolls - Kitchen (50/box)','server',7],[18,'Thermal Rolls (50/box)','server',4],
+[19,'Dinner Straws (Case)','server',5],[20,'Ice Tea Filters (2500/box)','server',96],
+[21,'To Go Menu (1000 pc)','host',0],
+[22,'Catering SM Spoons (2000/box)','togo',5],[23,'Catering Tongs (72/box)','togo',22],
+[24,'Chafing Dishes (Single)','togo',21],[25,'Clear Square Lid, 24–64 oz Square Bowls (252/case)','togo',7],
+[26,'Clear Square Lid, 8–16 oz Square Bowls (504/case)','togo',7],[27,'Cup Holder 4 (300/box)','togo',4],
+[28,'Deli Sandwich Wrap Paper','togo',20],[29,'Foil Steam Table Pan Lid - Full Size (50/case)','togo',9],
+[30,'Foil Steam Table Pan Lid - Third Size (100/case)','togo',10],[31,'Food Tray','togo',17],
+[32,'Full Size Foil Steam Pan, Deep 3 3/8" (50/case)','togo',8],[33,'Hinged Lid Plastic Container (200/case)','togo',9],
+[34,'Plastic Dome Lid, 160 oz Round Bowls (25/case)','togo',4],[35,'Sternoes (24/box)','togo',1],
+[36,'Third Size Foil Steam Pan, Deep 3 5/16" (100/case)','togo',6],[37,'To Go Silverware (250/box)','togo',19],
+[38,'ATM Shirts Small (Single)','uni',12],[39,'ATM Shirts Medium (Single)','uni',0],
+[40,'ATM Shirts Large (Single)','uni',14],[41,'ATM Shirts XL (Single)','uni',20],
+[42,'Cook Aprons (Single)','uni',1],[43,'Dish Aprons (Single)','uni',3],[44,'Hot Pads (Single)','uni',2],
+[45,'Kitchen Hats','uni',3],[46,'Name Tags (10/pack)','uni',0],[47,'Waiter Aprons (Single)','uni',32]
+].map(([id,name,cat,stock])=>({id,name,cat,stock,low:5}));
+
+const STORES = {copperfield:'Uno Mas · Copperfield', tomball:'Dos Mas · Tomball'};
+const USERS = [
+ {id:'brittany',name:'Brittany',title:'GM · Copperfield',role:'store',store:'copperfield'},
+ {id:'anna',name:'Anna',title:'GM · Tomball',role:'store',store:'tomball'},
+ {id:'sam',name:'Sam',title:'Partner · Corporate',role:'corporate',store:null},
+ {id:'angelica',name:'Angelica',title:'Corporate Admin',role:'corporate',store:null},
+];
+
+/* 90-day weekly usage (auto-computed in production; corporate can override) */
+const AVG = {
+ copperfield:{1:1.8,2:1.0,3:2.0,4:2.0,5:3.8,6:4.2,7:2.5,8:.6,9:.5,10:.7,11:.6,12:.8,13:.4,14:.5,15:.9,16:.7,
+  17:1.5,18:1.0,19:.8,20:.5,22:1.5,23:.4,24:.3,25:.5,26:.5,27:.6,28:1.2,29:1.0,30:1.2,31:2.2,32:1.4,33:.8,34:.4,
+  35:{auto:1.8,override:2.5},36:1.6,37:2.8},
+ tomball:{1:1.5,2:.8,3:1.7,4:1.7,5:3.2,6:3.6,7:2.2,8:.5,9:.4,10:.6,11:.5,12:.7,13:.3,14:.4,15:.8,16:.6,
+  17:1.2,18:.9,19:.7,20:.4,22:1.2,23:.3,24:.2,25:.4,26:.4,27:.5,28:1.0,29:.9,30:1.0,31:1.9,32:1.2,33:.7,34:.3,
+  35:1.5,36:1.4,37:2.4}
+};
+function avgOf(store,pid){const v=AVG[store]&&AVG[store][pid];if(v==null)return null;
+ return typeof v==='object'?{val:(v.override??v.auto),ov:v.override!=null}:{val:v,ov:false};}
+
+const now=new Date(); const D=(d,h,m)=>{const x=new Date(now);x.setDate(x.getDate()-d);x.setHours(h,m,0,0);return x;};
+let SEQ=1043;
+let ORDERS=[
+ {id:'O-1042',store:'tomball',createdBy:'Anna',status:'submitted',submittedAt:D(0,9,12),fulfilledBy:null,fulfilledAt:null,receivedAt:null,
+  lines:[{pid:6,oh:1,or:4,avg:3.6,sent:null,note:''},{pid:22,oh:0,or:2,avg:1.2,sent:null,note:''},
+         {pid:35,oh:0,or:3,avg:1.5,sent:null,note:''},{pid:37,oh:2,or:3,avg:2.4,sent:null,note:''},
+         {pid:18,oh:1,or:2,avg:.9,sent:null,note:''}]},
+ {id:'O-1041',store:'copperfield',createdBy:'Brittany',status:'partially_sent',submittedAt:D(4,8,40),fulfilledBy:'Sam',fulfilledAt:D(3,10,5),receivedAt:null,
+  lines:[{pid:7,oh:1,or:3,avg:2.5,sent:3,note:''},
+         {pid:35,oh:0,or:2,avg:2.5,sent:1,note:'Only 1 box on the shelf — rest lands with Webstaurant W-83621, sending Friday'},
+         {pid:31,oh:3,or:2,avg:2.2,sent:2,note:''},{pid:5,oh:2,or:4,avg:3.8,sent:4,note:''}]},
+ {id:'O-1037',store:'copperfield',createdBy:'Brittany',status:'received',submittedAt:D(11,9,2),fulfilledBy:'Angelica',fulfilledAt:D(10,11,15),receivedAt:D(9,14,0),
+  lines:[{pid:6,oh:2,or:3,avg:4.2,sent:3,note:''},{pid:37,oh:4,or:2,avg:2.8,sent:2,note:''},{pid:20,oh:0,or:1,avg:.5,sent:1,note:''}]}
+];
+
+let RECEIPTS=[
+ {id:'W-83621',source:'Webstaurant email',status:'pending',parsedAt:D(1,7,30),
+  lines:[{pid:35,desc:'Sterno 2 Hour Canned Heat (24/box)',qty:6},
+         {pid:6,desc:'Half Size Foil Pans (100 pc)',qty:10},
+         {pid:22,desc:'Catering SM Spoons (2000/box)',qty:4},
+         {pid:null,desc:'Dart 7" Insulated Foam Cups (1000/cs)',qty:2}]}
+];
+let FEED=[
+ {ts:D(1,7,30),txt:'<b>Webstaurant</b> order W-83621 parsed from confirmation email · 4 lines · pending review'},
+ {ts:D(3,10,5),txt:'<b>Sam</b> sent O-1041 to Copperfield · 10 of 11 units · 1 line short'},
+ {ts:D(10,11,15),txt:'<b>Angelica</b> sent O-1037 to Copperfield · filled in full'},
+];
+
+/* ============ STATE ============ */
+let S={user:null,tab:'sheet',cat:'all',q:'',sheet:{},review:false,errs:[],
+       fulfill:null,openR:null,invEdit:null,usageStore:'copperfield',expand:{}};
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const prod=id=>P.find(p=>p.id===id);
+const fmt=d=>d?d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}):'';
+const weekOf=()=>{const d=new Date(now);d.setDate(d.getDate()-((d.getDay()+6)%7));return 'Week of '+d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2600);}
+const STLBL={submitted:'Submitted',sent:'Sent',partially_sent:'Partially sent',received:'Received'};
+function stkBadge(p){if(p.stock===0)return '<span class="stk out">Out of stock</span>';
+ if(p.stock<=p.low)return '<span class="stk low">Low · '+p.stock+'</span>';
+ return '<span class="stk in">In stock · '+p.stock+'</span>';}
+
+/* ============ RENDER ============ */
+function render(){
+ const a=$('#app');
+ if(!S.user){a.innerHTML=loginView();return;}
+ a.innerHTML = topbar() + (S.user.role==='store'?storeView():corpView());
+ const ov = S.review?reviewOvl() : S.fulfill?fulfillOvl() : S.openR?receiptOvl() : '';
+ if(ov) a.insertAdjacentHTML('beforeend',ov);
+}
+
+function loginView(){return `<div class="login">
+ <div class="big">Corporate <em>Order</em></div>
+ <div class="sb">Cenas Kitchen · Supply Line</div>
+ <div class="profiles">${USERS.map(u=>`
+  <button class="pcard" data-act="login" data-a="${u.id}">
+   <div class="nm">${u.name}</div>
+   <div class="rl ${u.role==='corporate'?'c':'s'}">${u.title}</div>
+  </button>`).join('')}
+ </div>
+ <div class="ftn">Demo build · production signs you in with your normal platform session</div>
+</div>`;}
+
+function topbar(){const u=S.user;
+ const badge = u.role==='corporate' ? '<span class="badge-neon">Corporate</span>'
+  : `<span class="badge-neon badge-store">${esc(STORES[u.store].split('·')[1].trim())}</span>`;
+ return `<div class="topbar">
+  <div class="brand"><div class="t">Corporate Order</div>
+   <div class="s">${u.role==='store'?esc(STORES[u.store])+' · '+weekOf():'Cenas Kitchen · '+weekOf()}</div></div>
+  <div class="who">${badge}<div class="u"><b>${u.name}</b><br>${esc(u.title)}</div>
+   <button class="logout" data-act="logout">log out</button></div>
+ </div>`;}
+
+/* ---------- STORE ---------- */
+function storeView(){
+ const mine=ORDERS.filter(o=>o.store===S.user.store);
+ const open=mine.filter(o=>o.status!=='received').length;
+ const tabs=`<div class="tabs">
+  <button class="tab ${S.tab==='sheet'?'on':''}" data-act="tab" data-a="sheet">Order Sheet</button>
+  <button class="tab ${S.tab==='orders'?'on':''}" data-act="tab" data-a="orders">My Orders ${open?`<span class="ct">${open}</span>`:''}</button>
+ </div>`;
+ return tabs + (S.tab==='sheet'?sheetView():myOrdersView(mine));
+}
+
+function sheetView(){
+ const chips=Object.entries(CATS).map(([k,v])=>`<button class="chip ${S.cat===k?'on':''}" data-act="cat" data-a="${k}">${v}</button>`).join('');
+ return `<div class="searchrow"><input id="q" placeholder="Search items…" value="${esc(S.q)}" oninput="App.q(this.value)"></div>
+ <div class="chips">${chips}</div>
+ <div class="panel">
+  <div class="colh"><span>Item</span><span>Avg /wk</span><span>OH</span><span>Order</span></div>
+  <div id="plist">${prodRows()}</div>
+ </div>
+ <div style="font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:12px 4px;line-height:1.7">
+  OH = your count on the shelf right now — required for anything you order.&nbsp;
+  AVG = your store's 90-day weekly usage.&nbsp; ≫ avg flags an order well above usual.</div>
+ ${cartBar()}`;
+}
+
+function prodRows(){
+ const q=S.q.trim().toLowerCase();
+ const list=P.filter(p=>(S.cat==='all'||p.cat===S.cat)&&(!q||p.name.toLowerCase().includes(q)));
+ if(!list.length)return `<div class="empty">No items here${S.cat!=='all'?' — category exists, nothing seeded in the demo':''}.</div>`;
+ return list.map(p=>{
+  const e=S.sheet[p.id]||{oh:'',or:0};
+  const a=avgOf(S.user.store,p.id);
+  const dev=a&&e.or>2*a.val&&e.or>0?'<span class="dev">≫ avg</span>':'';
+  const avgCell=a?`<div class="avgc ${a.ov?'ov':''}">${a.val}${a.ov?' ●':''}<small>~${(a.val/7).toFixed(1)}/day</small></div>`
+                 :'<div class="avgc" style="color:var(--faint)">—</div>';
+  const ctrls = p.stock===0
+   ? `<div class="unav">Unavailable — ask corporate</div>`
+   : `<div class="ohc"><span class="lab">OH</span><input inputmode="numeric" pattern="[0-9]*" placeholder="–"
+        value="${e.oh}" class="${e.or>0&&e.oh===''?'need':''}" oninput="App.oh(${p.id},this.value)"></div>
+      <div class="orw"><span class="lab">Order</span><div class="orc">
+        <button class="step" data-act="dec" data-a="${p.id}">−</button>
+        <input inputmode="numeric" pattern="[0-9]*" value="${e.or||''}" placeholder="0" class="${e.or>0?'has':''}" oninput="App.or(${p.id},this.value)">
+        <button class="step" data-act="inc" data-a="${p.id}">+</button></div></div>`;
+  return `<div class="prow">
+   <div><div class="nm">${esc(p.name)}</div>
+    <div class="meta"><span class="cat">${CATS[p.cat]}</span>${stkBadge(p)}${dev}</div></div>
+   <div class="numwrap"><div class="avgw"><span class="lab">Avg/wk</span>${avgCell}</div>${ctrls}</div>
+  </div>`;
+ }).join('');
+}
+
+function cartCount(){return Object.values(S.sheet).filter(e=>e.or>0).length;}
+function cartBar(){const n=cartCount();
+ return `<div class="cartbar"><div class="inner">
+  <div class="info" id="cinfo">${n?`<b>${n}</b> item${n>1?'s':''} on this order`:'Add quantities to start your order'}</div>
+  <button class="btn" data-act="review" ${n?'':'disabled'}>Review Order</button>
+ </div></div>`;}
+
+function reviewOvl(){
+ const lines=Object.entries(S.sheet).filter(([,e])=>e.or>0).map(([pid,e])=>({pid:+pid,...e}));
+ const missing=lines.filter(l=>l.oh==='').map(l=>prod(l.pid).name);
+ return `<div class="ovl" data-act="closeovl">
+ <div class="sheet" onclick="event.stopPropagation()">
+  <div class="hd"><div class="t">Review · ${esc(STORES[S.user.store])}</div><button class="x" data-act="closeovl">✕ close</button></div>
+  ${S.errs.length?`<div class="errbox">OH count required before submitting:<br>• ${S.errs.map(esc).join('<br>• ')}</div>`:''}
+  <div class="bd">${lines.map(l=>{const p=prod(l.pid);const a=avgOf(S.user.store,l.pid);
+   return `<div class="fline"><div class="top"><div class="nm">${esc(p.name)}</div></div>
+    <div class="nums"><span>OH <b class="${l.oh===''?'':''}" style="${l.oh===''?'color:var(--red2)':''}">${l.oh===''?'missing':l.oh}</b></span>
+    <span>Order <b class="g">${l.or}</b></span><span>Avg ${a?a.val+'/wk':'—'}</span></div></div>`;}).join('')}</div>
+  <div class="ft"><button class="btn ghost" data-act="closeovl">Keep editing</button>
+   <button class="btn" data-act="submit">Submit ${missing.length?'· '+missing.length+' OH missing':'Order'}</button></div>
+ </div></div>`;
+}
+
+function myOrdersView(mine){
+ if(!mine.length)return `<div class="panel"><div class="empty">No orders yet — your first one starts on the Order Sheet.</div></div>`;
+ return mine.slice().sort((a,b)=>b.submittedAt-a.submittedAt).map(o=>orderCard(o,'store')).join('');
+}
+
+function orderCard(o,mode){
+ const x=S.expand[o.id];
+ const head=`<button class="hd" style="width:100%;text-align:left" data-act="expand" data-a="${o.id}">
+   <span class="id">${o.id}</span>
+   ${mode==='corp'?`<span class="sub"><b style="color:var(--text)">${esc(STORES[o.store])}</b></span>`:''}
+   <span class="sub">by ${o.createdBy} · ${fmt(o.submittedAt)}</span>
+   <span class="grow"></span><span class="st ${o.status}">${STLBL[o.status]}</span></button>`;
+ if(!x)return `<div class="ocard">${head}</div>`;
+ const lines=o.lines.map(l=>{const p=prod(l.pid);const short=l.sent!=null&&l.sent<l.or;
+  return `<div class="oline"><div>${esc(p.name)}</div>
+   <div class="q ${short?'short':''}">OH ${l.oh} · ordered <b>${l.or}</b>${l.sent!=null?` · sent <b>${l.sent}</b>`:''}</div>
+   ${l.note?`<div class="note">${esc(l.note)}</div>`:''}</div>`;}).join('');
+ const meta=[
+  o.fulfilledAt?`Sent by <b>${o.fulfilledBy}</b> · ${fmt(o.fulfilledAt)}`:'Waiting on corporate',
+  o.receivedAt?`Received ${fmt(o.receivedAt)}`:''
+ ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+ const act = mode==='store' && (o.status==='sent'||o.status==='partially_sent')
+   ? `<button class="btn sm" data-act="received" data-a="${o.id}">Confirm Received</button>` : '';
+ const cact = mode==='corp' && o.status==='submitted'
+   ? `<button class="btn sm" data-act="openfulfill" data-a="${o.id}">Fulfill</button>` : '';
+ return `<div class="ocard">${head}<div class="olines">${lines}</div>
+   <div class="meta"><span>${meta}</span><span class="grow"></span>${act}${cact}</div></div>`;
+}
+
+/* ---------- CORPORATE ---------- */
+function corpView(){
+ const q=ORDERS.filter(o=>o.status==='submitted').length;
+ const pend=RECEIPTS.filter(r=>r.status==='pending').length;
+ const tabs=`<div class="tabs">
+  <button class="tab ${S.tab==='queue'?'on':''}" data-act="tab" data-a="queue">Orders ${q?`<span class="ct">${q}</span>`:''}</button>
+  <button class="tab ${S.tab==='inv'?'on':''}" data-act="tab" data-a="inv">Inventory ${pend?`<span class="ct">${pend}</span>`:''}</button>
+  <button class="tab ${S.tab==='usage'?'on':''}" data-act="tab" data-a="usage">Usage</button>
+  <button class="tab ${S.tab==='users'?'on':''}" data-act="tab" data-a="users">Users</button>
+ </div>`;
+ const view = S.tab==='queue'?queueView() : S.tab==='inv'?invView() : S.tab==='usage'?usageView() : usersView();
+ return tabs+view;
+}
+
+function queueView(){
+ const sub=ORDERS.filter(o=>o.status==='submitted').sort((a,b)=>a.submittedAt-b.submittedAt);
+ const done=ORDERS.filter(o=>o.status!=='submitted').sort((a,b)=>b.submittedAt-a.submittedAt);
+ return (sub.length?`<h3 class="sec">Needs fulfillment</h3>`+sub.map(o=>orderCard(o,'corp')).join('')
+   :`<div class="panel"><div class="empty">Queue is clear — nothing waiting.</div></div>`)
+  + (done.length?`<h3 class="sec">Sent & history</h3>`+done.map(o=>orderCard(o,'corp')).join(''):'');
+}
+
+function fulfillOvl(){
+ const o=ORDERS.find(x=>x.id===S.fulfill.id); const f=S.fulfill;
+ const lines=o.lines.map(l=>{const p=prod(l.pid);const send=f.sends[l.pid];const short=send<l.or;
+  return `<div class="fline">
+   <div class="top"><div class="nm">${esc(p.name)}</div>${short?'<span class="shorttag">short</span>':''}</div>
+   <div class="nums"><span>Ordered <b class="g">${l.or}</b></span><span>Store OH <b>${l.oh}</b></span>
+    <span>Corp on-hand <b>${p.stock}</b></span><span>Avg ${l.avg??'—'}/wk</span></div>
+   <div class="sendrow"><label>Send</label>
+    <input type="number" min="0" max="${Math.min(l.or,p.stock)}" value="${send}" oninput="App.send(${l.pid},this.value)">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--faint)">max ${Math.min(l.or,p.stock)}</span></div>
+   ${short?`<input class="notein ${f.errs&&f.errs.includes(l.pid)?'need':''}" placeholder="Why short? (required — store sees this note)"
+      value="${esc(f.notes[l.pid]||'')}" oninput="App.note(${l.pid},this.value)">`:''}
+  </div>`;}).join('');
+ return `<div class="ovl" data-act="closeovl"><div class="sheet" onclick="event.stopPropagation()">
+  <div class="hd"><div class="t">Fulfill ${o.id} · ${esc(STORES[o.store])}</div><button class="x" data-act="closeovl">✕</button></div>
+  ${f.errs&&f.errs.length?`<div class="errbox">Every short line needs a note before sending.</div>`:''}
+  <div class="bd">${lines}</div>
+  <div class="ft"><button class="btn ghost" data-act="closeovl">Cancel</button>
+   <button class="btn" data-act="marksent">Mark Sent as ${S.user.name}</button></div>
+ </div></div>`;
+}
+
+function invView(){
+ const pend=RECEIPTS.filter(r=>r.status==='pending');
+ const rec=pend.map(r=>`<div class="rcard"><div class="hd">
+   <span class="tag">Webstaurant · pending</span><span class="id mono" style="color:var(--gold2);font-weight:600">${r.id}</span>
+   <span class="sub" style="font-size:12px;color:var(--dim)">parsed from email · ${fmt(r.parsedAt)} · ${r.lines.length} lines</span>
+   <span class="grow"></span><button class="btn sm" data-act="openreceipt" data-a="${r.id}">Review & apply</button></div></div>`).join('');
+ const q=(S.q||'').trim().toLowerCase();
+ const rows=P.filter(p=>!q||p.name.toLowerCase().includes(q)).map(p=>{
+  const cls=p.stock===0?'outv':p.stock<=p.low?'lowv':'';
+  const edit=S.invEdit&&S.invEdit.pid===p.id?`
+   <div class="inlinef"><input id="invq" type="number" min="${S.invEdit.mode==='adj'?-999:1}" placeholder="${S.invEdit.mode==='adj'?'± qty':'qty'}">
+    <button class="btn sm" data-act="invapply" data-a="${p.id}">${S.invEdit.mode==='adj'?'Adjust':'Receive'}</button>
+    <button class="x" data-act="invcancel">cancel</button></div>`:'';
+  return `<div class="invrow"><div class="nm">${esc(p.name)}<div class="meta"><span class="cat">${CATS[p.cat]}</span>${stkBadge(p)}</div></div>
+   <div class="oh ${cls}">${p.stock}</div>
+   <button class="mini" data-act="invedit" data-a="${p.id}|rcv">+ Receive</button>
+   <button class="mini" data-act="invedit" data-a="${p.id}|adj">Adjust</button>${edit}</div>`;}).join('');
+ const feed=FEED.slice().sort((a,b)=>b.ts-a.ts).slice(0,8).map(f=>`<div class="fitem"><span class="ts">${fmt(f.ts)}</span><span>${f.txt}</span></div>`).join('');
+ return `${rec}
+  <div class="searchrow"><input placeholder="Search inventory…" value="${esc(S.q)}" oninput="App.q(this.value)"></div>
+  <div class="panel">${rows}</div>
+  <h3 class="sec">Activity</h3><div class="panel feed">${feed}</div>
+  <div style="font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:12px 4px;line-height:1.7">
+   On-hand is a ledger: Webstaurant receipts add, fulfillments subtract, adjustments are logged with a name. Emails never change stock until a person applies them.</div>`;
+}
+
+function receiptOvl(){
+ const r=RECEIPTS.find(x=>x.id===S.openR);
+ const opts=P.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+ const lines=r.lines.map((l,i)=>`<div class="rline">
+   <div class="ds">${esc(l.desc)}${l.pid?'':' <span class="maps">needs mapping</span>'}</div>
+   ${l.pid?`<span class="mono" style="font-size:11px;color:var(--green)">→ ${esc(prod(l.pid).name)}</span>`
+     :`<select onchange="App.map('${r.id}',${i},this.value)"><option value="">map to product…</option>${opts}</select>`}
+   <input type="number" min="0" value="${l.qty}" oninput="App.rqty('${r.id}',${i},this.value)">
+  </div>`).join('');
+ return `<div class="ovl" data-act="closeovl"><div class="sheet" onclick="event.stopPropagation()">
+  <div class="hd"><div class="t">${r.id} · Webstaurant</div><button class="x" data-act="closeovl">✕</button></div>
+  <div class="bd">${lines}
+   <div style="font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:12px 18px;line-height:1.6">
+   Edit quantities if the delivery came up short or damaged. Unmapped SKUs must be mapped once — the system remembers next time.</div></div>
+  <div class="ft"><button class="btn ghost" data-act="closeovl">Later</button>
+   <button class="btn" data-act="applyreceipt" data-a="${r.id}">Apply to inventory</button></div>
+ </div></div>`;
+}
+
+function usageView(){
+ const st=S.usageStore;
+ const chips=Object.entries(STORES).map(([k,v])=>`<button class="chip ${st===k?'on':''}" data-act="ustore" data-a="${k}">${v}</button>`).join('');
+ const last={}; ORDERS.filter(o=>o.store===st).sort((a,b)=>a.submittedAt-b.submittedAt)
+  .forEach(o=>o.lines.forEach(l=>last[l.pid]={oh:l.oh,or:l.or}));
+ const rows=P.filter(p=>AVG[st][p.id]!=null||last[p.id]).map(p=>{
+  const raw=AVG[st][p.id]; const auto=raw==null?null:(typeof raw==='object'?raw.auto:raw);
+  const ov=raw&&typeof raw==='object'?raw.override:null; const l=last[p.id]||{};
+  return `<tr><td>${esc(p.name)}</td><td class="n">${auto??'—'}</td>
+   <td><input type="number" step="0.1" min="0" placeholder="auto" value="${ov??''}" onchange="App.override('${st}',${p.id},this.value)"></td>
+   <td class="n">${ov??auto??'—'}</td><td class="mono" style="color:var(--dim)">${l.oh??'—'}</td>
+   <td class="mono" style="color:var(--dim)">${l.or??'—'}</td></tr>`;}).join('');
+ return `<div class="chips">${chips}</div><div class="panel scroll-x"><table class="utab">
+  <tr><th>Item</th><th>Auto avg/wk<br><span style="letter-spacing:0;text-transform:none">90-day computed</span></th><th>Override</th><th>Effective</th><th>Last OH</th><th>Last OR</th></tr>
+  ${rows}</table></div>
+  <div style="font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:12px 4px;line-height:1.7">
+  Auto = computed weekly from each order's OH count + what was sent between counts. Type an override to pin a number; clear it to go back to auto. Stores see the effective value on their sheet.</div>`;
+}
+
+function usersView(){
+ const rows=USERS.map(u=>`<div class="urow"><div class="av">${u.name[0]}</div>
+  <div style="flex:1"><b>${u.name}</b><div style="font-size:12px;color:var(--dim)">${esc(u.title)}</div></div>
+  <span class="st ${u.role==='corporate'?'sent':'submitted'}">${u.role==='corporate'?'Corporate':STORES[u.store].split('·')[1].trim()}</span></div>`).join('');
+ return `<div class="panel">${rows}
+  <div class="formrow"><input id="nu_name" placeholder="Name">
+   <select id="nu_role"><option value="store">Store user</option><option value="corporate">Corporate</option></select>
+   <select id="nu_store"><option value="copperfield">Copperfield</option><option value="tomball">Tomball</option></select>
+   <button class="btn sm" data-act="adduser">+ Add user</button></div></div>
+  <div style="font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:12px 4px;line-height:1.7">
+  In production this grants corporder permissions on an existing platform account — same login they already use, no second password.</div>`;
+}
+
+/* ============ ACTIONS ============ */
+const App={
+ q(v){S.q=v;const pl=$('#plist');if(pl){pl.innerHTML=prodRows();}else{render();const el=$('#app input');if(el){el.focus();el.setSelectionRange(v.length,v.length);}}},
+ oh(pid,v){const e=S.sheet[pid]||(S.sheet[pid]={oh:'',or:0});e.oh=v.replace(/[^0-9]/g,'');},
+ or(pid,v){const e=S.sheet[pid]||(S.sheet[pid]={oh:'',or:0});e.or=Math.max(0,parseInt(v)||0);const c=$('#cinfo');if(c){const n=cartCount();c.innerHTML=n?`<b>${n}</b> item${n>1?'s':''} on this order`:'Add quantities to start your order';}},
+ send(pid,v){const f=S.fulfill;const o=ORDERS.find(x=>x.id===f.id);const l=o.lines.find(x=>x.pid===pid);
+  f.sends[pid]=Math.max(0,Math.min(parseInt(v)||0,Math.min(l.or,prod(pid).stock)));},
+ note(pid,v){S.fulfill.notes[pid]=v;},
+ rqty(rid,i,v){RECEIPTS.find(r=>r.id===rid).lines[i].qty=Math.max(0,parseInt(v)||0);},
+ map(rid,i,v){if(!v)return;RECEIPTS.find(r=>r.id===rid).lines[i].pid=+v;render();toast('SKU mapped — remembered for future emails');},
+ override(st,pid,v){const cur=AVG[st][pid];const auto=cur==null?null:(typeof cur==='object'?cur.auto:cur);
+  if(v===''){AVG[st][pid]=auto;toast('Override cleared — back to auto');}
+  else{AVG[st][pid]={auto:auto??0,override:parseFloat(v)};toast('Override set');} render();},
+ input(){}
+};
+
+document.addEventListener('click',e=>{
+ const b=e.target.closest('[data-act]'); if(!b)return;
+ const act=b.dataset.act, a=b.dataset.a;
+ if(act==='login'){S.user=USERS.find(u=>u.id===a);S.tab=S.user.role==='store'?'sheet':'queue';S.q='';render();
+   toast(S.user.role==='store'?'Logged in to '+STORES[S.user.store]:'Corporate session started');}
+ else if(act==='logout'){S={...S,user:null,sheet:{},review:false,fulfill:null,openR:null,q:''};render();}
+ else if(act==='tab'){S.tab=a;S.q='';render();}
+ else if(act==='cat'){S.cat=a;render();}
+ else if(act==='inc'||act==='dec'){const eSheet=S.sheet[a]||(S.sheet[a]={oh:'',or:0});
+   eSheet.or=Math.max(0,eSheet.or+(act==='inc'?1:-1));render();}
+ else if(act==='review'){S.errs=[];S.review=true;render();}
+ else if(act==='closeovl'){S.review=false;S.fulfill=null;S.openR=null;render();}
+ else if(act==='submit'){
+   const lines=Object.entries(S.sheet).filter(([,x])=>x.or>0);
+   const missing=lines.filter(([,x])=>x.oh==='').map(([pid])=>prod(+pid).name);
+   if(missing.length){S.errs=missing;render();toast('OH count required on '+missing.length+' item'+(missing.length>1?'s':''));return;}
+   const o={id:'O-'+(SEQ++),store:S.user.store,createdBy:S.user.name,status:'submitted',submittedAt:new Date(),
+     fulfilledBy:null,fulfilledAt:null,receivedAt:null,
+     lines:lines.map(([pid,x])=>{const av=avgOf(S.user.store,+pid);return {pid:+pid,oh:+x.oh,or:x.or,avg:av?av.val:null,sent:null,note:''};})};
+   ORDERS.unshift(o);S.sheet={};S.review=false;S.tab='orders';S.expand[o.id]=true;render();
+   toast(o.id+' submitted — corporate has it');}
+ else if(act==='expand'){S.expand[a]=!S.expand[a];render();}
+ else if(act==='received'){const o=ORDERS.find(x=>x.id===a);o.status='received';o.receivedAt=new Date();render();toast(o.id+' marked received');}
+ else if(act==='openfulfill'){const o=ORDERS.find(x=>x.id===a);
+   S.fulfill={id:a,errs:[],notes:{},sends:Object.fromEntries(o.lines.map(l=>[l.pid,Math.min(l.or,prod(l.pid).stock)]))};render();}
+ else if(act==='marksent'){const f=S.fulfill;const o=ORDERS.find(x=>x.id===f.id);
+   const shorts=o.lines.filter(l=>f.sends[l.pid]<l.or);
+   f.errs=shorts.filter(l=>!(f.notes[l.pid]||'').trim()).map(l=>l.pid);
+   if(f.errs.length){render();toast('Add a note on every short line');return;}
+   let units=0;o.lines.forEach(l=>{l.sent=f.sends[l.pid];l.note=(f.notes[l.pid]||'').trim();prod(l.pid).stock-=l.sent;units+=l.sent;});
+   o.status=shorts.length?'partially_sent':'sent';o.fulfilledBy=S.user.name;o.fulfilledAt=new Date();
+   FEED.unshift({ts:new Date(),txt:`<b>${S.user.name}</b> sent ${o.id} to ${STORES[o.store].split('·')[1].trim()} · ${units} units${shorts.length?' · '+shorts.length+' line'+(shorts.length>1?'s':'')+' short':' · filled in full'}`});
+   S.fulfill=null;render();toast(o.id+' sent — store can see it now');}
+ else if(act==='openreceipt'){S.openR=a;render();}
+ else if(act==='applyreceipt'){const r=RECEIPTS.find(x=>x.id===a);
+   if(r.lines.some(l=>!l.pid)){render();toast('Map every line before applying');return;}
+   let u=0;r.lines.forEach(l=>{prod(l.pid).stock+=l.qty;u+=l.qty;});r.status='applied';
+   FEED.unshift({ts:new Date(),txt:`<b>${S.user.name}</b> applied Webstaurant ${r.id} · +${u} units across ${r.lines.length} lines`});
+   S.openR=null;render();toast(r.id+' applied to inventory');}
+ else if(act==='invedit'){const [pid,mode]=a.split('|');S.invEdit={pid:+pid,mode};render();const i=$('#invq');if(i)i.focus();}
+ else if(act==='invcancel'){S.invEdit=null;render();}
+ else if(act==='invapply'){const v=parseInt($('#invq').value)||0;const p=prod(+a);
+   if(!v){toast('Enter a quantity');return;}
+   const mode=S.invEdit.mode;p.stock=Math.max(0,p.stock+(mode==='rcv'?Math.abs(v):v));
+   FEED.unshift({ts:new Date(),txt:`<b>${S.user.name}</b> ${mode==='rcv'?'received +'+Math.abs(v):'adjusted '+(v>0?'+':'')+v} · ${esc(p.name)}`});
+   S.invEdit=null;render();toast((mode==='rcv'?'Received into':'Adjusted')+' inventory');}
+ else if(act==='ustore'){S.usageStore=a;render();}
+ else if(act==='adduser'){const n=$('#nu_name').value.trim();if(!n){toast('Name required');return;}
+   const role=$('#nu_role').value;const st=$('#nu_store').value;
+   USERS.push({id:n.toLowerCase().replace(/\s+/g,''),name:n,title:role==='corporate'?'Corporate':'Store user · '+st[0].toUpperCase()+st.slice(1),role,store:role==='store'?st:null});
+   render();toast(n+' added — grant goes on their platform account');}
+});
+
+window.App=App;
+render();
+</script>
+</body>
+</html>

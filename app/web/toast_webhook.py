@@ -84,7 +84,11 @@ def _forward_to_ck(raw_body: bytes, headers: dict[str, str]) -> tuple[bool, int 
         if key.lower().startswith("toast-"):
             outbound[key] = value
     try:
-        with httpx.Client(timeout=1.2) as client:
+        proxy = (os.getenv("CENA_PROXY") or "").strip() or None
+        client_kwargs = {"timeout": httpx.Timeout(1.2, connect=0.6)}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as client:
             response = client.post(url, content=raw_body, headers=outbound)
         if 200 <= response.status_code < 300:
             return True, response.status_code, None

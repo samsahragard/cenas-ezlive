@@ -4,6 +4,7 @@ param(
     [string]$DbPath = "C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite",
     [string]$RelayTokenFile = "C:\Users\sam\cena-ai-assistant\secrets\toast_webhook_relay_token.txt",
     [string]$SigningSecretFile = "C:\Users\sam\cena-ai-assistant\secrets\toast_webhook_signing_secret.txt",
+    [string]$SigningSecretsFile = "C:\Users\sam\cena-ai-assistant\secrets\toast_webhook_signing_secrets.json",
     [string]$Hosts = "127.0.0.1,100.73.38.82",
     [int]$Port = 8784
 )
@@ -29,6 +30,9 @@ New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot "logs") | Out-
 $env:TOAST_WEBHOOK_DB = $DbPath
 $env:TOAST_RELAY_TOKEN_FILE = $RelayTokenFile
 $env:TOAST_WEBHOOK_SIGNING_SECRET_FILE = $SigningSecretFile
+if (Test-Path -LiteralPath $SigningSecretsFile) {
+    $env:TOAST_WEBHOOK_SIGNING_SECRETS_FILE = $SigningSecretsFile
+}
 $env:TOAST_WEBHOOK_HOSTS = $Hosts
 $env:TOAST_WEBHOOK_PORT = [string]$Port
 $env:TOAST_WEBHOOK_SEED_ON_START = if ($env:TOAST_WEBHOOK_SEED_ON_START) { $env:TOAST_WEBHOOK_SEED_ON_START } else { "1" }

@@ -65,6 +65,11 @@
                 0 -2px 8px -2px rgba(212, 175, 55, 0.22);
   }
   .ck-bnav-inner { display: flex; }
+  .ck-bnav-inner-ai {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 74px repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
   .ck-bnav-tab {
     flex: 1;
     display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -81,9 +86,21 @@
     filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
   }
   .ck-bnav-tab .bn-lbl {
-    font-size: 9px; font-weight: 600; letter-spacing: 0.03em;
+    font-size: 9px; font-weight: 600; letter-spacing: 0;
     text-transform: uppercase; color: #d4af37;
     text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
+  }
+  .ck-bnav-inner-ai .ck-bnav-tab:not(.ck-bnav-ai-tab) {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .ck-bnav-inner-ai .ck-bnav-tab:not(.ck-bnav-ai-tab) .bn-lbl {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1.05;
   }
   /* Tapped (popover open) or current section → white (Sam #10:47:
      "when you click it it becomes white"). */
@@ -100,6 +117,42 @@
   }
   .ck-bnav-tab.is-popping {
     background: rgba(255, 255, 255, 0.06);
+  }
+  .ck-bnav-ai-tab {
+    position: relative;
+    justify-content: center;
+    min-height: 66px;
+    padding: 0 0 5px;
+    margin-top: -27px;
+    border-top-color: transparent !important;
+  }
+  .ck-bnav-ai-tab::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -8px;
+    width: 88px;
+    height: 88px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 247, 205, 0.18), rgba(216, 179, 95, 0.10) 42%, transparent 70%);
+    pointer-events: none;
+  }
+  .ck-bnav-ai-tab canvas {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 62px;
+    height: 62px;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+  }
+  .ck-bnav-ai-tab .bn-lbl {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   /* Slide-up popover holding each tab's sub-options. */
@@ -200,7 +253,7 @@
      Catering, Operations and Today tabs already had. #}
   {% endif %}
 
-  <div class="ck-bnav-inner">
+  <div class="ck-bnav-inner{% if user_role != 'driver' %} ck-bnav-inner-ai{% endif %}">
   {% if user_role == 'driver' %}
     {% for href, key, icon, label in [
       ('/ez-market',   'ez_market',   'ti-flame',     'Ez Market'),
@@ -248,6 +301,12 @@
        class="ck-bnav-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering', 'dev_ezcater_live_map'] %} active{% endif %}">
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
+    </a>
+    <a href="/{{ store_slug }}/today?tab=cena"
+       class="ck-bnav-tab ck-bnav-ai-tab{% if _bn_active in ['assistant_page', 'sam_chat'] %} active{% endif %}"
+       aria-label="Open Cenas AI assistant">
+      <canvas data-ck-ai-orb data-size="62" aria-hidden="true"></canvas>
+      <span class="bn-lbl">AI</span>
     </a>
     {# Kitchen - per Sam #2239 (2026-05-31): added between Catering and
        Operations, linking straight to the tabbed Kitchen dashboard

@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, g, jsonify, request, session
+from flask import Blueprint, g, jsonify, render_template, request, session
 
 from app.db import SessionLocal
 from app.models import (
@@ -1567,6 +1567,16 @@ def assistant_context():
             for tool in tools
         ],
     })
+
+
+@assistant_bp.route("/assistant", methods=["GET"])
+def assistant_page():
+    """Full-page role-scoped Cenas AI assistant.
+
+    This replaces the old floating assistant bubble as the user-facing
+    entry point. The JSON endpoints below remain the same contract.
+    """
+    return render_template("assistant_page.html", active="assistant_page")
 
 
 @assistant_bp.route("/assistant/tools", methods=["GET"])

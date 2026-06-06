@@ -5375,9 +5375,9 @@ _TODAY_DASH_TABS = [
     ("dashboard",     "Dashboard"),
     ("notifications", "Notifications"),
     ("task-reports",  "Task Reports"),
-    ("cena",          "Cena"),
+    ("cena",          "Cenas AI"),
     # Sam #205 (2026-05-23): the four siblings live RIGHT NEXT to the
-    # Cena tab — not under a sidebar dropdown. Order matches the spec:
+    # Cenas AI tab — not under a sidebar dropdown. Order matches the spec:
     # Cena + Dev (the combined chat surface), then Agents (Cena's roster),
     # then Page Info (aick's page guide), then Pass (credential locations).
     ("cena-dev",      "Cena + Dev"),
@@ -5401,7 +5401,7 @@ def _today_dash_full_url(tab_key):
       dashboard     -> /<store>/                  (store.home)
       notifications -> /partner/notifications      (flat, not store-scoped)
       task-reports  -> /partner/team-reports/      (flat, not store-scoped)
-      cena          -> /sam/chat                   (flat, not store-scoped)
+      cena          -> /assistant                  (flat, role-level Cenas AI)
       cena-dev      -> /sam/combined               (flat; side-by-side chat)
       agents        -> /sam/agents                 (flat; Cena's roster)
       page-info     -> /partner/developer/app/page-guide  (flat; aick's page guide)
@@ -5418,7 +5418,7 @@ def _today_dash_full_url(tab_key):
     if tab_key == "task-reports":
         return "/partner/team-reports/"
     if tab_key == "cena":
-        return "/sam/chat"
+        return "/assistant"
     if tab_key == "cena-dev":
         return "/sam/combined"
     if tab_key == "agents":
@@ -5446,16 +5446,16 @@ def today_dashboard():
     the browser loads them.
 
     Tab gating mirrors the sidebar: the Task Reports tab is omitted
-    unless the viewer holds team_reports.view, and the Cena / Cena+Dev
-    / Agents / Pass / Docs tabs are omitted unless the viewer is the
-    Sam-chat user. Dashboard and Notifications are always present, so
-    the default tab is always valid. Gating fails OPEN — if a gate
+    unless the viewer holds team_reports.view. The Cenas AI tab is the
+    role-level assistant page; the Cena+Dev / Agents / Pass / Docs /
+    Automation tabs remain Sam-only. Dashboard and Notifications are
+    always present, so the default tab is always valid. Gating fails OPEN — if a gate
     helper raises, the tab is kept and its destination page enforces
     its own gate."""
     # Build the visible tab set, applying the same audience gates the
     # Today section's sidebar entries use.
     dash_tabs = []
-    _SAM_ONLY_KEYS = {"cena", "cena-dev", "agents", "pass", "docs"}
+    _SAM_ONLY_KEYS = {"cena-dev", "agents", "pass", "docs", "automation"}
     for key, caption in _TODAY_DASH_TABS:
         if key == "task-reports":
             try:

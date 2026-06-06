@@ -51,7 +51,7 @@
 
 /* Container */
 .ck-sidebar {
-  width: 264px;
+  width: 180px;
   background: var(--ck-bg-sidebar);
   border: 0.5px solid var(--ck-border);
   border-radius: 12px;
@@ -65,11 +65,19 @@
 /* Logo */
 .ck-sb-logo {
   display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 6px 8px 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 6px 12px 16px;
   border-bottom: 0.5px solid var(--ck-border-subtle);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ck-sb-logo-bull {
+  width: 78px;
+  height: auto;
+  display: block;
 }
 .ck-sb-logo-mark {
   width: 32px;
@@ -102,8 +110,24 @@
 .ck-sb-logo-sub {
   font-size: 11px;
   color: var(--ck-text-soft);
-  margin-top: 2px;
+  margin-top: 0;
   text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+.ck-sb-ai-orb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 52px;
+  margin: -12px 0 4px 38px;
+  border-radius: 999px;
+  text-decoration: none;
+  filter: drop-shadow(0 5px 14px rgba(0, 0, 0, 0.55));
+}
+.ck-sb-ai-orb canvas {
+  display: block;
+  width: 50px;
+  height: 50px;
 }
 
 /* Section */
@@ -435,7 +459,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(284px, 86vw);
+    width: min(150px, 54vw);
     max-height: 100vh;
     overflow-y: auto;
     border-radius: 0;
@@ -443,22 +467,46 @@
     border-right: 0.5px solid var(--ck-border);
     padding-top: max(14px, env(safe-area-inset-top, 0px));
     padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
-    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-left: max(6px, env(safe-area-inset-left, 0px));
+    padding-right: 6px;
     transform: translateX(-100%);
     transition: transform 280ms var(--ck-ease);
     z-index: 101;
     box-shadow: 6px 0 24px rgba(0,0,0,0.5);
     will-change: transform;
   }
+  .ck-sb-logo {
+    padding: 8px 4px 10px 6px;
+    margin-bottom: 2px;
+  }
+  .ck-sb-logo-bull {
+    width: 70px;
+  }
+  .ck-sb-ai-orb {
+    display: none;
+  }
+  .ck-sb-section {
+    margin-top: 6px;
+  }
+  .ck-sb-section-head {
+    padding: 6px 4px;
+  }
+  .ck-sb-section-label {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+  }
+  .ck-sb-chev {
+    font-size: 12px;
+  }
 
   /* Close button inside the drawer panel */
   .ck-mobile-close {
     display: flex;
     position: absolute;
-    top: max(10px, env(safe-area-inset-top, 0px));
-    right: 10px;
-    width: 32px;
-    height: 32px;
+    top: max(8px, env(safe-area-inset-top, 0px));
+    right: 6px;
+    width: 28px;
+    height: 28px;
     align-items: center;
     justify-content: center;
     background: transparent;
@@ -491,8 +539,8 @@
   }
 
   /* Hint: leaf items get bigger touch targets on mobile */
-  .ck-sb-item, .ck-sb-branch-head, .ck-sb-logout { padding: 10px; }
-  .ck-sb-subitem { padding-top: 9px; padding-bottom: 9px; }
+  .ck-sb-item, .ck-sb-branch-head, .ck-sb-logout { padding: 8px 4px; gap: 6px; }
+  .ck-sb-subitem { padding-top: 8px; padding-bottom: 8px; padding-left: 18px; }
 }
 
 /* Body scroll lock when drawer open — applied by JS */

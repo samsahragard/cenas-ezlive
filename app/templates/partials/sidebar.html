@@ -25,9 +25,8 @@
       <i class="ti ti-x" aria-hidden="true"></i>
     </button>
 
-    <a href="/" class="ck-sb-logo" style="flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px 16px; text-decoration: none; cursor: pointer;" title="Switch store">
-      <img src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="" style="width: 96px; height: auto;">
-      <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" style="height: 32px; width: auto;">
+    <a href="/" class="ck-sb-logo" title="Switch store">
+      <img class="ck-sb-logo-bull" src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="Cenas Kitchen">
       {# Logo sub-label. Suppressed when it would just say "Partner" — the
          role dashboard badge (base_dashboard.html, top-right of every
          page) already says "PARTNER DASHBOARD", so the word under the
@@ -36,9 +35,14 @@
          Copperfield / Corporate), which the role badge does NOT convey —
          so it is kept there as the store identity / switch-store hint. #}
       {% if store_label and store_label != 'Partner' %}
-      <div class="ck-sb-logo-sub" style="margin-top: 2px;">{{ store_label }}</div>
+      <div class="ck-sb-logo-sub">{{ store_label }}</div>
       {% endif %}
     </a>
+    {% if user_role != 'driver' %}
+    <a class="ck-sb-ai-orb" href="/{{ store_slug }}/today?tab=cena" aria-label="Open Cenas AI assistant" title="Cenas AI">
+      <canvas data-ck-ai-orb data-size="56" aria-hidden="true"></canvas>
+    </a>
+    {% endif %}
 
     {% if user_role == 'driver' %}
     {# ==== DRIVER-ONLY menu ==== #}

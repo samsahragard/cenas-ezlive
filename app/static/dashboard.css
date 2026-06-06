@@ -56,7 +56,7 @@ a { color: inherit; text-decoration: none; }
 
 .layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 180px 1fr;
   min-height: 100vh;
   position: relative;
   z-index: 1;
@@ -175,6 +175,13 @@ main.main {
 .ck-page-body > .sc-wrap {
   flex: 1 1 auto;
   min-height: 0;
+}
+.ck-page-body > .sv2-sched,
+.ck-page-body > .sv2-to,
+.ck-page-body > .sv2-av,
+.ck-page-body > .sv2-mk {
+  flex: 1 1 auto;
+  min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 120px));
 }
 /* Dashboard content runs edge-to-edge L-R so every card spans the full
    width with no side gap (Sam #1384). Gaps between cards are untouched.
@@ -905,7 +912,7 @@ input[type=password]:focus, textarea:focus, select:focus {
     position: fixed;
     top: 0; left: 0;
     height: 100vh;
-    width: 260px;
+    width: 150px;
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);

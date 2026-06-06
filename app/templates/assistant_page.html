@@ -1,0 +1,383 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'assistant_page' %}
+
+{% block title %}Cenas AI - Cenas Kitchen{% endblock %}
+{% block page_module_class %}mod-today{% endblock %}
+{% block page_module %}AI{% endblock %}
+{% block page_title %}Cenas AI{% endblock %}
+{% block page_subtitle %}Role-scoped assistant{% endblock %}
+
+{% block content %}
+<style>
+  .aiassist {
+    --ai-bg: #241610;
+    --ai-panel: #170b07;
+    --ai-panel-2: #21100a;
+    --ai-line: rgba(217, 164, 54, 0.18);
+    --ai-line-strong: rgba(217, 164, 54, 0.34);
+    --ai-gold: #E4B340;
+    --ai-gold-bright: #FFD970;
+    --ai-cream: #FAF6EC;
+    --ai-muted: rgba(250, 246, 236, 0.62);
+    --ai-faint: rgba(250, 246, 236, 0.42);
+    color: var(--ai-cream);
+    min-height: max(660px, calc(var(--ck-page-available-height, 100vh) - 210px));
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    gap: 14px;
+  }
+  .aiassist * { box-sizing: border-box; }
+  .aiassist-panel,
+  .aiassist-rail {
+    border: 1px solid var(--ai-line);
+    border-radius: 12px;
+    background:
+      radial-gradient(circle at 16% 0%, rgba(228, 179, 64, 0.08), transparent 34%),
+      linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
+    overflow: hidden;
+  }
+  .aiassist-rail {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .aiassist-profile {
+    padding: 18px 16px;
+    border-bottom: 1px solid var(--ai-line);
+  }
+  .aiassist-profile-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .aiassist-orb-small {
+    width: 58px;
+    height: 58px;
+    flex: 0 0 auto;
+  }
+  .aiassist-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--ai-gold-bright);
+  }
+  .aiassist-role {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--ai-muted);
+  }
+  .aiassist-tools {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow: auto;
+  }
+  .aiassist-tool {
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(217, 164, 54, 0.12);
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--ai-muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .aiassist-tool strong {
+    display: block;
+    color: var(--ai-cream);
+    font-size: 12.5px;
+    margin-bottom: 2px;
+  }
+  .aiassist-tool.is-active {
+    border-color: rgba(91, 202, 197, 0.35);
+  }
+  .aiassist-tool.is-waiting {
+    border-color: rgba(228, 179, 64, 0.24);
+  }
+  .aiassist-panel {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(260px, 1fr) auto;
+  }
+  .aiassist-head {
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--ai-line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .aiassist-title {
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .aiassist-sub {
+    margin-top: 3px;
+    color: var(--ai-muted);
+    font-size: 12px;
+  }
+  .aiassist-pill {
+    border: 1px solid var(--ai-line-strong);
+    border-radius: 999px;
+    padding: 6px 10px;
+    color: var(--ai-gold-bright);
+    font-size: 12px;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.22);
+  }
+  .aiassist-thread {
+    padding: 18px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .aiassist-msg {
+    max-width: min(760px, 86%);
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    background: rgba(255, 255, 255, 0.045);
+    line-height: 1.48;
+    font-size: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .aiassist-msg.user {
+    align-self: flex-end;
+    border-color: rgba(232, 122, 62, 0.34);
+    background: rgba(232, 122, 62, 0.15);
+  }
+  .aiassist-msg.assistant {
+    align-self: flex-start;
+  }
+  .aiassist-msg.queued {
+    border-color: rgba(228, 179, 64, 0.42);
+  }
+  .aiassist-meta {
+    margin-bottom: 6px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ai-faint);
+  }
+  .aiassist-form {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 9px;
+    padding: 13px;
+    border-top: 1px solid var(--ai-line);
+    background: rgba(0, 0, 0, 0.22);
+  }
+  .aiassist-icon,
+  .aiassist-send {
+    border-radius: 10px;
+    border: 1px solid rgba(217, 164, 54, 0.28);
+    background: rgba(0, 0, 0, 0.32);
+    color: var(--ai-cream);
+    min-height: 44px;
+    min-width: 44px;
+    font: inherit;
+  }
+  .aiassist-input {
+    min-height: 44px;
+    max-height: 140px;
+    resize: vertical;
+    border-radius: 10px;
+    border: 1px solid rgba(217, 164, 54, 0.24);
+    background: rgba(0, 0, 0, 0.32);
+    color: var(--ai-cream);
+    padding: 11px 12px;
+    font: inherit;
+  }
+  .aiassist-send {
+    background: #E87A3E;
+    border-color: rgba(232, 122, 62, 0.86);
+    color: #170b05;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .aiassist-send:disabled {
+    opacity: 0.56;
+    cursor: wait;
+  }
+  @media (max-width: 820px) {
+    .aiassist {
+      grid-template-columns: 1fr;
+      min-height: max(620px, calc(var(--ck-page-available-height, 100vh) - 150px));
+    }
+    .aiassist-rail {
+      min-height: auto;
+    }
+    .aiassist-tools {
+      display: none;
+    }
+    .aiassist-msg {
+      max-width: 94%;
+    }
+  }
+</style>
+
+<section class="aiassist" id="aiassist">
+  <aside class="aiassist-rail" aria-label="Assistant context">
+    <div class="aiassist-profile">
+      <div class="aiassist-profile-top">
+        <canvas class="aiassist-orb-small" data-ck-ai-orb data-size="58" aria-hidden="true"></canvas>
+        <div>
+          <div class="aiassist-name" id="aiassist-name">Cenas AI</div>
+          <div class="aiassist-role" id="aiassist-role">Checking access...</div>
+        </div>
+      </div>
+    </div>
+    <div class="aiassist-tools" id="aiassist-tools">
+      <div class="aiassist-tool is-waiting"><strong>Loading tools</strong>Reading your role catalog...</div>
+    </div>
+  </aside>
+
+  <main class="aiassist-panel" aria-label="Cenas AI chat">
+    <header class="aiassist-head">
+      <div>
+        <div class="aiassist-title">Ask Cenas AI</div>
+        <div class="aiassist-sub" id="aiassist-sub">Partner catalog tools are checked by your signed-in role.</div>
+      </div>
+      <div class="aiassist-pill" id="aiassist-pill">Gemini 2.5</div>
+    </header>
+
+    <div class="aiassist-thread" id="aiassist-thread">
+      <div class="aiassist-msg assistant">
+        <div class="aiassist-meta">Cenas AI</div>
+        Ask me a Cenas question. I will answer through approved tools when available, and save missing-tool questions for Sam review.
+      </div>
+    </div>
+
+    <form class="aiassist-form" id="aiassist-form">
+      <button class="aiassist-icon" type="button" aria-label="Attach" disabled>
+        <i class="ti ti-paperclip" aria-hidden="true"></i>
+      </button>
+      <textarea class="aiassist-input" id="aiassist-input" name="question" rows="1" maxlength="2000" placeholder="Ask Cenas AI..."></textarea>
+      <button class="aiassist-send" id="aiassist-send" type="submit">Ask</button>
+    </form>
+  </main>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById("aiassist");
+  if (!root) return;
+
+  var nameEl = document.getElementById("aiassist-name");
+  var roleEl = document.getElementById("aiassist-role");
+  var toolsEl = document.getElementById("aiassist-tools");
+  var subEl = document.getElementById("aiassist-sub");
+  var pillEl = document.getElementById("aiassist-pill");
+  var thread = document.getElementById("aiassist-thread");
+  var form = document.getElementById("aiassist-form");
+  var input = document.getElementById("aiassist-input");
+  var send = document.getElementById("aiassist-send");
+  var lastUserQuestion = "";
+  var lastAssistantAnswer = "";
+
+  function esc(text) {
+    return String(text == null ? "" : text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function meta(role) {
+    var now = new Date();
+    return role + " - " + now.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  }
+
+  function addMessage(kind, text, queued) {
+    var msg = document.createElement("div");
+    msg.className = "aiassist-msg " + kind + (queued ? " queued" : "");
+    msg.innerHTML = '<div class="aiassist-meta">' + esc(meta(kind === "user" ? "You" : "Cenas AI")) + '</div>' + esc(text || "");
+    thread.appendChild(msg);
+    thread.scrollTop = thread.scrollHeight;
+    return msg;
+  }
+
+  function setTools(tools) {
+    var active = (tools || []).filter(function (tool) { return tool.available; });
+    var waiting = (tools || []).filter(function (tool) { return !tool.available; });
+    pillEl.textContent = active.length + " active " + (active.length === 1 ? "tool" : "tools");
+    subEl.textContent = "Role catalog loaded for this session.";
+    toolsEl.innerHTML = active.slice(0, 14).map(function (tool) {
+      return '<div class="aiassist-tool is-active"><strong>' + esc(tool.label || tool.tool_id) + '</strong>' + esc(tool.tool_id || "") + '</div>';
+    }).join("");
+    if (!toolsEl.innerHTML) {
+      toolsEl.innerHTML = '<div class="aiassist-tool is-waiting"><strong>No active tools</strong>Questions will be saved for Sam review.</div>';
+    }
+    if (waiting.length) {
+      toolsEl.insertAdjacentHTML("beforeend", '<div class="aiassist-tool is-waiting"><strong>' + waiting.length + ' review-gated</strong>Saved for Sam review when needed.</div>');
+    }
+  }
+
+  fetch("/assistant/context", {
+    headers: {"X-Current-Path": window.location.pathname + window.location.search + window.location.hash}
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var principal = data.principal || {};
+      nameEl.textContent = principal.display_name || "Cenas AI";
+      roleEl.textContent = (principal.role || "user") + " - " + (principal.kind || "session");
+      setTools(data.tools || []);
+      if (!data.enabled) {
+        subEl.textContent = "Assistant runtime is unavailable; questions can still be saved for review.";
+      }
+    })
+    .catch(function () {
+      roleEl.textContent = "Review-gated";
+      toolsEl.innerHTML = '<div class="aiassist-tool is-waiting"><strong>Could not load tools</strong>Questions can still be submitted for review.</div>';
+    });
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var question = input.value.trim();
+    if (!question) return;
+    var previousQuestion = lastUserQuestion;
+    var previousAnswer = lastAssistantAnswer;
+    lastUserQuestion = question;
+    input.value = "";
+    addMessage("user", question);
+    var pending = addMessage("assistant", "Thinking...");
+    send.disabled = true;
+    fetch("/assistant/ask", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Current-Path": window.location.pathname + window.location.search + window.location.hash
+      },
+      body: JSON.stringify({
+        question: question,
+        previous_question: previousQuestion,
+        previous_answer: previousAnswer
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var answer = data && data.answer ? data.answer : "I could not answer that yet.";
+        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("Cenas AI")) + '</div>' + esc(answer);
+        if (data && data.queued) pending.classList.add("queued");
+        if (answer) lastAssistantAnswer = answer;
+      })
+      .catch(function () {
+        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("Cenas AI")) + '</div>I could not reach the assistant right now.';
+        pending.classList.add("queued");
+      })
+      .finally(function () {
+        send.disabled = false;
+        input.focus();
+      });
+  });
+})();
+</script>
+{% endblock %}

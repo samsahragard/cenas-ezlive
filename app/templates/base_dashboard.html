@@ -15,7 +15,6 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/assistant_bubble.css') }}">
   {# Page Title Library fonts — Manrope (titles) + JetBrains Mono (brand mark
      / metadata). Several rebuilt pages already self-import these; loading
      them in base means the shared topbar renders in the library typeface
@@ -333,11 +332,11 @@
       /* Driver badge stays pinned top-right (see the :has() placement rule
          below); tighten its inset and the header clearance for the smaller
          phone-width badge so the title keeps as much room as possible. */
-      .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .topbar-right {
+      .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .topbar-right {
         top: 12px;
         right: 12px;
       }
-      .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .ck-header {
+      .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
         padding-right: 120px;
       }
     }
@@ -372,9 +371,9 @@
     }
     .dash-role-banner {
       display: block;
-      height: 150px;
+      height: 74px;
       width: auto;
-      max-width: 500px;
+      max-width: 360px;
       object-fit: contain;
       border-radius: 8px;
       box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
@@ -386,20 +385,19 @@
        beats the base .dash-role-banner (0,0,1,0). Deliberately NOT touching
        the base rule: that would also enlarge the in-header copy on Home and
        the in-ribbon copy on the 6 tabbed dashboards (worsening their clip).
-       max-width 620px = 500 x 185/150, preserving the base's no-letterbox
-       headroom at the new height. Driver override below wins for driver.jpg
-       on the source-order tie, so drivers are unaffected here. */
+       headroom at the new height. Driver override below wins on the source-
+       order tie, so drivers are unaffected here. */
     .dash-role-badge-bar .dash-role-banner {
-      height: 185px;
-      max-width: 620px;
+      height: 92px;
+      max-width: 460px;
     }
     /* Driver badge enlarged (Sam #1432) — drivers get a bigger top-right
        ribbon badge than other roles. Scoped by src so only driver.jpg
        grows; partner/other badges keep the shared 48px sizing. The 2:1
        source means 70px height -> ~140px natural width, still well under
        the cap, so height is the binding dimension. */
-    .dash-role-banner[src*="banners/driver"] {
-      height: 70px;
+    .dash-role-banner[src*="role_only/driver"] {
+      height: 74px;
       max-width: 360px;
     }
     /* page-dashboard zeroes main.main's horizontal padding (dashboard.css),
@@ -410,19 +408,22 @@
     }
     @media (max-width: 900px) {
       .dash-role-banner {
-        height: 84px;
-        max-width: 64vw;
+        width: min(38vw, 148px);
+        height: auto;
+        max-width: none;
       }
       .dash-role-badge-bar .dash-role-banner {
-        height: 102px;
-        max-width: 80vw;
+        width: min(42vw, 156px);
+        height: auto;
+        max-width: none;
       }
-      .dash-role-banner[src*="banners/driver"] {
-        height: 52px;
-        max-width: 60vw;
+      .dash-role-banner[src*="role_only/driver"] {
+        width: min(36vw, 140px);
+        height: auto;
+        max-width: none;
       }
       .dash-role-badge-bar {
-        margin-bottom: 12px;
+        margin-bottom: 8px;
       }
     }
 
@@ -448,19 +449,19 @@
        the "wrong area" Sam flagged. .ck-topbar is position:relative so this
        anchors to it; the header reserves right padding so the title/brand
        mark clear the badge instead of running under it. */
-    .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .topbar-right {
+    .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .topbar-right {
       position: absolute;
       top: 18px;
       right: 20px;
       width: auto;
       z-index: 2;
     }
-    .ck-topbar:has(.dash-role-banner[src*="banners/driver"]) .ck-header {
+    .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
       padding-right: 162px;
     }
   </style>
   <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/assistant_bubble.js') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}" defer></script>
+  <script src="{{ url_for('static', filename='js/ai_orb.js') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}" defer></script>
   {# ribbon.js retired 2026-05-18 (commit 2). X/Check dismiss behavior
      moved to /partner/notifications inline JS (notifications.html).
      POST /partner/ribbon/dismiss/<item_type>/<int:item_id> endpoint

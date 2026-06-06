@@ -11,7 +11,7 @@
    embeds the REAL, fully-functional Today page inline in an
    <iframe> — click a tab and the actual working page is right there
    (Dashboard -> /<store>/, Notifications -> /partner/notifications,
-   Task Reports -> /partner/team-reports/, Cena -> /sam/chat). All
+   Task Reports -> /partner/team-reports/, Cenas AI -> /assistant). All
    existing Today functionality is left as-is — the pages are simply
    iframed, not rewritten.
 
@@ -48,10 +48,10 @@
    The dashboard route never touches Toast or any write path — it is a
    thin shell that only resolves each tab's URL. The iframed pages run
    their own queries when the browser loads them.
-   Audience gate at the route: the Task Reports and Cena tabs are
-   omitted unless the viewer holds the same gate the sidebar uses
-   (team_reports.view / is_sam_chat_user); the destination pages
-   enforce their own gate regardless.
+   Audience gate at the route: Task Reports is omitted unless the
+   viewer holds the same team_reports.view gate the sidebar uses.
+   Cenas AI is the role-level assistant tab; the Sam-only sibling tabs
+   are still gated at the route and by their destination pages.
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'today_dashboard' %}
@@ -336,17 +336,17 @@
 
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
-    .tdydash .tdyd-ribbon { padding: 16px 14px; }
-    .tdydash .ribbon-role-badge { top: 16px; right: 14px; }
-    .tdydash .tdyd-brand { margin-bottom: 8px; }
+    .tdydash .tdyd-ribbon { padding: 10px 12px 9px; }
+    .tdydash .ribbon-role-badge { top: 10px; right: 12px; }
+    .tdydash .tdyd-brand { margin-bottom: 4px; }
     .tdydash .tdyd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .tdydash .tdyd-title { font-size: 30px; margin-bottom: 6px; }
-    .tdydash .tdyd-rule { width: 40px; margin-bottom: 8px; }
+    .tdydash .tdyd-title { font-size: 28px; margin-bottom: 3px; }
+    .tdydash .tdyd-rule { width: 40px; margin-bottom: 5px; }
     .tdydash .tdyd-meta { font-size: 10px; gap: 6px; }
-    .tdydash .tdyd-tabs { padding: 0 8px; }
+    .tdydash .tdyd-tabs { padding: 0 6px; }
     .tdydash .tdyd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .tdydash .tdyd-tab-icon { width: 12px; height: 12px; }
-    .tdydash .tdyd-content-wrap { margin-top: 14px; }
+    .tdydash .tdyd-content-wrap { margin-top: 8px; }
     .tdydash .tdyd-panel { border-radius: 12px; }
     .tdydash .tdyd-embed-frame {
       height: max(600px, calc(var(--ck-page-available-height, 100vh) - 160px));
@@ -357,7 +357,7 @@
   @media (max-width: 380px) {
     .tdydash .tdyd-title { font-size: 26px; }
     .tdydash .tdyd-tab { padding: 10px 9px 8px; font-size: 11px; }
-    .tdydash .tdyd-ribbon { padding: 14px 14px 12px; }
+    .tdydash .tdyd-ribbon { padding: 9px 10px 8px; }
   }
 </style>
 

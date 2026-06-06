@@ -279,7 +279,7 @@
   .catdash .catd-embed-frame {
     display: block;
     width: 100%;
-    height: calc(100vh - 360px);
+    height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
     min-height: 600px;
     border: 0;
     background: #1a0d08;
@@ -338,7 +338,7 @@
     .catdash .catd-content-wrap { margin-top: 14px; }
     .catdash .catd-panel { border-radius: 12px; }
     .catdash .catd-embed-frame {
-      height: calc(100vh - 300px);
+      height: max(600px, calc(var(--ck-page-available-height, 100vh) - 160px));
       min-height: 560px;
     }
     .catdash .catd-section-label { font-size: 9px; margin-bottom: 8px; }

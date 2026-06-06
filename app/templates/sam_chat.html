@@ -10,8 +10,8 @@
   .sc-wrap {
     display: flex;
     gap: 14px;
-    height: calc(100vh - 200px);
-    min-height: 460px;
+    flex: 1 1 auto;
+    min-height: max(520px, calc(var(--ck-page-available-height, 100vh) - 220px));
     margin-top: 6px;
     position: relative;
     transition: outline 0.12s ease;
@@ -415,7 +415,7 @@
      rail on top as a bounded scrollable list, conversation full-width
      below. (dck spec.) */
   @media (max-width: 720px) {
-    .sc-wrap { flex-direction: column; height: auto; }
+    .sc-wrap { flex-direction: column; min-height: max(620px, calc(var(--ck-page-available-height, 100vh) - 160px)); }
     .sc-rail { flex: 0 0 auto; max-height: 200px; }
   }
 

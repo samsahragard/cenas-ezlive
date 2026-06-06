@@ -601,7 +601,9 @@
        page title and the body. #}
     {% include 'partials/_anomaly_cards.html' ignore missing %}
 
-    {% block content %}{% endblock %}
+    <div class="ck-page-body">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 </div>
 

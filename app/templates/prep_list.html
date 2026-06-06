@@ -118,7 +118,7 @@
     margin: 0 0 48px;
     /* Floor so the warm card reaches near the viewport bottom even on
        sparse days (mirrors kitchen_dashboard's calc + min-height). */
-    min-height: calc(100vh - 120px);
+    min-height: max(720px, calc(var(--ck-page-available-height, 100vh) - 60px));
     overflow: hidden;
   }
   /* Decorative tint only — position:absolute (NOT fixed) so it stays
@@ -396,7 +396,7 @@
   .prep-list-panel {
     background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
     border-radius: var(--prep-radius-md); overflow: hidden;
-    min-height: calc(100vh - 360px);
+    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
   }
   .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .prep-col-divider { border-right: 0.5px solid var(--prep-border-subtle); }

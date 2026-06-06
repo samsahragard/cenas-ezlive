@@ -137,7 +137,45 @@ aside.sidebar {
    from 32px to 6px — wallpaper still peeks through as the page
    background (intentional, Sam confirmed), but the cards are now
    ~52px wider on each side. */
-main.main { padding: 28px 6px 60px; min-width: 0; }
+main.main {
+  --ck-main-pad-top: 28px;
+  --ck-main-pad-bottom: 60px;
+  --ck-page-available-height: calc(100vh - var(--ck-main-pad-top) - var(--ck-main-pad-bottom));
+  padding: var(--ck-main-pad-top) 6px var(--ck-main-pad-bottom);
+  min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.ck-page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ck-page-body > .card:only-child,
+.ck-page-body > .table-scroll:only-child,
+.ck-page-body > .table-wrap:only-child,
+.ck-page-body > .grid-view:only-child,
+.ck-page-body > .chat-wrap:only-child,
+.ck-page-body > .sc-wrap:only-child,
+.ck-page-body > [class$="-frame"]:only-child,
+.ck-page-body > [class$="-page"]:only-child,
+.ck-page-body > [class$="-shell"]:only-child,
+.ck-page-body > [class$="-wrap"]:only-child {
+  flex: 1 1 auto;
+}
+.ck-page-body > div[class$="dash"],
+.ck-page-body > div[class$="-frame"],
+.ck-page-body > div[class$="-page"],
+.ck-page-body > div[class$="-shell"],
+.ck-page-body > div[class$="-wrap"],
+.ck-page-body > div[class$="-wrapper"],
+.ck-page-body > .chat-wrap,
+.ck-page-body > .sc-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 /* Dashboard content runs edge-to-edge L-R so every card spans the full
    width with no side gap (Sam #1384). Gaps between cards are untouched.
    Scoped to the dashboard via the body.page-dashboard class. */

@@ -214,10 +214,10 @@
     background: var(--rcp-bg-pane); border: 1px solid var(--rcp-border);
     border-radius: var(--rcp-radius); overflow: hidden;
     /* Fill the viewport down to near the bottom (mirrors kitchen_dashboard.html
-       .kitd-embed-frame ~L308-310: calc(100vh - 360px) / min-height). The
+       .kitd-embed-frame pattern: shared page-fill height plus a floor). The
        inner .rcp-list-body keeps its own scroll, so the panel stretches but
        the list still scrolls internally. */
-    height: calc(100vh - 360px); min-height: 600px;
+    height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px)); min-height: 600px;
     display: flex; flex-direction: column;
   }
   .rcp-list-head {
@@ -262,7 +262,7 @@
     /* Match the list panel's viewport-fill height so the detail pane reaches
        near the bottom too (mirrors kitchen_dashboard.html ~L308-310). Long
        recipes scroll WITHIN the panel; short ones still fill the column. */
-    min-height: calc(100vh - 360px);
+    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
     max-height: calc(100vh - 48px);
     overflow-y: auto;
   }

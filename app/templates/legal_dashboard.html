@@ -306,7 +306,7 @@
   .legdash .legd-embed-frame {
     display: block;
     width: 100%;
-    height: calc(100vh - 360px);
+    height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
     min-height: 600px;
     border: 0;
     background: #1a0d08;
@@ -393,7 +393,7 @@
     .legdash .legd-content-wrap { margin-top: 14px; }
     .legdash .legd-panel { border-radius: 12px; }
     .legdash .legd-embed-frame {
-      height: calc(100vh - 300px);
+      height: max(600px, calc(var(--ck-page-available-height, 100vh) - 160px));
       min-height: 560px;
     }
     .legdash .legd-soon-panel { padding: 16px 14px; }

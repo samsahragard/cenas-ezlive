@@ -1346,20 +1346,24 @@ def _route_approved_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
 
 
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    return _approved_tool_payload(question, ctx)[1]
+
+
+def _approved_tool_payload(question: str, ctx: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     tool_id = _route_approved_tool_id(question, ctx)
     if not tool_id:
-        return {}
+        return None, {}
     tool = next((item for item in _TOOL_REGISTRY if item["tool_id"] == tool_id), None)
     if not tool:
-        return {}
+        return None, {}
     handler = _approved_tool_handlers().get(str(tool.get("handler") or ""))
     if not handler:
-        return {}
+        return None, {}
     try:
-        return {tool_id: handler(question, ctx)}
+        return tool_id, {tool_id: handler(question, ctx)}
     except Exception:  # noqa: BLE001
         log.exception("assistant: failed to build %s", tool_id)
-        return {}
+        return None, {}
 
 
 def _contextual_followup(question: str, previous_question: str) -> bool:
@@ -1417,14 +1421,19 @@ def _post_to_ck_runtime(
         "X-Ai-Assistant-Token": token,
         "Content-Type": "application/json",
     }
+    resolved_for_tools = _resolved_question(question, previous_question)
+    routed_tool_id, tool_data = _approved_tool_payload(resolved_for_tools, ctx)
     payload = {
         "question": question,
         "principal": _runtime_principal(ctx),
         "tools": _tool_catalog_for(ctx),
-        "tool_data": _approved_tool_data(_resolved_question(question, previous_question), ctx),
+        "tool_data": tool_data,
         "source": "cenas_app",
         "requested_at": _now_iso(),
     }
+    if routed_tool_id:
+        payload["routed_tool_id"] = routed_tool_id
+        payload["route_path"] = "deterministic"
     if previous_question:
         payload["previous_question"] = previous_question
     if previous_answer:

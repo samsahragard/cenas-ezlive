@@ -1169,9 +1169,14 @@ def _approved_tool_answer(
     tools: list[dict],
     tool_data: dict,
     previous_answer: str = "",
+    routed_tool_id: str | None = None,
 ) -> dict | None:
     resolved_question = _resolved_question(question, previous_question)
-    if _wants_tool_discovery(resolved_question):
+    routed_tool_id = str(routed_tool_id or "").strip()
+    if (
+        (not routed_tool_id or routed_tool_id == "assistant.tool_discovery")
+        and _wants_tool_discovery(resolved_question)
+    ):
         return {
             "ok": True,
             "answer": _tool_discovery_answer(principal, tools),
@@ -1182,7 +1187,10 @@ def _approved_tool_answer(
         }
     if not _has_partner_tool_access(principal):
         return None
-    if _OWNER_IDENTITY_RE.search(str(question or "")):
+    if (
+        (not routed_tool_id or routed_tool_id == "assistant.session_context")
+        and _OWNER_IDENTITY_RE.search(str(question or ""))
+    ):
         if principal.get("is_owner_operator"):
             identity_answer = (
                 "This authenticated session is already marked as an owner-operator "
@@ -1203,14 +1211,12 @@ def _approved_tool_answer(
             "tool_id": "assistant.session_context",
             "generated_at": _now_iso(),
         }
-    if _toast_employee_profiles_tool_authorized(principal, tools) and _wants_toast_employee_profiles(resolved_question):
+    if not routed_tool_id:
+        return None
+    if routed_tool_id == "toast.employee_profiles" and _toast_employee_profiles_tool_authorized(principal, tools):
         employee_profiles = tool_data.get("toast.employee_profiles") if isinstance(tool_data, dict) else None
         if not _tool_payload_ok(employee_profiles):
-            try:
-                employee_profiles = _toast_employee_profiles_payload(resolved_question)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast employee profiles failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_employee_profiles_answer(employee_profiles, question),
@@ -1219,14 +1225,10 @@ def _approved_tool_answer(
             "tool_id": "toast.employee_profiles",
             "generated_at": employee_profiles.get("generated_at"),
         }
-    if _toast_webhook_tool_authorized(principal, tools) and _wants_toast_webhook_activity(resolved_question):
+    if routed_tool_id == "toast.webhook_activity" and _toast_webhook_tool_authorized(principal, tools):
         webhook_activity = tool_data.get("toast.webhook_activity") if isinstance(tool_data, dict) else None
         if not _tool_payload_ok(webhook_activity):
-            try:
-                webhook_activity = _toast_webhook_activity_payload(resolved_question)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast webhook activity failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_webhook_activity_answer(webhook_activity, question),
@@ -1235,7 +1237,7 @@ def _approved_tool_answer(
             "tool_id": "toast.webhook_activity",
             "generated_at": webhook_activity.get("generated_at"),
         }
-    if _toast_table_tool_authorized(principal, tools) and _wants_toast_table_activity(resolved_question):
+    if routed_tool_id == "toast.table_activity" and _toast_table_tool_authorized(principal, tools):
         contextual_table_answer = _toast_table_person_followup_answer(question, previous_answer)
         if contextual_table_answer:
             return {
@@ -1261,11 +1263,7 @@ def _approved_tool_answer(
             or (not payload_business_date and business_date)
             or _toast_table_activity_needs_employee_refresh(table_activity, question)
         ):
-            try:
-                table_activity = _toast_table_activity_payload(requested_store, business_date)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast table activity failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_table_activity_answer_for_question(table_activity, question),
@@ -1274,15 +1272,10 @@ def _approved_tool_answer(
             "tool_id": "toast.table_activity",
             "generated_at": table_activity.get("generated_at"),
         }
-    if _toast_tool_authorized(principal, tools) and _wants_toast_sales_summary(resolved_question):
-        period = _toast_period_from_question(resolved_question)
+    if routed_tool_id == "toast.sales_summary" and _toast_tool_authorized(principal, tools):
         toast_summary = tool_data.get("toast.sales_summary") if isinstance(tool_data, dict) else None
         if not isinstance(toast_summary, dict):
-            try:
-                toast_summary = _toast_sales_summary_payload(period)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast sales summary failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_sales_summary_answer(toast_summary),
@@ -1291,9 +1284,9 @@ def _approved_tool_answer(
             "tool_id": "toast.sales_summary",
             "generated_at": toast_summary.get("generated_at"),
         }
-    if _tool_available(tools, "drivers.store_summary"):
+    if routed_tool_id == "drivers.store_summary" and _tool_available(tools, "drivers.store_summary"):
         driver_summary = tool_data.get("drivers.store_summary") if isinstance(tool_data, dict) else None
-        if isinstance(driver_summary, dict) and _wants_driver_summary(resolved_question):
+        if isinstance(driver_summary, dict):
             return {
                 "ok": True,
                 "answer": _drivers_summary_answer(driver_summary),
@@ -1302,9 +1295,9 @@ def _approved_tool_answer(
                 "tool_id": "drivers.store_summary",
                 "generated_at": driver_summary.get("generated_at"),
             }
-    if _tool_available(tools, "labor.store_aggregate"):
+    if routed_tool_id == "labor.store_aggregate" and _tool_available(tools, "labor.store_aggregate"):
         labor_summary = tool_data.get("labor.store_aggregate") if isinstance(tool_data, dict) else None
-        if isinstance(labor_summary, dict) and _wants_labor_summary(resolved_question):
+        if isinstance(labor_summary, dict):
             return {
                 "ok": True,
                 "answer": _labor_summary_answer(labor_summary),
@@ -1313,9 +1306,9 @@ def _approved_tool_answer(
                 "tool_id": "labor.store_aggregate",
                 "generated_at": labor_summary.get("generated_at"),
             }
-    if _tool_available(tools, "orders.store_summary"):
+    if routed_tool_id == "orders.store_summary" and _tool_available(tools, "orders.store_summary"):
         summary = tool_data.get("orders.store_summary") if isinstance(tool_data, dict) else None
-        if isinstance(summary, dict) and _wants_order_summary(resolved_question):
+        if isinstance(summary, dict):
             return {
                 "ok": True,
                 "answer": _orders_summary_answer(summary, resolved_question),
@@ -1489,12 +1482,21 @@ def _answer(payload: dict) -> tuple[dict, int]:
     principal = payload.get("principal") or {}
     tools = payload.get("tools") or []
     tool_data = payload.get("tool_data") or {}
+    routed_tool_id = str(payload.get("routed_tool_id") or "").strip() or None
     source = str(payload.get("source") or "cenas_app")
     if not question:
         return {"ok": False, "error": "question required"}, 400
 
     resolved_question = _resolved_question(question, previous_question)
-    approved = _approved_tool_answer(question, previous_question, principal, tools, tool_data, previous_answer)
+    approved = _approved_tool_answer(
+        question,
+        previous_question,
+        principal,
+        tools,
+        tool_data,
+        previous_answer,
+        routed_tool_id,
+    )
     if approved is not None:
         route_cache = _record_tool_route_verification(
             question,

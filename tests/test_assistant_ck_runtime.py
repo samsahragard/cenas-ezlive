@@ -161,6 +161,8 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
                         "by_store": {"copperfield": 2, "tomball": 1},
                     }
                 },
+                "routed_tool_id": "orders.store_summary",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -213,6 +215,8 @@ def test_runtime_promotes_verified_tool_route_after_repeated_success(tmp_path, m
                 "by_store": {"copperfield": 2, "tomball": 1},
             }
         },
+        "routed_tool_id": "orders.store_summary",
+        "route_path": "deterministic",
         "source": "test",
     }
 
@@ -313,6 +317,8 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
                         "menu": {},
                     }
                 },
+                "routed_tool_id": "toast.sales_summary",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -374,6 +380,8 @@ def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_pa
                         },
                     }
                 },
+                "routed_tool_id": "toast.table_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -447,6 +455,8 @@ def test_runtime_answers_operator_toast_webhook_activity_with_approved_tool(tmp_
                         "raw_payloads_included": False,
                     }
                 },
+                "routed_tool_id": "toast.webhook_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -470,7 +480,7 @@ def test_runtime_answers_operator_toast_webhook_activity_with_approved_tool(tmp_
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_runtime_refetches_toast_webhook_when_render_payload_is_error(tmp_path, monkeypatch):
+def test_runtime_queues_toast_webhook_when_routed_payload_is_error(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     db_path = tmp_path / "assistant_review.sqlite"
@@ -480,28 +490,9 @@ def test_runtime_refetches_toast_webhook_when_render_payload_is_error(tmp_path, 
     monkeypatch.setattr(
         runtime,
         "_toast_webhook_activity_payload",
-        lambda question: {
-            "ok": True,
-            "generated_at": "2026-06-06T17:00:00Z",
-            "data_class": "toast_webhook_activity_sanitized",
-            "scope": {"store_key": None, "business_date": "20260606"},
-            "counts": {
-                "events": 22,
-                "orders": 6,
-                "checks": 6,
-                "selections": 18,
-                "payments": 4,
-                "employee_facts": 20,
-            },
-            "recent_last_hour_events": 5,
-            "raw_payloads_included": False,
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("runtime must not refetch webhook payload")),
     )
-    monkeypatch.setattr(
-        runtime,
-        "_gemini_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("webhook refetch answer must not call model")),
-    )
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
 
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
@@ -523,16 +514,17 @@ def test_runtime_refetches_toast_webhook_when_render_payload_is_error(tmp_path, 
                         "error": "toast_webhook_db_missing",
                     }
                 },
+                "routed_tool_id": "toast.webhook_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
         )
         data = json.loads(res.read().decode("utf-8"))
 
-        assert data["queued"] is False
-        assert data["storage"] == "toast_webhook_activity_tool"
-        assert data["tool_id"] == "toast.webhook_activity"
-        assert "22 webhook events" in data["answer"]
+        assert data["queued"] is True
+        assert data["reason"] == "data_question_needs_approved_tool"
+        assert data.get("tool_id") != "toast.webhook_activity"
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -596,6 +588,8 @@ def test_runtime_answers_operator_toast_employee_profile_with_approved_tool(tmp_
                         "raw_payloads_included": False,
                     }
                 },
+                "routed_tool_id": "toast.employee_profiles",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -618,7 +612,7 @@ def test_runtime_answers_operator_toast_employee_profile_with_approved_tool(tmp_
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_runtime_refetches_toast_employee_profiles_when_render_payload_is_error(tmp_path, monkeypatch):
+def test_runtime_queues_toast_employee_profiles_when_routed_payload_is_error(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     db_path = tmp_path / "assistant_review.sqlite"
@@ -628,27 +622,9 @@ def test_runtime_refetches_toast_employee_profiles_when_render_payload_is_error(
     monkeypatch.setattr(
         runtime,
         "_toast_employee_profiles_payload",
-        lambda question: {
-            "ok": True,
-            "generated_at": "2026-06-06T17:00:00Z",
-            "data_class": "toast_employee_profiles_sanitized",
-            "scope": "overview",
-            "profile_db_count": 88,
-            "central_counts": {
-                "employee_profiles": 88,
-                "identity_links": 95,
-                "employee_facts": 68448,
-                "unmatched_employee_refs": 69,
-            },
-            "top_employees_by_toast_facts": [],
-            "raw_payloads_included": False,
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("runtime must not refetch employee profile payload")),
     )
-    monkeypatch.setattr(
-        runtime,
-        "_gemini_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("employee profile refetch answer must not call model")),
-    )
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
 
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
@@ -670,17 +646,17 @@ def test_runtime_refetches_toast_employee_profiles_when_render_payload_is_error(
                         "error": "toast_webhook_db_missing",
                     }
                 },
+                "routed_tool_id": "toast.employee_profiles",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
         )
         data = json.loads(res.read().decode("utf-8"))
 
-        assert data["queued"] is False
-        assert data["storage"] == "toast_employee_profiles_tool"
-        assert data["tool_id"] == "toast.employee_profiles"
-        assert "88 per-employee SQLite files" in data["answer"]
-        assert "68,448 employee Toast facts" in data["answer"]
+        assert data["queued"] is True
+        assert data["reason"] == "data_question_needs_approved_tool"
+        assert data.get("tool_id") != "toast.employee_profiles"
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -719,6 +695,8 @@ def test_runtime_does_not_use_toast_payload_when_tool_unavailable(tmp_path, monk
                         "raw_payloads_included": False,
                     }
                 },
+                "routed_tool_id": "toast.webhook_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -779,6 +757,8 @@ def test_runtime_answers_table_waiter_followup_with_previous_question(tmp_path, 
                         },
                     }
                 },
+                "routed_tool_id": "toast.table_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -798,34 +778,18 @@ def test_runtime_answers_table_waiter_followup_with_previous_question(tmp_path, 
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_runtime_refreshes_stale_table_payload_without_waiter(tmp_path, monkeypatch):
+def test_runtime_queues_stale_table_payload_without_waiter(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     db_path = tmp_path / "assistant_review.sqlite"
     token = "runtime-test-token"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
-    monkeypatch.setattr(
-        runtime,
-        "_gemini_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("stale table payload must refresh tool")),
-    )
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
     monkeypatch.setattr(
         runtime,
         "_toast_table_activity_payload",
-        lambda location, business_date=None: {
-            "generated_at": "2026-06-06T01:05:00Z",
-            "location": location or "all",
-            "business_date": business_date,
-            "location_label": "all locations",
-            "latest": {
-                "table_name": "104",
-                "opened_at_local": "2026-06-05 8:05 PM CT",
-                "server_name": "Melissa D Almaguer Aguilera",
-                "employee_lookup_available": True,
-                "table_config_available": True,
-            },
-        },
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("runtime must not refetch table payload")),
     )
 
     port = _free_port()
@@ -854,17 +818,17 @@ def test_runtime_refreshes_stale_table_payload_without_waiter(tmp_path, monkeypa
                         },
                     }
                 },
+                "routed_tool_id": "toast.table_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
         )
         data = json.loads(res.read().decode("utf-8"))
 
-        assert data["queued"] is False
-        assert data["tool_id"] == "toast.table_activity"
-        assert "table 104" in data["answer"]
-        assert "8:05 PM CT" in data["answer"]
-        assert "waiter/server was Melissa D Almaguer Aguilera" in data["answer"]
+        assert data["queued"] is True
+        assert data["reason"] == "data_question_needs_approved_tool"
+        assert data.get("tool_id") != "toast.table_activity"
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -911,6 +875,8 @@ def test_runtime_anchors_table_waiter_followup_to_previous_answer(tmp_path, monk
                 "principal": principal,
                 "tools": [_available_tool("toast.table_activity")],
                 "tool_data": {},
+                "routed_tool_id": "toast.table_activity",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -932,33 +898,16 @@ def test_runtime_anchors_table_waiter_followup_to_previous_answer(tmp_path, monk
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_runtime_table_activity_last_night_fetches_yesterday_and_names_waiter(monkeypatch):
+def test_runtime_formats_routed_last_night_table_payload_with_waiter(monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     principal = _principal("partner")
     principal["kind"] = "partner"
     tools = [_available_tool("toast.table_activity")]
-    seen = {}
     monkeypatch.setattr(
         runtime,
         "_toast_table_activity_payload",
-        lambda location, business_date=None: seen.update({
-            "location": location,
-            "business_date": business_date,
-        }) or {
-            "generated_at": "2026-06-06T01:05:00Z",
-            "location": location or "all",
-            "business_date": business_date,
-            "location_label": "all locations",
-            "latest": {
-                "table_name": "82",
-                "opened_at_local": "2026-06-05 7:33 PM CT",
-                "opened_by_name": "Yadira Flores",
-                "server_name": "Yadira Flores",
-                "employee_lookup_available": True,
-                "table_config_available": True,
-            },
-        },
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("runtime must not fetch table payload")),
     )
 
     data = runtime._approved_tool_answer(
@@ -966,44 +915,43 @@ def test_runtime_table_activity_last_night_fetches_yesterday_and_names_waiter(mo
         "",
         principal,
         tools,
-        {},
+        {
+            "toast.table_activity": {
+                "generated_at": "2026-06-06T01:05:00Z",
+                "location": "all",
+                "business_date": runtime._toast_table_business_date_from_question("last night"),
+                "location_label": "all locations",
+                "latest": {
+                    "table_name": "82",
+                    "opened_at_local": "2026-06-05 7:33 PM CT",
+                    "opened_by_name": "Yadira Flores",
+                    "server_name": "Yadira Flores",
+                    "employee_lookup_available": True,
+                    "table_config_available": True,
+                },
+            }
+        },
+        routed_tool_id="toast.table_activity",
     )
 
     assert data is not None
     assert data["queued"] is False
     assert data["tool_id"] == "toast.table_activity"
-    assert seen["location"] is None
-    assert seen["business_date"] == runtime._toast_table_business_date_from_question("last night")
-    assert seen["business_date"] != runtime._today_ct().strftime("%Y%m%d")
     assert "table 82" in data["answer"]
     assert "2026-06-05 7:33 PM CT" in data["answer"]
     assert "opened by Yadira Flores" in data["answer"]
 
 
-def test_runtime_refreshes_server_only_payload_for_opened_by_question(monkeypatch):
+def test_runtime_queues_server_only_payload_for_opened_by_question(monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     principal = _principal("partner")
     principal["kind"] = "partner"
     tools = [_available_tool("toast.table_activity")]
-    refreshed = {"called": False}
     monkeypatch.setattr(
         runtime,
         "_toast_table_activity_payload",
-        lambda location, business_date=None: refreshed.update({"called": True}) or {
-            "generated_at": "2026-06-06T01:08:00Z",
-            "location": location or "all",
-            "business_date": business_date,
-            "location_label": "all locations",
-            "latest": {
-                "table_name": "82",
-                "opened_at_local": "2026-06-05 7:33 PM CT",
-                "opened_by_name": "Yadira Flores",
-                "server_name": "Maria Garcia",
-                "employee_lookup_available": True,
-                "table_config_available": True,
-            },
-        },
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("runtime must not refresh table payload")),
     )
 
     data = runtime._approved_tool_answer(
@@ -1024,12 +972,10 @@ def test_runtime_refreshes_server_only_payload_for_opened_by_question(monkeypatc
                 },
             }
         },
+        routed_tool_id="toast.table_activity",
     )
 
-    assert refreshed["called"] is True
-    assert data is not None
-    assert "opened by Yadira Flores" in data["answer"]
-    assert "waiter/server was Maria Garcia" in data["answer"]
+    assert data is None
 
 
 def test_runtime_bare_waiter_question_routes_to_table_tool(monkeypatch):
@@ -1062,6 +1008,7 @@ def test_runtime_bare_waiter_question_routes_to_table_tool(monkeypatch):
                 },
             }
         },
+        routed_tool_id="toast.table_activity",
     )
 
     assert data is not None
@@ -1117,6 +1064,8 @@ def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_p
                         "today_by_store": {"copperfield": 2, "tomball": 1},
                     }
                 },
+                "routed_tool_id": "orders.store_summary",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -1171,6 +1120,8 @@ def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, mo
                         "by_store": {"copperfield": 5},
                     }
                 },
+                "routed_tool_id": "drivers.store_summary",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,
@@ -1239,11 +1190,78 @@ def test_runtime_owner_tool_matcher_covers_live_sweep_phrases():
     }
 
     for question, expected_tool in cases.items():
-        data = runtime._approved_tool_answer(question, "", principal, tools, tool_data)
+        data = runtime._approved_tool_answer(
+            question,
+            "",
+            principal,
+            tools,
+            tool_data,
+            routed_tool_id=expected_tool,
+        )
         assert data is not None, question
         assert data["queued"] is False
         assert data["storage"] == "operational_tool"
         assert data["tool_id"] == expected_tool
+
+
+def test_runtime_formats_registry_routed_tool_without_re_matching():
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [
+        _available_tool("orders.store_summary"),
+        _available_tool("drivers.store_summary"),
+    ]
+    tool_data = {
+        "orders.store_summary": {
+            "today_orders": 99,
+            "upcoming_orders": 99,
+        },
+        "drivers.store_summary": {
+            "total_drivers": 5,
+            "active_drivers": 4,
+            "drivers_on_shift": 3,
+            "drivers_on_active_orders": 2,
+            "average_score": 100.0,
+        },
+    }
+
+    data = runtime._approved_tool_answer(
+        "how many caterings today?",
+        "",
+        principal,
+        tools,
+        tool_data,
+        routed_tool_id="drivers.store_summary",
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "drivers.store_summary"
+    assert "5 drivers" in data["answer"]
+    assert "99" not in data["answer"]
+
+
+def test_runtime_requires_explicit_registry_route_for_tool_data():
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = True
+    tools = [_available_tool("orders.store_summary")]
+    tool_data = {
+        "orders.store_summary": {
+            "today_orders": 4,
+            "upcoming_orders": 12,
+            "needs_driver_orders": 0,
+            "live_tracking_orders": 2,
+        },
+    }
+
+    data = runtime._approved_tool_answer("caterings today?", "", principal, tools, tool_data)
+
+    assert data is None
 
 
 def test_runtime_owner_identity_uses_authenticated_session_context(monkeypatch):
@@ -1282,7 +1300,14 @@ def test_runtime_partner_level_uses_approved_tool_without_owner_flag(monkeypatch
         },
     }
 
-    data = runtime._approved_tool_answer("caterings today?", "", principal, tools, tool_data)
+    data = runtime._approved_tool_answer(
+        "caterings today?",
+        "",
+        principal,
+        tools,
+        tool_data,
+        routed_tool_id="orders.store_summary",
+    )
 
     assert data is not None
     assert data["queued"] is False
@@ -1375,6 +1400,8 @@ def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, mon
                         "today_attendance_statuses": {"clocked-in": 12, "late": 1},
                     }
                 },
+                "routed_tool_id": "labor.store_aggregate",
+                "route_path": "deterministic",
                 "source": "test",
             },
             token,

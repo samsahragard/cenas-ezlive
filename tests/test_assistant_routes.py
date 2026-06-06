@@ -711,6 +711,136 @@ def test_render_context_stays_disabled_without_ck_runtime(monkeypatch):
     assert ar._assistant_available_for_context(ctx) is False
 
 
+def test_ask_no_route_falls_back_to_gemini_general_path(monkeypatch):
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setattr(ar, "_principal_context", lambda: ctx)
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.delenv("AI_ASSISTANT_CK_RUNTIME_URL", raising=False)
+    monkeypatch.delenv("ASSISTANT_RUNTIME_URL", raising=False)
+    monkeypatch.setattr(ar, "_mirror_assistant_turn_to_cena_chat", lambda *args: None)
+    monkeypatch.setattr(ar, "_queue_for_review", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("registry miss should not queue a general question")))
+    monkeypatch.setattr(ar, "_gemini_answer", lambda question, _ctx: ("General answer", "gemini-test"))
+
+    question = "hello there"
+    assert ar._route_approved_tool_id(question, ctx) is None
+
+    res = app.test_client().post("/assistant/ask", json={"question": question})
+    data = res.get_json()
+
+    assert res.status_code == 200
+    assert data == {
+        "ok": True,
+        "answer": "General answer",
+        "queued": False,
+        "model": "gemini-test",
+    }
+
+
+def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
+    class RuntimeHandler:
+        seen = {}
+
+    from http.server import BaseHTTPRequestHandler
+
+    class RuntimeServer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or "0")
+            RuntimeHandler.seen = json.loads(self.rfile.read(length).decode("utf-8"))
+            payload = json.dumps({
+                "ok": True,
+                "answer": "CK-local answer",
+                "queued": False,
+                "storage": "ck",
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt, *args):
+            return
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), RuntimeServer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setattr(ar, "_principal_context", lambda: ctx)
+    monkeypatch.setattr(ar, "_mirror_assistant_turn_to_cena_chat", lambda *args: None)
+    monkeypatch.setattr(
+        ar,
+        "_approved_tool_payload",
+        lambda question, _ctx: ("drivers.store_summary", {"drivers.store_summary": {"total_drivers": 5}}),
+    )
+    monkeypatch.setenv("RENDER", "1")
+    monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
+    monkeypatch.setattr(ar, "_gemini_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")))
+
+    try:
+        res = app.test_client().post(
+            "/assistant/ask",
+            json={
+                "question": "how many drivers today?",
+                "previous_question": "driver coverage yesterday",
+            },
+        )
+        data = res.get_json()
+
+        assert res.status_code == 200
+        assert data["answer"] == "CK-local answer"
+        assert RuntimeHandler.seen["routed_tool_id"] == "drivers.store_summary"
+        assert RuntimeHandler.seen["route_path"] == "deterministic"
+        assert RuntimeHandler.seen["tool_data"] == {"drivers.store_summary": {"total_drivers": 5}}
+        assert RuntimeHandler.seen["previous_question"] == "driver coverage yesterday"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        for name in [
+            "RENDER",
+            "AI_ASSISTANT_ENABLED",
+            "AI_ASSISTANT_CK_RUNTIME_URL",
+            "AI_ASSISTANT_CK_RUNTIME_TOKEN",
+        ]:
+            os.environ.pop(name, None)
+
+
 def test_render_ask_proxies_to_ck_runtime(monkeypatch):
     class RuntimeHandler:
         seen = {}

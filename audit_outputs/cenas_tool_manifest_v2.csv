@@ -3,11 +3,12 @@ agent_restart,agent,excluded,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: S
 assistant.approved_answer_lookup,assistant,excluded,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal primitive.
 assistant.audit_lookup_self,assistant,excluded,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal primitive.
 assistant.feedback_capture,assistant,excluded,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal primitive.
+assistant.general_help,assistant,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered web built-in; no private data access.
 assistant.handoff_to_sam,assistant,excluded,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal primitive.
 assistant.permission_explain,assistant,excluded,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal primitive.
 assistant.review_queue_submit,assistant,excluded,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal primitive.
-assistant.session_context,assistant,app_tool,read,implemented_runtime_branch,implemented_runtime_branch,,,Implemented runtime branch in current assistant surface.
-assistant.tool_discovery,assistant,app_tool,read,implemented_runtime_branch,implemented_runtime_branch,,,Implemented runtime branch in current assistant surface.
+assistant.session_context,assistant,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Runtime support answer for authenticated-session identity/permission context.
+assistant.tool_discovery,assistant,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Runtime support answer for catalog/tool availability questions.
 attendance.callout_summary,attendance,app_tool,read,catalog_only_assumed,P1-W1,,,
 attendance.edit,attendance,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
 attendance.late_summary,attendance,app_tool,read,catalog_only_assumed,P1-W1,,,
@@ -15,7 +16,7 @@ attendance.manager_board_summary,attendance,app_tool,read,catalog_only_assumed,P
 attendance.missed_punch_summary,attendance,app_tool,read,catalog_only_assumed,P1-W1,,,
 attendance.no_show_summary,attendance,app_tool,read,catalog_only_assumed,P1-W1,,,
 attendance.view,attendance,app_tool,read,catalog_only_assumed,P1-W1,,,
-availability.manage,availability,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
+availability.manage,availability,app_tool,read,catalog_only_assumed,P2-LOW,LOW,,
 availability.update_employee,availability,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
 catering.assign_driver,catering,app_tool,write,catalog_only_assumed,P2-LOW,LOW,orders.assign_driver,
 catering.driver_perf,catering,app_tool,read,catalog_only_assumed,P1-W1,,,
@@ -89,6 +90,7 @@ drivers.reset_passcode,drivers,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,
 drivers.roster_summary,drivers,app_tool,read,catalog_only_assumed,P1-W1,,,
 drivers.route_history_safe,drivers,app_tool,read,catalog_only_assumed,P1-W1,,,
 drivers.score_summary,drivers,app_tool,read,catalog_only_assumed,P1-W1,,,
+drivers.store_summary,drivers,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered built-in with approved runtime formatter.
 drivers.suspend_driver,drivers,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
 drivers.tier_summary,drivers,app_tool,read,catalog_only_assumed,P1-W1,,,
 drivers.unassigned_orders,drivers,app_tool,read,catalog_only_assumed,P1-W1,,,
@@ -123,6 +125,7 @@ employee.my_open_shifts,employee,app_tool,read,catalog_only_assumed,P1-W1,,,Staf
 employee.my_pay_summary,employee,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,Staff self-service; self-scoped only until principal_id->employee_id join is enforced.
 employee.my_performance_summary,employee,app_tool,read,catalog_only_assumed,P1-W1,,,Staff self-service; self-scoped only until principal_id->employee_id join is enforced.
 employee.my_positions.read,employee,app_tool,read,catalog_only_assumed,P1-W1,,,Staff self-service; self-scoped only until principal_id->employee_id join is enforced.
+employee.my_profile,employee,app_tool,read,registered_partial_review_gated,P0-PARTIAL,,,Registered built-in metadata only; handler not wired in Phase 0.2.
 employee.my_profile.read,employee,app_tool,read,catalog_only_assumed,P1-W1,,,Staff self-service; self-scoped only until principal_id->employee_id join is enforced.
 employee.my_rank_explain,employee,app_tool,read,catalog_only_assumed,P1-W1,,,Staff self-service; self-scoped only until principal_id->employee_id join is enforced.
 employee.my_rank_summary,employee,app_tool,read,catalog_only_assumed,P1-W1,,,Staff self-service; self-scoped only until principal_id->employee_id join is enforced.
@@ -136,256 +139,261 @@ employee.my_training.read,employee,app_tool,read,catalog_only_assumed,P1-W1,,,St
 employee.reset_passcode,employee,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
 employees.link_status_summary,employees,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
 employees.needs_review_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.passcode_status_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.performance_safe_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.profile_completion_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.roster_gap_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_attendance_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_availability_read,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_directory,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_positions,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_profile_lookup,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_schedule_read,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_time_off_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.store_training_summary,employees,app_tool,read,catalog_only_assumed,P1-W1,,,
-employees.toast_link_summary,employees,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-equip.add,equip,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-equip.edit,equip,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-equip.view,equip,app_tool,read,catalog_only_assumed,P1-W1,,,
-equip.view_warranty,equip,app_tool,read,catalog_only_assumed,P1-W1,,,
-ezcater_get_order_full_details,(root),app_tool,read,catalog_only_assumed,P1-W1,,,
-fetch_url,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-file_delete,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,HIGH,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-fin.approve_expense,fin,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,finance.approve_expense,"Duplicate: canonical=finance.approve_expense. Register alias->canonical, single handler."
-fin.config_accounts,fin,app_tool,read,catalog_only_assumed,P2-HIGH,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-fin.config_sales_cat,fin,app_tool,read,catalog_only_assumed,P2-HIGH,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-fin.config_tips,fin,app_tool,read,catalog_only_assumed,P2-HIGH,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-fin.edit_ap,fin,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-fin.edit_payroll,fin,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-fin.view_accounts,fin,app_tool,read,catalog_only_assumed,P1-W2,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-fin.view_ap,fin,app_tool,read,catalog_only_assumed,P1-W3,,finance.ap_summary,"Duplicate: canonical=finance.ap_summary. Register alias->canonical, single handler."
-fin.view_deposits,fin,app_tool,read,catalog_only_assumed,P1-W3,,finance.deposit_summary,"Duplicate: canonical=finance.deposit_summary. Register alias->canonical, single handler."
-fin.view_instant_deposit,fin,app_tool,read,catalog_only_assumed,P1-W3,,finance.instant_deposit_status,"Duplicate: canonical=finance.instant_deposit_status. Register alias->canonical, single handler."
-fin.view_payroll,fin,app_tool,read,catalog_only_assumed,P1-W2,,finance.payroll_setup_summary,"Duplicate: canonical=finance.payroll_setup_summary. Register alias->canonical, single handler."
-fin.view_pnl,fin,app_tool,read,catalog_only_assumed,P1-W3,,finance.pnl_summary,"Duplicate: canonical=finance.pnl_summary. Register alias->canonical, single handler."
-fin.view_tips,fin,app_tool,read,catalog_only_assumed,P1-W2,,finance.tip_pool_summary,"Duplicate: canonical=finance.tip_pool_summary. Register alias->canonical, single handler."
-finance.ap_summary,finance,app_tool,read,catalog_only_assumed,P1-W3,,,
-finance.approve_expense,finance,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-finance.deposit_summary,finance,app_tool,read,catalog_only_assumed,P1-W3,,,
-finance.instant_deposit_status,finance,app_tool,read,catalog_only_assumed,P1-W3,,,
-finance.mark_invoice_paid,finance,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-finance.payroll_setup_summary,finance,app_tool,read,catalog_only_assumed,P1-W2,,,
-finance.pnl_summary,finance,app_tool,read,catalog_only_assumed,P1-W3,,,
-finance.tip_pool_summary,finance,app_tool,read,catalog_only_assumed,P1-W2,,,
-finance.vendor_payables_summary,finance,app_tool,read,catalog_only_assumed,P1-W2,,,
-get_current_todo,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-incident.create,incident,app_tool,write,catalog_only_assumed,P2-LOW,LOW,manager.create_incident,"Duplicate: canonical=manager.create_incident. Register alias->canonical, single handler."
-incident.edit,incident,app_tool,write,catalog_only_assumed,P2-LOW,LOW,manager.edit_incident,"Duplicate: canonical=manager.edit_incident. Register alias->canonical, single handler."
-incident.view,incident,app_tool,read,catalog_only_assumed,P1-W1,,manager.incident_summary,"Duplicate: canonical=manager.incident_summary. Register alias->canonical, single handler."
-journal_read,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-journal_write,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,LOW,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-kitchen.catering_prep_breakdown,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.fresh_edit,kitchen,app_tool,write,catalog_only_assumed,P2-LOW,LOW,kitchen.update_fresh_food,"Duplicate: canonical=kitchen.update_fresh_food. Register alias->canonical, single handler."
-kitchen.fresh_food_recent,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.fresh_food_today,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.fresh_view,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,Consolidate candidate with kitchen.fresh_food_today/recent (generic vs specific).
-kitchen.inventory,kitchen,app_tool,read,catalog_only_assumed,P1-W2,,,
-kitchen.inventory_snapshot,kitchen,app_tool,read,catalog_only_assumed,P1-W2,,,
-kitchen.order_prep_needs,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.prep_edit,kitchen,app_tool,write,catalog_only_assumed,P2-LOW,LOW,kitchen.update_prep_item,"Duplicate: canonical=kitchen.update_prep_item. Register alias->canonical, single handler."
-kitchen.prep_entries_by_day,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.prep_item_lookup,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.prep_list_today,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.prep_view,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,Consolidate candidate with kitchen.prep_list_today (generic vs specific).
-kitchen.recipe_lookup,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.recipe_search,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,
-kitchen.recipes_view,kitchen,app_tool,read,catalog_only_assumed,P1-W1,,,Consolidate candidate with kitchen.recipe_lookup/search (generic vs specific).
-kitchen.update_fresh_food,kitchen,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-kitchen.update_prep_item,kitchen,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-labor.store_aggregate,labor,app_tool,read,implemented_runtime_branch,implemented_runtime_branch,,,Implemented runtime branch in current assistant surface.
-legal.company_structure_summary,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-legal.compliance_cal,legal,app_tool,read,catalog_only_assumed,P1-W1,,legal.compliance_calendar,"Duplicate: canonical=legal.compliance_calendar. Register alias->canonical, single handler."
-legal.compliance_calendar,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-legal.document_search,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-legal.edit_insurance,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-legal.edit_licenses,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-legal.edit_matter,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-legal.edit_meta,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-legal.insurance_summary,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-legal.license_summary,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-legal.manage_notices,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-legal.matter_lookup,legal,app_tool,read,catalog_only_assumed,P1-W1,,,Consolidate candidate with legal.matter_summary (generic vs specific).
-legal.matter_summary,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-legal.upload_docs,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,legal.upload_document,"Duplicate: canonical=legal.upload_document. Register alias->canonical, single handler."
-legal.upload_document,legal,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-legal.view_docs,legal,app_tool,read,catalog_only_assumed,P1-W1,,legal.document_search,Consolidate candidate with legal.document_search (generic vs specific).
-legal.view_insurance,legal,app_tool,read,catalog_only_assumed,P1-W1,,legal.insurance_summary,Consolidate candidate with legal.insurance_summary (generic vs specific).
-legal.view_licenses,legal,app_tool,read,catalog_only_assumed,P1-W1,,legal.license_summary,Consolidate candidate with legal.license_summary (generic vs specific).
-legal.view_notices,legal,app_tool,read,catalog_only_assumed,P1-W1,,,
-list_dir,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-maint.approve_spend,maint,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-maint.close,maint,app_tool,write,catalog_only_assumed,P2-LOW,LOW,maintenance.close_request,"Duplicate: canonical=maintenance.close_request. Register alias->canonical, single handler."
-maint.edit,maint,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-maint.submit,maint,app_tool,write,catalog_only_assumed,P2-LOW,LOW,maintenance.create_request,"Duplicate: canonical=maintenance.create_request. Register alias->canonical, single handler."
-maint.view,maint,app_tool,read,catalog_only_assumed,P1-W1,,manager.maintenance_summary,"Duplicate: canonical=manager.maintenance_summary. Register alias->canonical, single handler."
-maintenance.close_request,maintenance,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-maintenance.create_request,maintenance,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.close_incident,manager,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.close_of_day_audit_summary,manager,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.create_daily_log,manager,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.create_incident,manager,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.daily_goals_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.daily_log_search,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.daily_log_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.edit_incident,manager,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.employee_counseling_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.incident_lookup,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.incident_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.maintenance_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.pre_shift_checklist_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.recipe_page_search,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.send_team_notification,manager,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-manager.shift_handoff_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.staff_feedback_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager.supply_request_summary,manager,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-manager.training_record_summary,manager,app_tool,read,catalog_only_assumed,P1-W1,,,
-manager_log.write,manager_log,app_tool,write,catalog_only_assumed,P2-LOW,LOW,manager.create_daily_log,"Duplicate: canonical=manager.create_daily_log. Register alias->canonical, single handler."
-orders.assign_driver,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.catering_by_status,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_by_store,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_count,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_driver_assignment_summary,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_fees_summary,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_item_mix,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_late_risk,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_live_tracking,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_needs_driver,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_next_30_days,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_order_items_safe,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_order_lookup,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_payout_safe_summary,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_pdf_status,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_returning_customers_aggregate,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_today,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_tomorrow,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_tracking_missing,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_uuid_status,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.catering_week,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.create_in_house_quote,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.in_house_quote_lookup,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.in_house_quotes_summary,orders,app_tool,read,catalog_only_assumed,P1-W1,,,
-orders.mark_delivered,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.mark_picked_up,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.reassign_store,orders,app_tool,read,catalog_only_assumed,P2-LOW,,,
-orders.refresh_ezcater_tracking,orders,app_tool,read,catalog_only_assumed,P2-LOW,,,
-orders.run_ezcater_probe,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.run_pwck_assignment,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.send_quote_email,orders,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-orders.unassign_driver,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-orders.update_status,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,Sam signoff correction: mutates order state; write P2-LOW despite status token.
-orders.update_tracking_url,orders,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-permissions.access_requests,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.approve_access_request,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.assign_role,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.create_role_template,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.denial_summary,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.deny_access_request,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.edit_role_template,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.my_permissions,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.override_summary,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.override_user_permission,permissions,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-permissions.permission_catalog,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.role_catalog,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.role_change_risk_check,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.user_audit_log,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-permissions.user_lookup,permissions,app_tool,read,catalog_only_assumed,P1-W1,,,
-perms.assign,perms,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,permissions.assign_role,"Duplicate: canonical=permissions.assign_role. Register alias->canonical, single handler."
-perms.assign_role,perms,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,permissions.assign_role,"Duplicate: canonical=permissions.assign_role. Register alias->canonical, single handler."
-perms.create_role,perms,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,permissions.create_role_template,"Duplicate: canonical=permissions.create_role_template. Register alias->canonical, single handler."
-perms.delete_role,perms,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-perms.edit_role,perms,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,permissions.edit_role_template,"Duplicate: canonical=permissions.edit_role_template. Register alias->canonical, single handler."
-perms.override,perms,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,permissions.override_user_permission,"Duplicate: canonical=permissions.override_user_permission. Register alias->canonical, single handler."
-perms.view,perms,app_tool,read,catalog_only_assumed,P1-W1,,permissions.permission_catalog,"Duplicate: canonical=permissions.permission_catalog. Register alias->canonical, single handler."
-post_to_dev_chat,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,LOW,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-post_to_sam_chat,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,LOW,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-produce.bulk_insert_orders,produce,app_tool,read,catalog_only_assumed,P2-PIPELINE,,,"Ingestion pipeline trigger. Partner-only, confirm-gated."
-produce.ingest_vendor_emails,produce,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,"Ingestion pipeline trigger. Partner-only, confirm-gated."
-produce.scan_vendor_inbox,produce,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,"Ingestion pipeline trigger. Partner-only, confirm-gated."
-query_database,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-read_file,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-read_hub_inbox,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-remove_participant,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,LOW,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-render_deploy,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-render_env_get,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-render_env_set,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,LOW,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-reports.benchmark_summary,reports,app_tool,read,catalog_only_assumed,P1-W2,,,
-reports.benchmarks,reports,app_tool,read,catalog_only_assumed,P1-W2,,reports.benchmark_summary,"Duplicate: canonical=reports.benchmark_summary. Register alias->canonical, single handler."
-reports.catering,reports,app_tool,read,catalog_only_assumed,P1-W1,,reports.catering_summary,"Duplicate: canonical=reports.catering_summary. Register alias->canonical, single handler."
-reports.catering_item_mix,reports,app_tool,read,catalog_only_assumed,P1-W1,,orders.catering_item_mix,"Duplicate: canonical=orders.catering_item_mix. Register alias->canonical, single handler."
-reports.catering_summary,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.cross_store,reports,app_tool,read,catalog_only_assumed,P1-W1,,reports.cross_store_summary,"Duplicate: canonical=reports.cross_store_summary. Register alias->canonical, single handler."
-reports.cross_store_summary,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.driver_performance,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.employee_performance_safe,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.export,reports,app_tool,read,catalog_only_assumed,P1-W2,,,"File generation. Read data, side-effect = artifact. Needs size/PII guard."
-reports.export_prepare,reports,app_tool,read,catalog_only_assumed,P1-W2,,,"File generation. Read data, side-effect = artifact. Needs size/PII guard."
-reports.forecast_summary,reports,app_tool,read,catalog_only_assumed,P1-W2,,,
-reports.forecasts,reports,app_tool,read,catalog_only_assumed,P1-W2,,reports.forecast_summary,"Duplicate: canonical=reports.forecast_summary. Register alias->canonical, single handler."
-reports.giftcard,reports,app_tool,read,catalog_only_assumed,P1-W2,,,
-reports.labor,reports,app_tool,read,catalog_only_assumed,P1-W1,,reports.labor_summary,"Duplicate: canonical=reports.labor_summary. Register alias->canonical, single handler."
-reports.labor_by_store,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.labor_summary,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.marketing,reports,app_tool,read,catalog_only_assumed,P1-W2,,reports.marketing_summary,"Duplicate: canonical=reports.marketing_summary. Register alias->canonical, single handler."
-reports.marketing_summary,reports,app_tool,read,catalog_only_assumed,P1-W2,,,
-reports.menu,reports,app_tool,read,catalog_only_assumed,P1-W2,,,
-reports.sales,reports,app_tool,read,catalog_only_assumed,P1-W1,,reports.sales_summary,"Duplicate: canonical=reports.sales_summary. Register alias->canonical, single handler."
-reports.sales_by_channel,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.sales_by_store,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.sales_summary,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-reports.team_roster_summary,reports,app_tool,read,catalog_only_assumed,P1-W1,,,
-resolve_catering_order,(root),runtime_internal,n/a,excluded_non_routable,EXCLUDE,,,"Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
-resolve_employee,(root),runtime_internal,n/a,excluded_non_routable,EXCLUDE,,,"Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
-resolve_manager_log,(root),runtime_internal,n/a,excluded_non_routable,EXCLUDE,,,"Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
-resolve_menu_item,(root),runtime_internal,n/a,excluded_non_routable,EXCLUDE,,,"Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
-resolve_vendor,(root),runtime_internal,n/a,excluded_non_routable,EXCLUDE,,,"Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
-run_git,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,LOW,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-schedule.alarm_pending_summary,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.approve_shift_offer,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.approve_shift_swap,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.approve_time_off,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.availability_conflicts,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.configure,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.create_shift,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.delete_shift,schedule,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-schedule.deny_time_off,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.edit_shift,schedule,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-schedule.open_shifts,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.publish_week,schedule,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-schedule.send_shift_alarm,schedule,app_tool,write,catalog_only_assumed,P2-HIGH,HIGH,,
-schedule.shift_acceptance_summary,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.shift_offer_summary,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.shift_swap_summary,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.store_today,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.store_week,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.time_off_pending,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.unavailability_blocks,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,
-schedule.view,schedule,app_tool,read,catalog_only_assumed,P1-W1,,,Consolidate candidate with schedule.store_today/store_week (generic vs specific).
-screenshot_url,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-self_critique,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-shell_execute,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-sql_query,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-team.moderate_chat,team,app_tool,read,catalog_only_assumed,P2-LOW,,,
-team.notify,team,app_tool,read,catalog_only_assumed,P2-HIGH,,manager.send_team_notification,"Duplicate: canonical=manager.send_team_notification. Register alias->canonical, single handler."
-telegram_send,(root),infra_agent,n/a,excluded_non_routable,EXCLUDE,HIGH,,Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
-time.edit_others,time,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-time.view_all,time,app_tool,read,catalog_only_assumed,P1-W1,,,
-time.view_own,time,app_tool,read,catalog_only_assumed,P1-W1,,,
-timeoff.approve,timeoff,app_tool,write,catalog_only_assumed,P2-LOW,LOW,schedule.approve_time_off,"Duplicate: canonical=schedule.approve_time_off. Register alias->canonical, single handler."
-timeoff.request,timeoff,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
-toast_live_tables,(root),app_tool,read,catalog_only_assumed,P1-W1,,toast.table_activity,Accepted alias: catalog-only until alias table ships in Phase 0.5.
-training.configure,training,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-training.edit,training,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
-training.mark_complete,training,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
+employees.passcode_status_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.performance_safe_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.profile_completion_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.roster_gap_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_attendance_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_availability_read,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_directory,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_positions,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_profile_lookup,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_schedule_read,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_time_off_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.store_training_summary,employees,app_tool,read,catalog_only_confirmed,P1-W1,,,
+employees.toast_link_summary,employees,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+equip.add,equip,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+equip.edit,equip,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+equip.view,equip,app_tool,read,catalog_only_confirmed,P1-W1,,,
+equip.view_warranty,equip,app_tool,read,catalog_only_confirmed,P1-W1,,,
+ezcater_get_order_full_details,(root),app_tool,read,catalog_only_confirmed,P1-W1,,,
+fetch_url,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+file_delete,(root),infra_agent,write,excluded_non_routable,EXCLUDE,HIGH,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+fin.approve_expense,fin,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,finance.approve_expense,"Duplicate: canonical=finance.approve_expense. Register alias->canonical, single handler."
+fin.config_accounts,fin,app_tool,read,catalog_only_confirmed,P2-HIGH,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+fin.config_sales_cat,fin,app_tool,read,catalog_only_confirmed,P2-HIGH,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+fin.config_tips,fin,app_tool,read,catalog_only_confirmed,P2-HIGH,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+fin.edit_ap,fin,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+fin.edit_payroll,fin,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+fin.view_accounts,fin,app_tool,read,catalog_only_confirmed,P1-W2,,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+fin.view_ap,fin,app_tool,read,catalog_only_confirmed,P1-W3,,finance.ap_summary,"Duplicate: canonical=finance.ap_summary. Register alias->canonical, single handler."
+fin.view_deposits,fin,app_tool,read,catalog_only_confirmed,P1-W3,,finance.deposit_summary,"Duplicate: canonical=finance.deposit_summary. Register alias->canonical, single handler."
+fin.view_instant_deposit,fin,app_tool,read,catalog_only_confirmed,P1-W3,,finance.instant_deposit_status,"Duplicate: canonical=finance.instant_deposit_status. Register alias->canonical, single handler."
+fin.view_payroll,fin,app_tool,read,catalog_only_confirmed,P1-W2,,finance.payroll_setup_summary,"Duplicate: canonical=finance.payroll_setup_summary. Register alias->canonical, single handler."
+fin.view_pnl,fin,app_tool,read,catalog_only_confirmed,P1-W3,,finance.pnl_summary,"Duplicate: canonical=finance.pnl_summary. Register alias->canonical, single handler."
+fin.view_tips,fin,app_tool,read,catalog_only_confirmed,P1-W2,,finance.tip_pool_summary,"Duplicate: canonical=finance.tip_pool_summary. Register alias->canonical, single handler."
+finance.ap_summary,finance,app_tool,read,catalog_only_confirmed,P1-W3,,,
+finance.approve_expense,finance,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+finance.deposit_summary,finance,app_tool,read,catalog_only_confirmed,P1-W3,,,
+finance.instant_deposit_status,finance,app_tool,read,catalog_only_confirmed,P1-W3,,,
+finance.mark_invoice_paid,finance,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+finance.payroll_setup_summary,finance,app_tool,read,catalog_only_confirmed,P1-W2,,,
+finance.pnl_summary,finance,app_tool,read,catalog_only_confirmed,P1-W3,,,
+finance.tip_pool_summary,finance,app_tool,read,catalog_only_confirmed,P1-W2,,,
+finance.vendor_payables_summary,finance,app_tool,read,catalog_only_confirmed,P1-W2,,,
+get_current_todo,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+incident.create,incident,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,manager.create_incident,"Duplicate: canonical=manager.create_incident. Register alias->canonical, single handler."
+incident.edit,incident,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,manager.edit_incident,"Duplicate: canonical=manager.edit_incident. Register alias->canonical, single handler."
+incident.view,incident,app_tool,read,catalog_only_confirmed,P1-W1,,manager.incident_summary,"Duplicate: canonical=manager.incident_summary. Register alias->canonical, single handler."
+journal_read,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+journal_write,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+kitchen.catering_prep_breakdown,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.fresh_edit,kitchen,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,kitchen.update_fresh_food,"Duplicate: canonical=kitchen.update_fresh_food. Register alias->canonical, single handler."
+kitchen.fresh_food_recent,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.fresh_food_today,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.fresh_view,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,Consolidate candidate with kitchen.fresh_food_today/recent (generic vs specific).
+kitchen.inventory,kitchen,app_tool,read,catalog_only_confirmed,P1-W2,,,
+kitchen.inventory_snapshot,kitchen,app_tool,read,catalog_only_confirmed,P1-W2,,,
+kitchen.order_prep_needs,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.prep_edit,kitchen,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,kitchen.update_prep_item,"Duplicate: canonical=kitchen.update_prep_item. Register alias->canonical, single handler."
+kitchen.prep_entries_by_day,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.prep_item_lookup,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.prep_list_today,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.prep_view,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,Consolidate candidate with kitchen.prep_list_today (generic vs specific).
+kitchen.recipe_lookup,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.recipe_search,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,
+kitchen.recipes_view,kitchen,app_tool,read,catalog_only_confirmed,P1-W1,,,Consolidate candidate with kitchen.recipe_lookup/search (generic vs specific).
+kitchen.update_fresh_food,kitchen,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+kitchen.update_prep_item,kitchen,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+labor.store_aggregate,labor,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Implemented runtime branch in current assistant surface. Registered built-in with approved runtime formatter.
+legal.company_structure_summary,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+legal.compliance_cal,legal,app_tool,read,catalog_only_confirmed,P1-W1,,legal.compliance_calendar,"Duplicate: canonical=legal.compliance_calendar. Register alias->canonical, single handler."
+legal.compliance_calendar,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+legal.document_search,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+legal.edit_insurance,legal,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+legal.edit_licenses,legal,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+legal.edit_matter,legal,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+legal.edit_meta,legal,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+legal.insurance_summary,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+legal.license_summary,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+legal.manage_notices,legal,app_tool,read,catalog_only_confirmed,P2-HIGH,HIGH,,
+legal.matter_lookup,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,Consolidate candidate with legal.matter_summary (generic vs specific).
+legal.matter_summary,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+legal.upload_docs,legal,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,legal.upload_document,"Duplicate: canonical=legal.upload_document. Register alias->canonical, single handler."
+legal.upload_document,legal,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+legal.view_docs,legal,app_tool,read,catalog_only_confirmed,P1-W1,,legal.document_search,Consolidate candidate with legal.document_search (generic vs specific).
+legal.view_insurance,legal,app_tool,read,catalog_only_confirmed,P1-W1,,legal.insurance_summary,Consolidate candidate with legal.insurance_summary (generic vs specific).
+legal.view_licenses,legal,app_tool,read,catalog_only_confirmed,P1-W1,,legal.license_summary,Consolidate candidate with legal.license_summary (generic vs specific).
+legal.view_notices,legal,app_tool,read,catalog_only_confirmed,P1-W1,,,
+list_dir,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+maint.approve_spend,maint,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+maint.close,maint,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,maintenance.close_request,"Duplicate: canonical=maintenance.close_request. Register alias->canonical, single handler."
+maint.edit,maint,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+maint.submit,maint,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,maintenance.create_request,"Duplicate: canonical=maintenance.create_request. Register alias->canonical, single handler."
+maint.view,maint,app_tool,read,catalog_only_confirmed,P1-W1,,manager.maintenance_summary,"Duplicate: canonical=manager.maintenance_summary. Register alias->canonical, single handler."
+maintenance.close_request,maintenance,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+maintenance.create_request,maintenance,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+manager.close_incident,manager,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+manager.close_of_day_audit_summary,manager,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+manager.create_daily_log,manager,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+manager.create_incident,manager,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+manager.daily_goals_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.daily_log_search,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.daily_log_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.edit_incident,manager,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+manager.employee_counseling_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.incident_lookup,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.incident_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.maintenance_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.pre_shift_checklist_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.recipe_page_search,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.send_team_notification,manager,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+manager.shift_handoff_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.staff_feedback_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager.supply_request_summary,manager,app_tool,read,catalog_only_confirmed,P2-LOW,LOW,,
+manager.training_record_summary,manager,app_tool,read,catalog_only_confirmed,P1-W1,,,
+manager_log.write,manager_log,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,manager.create_daily_log,"Duplicate: canonical=manager.create_daily_log. Register alias->canonical, single handler."
+orders.assign_driver,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.catering_by_status,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_by_store,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_count,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_driver_assignment_summary,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_fees_summary,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_item_mix,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_late_risk,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_live_tracking,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_needs_driver,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_next_30_days,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_order_items_safe,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_order_lookup,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_payout_safe_summary,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_pdf_status,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_returning_customers_aggregate,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_today,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_tomorrow,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_tracking_missing,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_uuid_status,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.catering_week,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.create_in_house_quote,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.in_house_quote_lookup,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.in_house_quotes_summary,orders,app_tool,read,catalog_only_confirmed,P1-W1,,,
+orders.mark_delivered,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.mark_picked_up,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.reassign_store,orders,app_tool,read,catalog_only_confirmed,P2-LOW,,,
+orders.refresh_ezcater_tracking,orders,app_tool,read,catalog_only_confirmed,P2-LOW,,,
+orders.run_ezcater_probe,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.run_pwck_assignment,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.send_quote_email,orders,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+orders.store_summary,orders,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered built-in with approved runtime formatter.
+orders.unassign_driver,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+orders.update_status,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,Sam signoff correction: mutates order state; write P2-LOW despite status token.
+orders.update_tracking_url,orders,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+permissions.access_requests,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.approve_access_request,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.assign_role,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.create_role_template,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.denial_summary,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.deny_access_request,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.edit_role_template,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.my_permissions,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.override_summary,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.override_user_permission,permissions,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+permissions.permission_catalog,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.role_catalog,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.role_change_risk_check,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.user_audit_log,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+permissions.user_lookup,permissions,app_tool,read,catalog_only_confirmed,P1-W1,,,
+perms.assign,perms,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,permissions.assign_role,"Duplicate: canonical=permissions.assign_role. Register alias->canonical, single handler."
+perms.assign_role,perms,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,permissions.assign_role,"Duplicate: canonical=permissions.assign_role. Register alias->canonical, single handler."
+perms.create_role,perms,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,permissions.create_role_template,"Duplicate: canonical=permissions.create_role_template. Register alias->canonical, single handler."
+perms.delete_role,perms,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+perms.edit_role,perms,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,permissions.edit_role_template,"Duplicate: canonical=permissions.edit_role_template. Register alias->canonical, single handler."
+perms.override,perms,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,permissions.override_user_permission,"Duplicate: canonical=permissions.override_user_permission. Register alias->canonical, single handler."
+perms.view,perms,app_tool,read,catalog_only_confirmed,P1-W1,,permissions.permission_catalog,"Duplicate: canonical=permissions.permission_catalog. Register alias->canonical, single handler."
+post_to_dev_chat,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+post_to_sam_chat,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+produce.bulk_insert_orders,produce,app_tool,read,catalog_only_confirmed,P2-PIPELINE,,,"Ingestion pipeline trigger. Partner-only, confirm-gated."
+produce.ingest_vendor_emails,produce,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,"Ingestion pipeline trigger. Partner-only, confirm-gated."
+produce.scan_vendor_inbox,produce,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,"Ingestion pipeline trigger. Partner-only, confirm-gated."
+query_database,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+read_file,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+read_hub_inbox,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+remove_participant,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+render_deploy,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+render_env_get,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+render_env_set,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+reports.benchmark_summary,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,
+reports.benchmarks,reports,app_tool,read,catalog_only_confirmed,P1-W2,,reports.benchmark_summary,"Duplicate: canonical=reports.benchmark_summary. Register alias->canonical, single handler."
+reports.catering,reports,app_tool,read,catalog_only_confirmed,P1-W1,,reports.catering_summary,"Duplicate: canonical=reports.catering_summary. Register alias->canonical, single handler."
+reports.catering_item_mix,reports,app_tool,read,catalog_only_confirmed,P1-W1,,orders.catering_item_mix,"Duplicate: canonical=orders.catering_item_mix. Register alias->canonical, single handler."
+reports.catering_summary,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.cross_store,reports,app_tool,read,catalog_only_confirmed,P1-W1,,reports.cross_store_summary,"Duplicate: canonical=reports.cross_store_summary. Register alias->canonical, single handler."
+reports.cross_store_summary,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.driver_performance,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.employee_performance_safe,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.export,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,"File generation. Read data, side-effect = artifact. Needs size/PII guard."
+reports.export_prepare,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,"File generation. Read data, side-effect = artifact. Needs size/PII guard."
+reports.forecast_summary,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,
+reports.forecasts,reports,app_tool,read,catalog_only_confirmed,P1-W2,,reports.forecast_summary,"Duplicate: canonical=reports.forecast_summary. Register alias->canonical, single handler."
+reports.giftcard,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,
+reports.labor,reports,app_tool,read,catalog_only_confirmed,P1-W1,,reports.labor_summary,"Duplicate: canonical=reports.labor_summary. Register alias->canonical, single handler."
+reports.labor_by_store,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.labor_summary,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.marketing,reports,app_tool,read,catalog_only_confirmed,P1-W2,,reports.marketing_summary,"Duplicate: canonical=reports.marketing_summary. Register alias->canonical, single handler."
+reports.marketing_summary,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,
+reports.menu,reports,app_tool,read,catalog_only_confirmed,P1-W2,,,
+reports.sales,reports,app_tool,read,catalog_only_confirmed,P1-W1,,reports.sales_summary,"Duplicate: canonical=reports.sales_summary. Register alias->canonical, single handler."
+reports.sales_by_channel,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.sales_by_store,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.sales_summary,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+reports.team_roster_summary,reports,app_tool,read,catalog_only_confirmed,P1-W1,,,
+resolve_catering_order,(root),runtime_internal,read,excluded_non_routable,EXCLUDE,,,"EXCLUDE: infrastructure/internal/dev-only primitive. Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
+resolve_employee,(root),runtime_internal,read,excluded_non_routable,EXCLUDE,,,"EXCLUDE: infrastructure/internal/dev-only primitive. Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
+resolve_manager_log,(root),runtime_internal,read,excluded_non_routable,EXCLUDE,,,"EXCLUDE: infrastructure/internal/dev-only primitive. Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
+resolve_menu_item,(root),runtime_internal,read,excluded_non_routable,EXCLUDE,,,"EXCLUDE: infrastructure/internal/dev-only primitive. Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
+resolve_vendor,(root),runtime_internal,read,excluded_non_routable,EXCLUDE,,,"EXCLUDE: infrastructure/internal/dev-only primitive. Entity resolver used by runtime, not a user-facing tool. Exclude from routable catalog. EXCLUDE: runtime-internal resolver."
+run_git,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+schedule.alarm_pending_summary,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.approve_shift_offer,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.approve_shift_swap,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.approve_time_off,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.availability_conflicts,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.configure,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.create_shift,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.delete_shift,schedule,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+schedule.deny_time_off,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.edit_shift,schedule,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+schedule.open_shifts,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.publish_week,schedule,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+schedule.send_shift_alarm,schedule,app_tool,write,catalog_only_confirmed,P2-HIGH,HIGH,,
+schedule.shift_acceptance_summary,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.shift_offer_summary,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.shift_swap_summary,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.store_today,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.store_week,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.time_off_pending,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.unavailability_blocks,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,
+schedule.view,schedule,app_tool,read,catalog_only_confirmed,P1-W1,,,Consolidate candidate with schedule.store_today/store_week (generic vs specific).
+screenshot_url,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+self_critique,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+shell_execute,(root),infra_agent,write,excluded_non_routable,EXCLUDE,LOW,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+sql_query,(root),infra_agent,read,excluded_non_routable,EXCLUDE,,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+team.moderate_chat,team,app_tool,read,catalog_only_confirmed,P2-LOW,,,
+team.notify,team,app_tool,read,catalog_only_confirmed,P2-HIGH,,manager.send_team_notification,"Duplicate: canonical=manager.send_team_notification. Register alias->canonical, single handler."
+telegram_send,(root),infra_agent,write,excluded_non_routable,EXCLUDE,HIGH,,EXCLUDE: infrastructure/internal/dev-only primitive. Agent/infra primitive. Never chat-routable. Move out of partner catalog or hard-block in router. EXCLUDE: infrastructure/internal primitive.
+time.edit_others,time,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+time.view_all,time,app_tool,read,catalog_only_confirmed,P1-W1,,,
+time.view_own,time,app_tool,read,catalog_only_confirmed,P1-W1,,,
+timeoff.approve,timeoff,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,schedule.approve_time_off,"Duplicate: canonical=schedule.approve_time_off. Register alias->canonical, single handler."
+timeoff.request,timeoff,app_tool,read,catalog_only_confirmed,P2-LOW,LOW,,"Legacy fin/perms/maint family: no clean counterpart, decide keep/retire in dedupe audit."
+toast.employee_profiles,toast,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered built-in with approved runtime formatter.
+toast.sales_summary,toast,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered built-in with approved runtime formatter.
+toast.table_activity,toast,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered built-in with approved runtime formatter.
+toast.webhook_activity,toast,app_tool,read,implemented_runtime_branch,P0-LIVE,,,Registered built-in with approved runtime formatter.
+toast_live_tables,(root),app_tool,read,catalog_only_confirmed,P1-W1,,toast.table_activity,Accepted alias: catalog-only until alias table ships in Phase 0.5.
+training.configure,training,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+training.edit,training,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
+training.mark_complete,training,app_tool,write,catalog_only_confirmed,P2-LOW,LOW,,
 training.remind,training,app_tool,read,catalog_only_assumed,P1-W1,,,
 training.upload,training,app_tool,write,catalog_only_assumed,P2-LOW,LOW,,
 training.view_all,training,app_tool,read,catalog_only_assumed,P1-W1,,,

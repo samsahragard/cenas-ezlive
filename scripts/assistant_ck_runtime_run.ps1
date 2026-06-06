@@ -27,11 +27,6 @@ if ($env:PYTHONPATH) {
     $env:PYTHONPATH = $RepoRoot
 }
 
-$anthropicFile = "C:\Users\sam\cena-secrets\anthropic_api_key.txt"
-if (Test-Path -LiteralPath $anthropicFile) {
-    $env:ANTHROPIC_API_KEY_FILE = $anthropicFile
-}
-
 $geminiCandidates = @(
     "C:\Users\sam\cena-secrets\gemini_api_key.txt",
     "C:\Users\sam\cena\.secrets\gemini_api_key.txt",

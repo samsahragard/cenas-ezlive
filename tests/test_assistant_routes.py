@@ -442,7 +442,7 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
                 "ok": True,
                 "answer": "CK-local answer",
                 "queued": False,
-                "model": "claude-sonnet-4-6",
+                "model": "gemini-2.5-flash",
                 "storage": "ck",
             }).encode("utf-8")
             self.send_response(200)
@@ -481,7 +481,6 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
     monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
     monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
     monkeypatch.setenv("ASSISTANT_REVIEW_TIMEOUT_SECONDS", "5")
-    monkeypatch.setattr(ar, "_anthropic_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Anthropic directly")))
     monkeypatch.setattr(ar, "_gemini_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")))
 
     try:

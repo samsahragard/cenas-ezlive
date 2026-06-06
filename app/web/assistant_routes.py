@@ -47,7 +47,7 @@ assistant_bp = Blueprint("assistant", __name__)
 
 _QUEUE_LOCK = threading.Lock()
 _MAX_QUESTION_CHARS = 2000
-_DEFAULT_MODEL = "claude-sonnet-4-6"
+_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _REVIEW_STATUS = "needs_review"
 _CK_REVIEW_PATH = "/review/question"
 _CK_RUNTIME_PATH = "/assistant/answer"
@@ -1097,32 +1097,6 @@ def _queued_answer(reason: str) -> str:
     return "I can't safely answer that from your current permissions yet, so I saved it for Sam review."
 
 
-def _anthropic_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
-    key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        return None, None
-    try:
-        import anthropic  # type: ignore[import]
-    except ImportError:
-        log.warning("assistant: anthropic package not installed")
-        return None, None
-
-    model = os.getenv("AI_ASSISTANT_ANTHROPIC_MODEL", _DEFAULT_MODEL)
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=model,
-        max_tokens=800,
-        temperature=0.2,
-        system=_anthropic_system_blocks(ctx),
-        messages=[{"role": "user", "content": question}],
-    )
-    text = "".join(
-        block.text for block in getattr(msg, "content", [])
-        if getattr(block, "type", None) == "text"
-    ).strip()
-    return text or None, model
-
-
 def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
@@ -1133,7 +1107,7 @@ def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str 
         log.warning("assistant: google-genai package not installed")
         return None, None
 
-    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
     client = genai.Client(api_key=key)
     prompt = _system_prompt(ctx) + "\n\nUser question:\n" + question
     resp = client.models.generate_content(model=model, contents=prompt)
@@ -1171,20 +1145,6 @@ def _session_prompt(ctx: dict[str, Any]) -> str:
         f"stores={ctx['store_slugs']}, path={ctx['path']}, "
         f"owner_operator={bool(ctx.get('is_owner_operator'))}."
     )
-
-
-def _anthropic_system_blocks(ctx: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        {
-            "type": "text",
-            "text": _stable_policy_prompt(),
-            "cache_control": {"type": "ephemeral"},
-        },
-        {
-            "type": "text",
-            "text": _session_prompt(ctx),
-        },
-    ]
 
 
 def _should_queue(question: str, ctx: dict[str, Any]) -> tuple[bool, str, str | None]:
@@ -1283,11 +1243,9 @@ def assistant_ask():
         })
 
     try:
-        answer, model = _anthropic_answer(question, ctx)
-        if answer is None:
-            answer, model = _gemini_answer(question, ctx)
+        answer, model = _gemini_answer(question, ctx)
     except Exception:
-        log.exception("assistant answer failed")
+        log.exception("assistant gemini answer failed")
         answer = None
         model = None
 

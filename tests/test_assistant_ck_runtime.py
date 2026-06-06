@@ -1,9 +1,7 @@
 import json
 import os
 import socket
-import sys
 import threading
-import types
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -133,11 +131,6 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
-    )
-    monkeypatch.setattr(
-        runtime,
         "_gemini_answer",
         lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
     )
@@ -195,11 +188,6 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
     token = "runtime-test-token"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
-    monkeypatch.setattr(
-        runtime,
-        "_anthropic_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
-    )
     monkeypatch.setattr(
         runtime,
         "_gemini_answer",
@@ -273,11 +261,6 @@ def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_pa
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
-    )
-    monkeypatch.setattr(
-        runtime,
         "_gemini_answer",
         lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
     )
@@ -336,11 +319,6 @@ def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_p
     token = "runtime-test-token"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
-    monkeypatch.setattr(
-        runtime,
-        "_anthropic_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("follow-up tool answer must not call model")),
-    )
     monkeypatch.setattr(
         runtime,
         "_gemini_answer",
@@ -515,7 +493,7 @@ def test_runtime_owner_identity_uses_authenticated_session_context(monkeypatch):
 
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
+        "_gemini_answer",
         lambda *_: (_ for _ in ()).throw(AssertionError("session context answer must not call model")),
     )
     principal = _principal("partner")
@@ -533,11 +511,6 @@ def test_runtime_owner_identity_uses_authenticated_session_context(monkeypatch):
 def test_runtime_partner_level_uses_approved_tool_without_owner_flag(monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
-    monkeypatch.setattr(
-        runtime,
-        "_anthropic_answer",
-        lambda *_: (_ for _ in ()).throw(AssertionError("approved tool answer must not call model")),
-    )
     principal = _principal("partner")
     principal["kind"] = "partner"
     principal["is_owner_operator"] = False
@@ -564,7 +537,7 @@ def test_runtime_partner_identity_does_not_claim_owner_operator(monkeypatch):
 
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
+        "_gemini_answer",
         lambda *_: (_ for _ in ()).throw(AssertionError("session context answer must not call model")),
     )
     principal = _principal("partner")
@@ -585,7 +558,7 @@ def test_runtime_tool_discovery_reports_partner_catalog(monkeypatch):
 
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
+        "_gemini_answer",
         lambda *_: (_ for _ in ()).throw(AssertionError("tool discovery must not call model")),
     )
     principal = _principal("partner")
@@ -663,38 +636,6 @@ def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, mon
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_anthropic_answer_marks_stable_policy_for_prompt_cache(monkeypatch):
-    from scripts import assistant_ck_runtime as runtime
-
-    captured = {}
-
-    class FakeBlock:
-        type = "text"
-        text = "cached answer"
-
-    class FakeMessages:
-        def create(self, **kwargs):
-            captured.update(kwargs)
-            return types.SimpleNamespace(content=[FakeBlock()])
-
-    class FakeAnthropic:
-        def __init__(self, api_key):
-            self.api_key = api_key
-            self.messages = FakeMessages()
-
-    fake_module = types.SimpleNamespace(Anthropic=FakeAnthropic)
-    monkeypatch.setitem(sys.modules, "anthropic", fake_module)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    answer, model = runtime._anthropic_answer("How do I use the page?", _principal("gm"))
-
-    assert answer == "cached answer"
-    assert model == "claude-sonnet-4-6"
-    assert captured["system"][0]["cache_control"] == {"type": "ephemeral"}
-    assert "Current session" in captured["system"][1]["text"]
-    assert "owner_operator=False" in captured["system"][1]["text"]
-
-
 def test_runtime_missing_permission_keeps_permission_wording(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
@@ -745,13 +686,8 @@ def test_runtime_answers_general_question_from_ck_model(monkeypatch, tmp_path):
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
-        lambda question, principal: ("Use the Orders tab to review catering requests.", "claude-sonnet-4-6"),
-    )
-    monkeypatch.setattr(
-        runtime,
         "_gemini_answer",
-        lambda question, principal: (_ for _ in ()).throw(AssertionError("Gemini fallback should not run when Sonnet answers")),
+        lambda question, principal: ("Use the Orders tab to review catering requests.", "gemini-2.5-flash"),
     )
 
     port = _free_port()
@@ -776,7 +712,7 @@ def test_runtime_answers_general_question_from_ck_model(monkeypatch, tmp_path):
             "ok": True,
             "answer": "Use the Orders tab to review catering requests.",
             "queued": False,
-            "model": "claude-sonnet-4-6",
+            "model": "gemini-2.5-flash",
             "storage": "ck_runtime",
         }
     finally:
@@ -787,7 +723,7 @@ def test_runtime_answers_general_question_from_ck_model(monkeypatch, tmp_path):
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_runtime_falls_back_to_gemini_when_sonnet_errors(monkeypatch, tmp_path):
+def test_runtime_queues_when_gemini_model_errors(monkeypatch, tmp_path):
     from scripts import assistant_ck_runtime as runtime
 
     db_path = tmp_path / "assistant_review.sqlite"
@@ -796,13 +732,8 @@ def test_runtime_falls_back_to_gemini_when_sonnet_errors(monkeypatch, tmp_path):
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
     monkeypatch.setattr(
         runtime,
-        "_anthropic_answer",
-        lambda question, principal: (_ for _ in ()).throw(RuntimeError("provider failed")),
-    )
-    monkeypatch.setattr(
-        runtime,
         "_gemini_answer",
-        lambda question, principal: ("Open the Orders tab for catering requests.", "gemini-2.5-flash"),
+        lambda question, principal: (_ for _ in ()).throw(RuntimeError("provider failed")),
     )
 
     port = _free_port()
@@ -823,13 +754,11 @@ def test_runtime_falls_back_to_gemini_when_sonnet_errors(monkeypatch, tmp_path):
         data = json.loads(res.read().decode("utf-8"))
 
         assert res.status == 200
-        assert data == {
-            "ok": True,
-            "answer": "Open the Orders tab for catering requests.",
-            "queued": False,
-            "model": "gemini-2.5-flash",
-            "storage": "ck_runtime",
-        }
+        assert data["ok"] is True
+        assert data["queued"] is True
+        assert data["storage"] == "ck"
+        assert data["reason"] == "model_unavailable_or_no_answer"
+        assert data["answer"] == "I saved that for Sam review. The assistant model is not available right now."
     finally:
         httpd.shutdown()
         httpd.server_close()

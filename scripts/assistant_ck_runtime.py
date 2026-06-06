@@ -9,10 +9,9 @@ Environment:
   ASSISTANT_RUNTIME_HOSTS        optional comma-separated bind hosts
   ASSISTANT_RUNTIME_HOST         optional single bind host; default 127.0.0.1
   ASSISTANT_RUNTIME_PORT         optional port; default 8782
-  ANTHROPIC_API_KEY              optional Sonnet key
-  ANTHROPIC_API_KEY_FILE         optional file path for Sonnet key
   GEMINI_API_KEY                 optional Gemini key
   GEMINI_API_KEY_FILE            optional file path for Gemini key
+  AI_ASSISTANT_GEMINI_MODEL      optional Gemini model; default gemini-2.5-flash
 """
 from __future__ import annotations
 
@@ -41,14 +40,10 @@ except ImportError:  # pragma: no cover - allows running from scripts dir
 log = logging.getLogger(__name__)
 
 ANSWER_PATH = "/assistant/answer"
-_DEFAULT_MODEL = "claude-sonnet-4-6"
+_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _MAX_QUESTION_CHARS = 2000
 _REVIEW_STATUS = "needs_review"
 _SECRET_DEFAULTS = {
-    "ANTHROPIC_API_KEY": [
-        r"C:\Users\sam\cena-secrets\anthropic_api_key.txt",
-        r"C:\Users\sam\.openclaw\.secrets\anthropic_api_key.txt",
-    ],
     "GEMINI_API_KEY": [
         r"C:\Users\sam\cena-secrets\gemini_api_key.txt",
         r"C:\Users\sam\cena\.secrets\gemini_api_key.txt",
@@ -786,46 +781,6 @@ def _session_prompt(principal: dict) -> str:
     )
 
 
-def _anthropic_system_blocks(principal: dict) -> list[dict]:
-    return [
-        {
-            "type": "text",
-            "text": _stable_policy_prompt(),
-            "cache_control": {"type": "ephemeral"},
-        },
-        {
-            "type": "text",
-            "text": _session_prompt(principal),
-        },
-    ]
-
-
-def _anthropic_answer(question: str, principal: dict) -> tuple[str | None, str | None]:
-    key = _read_secret("ANTHROPIC_API_KEY")
-    if not key:
-        return None, None
-    try:
-        import anthropic  # type: ignore[import]
-    except ImportError:
-        log.warning("assistant runtime: anthropic package not installed")
-        return None, None
-
-    model = os.getenv("AI_ASSISTANT_ANTHROPIC_MODEL", _DEFAULT_MODEL)
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=model,
-        max_tokens=800,
-        temperature=0.2,
-        system=_anthropic_system_blocks(principal),
-        messages=[{"role": "user", "content": question}],
-    )
-    text = "".join(
-        block.text for block in getattr(msg, "content", [])
-        if getattr(block, "type", None) == "text"
-    ).strip()
-    return text or None, model
-
-
 def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | None]:
     key = _read_secret("GEMINI_API_KEY")
     if not key:
@@ -836,7 +791,7 @@ def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | No
         log.warning("assistant runtime: google-genai package not installed")
         return None, None
 
-    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
     client = genai.Client(api_key=key)
     prompt = _system_prompt(principal) + "\n\nUser question:\n" + question
     resp = client.models.generate_content(model=model, contents=prompt)
@@ -874,18 +829,12 @@ def _answer(payload: dict) -> tuple[dict, int]:
 
     answer = None
     model = None
-    for provider_name, provider in (
-        ("anthropic", _anthropic_answer),
-        ("gemini", _gemini_answer),
-    ):
-        try:
-            answer, model = provider(question, principal)
-        except Exception:  # noqa: BLE001
-            log.exception("assistant runtime %s answer failed", provider_name)
-            answer = None
-            model = None
-        if answer:
-            break
+    try:
+        answer, model = _gemini_answer(question, principal)
+    except Exception:  # noqa: BLE001
+        log.exception("assistant runtime gemini answer failed")
+        answer = None
+        model = None
 
     if not answer:
         row = _queue_for_review(question, principal, "model_unavailable_or_no_answer", None, source)
@@ -940,9 +889,10 @@ class Handler(BaseHTTPRequestHandler):
             "db": str(review_receiver._db_path()),
             "row_counts": review_receiver._row_counts(),
             "providers": {
-                "anthropic": bool(_read_secret("ANTHROPIC_API_KEY")),
                 "gemini": bool(_read_secret("GEMINI_API_KEY")),
             },
+            "active_model_provider": "gemini",
+            "active_model": os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL),
         })
 
     def do_POST(self) -> None:

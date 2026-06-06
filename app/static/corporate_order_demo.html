@@ -288,10 +288,9 @@ const P = [
 
 const STORES = {copperfield:'Uno Mas · Copperfield', tomball:'Dos Mas · Tomball'};
 const USERS = [
- {id:'brittany',name:'Brittany',title:'GM · Copperfield',role:'store',store:'copperfield'},
- {id:'anna',name:'Anna',title:'GM · Tomball',role:'store',store:'tomball'},
- {id:'sam',name:'Sam',title:'Partner · Corporate',role:'corporate',store:null},
- {id:'angelica',name:'Angelica',title:'Corporate Admin',role:'corporate',store:null},
+ {id:'copperfield',name:'Copperfield',title:'Store',role:'store',store:'copperfield',code:'7745'},
+ {id:'tomball',name:'Tomball',title:'Store',role:'store',store:'tomball',code:'8804'},
+ {id:'corporate',name:'Corporate',title:'Admin',role:'corporate',store:null,code:'9404'},
 ];
 
 /* 90-day weekly usage (auto-computed in production; corporate can override) */
@@ -367,7 +366,7 @@ function loginView(){return `<div class="login">
    <div class="rl ${u.role==='corporate'?'c':'s'}">${u.title}</div>
   </button>`).join('')}
  </div>
- <div class="ftn">Demo build · production signs you in with your normal platform session</div>
+ <div class="ftn">Select your location and enter its passcode. Demo build — production uses your normal platform session.</div>
 </div>`;}
 
 function topbar(){const u=S.user;
@@ -623,8 +622,11 @@ const App={
 document.addEventListener('click',e=>{
  const b=e.target.closest('[data-act]'); if(!b)return;
  const act=b.dataset.act, a=b.dataset.a;
- if(act==='login'){S.user=USERS.find(u=>u.id===a);S.tab=S.user.role==='store'?'sheet':'queue';S.q='';render();
-   toast(S.user.role==='store'?'Logged in to '+STORES[S.user.store]:'Corporate session started');}
+ if(act==='login'){const u=USERS.find(x=>x.id===a);if(!u)return;
+   const code=prompt('Enter passcode — '+u.name+':');if(code===null)return;
+   if(String(code).trim()!==u.code){toast('Wrong passcode');return;}
+   S.user=u;S.tab=u.role==='store'?'sheet':'queue';S.q='';render();
+   toast(u.role==='store'?'Logged in to '+STORES[u.store]:'Corporate session started');}
  else if(act==='logout'){S={...S,user:null,sheet:{},review:false,fulfill:null,openR:null,q:''};render();}
  else if(act==='tab'){S.tab=a;S.q='';render();}
  else if(act==='cat'){S.cat=a;render();}

@@ -22,6 +22,7 @@ auth = Blueprint("auth", __name__)
 # Paths that bypass the password gate. Match by prefix.
 EXEMPT_PREFIXES = (
     "/ezcater/webhook",          # ezCater POSTs here; payload is the auth
+    "/api/toast/webhook",        # Toast POSTs here; Toast-Signature + CK relay token are checked inside the route
     "/orders/ingest",            # legacy PDF ingest (token-protected)
     "/orders/ingest_structured", # API ingest (token-protected)
     "/produce/confirm/",         # Sam's tap-from-Telegram links (random order_id is the auth)

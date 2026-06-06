@@ -111,7 +111,7 @@
   }
   .ezo-page .ezo-tab {
     padding: 9px 16px; background: var(--surface);
-    border: 0.5px solid var(--border); border-radius: 999px;
+    border: 0.5px solid var(--border); border-radius: 5px;
     color: var(--cream-dim); font-family: 'Manrope', sans-serif;
     font-size: 12px; font-weight: 700; cursor: pointer;
     text-decoration: none; letter-spacing: 0.03em;
@@ -129,7 +129,7 @@
   .ezo-page .ezo-act {
     display: inline-flex; align-items: center; gap: 7px;
     padding: 9px 15px; background: rgba(228,179,64,0.06);
-    border: 1px solid var(--border-active); border-radius: 999px;
+    border: 1px solid var(--border-active); border-radius: 5px;
     color: var(--gold-bright); font-family: 'Manrope', sans-serif;
     font-size: 12px; font-weight: 700; cursor: pointer;
     text-decoration: none; transition: all .15s; white-space: nowrap;
@@ -387,27 +387,14 @@
 
   {# ---- title + subtitle ---- #}
   <h1 class="ezo-h1"><span class="a">All</span> <span class="b">Orders</span></h1>
-  <p class="ezo-sub">
-    {{ groups|length }} day{{ 's' if groups|length != 1 else '' }} with deliveries
-    · today and upcoming
-  </p>
 
-  {# ---- tab row: 3 tabs as <a> links. "Orders" is the current page;
-     the other two are store-scoped routes. g.current_store gives the
-     store slug (the route passes location, which can be "both"). #}
+  {# ---- tab row: SamAI 2026-06-06 owner order, squared tabs. #}
   {% set _store = g.current_store or 'partner' %}
   <div class="ezo-tabs">
     <a class="ezo-tab active" href="/{{ _store }}/orders">Orders</a>
-    <a class="ezo-tab" href="/{{ _store }}/orders/processor">Order Processing</a>
+    <a class="ezo-tab" href="/{{ _store }}/drivers-live">Drivers Live</a>
+    <a class="ezo-tab" href="/orders">Manually Processed PDF</a>
     <a class="ezo-tab" href="/{{ _store }}/driver-tracking">Driver Payroll</a>
-  </div>
-
-  {# ---- action buttons. "Manually Processed PDF" -> /orders (kept).
-     No "export today" route exists in the codebase, so the 2nd button
-     stays the current "Drivers Live" link rather than a dead link. #}
-  <div class="ezo-actions">
-    <a class="ezo-act" href="/orders"><span class="ic">&#128196;</span>Manually Processed PDF</a>
-    <a class="ezo-act" href="/{{ _store }}/drivers-live"><span class="ic">&#128205;</span>Drivers Live</a>
   </div>
 
   {% if not groups %}

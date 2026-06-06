@@ -19,7 +19,7 @@
 {% block content %}
 <style>
 .da-tabs {
-  display: flex; gap: 6px;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin-bottom: 18px;
   padding-bottom: 14px;
   border-bottom: 0.5px solid var(--ck-border, rgba(217, 164, 54, 0.10));
@@ -27,7 +27,7 @@
 .da-tab {
   background: transparent;
   border: 0.5px solid var(--ck-border, rgba(217, 164, 54, 0.10));
-  border-radius: 14px;
+  border-radius: 5px;
   padding: 8px 16px;
   color: #FFFFFF;
   font-size: 13px;
@@ -57,10 +57,24 @@
   box-shadow: 0 0 14px rgba(255, 200, 80, 0.32);
 }
 .da-tab.is-active .count { opacity: 0.85; }
+.da-add-driver {
+  background: rgba(232,122,62,0.85);
+  border-color: rgba(232,122,62,0.65);
+  color: #fff;
+  font-weight: 700;
+}
+.da-add-driver:hover {
+  background: rgba(232,122,62,0.95);
+  border-color: rgba(232,122,62,0.85);
+}
 </style>
 
 {% set base_url = request.path %}
 <div class="da-tabs">
+  <a href="/driver/signup{% if current_location and current_location != 'both' %}?location={{ current_location }}{% endif %}"
+     class="da-tab da-add-driver">
+    + Add new driver
+  </a>
   <a href="{{ base_url }}?status=active"
      class="da-tab{% if current_status == 'active' %} is-active{% endif %}">
     Active <span class="count">{{ active_count }}</span>
@@ -83,15 +97,6 @@
 {% if error %}
   <div class="banner banner-error" style="margin-bottom:18px;">{{ error }}</div>
 {% endif %}
-
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-  <a href="/driver/signup{% if current_location and current_location != 'both' %}?location={{ current_location }}{% endif %}"
-     style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;
-            background:rgba(232,122,62,0.85);color:#fff;font-size:13px;font-weight:600;
-            border:1px solid rgba(232,122,62,0.65);border-radius:8px;text-decoration:none;">
-    + Add new driver
-  </a>
-</div>
 
 <div class="table-scroll">
   <table class="log-table log-table-view">

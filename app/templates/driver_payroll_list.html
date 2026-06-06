@@ -6,14 +6,7 @@
 {% block page_module %}CATERING{% endblock %}
 {% block page_module_class %}mod-catering{% endblock %}
 {% block page_title %}<span class="word-primary">Driver</span> <span class="ck-accent">Payroll</span>{% endblock %}
-{% block page_subtitle %}
-  <p class="greeting-sub">
-    Current pay period:
-    <strong>{{ current_period_start.strftime('%a %b %d') }} → {{ current_period_end.strftime('%a %b %d, %Y') }}</strong>
-    · Check date <strong>{{ current_check_date.strftime('%a %b %d, %Y') }}</strong>.
-    Click a driver's name to see their per-delivery paycheck.
-  </p>
-{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block content %}
 {% if not rows %}
@@ -86,11 +79,4 @@
 </div>
 {% endif %}
 
-<p style="margin-top:20px;font-size:12px;color:var(--text-3);">
-  Roster from <code>ezcater_known_driver</code> (seeded from Sam's 5/10 list).
-  This-period numbers are computed live from <code>orders</code> rows where
-  <code>ezcater_driver_name</code> matches (after name normalization) and
-  <code>delivery_date</code> is in the current bi-weekly window.
-  Pay rules: $25/delivery base, $10 + $2.00/mi over 20 + $5/5★ all conditional on tracking_status='Tracked'.
-</p>
 {% endblock %}

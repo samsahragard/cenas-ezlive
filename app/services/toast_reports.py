@@ -524,6 +524,55 @@ def server_perf_report(start: datetime, end: datetime,
     }
 
 
+def server_tips_for_guids(server_guids, location_filter, business_date,
+                          refresh: bool = False) -> dict:
+    """LIVE credit-card tips for a SPECIFIC set of Toast server guids on ONE
+    business_date -- the scoped primitive behind the employee self-view's live
+    'today' tips. Sums cc_tips / cc_subtotal for ONLY the given guids' checks, so
+    the caller receives this employee's own aggregate and ZERO cross-employee
+    data (the B2 isolation guarantee). Same source + math as server_perf_report
+    (payment.tipAmount on CREDIT payments via _analyze_check); cash is excluded
+    because Toast does not track cash tips.
+
+    Reads the shared 30-min orders cache (refresh=False) so N employees loading
+    their perf tab piggyback the same cache the manager Server-Performance page
+    populates -- no extra Toast load. business_date is 'YYYYMMDD' (Central). Any
+    fetch error degrades that location to empty (never raises) so the caller can
+    fall back to the finalized completed-shift cache."""
+    guids = {g for g in (server_guids or set()) if g}
+    empty = {"cc_tips": 0.0, "cc_subtotal": 0.0, "tip_pct": None, "tickets": 0}
+    if not guids:
+        return empty
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+    item_categories = _load_item_categories()
+    cc_tips = 0.0
+    cc_subtotal = 0.0
+    tickets = 0
+    for loc, rg in locations.items():
+        try:
+            orders = client.fetch_orders_for_date(loc, rg, business_date, refresh=refresh)
+        except Exception as ex:
+            log.warning("toast: server_tips skip %s/%s: %s", loc, business_date, ex)
+            continue
+        for o in orders:
+            if o.get("voided"):
+                continue
+            for c in o.get("checks") or []:
+                ac = _analyze_check(c, o, item_categories)
+                if not ac or ac.get("server_guid") not in guids:
+                    continue
+                cc_tips += ac["cc_tips"]
+                cc_subtotal += ac["cc_subtotal"]
+                tickets += 1
+    return {
+        "cc_tips": round(cc_tips, 2),
+        "cc_subtotal": round(cc_subtotal, 2),
+        "tip_pct": (round(cc_tips / cc_subtotal * 100, 1) if cc_subtotal > 0 else None),
+        "tickets": tickets,
+    }
+
+
 # ============== formatting helpers (used by templates) ==============
 
 # ============== THIRD-PARTY SALES REPORT ==============

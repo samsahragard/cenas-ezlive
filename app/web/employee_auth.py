@@ -614,6 +614,31 @@ def performance_center():
                 dt = dt.replace(tzinfo=None)
             return dt
 
+        def _live_today_tips():
+            """LIVE credit-card tips for THIS employee TODAY, scoped strictly to
+            their OWN confirmed Toast server guid(s) (CenaToastLink.toast_id) -- the
+            same payment.tipAmount source the manager Server-Performance page shows,
+            never another employee's row. Reads the shared 30-min orders cache
+            (refresh=False) so it piggybacks the manager pull -- no extra Toast load.
+            Returns {cc_tips, tip_pct, ...} or None on no mapping / any error, so
+            the caller falls back to the finalized completed-shift cache. Central
+            business_date (UTC-5) matches the Toast cache key + the manager page."""
+            try:
+                guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
+                if not guids:
+                    return None
+                stores = {(l.store_key or "").strip().lower()
+                          for l in links if (l.store_key or "").strip()}
+                loc_filter = next(iter(stores)) if len(stores) == 1 else None
+                bd = (datetime.utcnow() - timedelta(hours=5)).strftime("%Y%m%d")
+                from app.services import toast_reports
+                res = toast_reports.server_tips_for_guids(guids, loc_filter, bd)
+                return res if isinstance(res, dict) else None
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "employee perf: live today tips failed", exc_info=True)
+                return None
+
         def _attendance_for(r):
             """Hybrid attendance for one period: join each PerfShiftCache row in the
             window to THIS employee's published Shift on the same business_date.
@@ -791,6 +816,21 @@ def performance_center():
                 hours = round(hours + live_extra, 2)
             base = round(float(r.base_pay or 0), 2)
             tips = round(float(r.tips or 0), 2) if is_tipped else 0.0
+            # TODAY only, tipped + currently ON SHIFT (same open-shift signal as
+            # live hours): replace the finalized-cache tips with the employee's
+            # LIVE credit-card tips so far today, pulled scoped to their own Toast
+            # server guid(s). Mirrors the manager Server-Performance page. Falls
+            # back to the cache value if unmapped / Toast unreachable. Cash tips are
+            # never in Toast, and pooled/shared tips settle at shift end, so this is
+            # an estimate -> the UI labels it 'live, finalizes at clock-out'.
+            live_tip_pct = None
+            tips_live = False
+            if period == "today" and is_tipped and live_extra > 0:
+                _lt = _live_today_tips()
+                if _lt is not None:
+                    tips = round(float(_lt.get("cc_tips") or 0.0), 2)
+                    live_tip_pct = _lt.get("tip_pct")
+                    tips_live = True
             total = round(base + tips, 2)
             money = {"hours": hours, "base_pay": base, "total_pay": total,
                      "effective_hourly": (round(total / hours, 2) if hours > 0 else None),
@@ -800,8 +840,13 @@ def performance_center():
                 # tip keys ONLY for tipped roles (sales-clean: tips $ + ratios)
                 money["tips"] = tips
                 money["tips_per_hour"] = (round(tips / hours, 4) if hours > 0 else None)
-                tp = ((rj_ranks.get(period) or {}).get("tip_percent") or {}).get("value")
-                money["tip_pct"] = (round(float(tp), 1) if tp is not None else None)
+                if tips_live:
+                    money["tip_pct"] = (round(float(live_tip_pct), 1)
+                                        if live_tip_pct is not None else None)
+                    money["tips_live"] = True
+                else:
+                    tp = ((rj_ranks.get(period) or {}).get("tip_percent") or {}).get("value")
+                    money["tip_pct"] = (round(float(tp), 1) if tp is not None else None)
                 metrics += ["tip_pct", "tips_per_hour", "combined"]
 
             rankings = {}
@@ -848,6 +893,10 @@ def performance_center():
                     dh = round(dh + live_extra, 2)
                 dbase = round(sum(float(x.base_pay or 0) for x in ss), 2)
                 dtips = round(sum(float(x.tips or 0) for x in ss), 2) if is_tipped else 0.0
+                # mirror the live tip replacement onto the open shift's day so the
+                # daily total_pay matches the (live) tips shown in the summary tile.
+                if tips_live and live_bd is not None and bd == live_bd:
+                    dtips = tips
                 drow = {"date": bd, "hours": dh, "base_pay": dbase,
                         "total_pay": round(dbase + dtips, 2),
                         "effective_hourly": (round((dbase + dtips) / dh, 2) if dh > 0 else None),

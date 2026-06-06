@@ -303,6 +303,8 @@
       $('live-text').textContent = live.since ? ('On shift now Â· since ' + hhmm(live.since)) : 'On shift now';
     }
 
+    if(onShift && m.tips_live){ $('live-text').textContent += ' · tips live (finalizes at clock-out)'; }
+
     let cards;
     if (cfg.rank){
       const count = (rankInfo.peers||[]).length || rankInfo.cohort_size || 0;

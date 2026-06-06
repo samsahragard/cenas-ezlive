@@ -44,7 +44,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from flask import (
-    Blueprint, Response, abort, g, jsonify, redirect, render_template,
+    Blueprint, Response, abort, g, has_app_context, jsonify, redirect, render_template,
     request, stream_with_context, url_for,
 )
 
@@ -450,6 +450,88 @@ def _assistant_review_context(content: str) -> str:
     return ""
 
 
+def _current_sam_display_name() -> str | None:
+    if not has_app_context():
+        return None
+    user = getattr(g, "current_user", None)
+    name = str(getattr(user, "full_name", "") or "").strip()
+    return re.sub(r"\s+", " ", name) if name else None
+
+
+def _canonical_review_subject(name: str | None) -> str | None:
+    clean = re.sub(r"\s+", " ", str(name or "").strip())
+    if not clean:
+        return None
+    current = _current_sam_display_name()
+    if current:
+        first = current.split()[0].casefold()
+        if clean.casefold() in {current.casefold(), first}:
+            return current
+    return clean
+
+
+def _review_subject_from_title(title: str) -> str | None:
+    if title.startswith(_ASSISTANT_REVIEW_SESSION_PREFIX):
+        return title[len(_ASSISTANT_REVIEW_SESSION_PREFIX):]
+    if title.endswith(_ASSISTANT_REVIEW_SESSION_SUFFIX):
+        return title[:-len(_ASSISTANT_REVIEW_SESSION_SUFFIX)]
+    return None
+
+
+def _review_subject_from_content(content: str) -> str | None:
+    text = str(content or "")
+    payload = None
+    for prefix in ("CENAS_ASSISTANT_REVIEW_V2\n",
+                   "CENAS_ASSISTANT_REVIEW_V1\n"):
+        if text.startswith(prefix):
+            try:
+                payload = json.loads(text[len(prefix):])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                payload = None
+            break
+    if isinstance(payload, dict):
+        actor = payload.get("actor") or payload.get("sender") or {}
+        return _canonical_review_subject(
+            actor.get("display_name") or actor.get("name"))
+    if text.startswith("Cenas AI assistant review"):
+        m = re.search(r"^Name:\s*(.+)$", text, flags=re.MULTILINE)
+        if m:
+            return _canonical_review_subject(m.group(1))
+    return None
+
+
+def _review_subject_for_session(db, s: SamChatSession,
+                                messages: list[SamChatMessage] | None = None
+                                ) -> str | None:
+    if not _is_assistant_review_session(s):
+        return None
+    title = str(s.title or "")
+    subject = _canonical_review_subject(_review_subject_from_title(title))
+    if subject:
+        return subject
+    for msg in reversed(messages or []):
+        if msg.model != _ASSISTANT_REVIEW_MODEL:
+            continue
+        subject = _review_subject_from_content(msg.content)
+        if subject:
+            return subject
+    try:
+        msg = (db.query(SamChatMessage)
+               .filter(SamChatMessage.session_id == s.id)
+               .filter(SamChatMessage.model == _ASSISTANT_REVIEW_MODEL)
+               .order_by(SamChatMessage.id.desc())
+               .first())
+    except Exception:  # noqa: BLE001
+        msg = None
+    if msg is not None:
+        subject = _review_subject_from_content(msg.content)
+        if subject:
+            return subject
+    if title == _ASSISTANT_REVIEW_SESSION_TITLE:
+        return _current_sam_display_name()
+    return None
+
+
 def _strip_cena_tool_blocks(content: str) -> str:
     """Remove cena-gateway tool announcements + result previews from a
     prior assistant turn's content before it's passed back to the model.
@@ -593,20 +675,16 @@ def _estimate_tokens(text: str) -> int:
 # Serialization helpers
 # ============================================================
 
-def _session_json(s: SamChatSession) -> dict:
+def _session_json(s: SamChatSession, review_subject: str | None = None) -> dict:
     is_review = _is_assistant_review_session(s)
     title = s.title or "New chat"
+    subject = _canonical_review_subject(
+        review_subject or _review_subject_from_title(title))
     return {
         "id": s.id,
         "title": title,
         "is_assistant_review": is_review,
-        "review_subject": (
-            title[len(_ASSISTANT_REVIEW_SESSION_PREFIX):]
-            if title.startswith(_ASSISTANT_REVIEW_SESSION_PREFIX)
-            else title[:-len(_ASSISTANT_REVIEW_SESSION_SUFFIX)]
-            if title.endswith(_ASSISTANT_REVIEW_SESSION_SUFFIX)
-            else None
-        ),
+        "review_subject": subject,
         "started_at": s.started_at.isoformat() if s.started_at else None,
         "last_message_at": (s.last_message_at.isoformat()
                             if s.last_message_at else None),
@@ -858,8 +936,17 @@ def sam_chat_page():
         return render_template(
             "sam_chat.html",
             active="sam_chat",
-            sessions=[_session_json(s) for s in sessions],
-            current_session=(_session_json(current) if current else None),
+            sessions=[
+                _session_json(s, _review_subject_for_session(db, s))
+                for s in sessions
+            ],
+            current_session=(
+                _session_json(
+                    current,
+                    _review_subject_for_session(db, current, messages),
+                )
+                if current else None
+            ),
             messages=[_message_json(m) for m in messages],
             models=[{"id": m, "label": _MODEL_LABELS[m]}
                     for m in _PICKER_MODELS],
@@ -1301,7 +1388,10 @@ def sam_chat_list_sessions():
                     .order_by(SamChatSession.last_message_at.desc())
                     .all())
         return jsonify({"ok": True,
-                        "sessions": [_session_json(s) for s in sessions]})
+                        "sessions": [
+                            _session_json(s, _review_subject_for_session(db, s))
+                            for s in sessions
+                        ]})
     finally:
         db.close()
 
@@ -1342,7 +1432,10 @@ def sam_chat_load_session(session_id: int):
                     .all())
         return jsonify({
             "ok": True,
-            "session": _session_json(s),
+            "session": _session_json(
+                s,
+                _review_subject_for_session(db, s, messages),
+            ),
             "messages": [_message_json(m) for m in messages],
             "session_cost": _session_cost(db, session_id),
             "token_estimate": _session_token_estimate(db, session_id),

@@ -274,7 +274,7 @@ def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
 
     payload = ar._assistant_review_payload(
         ctx,
-        "what was on the ticket",
+        "what was on the ticket token=abc123SECRET",
         {
             "ok": True,
             "answer": "I saved that for Sam review.",
@@ -296,6 +296,7 @@ def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
     assert payload["result"]["reason"] == "needs_review"
     assert payload["tool"]["storage"] == "assistant_review"
     assert payload["tool"]["model"] == "gemini-2.5-flash"
+    assert "abc123SECRET" not in payload["turn"]["question"]
     assert "abc123SECRET" not in payload["raw_response"]
     assert "[REDACTED]" in payload["raw_response"]
 

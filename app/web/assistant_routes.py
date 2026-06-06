@@ -616,7 +616,7 @@ def _runtime_principal(ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def _clip_review_text(value: Any, max_chars: int = _CENA_REVIEW_CLIP_CHARS) -> str:
-    text = "" if value is None else str(value).strip()
+    text = _redact_text("" if value is None else str(value).strip())
     if len(text) <= max_chars:
         return text
     omitted = len(text) - max_chars

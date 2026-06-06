@@ -566,6 +566,42 @@ def test_gate_dormant_when_env_unset(app_with_sam, monkeypatch):
     assert "/access-denied" in r.headers["Location"]
 
 
+def test_legacy_review_session_list_uses_person_name(app_with_sam):
+    _app, client_for, db = app_with_sam
+    now = datetime.utcnow()
+    session = SamChatSession(
+        started_at=now,
+        last_message_at=now,
+        title="Cenas AI Review",
+    )
+    db.add(session)
+    db.flush()
+    payload = {
+        "kind": "cenas.assistant_mirror",
+        "version": 2,
+        "actor": {"display_name": "Sam"},
+        "turn": {
+            "question": "what table was opened last night",
+            "answer": "Table 314 was opened by Jolie Jasso.",
+        },
+    }
+    db.add(SamChatMessage(
+        session_id=session.id,
+        role="system",
+        content="CENAS_ASSISTANT_REVIEW_V2\n" + json.dumps(payload),
+        model="assistant-review-mirror",
+        created_at=now,
+    ))
+    db.commit()
+
+    r = client_for(1).get("/sam/chat/sessions")
+
+    assert r.status_code == 200
+    row = next(s for s in r.get_json()["sessions"] if s["id"] == session.id)
+    assert row["is_assistant_review"] is True
+    assert row["review_subject"] == "Sam Sahragard"
+
+
 # ============================================================
 # Model-picker enforcement: the Sam Chat surface is Gemini 2.5 only.
 # ============================================================

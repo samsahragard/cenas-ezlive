@@ -907,12 +907,14 @@ def _wants_needs_driver(question: str) -> bool:
     return (
         _order_context(question)
         and not _in_house_context(question)
-        and bool(re.search(r"\b(needs? driver|driver attention|without driver|missing driver)\b", text))
+        and bool(re.search(r"\b(needs?(?:\s+a)?\s+driver|driver attention|without driver|missing driver)\b", text))
     )
 
 
 def _wants_live_tracking(question: str) -> bool:
     text = _txt(question)
+    if re.search(r"\b(missing tracking|without tracking|no tracking)\b", text):
+        return False
     return (
         _order_context(question)
         and not _in_house_context(question)

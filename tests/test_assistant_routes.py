@@ -408,7 +408,7 @@ WAVE1_ORDER_TOOL_CASES = [
     {
         "tool_id": "orders.catering_needs_driver",
         "handler": "orders_catering_needs_driver",
-        "hit": "which catering orders need driver attention",
+        "hit": "which orders still need a driver",
         "near_miss": "does the office computer need a device installed",
     },
     {
@@ -462,7 +462,7 @@ WAVE1_ORDER_TOOL_CASES = [
     {
         "tool_id": "orders.catering_tracking_missing",
         "handler": "orders_catering_tracking_missing",
-        "hit": "which catering orders are missing tracking",
+        "hit": "any orders missing tracking links",
         "near_miss": "missing tracking for office supplies",
     },
     {

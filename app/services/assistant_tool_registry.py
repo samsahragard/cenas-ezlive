@@ -356,6 +356,124 @@ BUILTIN_TOOL_REGISTRY.extend([
 ])
 
 
+def _schedule_read_tool(
+    tool_id: str,
+    label: str,
+    description: str,
+    handler: str,
+    matcher: str,
+    priority: int,
+) -> dict[str, Any]:
+    return {
+        "tool_id": tool_id,
+        "label": label,
+        "description": description,
+        "required_permissions": ["ai.ask_claude", "schedule.view"],
+        "session_types": ["partner", "staff"],
+        "store_scope": "current_user_store_scope",
+        "data_class": "schedule_operations",
+        "read_write_class": "read_only",
+        "status": "review_gated",
+        "operator_enabled": True,
+        "handler": handler,
+        "matcher": matcher,
+        "formatter": handler,
+        "priority": priority,
+    }
+
+
+BUILTIN_TOOL_REGISTRY.extend([
+    _schedule_read_tool(
+        "schedule.alarm_pending_summary",
+        "Schedule pending alarms",
+        "Store-scoped pending schedule reminder counts from internal Schedules V2.",
+        "schedule_alarm_pending_summary",
+        "schedule_alarm_pending_summary",
+        225,
+    ),
+    _schedule_read_tool(
+        "schedule.availability_conflicts",
+        "Schedule availability conflicts",
+        "Store-scoped soft availability and unavailability conflicts for upcoming Schedules V2 shifts.",
+        "schedule_availability_conflicts",
+        "schedule_availability_conflicts",
+        226,
+    ),
+    _schedule_read_tool(
+        "schedule.open_shifts",
+        "Open schedule shifts",
+        "Store-scoped open and unassigned shifts from internal Schedules V2.",
+        "schedule_open_shifts",
+        "schedule_open_shifts",
+        227,
+    ),
+    _schedule_read_tool(
+        "schedule.shift_acceptance_summary",
+        "Shift acceptance summary",
+        "Store-scoped accepted, declined, and pending shift-acceptance counts from internal Schedules V2.",
+        "schedule_shift_acceptance_summary",
+        "schedule_shift_acceptance_summary",
+        228,
+    ),
+    _schedule_read_tool(
+        "schedule.shift_offer_summary",
+        "Shift offer summary",
+        "Store-scoped shift-offer marketplace summary from internal Schedules V2.",
+        "schedule_shift_offer_summary",
+        "schedule_shift_offer_summary",
+        229,
+    ),
+    _schedule_read_tool(
+        "schedule.shift_swap_summary",
+        "Shift swap summary",
+        "Store-scoped shift-swap marketplace summary from internal Schedules V2.",
+        "schedule_shift_swap_summary",
+        "schedule_shift_swap_summary",
+        230,
+    ),
+    _schedule_read_tool(
+        "schedule.store_today",
+        "Today's schedule",
+        "Store-scoped today's shift summary from internal Schedules V2.",
+        "schedule_store_today",
+        "schedule_store_today",
+        231,
+    ),
+    _schedule_read_tool(
+        "schedule.store_week",
+        "This week's schedule",
+        "Store-scoped current-week schedule summary from internal Schedules V2.",
+        "schedule_store_week",
+        "schedule_store_week",
+        232,
+    ),
+    _schedule_read_tool(
+        "schedule.time_off_pending",
+        "Pending time off",
+        "Store-scoped pending time-off request counts from internal Schedules V2.",
+        "schedule_time_off_pending",
+        "schedule_time_off_pending",
+        233,
+    ),
+    _schedule_read_tool(
+        "schedule.unavailability_blocks",
+        "Unavailability blocks",
+        "Store-scoped upcoming unavailability blocks from internal Schedules V2.",
+        "schedule_unavailability_blocks",
+        "schedule_unavailability_blocks",
+        234,
+    ),
+    _schedule_read_tool(
+        "schedule.view",
+        "Schedule view",
+        "Generic store-scoped current schedule summary from internal Schedules V2.",
+        "schedule_view",
+        "schedule_view",
+        246,
+    ),
+])
+
+
 TOOL_ALIAS_MAP: dict[str, str] = {
     "catering.assign_driver": "orders.assign_driver",
     "catering.reassign_store": "orders.reassign_store",

@@ -14,20 +14,29 @@ from app.models import (
     Driver,
     DriverAssignmentJob,
     Employee,
+    EmployeeAvailability,
     EmployeeStoreAssignment,
+    EmployeeUnavailabilityBlock,
     EzcaterOrderDetails,
     InHouseCateringQuote,
     Order,
     OrderItem,
     PerfPeriodCache,
+    Position,
     ProcessingJob,
     ProcessingOrder,
     SamChatMessage,
     SamChatSession,
     Schedule,
     Shift,
+    ShiftAcceptance,
+    ShiftAlarm,
+    ShiftOffer,
+    ShiftSwap,
+    TimeOffRequest,
 )
 from app.services.assistant_handlers import orders as order_handlers
+from app.services.assistant_handlers import schedule as schedule_handlers
 from app.services.assistant_tool_inventory import (
     PARTNER_TOOL_IDS,
     is_excluded_non_routable,
@@ -775,6 +784,356 @@ def test_wave1_order_handlers_fail_closed_without_staff_store_scope(db_session, 
     assert "fajita_pack" not in encoded
     assert "taco_pack" not in encoded
     assert "hidden" not in encoded
+
+
+WAVE1_SCHEDULE_TOOL_CASES = [
+    {
+        "tool_id": "schedule.alarm_pending_summary",
+        "handler": "schedule_alarm_pending_summary",
+        "hit": "schedule pending alarms",
+        "near_miss": "pending equipment checks",
+    },
+    {
+        "tool_id": "schedule.availability_conflicts",
+        "handler": "schedule_availability_conflicts",
+        "hit": "schedule availability conflicts",
+        "near_miss": "vendor availability report",
+    },
+    {
+        "tool_id": "schedule.open_shifts",
+        "handler": "schedule_open_shifts",
+        "hit": "schedule open shifts",
+        "near_miss": "open catering orders",
+    },
+    {
+        "tool_id": "schedule.shift_acceptance_summary",
+        "handler": "schedule_shift_acceptance_summary",
+        "hit": "schedule shift acceptance summary",
+        "near_miss": "acceptance letter summary",
+    },
+    {
+        "tool_id": "schedule.shift_offer_summary",
+        "handler": "schedule_shift_offer_summary",
+        "hit": "shift offer summary",
+        "near_miss": "vendor offer summary",
+    },
+    {
+        "tool_id": "schedule.shift_swap_summary",
+        "handler": "schedule_shift_swap_summary",
+        "hit": "shift swap summary",
+        "near_miss": "swap the payment card",
+    },
+    {
+        "tool_id": "schedule.store_today",
+        "handler": "schedule_store_today",
+        "hit": "today's schedule shifts",
+        "near_miss": "today's sales report",
+    },
+    {
+        "tool_id": "schedule.store_week",
+        "handler": "schedule_store_week",
+        "hit": "this week schedule",
+        "near_miss": "this week's cleaning checklist",
+    },
+    {
+        "tool_id": "schedule.time_off_pending",
+        "handler": "schedule_time_off_pending",
+        "hit": "pending time-off requests",
+        "near_miss": "pending legal requests",
+    },
+    {
+        "tool_id": "schedule.unavailability_blocks",
+        "handler": "schedule_unavailability_blocks",
+        "hit": "schedule unavailability blocks",
+        "near_miss": "website unavailable",
+    },
+    {
+        "tool_id": "schedule.view",
+        "handler": "schedule_view",
+        "hit": "show current schedule",
+        "near_miss": "show current menu",
+    },
+]
+
+
+def _wave1_schedule_staff_ctx() -> dict:
+    ctx = _wave1_staff_ctx()
+    ctx["permissions"] = ["ai.ask_claude", "schedule.view"]
+    ctx["path"] = "/tomball/schedules-v2"
+    return ctx
+
+
+def _wave1_schedule_staff_ctx_without_store_scope() -> dict:
+    ctx = _wave1_schedule_staff_ctx()
+    ctx["store_slugs"] = []
+    ctx["current_store"] = None
+    return ctx
+
+
+def _seed_wave1_schedule_fixture(db_session) -> None:
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    tomball_server = Employee(
+        full_name="Tomball Server",
+        phone="713-555-1001",
+        email="tomball-private@example.com",
+        active=True,
+    )
+    tomball_cook = Employee(
+        full_name="Tomball Cook",
+        phone="713-555-1002",
+        email="cook-private@example.com",
+        active=True,
+    )
+    copperfield_server = Employee(
+        full_name="Hidden CF Server",
+        phone="713-555-9001",
+        email="hidden-private@example.com",
+        active=True,
+    )
+    db_session.add_all([tomball_server, tomball_cook, copperfield_server])
+    db_session.flush()
+    server = Position(name="Server", store_key=None)
+    cook = Position(name="Cook", store_key=None)
+    db_session.add_all([server, cook])
+    db_session.flush()
+    tomball_schedule = Schedule(store_key="tomball", week_start=week_start, status="published")
+    copperfield_schedule = Schedule(store_key="copperfield", week_start=week_start, status="published")
+    db_session.add_all([tomball_schedule, copperfield_schedule])
+    db_session.flush()
+    tomball_today = Shift(
+        schedule_id=tomball_schedule.id,
+        employee_id=tomball_server.id,
+        position_id=server.id,
+        start_at=datetime(today.year, today.month, today.day, 9, 0),
+        end_at=datetime(today.year, today.month, today.day, 15, 0),
+        break_minutes=30,
+        status="assigned",
+        notes="private manager note",
+    )
+    tomball_open = Shift(
+        schedule_id=tomball_schedule.id,
+        employee_id=None,
+        position_id=cook.id,
+        start_at=datetime(today.year, today.month, today.day, 16, 0) + timedelta(days=1),
+        end_at=datetime(today.year, today.month, today.day, 21, 0) + timedelta(days=1),
+        status="open",
+    )
+    tomball_swap = Shift(
+        schedule_id=tomball_schedule.id,
+        employee_id=tomball_cook.id,
+        position_id=cook.id,
+        start_at=datetime(today.year, today.month, today.day, 10, 0) + timedelta(days=2),
+        end_at=datetime(today.year, today.month, today.day, 16, 0) + timedelta(days=2),
+        status="assigned",
+    )
+    copperfield_today = Shift(
+        schedule_id=copperfield_schedule.id,
+        employee_id=copperfield_server.id,
+        position_id=server.id,
+        start_at=datetime(today.year, today.month, today.day, 11, 0),
+        end_at=datetime(today.year, today.month, today.day, 17, 0),
+        status="assigned",
+    )
+    db_session.add_all([tomball_today, tomball_open, tomball_swap, copperfield_today])
+    db_session.flush()
+    db_session.add_all([
+        EmployeeStoreAssignment(employee_id=tomball_server.id, store_key="tomball"),
+        EmployeeStoreAssignment(employee_id=tomball_cook.id, store_key="tomball"),
+        EmployeeStoreAssignment(employee_id=copperfield_server.id, store_key="copperfield"),
+        ShiftAcceptance(shift_id=tomball_today.id, employee_id=tomball_server.id, response="accepted"),
+        ShiftAcceptance(
+            shift_id=copperfield_today.id,
+            employee_id=copperfield_server.id,
+            response="declined",
+            reason="hidden decline reason",
+        ),
+        ShiftAlarm(
+            shift_id=tomball_today.id,
+            employee_id=tomball_server.id,
+            alarm_time=datetime.utcnow() - timedelta(minutes=5),
+            channel="sms",
+            status="pending",
+        ),
+        ShiftAlarm(
+            shift_id=copperfield_today.id,
+            employee_id=copperfield_server.id,
+            alarm_time=datetime.utcnow(),
+            channel="email",
+            status="pending",
+        ),
+        TimeOffRequest(
+            employee_id=tomball_server.id,
+            start_date=today + timedelta(days=3),
+            end_date=today + timedelta(days=4),
+            reason="private time off reason",
+            status="pending",
+        ),
+        TimeOffRequest(
+            employee_id=copperfield_server.id,
+            start_date=today + timedelta(days=5),
+            end_date=today + timedelta(days=5),
+            reason="hidden time off reason",
+            status="pending",
+        ),
+        EmployeeAvailability(
+            employee_id=tomball_server.id,
+            day_of_week=today.weekday(),
+            start_minute=600,
+            end_minute=660,
+        ),
+        EmployeeUnavailabilityBlock(
+            employee_id=tomball_server.id,
+            start_at=datetime(today.year, today.month, today.day, 8, 30),
+            end_at=datetime(today.year, today.month, today.day, 9, 30),
+            reason="private unavailability reason",
+        ),
+        EmployeeUnavailabilityBlock(
+            employee_id=copperfield_server.id,
+            start_at=datetime(today.year, today.month, today.day, 10, 30),
+            end_at=datetime(today.year, today.month, today.day, 11, 30),
+            reason="hidden unavailability reason",
+        ),
+        ShiftOffer(
+            shift_id=tomball_today.id,
+            offered_by_employee_id=tomball_server.id,
+            status="open",
+            restricted=True,
+            expires_at=datetime.utcnow() + timedelta(days=1),
+        ),
+        ShiftOffer(
+            shift_id=copperfield_today.id,
+            offered_by_employee_id=copperfield_server.id,
+            status="taken",
+            restricted=True,
+            expires_at=datetime.utcnow() + timedelta(days=1),
+        ),
+        ShiftSwap(
+            from_shift_id=tomball_today.id,
+            to_shift_id=tomball_swap.id,
+            from_employee_id=tomball_server.id,
+            to_employee_id=tomball_cook.id,
+            status="proposed",
+            expires_at=datetime.utcnow() + timedelta(days=1),
+        ),
+        ShiftSwap(
+            from_shift_id=copperfield_today.id,
+            to_shift_id=copperfield_today.id,
+            from_employee_id=copperfield_server.id,
+            to_employee_id=copperfield_server.id,
+            status="accepted",
+            expires_at=datetime.utcnow() + timedelta(days=1),
+        ),
+    ])
+    db_session.commit()
+
+
+@pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_schedule_matchers_route_each_read_tool_and_reject_near_miss(case, monkeypatch):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("deterministic schedule route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(case["hit"], ctx)
+    near_route = ar._deterministic_route_tool_id(case["near_miss"], ctx)
+
+    assert route["tool_id"] == case["tool_id"]
+    assert route["route_path"] == "deterministic"
+    assert route["classifier"]["reason"] == "not_used"
+    assert ar._TOOL_MATCHERS[case["handler"]](case["near_miss"]) is False
+    assert near_route != case["tool_id"]
+
+
+@pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_schedule_handlers_return_fixture_payload_for_every_read_tool(db_session, monkeypatch, case):
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+
+    payload = schedule_handlers.SCHEDULE_TOOL_HANDLERS[case["handler"]](
+        case["hit"],
+        _wave1_partner_ctx(stores=["tomball"]),
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["ok"] is True
+    assert payload["tool_id"] == case["tool_id"]
+    assert payload["data_class"] == "schedule_read_sanitized"
+    assert "hidden" not in encoded
+    assert "copperfield" not in encoded
+    assert "713-555" not in encoded
+    assert "example.com" not in encoded
+    assert "employee_id" not in encoded
+    assert "schedule_id" not in encoded
+    assert "shift_id" not in encoded
+    assert "request_id" not in encoded
+    assert "block_id" not in encoded
+    assert "offer_id" not in encoded
+    assert "swap_id" not in encoded
+    assert "private manager note" not in encoded
+    assert "private time off reason" not in encoded
+    assert "private unavailability reason" not in encoded
+    assert "hidden decline reason" not in encoded
+
+
+@pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_schedule_payloads_are_denied_without_schedule_permission(case, monkeypatch):
+    ctx = _wave1_partner_ctx(permissions=["ai.ask_claude"], stores=["tomball"])
+    monkeypatch.setitem(
+        schedule_handlers.SCHEDULE_TOOL_HANDLERS,
+        case["handler"],
+        lambda *_: (_ for _ in ()).throw(AssertionError("denied schedule tool must not execute")),
+    )
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools[case["tool_id"]]["available"] is False
+    assert tools[case["tool_id"]]["deny_reason"] == "missing_permission"
+    assert ar._approved_tool_data(case["hit"], ctx) == {}
+
+
+@pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_schedule_handlers_respect_staff_store_scope_for_every_read_tool(db_session, monkeypatch, case):
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+
+    payload = schedule_handlers.SCHEDULE_TOOL_HANDLERS[case["handler"]](
+        case["hit"],
+        _wave1_schedule_staff_ctx(),
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["ok"] is True
+    assert payload["tool_id"] == case["tool_id"]
+    assert "hidden" not in encoded
+    assert "copperfield" not in encoded
+    assert "713-555" not in encoded
+
+
+@pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
+def test_wave1_schedule_handlers_fail_closed_without_staff_store_scope(db_session, monkeypatch, case):
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+
+    payload = schedule_handlers.SCHEDULE_TOOL_HANDLERS[case["handler"]](
+        case["hit"],
+        _wave1_schedule_staff_ctx_without_store_scope(),
+    )
+    data_only = dict(payload)
+    data_only["question"] = ""
+    encoded = json.dumps(data_only, sort_keys=True).lower()
+
+    assert payload["ok"] is True
+    assert payload["tool_id"] == case["tool_id"]
+    assert "tomball server" not in encoded
+    assert "tomball cook" not in encoded
+    assert "hidden" not in encoded
+    assert "tomball" not in encoded
+    assert "copperfield" not in encoded
+    assert "713-555" not in encoded
 
 
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):

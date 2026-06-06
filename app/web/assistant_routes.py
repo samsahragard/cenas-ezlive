@@ -47,6 +47,7 @@ from app.services.assistant_tool_inventory import (
 )
 from app.services.assistant_handlers import drivers as driver_handlers
 from app.services.assistant_handlers import orders as order_handlers
+from app.services.assistant_handlers import schedule as schedule_handlers
 from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin_tool_registrations
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
@@ -1341,6 +1342,7 @@ def _toast_employee_profiles_tool_payload(question: str) -> dict[str, Any]:
 
 _TOOL_MATCHERS = {
     **order_handlers.ORDER_TOOL_MATCHERS,
+    **schedule_handlers.SCHEDULE_TOOL_MATCHERS,
     "orders_store_summary": _wants_orders_store_summary,
     "drivers_store_summary": _wants_drivers_store_summary,
     "labor_store_aggregate": _wants_labor_store_aggregate,
@@ -1354,6 +1356,7 @@ _TOOL_MATCHERS = {
 def _approved_tool_handlers() -> dict[str, Any]:
     handlers = {
         **order_handlers.ORDER_TOOL_HANDLERS,
+        **schedule_handlers.SCHEDULE_TOOL_HANDLERS,
         "drivers_store_summary": driver_handlers.drivers_store_summary,
         "labor_store_aggregate": lambda question, ctx: _labor_store_aggregate(ctx),
         "toast_sales_summary": (

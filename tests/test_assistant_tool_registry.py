@@ -35,6 +35,21 @@ WAVE1_ORDER_READ_TOOLS = {
 }
 
 
+WAVE1_SCHEDULE_READ_TOOLS = {
+    "schedule.alarm_pending_summary": "schedule_alarm_pending_summary",
+    "schedule.availability_conflicts": "schedule_availability_conflicts",
+    "schedule.open_shifts": "schedule_open_shifts",
+    "schedule.shift_acceptance_summary": "schedule_shift_acceptance_summary",
+    "schedule.shift_offer_summary": "schedule_shift_offer_summary",
+    "schedule.shift_swap_summary": "schedule_shift_swap_summary",
+    "schedule.store_today": "schedule_store_today",
+    "schedule.store_week": "schedule_store_week",
+    "schedule.time_off_pending": "schedule_time_off_pending",
+    "schedule.unavailability_blocks": "schedule_unavailability_blocks",
+    "schedule.view": "schedule_view",
+}
+
+
 def test_inventory_skips_excluded_non_routable_tools_by_default():
     excluded = set(iter_excluded_non_routable_tool_ids())
     catalog = {tool["tool_id"] for tool in iter_partner_tool_definitions()}
@@ -109,3 +124,29 @@ def test_wave1_orders_reads_are_registered_without_write_like_actions():
     assert "orders.update_status" not in tools
     assert "orders.reassign_store" not in tools
     assert "orders.refresh_ezcater_tracking" not in tools
+
+
+def test_wave1_schedule_reads_are_registered_without_write_like_actions():
+    tools = {tool["tool_id"]: tool for tool in iter_builtin_tool_registrations()}
+
+    for tool_id, handler in WAVE1_SCHEDULE_READ_TOOLS.items():
+        assert tools[tool_id]["handler"] == handler
+        assert tools[tool_id]["matcher"] == handler
+        assert tools[tool_id]["formatter"] == handler
+        assert tools[tool_id]["read_write_class"] == "read_only"
+        assert tools[tool_id]["status"] == "review_gated"
+        assert tools[tool_id]["operator_enabled"] is True
+        assert tools[tool_id]["required_permissions"] == ["ai.ask_claude", "schedule.view"]
+    for write_tool in [
+        "schedule.approve_shift_offer",
+        "schedule.approve_shift_swap",
+        "schedule.approve_time_off",
+        "schedule.configure",
+        "schedule.create_shift",
+        "schedule.delete_shift",
+        "schedule.deny_time_off",
+        "schedule.edit_shift",
+        "schedule.publish_week",
+        "schedule.send_shift_alarm",
+    ]:
+        assert write_tool not in tools

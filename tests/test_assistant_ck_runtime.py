@@ -80,6 +80,21 @@ WAVE1_ORDER_READ_TOOL_IDS = [
 ]
 
 
+WAVE1_SCHEDULE_READ_TOOL_IDS = [
+    "schedule.alarm_pending_summary",
+    "schedule.availability_conflicts",
+    "schedule.open_shifts",
+    "schedule.shift_acceptance_summary",
+    "schedule.shift_offer_summary",
+    "schedule.shift_swap_summary",
+    "schedule.store_today",
+    "schedule.store_week",
+    "schedule.time_off_pending",
+    "schedule.unavailability_blocks",
+    "schedule.view",
+]
+
+
 def _wave1_order_runtime_payload(tool_id: str) -> dict:
     base = {
         "ok": True,
@@ -215,6 +230,92 @@ def _wave1_order_runtime_payload(tool_id: str) -> dict:
     return payloads[tool_id]
 
 
+def _wave1_schedule_runtime_payload(tool_id: str) -> dict:
+    base = {
+        "ok": True,
+        "generated_at": "2026-06-06T12:00:00Z",
+        "data_class": "schedule_read_sanitized",
+    }
+    if tool_id == "schedule.store_today":
+        return {
+            **base,
+            "shift_count": 2,
+            "assigned_shift_count": 1,
+            "open_shift_count": 1,
+            "total_hours": 10.5,
+            "by_store": {"tomball": 2},
+            "shifts": [
+                {
+                    "start_at": "2026-06-06T09:00:00",
+                    "position_name": "Server",
+                    "employee_name": "Tomball Server",
+                }
+            ],
+        }
+    if tool_id in {"schedule.store_week", "schedule.view"}:
+        return {
+            **base,
+            "schedule_count": 1,
+            "shift_count": 3,
+            "assigned_shift_count": 2,
+            "open_shift_count": 1,
+            "total_hours": 18,
+            "by_store": {"tomball": 3},
+        }
+    payloads = {
+        "schedule.alarm_pending_summary": {
+            **base,
+            "pending_count": 2,
+            "overdue_count": 1,
+            "by_channel": {"sms": 2},
+        },
+        "schedule.availability_conflicts": {
+            **base,
+            "conflict_count": 1,
+            "by_type": {"unavailability_block": 1},
+        },
+        "schedule.open_shifts": {
+            **base,
+            "count": 1,
+            "by_store": {"tomball": 1},
+            "shifts": [
+                {
+                    "start_at": "2026-06-07T16:00:00",
+                    "position_name": "Cook",
+                    "employee_name": None,
+                }
+            ],
+        },
+        "schedule.shift_acceptance_summary": {
+            **base,
+            "assigned_shift_count": 3,
+            "response_count": 2,
+            "pending_count": 1,
+            "by_response": {"accepted": 1, "declined": 1},
+        },
+        "schedule.shift_offer_summary": {
+            **base,
+            "offer_count": 2,
+            "by_status": {"open": 1, "taken": 1},
+            "restricted_count": 2,
+        },
+        "schedule.shift_swap_summary": {
+            **base,
+            "swap_count": 1,
+            "by_status": {"proposed": 1},
+        },
+        "schedule.time_off_pending": {
+            **base,
+            "pending_count": 1,
+        },
+        "schedule.unavailability_blocks": {
+            **base,
+            "block_count": 1,
+        },
+    }
+    return payloads[tool_id]
+
+
 @pytest.mark.parametrize("tool_id", WAVE1_ORDER_READ_TOOL_IDS)
 def test_runtime_formats_and_verifies_every_wave1_order_read_tool(tool_id, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
@@ -230,6 +331,36 @@ def test_runtime_formats_and_verifies_every_wave1_order_read_tool(tool_id, monke
 
     data = runtime._approved_tool_answer(
         "wave1 order read test",
+        "",
+        principal,
+        [_available_tool(tool_id)],
+        {tool_id: payload},
+        routed_tool_id=tool_id,
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == tool_id
+    assert data["storage"] == "operational_tool"
+    assert data["answer"].strip()
+    assert runtime._tool_answer_verified(tool_id, payload, data["answer"]) is True
+
+
+@pytest.mark.parametrize("tool_id", WAVE1_SCHEDULE_READ_TOOL_IDS)
+def test_runtime_formats_and_verifies_every_wave1_schedule_read_tool(tool_id, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("approved schedule read tool must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    payload = _wave1_schedule_runtime_payload(tool_id)
+
+    data = runtime._approved_tool_answer(
+        "wave1 schedule read test",
         "",
         principal,
         [_available_tool(tool_id)],
@@ -1658,6 +1789,29 @@ def test_runtime_wave1_order_routes_are_verifiable():
         "orders.catering_today",
         payload,
         "There is 1 catering in the today view.",
+    )
+
+
+def test_runtime_wave1_schedule_routes_are_verifiable():
+    from scripts import assistant_ck_runtime as runtime
+
+    payload = {
+        "ok": True,
+        "shift_count": 1,
+        "assigned_shift_count": 1,
+        "open_shift_count": 0,
+        "total_hours": 6,
+    }
+
+    assert "schedule.store_today" in runtime._VERIFIED_ROUTE_TOOL_IDS
+    route_kind, route_args = runtime._route_args("schedule.store_today", "what is today's schedule")
+    assert route_kind == "store_today"
+    assert route_args["tool"] == "schedule.store_today"
+    assert route_args["window"] == "today"
+    assert runtime._tool_answer_verified(
+        "schedule.store_today",
+        payload,
+        "Today's schedule has 1 shift: 1 assigned, 0 open, 6 hours.",
     )
 
 

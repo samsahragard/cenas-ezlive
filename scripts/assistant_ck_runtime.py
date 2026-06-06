@@ -70,6 +70,17 @@ _VERIFIED_ROUTE_TOOL_IDS = {
     "orders.catering_week",
     "orders.in_house_quote_lookup",
     "orders.in_house_quotes_summary",
+    "schedule.alarm_pending_summary",
+    "schedule.availability_conflicts",
+    "schedule.open_shifts",
+    "schedule.shift_acceptance_summary",
+    "schedule.shift_offer_summary",
+    "schedule.shift_swap_summary",
+    "schedule.store_today",
+    "schedule.store_week",
+    "schedule.time_off_pending",
+    "schedule.unavailability_blocks",
+    "schedule.view",
     "drivers.store_summary",
     "labor.store_aggregate",
     "toast.sales_summary",
@@ -1120,6 +1131,124 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     return _orders_summary_answer(payload, question)
 
 
+def _schedule_shift_labels(rows: list[dict], limit: int = 4) -> str:
+    labels = []
+    for row in rows[:limit]:
+        if not isinstance(row, dict):
+            continue
+        start = str(row.get("start_at") or "").replace("T", " ")[:16]
+        role = row.get("position_name") or "shift"
+        employee = row.get("employee_name") or "open"
+        if start:
+            labels.append(f"{start} {role} ({employee})")
+        else:
+            labels.append(f"{role} ({employee})")
+    return "; ".join(labels)
+
+
+def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
+    if not isinstance(payload, dict) or payload.get("ok") is False:
+        return "I could not read the approved schedule data for that question, so I saved it for Sam review."
+
+    if tool_id == "schedule.store_today":
+        shifts = int(payload.get("shift_count") or 0)
+        answer = (
+            f"Today's schedule has {shifts} {_plural(shifts, 'shift')}: "
+            f"{int(payload.get('assigned_shift_count') or 0)} assigned, "
+            f"{int(payload.get('open_shift_count') or 0)} open, "
+            f"{float(payload.get('total_hours') or 0):g} hours."
+        )
+        split = _dict_split(payload.get("by_store") or {})
+        if split:
+            answer += " Store split: " + split + "."
+        sample = _schedule_shift_labels(payload.get("shifts") or [])
+        if sample:
+            answer += " First shifts: " + sample + "."
+        return answer
+
+    if tool_id in {"schedule.store_week", "schedule.view"}:
+        shifts = int(payload.get("shift_count") or 0)
+        schedules = int(payload.get("schedule_count") or 0)
+        label = "Current schedule view" if tool_id == "schedule.view" else "This week's schedule"
+        answer = (
+            f"{label} has {schedules} {_plural(schedules, 'schedule')} and "
+            f"{shifts} {_plural(shifts, 'shift')}: "
+            f"{int(payload.get('assigned_shift_count') or 0)} assigned, "
+            f"{int(payload.get('open_shift_count') or 0)} open, "
+            f"{float(payload.get('total_hours') or 0):g} hours."
+        )
+        split = _dict_split(payload.get("by_store") or {})
+        if split:
+            answer += " Store split: " + split + "."
+        return answer
+
+    if tool_id == "schedule.open_shifts":
+        count = int(payload.get("count") or 0)
+        answer = f"There are {count} open schedule {_plural(count, 'shift')} in the current view."
+        split = _dict_split(payload.get("by_store") or {})
+        if split:
+            answer += " Store split: " + split + "."
+        sample = _schedule_shift_labels(payload.get("shifts") or [])
+        if sample:
+            answer += " First open shifts: " + sample + "."
+        return answer
+
+    if tool_id == "schedule.shift_acceptance_summary":
+        split = _dict_split(payload.get("by_response") or {}) or "no responses yet"
+        return (
+            "Shift acceptance summary: "
+            f"{int(payload.get('assigned_shift_count') or 0)} assigned shifts, "
+            f"{int(payload.get('response_count') or 0)} responses, "
+            f"{int(payload.get('pending_count') or 0)} pending. "
+            f"Response split: {split}."
+        )
+
+    if tool_id == "schedule.alarm_pending_summary":
+        split = _dict_split(payload.get("by_channel") or {}) or "no pending channels"
+        return (
+            "Schedule alarm summary: "
+            f"{int(payload.get('pending_count') or 0)} pending reminders, "
+            f"{int(payload.get('overdue_count') or 0)} overdue. "
+            f"Channel split: {split}."
+        )
+
+    if tool_id == "schedule.time_off_pending":
+        count = int(payload.get("pending_count") or 0)
+        return f"There are {count} pending time-off {_plural(count, 'request')} in the current schedule view."
+
+    if tool_id == "schedule.unavailability_blocks":
+        count = int(payload.get("block_count") or 0)
+        return f"There are {count} upcoming schedule unavailability {_plural(count, 'block')} in the current view."
+
+    if tool_id == "schedule.availability_conflicts":
+        count = int(payload.get("conflict_count") or 0)
+        split = _dict_split(payload.get("by_type") or {})
+        answer = f"There are {count} schedule availability {_plural(count, 'conflict')} in the current view."
+        if split:
+            answer += " Conflict split: " + split + "."
+        return answer
+
+    if tool_id == "schedule.shift_offer_summary":
+        count = int(payload.get("offer_count") or 0)
+        split = _dict_split(payload.get("by_status") or {})
+        answer = f"Shift offer summary: {count} {_plural(count, 'offer')} in the current view."
+        if split:
+            answer += " Status split: " + split + "."
+        if payload.get("restricted_count") is not None:
+            answer += f" Restricted offers: {int(payload.get('restricted_count') or 0)}."
+        return answer
+
+    if tool_id == "schedule.shift_swap_summary":
+        count = int(payload.get("swap_count") or 0)
+        split = _dict_split(payload.get("by_status") or {})
+        answer = f"Shift swap summary: {count} {_plural(count, 'swap')} in the current view."
+        if split:
+            answer += " Status split: " + split + "."
+        return answer
+
+    return "Schedule summary is available from the approved internal Schedules V2 data."
+
+
 def _drivers_summary_answer(summary: dict) -> str:
     total = int(summary.get("total_drivers") or 0)
     active = int(summary.get("active_drivers") or 0)
@@ -1241,6 +1370,19 @@ def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
             "tool": tool_id,
             "store": _requested_store(resolved_question) or "all_accessible",
         }
+    if tool_id.startswith("schedule."):
+        text = str(resolved_question or "").casefold()
+        if "today" in text:
+            window = "today"
+        elif re.search(r"\b(this week|week|weekly)\b", text):
+            window = "current_week"
+        else:
+            window = "current_view"
+        return tool_id.split(".", 1)[1], {
+            "tool": tool_id,
+            "store": _requested_store(resolved_question) or "all_accessible",
+            "window": window,
+        }
     if tool_id == "drivers.store_summary":
         return "driver_summary", {"scope": "current_view"}
     if tool_id == "labor.store_aggregate":
@@ -1289,6 +1431,15 @@ def _tool_answer_verified(tool_id: str, payload: object, answer: str) -> bool:
             isinstance(payload, dict)
             and payload.get("ok") is not False
             and any(word in answer.casefold() for word in ("catering", "order", "quote", "tracking", "driver"))
+        )
+    if tool_id.startswith("schedule."):
+        return (
+            isinstance(payload, dict)
+            and payload.get("ok") is not False
+            and any(
+                word in answer.casefold()
+                for word in ("schedule", "shift", "time-off", "availability", "alarm", "offer", "swap")
+            )
         )
     if tool_id == "drivers.store_summary":
         return isinstance(payload, dict) and "driver" in answer.casefold()
@@ -1618,6 +1769,17 @@ def _approved_tool_answer(
             "tool_id": "toast.sales_summary",
             "generated_at": toast_summary.get("generated_at"),
         }
+    if routed_tool_id.startswith("schedule.") and _tool_available(tools, routed_tool_id):
+        schedule_payload = tool_data.get(routed_tool_id) if isinstance(tool_data, dict) else None
+        if isinstance(schedule_payload, dict):
+            return {
+                "ok": True,
+                "answer": _schedule_read_answer(schedule_payload, routed_tool_id, resolved_question),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": routed_tool_id,
+                "generated_at": schedule_payload.get("generated_at"),
+            }
     if routed_tool_id == "drivers.store_summary" and _tool_available(tools, "drivers.store_summary"):
         driver_summary = tool_data.get("drivers.store_summary") if isinstance(tool_data, dict) else None
         if isinstance(driver_summary, dict):

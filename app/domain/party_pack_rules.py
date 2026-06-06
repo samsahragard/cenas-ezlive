@@ -118,7 +118,7 @@ def party_sides(headcount: int, beans_choice: BeansChoice) -> list[KitchenLineIt
         }.get(bc, "Beans")
         lines.append(make_weight_line(beans_name, beans_total, beans_pp, container_for_oz(beans_total)))
 
-    chips_pp = per_person_rate(headcount, base_oz=4.0)
+    chips_pp = per_person_rate(headcount, base_oz=3.0)
     chips_total = chips_pp * headcount
     lines.append(make_weight_line("Chips", chips_total, chips_pp, "none"))
 

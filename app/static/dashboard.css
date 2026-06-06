@@ -489,6 +489,96 @@ h3.page-sub { font-size: 14px; font-weight: 500; color: var(--text-2); margin: 0
   font-weight: 700; color: var(--accent-soft);
 }
 
+.order-card-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(280px, 360px);
+  gap: 12px;
+  overflow-x: auto;
+  padding: 12px;
+  min-height: 240px;
+}
+.order-card {
+  background: rgba(14, 8, 5, 0.82);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.22);
+  overflow: hidden;
+}
+.order-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(232, 122, 62, 0.12);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.order-card-eyebrow {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.order-card h3 {
+  margin: 2px 0 0;
+  color: var(--accent-soft);
+  font-size: 16px;
+  line-height: 1.2;
+}
+.order-card-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.25;
+  max-width: 52%;
+  text-align: right;
+}
+.order-card-fields {
+  display: grid;
+}
+.order-card-section {
+  padding: 8px 14px;
+  background: rgba(232, 122, 62, 0.10);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: var(--accent-soft);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.order-card-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 38%) minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.order-card-row:last-child {
+  border-bottom: none;
+}
+.order-card-label {
+  color: rgba(255, 238, 204, 0.92);
+  font-weight: 700;
+  font-size: 12px;
+}
+.order-card-value {
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.order-card-empty {
+  padding: 18px 14px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 /* Tabs (Master / Kitchen / Driver / Prep Expo) */
 .tabs {
   display: flex; gap: 4px; margin: 0 0 12px;

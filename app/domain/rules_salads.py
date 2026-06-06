@@ -34,7 +34,7 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
         proteins.append(make_weight_line("Beef Diced", 2.0 * headcount, 2.0, "none"))
 
     sides = [
-        make_weight_line("Lettuce", 5.0 * headcount, 5.0),
+        make_weight_line("Lettuce", 4.0 * headcount, 4.0),
         make_weight_line("Avocado Diced", 2.0 * headcount, 2.0),
         make_weight_line("Tomatoes Diced", 2.0 * headcount, 2.0),
         make_weight_line("Cucumber Diced", 2.0 * headcount, 2.0),
@@ -92,7 +92,7 @@ def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> Prep
         proteins.append(make_weight_line("Beef", 2.5 * headcount, 2.5, "none"))
 
     sides = [
-        make_weight_line("Lettuce", 5.0 * headcount, 5.0),
+        make_weight_line("Lettuce", 4.0 * headcount, 4.0),
         make_weight_line("Avocado Diced", 2.0 *headcount, 2.0),
         make_weight_line("Tomatoes Diced", 2.0 * headcount, 2.0),
         make_weight_line("Cucumber Diced", 2.0 * headcount, 2.0),

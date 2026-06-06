@@ -564,7 +564,7 @@
       </div>
 
       {# per-day combined view — same target URL as the prior template #}
-      <a class="ezo-combined" href="/orders/{{ location }}/{{ grp.date }}">
+      <a class="ezo-combined" href="/orders/{{ location }}/{{ grp.date }}?collapse_empty_rows=1">
         All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view
       </a>
     {% endfor %}

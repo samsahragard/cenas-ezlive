@@ -143,7 +143,7 @@ def build_grids_for_single_order(db: Session, external_order_id: str) -> dict[st
         return None
     order, items, breakdowns = loaded
     bundle = reconstruct_bundle(order, items, breakdowns)
-    grids = build_all_view_grids([bundle], collapse_empty_rows=False)
+    grids = build_all_view_grids([bundle], collapse_empty_rows=True)
     return {"order": order, "bundle": bundle, "grids": grids}
 
 

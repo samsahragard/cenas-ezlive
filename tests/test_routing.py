@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.delivery_timing import compute_best_two_stop_route
+from app.domain.delivery_timing import compute_best_two_stop_route, compute_solo_timing
 
 
 def _common(**overrides):
@@ -60,6 +60,17 @@ def test_feasible_pair_returns_two_stops():
     assert result["stops"][1]["minutes_late"] == 0
     assert result["depart_store_at"]  # non-empty
     assert result["pickup_at"]
+
+
+def test_solo_departure_is_latest_leave_time_not_kitchen_ready_plus_buffer():
+    result = compute_solo_timing(
+        date_str="2026-05-13",
+        window_start="12:00 PM",
+        travel_minutes=20,
+    )
+    assert result["kitchen_ready_at"] == "10:10 AM"
+    assert result["depart_store_at"] == "11:40 AM"
+    assert result["pickup_at"] == "11:40 AM"
 
 
 def test_infeasible_when_second_stop_too_far_after_deadline():

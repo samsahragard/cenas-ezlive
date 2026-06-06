@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import List, TypedDict
 
-KITCHEN_TO_DEPART_MINUTES = 15
 KITCHEN_READY_BUFFER = 90
 MULTI_STOP_BUFFER_MINUTES = 20
 
 
 class SoloTimingResult(TypedDict):
     depart_store_at: str
+    pickup_at: str
     kitchen_ready_at: str
     travel_minutes: int
 
@@ -67,13 +67,15 @@ def compute_solo_timing(
     window_start — earliest allowed arrival (start of delivery window)
 
     kitchen_ready_at = window_start - KITCHEN_READY_BUFFER - travel
-    depart_store_at  = kitchen_ready_at + KITCHEN_TO_DEPART_MINUTES
+    depart_store_at  = window_start - travel
     """
     window_start_dt = parse_datetime(date_str, window_start)
     kitchen_ready_dt = window_start_dt - timedelta(minutes=KITCHEN_READY_BUFFER + travel_minutes)
+    depart_dt = window_start_dt - timedelta(minutes=travel_minutes)
 
     return {
-        "depart_store_at": format_time(kitchen_ready_dt + timedelta(minutes=KITCHEN_TO_DEPART_MINUTES)),
+        "depart_store_at": format_time(depart_dt),
+        "pickup_at": format_time(depart_dt),
         "kitchen_ready_at": format_time(kitchen_ready_dt),
         "travel_minutes": travel_minutes,
     }
@@ -174,7 +176,7 @@ def compute_two_stop_route(
 
     return {
         "feasible": feasible,
-        "depart_store_at": format_time(kitchen_ready_dt + timedelta(minutes=KITCHEN_TO_DEPART_MINUTES)),
+        "depart_store_at": format_time(depart_dt),
         "pickup_at": format_time(depart_dt),
         "kitchen_ready_at": format_time(kitchen_ready_dt),
         "total_drive_minutes": total_to_second,

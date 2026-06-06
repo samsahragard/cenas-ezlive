@@ -21,6 +21,7 @@ from app.services.orders_query import (
     build_grids_for_single_order,
     build_grids_for_orders,
 )
+from app.services.order_view_presenter import build_combined_order_card_views
 from app.infra.export_xlsx import export_view_grids_to_xlsx
 # Phase 0 Block 4 follow-up (ck 2026-05-13): tag-based gate on the
 # unassign-courier action. URL gets a store_scope segment so the
@@ -223,10 +224,12 @@ def combined_day(location: str, date: str):
             abort(404, f"No orders for {LOCATION_LABELS[location]} on {date}")
         collapse = request.args.get("collapse_empty_rows") == "1"
         result = build_grids_for_orders(db, orders, collapse_empty_rows=collapse)
+        card_views = build_combined_order_card_views(result["grids"])
         return render_template(
             "order_view.html",
             order=None,
             grids=result["grids"],
+            card_views=card_views,
             active_view="master",
             title=f"All {LOCATION_LABELS[location]} orders — {date}",
             mode="combined",
@@ -267,10 +270,12 @@ def combined_day_both(date: str):
             abort(404, f"No orders for both locations on {date}")
         collapse = request.args.get("collapse_empty_rows") == "1"
         result = build_grids_for_orders(db, orders, collapse_empty_rows=collapse)
+        card_views = build_combined_order_card_views(result["grids"])
         return render_template(
             "order_view.html",
             order=None,
             grids=result["grids"],
+            card_views=card_views,
             active_view="master",
             title=f"All Tomball + Copperfield orders — {date}",
             mode="combined",

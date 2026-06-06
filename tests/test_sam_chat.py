@@ -24,7 +24,7 @@ from decimal import Decimal
 import pytest
 
 import app.web.sam_chat as sc
-from app.models import SamChatSession, SamChatMessage
+from app.models import SamChatSession, SamChatMessage, SamChatSuggestion
 
 
 # ============================================================
@@ -600,6 +600,49 @@ def test_legacy_review_session_list_uses_person_name(app_with_sam):
     row = next(s for s in r.get_json()["sessions"] if s["id"] == session.id)
     assert row["is_assistant_review"] is True
     assert row["review_subject"] == "Sam Sahragard"
+
+
+def test_suggestions_queue_add_list_and_decide(app_with_sam):
+    _app, client_for, db = app_with_sam
+    c = client_for(1)
+    now = datetime.utcnow()
+    session = SamChatSession(
+        started_at=now,
+        last_message_at=now,
+        title="Cenas AI Review",
+    )
+    db.add(session)
+    db.commit()
+
+    r = client_for(2).get("/sam/chat/suggestions")
+    assert r.status_code == 403
+
+    r = c.post("/sam/chat/suggestions", json={
+        "summary": "Show waiter name for table questions",
+        "details": "Triggered by a review question where the answer had the table but not who opened it.",
+        "source_session_id": session.id,
+        "source_label": "Sam Sahragard",
+        "created_by": "ck codex",
+    })
+    assert r.status_code == 201
+    created = r.get_json()["suggestion"]
+    assert created["status"] == "pending"
+    assert created["source_session_id"] == session.id
+    assert created["source_label"] == "Sam Sahragard"
+
+    r = c.get("/sam/chat/suggestions")
+    assert r.status_code == 200
+    rows = r.get_json()["suggestions"]
+    assert rows[0]["id"] == created["id"]
+    assert rows[0]["summary"] == "Show waiter name for table questions"
+
+    r = c.post(f"/sam/chat/suggestions/{created['id']}/decision",
+               json={"status": "approved"})
+    assert r.status_code == 200
+    approved = r.get_json()["suggestion"]
+    assert approved["status"] == "approved"
+    assert approved["decided_at"]
+    assert db.get(SamChatSuggestion, created["id"]).status == "approved"
 
 
 # ============================================================

@@ -49,7 +49,13 @@ from flask import (
 )
 
 from app.db import SessionLocal
-from app.models import SamChatSession, SamChatMessage, _VALID_SAM_CHAT_ROLES
+from app.models import (
+    SamChatSession,
+    SamChatMessage,
+    SamChatSuggestion,
+    _VALID_SAM_CHAT_ROLES,
+    _VALID_SAM_CHAT_SUGGESTION_STATUS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -704,6 +710,41 @@ def _message_json(m: SamChatMessage) -> dict:
     }
 
 
+def _optional_int(raw) -> int | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _suggestion_json(row: SamChatSuggestion) -> dict:
+    return {
+        "id": row.id,
+        "source_session_id": row.source_session_id,
+        "source_message_id": row.source_message_id,
+        "source_label": row.source_label,
+        "summary": row.summary,
+        "details": row.details,
+        "status": row.status,
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "decided_at": row.decided_at.isoformat() if row.decided_at else None,
+    }
+
+
+def _suggestions_json(db, limit: int = 100) -> list[dict]:
+    rows = (db.query(SamChatSuggestion)
+            .order_by(SamChatSuggestion.id.desc())
+            .limit(limit)
+            .all())
+    status_rank = {"pending": 0, "approved": 1, "denied": 2}
+    rows.sort(key=lambda r: (status_rank.get(r.status, 9), -r.id))
+    return [_suggestion_json(r) for r in rows]
+
+
 def _session_cost(db, session_id: int) -> str:
     """Total cost_usd across a session's messages, as a string."""
     rows = (db.query(SamChatMessage.cost_usd)
@@ -956,6 +997,7 @@ def sam_chat_page():
             token_estimate=token_estimate,
             context_warn_tokens=_CONTEXT_WARN_TOKENS,
             start_files=_read_start_files(),
+            suggestions=_suggestions_json(db),
             # Phase 2 §9 — when on, the page's JS uses the async queue
             # flow (send / poll-2s / history-restore) instead of SSE.
             sam_chat_async=_sam_chat_async_enabled(),
@@ -1048,6 +1090,90 @@ def sam_chat_active_model_set():
     if not ok:
         return jsonify({"ok": False, "error": info}), 502
     return jsonify({"ok": True, "model": info})
+
+
+# ============================================================
+# Fix / improve suggestions under /sam/chat.
+# These rows are approval candidates generated from chat observations.
+# They do not become TODOs unless Sam approves or manually moves them.
+# ============================================================
+
+@sam_chat_bp.route("/sam/chat/suggestions", methods=["GET"])
+def sam_chat_suggestions_list():
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    db = SessionLocal()
+    try:
+        return jsonify({"ok": True, "suggestions": _suggestions_json(db)})
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/suggestions", methods=["POST"])
+def sam_chat_suggestions_add():
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        body = request.form.to_dict()
+    summary = (body.get("summary") or "").strip()
+    details = (body.get("details") or "").strip()
+    source_label = (body.get("source_label") or "").strip()
+    created_by = (body.get("created_by")
+                  or _current_sam_display_name()
+                  or "Sam").strip()
+    if not summary:
+        return jsonify({"ok": False, "error": "summary required"}), 400
+    row = SamChatSuggestion(
+        source_session_id=_optional_int(body.get("source_session_id")),
+        source_message_id=_optional_int(body.get("source_message_id")),
+        source_label=source_label[:160] or None,
+        summary=summary[:220],
+        details=details or None,
+        status="pending",
+        created_by=created_by[:80] or None,
+    )
+    db = SessionLocal()
+    try:
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True,
+                        "suggestion": _suggestion_json(row)}), 201
+    finally:
+        db.close()
+
+
+@sam_chat_bp.route("/sam/chat/suggestions/<int:suggestion_id>/decision",
+                   methods=["POST"])
+def sam_chat_suggestions_decide(suggestion_id: int):
+    gate = _require_sam_api()
+    if gate is not None:
+        return gate
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        body = request.form.to_dict()
+    status = (body.get("status") or "").strip().lower()
+    if (status not in _VALID_SAM_CHAT_SUGGESTION_STATUS
+            or status == "pending"):
+        return jsonify({"ok": False,
+                        "error": "status must be approved or denied"}), 400
+    db = SessionLocal()
+    try:
+        row = db.get(SamChatSuggestion, suggestion_id)
+        if row is None:
+            return jsonify({"ok": False, "error": "not found"}), 404
+        row.status = status
+        row.decided_at = datetime.utcnow()
+        row.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(row)
+        return jsonify({"ok": True,
+                        "suggestion": _suggestion_json(row)})
+    finally:
+        db.close()
 
 
 # ============================================================

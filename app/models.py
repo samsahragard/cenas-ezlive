@@ -2063,6 +2063,44 @@ class SamChatTodo(Base):
 _VALID_SAM_CHAT_TODO_STATUS = frozenset({"active", "done"})
 
 
+class SamChatSuggestion(Base):
+    """One improvement suggestion surfaced from Sam Chat/review messages.
+
+    Suggestions are deliberately separate from SamChatTodo: a row here is
+    an observation that Sam can approve or deny, not work the team is
+    automatically allowed to start.
+    """
+    __tablename__ = "sam_chat_suggestions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sam_chat_sessions.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    source_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sam_chat_messages.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    source_label: Mapped[str | None] = mapped_column(String(160),
+                                                     nullable=True)
+    summary: Mapped[str] = mapped_column(String(220), nullable=False)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 'pending' | 'approved' | 'denied'. Validated application-side.
+    status: Mapped[str] = mapped_column(String(16), nullable=False,
+                                        default="pending", index=True)
+    created_by: Mapped[str | None] = mapped_column(String(80),
+                                                   nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime,
+                                                        nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
+_VALID_SAM_CHAT_SUGGESTION_STATUS = frozenset(
+    {"pending", "approved", "denied"})
+
+
 class DevChatTodo(Base):
     """Sam-authored TODO under /partner/developer/chat (Sam #1066, 2026-05-26).
 

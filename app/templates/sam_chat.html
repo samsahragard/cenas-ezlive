@@ -181,7 +181,12 @@
     padding: 4px 10px;
     border-radius: 12px;
   }
-  .sc-msgs { flex: 1; overflow-y: auto; padding: 18px 16px; }
+  .sc-msgs {
+    flex: 1;
+    min-height: 120px;
+    overflow-y: auto;
+    padding: 18px 16px;
+  }
   .sc-msg { margin-bottom: 16px; display: flex; flex-direction: column; }
   .sc-msg.role-user { align-items: flex-end; }
   .sc-msg.role-assistant { align-items: flex-start; }
@@ -619,9 +624,159 @@
     text-transform: uppercase; color: rgba(236, 227, 208, 0.45);
     margin: 12px 0 4px;
   }
+  /* ---- Fix / improve suggestions approval queue ---- */
+  .sc-suggest {
+    flex: 0 0 auto;
+    max-height: 235px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    border-top: 0.5px solid rgba(217, 164, 54, 0.16);
+    background: rgba(18, 10, 6, 0.72);
+    color: rgba(236, 227, 208, 0.86);
+  }
+  .sc-suggest-head {
+    display: flex; align-items: center; gap: 8px;
+    color: #E4B340;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+  .sc-suggest-count {
+    margin-left: auto;
+    color: rgba(236, 227, 208, 0.54);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 400;
+  }
+  .sc-suggest-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    min-height: 44px;
+    max-height: 128px;
+    padding-right: 2px;
+  }
+  .sc-suggest-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 7px 8px;
+    border-left: 2px solid rgba(228, 179, 64, 0.42);
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.24);
+  }
+  .sc-suggest-item.is-approved { border-left-color: rgba(83, 187, 117, 0.75); }
+  .sc-suggest-item.is-denied { border-left-color: rgba(232, 88, 82, 0.75); opacity: 0.74; }
+  .sc-suggest-title {
+    color: #FAF6EC;
+    font-size: 12.5px;
+    font-weight: 650;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+  .sc-suggest-details {
+    margin-top: 3px;
+    color: rgba(236, 227, 208, 0.72);
+    font-size: 11.5px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .sc-suggest-meta {
+    margin-top: 4px;
+    color: rgba(236, 227, 208, 0.42);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .sc-suggest-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .sc-suggest-btn {
+    width: 25px; height: 25px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(236, 227, 208, 0.78);
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .sc-suggest-btn.approve:hover {
+    border-color: rgba(83, 187, 117, 0.50);
+    color: #86E2A3;
+    background: rgba(83, 187, 117, 0.16);
+  }
+  .sc-suggest-btn.deny:hover {
+    border-color: rgba(232, 88, 82, 0.48);
+    color: #FF938F;
+    background: rgba(232, 88, 82, 0.16);
+  }
+  .sc-suggest-status {
+    min-width: 74px;
+    text-align: right;
+    color: rgba(236, 227, 208, 0.52);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .sc-suggest-add {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .sc-suggest-add textarea {
+    resize: none;
+    min-height: 36px;
+    max-height: 70px;
+    background: rgba(10, 6, 4, 0.92);
+    color: #FAF6EC;
+    border: 1px solid rgba(217, 164, 54, 0.25);
+    border-radius: 6px;
+    padding: 8px 9px;
+    font-size: 12px;
+    font-family: inherit;
+    line-height: 1.3;
+  }
+  .sc-suggest-add textarea:focus {
+    outline: none;
+    border-color: rgba(228, 179, 64, 0.55);
+  }
+  .sc-suggest-add button {
+    background: rgba(228, 179, 64, 0.18);
+    color: #FFD970;
+    border: 1px solid rgba(228, 179, 64, 0.4);
+    border-radius: 6px;
+    padding: 7px 13px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .sc-suggest-add button:hover { background: rgba(228,179,64,0.28); }
+  .sc-suggest-empty {
+    color: rgba(236,227,208,0.5);
+    font-size: 12px;
+    padding: 6px 8px;
+    font-style: italic;
+  }
+  .sc-suggest-err {
+    color: #E85852;
+    font-size: 11px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
   @media (max-width: 600px) {
     .sc-todo-add { grid-template-columns: 1fr; }
     .sc-todo-add input[type="date"] { width: 100%; }
+    .sc-suggest { max-height: 260px; }
+    .sc-suggest-add { grid-template-columns: 1fr; }
+    .sc-suggest-item { grid-template-columns: 1fr; }
+    .sc-suggest-actions { justify-content: flex-end; }
   }
 </style>
 {% endblock %}
@@ -727,6 +882,20 @@
         <span class="sc-hint">Images / PDFs / text · 5MB each, 20MB total</span>
       </div>
     </div>
+    <section class="sc-suggest" id="sc-suggest">
+      <div class="sc-suggest-head">
+        <i class="ti ti-bulb"></i>
+        <span>Fix / Improve Suggestions</span>
+        <span class="sc-suggest-count" id="sc-suggest-count"></span>
+      </div>
+      <div class="sc-suggest-list" id="sc-suggest-list"></div>
+      <form class="sc-suggest-add" id="sc-suggest-form" autocomplete="off">
+        <textarea id="sc-suggest-text" rows="1"
+                  placeholder="Add a fix or improvement to approve later..."></textarea>
+        <button type="submit" id="sc-suggest-add-btn">Add</button>
+      </form>
+      <div class="sc-suggest-err" id="sc-suggest-err" hidden></div>
+    </section>
   </div>
 
 </div>
@@ -802,6 +971,7 @@
     cost30d: {{ cost_30d | tojson }},
     tokenEstimate: {{ token_estimate | tojson }},
     contextWarnTokens: {{ context_warn_tokens | tojson }},
+    suggestions: {{ suggestions | tojson }},
     samChatAsync: {{ sam_chat_async | tojson }}
   };
 </script>
@@ -879,7 +1049,11 @@
     return !!(session && session.is_assistant_review);
   }
   function applySessionMode(session) {
+    D.currentSession = session || null;
     if (colEl) colEl.classList.toggle("is-review", isReviewSession(session));
+    window.dispatchEvent(new CustomEvent("sam-chat-session-change", {
+      detail: { session: D.currentSession }
+    }));
   }
   function updateWarn(estTokens) {
     if (estTokens && estTokens >= D.contextWarnTokens) {
@@ -1632,6 +1806,171 @@
   fmtCost30(D.cost30d);
   updateWarn(D.tokenEstimate);
   inputEl.focus();
+})();
+{% endraw %}
+</script>
+
+<!-- ============================================================
+     Fix / improve suggestions approval queue.
+     ============================================================ -->
+<script>
+{% raw %}
+(function() {
+  const D = window.SAM_CHAT_DATA || {};
+  const $panel = document.getElementById("sc-suggest");
+  const $list = document.getElementById("sc-suggest-list");
+  const $count = document.getElementById("sc-suggest-count");
+  const $form = document.getElementById("sc-suggest-form");
+  const $text = document.getElementById("sc-suggest-text");
+  const $addBtn = document.getElementById("sc-suggest-add-btn");
+  const $err = document.getElementById("sc-suggest-err");
+  if (!$panel || !$form) return;
+
+  let suggestions = Array.isArray(D.suggestions) ? D.suggestions.slice() : [];
+  let activeSession = D.currentSession || null;
+
+  window.addEventListener("sam-chat-session-change", (e) => {
+    activeSession = (e.detail && e.detail.session) || null;
+  });
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  function showErr(msg) {
+    $err.textContent = msg;
+    $err.hidden = false;
+    setTimeout(() => { $err.hidden = true; }, 5000);
+  }
+
+  function fmtTime(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  }
+
+  async function api(method, path, body) {
+    const opts = { method: method, headers: {"Accept": "application/json"} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(path, opts);
+    let data = null;
+    try { data = await r.json(); } catch (e) { /* non-JSON */ }
+    if (!r.ok || (data && data.ok === false)) {
+      const detail = (data && data.error) || `HTTP ${r.status}`;
+      throw new Error(detail);
+    }
+    return data;
+  }
+
+  function sourceLabel() {
+    if (!activeSession) return "";
+    if (activeSession.is_assistant_review && activeSession.review_subject) {
+      return activeSession.review_subject;
+    }
+    return activeSession.title || "New chat";
+  }
+
+  function splitEntry(raw) {
+    const text = String(raw || "").trim();
+    const first = text.split(/\r?\n/).find((line) => line.trim()) || text;
+    return { summary: first.trim(), details: text };
+  }
+
+  function renderItem(s) {
+    const status = s.status || "pending";
+    const cls = ["sc-suggest-item", "is-" + status].join(" ");
+    const meta = [
+      s.created_by ? "by " + s.created_by : "",
+      s.source_label ? "from " + s.source_label : "",
+      s.created_at ? "added " + fmtTime(s.created_at) : "",
+      s.decided_at ? status + " " + fmtTime(s.decided_at) : ""
+    ].filter(Boolean).join(" · ");
+    const actions = status === "pending"
+      ? `<button class="sc-suggest-btn approve" data-action="approved" data-id="${s.id}" title="Approve"><i class="ti ti-check"></i></button>
+         <button class="sc-suggest-btn deny" data-action="denied" data-id="${s.id}" title="Deny"><i class="ti ti-x"></i></button>`
+      : `<div class="sc-suggest-status">${esc(status)}</div>`;
+    return `<div class="${cls}">
+      <div>
+        <div class="sc-suggest-title">${esc(s.summary)}</div>
+        ${s.details ? `<div class="sc-suggest-details">${esc(s.details)}</div>` : ""}
+        ${meta ? `<div class="sc-suggest-meta">${esc(meta)}</div>` : ""}
+      </div>
+      <div class="sc-suggest-actions">${actions}</div>
+    </div>`;
+  }
+
+  function render() {
+    const pending = suggestions.filter((s) => (s.status || "pending") === "pending").length;
+    const approved = suggestions.filter((s) => s.status === "approved").length;
+    const denied = suggestions.filter((s) => s.status === "denied").length;
+    $count.textContent = `(${pending} pending${approved ? `, ${approved} approved` : ""}${denied ? `, ${denied} denied` : ""})`;
+    $list.innerHTML = suggestions.length
+      ? suggestions.map(renderItem).join("")
+      : `<div class="sc-suggest-empty">No suggestions yet.</div>`;
+  }
+
+  async function refresh() {
+    try {
+      const data = await api("GET", "/sam/chat/suggestions");
+      suggestions = data.suggestions || [];
+      D.suggestions = suggestions;
+      render();
+    } catch (e) {
+      showErr("suggestions load failed: " + e.message);
+    }
+  }
+
+  $form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const entry = splitEntry($text.value);
+    if (!entry.summary) { showErr("suggestion required"); return; }
+    $addBtn.disabled = true;
+    try {
+      await api("POST", "/sam/chat/suggestions", {
+        summary: entry.summary,
+        details: entry.details === entry.summary ? "" : entry.details,
+        source_session_id: activeSession && activeSession.id ? activeSession.id : null,
+        source_label: sourceLabel()
+      });
+      $text.value = "";
+      await refresh();
+    } catch (err) {
+      showErr("add failed: " + err.message);
+    } finally {
+      $addBtn.disabled = false;
+      $text.focus();
+    }
+  });
+
+  $list.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id, 10);
+    const status = btn.dataset.action;
+    if (!id || !status) return;
+    btn.disabled = true;
+    try {
+      await api("POST", `/sam/chat/suggestions/${id}/decision`, {status});
+      await refresh();
+    } catch (err) {
+      showErr(status + " failed: " + err.message);
+      btn.disabled = false;
+    }
+  });
+
+  render();
+  setInterval(refresh, 15000);
 })();
 {% endraw %}
 </script>

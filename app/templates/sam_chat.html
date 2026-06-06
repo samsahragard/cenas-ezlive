@@ -631,7 +631,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 10px 12px 12px;
+    padding: 10px 84px 12px 12px;
     border-top: 0.5px solid rgba(217, 164, 54, 0.16);
     background: rgba(18, 10, 6, 0.72);
     color: rgba(236, 227, 208, 0.86);
@@ -773,7 +773,10 @@
   @media (max-width: 600px) {
     .sc-todo-add { grid-template-columns: 1fr; }
     .sc-todo-add input[type="date"] { width: 100%; }
-    .sc-suggest { max-height: 260px; }
+    .sc-suggest {
+      max-height: 260px;
+      padding-right: 70px;
+    }
     .sc-suggest-add { grid-template-columns: 1fr; }
     .sc-suggest-item { grid-template-columns: 1fr; }
     .sc-suggest-actions { justify-content: flex-end; }

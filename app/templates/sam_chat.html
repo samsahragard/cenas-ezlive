@@ -188,6 +188,7 @@
   .sc-msg.role-assistant { align-items: flex-start; }
   .sc-msg.role-dck { align-items: flex-start; }
   .sc-msg.role-aick { align-items: flex-start; }
+  .sc-msg.role-system { align-items: flex-start; }
   .sc-bubble {
     max-width: 78%;
     padding: 10px 14px;
@@ -222,6 +223,13 @@
     border: 1px solid rgba(80, 170, 210, 0.30);
     color: #ECE3D0;
     white-space: normal;
+  }
+  .role-system .sc-bubble {
+    max-width: 92%;
+    background: rgba(217, 164, 54, 0.075);
+    border: 1px solid rgba(217, 164, 54, 0.26);
+    color: #ECE3D0;
+    white-space: pre-wrap;
   }
   .sc-bubble p:first-child { margin-top: 0; }
   .sc-bubble p:last-child { margin-bottom: 0; }
@@ -372,6 +380,7 @@
   .role-assistant .sc-msg-author { color: rgba(217, 164, 54, 0.70); }
   .role-dck .sc-msg-author { color: rgba(200, 130, 200, 0.85); }
   .role-aick .sc-msg-author { color: rgba(140, 200, 230, 0.90); }
+  .role-system .sc-msg-author { color: rgba(217, 164, 54, 0.86); }
   /* ---- participant strip ---- */
   .sc-participants {
     display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
@@ -817,6 +826,7 @@
     authorEl.textContent = role === "user" ? "Sam"
       : role === "dck" ? "dck"
       : role === "aick" ? "aick"
+      : role === "system" ? "Cenas AI Review"
       : "Cena";
     wrap.appendChild(authorEl);
     const bubble = document.createElement("div");
@@ -869,7 +879,6 @@
       return;
     }
     list.forEach((m) => {
-      if (m.role === "system") return;
       if (m.id && m.id > lastSeenMsgId) lastSeenMsgId = m.id;
       addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });
     });
@@ -891,7 +900,6 @@
       const j = await r.json();
       if (!j.ok || !j.messages) return;
       j.messages.forEach((m) => {
-        if (m.role === "system") return;
         if (!m.id || m.id <= lastSeenMsgId) return;
         lastSeenMsgId = m.id;
         addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });

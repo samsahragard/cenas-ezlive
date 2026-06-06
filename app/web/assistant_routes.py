@@ -19,7 +19,7 @@ import hashlib
 import threading
 import urllib.parse
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,8 @@ from app.models import (
     EmployeeStoreAssignment,
     Order,
     PerfPeriodCache,
+    SamChatMessage,
+    SamChatSession,
     Schedule,
     Shift,
 )
@@ -51,6 +53,15 @@ _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _REVIEW_STATUS = "needs_review"
 _CK_REVIEW_PATH = "/review/question"
 _CK_RUNTIME_PATH = "/assistant/answer"
+_CENA_REVIEW_SESSION_TITLE = "Cenas AI Review"
+_CENA_REVIEW_CLIP_CHARS = 8000
+_SECRET_DEFAULTS = {
+    "GEMINI_API_KEY": [
+        r"C:\Users\sam\cena-secrets\gemini_api_key.txt",
+        r"C:\Users\sam\cena\.secrets\gemini_api_key.txt",
+        r"C:\Users\sam\cena-secrets\google_api_key.txt",
+    ],
+}
 _SENSITIVE_RE = re.compile(
     r"\b("
     r"password|passcode|token|secret|api key|credential|pin|"
@@ -84,6 +95,7 @@ _TOAST_SALES_RE = re.compile(
 _TOAST_TABLE_ACTIVITY_RE = re.compile(
     r"\b("
     r"table|tables|talbe|floor|seated|seat|opened|open check|"
+    r"check|ticket|waiter|server|opened by|opened it|"
     r"most recent.*open|latest.*open"
     r")\b",
     re.IGNORECASE,
@@ -99,7 +111,7 @@ _OPERATIONAL_NOUN_RE = re.compile(
 _FOLLOWUP_RE = re.compile(
     r"\b("
     r"what about|how about|what baout|earlier|morning|afternoon|"
-    r"evening|tonight|today|tomorrow|yesterday|this week|"
+    r"evening|tonight|today|tomorrow|yesterday|last night|this week|"
     r"tomball|dos|dos mas|copperfield|uno|uno mas"
     r")\b",
     re.IGNORECASE,
@@ -212,6 +224,11 @@ def _now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
+def _today_ct() -> date:
+    # Match the existing Toast report date handling on Windows hosts.
+    return (datetime.now(timezone.utc) - timedelta(hours=5)).date()
+
+
 def _stable_hash(value: Any) -> str:
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -219,6 +236,27 @@ def _stable_hash(value: Any) -> str:
 
 def _redact_text(value: str) -> str:
     return _SECRET_TEXT_RE.sub("[REDACTED]", value)
+
+
+def _read_secret(env_name: str) -> str:
+    value = (os.getenv(env_name) or "").strip()
+    if value:
+        return value
+    file_value = (os.getenv(env_name + "_FILE") or "").strip()
+    candidates = [file_value] if file_value else []
+    candidates.extend(_SECRET_DEFAULTS.get(env_name, []))
+    for raw_path in candidates:
+        if not raw_path:
+            continue
+        path = Path(raw_path)
+        try:
+            if path.exists():
+                value = path.read_text(encoding="utf-8").strip()
+                if value:
+                    return value
+        except OSError:
+            continue
+    return ""
 
 
 def _env_truthy(name: str) -> bool:
@@ -575,6 +613,191 @@ def _runtime_principal(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _clip_review_text(value: Any, max_chars: int = _CENA_REVIEW_CLIP_CHARS) -> str:
+    text = "" if value is None else str(value).strip()
+    if len(text) <= max_chars:
+        return text
+    omitted = len(text) - max_chars
+    return f"{text[:max_chars]}\n... [truncated {omitted} chars]"
+
+
+def _review_json(value: Any, max_chars: int = 4000) -> str:
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except TypeError:
+        text = str(value)
+    return _clip_review_text(text, max_chars)
+
+
+def _review_permissions(ctx: dict[str, Any]) -> str:
+    permissions = [str(perm) for perm in (ctx.get("permissions") or [])]
+    if "*" in permissions:
+        return "*"
+    if not permissions:
+        return "(none)"
+    visible = permissions[:25]
+    suffix = f" (+{len(permissions) - len(visible)} more)" if len(permissions) > len(visible) else ""
+    return ", ".join(visible) + suffix
+
+
+def _review_answer_from_response(data: dict[str, Any] | None) -> str:
+    if not isinstance(data, dict):
+        return _review_json(data)
+    answer = data.get("answer")
+    if answer:
+        return str(answer)
+    error = data.get("error")
+    if error:
+        return f"(error: {error})"
+    return _review_json(data)
+
+
+def _review_outcome(data: dict[str, Any] | None, status: int) -> str:
+    parts = [f"http_status={status}"]
+    if isinstance(data, dict):
+        for key in (
+            "ok",
+            "queued",
+            "reason",
+            "error",
+            "model",
+            "review_notice_model",
+            "storage",
+            "queue_id",
+            "ck_question_id",
+            "tool_id",
+            "tool_name",
+        ):
+            if key in data and data.get(key) is not None:
+                parts.append(f"{key}={data.get(key)}")
+    else:
+        parts.append("response_type=non_dict")
+    return "; ".join(parts)
+
+
+def _review_session(db) -> SamChatSession:
+    session_row = (
+        db.query(SamChatSession)
+        .filter(SamChatSession.title == _CENA_REVIEW_SESSION_TITLE)
+        .filter(SamChatSession.is_archived.is_(False))
+        .order_by(SamChatSession.id.asc())
+        .first()
+    )
+    if session_row is not None:
+        return session_row
+
+    now = datetime.utcnow()
+    session_row = SamChatSession(
+        started_at=now,
+        last_message_at=now,
+        title=_CENA_REVIEW_SESSION_TITLE,
+    )
+    db.add(session_row)
+    db.flush()
+    return session_row
+
+
+def _assistant_review_content(
+    ctx: dict[str, Any],
+    question: str,
+    data: dict[str, Any] | None,
+    status: int,
+    previous_question: str = "",
+    previous_answer: str = "",
+) -> str:
+    lines = [
+        "Cenas AI assistant review",
+        f"When: {_now_iso()}",
+        f"Outcome: {_review_outcome(data, status)}",
+        "",
+        "Sender:",
+        f"Name: {ctx.get('display_name') or 'Unknown'}",
+        f"Principal ID: {ctx.get('principal_id')}",
+        f"Kind: {ctx.get('kind')}",
+        f"Role: {ctx.get('role')}",
+        f"Owner operator: {bool(ctx.get('is_owner_operator'))}",
+        "",
+        "Permission setting:",
+        f"can_ask_personal: {bool(ctx.get('can_ask_personal'))}",
+        f"can_ask_operational: {bool(ctx.get('can_ask_operational'))}",
+        f"permissions: {_review_permissions(ctx)}",
+        "",
+        "Scope:",
+        f"path: {ctx.get('path')}",
+        f"current_store: {ctx.get('current_store')}",
+        f"store_slugs: {_review_json(ctx.get('store_slugs') or [])}",
+        "",
+        "Question:",
+        _clip_review_text(question),
+    ]
+    if previous_question:
+        lines.extend(["", "Previous question:", _clip_review_text(previous_question)])
+    if previous_answer:
+        lines.extend(["", "Previous answer:", _clip_review_text(previous_answer, 3000)])
+    lines.extend(["", "Answer:", _clip_review_text(_review_answer_from_response(data))])
+    return "\n".join(lines)
+
+
+def _mirror_assistant_turn_to_cena_chat(
+    ctx: dict[str, Any],
+    question: str,
+    data: dict[str, Any] | None,
+    status: int,
+    previous_question: str = "",
+    previous_answer: str = "",
+) -> None:
+    if not question:
+        return
+    if SessionLocal is None:
+        log.warning("assistant: Cena chat mirror skipped because SessionLocal is unavailable")
+        return
+    db = SessionLocal()
+    try:
+        session_row = _review_session(db)
+        now = datetime.utcnow()
+        session_row.last_message_at = now
+        session_row.updated_at = now
+        db.add(SamChatMessage(
+            session_id=session_row.id,
+            role="system",
+            content=_assistant_review_content(
+                ctx,
+                question,
+                data,
+                status,
+                previous_question,
+                previous_answer,
+            ),
+            model="assistant-review-mirror",
+            created_at=now,
+        ))
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("assistant: failed to mirror turn into Cena chat")
+    finally:
+        db.close()
+
+
+def _assistant_json_response(
+    ctx: dict[str, Any],
+    question: str,
+    data: dict[str, Any],
+    status: int = 200,
+    previous_question: str = "",
+    previous_answer: str = "",
+):
+    _mirror_assistant_turn_to_cena_chat(
+        ctx,
+        question,
+        data,
+        status,
+        previous_question,
+        previous_answer,
+    )
+    return jsonify(data), status
+
+
 def _date_key(value: Any) -> str | None:
     if isinstance(value, date):
         return value.isoformat()
@@ -882,8 +1105,23 @@ def _wants_toast_table_activity(question: str) -> bool:
     text = str(question or "")
     return bool(
         _TOAST_TABLE_ACTIVITY_RE.search(text)
-        and re.search(r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|latest|recent|open|opened)\b", text, re.IGNORECASE)
+        and re.search(
+            r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|"
+            r"yesterday|last night|tonight|latest|recent|open|opened)\b",
+            text,
+            re.IGNORECASE,
+        )
     )
+
+
+def _toast_table_business_date_from_question(question: str) -> str | None:
+    text = str(question or "").casefold()
+    today = _today_ct()
+    if re.search(r"\b(last night|yesterday|previous night)\b", text):
+        return (today - timedelta(days=1)).strftime("%Y%m%d")
+    if re.search(r"\b(today|tonight)\b", text):
+        return today.strftime("%Y%m%d")
+    return None
 
 
 def _requested_store(question: str) -> str | None:
@@ -909,10 +1147,13 @@ def _toast_sales_summary_tool_payload(period: str) -> dict[str, Any]:
     return analytics_summary_payload(period)
 
 
-def _toast_table_activity_tool_payload(location: str | None) -> dict[str, Any]:
+def _toast_table_activity_tool_payload(
+    location: str | None,
+    business_date: str | None = None,
+) -> dict[str, Any]:
     from app.services.toast_table_activity import latest_table_activity_payload
 
-    return latest_table_activity_payload(location)
+    return latest_table_activity_payload(location, business_date=business_date)
 
 
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
@@ -944,7 +1185,8 @@ def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     if _tool_is_available(ctx, "toast.table_activity") and _wants_toast_table_activity(question):
         try:
             data["toast.table_activity"] = _toast_table_activity_tool_payload(
-                _requested_store(question)
+                _requested_store(question),
+                _toast_table_business_date_from_question(question),
             )
         except Exception:  # noqa: BLE001
             log.exception("assistant: failed to build toast.table_activity")
@@ -1100,8 +1342,8 @@ def _queued_answer(reason: str) -> str:
     return "I can't safely answer that from your current permissions yet, so I saved it for Sam review."
 
 
-def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
-    key = os.getenv("GEMINI_API_KEY", "").strip()
+def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
+    key = _read_secret("GEMINI_API_KEY")
     if not key:
         return None, None
     try:
@@ -1112,10 +1354,57 @@ def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str 
 
     model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
     client = genai.Client(api_key=key)
-    prompt = _system_prompt(ctx) + "\n\nUser question:\n" + question
     resp = client.models.generate_content(model=model, contents=prompt)
     text = (getattr(resp, "text", None) or "").strip()
     return text or None, model
+
+
+def _review_reason_label(reason: str) -> str:
+    labels = {
+        "not_authenticated": "the user is not signed in",
+        "missing_ai_permission": "the current user does not have assistant permission",
+        "sensitive_or_operational_question_requires_higher_permission": (
+            "the question needs higher operational permission"
+        ),
+        "sensitive_or_operational_question_needs_approved_tool": (
+            "the question needs an approved Cenas data tool"
+        ),
+        "data_question_requires_higher_permission": (
+            "the question needs higher data permission"
+        ),
+        "data_question_needs_approved_tool": (
+            "the question needs an approved Cenas data tool"
+        ),
+    }
+    return labels.get(reason, "the current permissions or tooling require Sam review")
+
+
+def _review_notice_prompt(ctx: dict[str, Any], reason: str, required_permission: str | None,
+                          fallback: str) -> str:
+    return (
+        _stable_policy_prompt()
+        + "\n\n"
+        + "A user question has already been durably saved in the CK assistant "
+        "review queue. Draft only the short message shown to the user. Do not "
+        "answer the saved question. Do not invent facts, mention Gemini, mention "
+        "API keys, expose internal reason codes, or imply that Sam received a "
+        "separate live alert. Say that it was saved for Sam review. Keep it to "
+        "one or two friendly sentences.\n\n"
+        f"{_session_prompt(ctx)}\n"
+        f"Review reason: {_review_reason_label(reason)}.\n"
+        f"Required permission: {required_permission or 'none'}.\n"
+        f"Fallback notice: {fallback}"
+    )
+
+
+def _gemini_review_notice(ctx: dict[str, Any], reason: str, required_permission: str | None,
+                          fallback: str) -> tuple[str | None, str | None]:
+    return _gemini_generate(_review_notice_prompt(ctx, reason, required_permission, fallback))
+
+
+def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
+    prompt = _system_prompt(ctx) + "\n\nUser question:\n" + question
+    return _gemini_generate(prompt)
 
 
 def _system_prompt(ctx: dict[str, Any]) -> str:
@@ -1210,12 +1499,7 @@ def assistant_tools():
 
 @assistant_bp.route("/assistant/ask", methods=["POST"])
 def assistant_ask():
-    if not _assistant_enabled():
-        return jsonify({"ok": False, "error": "assistant_disabled"}), 503
-
     ctx = _principal_context()
-    if not _assistant_available_for_context(ctx):
-        return jsonify({"ok": False, "error": "assistant_unavailable"}), 503
 
     body = request.get_json(silent=True) or {}
     question = str(body.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
@@ -1225,26 +1509,79 @@ def assistant_ask():
     previous_answer = str(body.get("previous_answer") or "").strip()[:_MAX_QUESTION_CHARS]
     safety_question = _resolved_question(question, previous_question)
 
+    if not _assistant_enabled():
+        return _assistant_json_response(
+            ctx,
+            question,
+            {"ok": False, "error": "assistant_disabled"},
+            503,
+            previous_question,
+            previous_answer,
+        )
+
+    if not _assistant_available_for_context(ctx):
+        return _assistant_json_response(
+            ctx,
+            question,
+            {"ok": False, "error": "assistant_unavailable"},
+            503,
+            previous_question,
+            previous_answer,
+        )
+
     runtime_response = _post_to_ck_runtime(question, ctx, previous_question, previous_answer)
     if runtime_response is not None:
         data, status = runtime_response
-        return jsonify(data), status
+        return _assistant_json_response(
+            ctx,
+            question,
+            data,
+            status,
+            previous_question,
+            previous_answer,
+        )
 
     if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
-        return jsonify({"ok": False, "error": "ck_runtime_required"}), 503
+        return _assistant_json_response(
+            ctx,
+            question,
+            {"ok": False, "error": "ck_runtime_required"},
+            503,
+            previous_question,
+            previous_answer,
+        )
 
     should_queue, reason, required = _should_queue(safety_question, ctx)
     if should_queue:
         row = _queue_for_review(question, ctx, reason, required)
-        return jsonify({
+        answer = _queued_answer(reason)
+        notice = None
+        notice_model = None
+        try:
+            notice, notice_model = _gemini_review_notice(ctx, reason, required, answer)
+        except Exception:
+            log.exception("assistant gemini review notice failed")
+        if notice:
+            answer = notice
+        response = {
             "ok": True,
-            "answer": _queued_answer(reason),
+            "answer": answer,
             "queued": True,
             "queue_id": row["id"],
             "storage": row.get("storage"),
             "ck_question_id": row.get("ck_question_id"),
             "reason": reason,
-        })
+        }
+        if notice and notice_model:
+            response["review_notice_model"] = notice_model
+        return _assistant_json_response(
+            ctx,
+            question,
+            response,
+            200,
+            previous_question,
+            previous_answer,
+        )
 
     try:
         answer, model = _gemini_answer(question, ctx)
@@ -1255,7 +1592,7 @@ def assistant_ask():
 
     if not answer:
         row = _queue_for_review(question, ctx, "model_unavailable_or_no_answer", None)
-        return jsonify({
+        return _assistant_json_response(ctx, question, {
             "ok": True,
             "answer": "I saved that for Sam review. The assistant model is not available right now.",
             "queued": True,
@@ -1263,9 +1600,16 @@ def assistant_ask():
             "storage": row.get("storage"),
             "ck_question_id": row.get("ck_question_id"),
             "reason": "model_unavailable_or_no_answer",
-        })
+        }, 200, previous_question, previous_answer)
 
-    return jsonify({"ok": True, "answer": answer, "queued": False, "model": model})
+    return _assistant_json_response(
+        ctx,
+        question,
+        {"ok": True, "answer": answer, "queued": False, "model": model},
+        200,
+        previous_question,
+        previous_answer,
+    )
 
 
 @assistant_bp.route("/cron/assistant-questions-export", methods=["GET"])

@@ -469,9 +469,10 @@ def test_runtime_refreshes_stale_table_payload_without_waiter(tmp_path, monkeypa
     monkeypatch.setattr(
         runtime,
         "_toast_table_activity_payload",
-        lambda location: {
+        lambda location, business_date=None: {
             "generated_at": "2026-06-06T01:05:00Z",
             "location": location or "all",
+            "business_date": business_date,
             "location_label": "all locations",
             "latest": {
                 "table_name": "104",
@@ -543,7 +544,7 @@ def test_runtime_anchors_table_waiter_followup_to_previous_answer(tmp_path, monk
     monkeypatch.setattr(
         runtime,
         "_toast_table_activity_payload",
-        lambda *_: (_ for _ in ()).throw(AssertionError("anchored table follow-up must not refetch")),
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("anchored table follow-up must not refetch")),
     )
 
     port = _free_port()
@@ -585,6 +586,54 @@ def test_runtime_anchors_table_waiter_followup_to_previous_answer(tmp_path, monk
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_table_activity_last_night_fetches_yesterday_and_names_waiter(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("toast.table_activity")]
+    seen = {}
+    monkeypatch.setattr(
+        runtime,
+        "_toast_table_activity_payload",
+        lambda location, business_date=None: seen.update({
+            "location": location,
+            "business_date": business_date,
+        }) or {
+            "generated_at": "2026-06-06T01:05:00Z",
+            "location": location or "all",
+            "business_date": business_date,
+            "location_label": "all locations",
+            "latest": {
+                "table_name": "82",
+                "opened_at_local": "2026-06-05 7:33 PM CT",
+                "opened_by_name": "Yadira Flores",
+                "server_name": "Yadira Flores",
+                "employee_lookup_available": True,
+                "table_config_available": True,
+            },
+        },
+    )
+
+    data = runtime._approved_tool_answer(
+        "who opened the last table last night?",
+        "",
+        principal,
+        tools,
+        {},
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "toast.table_activity"
+    assert seen["location"] is None
+    assert seen["business_date"] == runtime._toast_table_business_date_from_question("last night")
+    assert seen["business_date"] != runtime._today_ct().strftime("%Y%m%d")
+    assert "table 82" in data["answer"]
+    assert "2026-06-05 7:33 PM CT" in data["answer"]
+    assert "opened by Yadira Flores" in data["answer"]
 
 
 def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_path, monkeypatch):

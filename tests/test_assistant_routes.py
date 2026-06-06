@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from http.server import ThreadingHTTPServer
 
 from flask import Flask
+from sqlalchemy.orm import sessionmaker
 
 from app.models import (
     AttendanceShift,
@@ -14,6 +15,8 @@ from app.models import (
     EmployeeStoreAssignment,
     Order,
     PerfPeriodCache,
+    SamChatMessage,
+    SamChatSession,
     Schedule,
     Shift,
 )
@@ -137,6 +140,76 @@ def test_partner_catalog_only_tools_do_not_activate_for_staff():
     assert tools["read_file"]["deny_reason"] == "session_type_not_allowed"
     assert tools["finance.pnl_summary"]["available"] is False
     assert tools["dev.assistant_tool_catalog_snapshot"]["available"] is False
+
+
+def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
+    test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr(ar, "SessionLocal", test_session_factory)
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": "tomball",
+        "path": "/partner/",
+        "permissions": ["*"],
+        "is_owner_operator": True,
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+    }
+
+    ar._mirror_assistant_turn_to_cena_chat(
+        ctx,
+        "who opened the last table and what time",
+        {
+            "ok": True,
+            "answer": "Table 311 was opened at 7:54 PM CT by Test Waiter.",
+            "queued": False,
+            "model": "gemini-2.5-flash",
+            "tool_id": "toast.table_activity",
+        },
+        200,
+        previous_question="what was the last table opened",
+        previous_answer="Table 311 was opened at 7:54 PM CT.",
+    )
+
+    session_row = (
+        db_session.query(SamChatSession)
+        .filter(SamChatSession.title == "Cenas AI Review")
+        .one()
+    )
+    message = (
+        db_session.query(SamChatMessage)
+        .filter(SamChatMessage.session_id == session_row.id)
+        .one()
+    )
+    assert message.role == "system"
+    assert message.model == "assistant-review-mirror"
+    assert "Cenas AI assistant review" in message.content
+    assert "Name: Sam" in message.content
+    assert "Role: partner" in message.content
+    assert "permissions: *" in message.content
+    assert "Question:\nwho opened the last table and what time" in message.content
+    assert "Table 311 was opened at 7:54 PM CT by Test Waiter." in message.content
+
+    ar._mirror_assistant_turn_to_cena_chat(
+        ctx,
+        "who was the waiter",
+        {"ok": False, "error": "assistant_unavailable"},
+        503,
+    )
+
+    assert (
+        db_session.query(SamChatSession)
+        .filter(SamChatSession.title == "Cenas AI Review")
+        .count()
+    ) == 1
+    assert (
+        db_session.query(SamChatMessage)
+        .filter(SamChatMessage.session_id == session_row.id)
+        .count()
+    ) == 2
 
 
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
@@ -294,8 +367,9 @@ def test_operator_toast_table_activity_payload_handles_typo(monkeypatch):
     monkeypatch.setattr(
         ar,
         "_toast_table_activity_tool_payload",
-        lambda location: {
+        lambda location, business_date=None: {
             "location": location,
+            "business_date": business_date,
             "latest": {
                 "location_label": "Tomball",
                 "table_name": "106",
@@ -309,6 +383,41 @@ def test_operator_toast_table_activity_payload_handles_typo(monkeypatch):
     assert payload["toast.table_activity"]["location"] == "tomball"
     assert payload["toast.table_activity"]["latest"]["table_name"] == "106"
     assert "toast.sales_summary" not in payload
+
+
+def test_operator_toast_table_activity_payload_uses_last_night_date(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    seen = {}
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_table_activity_tool_payload",
+        lambda location, business_date=None: seen.update({
+            "location": location,
+            "business_date": business_date,
+        }) or {"location": location, "business_date": business_date, "latest": None},
+    )
+
+    payload = ar._approved_tool_data("who opened the last table last night?", ctx)
+
+    assert "toast.table_activity" in payload
+    assert seen["location"] is None
+    assert seen["business_date"] == ar._toast_table_business_date_from_question("last night")
+    assert seen["business_date"] != ar._today_ct().strftime("%Y%m%d")
 
 
 def test_partner_level_tool_payloads_do_not_require_owner_operator(monkeypatch):
@@ -482,6 +591,8 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
     monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
     monkeypatch.setenv("ASSISTANT_REVIEW_TIMEOUT_SECONDS", "5")
     monkeypatch.setattr(ar, "_gemini_answer", lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")))
+    mirror_calls = []
+    monkeypatch.setattr(ar, "_mirror_assistant_turn_to_cena_chat", lambda *args: mirror_calls.append(args))
 
     try:
         res = app.test_client().post(
@@ -501,6 +612,14 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
         assert RuntimeHandler.seen["body"]["previous_question"] == "How many caterings do we have today?"
         assert RuntimeHandler.seen["body"]["principal"]["role"] == "gm"
         assert RuntimeHandler.seen["body"]["principal"]["store_slugs"] == ["dos"]
+        assert len(mirror_calls) == 1
+        mirror_ctx, mirror_question, mirror_data, mirror_status, mirror_previous, mirror_prev_answer = mirror_calls[0]
+        assert mirror_ctx["role"] == "gm"
+        assert mirror_question == "what baout earlier this morning?"
+        assert mirror_data["answer"] == "CK-local answer"
+        assert mirror_status == 200
+        assert mirror_previous == "How many caterings do we have today?"
+        assert mirror_prev_answer == ""
     finally:
         httpd.shutdown()
         httpd.server_close()

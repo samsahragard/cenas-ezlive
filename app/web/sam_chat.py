@@ -492,7 +492,7 @@ def _build_api_messages_from_rows(rows, images_by_msg=None) -> list[dict]:
             # Re-attach any images Sam sent on this turn so Cena can see
             # a screenshot referenced from an earlier message, not just
             # the current one (Sam #5:01 image-reading).
-            _imgs = (images_by_msg or {}).get(m.id) or []
+            _imgs = (images_by_msg or {}).get(getattr(m, "id", None)) or []
             mapped.append({"role": "user", "content": (
                 [{"type": "text", "text": m.content}] + _imgs
                 if _imgs else m.content)})

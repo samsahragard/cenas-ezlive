@@ -24,7 +24,7 @@ import sqlite3
 import sys
 import threading
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -105,6 +105,7 @@ _TOAST_SALES_RE = re.compile(
 _TOAST_TABLE_ACTIVITY_RE = re.compile(
     r"\b("
     r"table|tables|talbe|floor|seated|seat|opened|open check|"
+    r"check|ticket|waiter|server|opened by|opened it|"
     r"most recent.*open|latest.*open"
     r")\b",
     re.IGNORECASE,
@@ -124,7 +125,7 @@ _OPERATIONAL_NOUN_RE = re.compile(
 _FOLLOWUP_RE = re.compile(
     r"\b("
     r"what about|how about|what baout|earlier|morning|afternoon|"
-    r"evening|tonight|today|tomorrow|yesterday|this week|"
+    r"evening|tonight|today|tomorrow|yesterday|last night|this week|"
     r"tomball|dos|dos mas|copperfield|uno|uno mas"
     r")\b",
     re.IGNORECASE,
@@ -133,6 +134,11 @@ _FOLLOWUP_RE = re.compile(
 
 def _now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _today_ct() -> date:
+    # The app already normalizes Toast labor/report dates to fixed CDT on Windows.
+    return (datetime.now(timezone.utc) - timedelta(hours=5)).date()
 
 
 def _stable_hash(value: object) -> str:
@@ -312,8 +318,23 @@ def _wants_toast_table_activity(question: str) -> bool:
     text = str(question or "")
     return bool(
         _TOAST_TABLE_ACTIVITY_RE.search(text)
-        and re.search(r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|latest|recent|open|opened)\b", text, re.IGNORECASE)
+        and re.search(
+            r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|"
+            r"yesterday|last night|tonight|latest|recent|open|opened)\b",
+            text,
+            re.IGNORECASE,
+        )
     )
+
+
+def _toast_table_business_date_from_question(question: str) -> str | None:
+    text = str(question or "").casefold()
+    today = _today_ct()
+    if re.search(r"\b(last night|yesterday|previous night)\b", text):
+        return (today - timedelta(days=1)).strftime("%Y%m%d")
+    if re.search(r"\b(today|tonight)\b", text):
+        return today.strftime("%Y%m%d")
+    return None
 
 
 def _toast_period_from_question(question: str) -> str:
@@ -344,11 +365,11 @@ def _toast_sales_summary_payload(period: str) -> dict:
     return analytics_summary_payload(period)
 
 
-def _toast_table_activity_payload(location: str | None) -> dict:
+def _toast_table_activity_payload(location: str | None, business_date: str | None = None) -> dict:
     _load_toast_env_defaults()
     from app.services.toast_table_activity import latest_table_activity_payload
 
-    return latest_table_activity_payload(location)
+    return latest_table_activity_payload(location, business_date=business_date)
 
 
 def _money(value: object) -> str:
@@ -412,15 +433,21 @@ def _toast_sales_summary_answer(summary: dict) -> str:
 
 def _toast_table_activity_answer(summary: dict) -> str:
     location_label = str(summary.get("location_label") or "the requested location").strip()
+    business_date = str(summary.get("business_date") or "").strip()
+    date_label = "today"
+    if re.fullmatch(r"\d{8}", business_date):
+        formatted = f"{business_date[:4]}-{business_date[4:6]}-{business_date[6:]}"
+        if business_date != _today_ct().strftime("%Y%m%d"):
+            date_label = f"on {formatted}"
     latest = summary.get("latest") if isinstance(summary, dict) else None
     if not isinstance(latest, dict):
-        return f"I do not see any in-store table opens for {location_label} today in Toast yet."
+        return f"I do not see any in-store table opens for {location_label} {date_label} in Toast."
 
     opened_local = str(latest.get("opened_at_local") or "").strip()
     table_name = str(latest.get("table_name") or "").strip()
     if table_name:
         answer = (
-            f"The most recent {location_label} in-store table open I see is "
+            f"The most recent {location_label} in-store table open I see {date_label} is "
             f"table {table_name}"
         )
     else:
@@ -456,7 +483,7 @@ def _toast_table_activity_needs_employee_refresh(summary: object) -> bool:
         return False
     if str(latest.get("opened_by_name") or "").strip():
         return False
-    return "employee_lookup_available" not in latest
+    return latest.get("employee_lookup_available") is not False
 
 
 def _toast_table_person_followup_answer(question: str, previous_answer: str) -> str | None:
@@ -665,6 +692,7 @@ def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
     if tool_id == "toast.table_activity":
         return "latest_table_open", {
             "location": _requested_store(resolved_question) or "all_locations",
+            "business_date": _toast_table_business_date_from_question(resolved_question) or "today",
         }
     if tool_id == "toast.sales_summary":
         return "sales_summary", {
@@ -874,10 +902,22 @@ def _approved_tool_answer(
                 "generated_at": _now_iso(),
             }
         requested_store = _requested_store(resolved_question)
+        business_date = _toast_table_business_date_from_question(resolved_question)
         table_activity = tool_data.get("toast.table_activity") if isinstance(tool_data, dict) else None
-        if not isinstance(table_activity, dict) or _toast_table_activity_needs_employee_refresh(table_activity):
+        requested_business_date = business_date or _today_ct().strftime("%Y%m%d")
+        payload_business_date = (
+            str(table_activity.get("business_date") or "").strip()
+            if isinstance(table_activity, dict)
+            else ""
+        )
+        if (
+            not isinstance(table_activity, dict)
+            or (payload_business_date and payload_business_date != requested_business_date)
+            or (not payload_business_date and business_date)
+            or _toast_table_activity_needs_employee_refresh(table_activity)
+        ):
             try:
-                table_activity = _toast_table_activity_payload(requested_store)
+                table_activity = _toast_table_activity_payload(requested_store, business_date)
             except Exception:  # noqa: BLE001
                 log.exception("assistant runtime: Toast table activity failed")
                 return None
@@ -1001,6 +1041,66 @@ def _queued_answer(reason: str) -> str:
     return "I can't safely answer that from your current permissions yet, so I saved it for Sam review."
 
 
+def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
+    key = _read_secret("GEMINI_API_KEY")
+    if not key:
+        return None, None
+    try:
+        from google import genai  # type: ignore[import]
+    except ImportError:
+        log.warning("assistant runtime: google-genai package not installed")
+        return None, None
+
+    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
+    client = genai.Client(api_key=key)
+    resp = client.models.generate_content(model=model, contents=prompt)
+    text = (getattr(resp, "text", None) or "").strip()
+    return text or None, model
+
+
+def _review_reason_label(reason: str) -> str:
+    labels = {
+        "not_authenticated": "the user is not signed in",
+        "missing_ai_permission": "the current user does not have assistant permission",
+        "sensitive_or_operational_question_requires_higher_permission": (
+            "the question needs higher operational permission"
+        ),
+        "sensitive_or_operational_question_needs_approved_tool": (
+            "the question needs an approved Cenas data tool"
+        ),
+        "data_question_requires_higher_permission": (
+            "the question needs higher data permission"
+        ),
+        "data_question_needs_approved_tool": (
+            "the question needs an approved Cenas data tool"
+        ),
+    }
+    return labels.get(reason, "the current permissions or tooling require Sam review")
+
+
+def _review_notice_prompt(principal: dict, reason: str, required_permission: str | None,
+                          fallback: str) -> str:
+    return (
+        _stable_policy_prompt()
+        + "\n\n"
+        + "A user question has already been durably saved in the CK assistant "
+        "review queue. Draft only the short message shown to the user. Do not "
+        "answer the saved question. Do not invent facts, mention Gemini, mention "
+        "API keys, expose internal reason codes, or imply that Sam received a "
+        "separate live alert. Say that it was saved for Sam review. Keep it to "
+        "one or two friendly sentences.\n\n"
+        f"{_session_prompt(principal)}\n"
+        f"Review reason: {_review_reason_label(reason)}.\n"
+        f"Required permission: {required_permission or 'none'}.\n"
+        f"Fallback notice: {fallback}"
+    )
+
+
+def _gemini_review_notice(principal: dict, reason: str, required_permission: str | None,
+                          fallback: str) -> tuple[str | None, str | None]:
+    return _gemini_generate(_review_notice_prompt(principal, reason, required_permission, fallback))
+
+
 def _system_prompt(principal: dict) -> str:
     return (
         _stable_policy_prompt()
@@ -1033,21 +1133,8 @@ def _session_prompt(principal: dict) -> str:
 
 
 def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | None]:
-    key = _read_secret("GEMINI_API_KEY")
-    if not key:
-        return None, None
-    try:
-        from google import genai  # type: ignore[import]
-    except ImportError:
-        log.warning("assistant runtime: google-genai package not installed")
-        return None, None
-
-    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
-    client = genai.Client(api_key=key)
     prompt = _system_prompt(principal) + "\n\nUser question:\n" + question
-    resp = client.models.generate_content(model=model, contents=prompt)
-    text = (getattr(resp, "text", None) or "").strip()
-    return text or None, model
+    return _gemini_generate(prompt)
 
 
 def _answer(payload: dict) -> tuple[dict, int]:
@@ -1078,15 +1165,27 @@ def _answer(payload: dict) -> tuple[dict, int]:
     should_queue, reason, required = _should_queue(resolved_question, principal)
     if should_queue:
         row = _queue_for_review(question, principal, reason, required, source)
-        return {
+        answer = _queued_answer(reason)
+        notice = None
+        notice_model = None
+        try:
+            notice, notice_model = _gemini_review_notice(principal, reason, required, answer)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant runtime gemini review notice failed")
+        if notice:
+            answer = notice
+        response = {
             "ok": True,
-            "answer": _queued_answer(reason),
+            "answer": answer,
             "queued": True,
             "queue_id": row["id"],
             "storage": "ck",
             "ck_question_id": row["ck_question_id"],
             "reason": reason,
-        }, 200
+        }
+        if notice and notice_model:
+            response["review_notice_model"] = notice_model
+        return response, 200
 
     answer = None
     model = None

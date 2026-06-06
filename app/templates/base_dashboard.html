@@ -332,6 +332,14 @@
     .ck-topbar .ck-page-meta p {
       margin: 0;
     }
+    /* Driver ribbon declutter (Sam 2026-06-06): drivers get a clean header --
+       remove the CENAS/OPS eyebrow and the subtitle/meta line, leaving just the
+       title + DRIVER badge + menu icon. Scoped by the driver role badge so only
+       driver pages change; the accent rule + title stay. */
+    .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-brand-mark,
+    .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-page-meta {
+      display: none;
+    }
 
     .ck-topbar .topbar-right {
       display: flex;

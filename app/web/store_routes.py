@@ -5118,12 +5118,12 @@ def catering_dashboard():
 # store-scoped and flat routes, and the coming-soon tab gets no url.
 _OPERATIONS_DASH_TABS = [
     ("team",        "Team",            False),
-    ("forecasts",   "Forecasts",       True),
+    ("corp-order",       "Corporate Order",  False),
     ("sales",       "Sales",           False),
     ("labor",       "Labor",           False),
     ("performance", "Performance",     False),
     ("schedule-reports", "Schedule Reports", False),
-    ("corp-order",       "Corporate Order",  False),
+    ("forecasts",   "Forecasts",       True),
 ]
 
 

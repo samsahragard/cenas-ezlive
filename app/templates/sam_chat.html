@@ -1325,16 +1325,20 @@
     streaming = on;
     sendBtn.disabled = on;
   }
+  function isQueuedSend(value) {
+    return !!(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "text"));
+  }
 
   async function sendMessage(_q) {
-    const text = _q ? _q.text : inputEl.value.trim();
-    const _atts = _q ? _q.atts : [...attachments];
+    const queued = isQueuedSend(_q);
+    const text = queued ? (_q.text || "") : inputEl.value.trim();
+    const _atts = queued ? (_q.atts || []) : [...attachments];
     if (ASYNC && !isReviewSession(currentSession) && _atts.length === 0) {
-      return sendMessageAsync(_q);
+      return sendMessageAsync(queued ? _q : null);
     }
     if (!text && _atts.length === 0) return;
 
-    if (streaming && !_q) {
+    if (streaming && !queued) {
       msgQueue.push({ text, atts: _atts });
       addMessage("user", text || "(attachments only)", {});
       inputEl.value = "";
@@ -1356,7 +1360,7 @@
     if (currentSessionId) fd.append("session_id", String(currentSessionId));
     _atts.forEach((f) => fd.append("attachments", f));
 
-    if (!_q) {
+    if (!queued) {
       inputEl.value = "";
       inputEl.style.height = "auto";
       attachments = [];
@@ -1492,9 +1496,10 @@
 
   // Async send: enqueue on a gateway, return immediately, then poll.
   async function sendMessageAsync(_q) {
-    const text = _q ? _q.text : inputEl.value.trim();
+    const queued = isQueuedSend(_q);
+    const text = queued ? (_q.text || "") : inputEl.value.trim();
     if (!text) return;
-    if (streaming && !_q) {
+    if (streaming && !queued) {
       // a send while one is in flight — queue it (mirrors the SSE path)
       msgQueue.push({ text: text, atts: [] });
       addMessage("user", text, {});
@@ -1503,7 +1508,7 @@
       return;
     }
     addMessage("user", text, {});
-    if (!_q) {
+    if (!queued) {
       inputEl.value = "";
       inputEl.style.height = "auto";
       attachments = [];

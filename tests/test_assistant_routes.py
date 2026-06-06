@@ -20,7 +20,10 @@ from app.models import (
     Schedule,
     Shift,
 )
-from app.services.assistant_tool_inventory import PARTNER_TOOL_IDS
+from app.services.assistant_tool_inventory import (
+    PARTNER_TOOL_IDS,
+    is_excluded_non_routable,
+)
 from app.web import assistant_routes as ar
 
 
@@ -117,14 +120,13 @@ def test_tool_catalog_activates_approved_tools_for_partner_level():
     assert tools["toast.employee_profiles"]["available"] is True
     assert tools["employee.my_profile"]["available"] is False
     assert tools["employee.my_profile.read"]["available"] is True
-    assert tools["read_file"]["available"] is True
-    assert tools["render_env_set"]["available"] is True
-    assert tools["sql_query"]["available"] is True
     assert tools["finance.pnl_summary"]["available"] is True
     assert tools["orders.assign_driver"]["available"] is True
-    assert tools["dev.assistant_tool_catalog_snapshot"]["available"] is True
-    assert tools["read_file"]["implementation_status"] == "catalog_only"
-    assert sum(1 for tool in tools.values() if tool["available"]) >= len(PARTNER_TOOL_IDS)
+    assert "read_file" not in tools
+    assert "render_env_set" not in tools
+    assert "sql_query" not in tools
+    assert "dev.assistant_tool_catalog_snapshot" not in tools
+    assert sum(1 for tool in tools.values() if tool["available"]) < len(PARTNER_TOOL_IDS)
 
 
 def test_partner_catalog_only_tools_do_not_activate_for_staff():
@@ -142,12 +144,29 @@ def test_partner_catalog_only_tools_do_not_activate_for_staff():
 
     tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
 
-    assert tools["read_file"]["available"] is False
-    assert tools["read_file"]["deny_reason"] == "session_type_not_allowed"
+    assert "read_file" not in tools
     assert tools["finance.pnl_summary"]["available"] is False
-    assert tools["dev.assistant_tool_catalog_snapshot"]["available"] is False
+    assert "dev.assistant_tool_catalog_snapshot" not in tools
     assert tools["toast.webhook_activity"]["available"] is False
     assert tools["toast.employee_profiles"]["available"] is False
+
+
+def test_excluded_partner_tools_are_not_routable_for_partner_level():
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "permissions": ["*"],
+        "is_owner_operator": False,
+    }
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+    excluded_ids = [tool_id for tool_id in PARTNER_TOOL_IDS if is_excluded_non_routable(tool_id)]
+
+    assert excluded_ids
+    assert not (set(excluded_ids) & set(tools))
+    assert ar._route_approved_tool_id("please run git status", ctx) is None
 
 
 def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
@@ -398,11 +417,8 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
     assert summary["today_time_windows_by_store"]["morning"]["copperfield"] == 1
     assert summary["needs_driver_orders"] == 1
     assert summary["live_tracking_orders"] == 1
-    assert payload["drivers.store_summary"]["total_drivers"] == 1
-    assert payload["drivers.store_summary"]["average_score"] == 100.0
-    assert payload["labor.store_aggregate"]["active_employees"] == 1
-    assert payload["labor.store_aggregate"]["published_shifts"] == 1
-    assert payload["labor.store_aggregate"]["last30_cached_hours"] == 40.0
+    assert "drivers.store_summary" not in payload
+    assert "labor.store_aggregate" not in payload
     assert "713-555" not in encoded
     assert "private" not in encoded
     assert "secret co" not in encoded
@@ -422,9 +438,6 @@ def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
         "can_ask_operational": True,
         "is_owner_operator": True,
     }
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_sales_summary_tool_payload",
@@ -458,9 +471,6 @@ def test_operator_toast_table_activity_payload_handles_typo(monkeypatch):
         "can_ask_operational": True,
         "is_owner_operator": True,
     }
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_table_activity_tool_payload",
@@ -497,9 +507,6 @@ def test_operator_toast_table_activity_payload_uses_last_night_date(monkeypatch)
         "is_owner_operator": True,
     }
     seen = {}
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_table_activity_tool_payload",
@@ -532,9 +539,6 @@ def test_operator_toast_table_activity_payload_handles_bare_waiter_question(monk
         "is_owner_operator": True,
     }
     seen = {}
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_table_activity_tool_payload",
@@ -564,9 +568,6 @@ def test_operator_toast_webhook_activity_payload(monkeypatch):
         "can_ask_operational": True,
         "is_owner_operator": True,
     }
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_webhook_activity_tool_payload",
@@ -593,9 +594,6 @@ def test_operator_toast_employee_profiles_payload(monkeypatch):
         "can_ask_operational": True,
         "is_owner_operator": True,
     }
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_employee_profiles_tool_payload",
@@ -621,9 +619,6 @@ def test_partner_level_tool_payloads_do_not_require_owner_operator(monkeypatch):
         "can_ask_operational": True,
         "is_owner_operator": False,
     }
-    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
-    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
-    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
     monkeypatch.setattr(
         ar,
         "_toast_sales_summary_tool_payload",
@@ -632,9 +627,6 @@ def test_partner_level_tool_payloads_do_not_require_owner_operator(monkeypatch):
 
     payload = ar._approved_tool_data("what are Toast sales today?", ctx)
 
-    assert payload["orders.store_summary"]["total_orders"] == 0
-    assert payload["drivers.store_summary"]["total_drivers"] == 0
-    assert payload["labor.store_aggregate"]["total_employees"] == 0
     assert payload["toast.sales_summary"]["period"] == "today"
 
 

@@ -454,6 +454,139 @@ def test_runtime_answers_table_waiter_followup_with_previous_question(tmp_path, 
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_refreshes_stale_table_payload_without_waiter(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("stale table payload must refresh tool")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_toast_table_activity_payload",
+        lambda location: {
+            "generated_at": "2026-06-06T01:05:00Z",
+            "location": location or "all",
+            "location_label": "all locations",
+            "latest": {
+                "table_name": "104",
+                "opened_at_local": "2026-06-05 8:05 PM CT",
+                "server_name": "Melissa D Almaguer Aguilera",
+                "employee_lookup_available": True,
+                "table_config_available": True,
+            },
+        },
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        res = _post(
+            port,
+            {
+                "question": "who was the waiter",
+                "previous_question": "who opened the last table and what time",
+                "principal": principal,
+                "tools": [_available_tool("toast.table_activity")],
+                "tool_data": {
+                    "toast.table_activity": {
+                        "generated_at": "2026-06-06T01:04:00Z",
+                        "location": "all",
+                        "location_label": "all locations",
+                        "latest": {
+                            "table_name": "104",
+                            "opened_at_local": "2026-06-05 8:05 PM CT",
+                            "table_config_available": True,
+                        },
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["tool_id"] == "toast.table_activity"
+        assert "table 104" in data["answer"]
+        assert "8:05 PM CT" in data["answer"]
+        assert "waiter/server was Melissa D Almaguer Aguilera" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_anchors_table_waiter_followup_to_previous_answer(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("anchored table follow-up must not call model")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_toast_table_activity_payload",
+        lambda *_: (_ for _ in ()).throw(AssertionError("anchored table follow-up must not refetch")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        res = _post(
+            port,
+            {
+                "question": "who was the waiter",
+                "previous_question": "who opened the last table and what time",
+                "previous_answer": (
+                    "The most recent all locations in-store table open I see is "
+                    "table R2, opened at 2026-06-05 8:07 PM CT. "
+                    "The waiter/server was Alexa Rodriguez."
+                ),
+                "principal": principal,
+                "tools": [_available_tool("toast.table_activity")],
+                "tool_data": {},
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["tool_id"] == "toast.table_activity"
+        assert data["storage"] == "toast_table_activity_context"
+        assert data["answer"] == (
+            "The waiter/server was Alexa Rodriguez for table R2, "
+            "opened at 2026-06-05 8:07 PM CT."
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
 def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

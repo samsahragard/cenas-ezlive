@@ -446,6 +446,43 @@ def _toast_table_activity_answer(summary: dict) -> str:
     return answer
 
 
+def _toast_table_activity_needs_employee_refresh(summary: object) -> bool:
+    if not isinstance(summary, dict):
+        return False
+    latest = summary.get("latest")
+    if not isinstance(latest, dict):
+        return False
+    if str(latest.get("server_name") or "").strip():
+        return False
+    if str(latest.get("opened_by_name") or "").strip():
+        return False
+    return "employee_lookup_available" not in latest
+
+
+def _toast_table_person_followup_answer(question: str, previous_answer: str) -> str | None:
+    if not previous_answer.strip():
+        return None
+    if not re.search(r"\b(who|waiter|server|opened by|opened it)\b", question, re.IGNORECASE):
+        return None
+    if "in-store table open" not in previous_answer or "waiter/server was" not in previous_answer:
+        return None
+    server_match = re.search(r"\bwaiter/server was ([^.]+)", previous_answer)
+    if not server_match:
+        return None
+    table_matches = re.findall(r"(?:is|was)\s+table\s+([^,.]+)", previous_answer, re.IGNORECASE)
+    time_match = re.search(r"\bopened at ([^.]+? CT)\b", previous_answer)
+    server_name = server_match.group(1).strip()
+    answer = f"The waiter/server was {server_name}"
+    details = []
+    if table_matches:
+        details.append(f"table {table_matches[-1].strip()}")
+    if time_match:
+        details.append(f"opened at {time_match.group(1).strip()}")
+    if details:
+        answer += " for " + ", ".join(details)
+    return answer + "."
+
+
 def _plural(count: int, singular: str, plural: str | None = None) -> str:
     return singular if count == 1 else (plural or singular + "s")
 
@@ -790,6 +827,7 @@ def _approved_tool_answer(
     principal: dict,
     tools: list[dict],
     tool_data: dict,
+    previous_answer: str = "",
 ) -> dict | None:
     resolved_question = _resolved_question(question, previous_question)
     if _wants_tool_discovery(resolved_question):
@@ -825,9 +863,19 @@ def _approved_tool_answer(
             "generated_at": _now_iso(),
         }
     if _toast_table_tool_authorized(principal, tools) and _wants_toast_table_activity(resolved_question):
+        contextual_table_answer = _toast_table_person_followup_answer(question, previous_answer)
+        if contextual_table_answer:
+            return {
+                "ok": True,
+                "answer": contextual_table_answer,
+                "queued": False,
+                "storage": "toast_table_activity_context",
+                "tool_id": "toast.table_activity",
+                "generated_at": _now_iso(),
+            }
         requested_store = _requested_store(resolved_question)
         table_activity = tool_data.get("toast.table_activity") if isinstance(tool_data, dict) else None
-        if not isinstance(table_activity, dict):
+        if not isinstance(table_activity, dict) or _toast_table_activity_needs_employee_refresh(table_activity):
             try:
                 table_activity = _toast_table_activity_payload(requested_store)
             except Exception:  # noqa: BLE001
@@ -1005,6 +1053,7 @@ def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | No
 def _answer(payload: dict) -> tuple[dict, int]:
     question = str(payload.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     previous_question = str(payload.get("previous_question") or "").strip()[:_MAX_QUESTION_CHARS]
+    previous_answer = str(payload.get("previous_answer") or "").strip()[:_MAX_QUESTION_CHARS]
     principal = payload.get("principal") or {}
     tools = payload.get("tools") or []
     tool_data = payload.get("tool_data") or {}
@@ -1013,7 +1062,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
         return {"ok": False, "error": "question required"}, 400
 
     resolved_question = _resolved_question(question, previous_question)
-    approved = _approved_tool_answer(question, previous_question, principal, tools, tool_data)
+    approved = _approved_tool_answer(question, previous_question, principal, tools, tool_data, previous_answer)
     if approved is not None:
         route_cache = _record_tool_route_verification(
             question,

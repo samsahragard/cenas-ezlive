@@ -989,6 +989,7 @@ def _post_to_ck_runtime(
     question: str,
     ctx: dict[str, Any],
     previous_question: str = "",
+    previous_answer: str = "",
 ) -> tuple[dict[str, Any], int] | None:
     """Send the assistant turn to the CK-local runtime.
 
@@ -1015,6 +1016,8 @@ def _post_to_ck_runtime(
     }
     if previous_question:
         payload["previous_question"] = previous_question
+    if previous_answer:
+        payload["previous_answer"] = previous_answer
     try:
         import httpx
 
@@ -1219,9 +1222,10 @@ def assistant_ask():
     if not question:
         return jsonify({"ok": False, "error": "question required"}), 400
     previous_question = _previous_question_from_body(body, question)
+    previous_answer = str(body.get("previous_answer") or "").strip()[:_MAX_QUESTION_CHARS]
     safety_question = _resolved_question(question, previous_question)
 
-    runtime_response = _post_to_ck_runtime(question, ctx, previous_question)
+    runtime_response = _post_to_ck_runtime(question, ctx, previous_question, previous_answer)
     if runtime_response is not None:
         data, status = runtime_response
         return jsonify(data), status

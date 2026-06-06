@@ -66,6 +66,7 @@
     var messages = el("div", "ckai-messages");
     var intro = addMessage(messages, "assistant", "Ask me a Cenas question. I will only answer what your role is allowed to see.");
     var lastUserQuestion = "";
+    var lastAssistantAnswer = "";
 
     var form = el("form", "ckai-form");
     var input = el("textarea", "ckai-input");
@@ -130,6 +131,7 @@
       var question = input.value.trim();
       if (!question) return;
       var previousQuestion = lastUserQuestion;
+      var previousAnswer = lastAssistantAnswer;
       lastUserQuestion = question;
       input.value = "";
       addMessage(messages, "user", question);
@@ -143,12 +145,16 @@
         },
         body: JSON.stringify({
           question: question,
-          previous_question: previousQuestion
+          previous_question: previousQuestion,
+          previous_answer: previousAnswer
         })
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           pending.textContent = data && data.answer ? data.answer : "I could not answer that yet.";
+          if (data && data.answer) {
+            lastAssistantAnswer = data.answer;
+          }
           if (data && data.queued) {
             pending.classList.add("ckai-queued");
           }

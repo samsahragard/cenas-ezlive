@@ -316,6 +316,12 @@ def _wants_toast_sales_summary(question: str) -> bool:
 
 def _wants_toast_table_activity(question: str) -> bool:
     text = str(question or "")
+    if _TOAST_TABLE_ACTIVITY_RE.search(text) and re.search(
+        r"\b(who\s+opened|waiter|server|opened\s+by|opened\s+it)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return True
     return bool(
         _TOAST_TABLE_ACTIVITY_RE.search(text)
         and re.search(
@@ -432,6 +438,17 @@ def _toast_sales_summary_answer(summary: dict) -> str:
 
 
 def _toast_table_activity_answer(summary: dict) -> str:
+    return _toast_table_activity_answer_for_question(summary, "")
+
+
+def _toast_table_person_intent(question: str) -> tuple[bool, bool]:
+    text = str(question or "").casefold()
+    wants_opened_by = bool(re.search(r"\b(who\s+opened|opened\s+by|opened\s+it)\b", text))
+    wants_server = bool(re.search(r"\b(waiter|server)\b", text))
+    return wants_opened_by, wants_server
+
+
+def _toast_table_activity_answer_for_question(summary: dict, question: str) -> str:
     location_label = str(summary.get("location_label") or "the requested location").strip()
     business_date = str(summary.get("business_date") or "").strip()
     date_label = "today"
@@ -460,7 +477,28 @@ def _toast_table_activity_answer(summary: dict) -> str:
     answer += "."
     opened_by = str(latest.get("opened_by_name") or "").strip()
     server_name = str(latest.get("server_name") or "").strip()
-    if opened_by and server_name and opened_by != server_name:
+    wants_opened_by, wants_server = _toast_table_person_intent(question)
+    if wants_opened_by and not opened_by:
+        if server_name:
+            answer += (
+                f" Toast returned the waiter/server as {server_name}, but did not "
+                "return an opened-by employee for that check."
+            )
+        elif latest.get("employee_lookup_available") is False:
+            answer += " Toast returned the table event, but employee lookup was unavailable, so I cannot name who opened it yet."
+        else:
+            answer += " Toast did not return the opened-by employee for that check."
+    elif wants_server and not server_name:
+        if opened_by:
+            answer += (
+                f" It was opened by {opened_by}, but Toast did not return a "
+                "waiter/server for that check."
+            )
+        elif latest.get("employee_lookup_available") is False:
+            answer += " Toast returned the table event, but employee lookup was unavailable, so I cannot name the waiter/server yet."
+        else:
+            answer += " Toast did not return the waiter/server for that check."
+    elif opened_by and server_name and opened_by != server_name:
         answer += f" It was opened by {opened_by}; the waiter/server was {server_name}."
     elif opened_by:
         answer += f" It was opened by {opened_by}."
@@ -473,15 +511,22 @@ def _toast_table_activity_answer(summary: dict) -> str:
     return answer
 
 
-def _toast_table_activity_needs_employee_refresh(summary: object) -> bool:
+def _toast_table_activity_needs_employee_refresh(summary: object, question: str = "") -> bool:
     if not isinstance(summary, dict):
         return False
     latest = summary.get("latest")
     if not isinstance(latest, dict):
         return False
-    if str(latest.get("server_name") or "").strip():
+    if latest.get("employee_lookup_available") is False:
         return False
-    if str(latest.get("opened_by_name") or "").strip():
+    opened_by = str(latest.get("opened_by_name") or "").strip()
+    server_name = str(latest.get("server_name") or "").strip()
+    wants_opened_by, wants_server = _toast_table_person_intent(question)
+    if wants_opened_by and not opened_by:
+        return True
+    if wants_server and not server_name:
+        return True
+    if opened_by or server_name:
         return False
     return latest.get("employee_lookup_available") is not False
 
@@ -914,7 +959,7 @@ def _approved_tool_answer(
             not isinstance(table_activity, dict)
             or (payload_business_date and payload_business_date != requested_business_date)
             or (not payload_business_date and business_date)
-            or _toast_table_activity_needs_employee_refresh(table_activity)
+            or _toast_table_activity_needs_employee_refresh(table_activity, question)
         ):
             try:
                 table_activity = _toast_table_activity_payload(requested_store, business_date)
@@ -923,7 +968,7 @@ def _approved_tool_answer(
                 return None
         return {
             "ok": True,
-            "answer": _toast_table_activity_answer(table_activity),
+            "answer": _toast_table_activity_answer_for_question(table_activity, question),
             "queued": False,
             "storage": "toast_table_activity_tool",
             "tool_id": "toast.table_activity",

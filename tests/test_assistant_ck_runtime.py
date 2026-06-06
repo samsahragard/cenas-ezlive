@@ -636,6 +636,95 @@ def test_runtime_table_activity_last_night_fetches_yesterday_and_names_waiter(mo
     assert "opened by Yadira Flores" in data["answer"]
 
 
+def test_runtime_refreshes_server_only_payload_for_opened_by_question(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("toast.table_activity")]
+    refreshed = {"called": False}
+    monkeypatch.setattr(
+        runtime,
+        "_toast_table_activity_payload",
+        lambda location, business_date=None: refreshed.update({"called": True}) or {
+            "generated_at": "2026-06-06T01:08:00Z",
+            "location": location or "all",
+            "business_date": business_date,
+            "location_label": "all locations",
+            "latest": {
+                "table_name": "82",
+                "opened_at_local": "2026-06-05 7:33 PM CT",
+                "opened_by_name": "Yadira Flores",
+                "server_name": "Maria Garcia",
+                "employee_lookup_available": True,
+                "table_config_available": True,
+            },
+        },
+    )
+
+    data = runtime._approved_tool_answer(
+        "who opened the last table?",
+        "",
+        principal,
+        tools,
+        {
+            "toast.table_activity": {
+                "business_date": runtime._today_ct().strftime("%Y%m%d"),
+                "location_label": "all locations",
+                "latest": {
+                    "table_name": "82",
+                    "opened_at_local": "2026-06-05 7:33 PM CT",
+                    "server_name": "Maria Garcia",
+                    "employee_lookup_available": True,
+                    "table_config_available": True,
+                },
+            }
+        },
+    )
+
+    assert refreshed["called"] is True
+    assert data is not None
+    assert "opened by Yadira Flores" in data["answer"]
+    assert "waiter/server was Maria Garcia" in data["answer"]
+
+
+def test_runtime_bare_waiter_question_routes_to_table_tool(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("waiter question must use table tool")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("toast.table_activity")]
+
+    data = runtime._approved_tool_answer(
+        "who was the waiter?",
+        "",
+        principal,
+        tools,
+        {
+            "toast.table_activity": {
+                "business_date": runtime._today_ct().strftime("%Y%m%d"),
+                "location_label": "all locations",
+                "latest": {
+                    "table_name": "311",
+                    "opened_at_local": "2026-06-05 7:54 PM CT",
+                    "server_name": "Maria Garcia",
+                    "employee_lookup_available": True,
+                    "table_config_available": True,
+                },
+            }
+        },
+    )
+
+    assert data is not None
+    assert data["tool_id"] == "toast.table_activity"
+    assert "waiter/server was Maria Garcia" in data["answer"]
+
+
 def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

@@ -420,6 +420,39 @@ def test_operator_toast_table_activity_payload_uses_last_night_date(monkeypatch)
     assert seen["business_date"] != ar._today_ct().strftime("%Y%m%d")
 
 
+def test_operator_toast_table_activity_payload_handles_bare_waiter_question(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    seen = {}
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_table_activity_tool_payload",
+        lambda location, business_date=None: seen.update({
+            "location": location,
+            "business_date": business_date,
+        }) or {"location": location, "business_date": business_date, "latest": None},
+    )
+
+    payload = ar._approved_tool_data("who was the waiter?", ctx)
+
+    assert "toast.table_activity" in payload
+    assert seen["location"] is None
+
+
 def test_partner_level_tool_payloads_do_not_require_owner_operator(monkeypatch):
     ctx = {
         "kind": "partner",

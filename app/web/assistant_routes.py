@@ -1103,6 +1103,12 @@ def _wants_toast_sales_summary(question: str) -> bool:
 
 def _wants_toast_table_activity(question: str) -> bool:
     text = str(question or "")
+    if _TOAST_TABLE_ACTIVITY_RE.search(text) and re.search(
+        r"\b(who\s+opened|waiter|server|opened\s+by|opened\s+it)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return True
     return bool(
         _TOAST_TABLE_ACTIVITY_RE.search(text)
         and re.search(
@@ -1504,7 +1510,12 @@ def assistant_ask():
     body = request.get_json(silent=True) or {}
     question = str(body.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     if not question:
-        return jsonify({"ok": False, "error": "question required"}), 400
+        return _assistant_json_response(
+            ctx,
+            question,
+            {"ok": False, "error": "question required"},
+            400,
+        )
     previous_question = _previous_question_from_body(body, question)
     previous_answer = str(body.get("previous_answer") or "").strip()[:_MAX_QUESTION_CHARS]
     safety_question = _resolved_question(question, previous_question)

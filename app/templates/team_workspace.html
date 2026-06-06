@@ -432,6 +432,10 @@
 <script>
 (function () {
   "use strict";
+  // Per-page-load cache-bust token (one fresh epoch-ms stamp captured at load).
+  // Appended to each iframe src at assignment time so a deploy + refresh re-fetches
+  // the tab iframes fresh, while tab-switching within one session reuses this token.
+  var _IFCB = Date.now();
   var root = document.getElementById("tws-root");
   if (!root) return;
   var ROSTER_URL = root.getAttribute("data-roster-url");
@@ -483,7 +487,8 @@
     if (!frame) return;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
-    frame.setAttribute("src", frame.getAttribute("data-src"));
+    var url = frame.getAttribute("data-src");
+    frame.setAttribute("src", url + (String(url).includes("?") ? "&" : "?") + "_cb=" + _IFCB);
   }
   /* ---- "Both stores" mode scaffolding (Sam #2675b) ----
      When the Schedule store dropdown is "both", each sub-tab's embed-wrap shows

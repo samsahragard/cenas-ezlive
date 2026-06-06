@@ -530,6 +530,13 @@
      width — so the frame shows ONLY the page content. The iframe is
      kept hidden (opacity 0) until that strip finishes, so there is no
      flash of doubled chrome. */
+  /* One cache-bust token per page load (incl. refresh): a fresh
+     epoch-millisecond timestamp. Appended to each iframe src at
+     assignment time so a hard/soft refresh re-fetches the tab pages
+     (the browser otherwise caches a lazily-loaded iframe and shows
+     stale post-deploy content). Tab-switching within one page load
+     reuses the same token, so cache is reused across in-session swaps. */
+  var _IFCB = Date.now();
   var root = document.getElementById("legdash");
   if (!root) return;
   var tabs = root.querySelectorAll(".legd-tab");
@@ -629,7 +636,8 @@
     if (!src) return;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
-    frame.setAttribute("src", src);
+    var bustedSrc = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
+    frame.setAttribute("src", bustedSrc);
   }
 
   function activate(key) {

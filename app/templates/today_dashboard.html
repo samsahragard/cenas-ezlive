@@ -453,6 +453,12 @@
 <script>
 (function () {
   "use strict";
+  /* One cache-bust token captured per page load (incl. refresh), so
+     each fresh load re-fetches the lazily-loaded iframes instead of
+     showing a stale browser-cached page after a deploy. Tab-switching
+     within one session reuses the same token, so cached frames are
+     reused mid-session. */
+  var _IFCB = Date.now();
   /* Today dashboard — tab switching plus iframe lazy-load and the
      per-iframe chrome strip.
 
@@ -570,7 +576,10 @@
     if (!src) return;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
-    frame.setAttribute("src", src);
+    /* Append a per-page-load cache-bust so a refresh re-fetches the
+       iframe page fresh; do not alter the data-src route itself. */
+    var bustedSrc = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
+    frame.setAttribute("src", bustedSrc);
   }
 
   function activate(key) {

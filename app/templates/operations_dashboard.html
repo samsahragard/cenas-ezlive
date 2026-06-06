@@ -540,6 +540,11 @@
      width — so the frame shows ONLY the page content. The iframe is
      kept hidden (opacity 0) until that strip finishes, so there is no
      flash of doubled chrome. */
+  /* One cache-bust token per page load (incl. refresh). Appended to
+     each iframe src so a deploy's new content is always re-fetched on a
+     fresh load; tab-switching within one session reuses the same token
+     (so cache is reused there). */
+  var _IFCB = Date.now();
   var root = document.getElementById("opsdash");
   if (!root) return;
   var tabs = root.querySelectorAll(".opsd-tab");
@@ -639,7 +644,11 @@
     if (!src) return;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
-    frame.setAttribute("src", src);
+    /* Append the per-page-load cache-bust so a fresh load (incl.
+       refresh) always re-fetches the iframe page, never a stale cached
+       copy. The data-src route itself is left untouched. */
+    var bustedSrc = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
+    frame.setAttribute("src", bustedSrc);
   }
 
   function activate(key) {

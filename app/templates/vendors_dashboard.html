@@ -450,6 +450,11 @@
      width - so the frame shows ONLY the page content. The iframe is
      kept hidden (opacity 0) until that strip finishes, so there is no
      flash of doubled chrome. */
+  /* One cache-bust token per page load (incl. refresh), so every fresh
+     load re-fetches each tab iframe instead of serving a stale cached
+     page after a deploy. Captured ONCE so tab-switching within a single
+     session reuses the cached pages (same token). */
+  var _IFCB = Date.now();
   var root = document.getElementById("vendash");
   if (!root) return;
   var tabs = root.querySelectorAll(".vend-tab");
@@ -547,7 +552,11 @@
     if (!src) return;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
-    frame.setAttribute("src", src);
+    /* Append the per-page-load cache-bust so the iframe re-fetches fresh
+       on every page load (incl. refresh); do NOT alter the data-src
+       route itself - only the assigned URL gets the param. */
+    var bustedSrc = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
+    frame.setAttribute("src", bustedSrc);
   }
 
   function activate(key) {

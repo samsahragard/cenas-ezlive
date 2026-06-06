@@ -454,6 +454,13 @@
      width — so the frame shows ONLY the page content. The iframe is
      kept hidden (opacity 0) until that strip finishes, so there is no
      flash of doubled chrome. */
+  /* One cache-bust token per page load (incl. refresh): every iframe
+     src assigned this load carries the same _cb, so a fresh load /
+     refresh re-fetches the tab pages (defeating the browser's iframe
+     cache after a deploy), while tab-switching within one session
+     reuses the cache (same token). */
+  var _IFCB = Date.now();
+
   var root = document.getElementById("mgrdash");
   if (!root) return;
   var tabs = root.querySelectorAll(".mgd-tab");
@@ -551,6 +558,9 @@
     if (!src) return;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
+    /* Append the per-page-load cache-bust so a refresh re-fetches the
+       lazily-loaded iframe page; the data-src route itself is untouched. */
+    src = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
     frame.setAttribute("src", src);
   }
 

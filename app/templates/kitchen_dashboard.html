@@ -520,6 +520,13 @@
      width — so the frame shows ONLY the page content. The iframe is
      kept hidden (opacity 0) until that strip finishes, so there is no
      flash of doubled chrome. */
+  /* One cache-bust token per page load (incl. refresh). Appended to
+     each iframe src at assignment time so a fresh load always re-fetches
+     the lazy iframes (defeating the browser cache that otherwise serves
+     stale post-deploy tab content), while tab-switching within one
+     session reuses the cache (same token for the page's lifetime). */
+  const _IFCB = Date.now();
+
   var root = document.getElementById("kitdash");
   if (!root) return;
   var tabs = root.querySelectorAll(".kitd-tab");
@@ -617,6 +624,9 @@
     if (!frame) return;
     var src = frame.getAttribute("data-src");
     if (!src) return;
+    /* Append the per-page-load cache-bust without touching the data-src
+       route itself, so a refresh re-fetches the iframe fresh. */
+    src = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
     loaded[key] = true;
     frame.addEventListener("load", function () { stripChrome(frame); });
     frame.setAttribute("src", src);

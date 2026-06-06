@@ -13,13 +13,16 @@ from app.models import (
     Driver,
     Employee,
     EmployeeStoreAssignment,
+    InHouseCateringQuote,
     Order,
+    OrderItem,
     PerfPeriodCache,
     SamChatMessage,
     SamChatSession,
     Schedule,
     Shift,
 )
+from app.services.assistant_handlers import orders as order_handlers
 from app.services.assistant_tool_inventory import (
     PARTNER_TOOL_IDS,
     is_excluded_non_routable,
@@ -51,6 +54,8 @@ def test_tool_catalog_only_general_help_active_for_operational_role():
     assert tools["assistant.general_help"]["available"] is True
     assert tools["orders.store_summary"]["available"] is False
     assert tools["orders.store_summary"]["deny_reason"] == "needs_sam_review"
+    assert tools["orders.catering_today"]["available"] is False
+    assert tools["orders.catering_today"]["deny_reason"] == "needs_sam_review"
     assert tools["drivers.store_summary"]["available"] is False
     assert tools["labor.store_aggregate"]["available"] is False
 
@@ -86,6 +91,8 @@ def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
     assert tools["orders.store_summary"]["available"] is True
     assert tools["orders.store_summary"]["status"] == "active"
     assert tools["orders.store_summary"]["deny_reason"] is None
+    assert tools["orders.catering_today"]["available"] is True
+    assert tools["orders.catering_today"]["status"] == "active"
     assert tools["drivers.store_summary"]["available"] is True
     assert tools["toast.sales_summary"]["available"] is True
     assert tools["toast.sales_summary"]["status"] == "active"
@@ -112,6 +119,7 @@ def test_tool_catalog_activates_approved_tools_for_partner_level():
     assert tools["assistant.general_help"]["available"] is True
     assert tools["orders.store_summary"]["available"] is True
     assert tools["orders.store_summary"]["status"] == "active"
+    assert tools["orders.catering_today"]["available"] is True
     assert tools["drivers.store_summary"]["available"] is True
     assert tools["labor.store_aggregate"]["available"] is True
     assert tools["toast.sales_summary"]["available"] is True
@@ -405,7 +413,7 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
         ),
     ])
     db_session.commit()
-    monkeypatch.setattr(ar, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
 
     ctx = {
         "kind": "partner",
@@ -421,7 +429,7 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
         "is_owner_operator": True,
     }
 
-    payload = ar._approved_tool_data("How many caterings today?", ctx)
+    payload = ar._approved_tool_data("Give me the order summary", ctx)
     encoded = json.dumps(payload, sort_keys=True).lower()
 
     summary = payload["orders.store_summary"]
@@ -437,6 +445,163 @@ def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatc
     assert "713-555" not in encoded
     assert "private" not in encoded
     assert "secret co" not in encoded
+
+
+def test_order_items_tool_payload_is_sanitized_and_store_scoped(db_session, monkeypatch):
+    today = date.today()
+    tomball_order = Order(
+        external_order_id="TO-ITEM",
+        delivery_date=today.isoformat(),
+        deliver_at="11:30 AM",
+        origin_store_id="tomball",
+        status="approved",
+        customer_phone="713-555-1212",
+        delivery_address="123 Private St",
+        client="Private Customer",
+    )
+    copperfield_order = Order(
+        external_order_id="CF-ITEM",
+        delivery_date=today.isoformat(),
+        deliver_at="12:30 PM",
+        origin_store_id="copperfield",
+        status="approved",
+        customer_phone="713-555-9999",
+        delivery_address="456 Hidden Ave",
+        client="Secret Co",
+    )
+    db_session.add_all([tomball_order, copperfield_order])
+    db_session.flush()
+    db_session.add_all([
+        OrderItem(order_id=tomball_order.id, raw_alias="Fajita Pack", item_key="fajita_pack", qty=2),
+        OrderItem(order_id=copperfield_order.id, raw_alias="Taco Pack", item_key="taco_pack", qty=1),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["tomball"],
+        "current_store": "tomball",
+        "path": "/partner/catering",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+
+    payload = ar._approved_tool_data("what was on order TO-ITEM", ctx)
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert "orders.catering_order_items_safe" in payload
+    assert payload["orders.catering_order_items_safe"]["order"]["external_order_id"] == "TO-ITEM"
+    assert payload["orders.catering_order_items_safe"]["items"][0]["label"] == "fajita_pack"
+    assert "cf-item" not in encoded
+    assert "713-555" not in encoded
+    assert "private customer" not in encoded
+    assert "hidden ave" not in encoded
+
+
+def test_order_handler_respects_staff_store_scope_directly(db_session, monkeypatch):
+    today = date.today()
+    db_session.add_all([
+        Order(
+            external_order_id="TB-TODAY",
+            delivery_date=today.isoformat(),
+            origin_store_id="tomball",
+            status="approved",
+        ),
+        Order(
+            external_order_id="CF-TODAY",
+            delivery_date=today.isoformat(),
+            origin_store_id="copperfield",
+            status="approved",
+        ),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.catering_today(
+        "caterings today",
+        {
+            "kind": "staff",
+            "role": "gm",
+            "store_slugs": ["tomball"],
+            "current_store": "tomball",
+            "permissions": ["ai.ask_claude", "orders.view"],
+            "is_owner_operator": False,
+        },
+    )
+
+    assert payload["count"] == 1
+    assert payload["by_store"] == {"tomball": 1}
+    assert payload["orders"][0]["external_order_id"] == "TB-TODAY"
+
+
+def test_order_payload_suppressed_without_orders_permission(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["tomball"],
+        "current_store": "tomball",
+        "path": "/partner/catering",
+        "permissions": ["ai.ask_claude"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setitem(
+        order_handlers.ORDER_TOOL_HANDLERS,
+        "orders_catering_today",
+        lambda *_: (_ for _ in ()).throw(AssertionError("denied order tool must not execute")),
+    )
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools["orders.catering_today"]["available"] is False
+    assert tools["orders.catering_today"]["deny_reason"] == "missing_permission"
+    assert ar._approved_tool_data("what caterings are today", ctx) == {}
+
+
+def test_in_house_quote_summary_redacts_contact_details(db_session, monkeypatch):
+    db_session.add(
+        InHouseCateringQuote(
+            store_scope="tomball",
+            customer_name="Private Customer",
+            customer_email="private@example.com",
+            customer_phone="713-555-1212",
+            event_address="123 Private St",
+            guest_count=25,
+            subtotal=250.0,
+            status="sent",
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.in_house_quotes_summary(
+        "in-house quote summary",
+        {
+            "kind": "partner",
+            "role": "partner",
+            "store_slugs": ["tomball"],
+            "current_store": "tomball",
+            "permissions": ["*"],
+            "is_owner_operator": False,
+        },
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["quote_count"] == 1
+    assert payload["recent_quotes"][0]["subtotal"] == 250.0
+    assert "private@example.com" not in encoded
+    assert "713-555" not in encoded
+    assert "private customer" not in encoded
+    assert "private st" not in encoded
 
 
 def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
@@ -795,10 +960,37 @@ def test_deterministic_matcher_scan_uses_registry_priority():
 
     assert [row["tool_id"] for row in rows] == [
         "toast.table_activity",
-        "orders.store_summary",
+        "orders.catering_today",
         None,
     ]
     assert rows[-1]["route_path"] == "review"
+
+
+def test_wave1_order_matchers_route_specific_tools_and_near_miss(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("deterministic order route must not call classifier")),
+    )
+
+    assert ar._route_approved_tool_choice("what caterings are today", ctx)["tool_id"] == "orders.catering_today"
+    assert ar._route_approved_tool_choice("catering status split", ctx)["tool_id"] == "orders.catering_by_status"
+    assert ar._route_approved_tool_choice("what was on order TO-1234", ctx)["tool_id"] == "orders.catering_order_items_safe"
+    assert ar._deterministic_route_tool_id("what is the order of operations status", ctx) is None
 
 
 def test_classifier_fallback_is_disabled_by_default(monkeypatch):

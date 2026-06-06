@@ -45,6 +45,8 @@ from app.services.assistant_tool_inventory import (
     is_excluded_non_routable,
     iter_partner_tool_definitions,
 )
+from app.services.assistant_handlers import drivers as driver_handlers
+from app.services.assistant_handlers import orders as order_handlers
 from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin_tool_registrations
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
@@ -1251,6 +1253,8 @@ def _toast_table_activity_tool_payload(
 
 def _wants_toast_webhook_activity(question: str) -> bool:
     text = str(question or "")
+    if re.search(r"\bwhat\s+was\s+on\s+order\b|\border\s+[A-Za-z0-9][A-Za-z0-9_-]{2,}\b", text, re.IGNORECASE):
+        return False
     if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
         return False
     return bool(
@@ -1281,6 +1285,8 @@ def _wants_toast_employee_profiles(question: str) -> bool:
 
 def _wants_orders_store_summary(question: str) -> bool:
     text = str(question or "")
+    if "order of operations" in text.casefold():
+        return False
     if any(
         matcher(text)
         for matcher in (
@@ -1325,6 +1331,7 @@ def _toast_employee_profiles_tool_payload(question: str) -> dict[str, Any]:
 
 
 _TOOL_MATCHERS = {
+    **order_handlers.ORDER_TOOL_MATCHERS,
     "orders_store_summary": _wants_orders_store_summary,
     "drivers_store_summary": _wants_drivers_store_summary,
     "labor_store_aggregate": _wants_labor_store_aggregate,
@@ -1336,9 +1343,9 @@ _TOOL_MATCHERS = {
 
 
 def _approved_tool_handlers() -> dict[str, Any]:
-    return {
-        "orders_store_summary": lambda question, ctx: _orders_store_summary(ctx),
-        "drivers_store_summary": lambda question, ctx: _drivers_store_summary(ctx),
+    handlers = {
+        **order_handlers.ORDER_TOOL_HANDLERS,
+        "drivers_store_summary": driver_handlers.drivers_store_summary,
         "labor_store_aggregate": lambda question, ctx: _labor_store_aggregate(ctx),
         "toast_sales_summary": (
             lambda question, ctx: _toast_sales_summary_tool_payload(
@@ -1358,6 +1365,7 @@ def _approved_tool_handlers() -> dict[str, Any]:
             lambda question, ctx: _toast_employee_profiles_tool_payload(question)
         ),
     }
+    return handlers
 
 
 def _available_implemented_tools(ctx: dict[str, Any]) -> dict[str, dict[str, Any]]:

@@ -3,7 +3,11 @@ from app.services.assistant_tool_inventory import (
     iter_excluded_non_routable_tool_ids,
     iter_partner_tool_definitions,
 )
-from app.services.assistant_tool_registry import canonical_tool_id, iter_tool_aliases
+from app.services.assistant_tool_registry import (
+    canonical_tool_id,
+    iter_builtin_tool_registrations,
+    iter_tool_aliases,
+)
 
 
 def test_inventory_skips_excluded_non_routable_tools_by_default():
@@ -64,3 +68,14 @@ def test_tool_aliases_do_not_unblock_excluded_sentinels():
 
     assert "read_file" not in aliases
     assert is_excluded_non_routable("read_file")
+
+
+def test_wave1_orders_reads_are_registered_without_write_like_actions():
+    tools = {tool["tool_id"]: tool for tool in iter_builtin_tool_registrations()}
+
+    assert tools["orders.catering_today"]["handler"] == "orders_catering_today"
+    assert tools["orders.catering_today"]["read_write_class"] == "read_only"
+    assert tools["orders.catering_order_items_safe"]["handler"] == "orders_catering_order_items_safe"
+    assert "orders.update_status" not in tools
+    assert "orders.reassign_store" not in tools
+    assert "orders.refresh_ezcater_tracking" not in tools

@@ -1375,6 +1375,99 @@ def test_runtime_partner_level_uses_approved_tool_without_owner_flag(monkeypatch
     assert data["tool_id"] == "orders.store_summary"
 
 
+def test_runtime_answers_wave1_catering_today_with_explicit_route(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("orders.catering_today")]
+    tool_data = {
+        "orders.catering_today": {
+            "ok": True,
+            "count": 2,
+            "window": "today",
+            "by_store": {"tomball": 1, "copperfield": 1},
+            "orders": [
+                {"external_order_id": "TO-1"},
+                {"external_order_id": "TO-2"},
+            ],
+            "generated_at": "2026-06-06T12:00:00Z",
+        },
+    }
+
+    data = runtime._approved_tool_answer(
+        "what caterings are today?",
+        "",
+        principal,
+        tools,
+        tool_data,
+        routed_tool_id="orders.catering_today",
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "orders.catering_today"
+    assert "2 caterings" in data["answer"]
+    assert "TO-1" in data["answer"]
+
+
+def test_runtime_answers_wave1_order_items_with_explicit_route(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    tools = [_available_tool("orders.catering_order_items_safe")]
+    tool_data = {
+        "orders.catering_order_items_safe": {
+            "ok": True,
+            "found": True,
+            "order": {"external_order_id": "TO-ITEM"},
+            "item_count": 2,
+            "items": [
+                {"qty": 2, "label": "fajita_pack"},
+                {"qty": 1, "label": "queso"},
+            ],
+            "generated_at": "2026-06-06T12:00:00Z",
+        },
+    }
+
+    data = runtime._approved_tool_answer(
+        "what was on order TO-ITEM?",
+        "",
+        principal,
+        tools,
+        tool_data,
+        routed_tool_id="orders.catering_order_items_safe",
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "orders.catering_order_items_safe"
+    assert "TO-ITEM" in data["answer"]
+    assert "fajita_pack" in data["answer"]
+
+
+def test_runtime_wave1_order_routes_are_verifiable():
+    from scripts import assistant_ck_runtime as runtime
+
+    payload = {
+        "ok": True,
+        "count": 1,
+        "window": "today",
+        "orders": [{"external_order_id": "TO-1"}],
+    }
+
+    assert "orders.catering_today" in runtime._VERIFIED_ROUTE_TOOL_IDS
+    route_kind, route_args = runtime._route_args("orders.catering_today", "what caterings are today")
+    assert route_kind == "catering_today"
+    assert route_args["tool"] == "orders.catering_today"
+    assert runtime._tool_answer_verified(
+        "orders.catering_today",
+        payload,
+        "There is 1 catering in the today view.",
+    )
+
+
 def test_runtime_partner_identity_does_not_claim_owner_operator(monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

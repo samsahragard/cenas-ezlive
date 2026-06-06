@@ -61,13 +61,13 @@
     border-radius: 16px;
     padding: 18px 20px 30px;
     margin-bottom: 40px;
+    /* stretch the panel down to fill available viewport height so the
+       content/context box maximizes information space */
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 200px);
   }
   .tr-page * { box-sizing: border-box; }
-
-  .tr-page .tr-intro {
-    font-size: 12px; color: var(--ck-cream-faint); font-style: italic;
-    line-height: 1.5; margin-bottom: 14px; max-width: 680px;
-  }
 
   /* Sub-header strip — page title + count + roles + new entry */
   .tr-page .sub-header {
@@ -131,7 +131,7 @@
   .tr-page .filter-group { display: inline-flex; align-items: center; gap: 4px; }
   .tr-page .filter-chip {
     background: transparent; border: 0.5px solid var(--ck-border-subtle);
-    color: var(--ck-cream-faint); padding: 6px 11px; border-radius: 6px;
+    color: var(--ck-cream-faint); padding: 6px 11px; border-radius: 4px;
     font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
     letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s;
   }
@@ -149,6 +149,8 @@
   .tr-page .records-table {
     background: var(--ck-bg-input); border: 0.5px solid var(--ck-border-subtle);
     border-top: none;
+    /* stretch the content box down to fill remaining height */
+    flex: 1 1 auto;
   }
   .tr-page .records-header {
     display: grid; grid-template-columns: 1.6fr 1.6fr 0.8fr 0.9fr 1fr;
@@ -239,6 +241,8 @@
     text-align: center; padding: 40px 20px; color: var(--ck-cream-faint);
     font-size: 13px; background: var(--ck-bg-input);
     border: 0.5px solid var(--ck-border-subtle); border-top: none;
+    /* stretch the empty-state box down to fill remaining height too */
+    flex: 1 1 auto;
   }
   .tr-page .tr-empty.hidden { display: none; }
 
@@ -269,10 +273,6 @@
 
 <div class="tr-page" id="trPage">
 
-  <p class="tr-intro">Track food-handler cards, ServSafe and TABC certifications for every
-    teammate. Records nearing expiry are flagged amber; lapsed ones are flagged red so a
-    renewal is never missed.</p>
-
   <!-- Sub-header strip -->
   <div class="sub-header">
     <div class="sub-header-left">
@@ -286,11 +286,11 @@
         <span class="role-pill">FOH MANAGER</span>
       </span>
     </div>
-    <a class="new-entry-btn" href="{{ new_url }}">+ New entry</a>
   </div>
 
   <!-- Filter bar -->
   <div class="filter-bar">
+    <a class="new-entry-btn" href="{{ new_url }}">+ New entry</a>
     <div class="search-wrap">
       <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
       <input class="search-input" type="text" id="trSearch" placeholder="Search entries..." autocomplete="off">

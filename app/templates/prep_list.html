@@ -62,7 +62,7 @@
 {% block page_module %}PREP{% endblock %}
 {% block page_module_class %}mod-prep{% endblock %}
 {% block page_title %}<span class="word-primary">Prep</span> <span class="ck-accent">List</span>{% endblock %}
-{% block page_subtitle %}{{ store_label }} — daily prep board &amp; recipe breakdown{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block head_extra %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -271,11 +271,11 @@
   .prep-tt-tabs {
     display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 14px;
     background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-md); flex-wrap: wrap;
+    border-radius: 6px; flex-wrap: wrap;
   }
   .prep-tt-tab {
     padding: 7px 14px; background: transparent; border: 0.5px solid transparent;
-    border-radius: var(--prep-radius-sm); color: var(--prep-cream-dim);
+    border-radius: 5px; color: var(--prep-cream-dim);
     font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
     text-transform: uppercase; letter-spacing: 0.06em; transition: all 0.15s;
     display: inline-flex; align-items: center; gap: 6px;
@@ -289,7 +289,7 @@
   .prep-tt-tab .count {
     font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
     color: var(--prep-cream-faint); background: rgba(0,0,0,0.3);
-    padding: 1px 5px; border-radius: 999px; letter-spacing: 0.04em;
+    padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em;
   }
   .prep-tt-tab.active .count { color: var(--prep-gold-bright); background: rgba(228,179,64,0.18); }
   .prep-tt-panel { display: none; }
@@ -387,7 +387,13 @@
   .prep-tt-empty { font-size: 12px; color: var(--prep-cream-faint); font-style: italic; padding: 4px 0; }
 
   /* ---- Main grid ---- */
-  .prep-main-grid { display: grid; grid-template-columns: 1fr 420px; gap: 16px; align-items: start; }
+  /* align-items: stretch + a shared min-height floor so BOTH the board
+     and the detail panel fill the page height down (maximizing content
+     space) instead of collapsing to their content height. */
+  .prep-main-grid {
+    display: grid; grid-template-columns: 1fr 420px; gap: 16px; align-items: stretch;
+    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
+  }
 
   /* ---- List panel ---- */
   /* Tall enough to reach near the viewport bottom (mirrors the
@@ -397,8 +403,9 @@
     background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
     border-radius: var(--prep-radius-md); overflow: hidden;
     min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
+    display: flex; flex-direction: column;
   }
-  .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; flex: 1; }
   .prep-col-divider { border-right: 0.5px solid var(--prep-border-subtle); }
 
   .prep-section-header {
@@ -479,15 +486,20 @@
   .prep-section-empty { padding: 18px 16px; font-size: 11px; color: var(--prep-cream-faint); font-style: italic; }
 
   /* ---- Detail panel ---- */
+  /* Flex column + min-height floor so the panel (and its "No item
+     selected" empty state / open detail card) stretches the full height
+     of the board column down, matching .prep-list-panel. */
   .prep-detail-panel {
     background: var(--prep-bg-warm); border: 0.5px solid var(--prep-border-active);
     border-radius: var(--prep-radius-md); overflow: hidden; position: sticky; top: 16px;
+    display: flex; flex-direction: column;
+    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
   }
-  .prep-detail-empty { padding: 60px 24px; text-align: center; color: var(--prep-cream-faint); }
+  .prep-detail-empty { flex: 1; padding: 60px 24px; text-align: center; color: var(--prep-cream-faint); display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .prep-detail-empty svg { width: 48px; height: 48px; fill: var(--prep-cream-faint); opacity: 0.5; margin-bottom: 12px; }
   .prep-detail-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-cream-dim); margin-bottom: 6px; }
   .prep-detail-card { display: none; }
-  .prep-detail-card.open { display: block; }
+  .prep-detail-card.open { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   .prep-detail-header {
     padding: 16px 18px; position: relative;
@@ -517,7 +529,7 @@
   .prep-detail-meta-row .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--prep-cream-faint); }
   .prep-detail-meta-row .yield { color: var(--prep-gold-bright); font-weight: 600; }
 
-  .prep-detail-body { padding: 16px 18px; max-height: calc(100vh - 160px); overflow-y: auto; }
+  .prep-detail-body { padding: 16px 18px; flex: 1; min-height: 0; max-height: calc(100vh - 160px); overflow-y: auto; }
   .prep-detail-section { margin-bottom: 18px; }
   .prep-detail-section-title {
     font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--prep-gold);
@@ -933,6 +945,15 @@
 
   {# ---- Control bar ---- #}
   <div class="prep-control-bar">
+    {# Primary create action pulled FAR LEFT, before the date/period controls. #}
+    <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="form_action" value="copy_yesterday">
+      <input type="hidden" name="view_date" value="{{ selected_date }}">
+      <button class="prep-ctrl-btn primary" type="submit" {{ 'disabled' if locked else '' }}>
+        {{ prep_icon('copy') }} Copy yesterday's prep
+      </button>
+    </form>
     <div class="prep-date-nav">
       <a class="prep-date-nav-btn" href="?date={{ prev_date }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
       <div class="prep-date-display">
@@ -941,14 +962,6 @@
       </div>
       <a class="prep-date-nav-btn" href="?date={{ next_date }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
     </div>
-    <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-      <input type="hidden" name="form_action" value="copy_yesterday">
-      <input type="hidden" name="view_date" value="{{ selected_date }}">
-      <button class="prep-ctrl-btn" type="submit" {{ 'disabled' if locked else '' }}>
-        {{ prep_icon('copy') }} Copy yesterday's prep
-      </button>
-    </form>
     <a class="prep-ctrl-btn" href="?date={{ prev_date }}">{{ prep_icon('cal') }} View past days</a>
     <span class="prep-spacer"></span>
     <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} Export today</button>

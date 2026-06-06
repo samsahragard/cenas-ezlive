@@ -22,7 +22,10 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; }
+/* Espresso bg fills the ENTIRE viewport (Sam restyle 2026-06-06): set it on
+   html as well as body so there is no gap or blurred-image edge at the very
+   top/bottom (overscroll) or sides. min-height:100vh on html/body/.layout. */
+html, body { margin: 0; padding: 0; height: 100%; min-height: 100vh; background: var(--app-bg); }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
@@ -154,6 +157,15 @@ main.main {
   display: flex;
   flex-direction: column;
 }
+/* Content area stretches to the bottom (Sam restyle 2026-06-06): with the
+   ribbon shortened above, the body fills the freed vertical space so a
+   per-page panel can extend all the way down. A lone direct child stretches
+   to fill regardless of its class (the specific selectors below stay for
+   multi-child / legacy layouts). */
+.ck-page-body > *:only-child {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .ck-page-body > .card:only-child,
 .ck-page-body > .table-scroll:only-child,
 .ck-page-body > .table-wrap:only-child,
@@ -268,7 +280,7 @@ body.page-dashboard main.main { padding-left: 0; padding-right: 0; }
 .card-link:hover { color: #fff; }
 .pill-select {
   background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
-  color: var(--text-2); padding: 4px 10px; border-radius: 999px; font-size: 11px;
+  color: var(--text-2); padding: 4px 10px; border-radius: 4px; font-size: 11px;
 }
 
 /* ============ Charts row ============ */
@@ -414,7 +426,7 @@ body.page-dashboard main.main { padding-left: 0; padding-right: 0; }
   position: absolute; top: 12px; right: 12px;
   font-size: 9px; color: var(--text-3); text-transform: uppercase;
   letter-spacing: 0.5px; font-weight: 700;
-  background: rgba(255,255,255,0.08); padding: 2px 7px; border-radius: 999px;
+  background: rgba(255,255,255,0.08); padding: 2px 7px; border-radius: 4px;
 }
 
 /* ============ Decorative wordmark (bottom-right)
@@ -1197,21 +1209,32 @@ a.nav-group-toggle:hover {
 .dash-charts {
   margin: 0 0 18px;
 }
+/* Period toggle strip: organized as a clean header band that sits flush
+   above its two panels, with the square segmented tabs aligned to the
+   right edge instead of floating mid-air. */
 .dash-chart-tabs {
-  display: flex; gap: 6px; align-items: center;
-  margin-bottom: 12px; flex-wrap: wrap;
+  display: flex; gap: 4px; align-items: center;
+  margin: 0 0 10px; flex-wrap: wrap;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
 }
+/* Square segmented period tabs (Today / This Week / Last Week). */
 .dash-chart-tab {
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--glass-border);
   color: var(--text-2);
-  padding: 6px 14px;
-  border-radius: 999px;
+  padding: 6px 16px;
+  border-radius: 0;
   cursor: pointer;
   font-size: 13px;
   font-family: inherit;
   transition: all 0.15s ease;
 }
+/* Join the tabs into a single segmented control: only the outer corners
+   of the group are (subtly) squared, inner borders collapse. */
+.dash-chart-tab + .dash-chart-tab { margin-left: -1px; }
 .dash-chart-tab:hover {
   background: rgba(255,255,255,0.08);
   color: #fff;
@@ -1221,6 +1244,8 @@ a.nav-group-toggle:hover {
   border-color: var(--accent, #e87a3e);
   color: #fff;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
 }
 .dash-chart-range {
   margin-left: auto;
@@ -1254,7 +1279,21 @@ a.nav-group-toggle:hover {
   padding: 6px 10px;
   border-radius: 6px;
 }
-/* Make the canvas behave inside the existing .donut-wrap layout */
+/* Make the canvas behave inside the existing .donut-wrap layout.
+   Panels extend up + down to fill more space: the donut wrap gets a
+   taller min-height and the chart area centers within it so the four
+   analytics panels read larger. Canvas pixel dimensions (width/height
+   attributes) are untouched — this only sizes the layout box. */
 .donut-wrap canvas {
   flex: 0 0 auto;
+}
+.dash-charts .donut-wrap {
+  min-height: 240px;
+  padding: 8px 0;
+}
+.dash-charts .card {
+  padding: 22px 24px;
+}
+.dash-charts .card-head {
+  margin-bottom: 20px;
 }

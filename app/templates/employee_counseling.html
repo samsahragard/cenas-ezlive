@@ -75,6 +75,8 @@
     border: 0.5px solid var(--border); border-radius: 16px;
     box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 10px 24px rgba(0,0,0,0.45);
     padding: 18px 20px 30px; margin-bottom: 40px;
+    display: flex; flex-direction: column;
+    min-height: calc(100vh - 220px);
   }
   .ec-page * { box-sizing: border-box; }
 
@@ -130,7 +132,7 @@
   .ec-page .ec-tabs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
   .ec-page .ec-tab {
     padding: 9px 15px; background: var(--surface);
-    border: 0.5px solid var(--border); border-radius: 999px;
+    border: 0.5px solid var(--border); border-radius: 5px;
     color: var(--cream-dim); font-family: 'Manrope', sans-serif;
     font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s;
     letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 7px;
@@ -144,7 +146,7 @@
   .ec-page .ec-tab.active { background: var(--gold); border-color: var(--gold); color: #2a1607; }
   .ec-page .ec-tab.active .ct { background: rgba(0,0,0,0.22); color: #2a1607; }
   .ec-page .ec-add {
-    margin-left: auto; height: 38px; padding: 0 16px;
+    margin-right: auto; height: 38px; padding: 0 16px;
     background: linear-gradient(135deg, #E4B340, #d4af37);
     border: none; border-radius: 10px;
     color: #241409; font-family: 'Manrope', sans-serif; font-size: 13px;
@@ -172,7 +174,7 @@
   .ec-page .ec-search::placeholder { color: var(--cream-meta); }
 
   /* roster */
-  .ec-page .ec-roster { display: flex; flex-direction: column; gap: 8px; }
+  .ec-page .ec-roster { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; }
   .ec-page .ec-row {
     background: var(--surface); border: 0.5px solid var(--border);
     border-radius: var(--radius); padding: 12px 14px; cursor: pointer;
@@ -416,10 +418,6 @@
     <span class="ec-spacer"></span>
   </div>
 
-  <p class="ec-intro">Document coaching conversations, written warnings, and recognition.
-    Every employee is listed below — click a teammate to see their counseling history
-    and log a new entry. Records are kept on file so prior issues stay visible.</p>
-
   <div class="ec-kpis">
     <div class="ec-kpi k-total"><div class="lbl">On File</div><div class="val">{{ kpis.total }}</div></div>
     <div class="ec-kpi k-verbal"><div class="lbl">Verbal / Coaching</div><div class="val">{{ kpis.verbal }}</div></div>
@@ -431,13 +429,13 @@
   {% if counseling_notice %}<div class="ec-note">{{ counseling_notice }}</div>{% endif %}
 
   <div class="ec-toolbar">
+    <button type="button" class="ec-add" id="ecAddBtn"><span class="pl">+</span> Log new counseling</button>
     <div class="ec-tabs" id="ecTabs">
       <button type="button" class="ec-tab active" data-view="all">All <span class="ct" id="cAll">0</span></button>
       <button type="button" class="ec-tab" data-view="issues">Has Issues <span class="ct" id="cIss">0</span></button>
       <button type="button" class="ec-tab" data-view="recog">Recognized <span class="ct" id="cRec">0</span></button>
       <button type="button" class="ec-tab" data-view="clean">Clean Record <span class="ct" id="cCln">0</span></button>
     </div>
-    <button type="button" class="ec-add" id="ecAddBtn"><span class="pl">+</span> Log new counseling</button>
   </div>
   <div class="ec-hint" id="ecHint"></div>
 

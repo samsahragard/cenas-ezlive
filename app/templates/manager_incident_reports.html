@@ -76,6 +76,10 @@
     border-radius: var(--ir-radius-lg);
     padding: 24px 20px 40px;
     overflow: hidden;
+    /* Flex column so the incident list stretches to fill remaining
+       height and maximizes content space. */
+    display: flex;
+    flex-direction: column;
   }
   /* v3 dark-red gradient backdrop, scoped to the content column only
      (position:absolute on .ir-page, not fixed/viewport) so the
@@ -314,7 +318,7 @@
     padding: 8px 14px;
     background: transparent;
     border: 1px solid var(--ir-border-subtle);
-    border-radius: 999px;
+    border-radius: 5px;
     color: var(--ir-cream-dim);
     font: inherit;
     font-size: 12px;
@@ -341,6 +345,11 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    /* Stretch to fill remaining height so the content/list box uses
+       all available vertical space (maximize content area). */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
   }
   .ir-incident-card {
     --sev-color: var(--ir-cream-dim);
@@ -512,7 +521,6 @@
   <header class="ir-header">
     <span class="ir-store-pill">{{ store_label or 'Cenas Kitchen' }}{% if store_slug %} · {{ store_slug|upper }}{% endif %}</span>
     <h1>Incident <span class="accent">Reports</span></h1>
-    <p class="ir-subtitle">Document any incident involving employees, guests, or the property. Once submitted, reports lock and become append-only — original information is preserved forever; updates are added as new entries with their own timestamp.</p>
   </header>
 
   <div class="ir-status-strip">

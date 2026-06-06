@@ -11,11 +11,7 @@
 {% block page_module %}HOME{% endblock %}
 
 {% block page_title %}<span class="word-primary">Welcome back,</span> <span class="ck-accent">{{ user_name or 'Chef' }}</span> <span class="wave">👋</span>{% endblock %}
-{% block page_subtitle %}
-  <p class="greeting-sub">
-    {{ today_long }}{# "N deliveries today (Tomball/Copperfield)" removed per Sam #2813 - extra info #}
-  </p>
-{% endblock %}
+{% block page_subtitle %}{# intro/description text block removed to maximize content space (Sam) — the base layout collapses the empty meta line via :has #}{% endblock %}
 {% block topbar_right %}
   {# The role marquee badge moved to base_dashboard.html (Sam 2026-05-21)
      — it now renders top-right on EVERY page via the shared layout, so

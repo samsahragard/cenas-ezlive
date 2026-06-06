@@ -12,7 +12,11 @@
 
 {% block content %}
 <style>
-  .ffro-page { margin-top: 12px; position: relative; min-height: 100vh; }
+  .ffro-page { margin-top: 12px; position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+  /* Stretch the final content panel (order history) to fill remaining
+     vertical space so the information area maximizes downward (UI only). */
+  .ffro-page > .ffro-section:last-of-type { flex: 1 1 auto; display: flex; flex-direction: column; }
+  .ffro-page > .ffro-section:last-of-type > h2 { flex: 0 0 auto; }
   /* Darkening layer over the base_dashboard photo, scoped to .ffro-page
      via position:absolute (NOT fixed) so the sidebar is never painted
      over (dck #11:13 diagnostic — matches incident reports cfab327).
@@ -81,7 +85,7 @@
 
   .ffro-toolbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     margin-bottom: 12px;
   }
   .ffro-btn {
@@ -193,7 +197,7 @@
   .ffro-win-toggle { display: flex; gap: 4px; padding: 12px 16px 0; }
   .ffro-win-btn {
     padding: 5px 14px;
-    border-radius: 6px;
+    border-radius: 4px;
     border: 0.5px solid rgba(217,164,54,0.25);
     background: rgba(0,0,0,0.25);
     color: rgba(255,255,255,0.60);

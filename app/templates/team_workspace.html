@@ -43,20 +43,27 @@
   .tws-title { font-family: 'Instrument Serif', serif; font-size: 30px; line-height: 1.05; color: var(--tws-cream); }
   .tws-sub { font-size: 13px; color: var(--tws-cream-dim); margin-top: 4px; }
 
-  /* sub-tab bar */
-  .tws-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--tws-border); margin: 14px 0 16px; }
+  /* sub-tab bar -- squared tab chips (border-radius ~5px), kept functional */
+  .tws-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--tws-border); margin: 14px 0 16px; padding-bottom: 6px; }
   .tws-tab {
-    appearance: none; background: transparent; border: 0; cursor: pointer;
+    appearance: none; background: transparent; border: 1px solid transparent; cursor: pointer;
     font-family: inherit; font-size: 14px; font-weight: 600; color: var(--tws-cream-meta);
-    padding: 9px 16px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    padding: 8px 14px; border-radius: 5px;
     display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
   }
   .tws-tab:hover { color: var(--tws-cream); }
-  .tws-tab.active { color: var(--tws-gold-bright); border-bottom-color: var(--tws-gold-bright); }
+  .tws-tab.active { color: var(--tws-gold-bright); border-color: var(--tws-gold-bright); background: rgba(228,179,64,.10); }
   .tws-tab .ti { font-size: 16px; }
 
   .tws-panel { display: none; }
   .tws-panel.active { display: block; }
+
+  /* Maximize content space: the workspace fills the viewport height and the
+     active Team panel + its roster stretch DOWN to fill the leftover space, so
+     the roster list occupies as much room as possible (layout only). */
+  .tws { display: flex; flex-direction: column; min-height: calc(100vh - 72px); }
+  #tws-panel-team.tws-panel.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  #tws-roster { flex: 1 1 auto; min-height: 0; }
 
   /* nested Schedule sub-tabs [Week | Time off | Availability] -- squared
      underline tabs matching the top .tws-tab bar (Sam #2600), not pills. */
@@ -78,11 +85,11 @@
 
   /* filter row */
   .tws-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
-  .tws-pills { display: inline-flex; gap: 4px; background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: 999px; padding: 3px; }
+  .tws-pills { display: inline-flex; gap: 4px; background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: 6px; padding: 3px; }
   .tws-pill {
     appearance: none; background: transparent; border: 0; cursor: pointer; font-family: inherit;
     font-size: 12.5px; font-weight: 600; color: var(--tws-cream-dim);
-    padding: 6px 13px; border-radius: 999px; white-space: nowrap;
+    padding: 6px 13px; border-radius: 5px; white-space: nowrap;
   }
   .tws-pill.active { background: var(--tws-gold); color: #1a0d08; }
   .tws-pill .ct { opacity: .7; margin-left: 4px; font-weight: 500; }
@@ -295,7 +302,6 @@
 
   <div class="tws-head">
     <h1 class="tws-title">Team Roster</h1>
-    <p class="tws-sub">Active employees by location with the positions they fill.</p>
   </div>
 
   {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
@@ -309,12 +315,12 @@
   {# ---- TEAM panel (the new roster; binds to aick's contract) ---- #}
   <div class="tws-panel active" id="tws-panel-team" data-sub-panel="team" role="tabpanel">
     <div class="tws-filterbar">
+      <button class="tws-addbtn" id="tws-add">+ Add</button>
       <div class="tws-pills" id="tws-pills">
         <button class="tws-pill active" data-filter="all">All<span class="ct" data-ct="all">--</span></button>
         <button class="tws-pill" data-filter="boh">BOH<span class="ct" data-ct="boh">--</span></button>
         <button class="tws-pill" data-filter="foh">FOH<span class="ct" data-ct="foh">--</span></button>
       </div>
-      <button class="tws-addbtn" id="tws-add">+ Add</button>
       <span class="tws-spacer"></span>
       <select class="tws-select" id="tws-loc" aria-label="Location"><option value="all">Both stores</option></select>
       <div class="tws-posfilter" id="tws-pos-wrap">

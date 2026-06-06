@@ -147,7 +147,7 @@
   .rcp-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .rcp-chip {
     padding: 7px 14px; background: rgba(0,0,0,0.4);
-    border: 1px solid var(--rcp-border); border-radius: 999px;
+    border: 1px solid var(--rcp-border); border-radius: 5px;
     color: var(--rcp-cream); font-size: 12px; letter-spacing: 0.04em;
     text-transform: uppercase; cursor: pointer; font: inherit; font-weight: 600;
     transition: all .15s var(--rcp-ease);
@@ -217,7 +217,7 @@
        .kitd-embed-frame pattern: shared page-fill height plus a floor). The
        inner .rcp-list-body keeps its own scroll, so the panel stretches but
        the list still scrolls internally. */
-    height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px)); min-height: 600px;
+    height: max(720px, calc(var(--ck-page-available-height, 100vh) - 150px)); min-height: 680px;
     display: flex; flex-direction: column;
   }
   .rcp-list-head {
@@ -262,8 +262,8 @@
     /* Match the list panel's viewport-fill height so the detail pane reaches
        near the bottom too (mirrors kitchen_dashboard.html ~L308-310). Long
        recipes scroll WITHIN the panel; short ones still fill the column. */
-    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
-    max-height: calc(100vh - 48px);
+    min-height: max(720px, calc(var(--ck-page-available-height, 100vh) - 150px));
+    max-height: calc(100vh - 32px);
     overflow-y: auto;
   }
   .rcp-detail::-webkit-scrollbar { width: 8px; }
@@ -310,14 +310,18 @@
     color: var(--rcp-gold); margin: 0 0 14px; font-weight: 600;
   }
 
-  .rcp-variants { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--rcp-border); flex-wrap: wrap; }
+  .rcp-variants { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
   .rcp-variant-tab {
-    padding: 8px 14px; background: transparent; border: 0;
-    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    padding: 8px 16px; background: rgba(0,0,0,0.4);
+    border: 1px solid var(--rcp-border); border-radius: 5px;
     color: var(--rcp-cream-dim); font: inherit; font-size: 11px;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; font-weight: 600;
+    transition: all .15s var(--rcp-ease);
   }
-  .rcp-variant-tab.active { color: var(--rcp-gold); border-bottom-color: var(--rcp-gold); }
+  .rcp-variant-tab:hover { background: rgba(0,0,0,0.55); border-color: var(--rcp-gold-line); }
+  .rcp-variant-tab.active {
+    background: var(--rcp-gold); border-color: var(--rcp-gold); color: var(--rcp-bg-deep);
+  }
 
   .rcp-ing-table {
     width: 100%; border-collapse: collapse;
@@ -354,8 +358,11 @@
   }
   .rcp-lang-toggle button:disabled { opacity: .35; cursor: not-allowed; }
   /* Page-level EN/ES toggle lives in the hero row — no trailing margin,
-     does not shrink, sits just before the store pill (which has margin-left:auto). */
-  .rcp-page-lang { margin-bottom: 0; flex-shrink: 0; }
+     does not shrink, sits just before the store pill (which has margin-left:auto).
+     Larger than the in-detail toggle: spells out English / Spanish and gives the
+     control more presence in the hero band. */
+  .rcp-page-lang { margin-bottom: 0; flex-shrink: 0; border-radius: 8px; }
+  .rcp-page-lang button { padding: 9px 20px; font-size: 14px; letter-spacing: 0.06em; font-weight: 600; }
 
   .rcp-steps {
     list-style: none; counter-reset: step; padding: 0; margin: 0;
@@ -400,8 +407,8 @@
       <input type="search" id="rcpSearch" placeholder="Search by name, code, or ingredient…">
     </div>
     <div class="rcp-lang-toggle rcp-page-lang" id="rcpPageLang">
-      <button type="button" data-lang="en" class="active">EN</button>
-      <button type="button" data-lang="es">ES</button>
+      <button type="button" data-lang="en" class="active">English</button>
+      <button type="button" data-lang="es">Spanish</button>
     </div>
     <span class="rcp-hero-store">{{ store_label or 'Cenas Kitchen' }}{% if store_slug %} · {{ store_slug|upper }}{% endif %}</span>
   </div>

@@ -76,7 +76,7 @@
   .vro-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .vro-chip {
     padding: 6px 14px; background: var(--vro-glass); border: 1px solid var(--vro-border);
-    border-radius: 999px; color: var(--vro-cream-dim); font-size: 12px; cursor: pointer;
+    border-radius: 5px; color: var(--vro-cream-dim); font-size: 12px; cursor: pointer;
     text-decoration: none; transition: all .15s var(--vro-ease);
   }
   .vro-chip:hover { color: var(--vro-cream); border-color: var(--vro-gold-line); }
@@ -89,8 +89,8 @@
   .vro-stat .s-num { font-size: 20px; font-weight: 600; color: var(--vro-gold); font-variant-numeric: tabular-nums; }
   .vro-stat .s-lbl { font-size: 11px; color: var(--vro-cream-dim); text-transform: uppercase; letter-spacing: .06em; }
 
-  .vro-body { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 18px; align-items: start; }
-  .vro-list { display: flex; flex-direction: column; gap: 10px; max-height: 74vh; overflow-y: auto; padding-right: 6px; }
+  .vro-body { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 18px; align-items: stretch; min-height: calc(100vh - 220px); }
+  .vro-list { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 6px; }
 
   .vro-order {
     background: var(--vro-bg-pane); border: 1px solid var(--vro-border);
@@ -114,8 +114,8 @@
   .vro-order-meta .om-total { margin-left: auto; color: var(--vro-cream); font-weight: 600; font-variant-numeric: tabular-nums; }
 
   .vro-detail {
-    position: sticky; top: 24px; background: var(--vro-bg-pane);
-    border: 1px solid var(--vro-border); border-radius: var(--vro-radius); min-height: 320px; padding: 20px;
+    position: sticky; top: 24px; align-self: stretch; background: var(--vro-bg-pane);
+    border: 1px solid var(--vro-border); border-radius: var(--vro-radius); min-height: calc(100vh - 220px); padding: 20px;
   }
   .vro-detail-empty { color: var(--vro-cream-faint); font-style: italic; text-align: center; padding: 70px 0; }
   .vro-detail-body { display: none; }
@@ -219,7 +219,6 @@
     <span class="vro-vendor-badge">{{ vendor_label }}</span>
     <span class="vro-store-pill">{{ store_label }}</span>
   </div>
-  <p class="vro-sub">Vendor order history pulled from the orders@cenaskitchen.com inbox. Switch vendors with the chips below.</p>
 
   <div class="vro-chips">
     {% for chip_slug, chip_label in vendor_chips.items() %}

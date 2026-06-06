@@ -6,9 +6,7 @@
    than hardcoded; the title stays the route's dynamic label. #}
 {% block page_module %}{{ (page_slug or 'log')|upper|replace('_', ' ') }}{% endblock %}
 {% block page_title %}{{ page_label }}{% endblock %}
-{% block page_subtitle %}
-  <p class="greeting-sub">{{ page_subtitle|default('Store-scoped log. Text-heavy v1 — title + body + author + date per entry.') }}</p>
-{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block content %}
 <style>
@@ -99,7 +97,7 @@
     min-width: 200px;
     background: rgba(0,0,0,0.35);
     border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    border-radius: 5px;
+    border-radius: 4px;
     padding: 7px 12px;
     color: #FFFFFF;
     font-size: 12px;
@@ -110,7 +108,7 @@
     display: inline-flex;
     background: rgba(0,0,0,0.30);
     padding: 3px;
-    border-radius: 6px;
+    border-radius: 4px;
     border: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
   }
   .mgr-filter-seg button {
@@ -138,11 +136,11 @@
   .mgr-body {
     display: grid;
     grid-template-columns: 360px 1fr;
-    min-height: 480px;
+    min-height: calc(100vh - 220px);
   }
   .mgr-list {
     border-right: 0.5px solid var(--ck-border, rgba(217,164,54,0.10));
-    max-height: 70vh;
+    max-height: calc(100vh - 220px);
     overflow-y: auto;
   }
   .mgr-list-empty {
@@ -377,15 +375,15 @@
     <span class="mgr-count">{{ entries|length }} entr{{ 'y' if entries|length == 1 else 'ies' }}</span>
     <span class="mgr-access-pill"><i class="ti ti-users"></i>GM / KM / Asst KM / FOH manager</span>
     <span class="mgr-head-spacer"></span>
+  </div>
+
+  <!-- Filter row -->
+  <div class="mgr-filters">
     {% if form_mode != 'new' and form_mode != 'edit' %}
       <a href="/{{ store_slug }}/manager/{{ page_slug }}/new" class="mgr-new-btn">
         <i class="ti ti-plus"></i>New entry
       </a>
     {% endif %}
-  </div>
-
-  <!-- Filter row -->
-  <div class="mgr-filters">
     <input type="text" class="mgr-search" id="mgr-search" placeholder="Search entries...">
     <div class="mgr-filter-seg" id="mgr-range-seg">
       <button data-range="30" class="is-active">Last 30d</button>

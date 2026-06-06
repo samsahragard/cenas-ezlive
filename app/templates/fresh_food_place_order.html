@@ -12,7 +12,12 @@
 
 {% block content %}
 <style>
-  .ffpo-page { margin-top: 12px; position: relative; min-height: 100vh; }
+  .ffpo-page { margin-top: 12px; position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+  /* Let the active content view stretch to fill remaining height so the
+     content/context box maximizes information space and the sticky submit
+     row stays pinned at the bottom (UI/layout only). */
+  #ffpo-today-view, #ffpo-week-view { flex: 1 1 auto; }
+  #ffpo-week-view .ffpo-grid-wrap { height: 100%; }
   /* Darkening layer over the base_dashboard photo, scoped to .ffpo-page
      via position:absolute (NOT fixed) so the sidebar is never painted
      over (dck #11:13 diagnostic — matches incident reports cfab327).
@@ -129,13 +134,13 @@
     gap: 4px;
     background: rgba(0,0,0,0.30);
     border: 0.5px solid rgba(217,164,54,0.18);
-    border-radius: 8px;
+    border-radius: 5px;
     padding: 3px;
     margin-bottom: 14px;
   }
   .ffpo-mode-btn {
     padding: 7px 16px;
-    border-radius: 6px;
+    border-radius: 4px;
     border: none;
     background: transparent;
     color: rgba(255,255,255,0.55);
@@ -146,7 +151,7 @@
     cursor: pointer;
     font-family: inherit;
   }
-  .ffpo-mode-btn.active { background: #E4B340; color: #1a1208; }
+  .ffpo-mode-btn.active { background: #E4B340; color: #1a1208; border-radius: 4px; }
 
   /* --- TODAY (single-day) view ------------------------------------ */
   .ff-today-head {
@@ -492,9 +497,6 @@
         <div class="ff-today-by">Placed by <strong>{{ orderer }}</strong> at <strong>{{ location }}</strong></div>
       </div>
       <div class="ff-today-count" id="ff-today-count">0 items · 0 units ordered</div>
-    </div>
-    <div class="ff-today-legend">
-      ON HAND = your current inventory &nbsp;·&nbsp; ORDER = qty to send for this date &nbsp;·&nbsp; 30-DAY AVG = historical ordering pace
     </div>
 
     {% for cat in categories %}

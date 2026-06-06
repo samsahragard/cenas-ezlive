@@ -29,17 +29,31 @@
   <style>
     /* New sidebar (sidebar.css) replaces the inner content of the layout's
        .sidebar grid column. Neutralize the old .sidebar chrome here so the
-       inner .ck-sidebar's own width/border/padding takes over cleanly. */
+       inner .ck-sidebar's own width/border/padding takes over cleanly.
+       Solid near-black fill (Sam restyle 2026-06-06): the column was
+       transparent, so the espresso page backdrop showed through and faded.
+       Make the sidebar column itself solid black and span its FULL height
+       top-to-bottom — the host + inner sidebar both stretch to fill it so
+       there is no espresso strip above or below the nav. */
     .layout > .sidebar {
-      background: transparent !important;
+      background: #000 !important;
       border: none !important;
       padding: 0 !important;
       overflow: visible !important;
+    }
+    .layout > .sidebar > .ck-sidebar-host {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      background: #000;
     }
     .layout > .sidebar > .ck-sidebar-host > .ck-sidebar {
       width: 100%;
       border-radius: 0;
       border: none;
+      background: #000;
+      flex: 1 1 auto;
+      min-height: 100%;
     }
     /* Old store-switcher widget — hold position above the new sidebar logo */
     .ck-store-switcher-strip {
@@ -169,10 +183,13 @@
       --module-glow: rgba(255, 217, 112, 0.34);
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       gap: 18px;
-      margin-bottom: 22px;
-      padding: 20px 22px 18px;
+      /* Ribbon shortened (Sam restyle 2026-06-06): trimmed the empty vertical
+         band — top/bottom padding cut and margin reduced so the header sits
+         tighter and the content area below gets more room. */
+      margin-bottom: 14px;
+      padding: 10px 22px;
       border-radius: 16px;
       border: 0.5px solid rgba(217, 164, 54, 0.18);
       background-color: #241610;
@@ -208,12 +225,23 @@
       flex: 1;
     }
 
+    /* Title row — title + metadata on ONE line (Sam restyle 2026-06-06).
+       The date/meta line sits inline to the RIGHT of the title, vertically
+       centered. Wraps under the title on narrow widths so nothing clips. */
+    .ck-topbar .ck-title-row {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 4px 14px;
+      margin-bottom: 6px;
+    }
+
     /* Brand mark — CENAS / OPS / MODULE */
     .ck-topbar .ck-brand-mark {
       display: inline-flex;
       align-items: center;
       gap: 9px;
-      margin-bottom: 9px;
+      margin-bottom: 5px;
     }
     .ck-topbar .ck-brand-dot {
       width: 7px;
@@ -255,7 +283,7 @@
       line-height: 1.04;
       letter-spacing: -0.02em;
       color: #FAF6EC;
-      margin: 0 0 9px;
+      margin: 0;
     }
     h1.ck-page-title .ck-accent {
       color: var(--module-accent);
@@ -273,9 +301,14 @@
       height: 1px;
       width: 52px;
       background: linear-gradient(90deg, var(--module-accent), transparent);
-      margin-bottom: 10px;
+      margin-bottom: 0;
     }
     .ck-topbar .ck-header:has(h1.ck-page-title:empty) .ck-page-rule {
+      display: none;
+    }
+    /* When the page sets no title the whole title row is empty — collapse it
+       so the date/meta line (still rendered) doesn't leave an orphan gap. */
+    .ck-topbar .ck-title-row:has(h1.ck-page-title:empty):has(.ck-page-meta:empty) {
       display: none;
     }
 
@@ -552,10 +585,15 @@
           </div>
           {# h1.ck-page-title and .ck-page-rule collapse via CSS (:empty /
              :has) when page_title renders empty — pages that draw their own
-             header inside content then leave no blank gap here. #}
-          <h1 class="page-title ck-page-title">{% block page_title %}{% endblock %}</h1>
+             header inside content then leave no blank gap here.
+             Title + metadata sit on ONE row (Sam restyle 2026-06-06): the
+             .ck-title-row flexes the date/meta line inline to the RIGHT of
+             the title, vertically centered, instead of stacking below it. #}
+          <div class="ck-title-row">
+            <h1 class="page-title ck-page-title">{% block page_title %}{% endblock %}</h1>
+            <div class="ck-page-meta">{% block page_subtitle %}{% endblock %}</div>
+          </div>
           <div class="ck-page-rule"></div>
-          <div class="ck-page-meta">{% block page_subtitle %}{% endblock %}</div>
         </div>
       </div>
       <div class="topbar-right">

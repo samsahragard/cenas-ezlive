@@ -372,9 +372,7 @@ function loginView(){return `<div class="login">
 function topbar(){const u=S.user;
  const badge = u.role==='corporate' ? '<span class="badge-neon">Corporate</span>'
   : `<span class="badge-neon badge-store">${esc(STORES[u.store].split('·')[1].trim())}</span>`;
- return `<div class="topbar">
-  <div class="brand"><div class="t">Corporate Order</div>
-   <div class="s">${u.role==='store'?esc(STORES[u.store])+' · '+weekOf():'Cenas Kitchen · '+weekOf()}</div></div>
+ return `<div class="topbar" style="justify-content:flex-end">
   <div class="who">${badge}<div class="u"><b>${u.name}</b><br>${esc(u.title)}</div>
    <button class="logout" data-act="logout">log out</button></div>
  </div>`;}

@@ -16,9 +16,11 @@ Environment:
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import re
+import sqlite3
 import sys
 import threading
 import uuid
@@ -43,6 +45,14 @@ ANSWER_PATH = "/assistant/answer"
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _MAX_QUESTION_CHARS = 2000
 _REVIEW_STATUS = "needs_review"
+_TOOL_ROUTE_REQUIRED_VERIFICATIONS = 3
+_VERIFIED_ROUTE_TOOL_IDS = {
+    "orders.store_summary",
+    "drivers.store_summary",
+    "labor.store_aggregate",
+    "toast.sales_summary",
+    "toast.table_activity",
+}
 _SECRET_DEFAULTS = {
     "GEMINI_API_KEY": [
         r"C:\Users\sam\cena-secrets\gemini_api_key.txt",
@@ -123,6 +133,11 @@ _FOLLOWUP_RE = re.compile(
 
 def _now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _stable_hash(value: object) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _read_secret(env_name: str) -> str:
@@ -581,6 +596,178 @@ def _resolved_question(question: str, previous_question: str = "") -> str:
     return question
 
 
+def _route_required_verifications() -> int:
+    raw = (os.getenv("ASSISTANT_TOOL_ROUTE_REQUIRED_VERIFICATIONS") or "").strip()
+    try:
+        value = int(raw) if raw else _TOOL_ROUTE_REQUIRED_VERIFICATIONS
+    except ValueError:
+        value = _TOOL_ROUTE_REQUIRED_VERIFICATIONS
+    return max(value, 1)
+
+
+def _route_scope(principal: dict) -> tuple[str, str]:
+    role = _role(principal)
+    store = str(principal.get("current_store") or "").strip()
+    if not store:
+        stores = principal.get("store_slugs") or []
+        store = str(stores[0]) if stores else ""
+    return role, store
+
+
+def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
+    if tool_id == "toast.table_activity":
+        return "latest_table_open", {
+            "location": _requested_store(resolved_question) or "all_locations",
+        }
+    if tool_id == "toast.sales_summary":
+        return "sales_summary", {
+            "period": _toast_period_from_question(resolved_question),
+        }
+    if tool_id == "orders.store_summary":
+        window = _requested_today_window(resolved_question)
+        return "order_summary", {
+            "store": _requested_store(resolved_question) or "all_accessible",
+            "window": window[0] if window else "current_view",
+        }
+    if tool_id == "drivers.store_summary":
+        return "driver_summary", {"scope": "current_view"}
+    if tool_id == "labor.store_aggregate":
+        return "labor_summary", {"scope": "current_view"}
+    return "unknown", {}
+
+
+def _tool_payload_for(tool_id: str, tool_data: dict) -> object:
+    if not isinstance(tool_data, dict):
+        return None
+    return tool_data.get(tool_id)
+
+
+def _tool_answer_verified(tool_id: str, payload: object, answer: str) -> bool:
+    if not str(answer or "").strip():
+        return False
+    if tool_id == "toast.table_activity":
+        if not isinstance(payload, dict):
+            return "table" in answer.casefold() or "do not see any in-store table opens" in answer.casefold()
+        latest = payload.get("latest")
+        if not isinstance(latest, dict):
+            return "do not see any in-store table opens" in answer.casefold()
+        table_name = str(latest.get("table_name") or "").strip()
+        opened_at = str(latest.get("opened_at_local") or "").strip()
+        if table_name and table_name not in answer:
+            return False
+        if opened_at and opened_at not in answer:
+            return False
+        return True
+    if tool_id == "toast.sales_summary":
+        return isinstance(payload, dict) and "Toast Analytics" in answer
+    if tool_id == "orders.store_summary":
+        return isinstance(payload, dict) and any(word in answer for word in ("catering", "order", "tracking"))
+    if tool_id == "drivers.store_summary":
+        return isinstance(payload, dict) and "driver" in answer.casefold()
+    if tool_id == "labor.store_aggregate":
+        return isinstance(payload, dict) and any(word in answer.casefold() for word in ("employee", "labor", "shift"))
+    return False
+
+
+def _record_tool_route_verification(
+    question: str,
+    previous_question: str,
+    principal: dict,
+    approved: dict,
+    tool_data: dict,
+) -> dict | None:
+    tool_id = str(approved.get("tool_id") or "")
+    if tool_id not in _VERIFIED_ROUTE_TOOL_IDS:
+        return None
+    answer = str(approved.get("answer") or "")
+    payload = _tool_payload_for(tool_id, tool_data)
+    if not _tool_answer_verified(tool_id, payload, answer):
+        return {
+            "status": "not_recorded",
+            "tool_id": tool_id,
+            "reason": "verification_failed",
+        }
+
+    resolved_question = _resolved_question(question, previous_question)
+    route_kind, route_args = _route_args(tool_id, resolved_question)
+    role_scope, store_scope = _route_scope(principal)
+    required = _route_required_verifications()
+    now = _now_iso()
+    route_key_hash = _stable_hash({
+        "role_scope": role_scope,
+        "store_scope": store_scope,
+        "tool_id": tool_id,
+        "route_kind": route_kind,
+        "route_args": route_args,
+    })
+    payload_hash = _stable_hash(payload)
+    answer_hash = _stable_hash(answer)
+    route_id = _stable_hash({"route_key_hash": route_key_hash})[:32]
+
+    review_receiver._init_db()
+    with sqlite3.connect(review_receiver._db_path()) as con:
+        existing = con.execute(
+            """
+            SELECT verification_count, first_seen_at
+              FROM assistant_verified_tool_route
+             WHERE route_key_hash = ?
+            """,
+            (route_key_hash,),
+        ).fetchone()
+        count = int(existing[0]) + 1 if existing else 1
+        first_seen_at = str(existing[1]) if existing else now
+        status = "verified" if count >= required else "learning"
+        con.execute(
+            """
+            INSERT INTO assistant_verified_tool_route (
+                id, route_key_hash, role_scope, store_scope, tool_id,
+                route_kind, route_args_redacted, status, verification_count,
+                required_verifications, answer_hash, payload_hash,
+                first_seen_at, last_verified_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(route_key_hash) DO UPDATE SET
+                role_scope = excluded.role_scope,
+                store_scope = excluded.store_scope,
+                tool_id = excluded.tool_id,
+                route_kind = excluded.route_kind,
+                route_args_redacted = excluded.route_args_redacted,
+                status = excluded.status,
+                verification_count = excluded.verification_count,
+                required_verifications = excluded.required_verifications,
+                answer_hash = excluded.answer_hash,
+                payload_hash = excluded.payload_hash,
+                last_verified_at = excluded.last_verified_at,
+                updated_at = excluded.updated_at
+            """,
+            (
+                route_id,
+                route_key_hash,
+                role_scope,
+                store_scope,
+                tool_id,
+                route_kind,
+                json.dumps(route_args, ensure_ascii=False, sort_keys=True),
+                status,
+                count,
+                required,
+                answer_hash,
+                payload_hash,
+                first_seen_at,
+                now,
+                now,
+            ),
+        )
+        con.commit()
+
+    return {
+        "status": status,
+        "tool_id": tool_id,
+        "route_kind": route_kind,
+        "verification_count": count,
+        "required_verifications": required,
+    }
+
+
 def _approved_tool_answer(
     question: str,
     previous_question: str,
@@ -812,6 +999,15 @@ def _answer(payload: dict) -> tuple[dict, int]:
     resolved_question = _resolved_question(question, previous_question)
     approved = _approved_tool_answer(question, previous_question, principal, tools, tool_data)
     if approved is not None:
+        route_cache = _record_tool_route_verification(
+            question,
+            previous_question,
+            principal,
+            approved,
+            tool_data,
+        )
+        if route_cache is not None:
+            approved["route_cache"] = route_cache
         return approved, 200
 
     should_queue, reason, required = _should_queue(resolved_question, principal)

@@ -130,3 +130,28 @@ CREATE INDEX IF NOT EXISTS idx_tool_catalog_status
   ON assistant_tool_catalog_snapshot(status, captured_at);
 CREATE INDEX IF NOT EXISTS idx_tool_catalog_tool
   ON assistant_tool_catalog_snapshot(tool_name_hash);
+
+CREATE TABLE IF NOT EXISTS assistant_verified_tool_route (
+  id TEXT PRIMARY KEY,
+  route_key_hash TEXT NOT NULL UNIQUE,
+  role_scope TEXT,
+  store_scope TEXT,
+  tool_id TEXT NOT NULL,
+  route_kind TEXT NOT NULL,
+  route_args_redacted TEXT,
+  status TEXT NOT NULL DEFAULT 'learning',
+  verification_count INTEGER NOT NULL DEFAULT 0,
+  required_verifications INTEGER NOT NULL DEFAULT 3,
+  answer_hash TEXT,
+  payload_hash TEXT,
+  first_seen_at TEXT NOT NULL,
+  last_verified_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_verified_tool_route_status
+  ON assistant_verified_tool_route(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_verified_tool_route_tool
+  ON assistant_verified_tool_route(tool_id, route_kind);
+CREATE INDEX IF NOT EXISTS idx_verified_tool_route_scope
+  ON assistant_verified_tool_route(role_scope, store_scope);

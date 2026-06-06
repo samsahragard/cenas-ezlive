@@ -181,6 +181,85 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_promotes_verified_tool_route_after_repeated_success(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("verified tool route must not call model")),
+    )
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = False
+    payload = {
+        "question": "How many caterings do we have today?",
+        "principal": principal,
+        "tools": [_available_tool("orders.store_summary")],
+        "tool_data": {
+            "orders.store_summary": {
+                "generated_at": "2026-06-05T17:00:00Z",
+                "total_orders": 12,
+                "today_orders": 3,
+                "upcoming_orders": 8,
+                "needs_driver_orders": 0,
+                "live_tracking_orders": 1,
+                "by_store": {"copperfield": 2, "tomball": 1},
+            }
+        },
+        "source": "test",
+    }
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        route_states = []
+        for _ in range(3):
+            res = _post(port, payload, token)
+            data = json.loads(res.read().decode("utf-8"))
+            assert data["queued"] is False
+            assert data["tool_id"] == "orders.store_summary"
+            route_states.append(data["route_cache"])
+
+        assert [state["verification_count"] for state in route_states] == [1, 2, 3]
+        assert [state["status"] for state in route_states] == ["learning", "learning", "verified"]
+
+        import sqlite3
+
+        con = sqlite3.connect(db_path)
+        row = con.execute(
+            """
+            SELECT tool_id, route_kind, status, verification_count,
+                   required_verifications, route_args_redacted,
+                   answer_hash, payload_hash
+              FROM assistant_verified_tool_route
+            """
+        ).fetchone()
+        con.close()
+
+        assert row[0] == "orders.store_summary"
+        assert row[1] == "order_summary"
+        assert row[2] == "verified"
+        assert row[3] == 3
+        assert row[4] == 3
+        assert "current_view" in row[5]
+        assert row[6] and "3 caterings" not in row[6]
+        assert row[7] and "today_orders" not in row[7]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
 def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

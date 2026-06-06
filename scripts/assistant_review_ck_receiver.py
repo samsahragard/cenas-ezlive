@@ -378,6 +378,7 @@ def _row_counts() -> dict[str, int]:
         "assistant_delivery_attempt",
         "assistant_policy_rule",
         "assistant_tool_catalog_snapshot",
+        "assistant_verified_tool_route",
     ]
     with sqlite3.connect(_db_path()) as con:
         return {

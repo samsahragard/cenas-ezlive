@@ -311,6 +311,16 @@ def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
             "reason": "needs_review",
             "storage": "assistant_review",
             "review_notice_model": "gemini-2.5-flash",
+            "route_path": "review",
+            "routed_tool_id": "toast.table_activity",
+            "tool_id": "toast.table_activity",
+            "route_meta": {
+                "latency_ms": 12,
+                "classifier": {
+                    "enabled": False,
+                    "token_cost_usd": 0.0,
+                },
+            },
             "debug": "token=abc123SECRET",
         },
         200,
@@ -323,6 +333,11 @@ def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
     assert payload["result"]["reason"] == "needs_review"
     assert payload["tool"]["storage"] == "assistant_review"
     assert payload["tool"]["model"] == "gemini-2.5-flash"
+    assert payload["tool"]["route_path"] == "review"
+    assert payload["tool"]["routed_tool_id"] == "toast.table_activity"
+    assert payload["tool"]["final_tool_id"] == "toast.table_activity"
+    assert payload["telemetry"]["route_latency_ms"] == 12
+    assert payload["telemetry"]["classifier_token_cost_usd"] == 0.0
     assert "abc123SECRET" not in payload["turn"]["question"]
     assert "abc123SECRET" not in payload["raw_response"]
     assert "[REDACTED]" in payload["raw_response"]
@@ -749,7 +764,113 @@ def test_ask_no_route_falls_back_to_gemini_general_path(monkeypatch):
         "answer": "General answer",
         "queued": False,
         "model": "gemini-test",
+        "route_path": "general",
+        "routed_tool_id": None,
     }
+
+
+def test_deterministic_matcher_scan_uses_registry_priority():
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+
+    rows = ar._scan_deterministic_matchers(
+        [
+            "who opened the last table?",
+            "how many caterings today?",
+            "hello there",
+        ],
+        ctx,
+    )
+
+    assert [row["tool_id"] for row in rows] == [
+        "toast.table_activity",
+        "orders.store_summary",
+        None,
+    ]
+    assert rows[-1]["route_path"] == "review"
+
+
+def test_classifier_fallback_is_disabled_by_default(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.delenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", raising=False)
+    monkeypatch.setattr(ar, "_gemini_generate", lambda *_: (_ for _ in ()).throw(AssertionError("classifier is off")))
+
+    route = ar._route_approved_tool_choice("please use the alias", ctx)
+
+    assert route["tool_id"] is None
+    assert route["route_path"] == "review"
+    assert route["classifier"]["enabled"] is False
+
+
+def test_classifier_fallback_validates_alias_to_available_canonical_tool(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(ar, "_gemini_generate", lambda *_: ('{"tool_id":"toast_live_tables"}', "gemini-test"))
+
+    route = ar._route_approved_tool_choice("use the alias", ctx)
+
+    assert route["tool_id"] == "toast.table_activity"
+    assert route["route_path"] == "classifier"
+    assert route["classifier"]["raw_tool_id"] == "toast_live_tables"
+
+
+def test_classifier_fallback_rejects_excluded_tool_ids(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(ar, "_gemini_generate", lambda *_: ('{"tool_id":"read_file"}', "gemini-test"))
+
+    route = ar._route_approved_tool_choice("please open a local file", ctx)
+
+    assert route["tool_id"] is None
+    assert route["route_path"] == "review"
+    assert route["classifier"]["reason"] == "not_allowed"
 
 
 def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
@@ -803,8 +924,17 @@ def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
     monkeypatch.setattr(ar, "_mirror_assistant_turn_to_cena_chat", lambda *args: None)
     monkeypatch.setattr(
         ar,
-        "_approved_tool_payload",
-        lambda question, _ctx: ("drivers.store_summary", {"drivers.store_summary": {"total_drivers": 5}}),
+        "_approved_tool_package",
+        lambda question, _ctx: (
+            "drivers.store_summary",
+            {"drivers.store_summary": {"total_drivers": 5}},
+            {
+                "tool_id": "drivers.store_summary",
+                "route_path": "deterministic",
+                "latency_ms": 1,
+                "classifier": {"enabled": False, "reason": "not_used"},
+            },
+        ),
     )
     monkeypatch.setenv("RENDER", "1")
     monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
@@ -826,6 +956,7 @@ def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
         assert data["answer"] == "CK-local answer"
         assert RuntimeHandler.seen["routed_tool_id"] == "drivers.store_summary"
         assert RuntimeHandler.seen["route_path"] == "deterministic"
+        assert RuntimeHandler.seen["route_meta"]["latency_ms"] == 1
         assert RuntimeHandler.seen["tool_data"] == {"drivers.store_summary": {"total_drivers": 5}}
         assert RuntimeHandler.seen["previous_question"] == "driver coverage yesterday"
     finally:

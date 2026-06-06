@@ -3,6 +3,7 @@ from app.services.assistant_tool_inventory import (
     iter_excluded_non_routable_tool_ids,
     iter_partner_tool_definitions,
 )
+from app.services.assistant_tool_registry import canonical_tool_id, iter_tool_aliases
 
 
 def test_inventory_skips_excluded_non_routable_tools_by_default():
@@ -47,3 +48,19 @@ def test_inventory_write_classifier_splits_underscore_verbs():
     assert tools["orders.update_status"]["read_write_class"] == "action_confirmation"
     assert tools["orders.mark_delivered"]["read_write_class"] == "action_confirmation"
     assert tools["drivers.reset_passcode"]["read_write_class"] == "action_confirmation"
+
+
+def test_tool_alias_table_canonicalizes_confirmed_duplicates():
+    aliases = dict(iter_tool_aliases())
+
+    assert aliases["toast_live_tables"] == "toast.table_activity"
+    assert aliases["fin.view_pnl"] == "finance.pnl_summary"
+    assert canonical_tool_id("toast_live_tables") == "toast.table_activity"
+    assert canonical_tool_id("toast.table_activity") == "toast.table_activity"
+
+
+def test_tool_aliases_do_not_unblock_excluded_sentinels():
+    aliases = dict(iter_tool_aliases())
+
+    assert "read_file" not in aliases
+    assert is_excluded_non_routable("read_file")

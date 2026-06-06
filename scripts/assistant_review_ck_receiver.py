@@ -27,8 +27,14 @@ DEFAULT_DB = r"C:\Users\sam\cena-ai-assistant\assistant_review.sqlite"
 SCHEMA_FILE = Path(__file__).with_name("assistant_review_schema.sql")
 POST_PATH = "/review/question"
 LEGACY_POST_PATH = "/assistant/review-question"
+ROUTE_ACTION_PATH = "/review/route-action"
 ALLOWED_STATUSES = {"pending", "approved", "rejected", "needs_review", "archived"}
 ALLOWED_RISKS = {"low", "normal", "high", "blocked"}
+ROUTE_ACTION_STATUSES = {
+    "verify": "verified",
+    "flag": "flagged",
+    "reject": "rejected",
+}
 SENSITIVE_KEY_RE = re.compile(
     r"(token|secret|api[_-]?key|password|passcode|pin|hash|salt|"
     r"phone|email|address|gps|lat|lng|longitude|latitude)",
@@ -379,12 +385,99 @@ def _row_counts() -> dict[str, int]:
         "assistant_policy_rule",
         "assistant_tool_catalog_snapshot",
         "assistant_verified_tool_route",
+        "assistant_route_event",
     ]
     with sqlite3.connect(_db_path()) as con:
         return {
             table: int(con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
             for table in tables
         }
+
+
+def _save_route_action(row: dict) -> dict:
+    _init_db()
+    action = str(row.get("action") or "").strip().casefold()
+    status = ROUTE_ACTION_STATUSES.get(action)
+    if not status:
+        raise ValueError("invalid route action")
+    route_key_hash = str(row.get("route_key_hash") or "").strip()
+    route_id = str(row.get("route_id") or row.get("id") or "").strip()
+    if not route_key_hash and not route_id:
+        raise ValueError("route_key_hash or route_id required")
+
+    now = _now_iso()
+    reviewer = str(row.get("reviewer") or row.get("reviewed_by") or "operator").strip()
+    reason = str(row.get("reason") or "").strip()
+    where_sql = "route_key_hash = ?"
+    where_value = route_key_hash
+    if not where_value:
+        where_sql = "id = ?"
+        where_value = route_id
+
+    with sqlite3.connect(_db_path()) as con:
+        existing = con.execute(
+            f"""
+            SELECT id, route_key_hash, tool_id, route_kind
+              FROM assistant_verified_tool_route
+             WHERE {where_sql}
+            """,
+            (where_value,),
+        ).fetchone()
+        if not existing:
+            raise ValueError("route not found")
+        route_id, route_key_hash, tool_id, route_kind = [str(value or "") for value in existing]
+        con.execute(
+            """
+            UPDATE assistant_verified_tool_route
+               SET status = ?,
+                   last_verified_at = CASE WHEN ? = 'verified' THEN ? ELSE last_verified_at END,
+                   updated_at = ?
+             WHERE id = ?
+            """,
+            (status, status, now, now, route_id),
+        )
+        event_id = _stable_hash({
+            "route_key_hash": route_key_hash,
+            "status": status,
+            "reviewer": reviewer,
+            "created_at": now,
+        })[:32]
+        metadata = {
+            "action": action,
+            "status": status,
+            "reviewer_hash": _stable_hash(reviewer),
+            "reason": _redact_text(reason),
+        }
+        con.execute(
+            """
+            INSERT OR REPLACE INTO assistant_route_event (
+                id, route_key_hash, tool_id, route_kind, route_path, event_type,
+                classifier_model, classifier_latency_ms, classifier_token_cost_usd,
+                metadata_redacted, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event_id,
+                route_key_hash,
+                tool_id,
+                route_kind,
+                str(row.get("route_path") or "review"),
+                "review_action",
+                None,
+                None,
+                None,
+                json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+                now,
+            ),
+        )
+        con.commit()
+    return {
+        "ok": True,
+        "route_id": route_id,
+        "route_key_hash": route_key_hash,
+        "tool_id": tool_id,
+        "status": status,
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -417,7 +510,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in {POST_PATH, LEGACY_POST_PATH}:
+        if path not in {POST_PATH, LEGACY_POST_PATH, ROUTE_ACTION_PATH}:
             self._json(404, {"ok": False, "error": "not_found"})
             return
         if not self._authorized():
@@ -429,6 +522,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"ok": False, "error": "bad_length"})
                 return
             row = json.loads(self.rfile.read(length).decode("utf-8"))
+            if path == ROUTE_ACTION_PATH:
+                self._json(200, _save_route_action(row))
+                return
             qid = _save_question(row)
         except Exception as exc:
             self._json(400, {"ok": False, "error": str(exc)})

@@ -150,6 +150,76 @@ BUILTIN_TOOL_REGISTRY: list[dict[str, Any]] = [
 ]
 
 
+TOOL_ALIAS_MAP: dict[str, str] = {
+    "catering.assign_driver": "orders.assign_driver",
+    "catering.reassign_store": "orders.reassign_store",
+    "catering.unassign": "orders.unassign_driver",
+    "catering.view_drivers": "drivers.roster_summary",
+    "driver.approve_mileage": "drivers.approve_mileage",
+    "driver.view_all_queue": "drivers.active_delivery_queue",
+    "driver.view_earnings": "drivers.earnings_own",
+    "driver.view_own_queue": "drivers.active_delivery_queue",
+    "emp.add": "employee.add",
+    "emp.archive": "employee.deactivate",
+    "emp.edit_info": "employee.edit_profile",
+    "emp.reset_passcode": "employee.reset_passcode",
+    "emp.view_directory": "employees.store_directory",
+    "emp.view_perf": "employees.performance_safe_summary",
+    "fin.approve_expense": "finance.approve_expense",
+    "fin.view_ap": "finance.ap_summary",
+    "fin.view_deposits": "finance.deposit_summary",
+    "fin.view_instant_deposit": "finance.instant_deposit_status",
+    "fin.view_payroll": "finance.payroll_setup_summary",
+    "fin.view_pnl": "finance.pnl_summary",
+    "fin.view_tips": "finance.tip_pool_summary",
+    "incident.create": "manager.create_incident",
+    "incident.edit": "manager.edit_incident",
+    "incident.view": "manager.incident_summary",
+    "kitchen.fresh_edit": "kitchen.update_fresh_food",
+    "kitchen.prep_edit": "kitchen.update_prep_item",
+    "legal.compliance_cal": "legal.compliance_calendar",
+    "legal.upload_docs": "legal.upload_document",
+    "legal.view_docs": "legal.document_search",
+    "legal.view_insurance": "legal.insurance_summary",
+    "legal.view_licenses": "legal.license_summary",
+    "maint.close": "maintenance.close_request",
+    "maint.submit": "maintenance.create_request",
+    "maint.view": "manager.maintenance_summary",
+    "manager_log.write": "manager.create_daily_log",
+    "perms.assign": "permissions.assign_role",
+    "perms.assign_role": "permissions.assign_role",
+    "perms.create_role": "permissions.create_role_template",
+    "perms.edit_role": "permissions.edit_role_template",
+    "perms.override": "permissions.override_user_permission",
+    "perms.view": "permissions.permission_catalog",
+    "reports.benchmarks": "reports.benchmark_summary",
+    "reports.catering": "reports.catering_summary",
+    "reports.catering_item_mix": "orders.catering_item_mix",
+    "reports.cross_store": "reports.cross_store_summary",
+    "reports.forecasts": "reports.forecast_summary",
+    "reports.labor": "reports.labor_summary",
+    "reports.marketing": "reports.marketing_summary",
+    "reports.sales": "reports.sales_summary",
+    "team.notify": "manager.send_team_notification",
+    "timeoff.approve": "schedule.approve_time_off",
+    "toast_live_tables": "toast.table_activity",
+}
+
+
+def canonical_tool_id(tool_id: str) -> str:
+    current = str(tool_id or "").strip()
+    seen: set[str] = set()
+    while current in TOOL_ALIAS_MAP and current not in seen:
+        seen.add(current)
+        current = TOOL_ALIAS_MAP[current]
+    return current
+
+
+def iter_tool_aliases() -> Iterable[tuple[str, str]]:
+    for alias, canonical in sorted(TOOL_ALIAS_MAP.items()):
+        yield alias, canonical
+
+
 def iter_builtin_tool_registrations() -> Iterable[dict[str, Any]]:
     for entry in BUILTIN_TOOL_REGISTRY:
         yield deepcopy(entry)

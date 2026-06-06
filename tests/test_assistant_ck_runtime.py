@@ -184,7 +184,7 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
-def test_runtime_promotes_verified_tool_route_after_repeated_success(tmp_path, monkeypatch):
+def test_runtime_records_learning_tool_route_after_repeated_success(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     db_path = tmp_path / "assistant_review.sqlite"
@@ -234,7 +234,7 @@ def test_runtime_promotes_verified_tool_route_after_repeated_success(tmp_path, m
             route_states.append(data["route_cache"])
 
         assert [state["verification_count"] for state in route_states] == [1, 2, 3]
-        assert [state["status"] for state in route_states] == ["learning", "learning", "verified"]
+        assert [state["status"] for state in route_states] == ["learning", "learning", "learning"]
 
         import sqlite3
 
@@ -247,22 +247,82 @@ def test_runtime_promotes_verified_tool_route_after_repeated_success(tmp_path, m
               FROM assistant_verified_tool_route
             """
         ).fetchone()
+        event_count = con.execute(
+            "SELECT COUNT(*) FROM assistant_route_event WHERE route_path = 'deterministic'"
+        ).fetchone()[0]
         con.close()
 
         assert row[0] == "orders.store_summary"
         assert row[1] == "order_summary"
-        assert row[2] == "verified"
+        assert row[2] == "learning"
         assert row[3] == 3
         assert row[4] == 3
         assert "current_view" in row[5]
         assert row[6] and "3 caterings" not in row[6]
         assert row[7] and "today_orders" not in row[7]
+        assert event_count == 3
     finally:
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_nightly_auto_verify_promotes_aged_learning_route(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    approved = {
+        "tool_id": "orders.store_summary",
+        "answer": "You have 3 caterings today and 8 upcoming orders.",
+    }
+    tool_data = {
+        "orders.store_summary": {
+            "today_orders": 3,
+            "upcoming_orders": 8,
+            "needs_driver_orders": 0,
+            "live_tracking_orders": 1,
+        }
+    }
+
+    for _ in range(3):
+        state = runtime._record_tool_route_verification(
+            "How many caterings do we have today?",
+            "",
+            principal,
+            approved,
+            tool_data,
+            "deterministic",
+            {"classifier": {"enabled": False}},
+        )
+        assert state["status"] == "learning"
+
+    old = (datetime.now(timezone.utc) - timedelta(days=8)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    import sqlite3
+
+    con = sqlite3.connect(db_path)
+    con.execute("UPDATE assistant_verified_tool_route SET first_seen_at = ?", (old,))
+    con.commit()
+    con.close()
+
+    result = runtime._auto_verify_tool_routes(min_age_days=7)
+
+    con = sqlite3.connect(db_path)
+    status = con.execute("SELECT status FROM assistant_verified_tool_route").fetchone()[0]
+    event_type = con.execute(
+        "SELECT event_type FROM assistant_route_event WHERE route_path = 'nightly_auto_verify'"
+    ).fetchone()[0]
+    con.close()
+
+    assert result["promoted"] == 1
+    assert status == "verified"
+    assert event_type == "auto_verify"
 
 
 def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monkeypatch):
@@ -1500,6 +1560,8 @@ def test_runtime_answers_general_question_from_ck_model(monkeypatch, tmp_path):
             "queued": False,
             "model": "gemini-2.5-flash",
             "storage": "ck_runtime",
+            "route_path": "general",
+            "routed_tool_id": None,
         }
     finally:
         httpd.shutdown()

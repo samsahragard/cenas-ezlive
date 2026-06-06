@@ -17,6 +17,7 @@ import os
 import re
 import hashlib
 import threading
+import time
 import urllib.parse
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -44,7 +45,7 @@ from app.services.assistant_tool_inventory import (
     is_excluded_non_routable,
     iter_partner_tool_definitions,
 )
-from app.services.assistant_tool_registry import iter_builtin_tool_registrations
+from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin_tool_registrations
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
 log = logging.getLogger(__name__)
@@ -761,10 +762,28 @@ def _assistant_review_payload(
         },
         "tool": {
             "id": response.get("tool_id"),
+            "routed_tool_id": response.get("routed_tool_id"),
+            "final_tool_id": response.get("tool_id") or response.get("routed_tool_id"),
+            "route_path": response.get("route_path"),
             "name": response.get("tool_name"),
             "storage": response.get("storage"),
             "model": response.get("model") or response.get("review_notice_model"),
             "generated_at": response.get("generated_at"),
+            "classifier": (response.get("route_meta") or {}).get("classifier")
+            if isinstance(response.get("route_meta"), dict)
+            else None,
+        },
+        "telemetry": {
+            "route_path": response.get("route_path"),
+            "route_latency_ms": (response.get("route_meta") or {}).get("latency_ms")
+            if isinstance(response.get("route_meta"), dict)
+            else None,
+            "classifier_token_cost_usd": (
+                ((response.get("route_meta") or {}).get("classifier") or {}).get("token_cost_usd")
+                if isinstance(response.get("route_meta"), dict)
+                and isinstance((response.get("route_meta") or {}).get("classifier"), dict)
+                else None
+            ),
         },
         "outcome": _review_outcome(data, status),
         "raw_response": _review_json(data, 2500),
@@ -1323,47 +1342,180 @@ def _approved_tool_handlers() -> dict[str, Any]:
     }
 
 
-def _route_approved_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
-    if not _has_partner_tool_access(ctx):
-        return None
+def _available_implemented_tools(ctx: dict[str, Any]) -> dict[str, dict[str, Any]]:
     available = {
         tool["tool_id"]: tool
         for tool in _tool_catalog_for(ctx)
         if tool.get("available")
     }
+    handlers = _approved_tool_handlers()
+    return {
+        str(tool.get("tool_id") or ""): tool
+        for tool in _TOOL_REGISTRY
+        if (
+            str(tool.get("tool_id") or "") in available
+            and not is_excluded_non_routable(str(tool.get("tool_id") or ""))
+            and str(tool.get("handler") or "") in handlers
+        )
+    }
+
+
+def _deterministic_route_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
+    if not _has_partner_tool_access(ctx):
+        return None
+    available = _available_implemented_tools(ctx)
     for tool in sorted(_TOOL_REGISTRY, key=lambda item: int(item.get("priority") or 500)):
         tool_id = str(tool.get("tool_id") or "")
-        if is_excluded_non_routable(tool_id) or tool_id not in available:
+        if tool_id not in available:
             continue
-        handler_key = tool.get("handler")
         matcher_key = tool.get("matcher")
-        if not handler_key or handler_key not in _approved_tool_handlers():
-            continue
         matcher = _TOOL_MATCHERS.get(str(matcher_key or ""))
         if matcher and matcher(question):
             return tool_id
     return None
 
 
+def _classifier_enabled() -> bool:
+    return _env_truthy("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED")
+
+
+def _route_classifier_prompt(question: str, tools: dict[str, dict[str, Any]]) -> str:
+    catalog_lines = []
+    for tool_id, tool in sorted(tools.items()):
+        catalog_lines.append(
+            f"- {tool_id}: {tool.get('label') or tool_id}. {tool.get('description') or ''}"
+        )
+    return (
+        "Classify this Cenas Kitchen assistant question to exactly one available "
+        "implemented tool id, or NONE. Return strict JSON only in this exact "
+        "shape: {\"tool_id\":\"<id or NONE>\"}. Do not include free text. "
+        "Only choose from the allowlist below.\n\n"
+        "Available implemented tools:\n"
+        + "\n".join(catalog_lines)
+        + "\n\nQuestion:\n"
+        + question
+    )
+
+
+def _classifier_route_tool_id(
+    question: str,
+    ctx: dict[str, Any],
+    available: dict[str, dict[str, Any]],
+) -> tuple[str | None, dict[str, Any]]:
+    started = time.perf_counter()
+    meta: dict[str, Any] = {
+        "enabled": _classifier_enabled(),
+        "model": None,
+        "latency_ms": 0,
+        "token_cost_usd": None,
+        "raw_tool_id": None,
+        "reason": "disabled",
+    }
+    if not meta["enabled"]:
+        return None, meta
+    if not _has_partner_tool_access(ctx) or not available:
+        meta["reason"] = "no_available_tools"
+        return None, meta
+
+    try:
+        raw_text, model = _gemini_generate(_route_classifier_prompt(question, available))
+    except Exception:  # noqa: BLE001
+        log.exception("assistant: route classifier failed")
+        meta["reason"] = "model_error"
+        meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
+        return None, meta
+
+    meta["model"] = model
+    meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    if not raw_text:
+        meta["reason"] = "empty_response"
+        return None, meta
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        meta["reason"] = "invalid_json"
+        return None, meta
+    raw_tool_id = str(parsed.get("tool_id") or "").strip()
+    meta["raw_tool_id"] = raw_tool_id
+    if not raw_tool_id or raw_tool_id.upper() == "NONE":
+        meta["reason"] = "none"
+        return None, meta
+    canonical = canonical_tool_id(raw_tool_id)
+    if canonical not in available or is_excluded_non_routable(canonical):
+        meta["reason"] = "not_allowed"
+        return None, meta
+    meta["reason"] = "matched"
+    return canonical, meta
+
+
+def _route_approved_tool_choice(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    started = time.perf_counter()
+    tool_id = _deterministic_route_tool_id(question, ctx)
+    if tool_id:
+        return {
+            "tool_id": tool_id,
+            "route_path": "deterministic",
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "classifier": {"enabled": _classifier_enabled(), "reason": "not_used"},
+        }
+    available = _available_implemented_tools(ctx)
+    classifier_tool_id, classifier_meta = _classifier_route_tool_id(question, ctx, available)
+    if classifier_tool_id:
+        return {
+            "tool_id": classifier_tool_id,
+            "route_path": "classifier",
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "classifier": classifier_meta,
+        }
+    return {
+        "tool_id": None,
+        "route_path": "review",
+        "latency_ms": int((time.perf_counter() - started) * 1000),
+        "classifier": classifier_meta,
+    }
+
+
+def _route_approved_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
+    return _route_approved_tool_choice(question, ctx)["tool_id"]
+
+
+def _scan_deterministic_matchers(questions: list[str], ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for question in questions:
+        tool_id = _deterministic_route_tool_id(question, ctx)
+        results.append({
+            "question": question,
+            "tool_id": tool_id,
+            "route_path": "deterministic" if tool_id else "review",
+        })
+    return results
+
+
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     return _approved_tool_payload(question, ctx)[1]
 
 
-def _approved_tool_payload(question: str, ctx: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
-    tool_id = _route_approved_tool_id(question, ctx)
+def _approved_tool_package(question: str, ctx: dict[str, Any]) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
+    route = _route_approved_tool_choice(question, ctx)
+    tool_id = route.get("tool_id")
     if not tool_id:
-        return None, {}
+        return None, {}, route
     tool = next((item for item in _TOOL_REGISTRY if item["tool_id"] == tool_id), None)
     if not tool:
-        return None, {}
+        return None, {}, route
     handler = _approved_tool_handlers().get(str(tool.get("handler") or ""))
     if not handler:
-        return None, {}
+        return None, {}, route
     try:
-        return tool_id, {tool_id: handler(question, ctx)}
+        return str(tool_id), {str(tool_id): handler(question, ctx)}, route
     except Exception:  # noqa: BLE001
         log.exception("assistant: failed to build %s", tool_id)
-        return None, {}
+        return None, {}, route
+
+
+def _approved_tool_payload(question: str, ctx: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    tool_id, payload, _route = _approved_tool_package(question, ctx)
+    return tool_id, payload
 
 
 def _contextual_followup(question: str, previous_question: str) -> bool:
@@ -1422,18 +1574,19 @@ def _post_to_ck_runtime(
         "Content-Type": "application/json",
     }
     resolved_for_tools = _resolved_question(question, previous_question)
-    routed_tool_id, tool_data = _approved_tool_payload(resolved_for_tools, ctx)
+    routed_tool_id, tool_data, route_meta = _approved_tool_package(resolved_for_tools, ctx)
     payload = {
         "question": question,
         "principal": _runtime_principal(ctx),
         "tools": _tool_catalog_for(ctx),
         "tool_data": tool_data,
+        "route_path": route_meta.get("route_path"),
+        "route_meta": route_meta,
         "source": "cenas_app",
         "requested_at": _now_iso(),
     }
     if routed_tool_id:
         payload["routed_tool_id"] = routed_tool_id
-        payload["route_path"] = "deterministic"
     if previous_question:
         payload["previous_question"] = previous_question
     if previous_answer:
@@ -1451,6 +1604,10 @@ def _post_to_ck_runtime(
             resp = hx.post(url, json=payload, headers=headers)
         data = resp.json() if resp.content else {}
         if 200 <= resp.status_code < 300:
+            if isinstance(data, dict):
+                data.setdefault("route_path", route_meta.get("route_path"))
+                data.setdefault("routed_tool_id", routed_tool_id)
+                data.setdefault("route_meta", route_meta)
             return data, resp.status_code
         return {
             "ok": False,
@@ -1749,6 +1906,8 @@ def assistant_ask():
             "storage": row.get("storage"),
             "ck_question_id": row.get("ck_question_id"),
             "reason": reason,
+            "route_path": "review",
+            "routed_tool_id": None,
         }
         if notice and notice_model:
             response["review_notice_model"] = notice_model
@@ -1771,9 +1930,18 @@ def assistant_ask():
             "storage": row.get("storage"),
             "ck_question_id": row.get("ck_question_id"),
             "reason": "model_unavailable_or_no_answer",
+            "route_path": "review",
+            "routed_tool_id": None,
         })
 
-    return respond({"ok": True, "answer": answer, "queued": False, "model": model})
+    return respond({
+        "ok": True,
+        "answer": answer,
+        "queued": False,
+        "model": model,
+        "route_path": "general",
+        "routed_tool_id": None,
+    })
 
 
 @assistant_bp.route("/cron/assistant-questions-export", methods=["GET"])

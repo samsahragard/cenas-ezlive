@@ -125,9 +125,18 @@ def _employee_name(employee: dict[str, Any]) -> str | None:
     return None
 
 
-def _employee_name_map(client: Any, location: str, restaurant_guid: str) -> tuple[dict[str, str], bool]:
+def _employee_name_map(
+    client: Any,
+    location: str,
+    restaurant_guid: str,
+    *,
+    refresh: bool = False,
+) -> tuple[dict[str, str], bool]:
     try:
-        employees = client.fetch_employees(location, restaurant_guid)
+        try:
+            employees = client.fetch_employees(location, restaurant_guid, refresh=refresh)
+        except TypeError:
+            employees = client.fetch_employees(location, restaurant_guid)
     except Exception:  # noqa: BLE001
         log.exception("toast table activity: employee fetch failed for %s", location)
         return {}, False
@@ -189,7 +198,12 @@ def latest_table_activity_payload(
 
     for loc, guid in locations.items():
         table_map, table_config_available = _table_name_map(toast, loc, guid)
-        employee_map, employee_lookup_available = _employee_name_map(toast, loc, guid)
+        employee_map, employee_lookup_available = _employee_name_map(
+            toast,
+            loc,
+            guid,
+            refresh=refresh_orders,
+        )
         try:
             orders = toast.fetch_orders_for_date(loc, guid, bd, refresh=refresh_orders)
         except Exception:  # noqa: BLE001

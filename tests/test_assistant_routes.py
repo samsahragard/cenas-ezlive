@@ -88,6 +88,10 @@ def test_tool_catalog_activates_operator_tools_for_sam_or_masood(monkeypatch):
     assert tools["toast.sales_summary"]["status"] == "active"
     assert tools["toast.table_activity"]["available"] is True
     assert tools["toast.table_activity"]["status"] == "active"
+    assert tools["toast.webhook_activity"]["available"] is True
+    assert tools["toast.webhook_activity"]["status"] == "active"
+    assert tools["toast.employee_profiles"]["available"] is True
+    assert tools["toast.employee_profiles"]["status"] == "active"
 
 
 def test_tool_catalog_activates_approved_tools_for_partner_level():
@@ -109,6 +113,8 @@ def test_tool_catalog_activates_approved_tools_for_partner_level():
     assert tools["labor.store_aggregate"]["available"] is True
     assert tools["toast.sales_summary"]["available"] is True
     assert tools["toast.table_activity"]["available"] is True
+    assert tools["toast.webhook_activity"]["available"] is True
+    assert tools["toast.employee_profiles"]["available"] is True
     assert tools["employee.my_profile"]["available"] is False
     assert tools["employee.my_profile.read"]["available"] is True
     assert tools["read_file"]["available"] is True
@@ -140,6 +146,8 @@ def test_partner_catalog_only_tools_do_not_activate_for_staff():
     assert tools["read_file"]["deny_reason"] == "session_type_not_allowed"
     assert tools["finance.pnl_summary"]["available"] is False
     assert tools["dev.assistant_tool_catalog_snapshot"]["available"] is False
+    assert tools["toast.webhook_activity"]["available"] is False
+    assert tools["toast.employee_profiles"]["available"] is False
 
 
 def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
@@ -540,6 +548,63 @@ def test_operator_toast_table_activity_payload_handles_bare_waiter_question(monk
 
     assert "toast.table_activity" in payload
     assert seen["location"] is None
+
+
+def test_operator_toast_webhook_activity_payload(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_webhook_activity_tool_payload",
+        lambda question: {"data_class": "toast_webhook_activity_sanitized", "question": question},
+    )
+
+    payload = ar._approved_tool_data("what live Toast webhook events came in today?", ctx)
+
+    assert payload["toast.webhook_activity"]["data_class"] == "toast_webhook_activity_sanitized"
+    assert "toast.employee_profiles" not in payload
+
+
+def test_operator_toast_employee_profiles_payload(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    monkeypatch.setattr(ar, "_orders_store_summary", lambda ctx: {"total_orders": 0})
+    monkeypatch.setattr(ar, "_drivers_store_summary", lambda ctx: {"total_drivers": 0})
+    monkeypatch.setattr(ar, "_labor_store_aggregate", lambda ctx: {"total_employees": 0})
+    monkeypatch.setattr(
+        ar,
+        "_toast_employee_profiles_tool_payload",
+        lambda question: {"data_class": "toast_employee_profiles_sanitized", "question": question},
+    )
+
+    payload = ar._approved_tool_data("show employee 4 Toast profile facts", ctx)
+
+    assert payload["toast.employee_profiles"]["data_class"] == "toast_employee_profiles_sanitized"
 
 
 def test_partner_level_tool_payloads_do_not_require_owner_operator(monkeypatch):

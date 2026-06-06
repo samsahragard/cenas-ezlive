@@ -59,6 +59,7 @@ def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
     token = "runtime-test-token"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
 
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
@@ -385,6 +386,349 @@ def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_pa
         assert "table 106" in data["answer"]
         assert "6:20 PM CT" in data["answer"]
         assert "waiter/server was Maria Garcia" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_answers_operator_toast_webhook_activity_with_approved_tool(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("webhook tool answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "what live Toast webhook events came in today?",
+                "principal": principal,
+                "tools": [_available_tool("toast.webhook_activity")],
+                "tool_data": {
+                    "toast.webhook_activity": {
+                        "ok": True,
+                        "generated_at": "2026-06-06T17:00:00Z",
+                        "data_class": "toast_webhook_activity_sanitized",
+                        "scope": {"store_key": None, "business_date": "20260606"},
+                        "counts": {
+                            "events": 10,
+                            "orders": 4,
+                            "checks": 4,
+                            "selections": 9,
+                            "payments": 2,
+                            "employee_facts": 12,
+                        },
+                        "recent_last_hour_events": 3,
+                        "fact_types_for_scope": [{"fact_type": "item_added", "count": 7}],
+                        "latest_orders": [{
+                            "table_name": "{'guid': '626c6c44-b022-4475-ab37-43d61379b488', 'entityType': 'Table'}",
+                            "server_name": "Maria Garcia",
+                            "selection_count": 3,
+                            "payment_count": 1,
+                            "modified_date": "2026-06-06T16:59:00Z",
+                        }],
+                        "raw_payloads_included": False,
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["storage"] == "toast_webhook_activity_tool"
+        assert data["tool_id"] == "toast.webhook_activity"
+        assert "Toast webhook database is connected" in data["answer"]
+        assert "10 webhook events" in data["answer"]
+        assert "626c6c44-b022-4475-ab37-43d61379b488" not in data["answer"]
+        assert "entityType" not in data["answer"]
+        assert "table {" not in data["answer"]
+        assert "Raw Toast webhook JSON is not included" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_refetches_toast_webhook_when_render_payload_is_error(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_toast_webhook_activity_payload",
+        lambda question: {
+            "ok": True,
+            "generated_at": "2026-06-06T17:00:00Z",
+            "data_class": "toast_webhook_activity_sanitized",
+            "scope": {"store_key": None, "business_date": "20260606"},
+            "counts": {
+                "events": 22,
+                "orders": 6,
+                "checks": 6,
+                "selections": 18,
+                "payments": 4,
+                "employee_facts": 20,
+            },
+            "recent_last_hour_events": 5,
+            "raw_payloads_included": False,
+        },
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("webhook refetch answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "what live Toast webhook events came in today?",
+                "principal": principal,
+                "tools": [_available_tool("toast.webhook_activity")],
+                "tool_data": {
+                    "toast.webhook_activity": {
+                        "ok": False,
+                        "error": "toast_webhook_db_missing",
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["storage"] == "toast_webhook_activity_tool"
+        assert data["tool_id"] == "toast.webhook_activity"
+        assert "22 webhook events" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_answers_operator_toast_employee_profile_with_approved_tool(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("employee profile tool answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "show employee 4 Toast profile facts",
+                "principal": principal,
+                "tools": [_available_tool("toast.employee_profiles")],
+                "tool_data": {
+                    "toast.employee_profiles": {
+                        "ok": True,
+                        "generated_at": "2026-06-06T17:00:00Z",
+                        "data_class": "toast_employee_profiles_sanitized",
+                        "scope": "employee",
+                        "employee": {"cena_employee_id": 4, "name": "Natalie Allen"},
+                        "personal_db": {
+                            "exists": True,
+                            "toast_fact_count": 24,
+                            "related_orders": 4,
+                            "related_checks": 4,
+                            "related_selections": 8,
+                            "related_payments": 2,
+                            "metadata": {"generated_at": "2026-06-06T16:59:00Z"},
+                            "fact_type_counts": [{"fact_type": "item_added", "count": 8}],
+                            "latest_facts": [{
+                                "fact_type": "item_added",
+                                "occurred_at": "2026-06-06T16:59:00Z",
+                                "summary": {
+                                    "name": "Smoke Item",
+                                    "table": "{'guid': '626c6c44-b022-4475-ab37-43d61379b488'}",
+                                },
+                            }],
+                        },
+                        "raw_payloads_included": False,
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["storage"] == "toast_employee_profiles_tool"
+        assert data["tool_id"] == "toast.employee_profiles"
+        assert "Natalie Allen (employee 4)" in data["answer"]
+        assert "24 facts" in data["answer"]
+        assert "626c6c44-b022-4475-ab37-43d61379b488" not in data["answer"]
+        assert "table {" not in data["answer"]
+        assert "Raw webhook JSON is not included" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_refetches_toast_employee_profiles_when_render_payload_is_error(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(
+        runtime,
+        "_toast_employee_profiles_payload",
+        lambda question: {
+            "ok": True,
+            "generated_at": "2026-06-06T17:00:00Z",
+            "data_class": "toast_employee_profiles_sanitized",
+            "scope": "overview",
+            "profile_db_count": 88,
+            "central_counts": {
+                "employee_profiles": 88,
+                "identity_links": 95,
+                "employee_facts": 68448,
+                "unmatched_employee_refs": 69,
+            },
+            "top_employees_by_toast_facts": [],
+            "raw_payloads_included": False,
+        },
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("employee profile refetch answer must not call model")),
+    )
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "show Toast employee profile databases",
+                "principal": principal,
+                "tools": [_available_tool("toast.employee_profiles")],
+                "tool_data": {
+                    "toast.employee_profiles": {
+                        "ok": False,
+                        "error": "toast_webhook_db_missing",
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is False
+        assert data["storage"] == "toast_employee_profiles_tool"
+        assert data["tool_id"] == "toast.employee_profiles"
+        assert "88 per-employee SQLite files" in data["answer"]
+        assert "68,448 employee Toast facts" in data["answer"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_does_not_use_toast_payload_when_tool_unavailable(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "runtime-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        principal = _principal("partner")
+        principal["kind"] = "partner"
+        principal["is_owner_operator"] = True
+        res = _post(
+            port,
+            {
+                "question": "what live Toast webhook events came in today?",
+                "principal": principal,
+                "tools": [{"tool_id": "toast.webhook_activity", "available": False, "deny_reason": "needs_sam_review"}],
+                "tool_data": {
+                    "toast.webhook_activity": {
+                        "ok": True,
+                        "counts": {"events": 9999},
+                        "raw_payloads_included": False,
+                    }
+                },
+                "source": "test",
+            },
+            token,
+        )
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert data["queued"] is True
+        assert data["storage"] == "ck"
+        assert data.get("tool_id") != "toast.webhook_activity"
+        assert "9999" not in data["answer"]
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -801,6 +1145,7 @@ def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, mo
     token = "runtime-test-token"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
 
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)
@@ -1056,6 +1401,7 @@ def test_runtime_missing_permission_keeps_permission_wording(tmp_path, monkeypat
     token = "runtime-test-token"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
     monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", token)
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
 
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), runtime.Handler)

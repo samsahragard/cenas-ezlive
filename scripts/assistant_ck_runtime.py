@@ -52,6 +52,8 @@ _VERIFIED_ROUTE_TOOL_IDS = {
     "labor.store_aggregate",
     "toast.sales_summary",
     "toast.table_activity",
+    "toast.webhook_activity",
+    "toast.employee_profiles",
 }
 _SECRET_DEFAULTS = {
     "GEMINI_API_KEY": [
@@ -82,6 +84,10 @@ _SENSITIVE_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_UUID_RE = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+    re.IGNORECASE,
+)
 _DATA_TOOL_RE = re.compile(
     r"\b("
     r"how many|how amny|count|total|report|summary|list|show me|who|which|"
@@ -107,6 +113,25 @@ _TOAST_TABLE_ACTIVITY_RE = re.compile(
     r"table|tables|talbe|floor|seated|seat|opened|open check|"
     r"check|ticket|waiter|server|opened by|opened it|"
     r"most recent.*open|latest.*open"
+    r")\b",
+    re.IGNORECASE,
+)
+_TOAST_WEBHOOK_ACTIVITY_RE = re.compile(
+    r"\b("
+    r"toast\s+webhook|webhooks?|live\s+toast|toast\s+live|"
+    r"event|events|order_updated|ordering_schedule|restaurant_availability|"
+    r"menus?|stock|packaging|checks?|items?|plates?|payments?|closeouts?|"
+    r"rang\s+in|rung\s+in|voids?|closed\s+checks?"
+    r")\b",
+    re.IGNORECASE,
+)
+_TOAST_EMPLOYEE_PROFILE_RE = re.compile(
+    r"\b("
+    r"toast\s+employee|employee\s+toast|employee\s+profile|profile\s+db|"
+    r"personal(?:ized)?\s+db|employee\s+database|employee\s+files?|"
+    r"cena_employee_\d+|employee\s+(?:id\s*)?#?\s*\d+|"
+    r"toast\s+facts?|server\s+activity|tables\s+served|checks?\s+(?:opened|closed)|"
+    r"items?\s+r(?:ang|ung)\s+in|payments?\s+handled"
     r")\b",
     re.IGNORECASE,
 )
@@ -311,7 +336,10 @@ def _wants_labor_summary(question: str) -> bool:
 
 
 def _wants_toast_sales_summary(question: str) -> bool:
-    return bool(_TOAST_SALES_RE.search(str(question or "")))
+    text = str(question or "")
+    if _TOAST_WEBHOOK_ACTIVITY_RE.search(text) or _TOAST_EMPLOYEE_PROFILE_RE.search(text):
+        return False
+    return bool(_TOAST_SALES_RE.search(text))
 
 
 def _wants_toast_table_activity(question: str) -> bool:
@@ -364,6 +392,18 @@ def _toast_table_tool_authorized(principal: dict, tools: list[dict]) -> bool:
     return _tool_available(tools, "toast.table_activity")
 
 
+def _toast_webhook_tool_authorized(principal: dict, tools: list[dict]) -> bool:
+    if not _has_partner_tool_access(principal):
+        return False
+    return _tool_available(tools, "toast.webhook_activity")
+
+
+def _toast_employee_profiles_tool_authorized(principal: dict, tools: list[dict]) -> bool:
+    if not _has_partner_tool_access(principal):
+        return False
+    return _tool_available(tools, "toast.employee_profiles")
+
+
 def _toast_sales_summary_payload(period: str) -> dict:
     _load_toast_env_defaults()
     from app.services.toast_analytics_summary import analytics_summary_payload
@@ -376,6 +416,52 @@ def _toast_table_activity_payload(location: str | None, business_date: str | Non
     from app.services.toast_table_activity import latest_table_activity_payload
 
     return latest_table_activity_payload(location, business_date=business_date)
+
+
+def _wants_toast_webhook_activity(question: str) -> bool:
+    text = str(question or "")
+    if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
+        return False
+    return bool(
+        _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
+        and re.search(
+            r"\b(toast|webhook|live|events?|orders?|checks?|items?|plates?|"
+            r"payments?|closeouts?|closed|rang|rung|void|menus?|stock|packaging)\b",
+            text,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _wants_toast_employee_profiles(question: str) -> bool:
+    text = str(question or "")
+    return bool(
+        _TOAST_EMPLOYEE_PROFILE_RE.search(text)
+        or (
+            re.search(r"\b(employee|server|waiter|cashier|staff)\b", text, re.IGNORECASE)
+            and re.search(
+                r"\b(toast|tables?|checks?|items?|plates?|payments?|rang|rung|served|profile|facts?)\b",
+                text,
+                re.IGNORECASE,
+            )
+        )
+    )
+
+
+def _toast_webhook_activity_payload(question: str) -> dict:
+    from app.services.toast_webhook_assistant import toast_webhook_activity_payload
+
+    return toast_webhook_activity_payload(
+        question,
+        store_key=_requested_store(question),
+        business_date=_toast_table_business_date_from_question(question),
+    )
+
+
+def _toast_employee_profiles_payload(question: str) -> dict:
+    from app.services.toast_webhook_assistant import toast_employee_profile_payload
+
+    return toast_employee_profile_payload(question)
 
 
 def _money(value: object) -> str:
@@ -439,6 +525,170 @@ def _toast_sales_summary_answer(summary: dict) -> str:
 
 def _toast_table_activity_answer(summary: dict) -> str:
     return _toast_table_activity_answer_for_question(summary, "")
+
+
+def _count_list(rows: list[dict], key: str = "fact_type", count_key: str = "count", limit: int = 6) -> str:
+    bits = []
+    for row in rows[:limit]:
+        label = str(row.get(key) or "unknown").replace("_", " ")
+        count_value = row.get(count_key)
+        if count_value is None:
+            count_value = row.get("count")
+        if count_value is None:
+            count_value = row.get("fact_count")
+        count = int(count_value or 0)
+        bits.append(f"{label}: {count}")
+    return "; ".join(bits)
+
+
+def _safe_answer_label(value: object, *, max_len: int = 180) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.casefold()
+    if _UUID_RE.search(text):
+        return ""
+    if (
+        text.startswith("{")
+        or "entitytype" in lowered
+        or "externalid" in lowered
+        or "'guid'" in lowered
+        or '"guid"' in lowered
+    ):
+        return ""
+    return text[:max_len]
+
+
+def _toast_webhook_activity_answer(summary: dict, question: str = "") -> str:
+    if not isinstance(summary, dict) or not summary.get("ok"):
+        return "I cannot read the Toast webhook database right now."
+    counts = summary.get("counts") or {}
+    scope = summary.get("scope") or {}
+    store = scope.get("store_key") or "all stores"
+    business_date = scope.get("business_date") or "today"
+    answer = (
+        "The Toast webhook database is connected. "
+        f"It currently has {int(counts.get('events') or 0):,} webhook events, "
+        f"{int(counts.get('orders') or 0):,} current orders, "
+        f"{int(counts.get('checks') or 0):,} checks, "
+        f"{int(counts.get('selections') or 0):,} selections/items, "
+        f"{int(counts.get('payments') or 0):,} payments, and "
+        f"{int(counts.get('employee_facts') or 0):,} employee Toast facts."
+    )
+    recent = int(summary.get("recent_last_hour_events") or 0)
+    answer += f" It has accepted {recent:,} Toast webhook events in the last hour."
+    fact_types = summary.get("fact_types_for_scope") or []
+    if fact_types:
+        answer += f" For {store} on {business_date}, employee fact types are: {_count_list(fact_types)}."
+    latest_orders = summary.get("latest_orders") or []
+    if latest_orders:
+        latest = latest_orders[0]
+        table = _safe_answer_label(latest.get("table_name"), max_len=80)
+        server = _safe_answer_label(latest.get("server_name"), max_len=80)
+        parts = []
+        if table:
+            parts.append(f"table {table}")
+        if server:
+            parts.append(f"server {server}")
+        parts.append(f"{int(latest.get('selection_count') or 0)} items")
+        parts.append(f"{int(latest.get('payment_count') or 0)} payments")
+        when = latest.get("modified_date") or latest.get("opened_date") or latest.get("closed_date")
+        answer += " Latest current order snapshot: " + ", ".join(parts)
+        if when:
+            answer += f", updated around {when}"
+        answer += "."
+    if summary.get("raw_payloads_included") is False:
+        answer += " Raw Toast webhook JSON is not included in this assistant payload."
+    return answer
+
+
+def _fact_summary_text(fact: dict) -> str:
+    fact_type = str(fact.get("fact_type") or "activity").replace("_", " ")
+    when = str(fact.get("occurred_at") or "").strip()
+    summary = fact.get("summary") if isinstance(fact.get("summary"), dict) else {}
+    details = []
+    table = _safe_answer_label(summary.get("table"), max_len=80)
+    name = _safe_answer_label(summary.get("name"), max_len=120)
+    status = _safe_answer_label(summary.get("payment_status"), max_len=40)
+    if table:
+        details.append(f"table {table}")
+    if name:
+        details.append(name)
+    if summary.get("amount") is not None:
+        details.append(_money(summary.get("amount")))
+    if summary.get("total_amount") is not None:
+        details.append(_money(summary.get("total_amount")))
+    if status:
+        details.append(status)
+    text = fact_type
+    if when:
+        text += f" at {when}"
+    if details:
+        text += " (" + ", ".join(details[:3]) + ")"
+    return text
+
+
+def _toast_employee_profiles_answer(summary: dict, question: str = "") -> str:
+    if not isinstance(summary, dict) or not summary.get("ok"):
+        return "I cannot read the Toast employee profile databases right now."
+    if summary.get("scope") == "overview":
+        central = summary.get("central_counts") or {}
+        answer = (
+            "The Toast employee profile databases are connected. "
+            f"There are {int(summary.get('profile_db_count') or 0)} per-employee SQLite files, "
+            f"{int(central.get('employee_profiles') or 0)} central employee profiles, "
+            f"{int(central.get('identity_links') or 0)} Toast identity links, and "
+            f"{int(central.get('employee_facts') or 0):,} employee Toast facts."
+        )
+        unmatched = int(central.get("unmatched_employee_refs") or 0)
+        if unmatched:
+            answer += f" There are {unmatched} unmatched Toast employee references waiting on mapping."
+        top = summary.get("top_employees_by_toast_facts") or []
+        if top:
+            bits = [
+                f"{row.get('name')} ({int(row.get('fact_count') or 0):,})"
+                for row in top[:5]
+            ]
+            answer += " Most active employee profiles by Toast facts: " + "; ".join(bits) + "."
+        answer += " Raw webhook JSON is not copied into the employee DBs."
+        return answer
+
+    employee = summary.get("employee") or {}
+    personal = summary.get("personal_db") or {}
+    name = str(employee.get("name") or f"Employee {employee.get('cena_employee_id')}").strip()
+    employee_id = employee.get("cena_employee_id")
+    answer = f"{name}"
+    if employee_id is not None:
+        answer += f" (employee {employee_id})"
+    if personal.get("exists"):
+        answer += (
+            f" has a personal Toast profile DB with {int(personal.get('toast_fact_count') or 0):,} facts, "
+            f"{int(personal.get('related_orders') or 0):,} related orders, "
+            f"{int(personal.get('related_checks') or 0):,} checks, "
+            f"{int(personal.get('related_selections') or 0):,} selections/items, and "
+            f"{int(personal.get('related_payments') or 0):,} payments."
+        )
+        metadata = personal.get("metadata") or {}
+        if metadata.get("generated_at"):
+            answer += f" The DB was last materialized at {metadata['generated_at']}."
+        fact_counts = personal.get("fact_type_counts") or summary.get("central_fact_type_counts") or []
+        if fact_counts:
+            answer += " Fact types: " + _count_list(fact_counts, count_key="fact_count") + "."
+        latest = personal.get("latest_facts") or []
+        if latest:
+            answer += " Latest Toast activity: " + "; ".join(_fact_summary_text(row) for row in latest[:3]) + "."
+    else:
+        answer += " does not have a materialized personal Toast profile DB yet."
+        fact_counts = summary.get("central_fact_type_counts") or []
+        if fact_counts:
+            answer += " Central Toast facts exist: " + _count_list(fact_counts) + "."
+    if summary.get("raw_payloads_included") is False:
+        answer += " Raw webhook JSON is not included in this assistant payload."
+    return answer
+
+
+def _tool_payload_ok(payload: object) -> bool:
+    return isinstance(payload, dict) and payload.get("ok") is not False
 
 
 def _toast_table_person_intent(question: str) -> tuple[bool, bool]:
@@ -743,6 +993,20 @@ def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
         return "sales_summary", {
             "period": _toast_period_from_question(resolved_question),
         }
+    if tool_id == "toast.webhook_activity":
+        return "toast_webhook_activity", {
+            "store": _requested_store(resolved_question) or "all_accessible",
+            "business_date": _toast_table_business_date_from_question(resolved_question) or "today",
+        }
+    if tool_id == "toast.employee_profiles":
+        employee_match = re.search(
+            r"\b(?:cena_employee_|employee(?:\s+id)?\s*#?\s*)(\d+)\b",
+            resolved_question,
+            re.IGNORECASE,
+        )
+        return "toast_employee_profiles", {
+            "employee": employee_match.group(1) if employee_match else "overview_or_name_lookup",
+        }
     if tool_id == "orders.store_summary":
         window = _requested_today_window(resolved_question)
         return "order_summary", {
@@ -786,6 +1050,10 @@ def _tool_answer_verified(tool_id: str, payload: object, answer: str) -> bool:
         return True
     if tool_id == "toast.sales_summary":
         return isinstance(payload, dict) and "Toast Analytics" in answer
+    if tool_id == "toast.webhook_activity":
+        return isinstance(payload, dict) and payload.get("data_class") == "toast_webhook_activity_sanitized" and "Toast webhook" in answer
+    if tool_id == "toast.employee_profiles":
+        return isinstance(payload, dict) and payload.get("data_class") == "toast_employee_profiles_sanitized" and "Toast" in answer and "profile" in answer.casefold()
     if tool_id == "orders.store_summary":
         return isinstance(payload, dict) and any(word in answer for word in ("catering", "order", "tracking"))
     if tool_id == "drivers.store_summary":
@@ -934,6 +1202,38 @@ def _approved_tool_answer(
             "storage": "session_context",
             "tool_id": "assistant.session_context",
             "generated_at": _now_iso(),
+        }
+    if _toast_employee_profiles_tool_authorized(principal, tools) and _wants_toast_employee_profiles(resolved_question):
+        employee_profiles = tool_data.get("toast.employee_profiles") if isinstance(tool_data, dict) else None
+        if not _tool_payload_ok(employee_profiles):
+            try:
+                employee_profiles = _toast_employee_profiles_payload(resolved_question)
+            except Exception:  # noqa: BLE001
+                log.exception("assistant runtime: Toast employee profiles failed")
+                return None
+        return {
+            "ok": True,
+            "answer": _toast_employee_profiles_answer(employee_profiles, question),
+            "queued": False,
+            "storage": "toast_employee_profiles_tool",
+            "tool_id": "toast.employee_profiles",
+            "generated_at": employee_profiles.get("generated_at"),
+        }
+    if _toast_webhook_tool_authorized(principal, tools) and _wants_toast_webhook_activity(resolved_question):
+        webhook_activity = tool_data.get("toast.webhook_activity") if isinstance(tool_data, dict) else None
+        if not _tool_payload_ok(webhook_activity):
+            try:
+                webhook_activity = _toast_webhook_activity_payload(resolved_question)
+            except Exception:  # noqa: BLE001
+                log.exception("assistant runtime: Toast webhook activity failed")
+                return None
+        return {
+            "ok": True,
+            "answer": _toast_webhook_activity_answer(webhook_activity, question),
+            "queued": False,
+            "storage": "toast_webhook_activity_tool",
+            "tool_id": "toast.webhook_activity",
+            "generated_at": webhook_activity.get("generated_at"),
         }
     if _toast_table_tool_authorized(principal, tools) and _wants_toast_table_activity(resolved_question):
         contextual_table_answer = _toast_table_person_followup_answer(question, previous_answer)

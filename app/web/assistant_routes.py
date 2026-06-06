@@ -102,6 +102,25 @@ _TOAST_TABLE_ACTIVITY_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_TOAST_WEBHOOK_ACTIVITY_RE = re.compile(
+    r"\b("
+    r"toast\s+webhook|webhooks?|live\s+toast|toast\s+live|"
+    r"event|events|order_updated|ordering_schedule|restaurant_availability|"
+    r"menus?|stock|packaging|checks?|items?|plates?|payments?|closeouts?|"
+    r"rang\s+in|rung\s+in|voids?|closed\s+checks?"
+    r")\b",
+    re.IGNORECASE,
+)
+_TOAST_EMPLOYEE_PROFILE_RE = re.compile(
+    r"\b("
+    r"toast\s+employee|employee\s+toast|employee\s+profile|profile\s+db|"
+    r"personal(?:ized)?\s+db|employee\s+database|employee\s+files?|"
+    r"cena_employee_\d+|employee\s+(?:id\s*)?#?\s*\d+|"
+    r"toast\s+facts?|server\s+activity|tables\s+served|checks?\s+(?:opened|closed)|"
+    r"items?\s+r(?:ang|ung)\s+in|payments?\s+handled"
+    r")\b",
+    re.IGNORECASE,
+)
 _OPERATIONAL_NOUN_RE = re.compile(
     r"\b("
     r"catering|caterings|order|orders|delivery|deliveries|"
@@ -206,6 +225,30 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "session_types": ["partner", "staff"],
         "store_scope": "current_user_store_scope",
         "data_class": "table_activity",
+        "read_write_class": "read_only",
+        "status": "review_gated",
+        "operator_enabled": True,
+    },
+    {
+        "tool_id": "toast.webhook_activity",
+        "label": "Toast webhook activity",
+        "description": "Read-only live Toast webhook/order/check/item/payment activity from the CK central webhook database.",
+        "required_permissions": ["ai.ask_claude", "sales.view_today"],
+        "session_types": ["partner", "staff"],
+        "store_scope": "current_user_store_scope",
+        "data_class": "toast_webhook_activity",
+        "read_write_class": "read_only",
+        "status": "review_gated",
+        "operator_enabled": True,
+    },
+    {
+        "tool_id": "toast.employee_profiles",
+        "label": "Toast employee profiles",
+        "description": "Read-only employee-specific Toast facts from CK's per-employee Toast profile databases.",
+        "required_permissions": ["ai.ask_claude", "labor.view_store_summary"],
+        "session_types": ["partner", "staff"],
+        "store_scope": "partner_all_stores",
+        "data_class": "toast_employee_profiles",
         "read_write_class": "read_only",
         "status": "review_gated",
         "operator_enabled": True,
@@ -1176,7 +1219,10 @@ def _toast_period_from_question(question: str) -> str:
 
 
 def _wants_toast_sales_summary(question: str) -> bool:
-    return bool(_TOAST_SALES_RE.search(str(question or "")))
+    text = str(question or "")
+    if _TOAST_WEBHOOK_ACTIVITY_RE.search(text) or _TOAST_EMPLOYEE_PROFILE_RE.search(text):
+        return False
+    return bool(_TOAST_SALES_RE.search(text))
 
 
 def _wants_toast_table_activity(question: str) -> bool:
@@ -1240,6 +1286,52 @@ def _toast_table_activity_tool_payload(
     return latest_table_activity_payload(location, business_date=business_date)
 
 
+def _wants_toast_webhook_activity(question: str) -> bool:
+    text = str(question or "")
+    if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
+        return False
+    return bool(
+        _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
+        and re.search(
+            r"\b(toast|webhook|live|events?|orders?|checks?|items?|plates?|"
+            r"payments?|closeouts?|closed|rang|rung|void|menus?|stock|packaging)\b",
+            text,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _wants_toast_employee_profiles(question: str) -> bool:
+    text = str(question or "")
+    return bool(
+        _TOAST_EMPLOYEE_PROFILE_RE.search(text)
+        or (
+            re.search(r"\b(employee|server|waiter|cashier|staff)\b", text, re.IGNORECASE)
+            and re.search(
+                r"\b(toast|tables?|checks?|items?|plates?|payments?|rang|rung|served|profile|facts?)\b",
+                text,
+                re.IGNORECASE,
+            )
+        )
+    )
+
+
+def _toast_webhook_activity_tool_payload(question: str) -> dict[str, Any]:
+    from app.services.toast_webhook_assistant import toast_webhook_activity_payload
+
+    return toast_webhook_activity_payload(
+        question,
+        store_key=_requested_store(question),
+        business_date=_toast_table_business_date_from_question(question),
+    )
+
+
+def _toast_employee_profiles_tool_payload(question: str) -> dict[str, Any]:
+    from app.services.toast_webhook_assistant import toast_employee_profile_payload
+
+    return toast_employee_profile_payload(question)
+
+
 def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     if not _has_partner_tool_access(ctx):
         return {}
@@ -1274,6 +1366,16 @@ def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
             )
         except Exception:  # noqa: BLE001
             log.exception("assistant: failed to build toast.table_activity")
+    if _tool_is_available(ctx, "toast.employee_profiles") and _wants_toast_employee_profiles(question):
+        try:
+            data["toast.employee_profiles"] = _toast_employee_profiles_tool_payload(question)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build toast.employee_profiles")
+    if _tool_is_available(ctx, "toast.webhook_activity") and _wants_toast_webhook_activity(question):
+        try:
+            data["toast.webhook_activity"] = _toast_webhook_activity_tool_payload(question)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant: failed to build toast.webhook_activity")
     return data
 
 

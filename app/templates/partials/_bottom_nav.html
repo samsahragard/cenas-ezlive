@@ -67,7 +67,7 @@
   .ck-bnav-inner { display: flex; }
   .ck-bnav-inner-ai {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 74px repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 62px repeat(3, minmax(0, 1fr));
     align-items: end;
   }
   .ck-bnav-tab {
@@ -121,30 +121,26 @@
   .ck-bnav-ai-tab {
     position: relative;
     justify-content: center;
-    min-height: 66px;
-    padding: 0 0 5px;
-    margin-top: -27px;
+    min-height: 58px;
+    padding: 0;
+    margin-top: 0;
     border-top-color: transparent !important;
+    overflow: visible;
   }
   .ck-bnav-ai-tab::before {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: -8px;
-    width: 88px;
-    height: 88px;
-    transform: translateX(-50%);
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 247, 205, 0.18), rgba(216, 179, 95, 0.10) 42%, transparent 70%);
-    pointer-events: none;
+    display: none;
   }
-  .ck-bnav-ai-tab canvas {
-    position: relative;
-    z-index: 1;
+  .ck-bnav-ai-tab .ck-ai-orb-stack {
+    position: absolute !important;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 7;
     display: block;
-    width: 62px;
-    height: 62px;
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+    width: 176px !important;
+    height: 124px !important;
+    pointer-events: none;
+    filter: none;
   }
   .ck-bnav-ai-tab .bn-lbl {
     position: absolute;
@@ -305,7 +301,7 @@
     <a href="/{{ store_slug }}/today?tab=cena"
        class="ck-bnav-tab ck-bnav-ai-tab{% if _bn_active in ['assistant_page', 'sam_chat'] %} active{% endif %}"
        aria-label="Open Cenas AI assistant">
-      <canvas data-ck-ai-orb data-size="62" aria-hidden="true"></canvas>
+      <canvas data-ck-ai-orb data-width="176" data-height="124" aria-hidden="true"></canvas>
       <span class="bn-lbl">AI</span>
     </a>
     {# Kitchen - per Sam #2239 (2026-05-31): added between Catering and

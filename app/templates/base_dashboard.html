@@ -360,8 +360,16 @@
        all use the gold default set on .ck-topbar above. */
 
     @media (max-width: 900px) {
-      .ck-topbar { flex-direction: column; align-items: stretch; }
+      /* Smaller ribbon on phones (driver/mobile view, Sam 2026-06-06): tighter
+         padding, smaller title + eyebrow + meta, less vertical stacking -> more
+         room for content. The menu icon (.menu-toggle) and the role badge stay. */
+      .ck-topbar { flex-direction: column; align-items: stretch; padding: 8px 14px; margin-bottom: 10px; }
       .ck-topbar .topbar-right { width: 100%; }
+      .ck-topbar h1.ck-page-title { font-size: 22px; }
+      .ck-topbar .ck-brand-mark { margin-bottom: 3px; }
+      .ck-topbar .ck-title-row { margin-bottom: 3px; }
+      .ck-topbar .ck-brand-text { font-size: 9px; letter-spacing: 0.2em; }
+      .ck-topbar .ck-page-meta { font-size: 10px; }
       /* Driver badge stays pinned top-right (see the :has() placement rule
          below); tighten its inset and the header clearance for the smaller
          phone-width badge so the title keeps as much room as possible. */

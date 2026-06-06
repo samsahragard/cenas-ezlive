@@ -1978,6 +1978,110 @@ def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
             os.environ.pop(name, None)
 
 
+def test_render_runtime_route_does_not_reuse_catering_context_for_schedule(monkeypatch):
+    class RuntimeHandler:
+        seen = {}
+
+    from http.server import BaseHTTPRequestHandler
+
+    class RuntimeServer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or "0")
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            RuntimeHandler.seen = body
+            payload = json.dumps({
+                "ok": True,
+                "answer": "CK-local schedule answer",
+                "queued": False,
+                "storage": "operational_tool",
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt, *args):
+            return
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), RuntimeServer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+
+    ctx = _wave1_partner_ctx(stores=["tomball", "copperfield"])
+    monkeypatch.setattr(ar, "_principal_context", lambda: ctx)
+    monkeypatch.setattr(ar, "_mirror_assistant_turn_to_cena_chat", lambda *args: None)
+    monkeypatch.setattr(
+        ar,
+        "_approved_tool_handlers",
+        lambda: {
+            "orders_catering_week": lambda question, _ctx: {
+                "ok": True,
+                "tool_id": "orders.catering_week",
+                "question": question,
+                "sentinel": "orders",
+            },
+            "schedule_open_shifts": lambda question, _ctx: {
+                "ok": True,
+                "tool_id": "schedule.open_shifts",
+                "question": question,
+                "sentinel": "schedule",
+            },
+        },
+    )
+    monkeypatch.setenv("RENDER", "1")
+    monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
+    monkeypatch.setenv("ASSISTANT_REVIEW_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")),
+    )
+
+    try:
+        res = app.test_client().post(
+            "/assistant/ask",
+            json={
+                "question": "schedule open shifts",
+                "previous_question": "what catering orders are this week",
+            },
+        )
+        data = res.get_json()
+
+        assert res.status_code == 200
+        assert data["answer"] == "CK-local schedule answer"
+        assert RuntimeHandler.seen["routed_tool_id"] == "schedule.open_shifts"
+        assert RuntimeHandler.seen["route_path"] == "deterministic"
+        assert RuntimeHandler.seen["tool_data"] == {
+            "schedule.open_shifts": {
+                "ok": True,
+                "tool_id": "schedule.open_shifts",
+                "question": "schedule open shifts",
+                "sentinel": "schedule",
+            }
+        }
+        assert RuntimeHandler.seen["previous_question"] == "what catering orders are this week"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        for name in [
+            "RENDER",
+            "AI_ASSISTANT_ENABLED",
+            "AI_ASSISTANT_CK_RUNTIME_URL",
+            "AI_ASSISTANT_CK_RUNTIME_TOKEN",
+            "ASSISTANT_REVIEW_TIMEOUT_SECONDS",
+        ]:
+            os.environ.pop(name, None)
+
+
 def test_render_ask_proxies_to_ck_runtime(monkeypatch):
     class RuntimeHandler:
         seen = {}

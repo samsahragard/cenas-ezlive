@@ -376,6 +376,22 @@ def test_runtime_formats_and_verifies_every_wave1_schedule_read_tool(tool_id, mo
     assert runtime._tool_answer_verified(tool_id, payload, data["answer"]) is True
 
 
+def test_runtime_resolved_question_keeps_explicit_schedule_after_catering_context():
+    from scripts import assistant_ck_runtime as runtime
+
+    assert (
+        runtime._resolved_question(
+            "schedule open shifts",
+            "what catering orders are this week",
+        )
+        == "schedule open shifts"
+    )
+    assert runtime._resolved_question(
+        "what baout earlier this morning?",
+        "How many caterings do we have today?",
+    ) == "How many caterings do we have today?\nFollow-up: what baout earlier this morning?"
+
+
 def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

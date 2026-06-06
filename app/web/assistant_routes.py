@@ -156,7 +156,9 @@ _OPERATIONAL_NOUN_RE = re.compile(
     r"\b("
     r"catering|caterings|order|orders|delivery|deliveries|"
     r"driver|drivers|labor|employee|employees|staff|team|"
-    r"table|tables|talbe|floor"
+    r"table|tables|talbe|floor|"
+    r"schedule|schedules|shift|shifts|roster|attendance|"
+    r"availability|unavailability|time[- ]off|alarm|reminder|reminders"
     r")\b",
     re.IGNORECASE,
 )

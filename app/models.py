@@ -1936,7 +1936,7 @@ def _no_delete_task_audit(mapper, connection, target):
 
 # ---- Sam Chat — standalone /sam/chat surface (Sam request 2026-05-14) ----
 # A dedicated chat page for Sam (partner) to converse with Claude
-# directly via the Anthropic API — no agentic context, no Cenas Kitchen
+# through the Sam Chat AI surface — no agentic context, no Cenas Kitchen
 # system prompt. Deliberately ISOLATED from the agentic pipeline: no FK
 # to User (the route is hard-gated to SAM_CHAT_USER_ID), and no
 # reads/writes to AgentChatMessage / AgentActionLog / any Phase 2 Block
@@ -1975,8 +1975,7 @@ class SamChatSession(Base):
 
 class SamChatMessage(Base):
     """One message in a SamChatSession — user, assistant, or system.
-    The app reconstructs Anthropic context from these rows on each turn
-    (the Anthropic API is stateless).
+    The app reconstructs model context from these rows on each turn.
 
     cost_* columns are populated on assistant messages from the
     response usage block, feeding the live session-cost + 30-day-total

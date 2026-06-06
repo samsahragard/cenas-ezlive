@@ -54,7 +54,9 @@ _REVIEW_STATUS = "needs_review"
 _CK_REVIEW_PATH = "/review/question"
 _CK_RUNTIME_PATH = "/assistant/answer"
 _CENA_REVIEW_SESSION_TITLE = "Cenas AI Review"
+_CENA_REVIEW_SESSION_PREFIX = "Cenas AI Review: "
 _CENA_REVIEW_CLIP_CHARS = 8000
+_CENA_REVIEW_PAYLOAD_PREFIX = "CENAS_ASSISTANT_REVIEW_V2\n"
 _SECRET_DEFAULTS = {
     "GEMINI_API_KEY": [
         r"C:\Users\sam\cena-secrets\gemini_api_key.txt",
@@ -626,7 +628,7 @@ def _review_json(value: Any, max_chars: int = 4000) -> str:
         text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
     except TypeError:
         text = str(value)
-    return _clip_review_text(text, max_chars)
+    return _clip_review_text(_redact_text(text), max_chars)
 
 
 def _review_permissions(ctx: dict[str, Any]) -> str:
@@ -648,6 +650,12 @@ def _review_answer_from_response(data: dict[str, Any] | None) -> str:
         return str(answer)
     error = data.get("error")
     if error:
+        if error == "assistant_unavailable":
+            return "I saved that for Sam review. The assistant model is not available right now."
+        if error == "ck_runtime_required":
+            return "I saved that for Sam review. The assistant runtime is not available right now."
+        if error == "assistant_disabled":
+            return "I saved that for Sam review. The assistant is disabled right now."
         return f"(error: {error})"
     return _review_json(data)
 
@@ -675,10 +683,43 @@ def _review_outcome(data: dict[str, Any] | None, status: int) -> str:
     return "; ".join(parts)
 
 
-def _review_session(db) -> SamChatSession:
+def _review_result_status(data: dict[str, Any] | None, status: int) -> str:
+    if not isinstance(data, dict):
+        return "error"
+    error = str(data.get("error") or "")
+    if error == "assistant_disabled":
+        return "disabled"
+    if error == "assistant_unavailable":
+        return "unavailable"
+    if error == "ck_runtime_required":
+        return "runtime_required"
+    if data.get("queued") is True:
+        return "queued"
+    if data.get("ok") is True and status < 400:
+        return "answered"
+    return "error"
+
+
+def _review_subject(ctx: dict[str, Any]) -> str:
+    name = str(ctx.get("display_name") or "").strip()
+    if name:
+        return name[:80]
+    role = str(ctx.get("role") or ctx.get("kind") or "assistant user").strip()
+    principal_id = ctx.get("principal_id")
+    if principal_id:
+        return f"{role} #{principal_id}"[:80]
+    return role[:80] or "Assistant user"
+
+
+def _review_session_title(ctx: dict[str, Any]) -> str:
+    return f"{_CENA_REVIEW_SESSION_PREFIX}{_review_subject(ctx)}"
+
+
+def _review_session(db, ctx: dict[str, Any]) -> SamChatSession:
+    title = _review_session_title(ctx)
     session_row = (
         db.query(SamChatSession)
-        .filter(SamChatSession.title == _CENA_REVIEW_SESSION_TITLE)
+        .filter(SamChatSession.title == title)
         .filter(SamChatSession.is_archived.is_(False))
         .order_by(SamChatSession.id.asc())
         .first()
@@ -690,52 +731,85 @@ def _review_session(db) -> SamChatSession:
     session_row = SamChatSession(
         started_at=now,
         last_message_at=now,
-        title=_CENA_REVIEW_SESSION_TITLE,
+        title=title,
     )
     db.add(session_row)
     db.flush()
     return session_row
 
 
-def _assistant_review_content(
+def _assistant_review_payload(
     ctx: dict[str, Any],
     question: str,
     data: dict[str, Any] | None,
     status: int,
     previous_question: str = "",
     previous_answer: str = "",
-) -> str:
-    lines = [
-        "Cenas AI assistant review",
-        f"When: {_now_iso()}",
-        f"Outcome: {_review_outcome(data, status)}",
-        "",
-        "Sender:",
-        f"Name: {ctx.get('display_name') or 'Unknown'}",
-        f"Principal ID: {ctx.get('principal_id')}",
-        f"Kind: {ctx.get('kind')}",
-        f"Role: {ctx.get('role')}",
-        f"Owner operator: {bool(ctx.get('is_owner_operator'))}",
-        "",
-        "Permission setting:",
-        f"can_ask_personal: {bool(ctx.get('can_ask_personal'))}",
-        f"can_ask_operational: {bool(ctx.get('can_ask_operational'))}",
-        f"permissions: {_review_permissions(ctx)}",
-        "",
-        "Scope:",
-        f"path: {ctx.get('path')}",
-        f"current_store: {ctx.get('current_store')}",
-        f"store_slugs: {_review_json(ctx.get('store_slugs') or [])}",
-        "",
-        "Question:",
-        _clip_review_text(question),
-    ]
-    if previous_question:
-        lines.extend(["", "Previous question:", _clip_review_text(previous_question)])
-    if previous_answer:
-        lines.extend(["", "Previous answer:", _clip_review_text(previous_answer, 3000)])
-    lines.extend(["", "Answer:", _clip_review_text(_review_answer_from_response(data))])
-    return "\n".join(lines)
+    asked_at: str | None = None,
+) -> dict[str, Any]:
+    response = data if isinstance(data, dict) else {}
+    previous = None
+    if previous_question or previous_answer:
+        previous = {
+            "question": _clip_review_text(previous_question),
+            "answer": _clip_review_text(previous_answer, 3000),
+        }
+    return {
+        "kind": "cenas.assistant_mirror",
+        "version": 2,
+        "asked_at": asked_at or _now_iso(),
+        "actor": {
+            "display_name": ctx.get("display_name") or "Unknown",
+            "principal_id": ctx.get("principal_id"),
+            "principal_type": ctx.get("kind"),
+            "role": ctx.get("role"),
+            "owner_operator": bool(ctx.get("is_owner_operator")),
+        },
+        "permissions": {
+            "can_ask_personal": bool(ctx.get("can_ask_personal")),
+            "can_ask_operational": bool(ctx.get("can_ask_operational")),
+            "summary": _review_permissions(ctx),
+        },
+        "scope": {
+            "path": ctx.get("path"),
+            "current_store": ctx.get("current_store"),
+            "store_slugs": ctx.get("store_slugs") or [],
+        },
+        "turn": {
+            "question": _clip_review_text(question),
+            "previous": previous,
+            "answer": _clip_review_text(_review_answer_from_response(data)),
+        },
+        "result": {
+            "status": _review_result_status(data, status),
+            "http_status": status,
+            "ok": response.get("ok"),
+            "queued": response.get("queued"),
+            "reason": response.get("reason"),
+            "error": response.get("error"),
+            "queue_id": response.get("queue_id"),
+            "ck_question_id": response.get("ck_question_id"),
+        },
+        "tool": {
+            "id": response.get("tool_id"),
+            "name": response.get("tool_name"),
+            "storage": response.get("storage"),
+            "model": response.get("model") or response.get("review_notice_model"),
+            "generated_at": response.get("generated_at"),
+        },
+        "outcome": _review_outcome(data, status),
+        "raw_response": _review_json(data, 2500),
+    }
+
+
+def _assistant_review_content(*args, **kwargs) -> str:
+    payload = _assistant_review_payload(*args, **kwargs)
+    return _CENA_REVIEW_PAYLOAD_PREFIX + json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
 
 
 def _mirror_assistant_turn_to_cena_chat(
@@ -745,6 +819,7 @@ def _mirror_assistant_turn_to_cena_chat(
     status: int,
     previous_question: str = "",
     previous_answer: str = "",
+    asked_at: str | None = None,
 ) -> None:
     if not question:
         return
@@ -753,7 +828,7 @@ def _mirror_assistant_turn_to_cena_chat(
         return
     db = SessionLocal()
     try:
-        session_row = _review_session(db)
+        session_row = _review_session(db, ctx)
         now = datetime.utcnow()
         session_row.last_message_at = now
         session_row.updated_at = now
@@ -767,6 +842,7 @@ def _mirror_assistant_turn_to_cena_chat(
                 status,
                 previous_question,
                 previous_answer,
+                asked_at,
             ),
             model="assistant-review-mirror",
             created_at=now,
@@ -786,6 +862,7 @@ def _assistant_json_response(
     status: int = 200,
     previous_question: str = "",
     previous_answer: str = "",
+    asked_at: str | None = None,
 ):
     _mirror_assistant_turn_to_cena_chat(
         ctx,
@@ -794,6 +871,7 @@ def _assistant_json_response(
         status,
         previous_question,
         previous_answer,
+        asked_at,
     )
     return jsonify(data), status
 
@@ -1509,40 +1587,20 @@ def assistant_ask():
 
     body = request.get_json(silent=True) or {}
     question = str(body.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
+    asked_at = _now_iso()
     if not question:
         return _assistant_json_response(
             ctx,
             question,
             {"ok": False, "error": "question required"},
             400,
+            asked_at=asked_at,
         )
     previous_question = _previous_question_from_body(body, question)
     previous_answer = str(body.get("previous_answer") or "").strip()[:_MAX_QUESTION_CHARS]
     safety_question = _resolved_question(question, previous_question)
 
-    if not _assistant_enabled():
-        return _assistant_json_response(
-            ctx,
-            question,
-            {"ok": False, "error": "assistant_disabled"},
-            503,
-            previous_question,
-            previous_answer,
-        )
-
-    if not _assistant_available_for_context(ctx):
-        return _assistant_json_response(
-            ctx,
-            question,
-            {"ok": False, "error": "assistant_unavailable"},
-            503,
-            previous_question,
-            previous_answer,
-        )
-
-    runtime_response = _post_to_ck_runtime(question, ctx, previous_question, previous_answer)
-    if runtime_response is not None:
-        data, status = runtime_response
+    def respond(data: dict[str, Any], status: int = 200):
         return _assistant_json_response(
             ctx,
             question,
@@ -1550,17 +1608,22 @@ def assistant_ask():
             status,
             previous_question,
             previous_answer,
+            asked_at,
         )
 
+    if not _assistant_enabled():
+        return respond({"ok": False, "error": "assistant_disabled"}, 503)
+
+    if not _assistant_available_for_context(ctx):
+        return respond({"ok": False, "error": "assistant_unavailable"}, 503)
+
+    runtime_response = _post_to_ck_runtime(question, ctx, previous_question, previous_answer)
+    if runtime_response is not None:
+        data, status = runtime_response
+        return respond(data, status)
+
     if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
-        return _assistant_json_response(
-            ctx,
-            question,
-            {"ok": False, "error": "ck_runtime_required"},
-            503,
-            previous_question,
-            previous_answer,
-        )
+        return respond({"ok": False, "error": "ck_runtime_required"}, 503)
 
     should_queue, reason, required = _should_queue(safety_question, ctx)
     if should_queue:
@@ -1585,14 +1648,7 @@ def assistant_ask():
         }
         if notice and notice_model:
             response["review_notice_model"] = notice_model
-        return _assistant_json_response(
-            ctx,
-            question,
-            response,
-            200,
-            previous_question,
-            previous_answer,
-        )
+        return respond(response)
 
     try:
         answer, model = _gemini_answer(question, ctx)
@@ -1603,7 +1659,7 @@ def assistant_ask():
 
     if not answer:
         row = _queue_for_review(question, ctx, "model_unavailable_or_no_answer", None)
-        return _assistant_json_response(ctx, question, {
+        return respond({
             "ok": True,
             "answer": "I saved that for Sam review. The assistant model is not available right now.",
             "queued": True,
@@ -1611,16 +1667,9 @@ def assistant_ask():
             "storage": row.get("storage"),
             "ck_question_id": row.get("ck_question_id"),
             "reason": "model_unavailable_or_no_answer",
-        }, 200, previous_question, previous_answer)
+        })
 
-    return _assistant_json_response(
-        ctx,
-        question,
-        {"ok": True, "answer": answer, "queued": False, "model": model},
-        200,
-        previous_question,
-        previous_answer,
-    )
+    return respond({"ok": True, "answer": answer, "queued": False, "model": model})
 
 
 @assistant_bp.route("/cron/assistant-questions-export", methods=["GET"])

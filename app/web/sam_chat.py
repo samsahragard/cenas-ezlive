@@ -1,5 +1,5 @@
 """Sam Chat — a standalone /sam/chat surface for Sam to converse with
-Claude directly via the Anthropic API (Sam request 2026-05-14).
+Cenas AI through Gemini 2.5 Flash.
 
 Deliberately ISOLATED from the agentic pipeline: no Cenas Kitchen
 system prompt, no agent context, no reads/writes to AgentChatMessage /
@@ -21,7 +21,7 @@ Access — hard-gated to ONE user:
 Routes:
   GET  /sam/chat                          — the chat UI
   POST /sam/chat/send                     — send a message, SSE-stream
-                                            Claude's reply back
+                                            Cenas AI's reply back
   GET  /sam/chat/sessions                 — list sessions (JSON)
   POST /sam/chat/sessions                 — create a new session (JSON)
   GET  /sam/chat/sessions/<id>            — load a session's messages
@@ -57,44 +57,21 @@ sam_chat_bp = Blueprint("sam_chat", __name__)
 
 
 # ---- model routing ----
-_DEFAULT_MODEL = "claude-sonnet-4-6"
-_ALLOWED_MODELS = {"claude-opus-4-7", "claude-sonnet-4-6",
-                   "gemini-2.5-flash", "gemini-3.5-flash"}
+_DEFAULT_MODEL = "gemini-2.5-flash"
+_PICKER_MODELS = (_DEFAULT_MODEL,)
+_ALLOWED_MODELS = set(_PICKER_MODELS)
 _MODEL_LABELS = {
-    "claude-opus-4-7":  "Opus 4.7",
-    "claude-sonnet-4-6": "Sonnet 4.6",
     "gemini-2.5-flash":  "Gemini 2.5 Flash",
-    "gemini-3.5-flash":  "Gemini 3.5 Flash",
 }
 # Rough list-price estimates, USD per million tokens.
-# Sam directive 2026-05-23 #236: added gemini-3.5-flash. Rates here are
-# a placeholder mirroring 2.5-flash until Sam confirms actual 3.5-flash
-# pricing; cost-display is best-effort either way.
 _MODEL_RATES = {
-    "claude-opus-4-7":   {"in": 5.0,  "out": 25.0},
-    "claude-sonnet-4-6": {"in": 3.0,  "out": 15.0},
     "gemini-2.5-flash":  {"in": 0.15, "out": 0.60},
-    "gemini-3.5-flash":  {"in": 0.15, "out": 0.60},
 }
-
-# ---- auto model selection ----
-_OPUS_KEYWORDS = frozenset({
-    "write", "build", "create", "debug", "refactor", "analyze", "review",
-    "explain", "implement", "optimize", "design", "architect", "code",
-    "function", "class", "error", "fix", "algorithm", "script", "module",
-    "compare", "summarize", "translate", "plan", "strategy",
-})
-_OPUS_CHAR_THRESHOLD = 300
 
 
 def _auto_select_model(text: str) -> str:
-    """Sonnet for short conversational queries, Opus for long/complex ones."""
-    if len(text) >= _OPUS_CHAR_THRESHOLD:
-        return "claude-opus-4-7"
-    words = set(text.lower().split())
-    if words & _OPUS_KEYWORDS:
-        return "claude-opus-4-7"
-    return "claude-sonnet-4-6"
+    """Coerce any stale/unknown browser value back to Gemini 2.5 Flash."""
+    return _DEFAULT_MODEL
 
 
 def _gemini_client():
@@ -174,26 +151,14 @@ def _require_sam_api():
 
 
 # ============================================================
-# Anthropic plumbing
+# Cenas AI / gateway plumbing
 # ============================================================
-
-def _anthropic_client():
-    """An anthropic.Anthropic client, or None if the SDK is missing or
-    ANTHROPIC_API_KEY is unset."""
-    try:
-        import anthropic
-    except ImportError:
-        return None
-    key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        return None
-    return anthropic.Anthropic(api_key=key)
 
 def _cena_gateway_url() -> str | None:
     """URL of Cena's gateway server on aick, e.g.
     https://cena-api.cenaskitchen.com  (set via CENA_GATEWAY_URL env var).
-    When set, sam_chat routes to Cena instead of calling Anthropic directly.
-    Returns None when the env var is absent — falls back to Anthropic."""
+    When set, sam_chat routes to Cena instead of calling Gemini directly.
+    Returns None when the env var is absent — falls back to direct Gemini."""
     url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
     return url or None
 
@@ -390,11 +355,8 @@ def _estimate_cost(model: str, in_tok: int, out_tok: int,
     """Rough USD cost estimate from token usage. Quantized to 4 places
     for the Numeric(10,4) column. Best-effort — see _MODEL_RATES.
 
-    Cache pricing per Anthropic with the 1h ephemeral TTL set in
-    cena_gateway.py: cache_creation is paid at 2x the normal input
-    rate; cache_read is paid at 0.10x. in_tok covers only the
-    uncached portion (Anthropic returns input_tokens that way when
-    prompt caching is active)."""
+    Cache-token inputs are accepted for gateway compatibility. Direct
+    Gemini sends usually leave these at zero."""
     rates = _MODEL_RATES.get(model, {"in": 0.0, "out": 0.0})
     in_rate = rates["in"]
     usd = ((in_tok or 0) * in_rate
@@ -404,14 +366,14 @@ def _estimate_cost(model: str, in_tok: int, out_tok: int,
     return Decimal(str(usd)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
-# Tool-block strip for Anthropic context (Sam #2148 + samai #2154 hybrid
+# Tool-block strip for model context (Sam #2148 + samai #2154 hybrid
 # spec). Cena's gateway streams tool calls inline in the assistant turn
 # text using a fixed format:
 #   "\n\n[<tool_name>(<args>)]\n→ <preview up to 301 chars>\n"
 # (cena_gateway.py:857 announce, :884 result_notice). The full streamed
 # text is persisted into SamChatMessage.content. On the next turn,
 # rebuilding api_messages from those rows feeds prior tool blocks BACK
-# to Anthropic — and the model latches onto the in-context prior result
+# to the model — and it can latch onto the in-context prior result
 # instead of re-firing the tool. That substrate is the confabulation
 # vector documented in lessons #1865/#2042/#2122/#2138. (B) system-
 # prompt nudge alone is insufficient to override the in-context pull.
@@ -435,11 +397,62 @@ _CENA_TOOL_STRIP_MARKER = (
     "\n\n[earlier tool calls this turn stripped from context — "
     "re-fire any tool to get current data]"
 )
+_ASSISTANT_REVIEW_SESSION_TITLE = "Cenas AI Review"
+_ASSISTANT_REVIEW_SESSION_PREFIX = "Cenas AI Review: "
+_ASSISTANT_REVIEW_SESSION_SUFFIX = " - Cenas AI"
+_ASSISTANT_REVIEW_MODEL = "assistant-review-mirror"
+
+
+def _is_assistant_review_session(s: SamChatSession | None) -> bool:
+    title = str(getattr(s, "title", "") or "")
+    return (
+        title == _ASSISTANT_REVIEW_SESSION_TITLE
+        or title.startswith(_ASSISTANT_REVIEW_SESSION_PREFIX)
+        or title.endswith(_ASSISTANT_REVIEW_SESSION_SUFFIX)
+    )
+
+
+def _assistant_review_context(content: str) -> str:
+    text = str(content or "")
+    if not text:
+        return ""
+    payload = None
+    if text.startswith("CENAS_ASSISTANT_REVIEW_V2\n"):
+        try:
+            payload = json.loads(text.split("\n", 1)[1])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+    if isinstance(payload, dict):
+        actor = payload.get("actor") or {}
+        turn = payload.get("turn") or {}
+        previous = turn.get("previous") or {}
+        result = payload.get("result") or {}
+        tool = payload.get("tool") or {}
+        parts = [
+            "Cenas AI review context:",
+            f"Asked at: {payload.get('asked_at') or ''}",
+            f"Asked by: {actor.get('display_name') or 'Unknown'}",
+            f"Question: {turn.get('question') or ''}",
+        ]
+        if previous.get("question"):
+            parts.append(f"Previous question: {previous.get('question')}")
+        if previous.get("answer"):
+            parts.append(f"Previous answer: {previous.get('answer')}")
+        parts.extend([
+            f"Answer: {turn.get('answer') or ''}",
+            f"Status: {result.get('status') or ''}",
+        ])
+        if tool.get("id"):
+            parts.append(f"Tool: {tool.get('id')}")
+        return "\n".join(part for part in parts if part.strip())
+    if text.startswith("Cenas AI assistant review"):
+        return "Cenas AI review context:\n" + text
+    return ""
 
 
 def _strip_cena_tool_blocks(content: str) -> str:
     """Remove cena-gateway tool announcements + result previews from a
-    prior assistant turn's content before it's passed back to Anthropic.
+    prior assistant turn's content before it's passed back to the model.
     Appends ONE terminal marker if any block was stripped.
 
     See _CENA_TOOL_BLOCK_RE comment block for design rationale (Sam
@@ -456,8 +469,7 @@ def _merge_content(prev, curr):
     """Combine two same-role turns into one. str+str joins with a blank
     line; if either side is a content-block list (a turn carrying image
     blocks), both are normalized to block lists and concatenated — the
-    merge never yields two consecutive same-role API messages, which the
-    Anthropic API rejects."""
+    merge never yields two consecutive same-role API messages."""
     if isinstance(prev, str) and isinstance(curr, str):
         return prev + "\n\n" + curr
 
@@ -468,7 +480,7 @@ def _merge_content(prev, curr):
 
 
 def _build_api_messages_from_rows(rows, images_by_msg=None) -> list[dict]:
-    """Map persisted SamChatMessage rows to Anthropic's user/assistant
+    """Map persisted SamChatMessage rows to user/assistant
     message list, applying the conversation-flow rules /sam/chat needs:
 
     - 'user' rows pass through as user turns
@@ -483,9 +495,8 @@ def _build_api_messages_from_rows(rows, images_by_msg=None) -> list[dict]:
     - Other roles are dropped (defensive — model whitelist allows them
       but the API layer ignores anything not user/assistant/system).
 
-    Anthropic requires strict role alternation. Consecutive same-role
-    turns are merged into one, joined by '\\n\\n'. Without merging, a
-    Sam→dck→Sam sequence becomes user→user→user and the API rejects."""
+    Consecutive same-role turns are merged into one, joined by '\\n\\n'.
+    Without merging, a Sam->dck->Sam sequence becomes user->user->user."""
     mapped: list[dict] = []
     for m in rows:
         if m.role == "user":
@@ -499,6 +510,13 @@ def _build_api_messages_from_rows(rows, images_by_msg=None) -> list[dict]:
         elif m.role == "assistant":
             mapped.append({"role": "assistant",
                            "content": _strip_cena_tool_blocks(m.content)})
+        elif (
+            m.role == "system"
+            and getattr(m, "model", None) == _ASSISTANT_REVIEW_MODEL
+        ):
+            context = _assistant_review_context(m.content)
+            if context:
+                mapped.append({"role": "user", "content": context})
         elif m.role == "dck":
             mapped.append({"role": "user",
                            "content": f"[dck]: {m.content}"})
@@ -576,9 +594,19 @@ def _estimate_tokens(text: str) -> int:
 # ============================================================
 
 def _session_json(s: SamChatSession) -> dict:
+    is_review = _is_assistant_review_session(s)
+    title = s.title or "New chat"
     return {
         "id": s.id,
-        "title": s.title or "New chat",
+        "title": title,
+        "is_assistant_review": is_review,
+        "review_subject": (
+            title[len(_ASSISTANT_REVIEW_SESSION_PREFIX):]
+            if title.startswith(_ASSISTANT_REVIEW_SESSION_PREFIX)
+            else title[:-len(_ASSISTANT_REVIEW_SESSION_SUFFIX)]
+            if title.endswith(_ASSISTANT_REVIEW_SESSION_SUFFIX)
+            else None
+        ),
         "started_at": s.started_at.isoformat() if s.started_at else None,
         "last_message_at": (s.last_message_at.isoformat()
                             if s.last_message_at else None),
@@ -592,6 +620,7 @@ def _message_json(m: SamChatMessage) -> dict:
         "role": m.role,
         "content": m.content,
         "model": m.model,
+        "is_assistant_review": m.model == _ASSISTANT_REVIEW_MODEL,
         "cost_usd": (str(m.cost_usd) if m.cost_usd is not None else None),
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
@@ -632,8 +661,8 @@ def _session_token_estimate(db, session_id: int) -> int:
 def _process_attachments(files):
     """Turn uploaded files into (api_blocks, text_appendix).
 
-    - images (png/jpg/webp/gif) -> base64 Anthropic image content blocks
-    - PDFs                      -> base64 Anthropic document blocks
+    - images (png/jpg/webp/gif) -> base64 image content blocks
+    - PDFs                      -> base64 document blocks
     - text files                -> decoded + returned as a text appendix
       (the directive: "read content + paste into the user message")
 
@@ -822,20 +851,10 @@ def sam_chat_page():
             token_estimate = _session_token_estimate(db, current.id)
             session_cost = _session_cost(db, current.id)
 
-        # All three models are offered. Gemini routes directly to the
-        # Google API in generate() (model.startswith("gemini")), bypassing
-        # the Cena gateway, so it never receives the Anthropic tool-use
-        # schema — no fabricated tool trail. Sonnet/Opus still route
-        # through the gateway when it is wired.
-        _picker_models = ("claude-sonnet-4-6", "claude-opus-4-7",
-                          "gemini-2.5-flash", "gemini-3.5-flash")
-
-        # Source-of-truth model (Sam directive #276 2026-05-23): the
-        # gateway holds the canonical active-model selection. Reading it
-        # at render time means the picker defaults to whatever Sam most-
-        # recently selected on ANY surface — and a hard refresh keeps the
-        # selection sticky across sessions. Silent-fall-back to
-        # _DEFAULT_MODEL if the gateway is unreachable.
+        # Source-of-truth model (Sam directive #276 2026-05-23): this
+        # surface now exposes Gemini 2.5 Flash only. Gateway state is
+        # still read for compatibility, but stale non-Gemini values fall
+        # back to _DEFAULT_MODEL.
         return render_template(
             "sam_chat.html",
             active="sam_chat",
@@ -843,7 +862,7 @@ def sam_chat_page():
             current_session=(_session_json(current) if current else None),
             messages=[_message_json(m) for m in messages],
             models=[{"id": m, "label": _MODEL_LABELS[m]}
-                    for m in _picker_models],
+                    for m in _PICKER_MODELS],
             default_model=_gateway_active_model_get(),
             session_cost=session_cost,
             cost_30d=_cost_last_30d(db),
@@ -1382,12 +1401,12 @@ def _sse(event: dict) -> str:
 
 @sam_chat_bp.route("/sam/chat/send", methods=["POST"])
 def sam_chat_send():
-    """Send a user message to Claude and SSE-stream the reply back.
+    """Send a user message to Cenas AI and SSE-stream the reply back.
 
     multipart/form-data:
       session_id  — optional; a new session is created when absent
       message     — the user's text (required unless attachments present)
-      model       — claude-opus-4-7 | claude-sonnet-4-6
+      model       — gemini-2.5-flash
       attachments — 0..N files (images / PDFs / text)
 
     The user message + attachment text are persisted BEFORE streaming
@@ -1421,13 +1440,6 @@ def sam_chat_send():
     if not stored_content:
         stored_content = "(attachments only)"
 
-    client = _anthropic_client()
-    if client is None:
-        return jsonify({
-            "ok": False,
-            "error": "Anthropic API is not configured (ANTHROPIC_API_KEY).",
-        }), 503
-
     # --- persist the user turn + build the API history (before stream) ---
     db = SessionLocal()
     try:
@@ -1444,7 +1456,7 @@ def sam_chat_send():
             db.flush()
         session_id = session_row.id
 
-        # Prior turns -> Anthropic message list (user/assistant only;
+        # Prior turns -> model message list (user/assistant only;
         # the API takes 'system' separately and Sam Chat creates none).
         # dck rows map to user-side turns with '[dck]: ' prefix and
         # consecutive same-role turns are merged for API alternation —
@@ -1523,9 +1535,7 @@ def sam_chat_send():
     # If the last prior turn was already user-role (e.g. a recent dck
     # post mapped to user via _build_api_messages_from_rows), merge the
     # new Sam turn into it to preserve API alternation. String concat
-    # for str+str; otherwise append as a separate entry and let Anthropic
-    # surface the alternation error (very unusual code path — only fires
-    # when Sam attaches an image immediately after a dck post).
+    # for str+str; otherwise append as a separate entry.
     if api_messages and api_messages[-1]["role"] == "user":
         api_messages[-1]["content"] = _merge_content(
             api_messages[-1]["content"], new_content)
@@ -1545,54 +1555,7 @@ def sam_chat_send():
             # Windows Task wires up on aick) — falls through to no-op.
             cena_devchat_feed = _read_devchat_feed()
 
-            if model.startswith("gemini") and not gateway_url:
-                # ---- Google Gemini: direct API (gateway-down fallback) ----
-                # When the Cena gateway is wired (normal prod), Gemini
-                # routes through it just like Claude — the gateway runs
-                # the FULL Cena (system prompt, context, tools) on
-                # Gemini. This bare direct-API path is only the fallback
-                # for when the gateway is unwired (e.g. local dev): no
-                # tools, no Cena identity.
-                gc = _gemini_client()
-                if gc is None:
-                    yield _sse({"type": "error",
-                                "error": "GEMINI_API_KEY not configured"})
-                    return
-                from google.genai import types as _gtypes  # type: ignore[import]
-                # Convert Anthropic role/content format → Gemini Contents.
-                gemini_contents = []
-                for _m in api_messages:
-                    _role = "model" if _m["role"] == "assistant" else "user"
-                    _raw = _m["content"]
-                    if isinstance(_raw, list):
-                        _text = " ".join(
-                            b.get("text", "") for b in _raw
-                            if isinstance(b, dict) and b.get("type") == "text"
-                        )
-                    else:
-                        _text = str(_raw)
-                    gemini_contents.append(
-                        _gtypes.Content(role=_role,
-                                        parts=[_gtypes.Part(text=_text)]))
-                _gemini_cfg_kwargs: dict = {
-                    "max_output_tokens": _MAX_OUTPUT_TOKENS,
-                }
-                if cena_devchat_feed:
-                    _gemini_cfg_kwargs["system_instruction"] = cena_devchat_feed
-                for _chunk in gc.models.generate_content_stream(
-                    model=model,
-                    contents=gemini_contents,
-                    config=_gtypes.GenerateContentConfig(**_gemini_cfg_kwargs),
-                ):
-                    if _chunk.text:
-                        full += _chunk.text
-                        yield _sse({"type": "delta", "text": _chunk.text})
-                # Gemini streaming doesn't expose per-chunk usage;
-                # rough estimate from character counts (÷4 ≈ tokens).
-                in_tok = sum(len(str(_m.get("content", ""))) // 4
-                             for _m in api_messages)
-                out_tok = len(full) // 4
-            elif gateway_url:
+            if gateway_url:
                 # ---- Cena gateway: route to aick ----
                 # CENA_PROXY (e.g. socks5h://localhost:1055) routes the
                 # outbound call through Render's userspace tailscaled —
@@ -1617,9 +1580,7 @@ def sam_chat_send():
                         "POST", gateway_url + "/cena/stream",
                         # session_id + message_id let the gateway link
                         # each CenaActionLog row back to this chat turn.
-                        # system carries the auto-loaded dev-chat feed
-                        # (gateway server can pass through to Anthropic
-                        # or ignore until it adds support).
+                        # system carries the auto-loaded dev-chat feed.
                         json=_gw_body,
                         headers={"X-Cena-Token": cena_token,
                                  "Content-Type": "application/json"},
@@ -1646,22 +1607,71 @@ def sam_chat_send():
                                 raise RuntimeError(
                                     evt.get("error", "Cena gateway error"))
             else:
-                # ---- Direct Anthropic API (original path) ----
-                _anthropic_kwargs: dict = {
-                    "model": model,
-                    "max_tokens": _MAX_OUTPUT_TOKENS,
-                    "messages": api_messages,
+                # ---- Google Gemini: direct API (gateway-down fallback) ----
+                # Normal production uses the Cena gateway so tool/context
+                # orchestration stays centralized. This direct API path is
+                # the fallback for local dev or an unwired gateway.
+                gc = _gemini_client()
+                if gc is None:
+                    yield _sse({"type": "error",
+                                "error": "GEMINI_API_KEY not configured"})
+                    return
+                from google.genai import types as _gtypes  # type: ignore[import]
+
+                def _gemini_parts(raw) -> list:
+                    if not isinstance(raw, list):
+                        return [_gtypes.Part.from_text(text=str(raw))]
+                    parts = []
+                    for block in raw:
+                        if not isinstance(block, dict):
+                            continue
+                        kind = block.get("type")
+                        if kind == "text":
+                            parts.append(_gtypes.Part.from_text(
+                                text=str(block.get("text") or "")))
+                            continue
+                        if kind not in ("image", "document"):
+                            continue
+                        source = block.get("source") or {}
+                        if source.get("type") != "base64":
+                            continue
+                        try:
+                            parts.append(_gtypes.Part.from_bytes(
+                                data=base64.b64decode(source.get("data") or ""),
+                                mime_type=(
+                                    source.get("media_type")
+                                    or "application/octet-stream"
+                                ),
+                            ))
+                        except Exception:  # noqa: BLE001
+                            continue
+                    return parts or [_gtypes.Part.from_text(text="")]
+
+                gemini_contents = []
+                for _m in api_messages:
+                    _role = "model" if _m["role"] == "assistant" else "user"
+                    gemini_contents.append(_gtypes.Content(
+                        role=_role,
+                        parts=_gemini_parts(_m["content"]),
+                    ))
+                _gemini_cfg_kwargs: dict = {
+                    "max_output_tokens": _MAX_OUTPUT_TOKENS,
                 }
                 if cena_devchat_feed:
-                    _anthropic_kwargs["system"] = cena_devchat_feed
-                with client.messages.stream(**_anthropic_kwargs) as stream:
-                    for chunk in stream.text_stream:
-                        full += chunk
-                        yield _sse({"type": "delta", "text": chunk})
-                    final = stream.get_final_message()
-                usage = getattr(final, "usage", None)
-                in_tok = getattr(usage, "input_tokens", 0) or 0
-                out_tok = getattr(usage, "output_tokens", 0) or 0
+                    _gemini_cfg_kwargs["system_instruction"] = cena_devchat_feed
+                for _chunk in gc.models.generate_content_stream(
+                    model=model,
+                    contents=gemini_contents,
+                    config=_gtypes.GenerateContentConfig(**_gemini_cfg_kwargs),
+                ):
+                    if _chunk.text:
+                        full += _chunk.text
+                        yield _sse({"type": "delta", "text": _chunk.text})
+                # Gemini streaming doesn't expose per-chunk usage;
+                # rough estimate from character counts (÷4 ≈ tokens).
+                in_tok = sum(len(str(_m.get("content", ""))) // 4
+                             for _m in api_messages)
+                out_tok = len(full) // 4
         except Exception as e:  # noqa: BLE001
             logger.exception("sam_chat: stream failed")
             # Persist whatever streamed before the failure so the turn
@@ -1726,6 +1736,9 @@ def sam_chat_async_send():
         return jsonify({"ok": False, "error": "async mode disabled"}), 409
     body = request.get_json(silent=True) or {}
     message = (body.get("message") or "").strip()
+    model = str(body.get("model") or _DEFAULT_MODEL).strip()
+    if model not in _ALLOWED_MODELS:
+        model = _auto_select_model(message)
     if not message:
         return jsonify({"ok": False, "error": "message is empty"}), 400
     raw_session_id = body.get("session_id")
@@ -1761,6 +1774,7 @@ def sam_chat_async_send():
             "idempotency_key": message_id,
             "conversation_id": conversation_id,
             "user_id": str(_sam_chat_user_id() or "sam"),
+            "model": model,
             "content": message})
     if status is None:
         return jsonify({"ok": False,

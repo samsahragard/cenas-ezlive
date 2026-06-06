@@ -172,11 +172,12 @@ def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
         200,
         previous_question="what was the last table opened",
         previous_answer="Table 311 was opened at 7:54 PM CT.",
+        asked_at="2026-06-06T01:02:03Z",
     )
 
     session_row = (
         db_session.query(SamChatSession)
-        .filter(SamChatSession.title == "Cenas AI Review")
+        .filter(SamChatSession.title == "Cenas AI Review: Sam")
         .one()
     )
     message = (
@@ -186,12 +187,31 @@ def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
     )
     assert message.role == "system"
     assert message.model == "assistant-review-mirror"
-    assert "Cenas AI assistant review" in message.content
-    assert "Name: Sam" in message.content
-    assert "Role: partner" in message.content
-    assert "permissions: *" in message.content
-    assert "Question:\nwho opened the last table and what time" in message.content
-    assert "Table 311 was opened at 7:54 PM CT by Test Waiter." in message.content
+    assert message.content.startswith("CENAS_ASSISTANT_REVIEW_V2\n")
+    payload = json.loads(message.content.split("\n", 1)[1])
+    assert payload["kind"] == "cenas.assistant_mirror"
+    assert payload["version"] == 2
+    assert payload["asked_at"] == "2026-06-06T01:02:03Z"
+    assert payload["actor"]["display_name"] == "Sam"
+    assert payload["actor"]["principal_id"] == 1
+    assert payload["actor"]["principal_type"] == "partner"
+    assert payload["actor"]["role"] == "partner"
+    assert payload["actor"]["owner_operator"] is True
+    assert payload["permissions"]["summary"] == "*"
+    assert payload["scope"]["current_store"] == "tomball"
+    assert payload["scope"]["store_slugs"] == ["tomball", "copperfield"]
+    assert payload["turn"]["question"] == "who opened the last table and what time"
+    assert payload["turn"]["previous"] == {
+        "question": "what was the last table opened",
+        "answer": "Table 311 was opened at 7:54 PM CT.",
+    }
+    assert payload["turn"]["answer"] == "Table 311 was opened at 7:54 PM CT by Test Waiter."
+    assert payload["result"]["status"] == "answered"
+    assert payload["result"]["http_status"] == 200
+    assert payload["result"]["ok"] is True
+    assert payload["result"]["queued"] is False
+    assert payload["tool"]["id"] == "toast.table_activity"
+    assert payload["tool"]["model"] == "gemini-2.5-flash"
 
     ar._mirror_assistant_turn_to_cena_chat(
         ctx,
@@ -202,7 +222,7 @@ def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
 
     assert (
         db_session.query(SamChatSession)
-        .filter(SamChatSession.title == "Cenas AI Review")
+        .filter(SamChatSession.title == "Cenas AI Review: Sam")
         .count()
     ) == 1
     assert (
@@ -210,6 +230,74 @@ def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
         .filter(SamChatMessage.session_id == session_row.id)
         .count()
     ) == 2
+    unavailable_message = (
+        db_session.query(SamChatMessage)
+        .filter(SamChatMessage.session_id == session_row.id)
+        .order_by(SamChatMessage.id.desc())
+        .first()
+    )
+    unavailable_payload = json.loads(unavailable_message.content.split("\n", 1)[1])
+    assert unavailable_payload["result"]["status"] == "unavailable"
+    assert unavailable_payload["result"]["error"] == "assistant_unavailable"
+    assert unavailable_payload["turn"]["answer"] == "I saved that for Sam review. The assistant model is not available right now."
+
+    other_ctx = dict(ctx)
+    other_ctx["principal_id"] = 2
+    other_ctx["display_name"] = "Javier Cruz"
+    ar._mirror_assistant_turn_to_cena_chat(
+        other_ctx,
+        "how many caterings today",
+        {"ok": True, "answer": "One catering.", "queued": False},
+        200,
+    )
+    assert (
+        db_session.query(SamChatSession)
+        .filter(SamChatSession.title == "Cenas AI Review: Javier Cruz")
+        .count()
+    ) == 1
+
+
+def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam",
+        "store_slugs": ["tomball"],
+        "current_store": "tomball",
+        "path": "/partner/",
+        "permissions": ["ai.ask_claude"],
+        "is_owner_operator": False,
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+    }
+
+    payload = ar._assistant_review_payload(
+        ctx,
+        "what was on the ticket",
+        {
+            "ok": True,
+            "answer": "I saved that for Sam review.",
+            "queued": True,
+            "queue_id": 42,
+            "ck_question_id": "ck-123",
+            "reason": "needs_review",
+            "storage": "assistant_review",
+            "review_notice_model": "gemini-2.5-flash",
+            "debug": "token=abc123SECRET",
+        },
+        200,
+        asked_at="2026-06-06T02:03:04Z",
+    )
+
+    assert payload["result"]["status"] == "queued"
+    assert payload["result"]["queue_id"] == 42
+    assert payload["result"]["ck_question_id"] == "ck-123"
+    assert payload["result"]["reason"] == "needs_review"
+    assert payload["tool"]["storage"] == "assistant_review"
+    assert payload["tool"]["model"] == "gemini-2.5-flash"
+    assert "abc123SECRET" not in payload["raw_response"]
+    assert "[REDACTED]" in payload["raw_response"]
 
 
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):
@@ -646,13 +734,22 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
         assert RuntimeHandler.seen["body"]["principal"]["role"] == "gm"
         assert RuntimeHandler.seen["body"]["principal"]["store_slugs"] == ["dos"]
         assert len(mirror_calls) == 1
-        mirror_ctx, mirror_question, mirror_data, mirror_status, mirror_previous, mirror_prev_answer = mirror_calls[0]
+        (
+            mirror_ctx,
+            mirror_question,
+            mirror_data,
+            mirror_status,
+            mirror_previous,
+            mirror_prev_answer,
+            mirror_asked_at,
+        ) = mirror_calls[0]
         assert mirror_ctx["role"] == "gm"
         assert mirror_question == "what baout earlier this morning?"
         assert mirror_data["answer"] == "CK-local answer"
         assert mirror_status == 200
         assert mirror_previous == "How many caterings do we have today?"
         assert mirror_prev_answer == ""
+        assert mirror_asked_at.endswith("Z")
     finally:
         httpd.shutdown()
         httpd.server_close()

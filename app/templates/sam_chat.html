@@ -1,6 +1,5 @@
 {% extends "base_dashboard.html" %}
-{# Sam Chat — Sam's standalone direct-to-Claude surface (Sam request
-   2026-05-14). Hard-gated to SAM_CHAT_USER_ID by the route + the
+{# Sam Chat — Sam's standalone Cenas AI surface. Hard-gated to SAM_CHAT_USER_ID by the route + the
    sidebar link. The big JS body is {% raw %}-wrapped; server data is
    handed in via a small window.SAM_CHAT_DATA bootstrap script. #}
 {% block title %}Sam Chat — Cenas Kitchen{% endblock %}
@@ -230,6 +229,75 @@
     border: 1px solid rgba(217, 164, 54, 0.26);
     color: #ECE3D0;
     white-space: pre-wrap;
+  }
+  #sc-col.is-review #sc-todo,
+  #sc-col.is-review #sc-start-files {
+    display: none;
+  }
+  .sc-review-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: min(680px, 100%);
+  }
+  .sc-review-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(217, 164, 54, 0.18);
+  }
+  .sc-review-person {
+    font-size: 14px;
+    font-weight: 700;
+    color: #FFD970;
+  }
+  .sc-review-meta,
+  .sc-review-status {
+    color: rgba(236, 227, 208, 0.58);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .sc-review-grid {
+    display: grid;
+    gap: 9px;
+  }
+  .sc-review-row {
+    border-left: 2px solid rgba(217, 164, 54, 0.34);
+    padding: 7px 9px;
+    background: rgba(0, 0, 0, 0.20);
+    border-radius: 5px;
+  }
+  .sc-review-row.question { border-left-color: #E87A3E; }
+  .sc-review-row.answer { border-left-color: #FFD970; }
+  .sc-review-label {
+    margin-bottom: 4px;
+    color: rgba(236, 227, 208, 0.55);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .sc-review-text {
+    color: #ECE3D0;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  .sc-review-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sc-review-pill {
+    border: 1px solid rgba(217, 164, 54, 0.22);
+    background: rgba(217, 164, 54, 0.08);
+    border-radius: 12px;
+    color: rgba(236, 227, 208, 0.70);
+    font-size: 10.5px;
+    padding: 2px 8px;
   }
   .sc-bubble p:first-child { margin-top: 0; }
   .sc-bubble p:last-child { margin-bottom: 0; }
@@ -570,7 +638,7 @@
     <div class="sc-sessions" id="sc-sessions"></div>
   </div>
 
-  <div class="sc-col">
+  <div class="sc-col{% if current_session and current_session.is_assistant_review %} is-review{% endif %}" id="sc-col">
     <div class="sc-colhead">
       <label style="font-size:11.5px;color:rgba(236,227,208,0.55);">Model</label>
       <select id="sc-model"></select>
@@ -616,7 +684,7 @@
     </details>
 
     {% if start_files %}
-    <details class="sc-pin">
+    <details class="sc-pin" id="sc-start-files">
       <summary>Cena start files ({{ start_files|length }}) — most recent copy auto-loaded on every chat open</summary>
       {% for f in start_files %}
       <details class="sc-pin-file">
@@ -647,7 +715,7 @@
           <i class="ti ti-microphone"></i>
         </button>
         <textarea class="sc-input" id="sc-input" rows="1"
-                  placeholder="Message Claude…  (Shift+Enter for newline)"></textarea>
+                  placeholder="Message Cenas AI...  (Shift+Enter for newline)"></textarea>
         <button class="sc-btn sc-send" id="sc-send" title="Send">
           <i class="ti ti-arrow-up"></i>
         </button>
@@ -748,12 +816,14 @@
   const ASYNC = !!D.samChatAsync;
   const $ = (id) => document.getElementById(id);
   const railEl = $("sc-sessions"), msgsEl = $("sc-msgs"),
+        colEl = $("sc-col"),
         inputEl = $("sc-input"), modelEl = $("sc-model"),
         chipsEl = $("sc-chips"), warnEl = $("sc-warn"),
         cost30El = $("sc-cost30"), sessionCostEl = $("sc-session-cost"),
         filesEl = $("sc-files"), sendBtn = $("sc-send"), micBtn = $("sc-mic");
 
-  let currentSessionId = D.currentSession ? D.currentSession.id : null;
+  let currentSession = D.currentSession || null;
+  let currentSessionId = currentSession ? currentSession.id : null;
   let attachments = [];
   let streaming = false;
     let msgQueue = [];
@@ -805,6 +875,12 @@
   }
   function fmtCost30(v) { cost30El.textContent = "30d: $" + v; }
   function fmtSessionCost(v) { sessionCostEl.textContent = "Session: $" + v; }
+  function isReviewSession(session) {
+    return !!(session && session.is_assistant_review);
+  }
+  function applySessionMode(session) {
+    if (colEl) colEl.classList.toggle("is-review", isReviewSession(session));
+  }
   function updateWarn(estTokens) {
     if (estTokens && estTokens >= D.contextWarnTokens) {
       warnEl.textContent = "This conversation is getting long (~" +
@@ -814,6 +890,153 @@
     } else {
       warnEl.classList.remove("show");
     }
+  }
+
+  const REVIEW_PREFIX_V1 = "CENAS_ASSISTANT_REVIEW_V1\n";
+  const REVIEW_PREFIX_V2 = "CENAS_ASSISTANT_REVIEW_V2\n";
+  function fmtTime(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  }
+  function sectionFromLegacy(text, label) {
+    const labels = [
+      "Sender:", "Permission setting:", "Scope:", "Question:",
+      "Previous question:", "Previous answer:", "Answer:"
+    ];
+    const start = text.indexOf(label);
+    if (start < 0) return "";
+    let bodyStart = start + label.length;
+    if (text[bodyStart] === "\n") bodyStart += 1;
+    let end = text.length;
+    labels.forEach((other) => {
+      if (other === label) return;
+      const idx = text.indexOf("\n" + other, bodyStart);
+      if (idx >= 0 && idx < end) end = idx;
+    });
+    return text.slice(bodyStart, end).trim();
+  }
+  function parseLegacyReview(content) {
+    const text = String(content || "");
+    if (!text.startsWith("Cenas AI assistant review")) return null;
+    const nameLine = (sectionFromLegacy(text, "Sender:").split("\n")
+      .find((line) => line.startsWith("Name: ")) || "").slice(6).trim();
+    const roleLine = (sectionFromLegacy(text, "Sender:").split("\n")
+      .find((line) => line.startsWith("Role: ")) || "").slice(6).trim();
+    const whenMatch = text.match(/^When:\s*(.+)$/m);
+    const outcomeMatch = text.match(/^Outcome:\s*(.+)$/m);
+    return {
+      kind: "Cenas AI assistant review",
+      asked_at: whenMatch ? whenMatch[1].trim() : "",
+      sender: { name: nameLine || "Unknown", role: roleLine || "" },
+      question: sectionFromLegacy(text, "Question:"),
+      previous_question: sectionFromLegacy(text, "Previous question:"),
+      previous_answer: sectionFromLegacy(text, "Previous answer:"),
+      answer: sectionFromLegacy(text, "Answer:"),
+      outcome: outcomeMatch ? outcomeMatch[1].trim() : ""
+    };
+  }
+  function parseReviewPayload(content) {
+    const text = String(content || "");
+    if (text.startsWith(REVIEW_PREFIX_V2)) {
+      try { return JSON.parse(text.slice(REVIEW_PREFIX_V2.length)); }
+      catch (e) { return null; }
+    }
+    if (text.startsWith(REVIEW_PREFIX_V1)) {
+      try { return JSON.parse(text.slice(REVIEW_PREFIX_V1.length)); }
+      catch (e) { return null; }
+    }
+    return parseLegacyReview(text);
+  }
+  function addReviewRow(parent, label, value, cls) {
+    const text = String(value || "").trim();
+    if (!text) return;
+    const row = document.createElement("div");
+    row.className = "sc-review-row" + (cls ? " " + cls : "");
+    const lab = document.createElement("div");
+    lab.className = "sc-review-label";
+    lab.textContent = label;
+    const body = document.createElement("div");
+    body.className = "sc-review-text";
+    body.textContent = text;
+    row.appendChild(lab);
+    row.appendChild(body);
+    parent.appendChild(row);
+  }
+  function renderReviewBubble(bubble, content, opts) {
+    const payload = parseReviewPayload(content);
+    if (!payload) {
+      bubble.textContent = content || "";
+      return;
+    }
+    bubble.textContent = "";
+    bubble.classList.add("sc-review-bubble");
+    const actor = payload.actor || payload.sender || {};
+    const turn = payload.turn || {
+      question: payload.question,
+      previous: (payload.previous_question || payload.previous_answer) ? {
+        question: payload.previous_question,
+        answer: payload.previous_answer
+      } : null,
+      answer: payload.answer
+    };
+    const previous = turn.previous || {};
+    const result = payload.result || {};
+    const tool = payload.tool || {};
+    const legacyResponse = payload.response || {};
+    const card = document.createElement("div");
+    card.className = "sc-review-card";
+    const head = document.createElement("div");
+    head.className = "sc-review-head";
+    const personBlock = document.createElement("div");
+    const person = document.createElement("div");
+    person.className = "sc-review-person";
+    person.textContent = actor.display_name || actor.name || "Unknown user";
+    const meta = document.createElement("div");
+    meta.className = "sc-review-meta";
+    const role = actor.role || "";
+    const kind = actor.principal_type || actor.kind || "";
+    meta.textContent = [kind, role].filter(Boolean).join(" - ");
+    personBlock.appendChild(person);
+    personBlock.appendChild(meta);
+    const time = document.createElement("div");
+    time.className = "sc-review-meta";
+    time.textContent = fmtTime(payload.asked_at || opts.created_at);
+    head.appendChild(personBlock);
+    head.appendChild(time);
+    card.appendChild(head);
+
+    const grid = document.createElement("div");
+    grid.className = "sc-review-grid";
+    addReviewRow(grid, "Question", turn.question, "question");
+    addReviewRow(grid, "Previous question", previous.question, "");
+    addReviewRow(grid, "Previous answer", previous.answer, "");
+    addReviewRow(grid, "Answer", turn.answer, "answer");
+    card.appendChild(grid);
+
+    const foot = document.createElement("div");
+    foot.className = "sc-review-foot";
+    [
+      payload.outcome,
+      result.status ? "status: " + result.status : "",
+      tool.id ? "tool: " + tool.id : (legacyResponse.tool_id ? "tool: " + legacyResponse.tool_id : ""),
+      tool.storage ? "storage: " + tool.storage : (legacyResponse.storage ? "storage: " + legacyResponse.storage : ""),
+      result.queued !== undefined ? "queued: " + result.queued : (legacyResponse.queued !== undefined ? "queued: " + legacyResponse.queued : ""),
+      result.http_status ? "http: " + result.http_status : (payload.http_status ? "http: " + payload.http_status : "")
+    ].filter(Boolean).forEach((item) => {
+      const pill = document.createElement("span");
+      pill.className = "sc-review-pill";
+      pill.textContent = item;
+      foot.appendChild(pill);
+    });
+    if (foot.children.length) card.appendChild(foot);
+    bubble.appendChild(card);
   }
 
   // ---- message rendering ----
@@ -831,7 +1054,9 @@
     wrap.appendChild(authorEl);
     const bubble = document.createElement("div");
     bubble.className = "sc-bubble";
-    if ((role === "assistant" || role === "dck" || role === "aick") && !opts.streaming) {
+    if (role === "system" && opts.model === "assistant-review-mirror") {
+      renderReviewBubble(bubble, content, opts);
+    } else if ((role === "assistant" || role === "dck" || role === "aick") && !opts.streaming) {
       try { bubble.innerHTML = marked.parse(content || ""); }
       catch (e) { bubble.textContent = content || ""; }
     } else {
@@ -880,7 +1105,11 @@
     }
     list.forEach((m) => {
       if (m.id && m.id > lastSeenMsgId) lastSeenMsgId = m.id;
-      addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });
+      addMessage(m.role, m.content, {
+        model: m.model,
+        cost: m.cost_usd,
+        created_at: m.created_at
+      });
     });
   }
 
@@ -902,23 +1131,37 @@
       j.messages.forEach((m) => {
         if (!m.id || m.id <= lastSeenMsgId) return;
         lastSeenMsgId = m.id;
-        addMessage(m.role, m.content, { model: m.model, cost: m.cost_usd });
+        addMessage(m.role, m.content, {
+          model: m.model,
+          cost: m.cost_usd,
+          created_at: m.created_at
+        });
       });
     } catch (e) { /* swallow — transient network */ }
   }
   setInterval(pollNewMessages, 4000);
+  setInterval(refreshSessions, 10000);
 
   // ---- session rail ----
   function renderSessions(list) {
+    D.sessions = list || [];
     railEl.innerHTML = "";
-    (list || []).forEach((s) => {
+    D.sessions.forEach((s) => {
       const el = document.createElement("div");
       el.className = "sc-session" + (s.id === currentSessionId ? " is-active" : "");
       el.title = s.title;
       const label = document.createElement("span");
-      label.textContent = s.title;
+      label.textContent = s.is_assistant_review && s.review_subject
+        ? s.review_subject
+        : s.title;
       label.style.cssText = "overflow:hidden;text-overflow:ellipsis;";
       el.appendChild(label);
+      if (s.is_assistant_review) {
+        const tag = document.createElement("span");
+        tag.textContent = "AI";
+        tag.style.cssText = "margin-left:6px;font-size:10px;color:rgba(236,227,208,.45);";
+        el.appendChild(tag);
+      }
       const arch = document.createElement("i");
       arch.className = "ti ti-archive sc-arch";
       arch.title = "Archive";
@@ -931,8 +1174,11 @@
 
   async function loadSession(id) {
     if (streaming) return;
-    if (ASYNC) {
+    const targetSession = (D.sessions || []).find((s) => s.id === id) || currentSession;
+    if (ASYNC && !isReviewSession(targetSession)) {
       currentSessionId = id;
+      currentSession = targetSession;
+      applySessionMode(currentSession);
       document.querySelectorAll(".sc-session")
         .forEach((e) => e.classList.remove("is-active"));
       await restoreAsyncHistory();
@@ -944,6 +1190,8 @@
     const j = await r.json();
     if (!j.ok) return;
     currentSessionId = id;
+    currentSession = j.session || null;
+    applySessionMode(currentSession);
     renderMessages(j.messages);
     fmtSessionCost(j.session_cost);
     updateWarn(j.token_estimate);
@@ -955,7 +1203,22 @@
     const r = await fetch("/sam/chat/sessions");
     if (!r.ok) return;
     const j = await r.json();
-    if (j.ok) renderSessions(j.sessions);
+    if (j.ok) {
+      const sessions = j.sessions || [];
+      const active = sessions.find((s) => s.id === currentSessionId);
+      if (active) {
+        currentSession = active;
+        applySessionMode(currentSession);
+      } else if (currentSessionId) {
+        currentSessionId = null;
+        currentSession = null;
+        applySessionMode(null);
+        renderMessages([]);
+        fmtSessionCost("0.0000");
+        updateWarn(0);
+      }
+      renderSessions(sessions);
+    }
   }
 
   async function newSession() {
@@ -965,6 +1228,8 @@
     const j = await r.json();
     if (!j.ok) return;
     currentSessionId = j.session.id;
+    currentSession = j.session;
+    applySessionMode(currentSession);
     renderMessages([]);
     fmtSessionCost("0.0000");
     updateWarn(0);
@@ -972,9 +1237,12 @@
   }
 
   async function archiveSession(id) {
-    await fetch("/sam/chat/sessions/" + id + "/archive", { method: "POST" });
+    const r = await fetch("/sam/chat/sessions/" + id + "/archive", { method: "POST" });
+    if (!r.ok) return;
     if (id === currentSessionId) {
       currentSessionId = null;
+      currentSession = null;
+      applySessionMode(null);
       renderMessages([]);
       fmtSessionCost("0.0000");
     }
@@ -1059,9 +1327,11 @@
   }
 
   async function sendMessage(_q) {
-    if (ASYNC) return sendMessageAsync(_q);
     const text = _q ? _q.text : inputEl.value.trim();
     const _atts = _q ? _q.atts : [...attachments];
+    if (ASYNC && !isReviewSession(currentSession) && _atts.length === 0) {
+      return sendMessageAsync(_q);
+    }
     if (!text && _atts.length === 0) return;
 
     if (streaming && !_q) {
@@ -1133,6 +1403,8 @@
             streamBubble.classList.remove("streaming");
             streamBubble.dataset.raw = acc;
             currentSessionId = evt.session_id;
+            const doneId = Number(evt.message_id || 0);
+            if (doneId > lastSeenMsgId) lastSeenMsgId = doneId;
             fmtSessionCost(evt.session_cost);
             fmtCost30(evt.cost_30d);
             updateWarn(evt.token_estimate);
@@ -1247,6 +1519,7 @@
         body: JSON.stringify({
           message: text,
           session_id: currentSessionId ? String(currentSessionId) : null,
+          model: modelEl.value,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -1344,10 +1617,11 @@
   }
 
   // ---- boot ----
+  applySessionMode(currentSession);
   renderSessions(D.sessions);
   // Phase 2 §9 — async mode restores the thread from the gateway log;
   // sync mode renders the server-preloaded SamChatMessage rows.
-  if (ASYNC) { restoreAsyncHistory(); }
+  if (ASYNC && !isReviewSession(currentSession)) { restoreAsyncHistory(); }
   else { renderMessages(D.messages); }
   fmtSessionCost(D.sessionCost);
   fmtCost30(D.cost30d);

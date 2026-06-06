@@ -205,11 +205,20 @@ def _handle_view_login(code: str, nxt: str):
     finally:
         db.close()
 
-    # Land where a normal employee lands: dashboard for a single store, the
-    # store picker when the employee works at 2+ stores.
+    # View-login is a PURE employee view: drop the UNIFY manager-fold that
+    # _establish_employee_session sets for a LINKED employee (Employee.user_id).
+    # Without this, a linked employee (a manager) carries user_id into the
+    # session, so "/" routes to /partner/ and the employee->/partner firewall
+    # 403s it (employee_id present without partner_auth_ok) -- the "Forbidden"
+    # the owner hit. The owner wants the employee's portal, not the manager's.
+    session.pop("user_id", None)
+    session.pop("user_session_version", None)
+
+    # Always land in the employee dashboard -- it renders fine for a 2+ store
+    # employee with no active_store; /employee/select-store is POST-only (a GET
+    # there 405s), so never send the owner straight at it.
+    _ = stores  # noqa: F841 (kept: _establish_employee_session has session side effects)
     dest = "/employee/dashboard"
-    if isinstance(stores, (list, tuple)) and len(stores) > 1:
-        dest = "/employee/select-store"
     if nxt and nxt != "/" and nxt.startswith("/"):
         dest = nxt
     return jsonify({"ok": True, "next": dest})

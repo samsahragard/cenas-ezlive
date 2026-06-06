@@ -80,9 +80,9 @@ def _store_key_for_quote(quote: InHouseCateringQuote) -> str:
     return _normalize_store(quote.store_scope or "unknown")
 
 
-def _tool_store_filter(ctx: dict[str, Any]) -> set[str]:
+def _tool_store_filter(ctx: dict[str, Any]) -> set[str] | None:
     if ctx.get("is_owner_operator"):
-        return set()
+        return None
     return {_normalize_store(store) for store in (ctx.get("store_slugs") or [])}
 
 
@@ -143,17 +143,21 @@ def _money(value: Any) -> float:
 def _allowed_orders(db: Session, ctx: dict[str, Any]) -> list[Order]:
     orders = db.query(Order).all()
     allowed = _tool_store_filter(ctx)
-    if allowed:
-        return [order for order in orders if _store_key_for_order(order) in allowed]
-    return orders
+    if allowed is None:
+        return orders
+    if not allowed:
+        return []
+    return [order for order in orders if _store_key_for_order(order) in allowed]
 
 
 def _allowed_quotes(db: Session, ctx: dict[str, Any]) -> list[InHouseCateringQuote]:
     quotes = db.query(InHouseCateringQuote).all()
     allowed = _tool_store_filter(ctx)
-    if allowed:
-        return [quote for quote in quotes if _store_key_for_quote(quote) in allowed]
-    return quotes
+    if allowed is None:
+        return quotes
+    if not allowed:
+        return []
+    return [quote for quote in quotes if _store_key_for_quote(quote) in allowed]
 
 
 def _visible_external_ids(orders: list[Order]) -> set[str]:
@@ -886,77 +890,134 @@ def _wants_count(question: str) -> bool:
 
 
 def _wants_by_status(question: str) -> bool:
-    return _order_context(question) and "status" in _txt(question)
+    return _order_context(question) and not _in_house_context(question) and "status" in _txt(question)
 
 
 def _wants_by_store(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(by store|store split|location split|by location)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(by store|store split|location split|by location)\b", text))
+    )
 
 
 def _wants_needs_driver(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(needs? driver|driver attention|without driver|missing driver)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(needs? driver|driver attention|without driver|missing driver)\b", text))
+    )
 
 
 def _wants_live_tracking(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(live tracking|active tracking|tracking links?)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(live tracking|active tracking|tracking links?)\b", text))
+    )
 
 
 def _wants_tracking_missing(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(missing tracking|without tracking|no tracking)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(missing tracking|without tracking|no tracking)\b", text))
+    )
 
 
 def _wants_uuid_status(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(uuid|tracking id|tracking status)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(uuid|tracking id|tracking status)\b", text))
+    )
 
 
 def _wants_late_risk(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(late|risk|overdue|behind)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(late|risk|overdue|behind)\b", text))
+    )
 
 
 def _wants_order_items(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(items?|food|what was on|what is on|item mix)\b", text)) and "mix" not in text
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(items?|food|what was on|what is on|item mix)\b", text))
+        and "mix" not in text
+    )
 
 
 def _wants_order_lookup(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(lookup|find|details?|show|order #|order id|ticket)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(lookup|find|details?|show|order #|order id|ticket)\b", text))
+    )
 
 
 def _wants_item_mix(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(item mix|menu mix|top items?|food mix|what items sell)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(item mix|menu mix|top items?|food mix|what items sell)\b", text))
+    )
 
 
 def _wants_fees(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(fee|fees|commission|service fee|processing fee|tips?)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(fee|fees|commission|service fee|processing fee|tips?)\b", text))
+    )
 
 
 def _wants_payout(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(payout|driver pay|paid payout|potential payout|verified miles)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(payout|driver pay|paid payout|potential payout|verified miles)\b", text))
+    )
 
 
 def _wants_pdf_status(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(pdf|parse|processing status|uploaded)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(pdf|parse|processing status|uploaded)\b", text))
+    )
 
 
 def _wants_driver_assignment(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(driver assignment|assignment jobs?|assignments?|reassignment)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(driver assignment|assignment jobs?|assignments?|reassignment)\b", text))
+    )
 
 
 def _wants_returning_customers(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and bool(re.search(r"\b(returning customers?|repeat customers?|customer aggregate)\b", text))
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and bool(re.search(r"\b(returning customers?|repeat customers?|customer aggregate)\b", text))
+    )
 
 
 def _wants_in_house_summary(question: str) -> bool:

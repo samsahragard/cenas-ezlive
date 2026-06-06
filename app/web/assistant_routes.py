@@ -1255,6 +1255,15 @@ def _wants_toast_webhook_activity(question: str) -> bool:
     text = str(question or "")
     if re.search(r"\bwhat\s+was\s+on\s+order\b|\border\s+[A-Za-z0-9][A-Za-z0-9_-]{2,}\b", text, re.IGNORECASE):
         return False
+    if (
+        re.search(r"\b(catering|caterings|ezcater|in[- ]house|quotes?)\b", text, re.IGNORECASE)
+        and not re.search(
+            r"\b(toast|webhooks?|rang|rung|checks?|payments?|closeouts?|voids?)\b",
+            text,
+            re.IGNORECASE,
+        )
+    ):
+        return False
     if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
         return False
     return bool(

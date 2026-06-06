@@ -279,7 +279,7 @@ BUILTIN_TOOL_REGISTRY.extend([
         "Sanitized item list for one visible catering order without contact details.",
         "orders_catering_order_items_safe",
         "orders_catering_order_items_safe",
-        217,
+        203,
     ),
     _orders_read_tool(
         "orders.catering_order_lookup",
@@ -287,7 +287,7 @@ BUILTIN_TOOL_REGISTRY.extend([
         "Sanitized details for one visible catering order without customer contact data.",
         "orders_catering_order_lookup",
         "orders_catering_order_lookup",
-        218,
+        204,
     ),
     _orders_read_tool(
         "orders.catering_driver_assignment_summary",
@@ -343,7 +343,7 @@ BUILTIN_TOOL_REGISTRY.extend([
         "Sanitized details for one in-house catering quote without contact data.",
         "orders_in_house_quote_lookup",
         "orders_in_house_quote_lookup",
-        230,
+        201,
     ),
     _orders_read_tool(
         "orders.in_house_quotes_summary",
@@ -351,7 +351,7 @@ BUILTIN_TOOL_REGISTRY.extend([
         "Store-scoped in-house catering quote counts, status split, and sanitized recent list.",
         "orders_in_house_quotes_summary",
         "orders_in_house_quotes_summary",
-        231,
+        202,
     ),
 ])
 

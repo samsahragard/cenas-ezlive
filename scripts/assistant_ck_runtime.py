@@ -1074,7 +1074,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     if tool_id == "orders.catering_pdf_status":
         split = _dict_split(payload.get("by_processing_status") or {})
         answer = (
-            f"PDF status: {int(payload.get('processing_rows') or 0)} processing rows, "
+            f"Catering PDF status: {int(payload.get('processing_rows') or 0)} processing rows, "
             f"{int(payload.get('pdf_detail_rows') or 0)} detail rows, "
             f"{int(payload.get('with_pdf_source') or 0)} with PDF source, "
             f"{int(payload.get('parse_error_count') or 0)} parse errors."

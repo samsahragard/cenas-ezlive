@@ -427,6 +427,58 @@ write_file
 """.split()
 )
 
+_HARDBLOCK_TOOL_IDS = frozenset(
+    {
+        "agent_restart",
+        "fetch_url",
+        "file_delete",
+        "get_current_todo",
+        "journal_read",
+        "journal_write",
+        "list_dir",
+        "post_to_dev_chat",
+        "post_to_sam_chat",
+        "query_database",
+        "read_file",
+        "read_hub_inbox",
+        "remove_participant",
+        "render_deploy",
+        "render_env_get",
+        "render_env_set",
+        "run_git",
+        "screenshot_url",
+        "self_critique",
+        "shell_execute",
+        "sql_query",
+        "telegram_send",
+        "wake_on_hub",
+        "web_search",
+        "whatsapp_send",
+        "write_file",
+    }
+)
+
+
+def is_excluded_non_routable(tool_id: str) -> bool:
+    """Return True for inventory ids that must never enter chat routing."""
+    if tool_id in _HARDBLOCK_TOOL_IDS:
+        return True
+    if tool_id.startswith(("dev.", "dash.", "resolve_")):
+        return True
+    if tool_id.startswith("assistant.") and tool_id not in {
+        "assistant.general_help",
+        "assistant.tool_discovery",
+        "assistant.session_context",
+    }:
+        return True
+    return False
+
+
+def iter_excluded_non_routable_tool_ids() -> Iterable[str]:
+    for tool_id in sorted(PARTNER_TOOL_IDS):
+        if is_excluded_non_routable(tool_id):
+            yield tool_id
+
 _ACTION_WORDS = frozenset(
     {
         "add",
@@ -483,7 +535,7 @@ def _title_from_tool_id(tool_id: str) -> str:
 
 
 def _read_write_class(tool_id: str) -> str:
-    parts = tool_id.replace(".", " ").split()
+    parts = tool_id.replace(".", " ").replace("_", " ").replace("-", " ").split()
     if tool_id in _ACTION_WORDS or any(part in _ACTION_WORDS for part in parts):
         return "action_confirmation"
     return "read_only"
@@ -497,8 +549,10 @@ def _data_class(tool_id: str) -> str:
     return "partner_tool"
 
 
-def iter_partner_tool_definitions() -> Iterable[dict[str, Any]]:
+def iter_partner_tool_definitions(*, include_excluded: bool = False) -> Iterable[dict[str, Any]]:
     for tool_id in sorted(PARTNER_TOOL_IDS):
+        if not include_excluded and is_excluded_non_routable(tool_id):
+            continue
         yield {
             "tool_id": tool_id,
             "label": _title_from_tool_id(tool_id),

@@ -137,6 +137,92 @@ def test_receiver_token_gate_and_redacted_insert(tmp_path, monkeypatch):
         os.environ.pop("ASSISTANT_REVIEW_TOKEN", None)
 
 
+def test_receiver_route_action_verifies_learning_route(tmp_path, monkeypatch):
+    from scripts import assistant_review_ck_receiver as receiver
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    token = "local-test-token"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setenv("ASSISTANT_REVIEW_TOKEN", token)
+    receiver._init_db()
+
+    import sqlite3
+
+    con = sqlite3.connect(db_path)
+    con.execute(
+        """
+        INSERT INTO assistant_verified_tool_route (
+            id, route_key_hash, role_scope, store_scope, tool_id, route_kind,
+            route_args_redacted, status, verification_count,
+            required_verifications, answer_hash, payload_hash,
+            first_seen_at, last_verified_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "route-1",
+            "route-key-1",
+            "partner",
+            "all",
+            "orders.store_summary",
+            "order_summary",
+            "{}",
+            "learning",
+            3,
+            3,
+            "answer-hash",
+            "payload-hash",
+            "2026-06-01T00:00:00Z",
+            "2026-06-01T00:00:00Z",
+            "2026-06-01T00:00:00Z",
+        ),
+    )
+    con.commit()
+    con.close()
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), receiver.Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        body = json.dumps({
+            "route_key_hash": "route-key-1",
+            "action": "verify",
+            "reviewer": "Sam",
+            "reason": "looks right",
+            "route_path": "review",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/review/route-action",
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+        res = urllib.request.urlopen(req, timeout=3)
+        data = json.loads(res.read().decode("utf-8"))
+
+        assert res.status == 200
+        assert data["status"] == "verified"
+        con = sqlite3.connect(db_path)
+        status = con.execute(
+            "SELECT status FROM assistant_verified_tool_route WHERE route_key_hash = 'route-key-1'"
+        ).fetchone()[0]
+        event = con.execute(
+            "SELECT event_type, route_path FROM assistant_route_event WHERE route_key_hash = 'route-key-1'"
+        ).fetchone()
+        con.close()
+        assert status == "verified"
+        assert event == ("review_action", "review")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        os.environ.pop("ASSISTANT_REVIEW_DB", None)
+        os.environ.pop("ASSISTANT_REVIEW_TOKEN", None)
+
+
 def test_receiver_supports_ck_integer_primary_key_schema(tmp_path, monkeypatch):
     from scripts import assistant_review_ck_receiver as receiver
 

@@ -155,3 +155,22 @@ CREATE INDEX IF NOT EXISTS idx_verified_tool_route_tool
   ON assistant_verified_tool_route(tool_id, route_kind);
 CREATE INDEX IF NOT EXISTS idx_verified_tool_route_scope
   ON assistant_verified_tool_route(role_scope, store_scope);
+
+CREATE TABLE IF NOT EXISTS assistant_route_event (
+  id TEXT PRIMARY KEY,
+  route_key_hash TEXT,
+  tool_id TEXT,
+  route_kind TEXT,
+  route_path TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  classifier_model TEXT,
+  classifier_latency_ms INTEGER,
+  classifier_token_cost_usd REAL,
+  metadata_redacted TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_route_event_route
+  ON assistant_route_event(route_key_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_route_event_path
+  ON assistant_route_event(route_path, event_type, created_at);

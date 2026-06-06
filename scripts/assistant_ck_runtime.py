@@ -1069,6 +1069,8 @@ def _record_tool_route_verification(
     principal: dict,
     approved: dict,
     tool_data: dict,
+    route_path: str = "deterministic",
+    route_meta: dict | None = None,
 ) -> dict | None:
     tool_id = str(approved.get("tool_id") or "")
     if tool_id not in _VERIFIED_ROUTE_TOOL_IDS:
@@ -1102,7 +1104,7 @@ def _record_tool_route_verification(
     with sqlite3.connect(review_receiver._db_path()) as con:
         existing = con.execute(
             """
-            SELECT verification_count, first_seen_at
+            SELECT verification_count, first_seen_at, status
               FROM assistant_verified_tool_route
              WHERE route_key_hash = ?
             """,
@@ -1110,7 +1112,8 @@ def _record_tool_route_verification(
         ).fetchone()
         count = int(existing[0]) + 1 if existing else 1
         first_seen_at = str(existing[1]) if existing else now
-        status = "verified" if count >= required else "learning"
+        existing_status = str(existing[2]) if existing else "learning"
+        status = existing_status if existing_status in {"verified", "flagged", "rejected"} else "learning"
         con.execute(
             """
             INSERT INTO assistant_verified_tool_route (
@@ -1151,14 +1154,111 @@ def _record_tool_route_verification(
                 now,
             ),
         )
+        _record_route_event(
+            con,
+            route_key_hash,
+            tool_id,
+            route_kind,
+            route_path,
+            "candidate",
+            route_meta or {},
+            now,
+        )
         con.commit()
 
     return {
         "status": status,
         "tool_id": tool_id,
         "route_kind": route_kind,
+        "route_path": route_path,
         "verification_count": count,
         "required_verifications": required,
+    }
+
+
+def _record_route_event(
+    con: sqlite3.Connection,
+    route_key_hash: str,
+    tool_id: str,
+    route_kind: str,
+    route_path: str,
+    event_type: str,
+    route_meta: dict,
+    now: str,
+) -> None:
+    classifier = route_meta.get("classifier") if isinstance(route_meta, dict) else None
+    if not isinstance(classifier, dict):
+        classifier = {}
+    event_id = uuid.uuid4().hex
+    con.execute(
+        """
+        INSERT OR REPLACE INTO assistant_route_event (
+            id, route_key_hash, tool_id, route_kind, route_path, event_type,
+            classifier_model, classifier_latency_ms, classifier_token_cost_usd,
+            metadata_redacted, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            event_id,
+            route_key_hash,
+            tool_id,
+            route_kind,
+            route_path,
+            event_type,
+            classifier.get("model"),
+            classifier.get("latency_ms"),
+            classifier.get("token_cost_usd"),
+            json.dumps(route_meta, ensure_ascii=False, sort_keys=True),
+            now,
+        ),
+    )
+
+
+def _auto_verify_tool_routes(min_age_days: int = 7) -> dict:
+    review_receiver._init_db()
+    now_dt = datetime.now(timezone.utc)
+    cutoff = (now_dt - timedelta(days=min_age_days)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    now = now_dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    promoted: list[str] = []
+    with sqlite3.connect(review_receiver._db_path()) as con:
+        rows = con.execute(
+            """
+            SELECT id, route_key_hash, tool_id, route_kind
+              FROM assistant_verified_tool_route
+             WHERE status = 'learning'
+               AND verification_count >= required_verifications
+               AND first_seen_at <= ?
+            """,
+            (cutoff,),
+        ).fetchall()
+        for route_id, route_key_hash, tool_id, route_kind in rows:
+            con.execute(
+                """
+                UPDATE assistant_verified_tool_route
+                   SET status = 'verified',
+                       last_verified_at = ?,
+                       updated_at = ?
+                 WHERE id = ?
+                """,
+                (now, now, route_id),
+            )
+            _record_route_event(
+                con,
+                str(route_key_hash),
+                str(tool_id),
+                str(route_kind),
+                "nightly_auto_verify",
+                "auto_verify",
+                {"min_age_days": min_age_days},
+                now,
+            )
+            promoted.append(str(route_id))
+        con.commit()
+    return {
+        "ok": True,
+        "promoted": len(promoted),
+        "route_ids": promoted,
+        "cutoff": cutoff,
     }
 
 
@@ -1169,9 +1269,14 @@ def _approved_tool_answer(
     tools: list[dict],
     tool_data: dict,
     previous_answer: str = "",
+    routed_tool_id: str | None = None,
 ) -> dict | None:
     resolved_question = _resolved_question(question, previous_question)
-    if _wants_tool_discovery(resolved_question):
+    routed_tool_id = str(routed_tool_id or "").strip()
+    if (
+        (not routed_tool_id or routed_tool_id == "assistant.tool_discovery")
+        and _wants_tool_discovery(resolved_question)
+    ):
         return {
             "ok": True,
             "answer": _tool_discovery_answer(principal, tools),
@@ -1182,7 +1287,10 @@ def _approved_tool_answer(
         }
     if not _has_partner_tool_access(principal):
         return None
-    if _OWNER_IDENTITY_RE.search(str(question or "")):
+    if (
+        (not routed_tool_id or routed_tool_id == "assistant.session_context")
+        and _OWNER_IDENTITY_RE.search(str(question or ""))
+    ):
         if principal.get("is_owner_operator"):
             identity_answer = (
                 "This authenticated session is already marked as an owner-operator "
@@ -1203,14 +1311,12 @@ def _approved_tool_answer(
             "tool_id": "assistant.session_context",
             "generated_at": _now_iso(),
         }
-    if _toast_employee_profiles_tool_authorized(principal, tools) and _wants_toast_employee_profiles(resolved_question):
+    if not routed_tool_id:
+        return None
+    if routed_tool_id == "toast.employee_profiles" and _toast_employee_profiles_tool_authorized(principal, tools):
         employee_profiles = tool_data.get("toast.employee_profiles") if isinstance(tool_data, dict) else None
         if not _tool_payload_ok(employee_profiles):
-            try:
-                employee_profiles = _toast_employee_profiles_payload(resolved_question)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast employee profiles failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_employee_profiles_answer(employee_profiles, question),
@@ -1219,14 +1325,10 @@ def _approved_tool_answer(
             "tool_id": "toast.employee_profiles",
             "generated_at": employee_profiles.get("generated_at"),
         }
-    if _toast_webhook_tool_authorized(principal, tools) and _wants_toast_webhook_activity(resolved_question):
+    if routed_tool_id == "toast.webhook_activity" and _toast_webhook_tool_authorized(principal, tools):
         webhook_activity = tool_data.get("toast.webhook_activity") if isinstance(tool_data, dict) else None
         if not _tool_payload_ok(webhook_activity):
-            try:
-                webhook_activity = _toast_webhook_activity_payload(resolved_question)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast webhook activity failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_webhook_activity_answer(webhook_activity, question),
@@ -1235,7 +1337,7 @@ def _approved_tool_answer(
             "tool_id": "toast.webhook_activity",
             "generated_at": webhook_activity.get("generated_at"),
         }
-    if _toast_table_tool_authorized(principal, tools) and _wants_toast_table_activity(resolved_question):
+    if routed_tool_id == "toast.table_activity" and _toast_table_tool_authorized(principal, tools):
         contextual_table_answer = _toast_table_person_followup_answer(question, previous_answer)
         if contextual_table_answer:
             return {
@@ -1261,11 +1363,7 @@ def _approved_tool_answer(
             or (not payload_business_date and business_date)
             or _toast_table_activity_needs_employee_refresh(table_activity, question)
         ):
-            try:
-                table_activity = _toast_table_activity_payload(requested_store, business_date)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast table activity failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_table_activity_answer_for_question(table_activity, question),
@@ -1274,15 +1372,10 @@ def _approved_tool_answer(
             "tool_id": "toast.table_activity",
             "generated_at": table_activity.get("generated_at"),
         }
-    if _toast_tool_authorized(principal, tools) and _wants_toast_sales_summary(resolved_question):
-        period = _toast_period_from_question(resolved_question)
+    if routed_tool_id == "toast.sales_summary" and _toast_tool_authorized(principal, tools):
         toast_summary = tool_data.get("toast.sales_summary") if isinstance(tool_data, dict) else None
         if not isinstance(toast_summary, dict):
-            try:
-                toast_summary = _toast_sales_summary_payload(period)
-            except Exception:  # noqa: BLE001
-                log.exception("assistant runtime: Toast sales summary failed")
-                return None
+            return None
         return {
             "ok": True,
             "answer": _toast_sales_summary_answer(toast_summary),
@@ -1291,9 +1384,9 @@ def _approved_tool_answer(
             "tool_id": "toast.sales_summary",
             "generated_at": toast_summary.get("generated_at"),
         }
-    if _tool_available(tools, "drivers.store_summary"):
+    if routed_tool_id == "drivers.store_summary" and _tool_available(tools, "drivers.store_summary"):
         driver_summary = tool_data.get("drivers.store_summary") if isinstance(tool_data, dict) else None
-        if isinstance(driver_summary, dict) and _wants_driver_summary(resolved_question):
+        if isinstance(driver_summary, dict):
             return {
                 "ok": True,
                 "answer": _drivers_summary_answer(driver_summary),
@@ -1302,9 +1395,9 @@ def _approved_tool_answer(
                 "tool_id": "drivers.store_summary",
                 "generated_at": driver_summary.get("generated_at"),
             }
-    if _tool_available(tools, "labor.store_aggregate"):
+    if routed_tool_id == "labor.store_aggregate" and _tool_available(tools, "labor.store_aggregate"):
         labor_summary = tool_data.get("labor.store_aggregate") if isinstance(tool_data, dict) else None
-        if isinstance(labor_summary, dict) and _wants_labor_summary(resolved_question):
+        if isinstance(labor_summary, dict):
             return {
                 "ok": True,
                 "answer": _labor_summary_answer(labor_summary),
@@ -1313,9 +1406,9 @@ def _approved_tool_answer(
                 "tool_id": "labor.store_aggregate",
                 "generated_at": labor_summary.get("generated_at"),
             }
-    if _tool_available(tools, "orders.store_summary"):
+    if routed_tool_id == "orders.store_summary" and _tool_available(tools, "orders.store_summary"):
         summary = tool_data.get("orders.store_summary") if isinstance(tool_data, dict) else None
-        if isinstance(summary, dict) and _wants_order_summary(resolved_question):
+        if isinstance(summary, dict):
             return {
                 "ok": True,
                 "answer": _orders_summary_answer(summary, resolved_question),
@@ -1489,12 +1582,23 @@ def _answer(payload: dict) -> tuple[dict, int]:
     principal = payload.get("principal") or {}
     tools = payload.get("tools") or []
     tool_data = payload.get("tool_data") or {}
+    routed_tool_id = str(payload.get("routed_tool_id") or "").strip() or None
+    route_path = str(payload.get("route_path") or "review").strip() or "review"
+    route_meta = payload.get("route_meta") if isinstance(payload.get("route_meta"), dict) else {}
     source = str(payload.get("source") or "cenas_app")
     if not question:
         return {"ok": False, "error": "question required"}, 400
 
     resolved_question = _resolved_question(question, previous_question)
-    approved = _approved_tool_answer(question, previous_question, principal, tools, tool_data, previous_answer)
+    approved = _approved_tool_answer(
+        question,
+        previous_question,
+        principal,
+        tools,
+        tool_data,
+        previous_answer,
+        routed_tool_id,
+    )
     if approved is not None:
         route_cache = _record_tool_route_verification(
             question,
@@ -1502,9 +1606,14 @@ def _answer(payload: dict) -> tuple[dict, int]:
             principal,
             approved,
             tool_data,
+            route_path,
+            route_meta,
         )
         if route_cache is not None:
             approved["route_cache"] = route_cache
+        approved.setdefault("route_path", route_path)
+        approved.setdefault("routed_tool_id", routed_tool_id)
+        approved.setdefault("route_meta", route_meta)
         return approved, 200
 
     should_queue, reason, required = _should_queue(resolved_question, principal)
@@ -1527,6 +1636,8 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "storage": "ck",
             "ck_question_id": row["ck_question_id"],
             "reason": reason,
+            "route_path": "review",
+            "routed_tool_id": routed_tool_id,
         }
         if notice and notice_model:
             response["review_notice_model"] = notice_model
@@ -1551,6 +1662,8 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "storage": "ck",
             "ck_question_id": row["ck_question_id"],
             "reason": "model_unavailable_or_no_answer",
+            "route_path": "review",
+            "routed_tool_id": routed_tool_id,
         }, 200
 
     return {
@@ -1559,6 +1672,8 @@ def _answer(payload: dict) -> tuple[dict, int]:
         "queued": False,
         "model": model,
         "storage": "ck_runtime",
+        "route_path": "general",
+        "routed_tool_id": routed_tool_id,
     }, 200
 
 

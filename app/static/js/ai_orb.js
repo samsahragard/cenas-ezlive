@@ -88,8 +88,65 @@
 
     var clickTarget = stack.closest("a, button");
     var clickedUntil = 0;
+    var longPressTimer = null;
+    var longPressHandled = false;
+    var longPressPointerId = null;
+
+    function clearLongPress() {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      longPressPointerId = null;
+    }
+
+    function dispatchLongPress(sourceEvent) {
+      longPressTimer = null;
+      clickedUntil = performance.now() + 1800;
+      makeBolt();
+      makeBolt();
+      var event = new CustomEvent("ck-ai-orb-longpress", {
+        bubbles: true,
+        cancelable: true,
+        detail: {
+          canvas: canvas,
+          stack: stack,
+          target: clickTarget || stack,
+          originalEvent: sourceEvent || null
+        }
+      });
+      stack.dispatchEvent(event);
+      if (event.defaultPrevented) {
+        longPressHandled = true;
+        return;
+      }
+      try {
+        if (window.sessionStorage) sessionStorage.setItem("ckAiVoiceOnLoad", "1");
+      } catch (err) {}
+    }
+
     if (clickTarget) {
-      clickTarget.addEventListener("click", function () {
+      clickTarget.addEventListener("pointerdown", function (event) {
+        if (event.button != null && event.button !== 0) return;
+        clearLongPress();
+        longPressHandled = false;
+        longPressPointerId = event.pointerId;
+        longPressTimer = setTimeout(function () {
+          dispatchLongPress(event);
+        }, 520);
+      }, { passive: true });
+      clickTarget.addEventListener("pointerup", clearLongPress, { passive: true });
+      clickTarget.addEventListener("pointercancel", clearLongPress, { passive: true });
+      clickTarget.addEventListener("pointerleave", function (event) {
+        if (longPressPointerId === event.pointerId) clearLongPress();
+      }, { passive: true });
+      clickTarget.addEventListener("click", function (event) {
+        if (longPressHandled) {
+          longPressHandled = false;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return;
+        }
         clickedUntil = performance.now() + 1800;
         makeBolt();
         makeBolt();

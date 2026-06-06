@@ -48,6 +48,11 @@
   animation-duration: 1.3s;
 }
 
+.ckai-orb.is-listening {
+  border-color: rgba(91, 202, 197, 0.95);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42), 0 0 28px rgba(91, 202, 197, 0.72);
+}
+
 @keyframes ckaiPulse {
   0% { transform: scale(0.86); opacity: 0.88; }
   70% { transform: scale(1.2); opacity: 0; }

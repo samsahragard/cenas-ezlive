@@ -35,7 +35,11 @@
   }
 
   function setStatus(node, text) {
-    if (node) node.textContent = text || "";
+    if (!node) return;
+    node.textContent = text || "";
+    if (text !== "Listening...") {
+      node.setAttribute("data-ready-status", text || "");
+    }
   }
 
   function init() {
@@ -78,6 +82,8 @@
     send.type = "submit";
     form.appendChild(input);
     form.appendChild(send);
+    var voiceRecognition = null;
+    var voiceListening = false;
 
     panel.appendChild(header);
     panel.appendChild(messages);
@@ -120,11 +126,97 @@
       button.classList.remove("is-open");
     }
 
+    function resizeInput() {
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    }
+
+    function appendTranscript(text) {
+      var clean = String(text || "").trim();
+      if (!clean) return;
+      input.value = (input.value.trim() ? input.value.trim() + " " : "") + clean;
+      resizeInput();
+      input.focus();
+    }
+
+    function setVoiceListening(on) {
+      voiceListening = !!on;
+      button.classList.toggle("is-listening", voiceListening);
+      setStatus(status, voiceListening ? "Listening..." : status.getAttribute("data-ready-status") || status.textContent);
+    }
+
+    function startVoiceInput() {
+      var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        openPanel();
+        input.placeholder = "Voice input is not supported in this browser.";
+        input.focus();
+        return false;
+      }
+      openPanel();
+      if (voiceListening && voiceRecognition) {
+        voiceRecognition.stop();
+        return true;
+      }
+      voiceRecognition = new SpeechRecognition();
+      voiceRecognition.continuous = true;
+      voiceRecognition.interimResults = false;
+      voiceRecognition.lang = "en-US";
+      voiceRecognition.onresult = function (event) {
+        var text = "";
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+          text += event.results[i][0].transcript;
+        }
+        appendTranscript(text);
+      };
+      voiceRecognition.onerror = function () { setVoiceListening(false); };
+      voiceRecognition.onend = function () { setVoiceListening(false); };
+      try {
+        voiceRecognition.start();
+        setVoiceListening(true);
+        return true;
+      } catch (err) {
+        setVoiceListening(false);
+        return false;
+      }
+    }
+
     button.addEventListener("click", function () {
       if (panel.hasAttribute("hidden")) openPanel();
       else closePanel();
     });
+    var holdTimer = null;
+    var heldForVoice = false;
+    button.addEventListener("pointerdown", function (event) {
+      if (event.button != null && event.button !== 0) return;
+      heldForVoice = false;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(function () {
+        heldForVoice = startVoiceInput();
+      }, 520);
+    }, { passive: true });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (name) {
+      button.addEventListener(name, function () {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }, { passive: true });
+    });
+    button.addEventListener("click", function (event) {
+      if (!heldForVoice) return;
+      heldForVoice = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
     close.addEventListener("click", closePanel);
+
+    input.addEventListener("input", resizeInput);
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        if (form.requestSubmit) form.requestSubmit();
+        else send.click();
+      }
+    });
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -134,6 +226,7 @@
       var previousAnswer = lastAssistantAnswer;
       lastUserQuestion = question;
       input.value = "";
+      resizeInput();
       addMessage(messages, "user", question);
       var pending = addMessage(messages, "assistant", "Thinking...");
       send.disabled = true;

@@ -55,6 +55,20 @@
     height: 62px;
     flex: 0 0 auto;
   }
+  .aiassist-orb-button {
+    width: 86px;
+    height: 62px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    filter: drop-shadow(0 5px 14px rgba(0, 0, 0, 0.55));
+  }
+  .aiassist-orb-button.is-listening {
+    filter: drop-shadow(0 0 16px rgba(91, 202, 197, 0.9));
+  }
   .aiassist-name {
     font-size: 15px;
     font-weight: 800;
@@ -224,7 +238,9 @@
   <aside class="aiassist-rail" aria-label="Assistant context">
     <div class="aiassist-profile">
       <div class="aiassist-profile-top">
-        <canvas class="aiassist-orb-small" data-ck-ai-orb data-width="86" data-height="62" aria-hidden="true"></canvas>
+        <button class="aiassist-orb-button" id="aiassist-voice-orb" type="button" aria-label="Hold for voice input" title="Hold for voice input">
+          <canvas class="aiassist-orb-small" data-ck-ai-orb data-width="86" data-height="62" aria-hidden="true"></canvas>
+        </button>
         <div>
           <div class="aiassist-name" id="aiassist-name">Cenas AI</div>
           <div class="aiassist-role" id="aiassist-role">Checking access...</div>
@@ -279,8 +295,12 @@
   var form = document.getElementById("aiassist-form");
   var input = document.getElementById("aiassist-input");
   var send = document.getElementById("aiassist-send");
+  var voiceOrb = document.getElementById("aiassist-voice-orb");
   var lastUserQuestion = "";
   var lastAssistantAnswer = "";
+  var voiceRecognition = null;
+  var voiceListening = false;
+  var originalRoleText = "";
 
   function esc(text) {
     return String(text == null ? "" : text)
@@ -303,6 +323,64 @@
     thread.appendChild(msg);
     thread.scrollTop = thread.scrollHeight;
     return msg;
+  }
+
+  function resizeInput() {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 140) + "px";
+  }
+
+  function setVoiceListening(on) {
+    voiceListening = !!on;
+    if (voiceOrb) voiceOrb.classList.toggle("is-listening", voiceListening);
+    if (voiceListening) {
+      originalRoleText = roleEl.textContent || "";
+      roleEl.textContent = "Listening...";
+    } else if (originalRoleText) {
+      roleEl.textContent = originalRoleText;
+    }
+  }
+
+  function appendTranscript(text) {
+    var clean = String(text || "").trim();
+    if (!clean) return;
+    input.value = (input.value.trim() ? input.value.trim() + " " : "") + clean;
+    resizeInput();
+    input.focus();
+  }
+
+  function startVoiceInput() {
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      input.focus();
+      input.placeholder = "Voice input is not supported in this browser.";
+      return false;
+    }
+    if (voiceListening && voiceRecognition) {
+      voiceRecognition.stop();
+      return true;
+    }
+    voiceRecognition = new SpeechRecognition();
+    voiceRecognition.continuous = true;
+    voiceRecognition.interimResults = false;
+    voiceRecognition.lang = "en-US";
+    voiceRecognition.onresult = function (event) {
+      var text = "";
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      appendTranscript(text);
+    };
+    voiceRecognition.onerror = function () { setVoiceListening(false); };
+    voiceRecognition.onend = function () { setVoiceListening(false); };
+    try {
+      voiceRecognition.start();
+      setVoiceListening(true);
+      return true;
+    } catch (err) {
+      setVoiceListening(false);
+      return false;
+    }
   }
 
   function setTools(tools) {
@@ -339,6 +417,33 @@
       toolsEl.innerHTML = '<div class="aiassist-tool is-waiting"><strong>Could not load tools</strong>Questions can still be submitted for review.</div>';
     });
 
+  input.addEventListener("input", resizeInput);
+  input.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+      else send.click();
+    }
+  });
+
+  if (voiceOrb) {
+    voiceOrb.addEventListener("click", function () {
+      input.focus();
+    });
+  }
+  document.addEventListener("ck-ai-orb-longpress", function (event) {
+    if (!input) return;
+    if (startVoiceInput()) {
+      event.preventDefault();
+    }
+  });
+  try {
+    if (window.sessionStorage && sessionStorage.getItem("ckAiVoiceOnLoad") === "1") {
+      sessionStorage.removeItem("ckAiVoiceOnLoad");
+      setTimeout(startVoiceInput, 250);
+    }
+  } catch (err) {}
+
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     var question = input.value.trim();
@@ -347,6 +452,7 @@
     var previousAnswer = lastAssistantAnswer;
     lastUserQuestion = question;
     input.value = "";
+    resizeInput();
     addMessage("user", question);
     var pending = addMessage("assistant", "Thinking...");
     send.disabled = true;

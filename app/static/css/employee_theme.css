@@ -20,7 +20,7 @@
   --ink:         #FAF6EC;   /* body text -> cream */
   --surface:     #241409;   /* card / panel surface */
   --surface-2:   #2c1810;   /* slightly raised surface */
-  --bg-base:     #1a0d08;   /* page base behind the blurred photo */
+  --bg-base:     #241610;   /* page base behind the blurred photo (unified --app-bg) */
   --bd-gold:     rgba(217,164,54,0.18);  /* gold hairline border */
   --bd-gold-2:   rgba(228,179,64,0.30);  /* stronger gold edge */
   --radius:      14px;

@@ -4,6 +4,7 @@
  */
 
 :root {
+  --app-bg: #241610;
   --accent: #e87a3e;
   --accent-soft: #f5b48e;
   --brand-red: #c42727;
@@ -29,7 +30,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  background: #0a0604;
+  background: var(--app-bg);
   position: relative;
 }
 /* Live restaurant photo backdrop — mildly blurred, mostly visible */

@@ -34,16 +34,10 @@ html,body{
 }
 /* Blurred house photo + darkening veil. Pages that want the photo set
    --emp-bg: url("...bg-tequila.jpg") on <body>; default is a flat dark. */
-body::before{
-  content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
-  background-image: var(--emp-bg, none);
-  background-size:cover; background-position:center; background-repeat:no-repeat;
-  filter: blur(6px) brightness(0.55) saturate(1.05);
-}
-body::after{
-  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-  background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
-}
+/* Flat espresso background (Sam 2026-06-06): photo backdrop + darkening veil
+   removed so employee pages are the solid --bg-base espresso, no image/fade. */
+body::before{ display:none; }
+body::after{ display:none; }
 .wrap{
   position:relative; z-index:1;
   max-width:520px; margin:0 auto; padding:20px 18px 90px;

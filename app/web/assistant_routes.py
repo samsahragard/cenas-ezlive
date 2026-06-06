@@ -38,6 +38,7 @@ from app.models import (
     Shift,
 )
 from app.web.permissions import accessible_store_slugs
+from app.services.assistant_tool_inventory import iter_partner_tool_definitions
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
 log = logging.getLogger(__name__)
@@ -67,7 +68,9 @@ _DATA_TOOL_RE = re.compile(
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
     r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|"
-    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees"
+    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees|"
+    r"tool|tools|file|files|filesystem|shell|sql|render|deploy|git|env|"
+    r"log|logs|restart|dev chat|sam chat|permission|permissions"
     r")\b",
     re.IGNORECASE,
 )
@@ -194,6 +197,15 @@ _TOOL_REGISTRY: list[dict[str, Any]] = [
         "operator_enabled": True,
     },
 ]
+
+
+_KNOWN_TOOL_IDS = {tool["tool_id"] for tool in _TOOL_REGISTRY}
+for _partner_tool in iter_partner_tool_definitions():
+    if _partner_tool["tool_id"] in _KNOWN_TOOL_IDS:
+        continue
+    _TOOL_REGISTRY.append(_partner_tool)
+    _KNOWN_TOOL_IDS.add(_partner_tool["tool_id"])
+del _partner_tool
 
 
 def _now_iso() -> str:
@@ -395,14 +407,21 @@ def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
             and allowed_session
             and allowed_permissions
         )
-        available = bool((status == "active" or operator_active) and allowed_session and allowed_permissions)
-        effective_status = "active" if operator_active else status
+        partner_catalog_active = bool(
+            _has_partner_tool_access(ctx)
+            and tool.get("partner_catalog_enabled")
+            and allowed_session
+            and allowed_permissions
+        )
+        promoted_active = operator_active or partner_catalog_active
+        available = bool((status == "active" or promoted_active) and allowed_session and allowed_permissions)
+        effective_status = "active" if promoted_active else status
         reason = None
         if not allowed_session:
             reason = "session_type_not_allowed"
         elif not allowed_permissions:
             reason = "missing_permission"
-        elif status != "active" and not operator_active:
+        elif status != "active" and not promoted_active:
             reason = "needs_sam_review"
         catalog.append({
             **tool,

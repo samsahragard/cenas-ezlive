@@ -84,7 +84,9 @@ _DATA_TOOL_RE = re.compile(
     r"schedule|shift|roster|attendance|incident|write up|"
     r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
     r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|"
-    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees"
+    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees|"
+    r"tool|tools|file|files|filesystem|shell|sql|render|deploy|git|env|"
+    r"log|logs|restart|dev chat|sam chat|permission|permissions"
     r")\b",
     re.IGNORECASE,
 )
@@ -207,6 +209,41 @@ def _tool_available(tools: list[dict], tool_id: str) -> bool:
         if isinstance(tool, dict) and tool.get("tool_id") == tool_id and tool.get("available") is True:
             return True
     return False
+
+
+def _wants_tool_discovery(question: str) -> bool:
+    text = str(question or "").casefold()
+    return bool(
+        re.search(r"\b(what|which|show|list|tell)\b", text)
+        and re.search(r"\b(tools?|capabilities|available|active)\b", text)
+    )
+
+
+def _tool_discovery_answer(principal: dict, tools: list[dict]) -> str:
+    available = [
+        tool for tool in tools
+        if isinstance(tool, dict) and tool.get("available") is True
+    ]
+    total = len(available)
+    catalog_only = sum(
+        1
+        for tool in available
+        if isinstance(tool, dict) and tool.get("implementation_status") == "catalog_only"
+    )
+    implemented = max(total - catalog_only, 0)
+    role = _role(principal)
+    sample_ids = [
+        str(tool.get("tool_id"))
+        for tool in available
+        if tool.get("tool_id")
+    ][:24]
+    sample = ", ".join(sample_ids)
+    answer = f"This {role} session has {total} active Cenas AI catalog tools."
+    if implemented or catalog_only:
+        answer += f" {implemented} are wired to approved executable paths now; {catalog_only} are partner catalog entries waiting on implementation."
+    if sample:
+        answer += f" First tools: {sample}."
+    return answer
 
 
 def _wants_order_summary(question: str) -> bool:
@@ -556,9 +593,18 @@ def _approved_tool_answer(
     tools: list[dict],
     tool_data: dict,
 ) -> dict | None:
+    resolved_question = _resolved_question(question, previous_question)
+    if _wants_tool_discovery(resolved_question):
+        return {
+            "ok": True,
+            "answer": _tool_discovery_answer(principal, tools),
+            "queued": False,
+            "storage": "tool_catalog",
+            "tool_id": "assistant.tool_discovery",
+            "generated_at": _now_iso(),
+        }
     if not _has_partner_tool_access(principal):
         return None
-    resolved_question = _resolved_question(question, previous_question)
     if _OWNER_IDENTITY_RE.search(str(question or "")):
         if principal.get("is_owner_operator"):
             identity_answer = (

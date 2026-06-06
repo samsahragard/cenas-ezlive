@@ -102,8 +102,8 @@
         var activeTools = (data.tools || []).filter(function (tool) {
           return tool.available;
         });
-        setStatus(status, role + " - " + activeTools.length + " active tool");
-        intro.textContent = "Ask me a Cenas question. Operational data questions are saved for Sam review until their tool is approved.";
+        setStatus(status, role + " - " + activeTools.length + " active " + (activeTools.length === 1 ? "tool" : "tools"));
+        intro.textContent = "Ask me a Cenas question. Partner catalog tools are available by role; unimplemented tools are saved for Sam review.";
       })
       .catch(function () {
         setStatus(status, "Review-gated");

@@ -580,6 +580,38 @@ def test_runtime_partner_identity_does_not_claim_owner_operator(monkeypatch):
     assert "owner-operator" not in data["answer"]
 
 
+def test_runtime_tool_discovery_reports_partner_catalog(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_anthropic_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("tool discovery must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = False
+    tools = [
+        _available_tool("orders.store_summary"),
+        {
+            "tool_id": "read_file",
+            "label": "Read file",
+            "available": True,
+            "implementation_status": "catalog_only",
+        },
+    ]
+
+    data = runtime._approved_tool_answer("what tools are available?", "", principal, tools, {})
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["storage"] == "tool_catalog"
+    assert data["tool_id"] == "assistant.tool_discovery"
+    assert "2 active Cenas AI catalog tools" in data["answer"]
+    assert "1 are wired" in data["answer"]
+    assert "1 are partner catalog entries" in data["answer"]
+
+
 def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

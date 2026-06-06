@@ -17,6 +17,7 @@ from app.models import (
     Schedule,
     Shift,
 )
+from app.services.assistant_tool_inventory import PARTNER_TOOL_IDS
 from app.web import assistant_routes as ar
 
 
@@ -106,6 +107,36 @@ def test_tool_catalog_activates_approved_tools_for_partner_level():
     assert tools["toast.sales_summary"]["available"] is True
     assert tools["toast.table_activity"]["available"] is True
     assert tools["employee.my_profile"]["available"] is False
+    assert tools["employee.my_profile.read"]["available"] is True
+    assert tools["read_file"]["available"] is True
+    assert tools["render_env_set"]["available"] is True
+    assert tools["sql_query"]["available"] is True
+    assert tools["finance.pnl_summary"]["available"] is True
+    assert tools["orders.assign_driver"]["available"] is True
+    assert tools["dev.assistant_tool_catalog_snapshot"]["available"] is True
+    assert tools["read_file"]["implementation_status"] == "catalog_only"
+    assert sum(1 for tool in tools.values() if tool["available"]) >= len(PARTNER_TOOL_IDS)
+
+
+def test_partner_catalog_only_tools_do_not_activate_for_staff():
+    ctx = {
+        "kind": "staff",
+        "role": "gm",
+        "permissions": [
+            "ai.ask_claude",
+            "ai.ask_claude_personal",
+            "orders.view",
+            "drivers.view_roster",
+            "labor.view_store_summary",
+        ],
+    }
+
+    tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
+
+    assert tools["read_file"]["available"] is False
+    assert tools["read_file"]["deny_reason"] == "session_type_not_allowed"
+    assert tools["finance.pnl_summary"]["available"] is False
+    assert tools["dev.assistant_tool_catalog_snapshot"]["available"] is False
 
 
 def test_operator_order_summary_tool_payload_is_sanitized(db_session, monkeypatch):

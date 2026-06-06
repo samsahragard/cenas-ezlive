@@ -366,8 +366,11 @@
     try{
       await fetch(LOGOUT_URL, { method:'POST', credentials:'same-origin' });
     } catch(_){}
-    // Clear the remembered phone too, then back to login.
-    window.location.replace(LOGIN_URL + '?_clear=1');
+    // Clear the remembered phone too, then back to the numeric keypad
+    // (same destination as the driver logout, driver_routes.py:701 ->
+    // /keypad-login?_clear=1; the keypad template reads ?_clear=1 to wipe
+    // the persisted phone). NOT the typed /employee/login form.
+    window.location.replace('/keypad-login?_clear=1');
   });
 
   // --- Phase 4 (Sam #2983): Performance tab. Reads only the employee performance

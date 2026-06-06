@@ -47,6 +47,7 @@ from app.web import employee_alarm_prefs  # noqa: F401  B6: attaches GET/POST /e
 from app.web import employee_profile_page  # noqa: F401  B6: attaches GET /employee/profile (alarm-preferences UI) to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import employee_my_profile_page  # noqa: F401  Staff profile hub: attaches GET /employee/my-profile to employee_auth blueprint
 from app.web.corporate_profile_lab import profile_lab_bp
+from app.web.employee_messages import employee_messages_bp  # Employee-to-employee messaging blueprint (standalone; registered below)
 from app.web import employee_time_off  # noqa: F401  B7: attaches the employee time-off endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
 from app.web import employee_time_off_page  # noqa: F401  B7: attaches GET /employee/time-off (time-off request UI) to the employee_auth blueprint (ck; must import before ezempauth.install)
 from app.web import employee_availability  # noqa: F401  B8: attaches the employee availability endpoints to the employee_auth blueprint (ckai; must import before ezempauth.install)
@@ -162,6 +163,7 @@ def create_app():
     app.register_blueprint(assistant_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(profile_lab_bp)
+    app.register_blueprint(employee_messages_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(access_req_bp)
     app.register_blueprint(driver_system_bp)

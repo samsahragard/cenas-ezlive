@@ -21,7 +21,7 @@
      Time Off           -> /employee/time-off           (built)
      Alarm              -> /employee/profile            (built; the
                            alarm-preferences page)
-     Message            -> #  (not built yet -> "soon")
+     Message            -> /employee/messages            (built)
      News               -> #  (not built yet -> "soon")
 
    Active tab: the including page passes {{ active_nav }} (one of the keys
@@ -115,6 +115,7 @@
       ('my_schedule',       '/employee/my-schedule',       'My Schedule'),
       ('time_off',          '/employee/time-off',          'Time Off'),
       ('notifications',     '/employee/profile',           'Alarm'),
+      ('messages',          '/employee/messages',          'Message'),
     ] %}
     <a href="{{ href }}"
        class="ck-enav-tab{% if _en_active == key or (not _en_active and _en_path == href) %} active{% endif %}"{% if _en_active == key or (not _en_active and _en_path == href) %} aria-current="page"{% endif %}>
@@ -126,7 +127,6 @@
     {# Not-yet-built surfaces -> href="#" with subtle "soon" styling so a
        tap never breaks (no real page exists for these yet). #}
     {% for key, label in [
-      ('messages',      'Message'),
       ('announcements', 'News'),
     ] %}
     <a href="#"

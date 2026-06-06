@@ -569,6 +569,35 @@ def performance_center():
                     out.append(s)
             return out
 
+        # LIVE 'on shift now' (Sam live-today-hours): a completed Toast entry carries
+        # total_hours = clock_out - clock_in, so an OPEN entry (no clock_out) computes
+        # to 0 and would show 0.00h while the person is mid-shift. For the row in this
+        # period that is OPEN (clock_in present, clock_out empty, cached total_hours ~0
+        # so we never double-count a finished row that merely lost its clock_out), add
+        # the elapsed clock_in -> now. Returns (extra_hours, business_date, clock_in_iso)
+        # for the FIRST such open row; (0.0, None, None) if none. Defensive: an
+        # unparseable clock_in is ignored (never a 500), elapsed is clamped >= 0 and
+        # capped at 24h so a stale/garbage timestamp can't inflate the total. This
+        # surfaces live hours ONLY once CK actually pushes the open row into
+        # PerfShiftCache; CK ingestion of the open entry is out of scope here.
+        def _live_open_hours(r, now=None):
+            now = now or datetime.utcnow()
+            for s in _shifts_in(r):
+                if getattr(s, "clock_out", None):
+                    continue  # completed -> already in total_hours
+                if float(getattr(s, "total_hours", 0) or 0) > 0.05:
+                    continue  # has cached hours -> trust the cache, don't double-add
+                ci_iso = getattr(s, "clock_in", None)
+                ci = _parse_dt(ci_iso)
+                if ci is None:
+                    continue
+                elapsed_h = (now - ci).total_seconds() / 3600.0
+                if elapsed_h <= 0:
+                    continue
+                elapsed_h = min(elapsed_h, 24.0)
+                return round(elapsed_h, 2), s.business_date, ci_iso
+            return 0.0, None, None
+
         def _parse_dt(s):
             """Best-effort ISO -> naive datetime; None on anything unparseable.
             Defensive by contract: a bad cached timestamp must NEVER 500 the route
@@ -749,9 +778,17 @@ def performance_center():
             if r is None:
                 periods[period] = {"money": {}, "rankings": {},
                                    "attendance": {"late": 0, "missed": 0, "rows": []},
+                                   "live": {"on_shift": False, "since": None},
                                    "daily": []}
                 continue
             hours = round(float(r.total_hours or 0), 2)
+            # TODAY only: if an open (in-progress) shift row is present, add its
+            # elapsed clock_in -> now so the page reflects the live shift instead of
+            # 0.00h. live_bd / live_since drive the per-day row + 'on shift now' badge.
+            live_extra, live_bd, live_since = (
+                _live_open_hours(r) if period == "today" else (0.0, None, None))
+            if live_extra > 0:
+                hours = round(hours + live_extra, 2)
             base = round(float(r.base_pay or 0), 2)
             tips = round(float(r.tips or 0), 2) if is_tipped else 0.0
             total = round(base + tips, 2)
@@ -805,6 +842,10 @@ def performance_center():
             for bd in order:
                 ss = byd[bd]
                 dh = round(sum(float(x.total_hours or 0) for x in ss), 2)
+                # mirror the period-level live add onto the open shift's own day so the
+                # daily breakdown still sums to the (bumped) total shown above.
+                if live_extra > 0 and live_bd is not None and bd == live_bd:
+                    dh = round(dh + live_extra, 2)
                 dbase = round(sum(float(x.base_pay or 0) for x in ss), 2)
                 dtips = round(sum(float(x.tips or 0) for x in ss), 2) if is_tipped else 0.0
                 drow = {"date": bd, "hours": dh, "base_pay": dbase,
@@ -826,6 +867,10 @@ def performance_center():
                                # attendance hybrid: late-vs-published-schedule join,
                                # with a needs_review fallback (no fabricated lateness).
                                "attendance": _attendance_for(r),
+                               # live 'on shift now' marker (today only); since = own
+                               # clock_in (already employee-visible via daily punches).
+                               "live": {"on_shift": bool(live_extra > 0),
+                                        "since": live_since if live_extra > 0 else None},
                                "daily": daily}
 
         return jsonify({"ok": True, "linked": True,

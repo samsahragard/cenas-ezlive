@@ -1,0 +1,576 @@
+{# Employee-to-employee messaging (the MESSAGE portal surface).
+   ck-style standalone page (does NOT extend base_dashboard) - matches the
+   employee portal: dark bg, gold accents, shared partials/_employee_nav.html.
+
+   Page route: GET /employee/messages (employee_messages.py). Data endpoints
+   (all session['employee_id']-gated, JSON 401 when logged out):
+     GET  {{ directoryUrl }}                 -> {ok, employees:[{id,name}]}
+     GET  {{ conversationsUrl }}             -> {ok, conversations:[{peer_id,peer_name,last_body,last_at,last_mine,unread}]}
+     GET  {{ threadBase }}/<id>              -> {ok, peer:{id,name,active}, messages:[{id,from_employee_id,to_employee_id,body,created_at,read_at,mine}]}
+     POST {{ sendUrl }} {to_employee_id,body}-> 201 {ok, message:{...}}
+     POST {{ threadBase }}/<id>/read         -> {ok, marked:N}
+   Scope: peer-to-peer among ACTIVE employees.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Messages &mdash; Cenas Kitchen</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
+<style>
+  :root{
+    --blue:        #E4B340;
+    --blue-bright: #FFD970;
+    --blue-deep:   #FFD970;
+    --red:         #E4B340;
+    --red-bright:  #FFD970;
+    --red-deep:    #d4af37;
+    --cream:       #FAF6EC;
+    --cream-soft:  #ece3d0;
+    --ink:         #FAF6EC;
+    --ok:          #2f8f57;
+    --ok-deep:     #1f6b3e;
+    --amber:       #e7b54a;
+    --amber-soft:  #e7b54a;
+    --grey:        #9a8f7a;
+    --surface:     #241409;
+    --bd-gold:     rgba(217,164,54,0.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    width:100%; min-height:100vh; background:#1a0d08;
+    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+    position:relative; color: var(--ink);
+  }
+  body::before{
+    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
+    background-image: var(--emp-bg, none);
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    filter: blur(6px) brightness(0.55) saturate(1.05);
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
+  }
+  .wrap{
+    position:relative; z-index:1;
+    max-width:520px; margin:0 auto; padding:20px 18px 90px;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:18px;
+    background:#241409; border:0.5px solid var(--bd-gold);
+    border-radius:14px; padding:12px 14px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.35);
+  }
+  .topbar img{ width:auto; height:34px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+  .backlink{
+    display:inline-flex; align-items:center; gap:5px;
+    background: rgba(244,231,208,0.12); color: var(--cream);
+    border:1px solid rgba(244,231,208,0.30); border-radius:10px; padding:8px 13px;
+    font-size:13px; font-weight:600; letter-spacing:0.4px; text-decoration:none;
+    transition: background 120ms ease; cursor:pointer;
+  }
+  .backlink:hover{ background: rgba(244,231,208,0.22); }
+  .backlink .chev{ font-size:16px; line-height:1; margin-top:-1px; }
+  .pagehead{
+    background:
+      linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
+    border:0.5px solid var(--bd-gold);
+    border-radius:16px; padding:18px 20px; margin-bottom:18px;
+    box-shadow:
+      inset 0 0 0 1px rgba(228,179,64,0.10),
+      0 0 26px rgba(255,217,112,0.10),
+      0 10px 22px rgba(0,0,0,0.5);
+  }
+  .pagehead .eyebrow{
+    font-size:13px; font-weight:700; letter-spacing:3px;
+    text-transform:uppercase; color: var(--red);
+  }
+  .pagehead .name{
+    font-size:24px; font-weight:800; color: var(--blue-deep); line-height:1.15; margin-top:2px;
+  }
+  .pagehead .meta{ font-size:13px; color: rgba(250,246,236,0.72); margin-top:7px; font-weight:600; }
+  .seclabel{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color: rgba(244,231,208,0.78); margin:18px 2px 11px;
+  }
+  .seclabel:first-of-type{ margin-top:2px; }
+  .newbtn{
+    background: var(--red); color:#fff; border:none; border-radius:10px;
+    padding:7px 13px; font-size:11px; font-weight:800; letter-spacing:0.5px;
+    text-transform:uppercase; cursor:pointer; box-shadow:0 2px 0 var(--red-deep);
+  }
+  .newbtn:hover{ filter:brightness(1.06); }
+
+  /* Conversation list */
+  .convo{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    background: var(--surface); border:0.5px solid var(--bd-gold);
+    border-radius:13px; padding:13px 15px; margin-bottom:11px; cursor:pointer;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.4); color:inherit;
+    transition: border-color 120ms ease;
+  }
+  .convo:hover{ border-color: rgba(217,164,54,0.4); }
+  .convo .avatar{
+    flex:0 0 auto; width:42px; height:42px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(135deg, rgba(228,179,64,0.30), rgba(212,175,55,0.12));
+    border:1px solid rgba(217,164,54,0.4);
+    font-size:16px; font-weight:800; color: var(--blue-deep);
+  }
+  .convo .cbody{ flex:1 1 auto; min-width:0; }
+  .convo .cname{ font-size:15px; font-weight:800; color: var(--blue-deep); }
+  .convo .clast{
+    font-size:13px; color: rgba(250,246,236,0.66); margin-top:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .convo .cmeta{ flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
+  .convo .ctime{ font-size:11px; color: rgba(250,246,236,0.5); }
+  .badge-unread{
+    min-width:20px; height:20px; padding:0 6px; border-radius:999px;
+    background: var(--red); color:#fff; font-size:11px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  /* Thread */
+  .thread{ display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .bubble{
+    max-width:80%; padding:9px 13px; border-radius:14px; font-size:14px; line-height:1.4;
+    word-wrap:break-word; white-space:pre-wrap;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+  }
+  .bubble .btime{ display:block; font-size:10px; opacity:0.6; margin-top:4px; }
+  .bubble.them{
+    align-self:flex-start; background: var(--surface);
+    border:0.5px solid var(--bd-gold); color: var(--cream);
+    border-bottom-left-radius:5px;
+  }
+  .bubble.me{
+    align-self:flex-end;
+    background: linear-gradient(135deg, rgba(228,179,64,0.95), rgba(212,175,55,0.92));
+    color:#2a1a08; font-weight:600; border-bottom-right-radius:5px;
+  }
+  .bubble.me .btime{ opacity:0.55; }
+
+  /* Compose */
+  .compose{
+    position:sticky; bottom:74px; z-index:5;
+    display:flex; gap:9px; align-items:flex-end;
+    background:#241409; border:0.5px solid var(--bd-gold); border-radius:14px;
+    padding:10px 11px; box-shadow: 0 6px 14px rgba(0,0,0,0.45); margin-top:4px;
+  }
+  .compose textarea{
+    flex:1 1 auto; resize:none; min-height:40px; max-height:120px;
+    border:1.5px solid rgba(217,164,54,0.30); border-radius:10px;
+    padding:9px 11px; font-family:inherit; font-size:14px; color: var(--ink);
+    background: rgba(0,0,0,0.3);
+  }
+  .compose textarea:focus{ outline:none; border-color: var(--red); }
+  .compose .send{
+    flex:0 0 auto; border:none; border-radius:11px; padding:11px 16px;
+    background: var(--red); color:#fff; font-size:14px; font-weight:800;
+    cursor:pointer; box-shadow:0 2px 0 var(--red-deep);
+  }
+  .compose .send:hover{ filter:brightness(1.06); }
+  .compose .send:disabled{ opacity:0.6; cursor:default; }
+
+  /* Recipient picker (New message) */
+  .picker{ }
+  .picker .search{
+    width:100%; border:1.5px solid rgba(217,164,54,0.30); border-radius:10px;
+    padding:10px 11px; font-family:inherit; font-size:14px; color: var(--ink);
+    background: rgba(0,0,0,0.3); margin-bottom:11px;
+  }
+  .picker .search:focus{ outline:none; border-color: var(--red); }
+  .pick-row{
+    display:flex; align-items:center; gap:11px; width:100%; text-align:left;
+    background: var(--surface); border:0.5px solid var(--bd-gold);
+    border-radius:12px; padding:11px 14px; margin-bottom:9px; cursor:pointer;
+    color:inherit; transition: border-color 120ms ease;
+  }
+  .pick-row:hover{ border-color: rgba(217,164,54,0.4); }
+  .pick-row .avatar{
+    flex:0 0 auto; width:36px; height:36px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(135deg, rgba(228,179,64,0.30), rgba(212,175,55,0.12));
+    border:1px solid rgba(217,164,54,0.4); font-size:14px; font-weight:800; color: var(--blue-deep);
+  }
+  .pick-row .pname{ font-size:14.5px; font-weight:700; color: var(--cream); }
+
+  /* States */
+  .statecard{
+    background: var(--surface); border:0.5px solid var(--bd-gold);
+    border-radius:14px; padding:24px 22px; text-align:center;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.4); margin-top:2px;
+  }
+  .statecard[hidden]{ display:none; }
+  .statecard .s-title{ font-size:16px; font-weight:800; color: var(--blue-deep); }
+  .statecard .s-body{ font-size:13.5px; color: rgba(250,246,236,0.72); margin-top:8px; line-height:1.5; }
+  .statecard .s-cta{
+    display:inline-block; margin-top:16px; background: var(--red); color:#fff;
+    border-radius:11px; padding:11px 22px; font-size:14px; font-weight:800;
+    text-decoration:none; box-shadow: 0 2px 0 var(--red-deep);
+  }
+  .loading-dots{ font-size:14px; font-weight:700; letter-spacing:1px; color: rgba(244,231,208,0.8); text-align:center; padding:26px 0; }
+  [hidden]{ display:none !important; }
+
+  .toast{
+    position:fixed; left:50%; bottom:84px; transform:translateX(-50%) translateY(20px);
+    z-index:50; max-width:440px; width:calc(100% - 36px);
+    background: #2a2419; color: var(--cream);
+    border:1px solid rgba(217,164,54,0.30); border-radius:12px; padding:12px 16px;
+    font-size:13.5px; font-weight:600; text-align:center;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.55); opacity:0; pointer-events:none;
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err{ background: var(--red-deep); border-color: rgba(244,231,208,0.30); }
+  .footnote{
+    margin-top:auto; padding-top:24px; text-align:center;
+    font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
+  }
+</style>
+</head>
+<body style="--emp-bg:url('{{ url_for('static', filename='brand/bg-tequila.jpg') }}')">
+<div class="wrap">
+
+  <div class="topbar">
+    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
+    <a class="backlink" id="msg-back" href="{{ dashboard_url|default('/employee/dashboard') }}"><span class="chev">&lsaquo;</span> <span id="msg-back-lbl">Dashboard</span></a>
+  </div>
+
+  <div class="pagehead">
+    <div class="eyebrow">Messages</div>
+    <div class="name" id="msg-head-name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'Team chat')) }}</div>
+    <div class="meta" id="msg-head-meta">Message anyone on the team</div>
+  </div>
+
+  {# ---- LIST VIEW ---- #}
+  <div id="view-list">
+    <div class="seclabel">Conversations <button class="newbtn" id="btn-new" type="button">+ New</button></div>
+    <div class="loading-dots" id="list-loading">Loading your messages&hellip;</div>
+    <div class="statecard" id="list-empty" hidden>
+      <div class="s-title">No messages yet</div>
+      <div class="s-body">Tap &ldquo;+ New&rdquo; to start a conversation with a teammate.</div>
+    </div>
+    <div id="convo-list"></div>
+  </div>
+
+  {# ---- PICKER VIEW (New message) ---- #}
+  <div id="view-picker" hidden>
+    <div class="seclabel">New message</div>
+    <div class="picker">
+      <input class="search" id="pick-search" type="text" placeholder="Search teammates&hellip;" autocomplete="off" />
+      <div class="loading-dots" id="pick-loading">Loading the team&hellip;</div>
+      <div id="pick-list"></div>
+    </div>
+  </div>
+
+  {# ---- THREAD VIEW ---- #}
+  <div id="view-thread" hidden>
+    <div class="loading-dots" id="thread-loading">Loading conversation&hellip;</div>
+    <div class="thread" id="thread"></div>
+    <div class="compose">
+      <textarea id="compose-body" maxlength="2000" rows="1" placeholder="Write a message&hellip;"></textarea>
+      <button class="send" id="compose-send" type="button">Send</button>
+    </div>
+  </div>
+
+  {# ---- shared access state ---- #}
+  <div class="statecard" id="msg-access" hidden>
+    <div class="s-title">Please sign in again</div>
+    <div class="s-body">Your session has expired. Sign back in to see your messages.</div>
+    <a class="s-cta" href="{{ login_url|default('/employee/login') }}">Go to login</a>
+  </div>
+
+  <div class="footnote">Cenas Kitchen &middot; messages</div>
+</div>
+
+{% set active_nav = 'messages' %}{% include 'partials/_employee_nav.html' %}
+
+<div class="toast" id="msg-toast"></div>
+
+<script type="application/json" id="msg-config">{{ config_json | safe }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("msg-config").textContent);
+
+  var elBack    = document.getElementById("msg-back");
+  var elBackLbl = document.getElementById("msg-back-lbl");
+  var elHeadName= document.getElementById("msg-head-name");
+  var elHeadMeta= document.getElementById("msg-head-meta");
+  var elAccess  = document.getElementById("msg-access");
+  var elToast   = document.getElementById("msg-toast");
+
+  var vList   = document.getElementById("view-list");
+  var vPicker = document.getElementById("view-picker");
+  var vThread = document.getElementById("view-thread");
+
+  var listLoading = document.getElementById("list-loading");
+  var listEmpty   = document.getElementById("list-empty");
+  var convoList   = document.getElementById("convo-list");
+  var btnNew      = document.getElementById("btn-new");
+
+  var pickSearch  = document.getElementById("pick-search");
+  var pickLoading = document.getElementById("pick-loading");
+  var pickList    = document.getElementById("pick-list");
+
+  var threadLoading = document.getElementById("thread-loading");
+  var threadEl      = document.getElementById("thread");
+  var composeBody   = document.getElementById("compose-body");
+  var composeSend   = document.getElementById("compose-send");
+
+  var DASHBOARD = CFG.dashboardUrl || "/employee/dashboard";
+  var pollTimer = null;
+  var openPeer = null;       // {id, name}
+  var directoryCache = null; // [{id,name}]
+  var busy = false;
+  var lastCount = 0;
+
+  // ---- helpers --------------------------------------------------------------
+  function show(el){ el.hidden = false; }
+  function hide(el){ el.hidden = true; }
+  function esc(s){
+    return String(s == null ? "" : s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function initials(name){
+    var p = String(name || "").trim().split(/\s+/);
+    if(!p[0]) return "?";
+    return ((p[0][0] || "") + (p.length > 1 ? (p[p.length-1][0] || "") : "")).toUpperCase();
+  }
+  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtTime(iso){
+    if(!iso) return "";
+    var d = new Date(iso); if(isNaN(d)) return "";
+    var now = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    var ap = h >= 12 ? "PM" : "AM"; h = h % 12; if(h === 0) h = 12;
+    var hm = h + ":" + (m < 10 ? "0" + m : m) + " " + ap;
+    if(d.toDateString() === now.toDateString()) return hm;
+    return MON[d.getMonth()] + " " + d.getDate() + ", " + hm;
+  }
+
+  var toastTimer = null;
+  function toast(msg, isErr){
+    elToast.textContent = msg;
+    elToast.classList.toggle("err", !!isErr);
+    elToast.classList.add("show");
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ elToast.classList.remove("show"); }, 3400);
+  }
+  function jsonHeaders(){ return { "Content-Type": "application/json", "Accept": "application/json" }; }
+
+  function parseJsonOrThrow(r){
+    var ct = r.headers.get("content-type") || "";
+    if(ct.indexOf("application/json") === -1){
+      var e1 = new Error("non-json"); e1.status = (r.status === 200 ? 401 : r.status); throw e1;
+    }
+    return r.json().then(function(j){
+      if(!r.ok || (j && j.ok === false)){
+        var e2 = new Error("bad-response"); e2.status = r.status;
+        e2.error = (j && j.error) ? j.error : null; throw e2;
+      }
+      return j;
+    });
+  }
+  function showAccess(){ stopPoll(); hide(vList); hide(vPicker); hide(vThread); show(elAccess); }
+
+  function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
+
+  // ---- view switching -------------------------------------------------------
+  function gotoList(){
+    stopPoll(); openPeer = null;
+    hide(vPicker); hide(vThread); show(vList);
+    elHeadName.textContent = "Team chat";
+    elHeadMeta.textContent = "Message anyone on the team";
+    elBackLbl.textContent = "Dashboard";
+    loadConversations();
+  }
+  function gotoPicker(){
+    stopPoll(); openPeer = null;
+    hide(vList); hide(vThread); show(vPicker);
+    elHeadName.textContent = "New message";
+    elHeadMeta.textContent = "Pick a teammate to message";
+    elBackLbl.textContent = "Messages";
+    pickSearch.value = "";
+    loadDirectory();
+  }
+  function gotoThread(peer){
+    openPeer = peer;
+    hide(vList); hide(vPicker); show(vThread);
+    elHeadName.textContent = peer.name || "Conversation";
+    elHeadMeta.textContent = "Direct message";
+    elBackLbl.textContent = "Messages";
+    threadEl.innerHTML = ""; lastCount = 0;
+    show(threadLoading);
+    loadThread(true);
+    stopPoll();
+    pollTimer = setInterval(function(){ loadThread(false); }, CFG.pollMs || 10000);
+  }
+
+  // Back: thread/picker -> list; list -> dashboard.
+  elBack.addEventListener("click", function(ev){
+    if(!vList.hidden){ return; } // real link to dashboard
+    ev.preventDefault();
+    gotoList();
+  });
+
+  // ---- conversations list ---------------------------------------------------
+  function convoHtml(c){
+    var unread = (+c.unread) || 0;
+    var preview = (c.last_mine ? "You: " : "") + (c.last_body || "");
+    return '' +
+      '<button class="convo" type="button" data-peer="' + (+c.peer_id) + '" data-name="' + esc(c.peer_name) + '">' +
+        '<span class="avatar">' + esc(initials(c.peer_name)) + '</span>' +
+        '<span class="cbody">' +
+          '<span class="cname">' + esc(c.peer_name) + '</span>' +
+          '<span class="clast">' + esc(preview) + '</span>' +
+        '</span>' +
+        '<span class="cmeta">' +
+          '<span class="ctime">' + esc(fmtTime(c.last_at)) + '</span>' +
+          (unread ? '<span class="badge-unread">' + unread + '</span>' : '') +
+        '</span>' +
+      '</button>';
+  }
+  function loadConversations(){
+    show(listLoading); hide(listEmpty);
+    fetch(CFG.conversationsUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){
+        hide(listLoading); hide(elAccess);
+        var rows = (j && j.conversations) || [];
+        if(!rows.length){ convoList.innerHTML = ""; show(listEmpty); return; }
+        hide(listEmpty);
+        convoList.innerHTML = rows.map(convoHtml).join("");
+      })
+      .catch(function(e){
+        if(e && e.status === 401){ showAccess(); return; }
+        hide(listLoading); toast("Could not load messages. Try again.", true);
+      });
+  }
+  convoList.addEventListener("click", function(ev){
+    var b = ev.target.closest(".convo"); if(!b) return;
+    gotoThread({ id: +b.getAttribute("data-peer"), name: b.getAttribute("data-name") });
+  });
+  btnNew.addEventListener("click", gotoPicker);
+
+  // ---- recipient picker -----------------------------------------------------
+  function renderPicker(){
+    var q = (pickSearch.value || "").trim().toLowerCase();
+    var rows = (directoryCache || []).filter(function(p){
+      return !q || (p.name || "").toLowerCase().indexOf(q) !== -1;
+    });
+    if(!rows.length){ pickList.innerHTML = '<div class="statecard"><div class="s-body">No teammates match.</div></div>'; return; }
+    pickList.innerHTML = rows.map(function(p){
+      return '<button class="pick-row" type="button" data-peer="' + (+p.id) + '" data-name="' + esc(p.name) + '">' +
+               '<span class="avatar">' + esc(initials(p.name)) + '</span>' +
+               '<span class="pname">' + esc(p.name) + '</span>' +
+             '</button>';
+    }).join("");
+  }
+  function loadDirectory(){
+    show(pickLoading); pickList.innerHTML = "";
+    fetch(CFG.directoryUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){
+        hide(pickLoading);
+        directoryCache = (j && j.employees) || [];
+        renderPicker();
+      })
+      .catch(function(e){
+        if(e && e.status === 401){ showAccess(); return; }
+        hide(pickLoading); toast("Could not load the team. Try again.", true);
+      });
+  }
+  pickSearch.addEventListener("input", renderPicker);
+  pickList.addEventListener("click", function(ev){
+    var b = ev.target.closest(".pick-row"); if(!b) return;
+    gotoThread({ id: +b.getAttribute("data-peer"), name: b.getAttribute("data-name") });
+  });
+
+  // ---- thread ---------------------------------------------------------------
+  function bubbleHtml(m){
+    return '<div class="bubble ' + (m.mine ? "me" : "them") + '">' +
+             esc(m.body) +
+             '<span class="btime">' + esc(fmtTime(m.created_at)) + '</span>' +
+           '</div>';
+  }
+  function loadThread(initial){
+    if(!openPeer) return;
+    fetch(CFG.threadBase + "/" + openPeer.id, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(parseJsonOrThrow)
+      .then(function(j){
+        hide(threadLoading); hide(elAccess);
+        if(j.peer && j.peer.name){ openPeer.name = j.peer.name; elHeadName.textContent = j.peer.name; }
+        var msgs = (j && j.messages) || [];
+        var atBottom = (threadEl.scrollHeight - threadEl.scrollTop - threadEl.clientHeight) < 60;
+        // Only repaint when something changed (cheap poll).
+        if(initial || msgs.length !== lastCount){
+          threadEl.innerHTML = msgs.map(bubbleHtml).join("");
+          lastCount = msgs.length;
+          if(initial || atBottom){ window.scrollTo(0, document.body.scrollHeight); }
+        }
+        markRead();
+      })
+      .catch(function(e){
+        if(e && e.status === 401){ showAccess(); return; }
+        hide(threadLoading);
+        if(initial){ toast("Could not load the conversation.", true); }
+      });
+  }
+  function markRead(){
+    if(!openPeer) return;
+    fetch(CFG.threadBase + "/" + openPeer.id + "/read", {
+      method: "POST", headers: { "Accept": "application/json" }, credentials: "same-origin"
+    }).then(function(){}).catch(function(){});
+  }
+  function sendMessage(){
+    if(busy || !openPeer) return;
+    var body = (composeBody.value || "").trim();
+    if(!body){ return; }
+    busy = true; composeSend.disabled = true;
+    fetch(CFG.sendUrl, {
+      method: "POST", headers: jsonHeaders(), credentials: "same-origin",
+      body: JSON.stringify({ to_employee_id: openPeer.id, body: body })
+    })
+      .then(parseJsonOrThrow)
+      .then(function(j){
+        busy = false; composeSend.disabled = false;
+        composeBody.value = ""; composeBody.style.height = "auto";
+        if(j && j.message){
+          threadEl.insertAdjacentHTML("beforeend", bubbleHtml(j.message));
+          lastCount += 1;
+          window.scrollTo(0, document.body.scrollHeight);
+        } else {
+          loadThread(true);
+        }
+      })
+      .catch(function(err){
+        busy = false; composeSend.disabled = false;
+        if(err && err.status === 401){ showAccess(); return; }
+        toast((err && err.error) ? err.error : "Could not send. Try again.", true);
+      });
+  }
+  composeSend.addEventListener("click", sendMessage);
+  composeBody.addEventListener("keydown", function(ev){
+    if(ev.key === "Enter" && !ev.shiftKey){ ev.preventDefault(); sendMessage(); }
+  });
+  composeBody.addEventListener("input", function(){
+    composeBody.style.height = "auto";
+    composeBody.style.height = Math.min(composeBody.scrollHeight, 120) + "px";
+  });
+
+  // ---- boot -----------------------------------------------------------------
+  gotoList();
+  window.addEventListener("beforeunload", stopPoll);
+})();
+</script>
+</body>
+</html>

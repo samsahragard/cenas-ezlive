@@ -68,6 +68,9 @@
   .peer-head .peer-name,.peer-head .peer-rank,.peer-head .peer-val{color:var(--dim);}
   .state{margin-top:14px;padding:18px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);color:var(--muted);}
   .note{color:var(--muted);font-size:13px;line-height:1.5;}
+  .live-badge{display:none;margin-top:10px;padding:8px 12px;border:1px solid rgba(93,217,139,.45);border-radius:9px;background:rgba(93,217,139,.10);color:var(--green);font-size:12.5px;font-weight:800;}
+  .live-badge.on{display:inline-block;}
+  .live-badge .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:7px;vertical-align:middle;box-shadow:0 0 0 3px rgba(93,217,139,.18);}
   .hidden{display:none!important;}
   @media(max-width:760px){
     .shell{padding:12px 12px 100px;}
@@ -105,6 +108,7 @@
         <p id="explainer"></p>
       </div>
       <div class="big-value" id="big-value">-</div>
+      <div class="live-badge" id="live-badge"><span class="dot"></span><span id="live-text">On shift now</span></div>
     </div>
 
     <nav class="detail-tabs" aria-label="Employee profile sections">
@@ -289,6 +293,14 @@
       $('big-value').textContent = pctile == null ? '-' : `Top ${pctile}%`;
     } else {
       $('big-value').textContent = cfg.rank ? (value && value.rank ? `#${value.rank}` : '-') : metricValue(m,cfg);
+    }
+
+    // Live 'on shift now' badge: today period + an open (in-progress) shift only.
+    const live = (state.period === 'today') ? (p.live || {}) : {};
+    const onShift = !!live.on_shift;
+    $('live-badge').classList.toggle('on', onShift);
+    if(onShift){
+      $('live-text').textContent = live.since ? ('On shift now Â· since ' + hhmm(live.since)) : 'On shift now';
     }
 
     let cards;

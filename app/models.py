@@ -3130,6 +3130,38 @@ class Employee(Base):
     )
 
 
+class Message(Base):
+    """A one-to-one in-app message between two employees (the /employee/messages
+    portal surface). Peer-to-peer: any ACTIVE employee may message any other
+    ACTIVE employee. A conversation/thread is the set of rows between a given
+    (from, to) pair in either direction; read_at NULL = unread by the recipient.
+
+    NEW table -> Base.metadata.create_all(engine) at boot creates it on both a
+    fresh and a populated DB (create_all only skips tables that already exist);
+    no ALTER/migration needed (same as EmployeeSetupToken).
+    """
+
+    __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_pair", "from_employee_id", "to_employee_id", "id"),
+        Index("ix_messages_inbox", "to_employee_id", "read_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    to_employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    # NULL until the recipient opens the thread (mark-thread-read).
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class EmployeeSetupToken(Base):
     """Email-pivot (2026-05-30): a one-time, expiring email-setup link for an
     admin-added employee. The admin-add emails /employee/setup/<token>; the

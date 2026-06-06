@@ -187,9 +187,12 @@
       gap: 18px;
       /* Ribbon shortened (Sam restyle 2026-06-06): trimmed the empty vertical
          band — top/bottom padding cut and margin reduced so the header sits
-         tighter and the content area below gets more room. */
-      margin-bottom: 14px;
-      padding: 10px 22px;
+         tighter and the content area below gets more room. Tightened further
+         (Sam "still too tall" 2026-06-06): vertical padding 10px -> 6px,
+         margin-bottom 14px -> 10px, and the internal stack gaps below were
+         pulled in so there is minimal empty vertical space. */
+      margin-bottom: 10px;
+      padding: 6px 20px;
       border-radius: 16px;
       border: 0.5px solid rgba(217, 164, 54, 0.18);
       background-color: #241610;
@@ -233,7 +236,7 @@
       align-items: baseline;
       flex-wrap: wrap;
       gap: 4px 14px;
-      margin-bottom: 6px;
+      margin-bottom: 3px;
     }
 
     /* Brand mark — CENAS / OPS / MODULE */
@@ -241,7 +244,7 @@
       display: inline-flex;
       align-items: center;
       gap: 9px;
-      margin-bottom: 5px;
+      margin-bottom: 2px;
     }
     .ck-topbar .ck-brand-dot {
       width: 7px;
@@ -279,7 +282,9 @@
     h1.ck-page-title {
       font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-weight: 800;
-      font-size: clamp(26px, 3.4vw, 40px);
+      /* Title trimmed (Sam "ribbon still too tall" 2026-06-06): max cut from
+         40px -> 30px so the title row is shorter while staying bold + readable. */
+      font-size: clamp(24px, 2.4vw, 30px);
       line-height: 1.04;
       letter-spacing: -0.02em;
       color: #FAF6EC;
@@ -458,8 +463,11 @@
         height: auto;
         max-width: none;
       }
+      /* Smaller driver badge on phones (Sam 2026-06-06): the 140px badge
+         overran the title's 120px clearance and overlapped it -> cramped
+         ribbon. 104px fits inside the clearance with a clean gap. */
       .dash-role-banner[src*="role_only/driver"] {
-        width: min(36vw, 140px);
+        width: min(26vw, 104px);
         height: auto;
         max-width: none;
       }

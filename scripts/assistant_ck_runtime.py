@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 
 ANSWER_PATH = "/assistant/answer"
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+_MAX_REQUEST_BODY_BYTES = 1024 * 256
 _MAX_QUESTION_CHARS = 2000
 _REVIEW_STATUS = "needs_review"
 _TOOL_ROUTE_REQUIRED_VERIFICATIONS = 3
@@ -164,6 +165,29 @@ _TOAST_WEBHOOK_ACTIVITY_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_TOAST_DATA_FRESHNESS_RE = re.compile(
+    r"\bwhen\s+(?:did|was|were)\s+(?:we\s+)?last\b|"
+    r"\b(?:last|latest|most\s+recent)\s+(?:toast\s+)?(?:data|webhook|webhooks?|events?|sync|update)\b|"
+    r"\btoast\s+(?:data|webhook|webhooks?)\b.*\b(?:fresh|freshness|stale|updated?|sync(?:ed)?|working|connected|last)\b|"
+    r"\b(?:fresh|freshness|stale|updated?|sync(?:ed)?|working|connected)\b.*\btoast\s+(?:data|webhook|webhooks?)\b",
+    re.IGNORECASE,
+)
+_TOAST_SALES_UNSUPPORTED_SCOPE_RE = re.compile(
+    r"\b("
+    r"yesterday|last\s+night|previous\s+day|"
+    r"last\s+month|this\s+month|month\s+to\s+date|mtd|"
+    r"ytd|year\s+to\s+date|last\s+year|this\s+year|"
+    r"last\s+\d+\s+days|past\s+\d+\s+days|"
+    r"between|from\s+.+\s+to\s+|"
+    r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|"
+    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|"
+    r"(?:last|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+    r")\b",
+    re.IGNORECASE,
+)
+_LABOR_RATIO_MIN_ORDERS = 10
+_LABOR_RATIO_MIN_NET_SALES = 500.0
 _TOAST_EMPLOYEE_PROFILE_RE = re.compile(
     r"\b("
     r"toast\s+employee|employee\s+toast|employee\s+profile|profile\s+db|"
@@ -378,7 +402,12 @@ def _wants_labor_summary(question: str) -> bool:
 
 def _wants_toast_sales_summary(question: str) -> bool:
     text = str(question or "")
-    if _TOAST_WEBHOOK_ACTIVITY_RE.search(text) or _TOAST_EMPLOYEE_PROFILE_RE.search(text):
+    if (
+        _wants_toast_data_freshness(text)
+        or _has_unsupported_toast_sales_scope(text)
+        or _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
+        or _TOAST_EMPLOYEE_PROFILE_RE.search(text)
+    ):
         return False
     return bool(_TOAST_SALES_RE.search(text))
 
@@ -419,6 +448,25 @@ def _toast_period_from_question(question: str) -> str:
     if "this week" in text or re.search(r"\bweek\b", text):
         return "week"
     return "today"
+
+
+def _wants_toast_data_freshness(question: str) -> bool:
+    text = str(question or "")
+    if not re.search(r"\b(toast|webhook)\b", text, re.IGNORECASE):
+        return False
+    return bool(
+        _TOAST_DATA_FRESHNESS_RE.search(text)
+        and re.search(r"\b(toast|webhook|data|events?|sync|update)\b", text, re.IGNORECASE)
+    )
+
+
+def _has_unsupported_toast_sales_scope(question: str) -> bool:
+    text = str(question or "")
+    if not _TOAST_SALES_RE.search(text):
+        return False
+    if re.search(r"\b(today|this\s+week|last\s+week|previous\s+week)\b", text, re.IGNORECASE):
+        return False
+    return bool(_TOAST_SALES_UNSUPPORTED_SCOPE_RE.search(text))
 
 
 def _toast_tool_authorized(principal: dict, tools: list[dict]) -> bool:
@@ -463,6 +511,8 @@ def _wants_toast_webhook_activity(question: str) -> bool:
     text = str(question or "")
     if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
         return False
+    if _wants_toast_data_freshness(text):
+        return True
     return bool(
         _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
         and re.search(
@@ -513,9 +563,64 @@ def _money(value: object) -> str:
     return f"${amount:,.2f}"
 
 
+def _float_value(value: object) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _format_ymd(value: object) -> str:
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d{8}", text):
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return text
+
+
+def _date_range_text(summary: dict) -> str:
+    date_range = summary.get("date_range") or {}
+    if isinstance(date_range, dict):
+        start = _format_ymd(date_range.get("start"))
+        end = _format_ymd(date_range.get("end"))
+        if start and end:
+            if start == end and str(summary.get("period") or "").strip() == "week":
+                return f"{start} to {end}"
+            return start if start == end else f"{start} to {end}"
+        return start or end or str(date_range.get("label") or "").strip()
+    return str(summary.get("date_range_label") or "").strip()
+
+
+def _labor_ratio_ok(summary: dict, sales: dict, labor: dict) -> bool:
+    explicit = labor.get("ratio_denominator_ok")
+    if explicit is not None:
+        return bool(explicit)
+    guard = labor.get("ratio_guard") or {}
+    if isinstance(guard, dict) and guard.get("ok") is not None:
+        return bool(guard.get("ok"))
+    orders = int(sales.get("orders") or 0)
+    net = _float_value(sales.get("net"))
+    return orders >= _LABOR_RATIO_MIN_ORDERS and net >= _LABOR_RATIO_MIN_NET_SALES
+
+
+def _labor_ratio_guard_note(sales: dict, labor: dict) -> str:
+    guard = labor.get("ratio_guard") or {}
+    if isinstance(guard, dict):
+        note = str(guard.get("note") or "").strip()
+        if note:
+            return note
+    orders = int(sales.get("orders") or 0)
+    net = _float_value(sales.get("net"))
+    return (
+        "this period is below the denominator guard "
+        f"({orders} {_plural(orders, 'order')}, {_money(net)} net sales)"
+    )
+
+
 def _toast_sales_summary_answer(summary: dict) -> str:
     label = str(summary.get("label") or "Today").strip() or "Today"
+    period = str(summary.get("period") or "").strip()
     scope_note = str(summary.get("scope_note") or "").strip()
+    date_scope = _date_range_text(summary)
     sales = summary.get("sales") or {}
     labor = summary.get("labor") or {}
 
@@ -528,9 +633,12 @@ def _toast_sales_summary_answer(summary: dict) -> str:
     refund = sales.get("refund") or 0
     void = sales.get("void") or 0
 
+    heading = f"{label} Toast Analytics"
+    if date_scope:
+        heading += f" (date range: {date_scope})"
     answer = (
-        f"{label} Toast Analytics: net sales are {_money(net)} on "
-        f"{orders} {_plural(orders, 'order')} (avg {_money(avg_order)}). "
+        f"{heading}: net sales are {_money(net)} on {orders} "
+        f"{_plural(orders, 'order')} (avg {_money(avg_order)}). "
         f"Gross sales are {_money(gross)}"
     )
     adjustments = []
@@ -546,6 +654,13 @@ def _toast_sales_summary_answer(summary: dict) -> str:
 
     if guests:
         answer += f" Guest count is {guests}."
+    if period == "week":
+        date_range = summary.get("date_range") or {}
+        if isinstance(date_range, dict):
+            start = _format_ymd(date_range.get("start"))
+            end = _format_ymd(date_range.get("end"))
+            if start and end and start == end:
+                answer += " Date note: This Week is Sunday-to-date, so on Sunday it matches Today."
 
     labor_hours = float(labor.get("hours") or 0)
     labor_cost = labor.get("cost") or 0
@@ -553,11 +668,14 @@ def _toast_sales_summary_answer(summary: dict) -> str:
     sales_per_labor_hour = sales.get("sales_per_labor_hour")
     if labor_hours or float(labor_cost or 0):
         answer += f" Labor is {labor_hours:g} hours, {_money(labor_cost)} cost"
-        if labor_ratio is not None:
+        ratio_ok = _labor_ratio_ok(summary, sales, labor)
+        if labor_ratio is not None and ratio_ok:
             answer += f" ({labor_ratio}% of sales)"
         if sales_per_labor_hour is not None:
             answer += f", {_money(sales_per_labor_hour)} sales per labor hour"
         answer += "."
+        if labor_ratio is not None and not ratio_ok:
+            answer += f" Labor percent is not shown because {_labor_ratio_guard_note(sales, labor)}."
 
     if scope_note:
         answer += f" Scope: {scope_note}"
@@ -1160,15 +1278,21 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
 
     if tool_id == "schedule.store_today":
         shifts = int(payload.get("shift_count") or 0)
+        local_date = str(payload.get("date") or "today").strip()
         answer = (
-            f"Today's schedule has {shifts} {_plural(shifts, 'shift')}: "
+            f"Local-date shifts for {local_date} from allowed schedule stores: "
+            f"{shifts} visible schedule {_plural(shifts, 'shift')}: "
             f"{int(payload.get('assigned_shift_count') or 0)} assigned, "
             f"{int(payload.get('open_shift_count') or 0)} open, "
             f"{float(payload.get('total_hours') or 0):g} hours."
         )
         split = _dict_split(payload.get("by_store") or {})
         if split:
-            answer += " Store split: " + split + "."
+            answer += (
+                " Store split for visible rows: "
+                + split
+                + ". Stores without visible rows are not listed; that is not a closed-store signal."
+            )
         sample = _schedule_shift_labels(payload.get("shifts") or [])
         if sample:
             answer += " First shifts: " + sample + "."
@@ -1177,14 +1301,36 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
     if tool_id in {"schedule.store_week", "schedule.view"}:
         shifts = int(payload.get("shift_count") or 0)
         schedules = int(payload.get("schedule_count") or 0)
-        label = "Current schedule view" if tool_id == "schedule.view" else "This week's schedule"
+        label = "Current schedule view" if tool_id == "schedule.view" else "Current week schedule"
+        week_start = str(payload.get("week_start") or "").strip()
+        week_end = str(payload.get("week_end") or "").strip()
+        window = f" ({week_start} to {week_end})" if week_start and week_end else ""
         answer = (
-            f"{label} has {schedules} {_plural(schedules, 'schedule')} and "
+            f"{label}{window} has {schedules} {_plural(schedules, 'schedule')} and "
             f"{shifts} {_plural(shifts, 'shift')}: "
             f"{int(payload.get('assigned_shift_count') or 0)} assigned, "
             f"{int(payload.get('open_shift_count') or 0)} open, "
             f"{float(payload.get('total_hours') or 0):g} hours."
         )
+        if (
+            payload.get("published_schedule_count") is not None
+            or payload.get("draft_schedule_count") is not None
+        ):
+            published_schedules = int(payload.get("published_schedule_count") or 0)
+            draft_schedules = int(payload.get("draft_schedule_count") or 0)
+            if published_schedules and draft_schedules:
+                open_scope = "draft+published visible shifts"
+            elif draft_schedules:
+                open_scope = "draft visible shifts"
+            elif published_schedules:
+                open_scope = "published visible shifts"
+            else:
+                open_scope = "visible shifts with no published/draft schedule status"
+            answer += (
+                f" Open count includes {open_scope} "
+                f"({published_schedules} published {_plural(published_schedules, 'schedule')}, "
+                f"{draft_schedules} draft {_plural(draft_schedules, 'schedule')})."
+            )
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
@@ -1192,7 +1338,12 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
 
     if tool_id == "schedule.open_shifts":
         count = int(payload.get("count") or 0)
-        answer = f"There are {count} open schedule {_plural(count, 'shift')} in the current view."
+        as_of = str(payload.get("as_of_date") or "").strip()
+        date_suffix = f" as of local date {as_of}" if as_of else ""
+        answer = (
+            f"Remaining today-forward open schedule {_plural(count, 'shift')} "
+            f"in the current view{date_suffix}: {count}."
+        )
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
@@ -1286,12 +1437,12 @@ def _labor_summary_answer(summary: dict) -> str:
     open_shifts = int(summary.get("open_shifts") or 0)
     hours = float(summary.get("last30_cached_hours") or 0.0)
     answer = (
-        f"There are {total} {_plural(total, 'employee')} in the current view; "
-        f"{active} are active. Published schedule has {published} assigned "
+        f"Labor summary: employee count is all allowed employee store assignments: "
+        f"{total} {_plural(total, 'employee')}, {active} active. "
+        f"Published-schedule/all-allowed historical scope: {published} assigned "
         f"{_plural(published, 'shift')} and {open_shifts} open {_plural(open_shifts, 'shift')}."
     )
-    if hours:
-        answer += f" The last-30 cached labor total is {hours:g} hours."
+    answer += f" Last-30 cached labor hours from performance-cache rows: {hours:g} hours."
     statuses = summary.get("today_attendance_statuses") or {}
     if statuses:
         answer += " Today's attendance statuses: " + "; ".join(
@@ -1695,6 +1846,11 @@ def _approved_tool_answer(
             "generated_at": _now_iso(),
         }
     if not routed_tool_id:
+        return None
+    if routed_tool_id == "toast.sales_summary" and (
+        _wants_toast_data_freshness(resolved_question)
+        or _has_unsupported_toast_sales_scope(resolved_question)
+    ):
         return None
     if routed_tool_id == "toast.employee_profiles" and _toast_employee_profiles_tool_authorized(principal, tools):
         employee_profiles = tool_data.get("toast.employee_profiles") if isinstance(tool_data, dict) else None
@@ -2151,6 +2307,17 @@ class Handler(BaseHTTPRequestHandler):
         token = token or self.headers.get("X-Ai-Assistant-Token", "").strip()
         return token == expected
 
+    def _drain_bounded_request_body(self) -> None:
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            return
+        try:
+            length = int(raw_length)
+        except ValueError:
+            return
+        if 0 < length <= _MAX_REQUEST_BODY_BYTES:
+            self.rfile.read(length)
+
     def do_GET(self) -> None:
         if urlparse(self.path).path != "/healthz":
             self._json(404, {"ok": False, "error": "not_found"})
@@ -2172,11 +2339,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"ok": False, "error": "not_found"})
             return
         if not self._authorized():
+            self._drain_bounded_request_body()
             self._json(403, {"ok": False, "error": "forbidden"})
             return
         try:
             length = int(self.headers.get("Content-Length") or "0")
-            if length <= 0 or length > 1024 * 256:
+            if length <= 0 or length > _MAX_REQUEST_BODY_BYTES:
                 self._json(400, {"ok": False, "error": "bad_length"})
                 return
             payload = json.loads(self.rfile.read(length).decode("utf-8"))

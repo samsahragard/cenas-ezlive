@@ -34,6 +34,52 @@ _STORE_ALIASES = {
     "dos mas": "tomball",
     "tomball": "tomball",
 }
+_LOOKUP_TOKEN_STOP_WORDS = {
+    "order",
+    "orders",
+    "catering",
+    "caterings",
+    "ezcater",
+    "ticket",
+    "tickets",
+    "quote",
+    "quotes",
+    "id",
+    "ids",
+    "item",
+    "items",
+    "food",
+    "detail",
+    "details",
+    "number",
+    "numbers",
+    "no",
+    "status",
+    "statuses",
+    "summary",
+    "count",
+    "total",
+}
+_REAL_EZCATER_ID_RE = re.compile(r"\b([A-Z0-9]{3}-[A-Z0-9]{3})\b", re.IGNORECASE)
+_KEYWORD_LOOKUP_TOKEN_RE = re.compile(
+    r"\b(?:order|catering|ezcater|ticket|quote)\s*"
+    r"(?:id|#|number|no\.?)?\s*[:#-]?\s*"
+    r"([A-Za-z0-9][A-Za-z0-9_-]{2,})\b",
+    re.IGNORECASE,
+)
+_ITEM_MIX_AGGREGATE_RE = re.compile(
+    r"\b("
+    r"what\s+items?\s+get\s+ordered\s+most|"
+    r"items?\s+(?:get\s+)?ordered\s+most|"
+    r"most\s+ordered|"
+    r"ordered\s+most|"
+    r"most\s+popular|"
+    r"popular\s+items?|"
+    r"best[-\s]+selling|"
+    r"top[-\s]+selling"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def _now_iso() -> str:
@@ -250,18 +296,56 @@ def _payload(tool_id: str, ctx: dict[str, Any], **data: Any) -> dict[str, Any]:
     }
 
 
+def _is_lookup_stop_word(token: str) -> bool:
+    normalized = str(token or "").strip(" .:#-_").casefold()
+    return normalized in _LOOKUP_TOKEN_STOP_WORDS
+
+
+def _looks_like_order_id(token: str) -> bool:
+    text = str(token or "").strip()
+    return bool(text and (re.search(r"\d", text) or "-" in text or "_" in text))
+
+
+def _keyword_lookup_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    pos = 0
+    while match := _KEYWORD_LOOKUP_TOKEN_RE.search(text, pos):
+        token = match.group(1).strip()
+        tokens.append(token)
+        next_pos = match.start(1) if _is_lookup_stop_word(token) else match.end()
+        if next_pos <= pos:
+            next_pos = match.start() + 1
+        pos = next_pos
+    return tokens
+
+
 def _lookup_token(question: str) -> str | None:
     text = str(question or "").strip()
-    patterns = [
-        r"\b(?:order|catering|ezcater|ticket|quote)\s*(?:id|#|number|no\.)?\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9_-]{2,})\b",
-        r"\b([A-Z]{1,4}-?\d{2,})\b",
-        r"\b(\d{4,})\b",
-    ]
+    real_id = _REAL_EZCATER_ID_RE.search(text)
+    if real_id:
+        return real_id.group(1).strip()
+    for token in _keyword_lookup_tokens(text):
+        if not _is_lookup_stop_word(token):
+            return token
+    patterns = [r"\b([A-Z]{1,4}-?\d{2,})\b", r"\b(\d{4,})\b"]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            token = match.group(1).strip()
+            if _is_lookup_stop_word(token):
+                continue
+            return token
     return None
+
+
+def _has_explicit_order_reference(question: str) -> bool:
+    text = str(question or "")
+    if _REAL_EZCATER_ID_RE.search(text):
+        return True
+    for token in _keyword_lookup_tokens(text):
+        if not _is_lookup_stop_word(token) and _looks_like_order_id(token):
+            return True
+    return False
 
 
 def _find_order(orders: list[Order], question: str) -> Order | None:
@@ -886,6 +970,8 @@ def _wants_next_30(question: str) -> bool:
 
 def _wants_count(question: str) -> bool:
     text = _txt(question)
+    if _wants_returning_customers(question):
+        return False
     return _order_context(question) and not _in_house_context(question) and bool(re.search(r"\b(how many|count|total)\b", text))
 
 
@@ -954,7 +1040,8 @@ def _wants_order_items(question: str) -> bool:
     return (
         _order_context(question)
         and not _in_house_context(question)
-        and bool(re.search(r"\b(items?|food|what was on|what is on|item mix)\b", text))
+        and _has_explicit_order_reference(question)
+        and bool(re.search(r"\b(items?|food|what was on|what is on)\b", text))
         and "mix" not in text
     )
 
@@ -973,10 +1060,11 @@ def _wants_order_lookup(question: str) -> bool:
 
 def _wants_item_mix(question: str) -> bool:
     text = _txt(question)
+    wants_mix = bool(re.search(r"\b(item mix|menu mix|top items?|food mix|what items sell)\b", text))
+    wants_aggregate = bool(_ITEM_MIX_AGGREGATE_RE.search(text))
     return (
-        _order_context(question)
-        and not _in_house_context(question)
-        and bool(re.search(r"\b(item mix|menu mix|top items?|food mix|what items sell)\b", text))
+        not _in_house_context(question)
+        and ((_order_context(question) and wants_mix) or wants_aggregate)
     )
 
 
@@ -1018,10 +1106,13 @@ def _wants_driver_assignment(question: str) -> bool:
 
 def _wants_returning_customers(question: str) -> bool:
     text = _txt(question)
+    returning_phrase = bool(re.search(r"\b(?:returning|repeat)(?:\s+\w+){0,4}\s+customers?\b", text))
     return (
-        _order_context(question)
-        and not _in_house_context(question)
-        and bool(re.search(r"\b(returning customers?|repeat customers?|customer aggregate)\b", text))
+        not _in_house_context(question)
+        and (
+            returning_phrase
+            or (_order_context(question) and bool(re.search(r"\bcustomer aggregate\b", text)))
+        )
     )
 
 

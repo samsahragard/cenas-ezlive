@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import socket
@@ -390,6 +391,35 @@ def test_runtime_resolved_question_keeps_explicit_schedule_after_catering_contex
         "what baout earlier this morning?",
         "How many caterings do we have today?",
     ) == "what baout earlier this morning?"
+
+
+def test_runtime_forbidden_post_drains_bounded_request_body(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    payload = json.dumps(
+        {
+            "question": "Show me customer phone numbers for catering orders",
+            "principal": _principal("gm"),
+            "tools": [],
+            "source": "test",
+        }
+    ).encode("utf-8")
+    responses = []
+    handler = runtime.Handler.__new__(runtime.Handler)
+    handler.path = runtime.ANSWER_PATH
+    handler.headers = {
+        "Content-Length": str(len(payload)),
+        "Content-Type": "application/json",
+    }
+    handler.rfile = io.BytesIO(payload)
+    handler._json = lambda status, body: responses.append((status, body))
+
+    monkeypatch.setenv("ASSISTANT_RUNTIME_TOKEN", "runtime-test-token")
+
+    runtime.Handler.do_POST(handler)
+
+    assert responses == [(403, {"ok": False, "error": "forbidden"})]
+    assert handler.rfile.read() == b""
 
 
 def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
@@ -802,7 +832,9 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
                 "tool_data": {
                     "toast.sales_summary": {
                         "generated_at": "2026-06-05T17:00:00Z",
+                        "period": "today",
                         "label": "Today",
+                        "date_range": {"start": "20260605", "end": "20260605"},
                         "scope_note": "2 locations included.",
                         "sales": {
                             "net": 1234.56,
@@ -819,6 +851,7 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
                             "hours": 11.11,
                             "cost": 444.44,
                             "ratio_pct": 36.0,
+                            "ratio_denominator_ok": True,
                             "by_job": [],
                         },
                         "menu": {},
@@ -835,7 +868,9 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
         assert data["queued"] is False
         assert data["storage"] == "toast_analytics_tool"
         assert data["tool_id"] == "toast.sales_summary"
+        assert "date range: 2026-06-05" in data["answer"]
         assert "net sales are $1,234.56" in data["answer"]
+        assert "36.0% of sales" in data["answer"]
         assert "2 locations included" in data["answer"]
     finally:
         httpd.shutdown()
@@ -843,6 +878,122 @@ def test_runtime_answers_operator_toast_sales_with_approved_tool(tmp_path, monke
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_toast_week_answer_labels_one_day_week_scope(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = True
+    data = runtime._approved_tool_answer(
+        "Give me a sales summary for this week",
+        "",
+        principal,
+        [_available_tool("toast.sales_summary")],
+        {
+            "toast.sales_summary": {
+                "generated_at": "2026-06-07T17:00:00Z",
+                "period": "week",
+                "label": "This Week",
+                "date_range": {"start": "20260607", "end": "20260607"},
+                "scope_note": "2 locations included.",
+                "sales": {
+                    "net": 150.89,
+                    "gross": 150.89,
+                    "avg_order": 30.18,
+                    "orders": 5,
+                    "guests": 8,
+                    "sales_per_labor_hour": 2.90,
+                },
+                "labor": {
+                    "hours": 52,
+                    "cost": 534.68,
+                    "ratio_pct": 354.4,
+                    "ratio_denominator_ok": False,
+                    "ratio_guard": {
+                        "ok": False,
+                        "note": "this period is below the denominator guard (5 orders, $150.89 net sales)",
+                    },
+                },
+            }
+        },
+        routed_tool_id="toast.sales_summary",
+    )
+
+    assert data is not None
+    assert "This Week Toast Analytics (date range: 2026-06-07 to 2026-06-07)" in data["answer"]
+    assert "This Week is Sunday-to-date, so on Sunday it matches Today" in data["answer"]
+    assert "354.4% of sales" not in data["answer"]
+    assert "Labor percent is not shown" in data["answer"]
+    assert "$150.89 net sales" in data["answer"]
+
+
+def test_runtime_toast_freshness_stale_sales_route_queues_instead_of_answering(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = True
+    data, status = runtime._answer({
+        "question": "When did we last get data from Toast?",
+        "principal": principal,
+        "tools": [_available_tool("toast.sales_summary")],
+        "tool_data": {
+            "toast.sales_summary": {
+                "label": "Today",
+                "sales": {"net": 150.89, "orders": 5},
+                "labor": {"hours": 52, "cost": 534.68, "ratio_pct": 354.4},
+            },
+        },
+        "routed_tool_id": "toast.sales_summary",
+        "route_path": "deterministic",
+        "source": "test",
+    })
+
+    assert status == 200
+    assert data["queued"] is True
+    assert data["reason"] == "data_question_needs_approved_tool"
+    assert data["routed_tool_id"] is None
+    assert data.get("tool_id") != "toast.sales_summary"
+    assert "net sales" not in data["answer"]
+
+
+def test_runtime_unsupported_yesterday_sales_scope_queues_before_stale_sales_answer(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
+
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    principal["is_owner_operator"] = True
+    data, status = runtime._answer({
+        "question": "What were sales yesterday?",
+        "principal": principal,
+        "tools": [_available_tool("toast.sales_summary")],
+        "tool_data": {
+            "toast.sales_summary": {
+                "label": "Today",
+                "sales": {"net": 150.89, "orders": 5},
+                "labor": {"hours": 52, "cost": 534.68, "ratio_pct": 354.4},
+            },
+        },
+        "routed_tool_id": "toast.sales_summary",
+        "route_path": "deterministic",
+        "source": "test",
+    })
+
+    assert status == 200
+    assert data["queued"] is True
+    assert data["reason"] == "data_question_needs_approved_tool"
+    assert data["routed_tool_id"] is None
+    assert "net sales" not in data["answer"]
 
 
 def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_path, monkeypatch):
@@ -1936,6 +2087,88 @@ def test_runtime_wave1_schedule_routes_are_verifiable():
         payload,
         "Today's schedule has 1 shift: 1 assigned, 0 open, 6 hours.",
     )
+
+
+def test_runtime_schedule_today_labels_local_visible_allowed_rows():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._schedule_read_answer(
+        {
+            "ok": True,
+            "date": "2026-06-07",
+            "shift_count": 2,
+            "assigned_shift_count": 1,
+            "open_shift_count": 1,
+            "total_hours": 10.5,
+            "by_store": {"tomball": 2},
+        },
+        "schedule.store_today",
+    )
+
+    assert "Local-date shifts for 2026-06-07 from allowed schedule stores" in answer
+    assert "2 visible schedule shifts" in answer
+    assert "Store split for visible rows: tomball: 2" in answer
+    assert "not a closed-store signal" in answer
+
+
+def test_runtime_schedule_week_labels_window_and_draft_published_open_scope():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._schedule_read_answer(
+        {
+            "ok": True,
+            "week_start": "2026-06-01",
+            "week_end": "2026-06-07",
+            "schedule_count": 2,
+            "published_schedule_count": 1,
+            "draft_schedule_count": 1,
+            "shift_count": 3,
+            "assigned_shift_count": 2,
+            "open_shift_count": 1,
+            "total_hours": 18,
+            "by_store": {"tomball": 3},
+        },
+        "schedule.store_week",
+    )
+
+    assert "Current week schedule (2026-06-01 to 2026-06-07)" in answer
+    assert "Open count includes draft+published visible shifts" in answer
+    assert "1 published schedule, 1 draft schedule" in answer
+
+
+def test_runtime_open_shifts_labels_today_forward_current_view_not_week():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._schedule_read_answer(
+        {
+            "ok": True,
+            "as_of_date": "2026-06-07",
+            "count": 2,
+            "by_store": {"tomball": 2},
+        },
+        "schedule.open_shifts",
+    )
+
+    assert "Remaining today-forward open schedule shifts in the current view as of local date 2026-06-07: 2" in answer
+    assert "week" not in answer.casefold()
+
+
+def test_runtime_labor_summary_labels_historical_shift_scope_and_cached_hours():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._labor_summary_answer(
+        {
+            "total_employees": 122,
+            "active_employees": 80,
+            "published_shifts": 2342,
+            "open_shifts": 0,
+            "last30_cached_hours": 1980,
+        }
+    )
+
+    assert "employee count is all allowed employee store assignments: 122 employees, 80 active" in answer
+    assert "Published-schedule/all-allowed historical scope: 2342 assigned shifts and 0 open shifts" in answer
+    assert "Last-30 cached labor hours from performance-cache rows: 1980 hours" in answer
 
 
 def test_runtime_partner_identity_does_not_claim_owner_operator(monkeypatch):

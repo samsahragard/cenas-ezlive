@@ -721,6 +721,110 @@ def test_smoke_catering_specific_prompts_do_not_fall_back_to_generic_order_route
         assert route["route_path"] == "deterministic"
 
 
+@pytest.mark.parametrize(
+    ("question", "expected_token"),
+    [
+        ("Look up catering order W7T-UF9", "W7T-UF9"),
+        ("show ezCater xgc-t07 details", "xgc-t07"),
+        ("ticket C8V-PEG status", "C8V-PEG"),
+        ("quote id 0GU-0W3", "0GU-0W3"),
+        ("show catering order TO-TODAY", "TO-TODAY"),
+    ],
+)
+def test_order_lookup_token_prefers_real_ezcater_ids_and_skips_structural_words(question, expected_token):
+    assert order_handlers._lookup_token(question) == expected_token
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "catering order status",
+        "order id",
+        "order number",
+        "order no",
+        "ezcater ticket",
+        "catering quote number",
+    ],
+)
+def test_order_lookup_token_does_not_return_keyword_stop_words(question):
+    assert order_handlers._lookup_token(question) is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "what items get ordered most in catering",
+        "most ordered",
+        "ordered most",
+        "most popular",
+        "popular items",
+        "best selling",
+        "top selling",
+    ],
+)
+def test_catering_item_aggregate_prompts_route_to_item_mix_not_order_items(monkeypatch, question):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("aggregate item route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(question, ctx)
+
+    assert route["tool_id"] == "orders.catering_item_mix"
+    assert route["route_path"] == "deterministic"
+    assert ar._TOOL_MATCHERS["orders_catering_order_items_safe"](question) is False
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "what items are on order W7T-UF9",
+        "on order XGC-T07 what food was included",
+        "order C8V-PEG items",
+    ],
+)
+def test_order_items_requires_explicit_order_reference(monkeypatch, question):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("explicit order item route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(question, ctx)
+
+    assert route["tool_id"] == "orders.catering_order_items_safe"
+    assert route["route_path"] == "deterministic"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "how many returning catering customers do we have",
+        "how many repeat ezcater customers do we have",
+        "count returning high value catering customers",
+    ],
+)
+def test_returning_customer_prompts_route_to_returning_aggregate_before_count(monkeypatch, question):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("returning customer route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(question, ctx)
+
+    assert route["tool_id"] == "orders.catering_returning_customers_aggregate"
+    assert route["route_path"] == "deterministic"
+    assert ar._TOOL_MATCHERS["orders_catering_count"](question) is False
+
+
 @pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
 def test_wave1_order_handlers_return_fixture_payload_for_every_read_tool(db_session, monkeypatch, case):
     _seed_wave1_order_fixture(db_session)
@@ -1114,6 +1218,25 @@ def test_wave1_schedule_handlers_return_fixture_payload_for_every_read_tool(db_s
     assert "hidden decline reason" not in encoded
 
 
+def test_wave1_schedule_handlers_label_answer_windows(db_session, monkeypatch):
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+
+    today_payload = schedule_handlers.schedule_store_today("who is working today?", ctx)
+    week_payload = schedule_handlers.schedule_store_week("show this week", ctx)
+    open_payload = schedule_handlers.schedule_open_shifts("open shifts", ctx)
+
+    assert today_payload["window_label"] == "local_date_visible_allowed_schedule_stores"
+    assert today_payload["date"] == schedule_handlers._today_local().isoformat()
+    assert week_payload["window_label"] == "current_week_visible_allowed_schedule_stores"
+    assert week_payload["week_start"] == schedule_handlers._week_start().isoformat()
+    assert week_payload["published_schedule_count"] == 1
+    assert week_payload["draft_schedule_count"] == 0
+    assert open_payload["window_label"] == "remaining_today_forward_current_view"
+    assert open_payload["as_of_date"] == schedule_handlers._today_local().isoformat()
+
+
 @pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
 def test_wave1_schedule_payloads_are_denied_without_schedule_permission(case, monkeypatch):
     ctx = _wave1_partner_ctx(permissions=["ai.ask_claude"], stores=["tomball"])
@@ -1455,6 +1578,111 @@ def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
 
     assert payload["toast.sales_summary"]["period"] == "today"
     assert payload["toast.sales_summary"]["sales"] == {"net": 123.45, "orders": 3}
+
+
+def test_labor_store_aggregate_payload_labels_metric_scopes(db_session, monkeypatch):
+    today = date.today()
+    now = datetime.utcnow()
+    employee = Employee(full_name="Labor Scope Employee", active=True)
+    db_session.add(employee)
+    db_session.flush()
+    schedule = Schedule(store_key="tomball", week_start=today, status="published")
+    db_session.add(schedule)
+    db_session.flush()
+    db_session.add_all([
+        EmployeeStoreAssignment(employee_id=employee.id, store_key="tomball"),
+        Shift(
+            schedule_id=schedule.id,
+            employee_id=employee.id,
+            start_at=now,
+            end_at=now + timedelta(hours=6),
+            status="assigned",
+        ),
+        Shift(
+            schedule_id=schedule.id,
+            employee_id=None,
+            start_at=now + timedelta(days=1),
+            end_at=now + timedelta(days=1, hours=5),
+            status="open",
+        ),
+        PerfPeriodCache(
+            cena_employee_id=employee.id,
+            period="last30",
+            store_key="tomball",
+            total_hours=80.0,
+        ),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(ar, "SessionLocal", lambda: db_session)
+
+    payload = ar._labor_store_aggregate(_wave1_partner_ctx(stores=["tomball"]))
+
+    assert payload["employee_count_scope"] == "all_allowed_employee_store_assignments"
+    assert payload["schedule_shift_scope"] == "all_allowed_historical_published_schedules"
+    assert payload["last30_cached_hours_scope"] == "last_30_perf_period_cache_rows"
+    assert payload["published_shifts"] == 1
+    assert payload["open_shifts"] == 1
+    assert payload["last30_cached_hours"] == 80.0
+
+
+def test_operator_toast_data_freshness_routes_to_webhook_not_sales(monkeypatch):
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam Sahragard",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": None,
+        "path": "/partner/",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": True,
+    }
+    monkeypatch.setattr(
+        ar,
+        "_toast_webhook_activity_tool_payload",
+        lambda question: {"data_class": "toast_webhook_activity_sanitized", "question": question},
+    )
+    monkeypatch.setattr(
+        ar,
+        "_toast_sales_summary_tool_payload",
+        lambda period: (_ for _ in ()).throw(AssertionError("freshness prompt must not build sales")),
+    )
+
+    tool_id, payload, route = ar._approved_tool_package("When did we last get data from Toast?", ctx)
+
+    assert tool_id == "toast.webhook_activity"
+    assert route["tool_id"] == "toast.webhook_activity"
+    assert "toast.webhook_activity" in payload
+    assert "toast.sales_summary" not in payload
+
+
+def test_toast_data_freshness_never_falls_back_to_sales_when_webhook_unavailable(monkeypatch):
+    ctx = _wave1_partner_ctx()
+    monkeypatch.setattr(
+        ar,
+        "_available_implemented_tools",
+        lambda _ctx: {"toast.sales_summary": {"tool_id": "toast.sales_summary"}},
+    )
+
+    route = ar._route_approved_tool_choice("When did we last get data from Toast?", ctx)
+
+    assert route["tool_id"] is None
+    assert route["route_path"] == "review"
+
+
+def test_unsupported_toast_sales_scope_does_not_route_to_today_summary():
+    ctx = _wave1_partner_ctx()
+
+    for question in (
+        "What were Toast sales yesterday?",
+        "What were sales on 2026-06-01?",
+        "Give me revenue for June 1",
+    ):
+        route = ar._route_approved_tool_choice(question, ctx)
+        assert route["tool_id"] is None
+        assert route["route_path"] == "review"
 
 
 def test_operator_toast_table_activity_payload_handles_typo(monkeypatch):

@@ -8,6 +8,38 @@ from app.services.toast_analytics_client import ToastAnalyticsClient, period_to_
 
 
 VALID_PERIODS = {"today", "week", "last_week"}
+LABOR_RATIO_MIN_ORDERS = 10
+LABOR_RATIO_MIN_NET_SALES = 500.0
+
+
+def _format_ymd(value: str) -> str:
+    text = str(value or "").strip()
+    if len(text) == 8 and text.isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return text
+
+
+def _date_range_label(start_ymd: str, end_ymd: str) -> str:
+    start = _format_ymd(start_ymd)
+    end = _format_ymd(end_ymd)
+    return start if start == end else f"{start} to {end}"
+
+
+def _labor_ratio_guard(orders_count: int, net_sales: float) -> dict[str, Any]:
+    ok = orders_count >= LABOR_RATIO_MIN_ORDERS and net_sales >= LABOR_RATIO_MIN_NET_SALES
+    note = ""
+    if not ok:
+        note = (
+            "this period is below the denominator guard "
+            f"({orders_count} {'order' if orders_count == 1 else 'orders'}, "
+            f"${net_sales:,.2f} net sales)"
+        )
+    return {
+        "ok": ok,
+        "min_orders": LABOR_RATIO_MIN_ORDERS,
+        "min_net_sales": LABOR_RATIO_MIN_NET_SALES,
+        "note": note,
+    }
 
 
 def analytics_summary_payload(
@@ -36,6 +68,7 @@ def analytics_summary_payload(
     avg_order = (net_sales / orders_count) if orders_count else 0.0
     sales_per_labor_hour = (net_sales / labor_hours) if labor_hours else 0.0
     labor_ratio_pct = (labor_pay / net_sales * 100.0) if net_sales else 0.0
+    labor_ratio_guard = _labor_ratio_guard(orders_count, net_sales)
 
     by_job: dict[str, dict[str, float | str]] = {}
     for row in labor_rows:
@@ -69,7 +102,12 @@ def analytics_summary_payload(
     return {
         "period": period,
         "label": label,
-        "date_range": {"start": start_ymd, "end": end_ymd},
+        "date_range": {
+            "start": start_ymd,
+            "end": end_ymd,
+            "label": _date_range_label(start_ymd, end_ymd),
+        },
+        "date_range_label": _date_range_label(start_ymd, end_ymd),
         "scope_note": scope_note,
         "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "sales": {
@@ -87,6 +125,8 @@ def analytics_summary_payload(
             "hours": round(labor_hours, 2),
             "cost": round(labor_pay, 2),
             "ratio_pct": round(labor_ratio_pct, 1),
+            "ratio_denominator_ok": labor_ratio_guard["ok"],
+            "ratio_guard": labor_ratio_guard,
             "by_job": [
                 {
                     "label": str(r["label"]),

@@ -124,6 +124,40 @@ _TOAST_WEBHOOK_ACTIVITY_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_CATERING_ITEM_AGGREGATE_RE = re.compile(
+    r"\b("
+    r"what\s+items?\s+get\s+ordered\s+most|"
+    r"items?\s+(?:get\s+)?ordered\s+most|"
+    r"most\s+ordered|"
+    r"ordered\s+most|"
+    r"most\s+popular|"
+    r"popular\s+items?|"
+    r"best[-\s]+selling|"
+    r"top[-\s]+selling"
+    r")\b",
+    re.IGNORECASE,
+)
+_TOAST_DATA_FRESHNESS_RE = re.compile(
+    r"\bwhen\s+(?:did|was|were)\s+(?:we\s+)?last\b|"
+    r"\b(?:last|latest|most\s+recent)\s+(?:toast\s+)?(?:data|webhook|webhooks?|events?|sync|update)\b|"
+    r"\btoast\s+(?:data|webhook|webhooks?)\b.*\b(?:fresh|freshness|stale|updated?|sync(?:ed)?|working|connected|last)\b|"
+    r"\b(?:fresh|freshness|stale|updated?|sync(?:ed)?|working|connected)\b.*\btoast\s+(?:data|webhook|webhooks?)\b",
+    re.IGNORECASE,
+)
+_TOAST_SALES_UNSUPPORTED_SCOPE_RE = re.compile(
+    r"\b("
+    r"yesterday|last\s+night|previous\s+day|"
+    r"last\s+month|this\s+month|month\s+to\s+date|mtd|"
+    r"ytd|year\s+to\s+date|last\s+year|this\s+year|"
+    r"last\s+\d+\s+days|past\s+\d+\s+days|"
+    r"between|from\s+.+\s+to\s+|"
+    r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|"
+    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|"
+    r"(?:last|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+    r")\b",
+    re.IGNORECASE,
+)
 _TOAST_EMPLOYEE_PROFILE_RE = re.compile(
     r"\b("
     r"toast\s+employee|employee\s+toast|employee\s+profile|profile\s+db|"
@@ -1160,6 +1194,9 @@ def _labor_store_aggregate(ctx: dict[str, Any]) -> dict[str, Any]:
         return {
             "generated_at": _now_iso(),
             "data_class": "labor_aggregate_sanitized",
+            "employee_count_scope": "all_allowed_employee_store_assignments",
+            "schedule_shift_scope": "all_allowed_historical_published_schedules",
+            "last30_cached_hours_scope": "last_30_perf_period_cache_rows",
             "total_employees": len(employees),
             "active_employees": len(active_employees),
             "inactive_employees": max(0, len(employees) - len(active_employees)),
@@ -1191,9 +1228,33 @@ def _toast_period_from_question(question: str) -> str:
     return "today"
 
 
+def _wants_toast_data_freshness(question: str) -> bool:
+    text = str(question or "")
+    if not re.search(r"\b(toast|webhook)\b", text, re.IGNORECASE):
+        return False
+    return bool(
+        _TOAST_DATA_FRESHNESS_RE.search(text)
+        and re.search(r"\b(toast|webhook|data|events?|sync|update)\b", text, re.IGNORECASE)
+    )
+
+
+def _has_unsupported_toast_sales_scope(question: str) -> bool:
+    text = str(question or "")
+    if not _TOAST_SALES_RE.search(text):
+        return False
+    if re.search(r"\b(today|this\s+week|last\s+week|previous\s+week)\b", text, re.IGNORECASE):
+        return False
+    return bool(_TOAST_SALES_UNSUPPORTED_SCOPE_RE.search(text))
+
+
 def _wants_toast_sales_summary(question: str) -> bool:
     text = str(question or "")
-    if _TOAST_WEBHOOK_ACTIVITY_RE.search(text) or _TOAST_EMPLOYEE_PROFILE_RE.search(text):
+    if (
+        _wants_toast_data_freshness(text)
+        or _has_unsupported_toast_sales_scope(text)
+        or _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
+        or _TOAST_EMPLOYEE_PROFILE_RE.search(text)
+    ):
         return False
     return bool(_TOAST_SALES_RE.search(text))
 
@@ -1263,6 +1324,12 @@ def _wants_toast_webhook_activity(question: str) -> bool:
     text = str(question or "")
     if re.search(r"\bwhat\s+was\s+on\s+order\b|\border\s+[A-Za-z0-9][A-Za-z0-9_-]{2,}\b", text, re.IGNORECASE):
         return False
+    if _CATERING_ITEM_AGGREGATE_RE.search(text) and not re.search(
+        r"\b(toast|webhooks?|live|events?|checks?|payments?|plates?|closeouts?|voids?|rang|rung|menus?|stock|packaging)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return False
     if (
         re.search(r"\b(catering|caterings|ezcater|in[- ]house|quotes?)\b", text, re.IGNORECASE)
         and not re.search(
@@ -1274,6 +1341,8 @@ def _wants_toast_webhook_activity(question: str) -> bool:
         return False
     if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
         return False
+    if _wants_toast_data_freshness(text):
+        return True
     return bool(
         _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
         and re.search(
@@ -1499,6 +1568,13 @@ def _classifier_route_tool_id(
 
 def _route_approved_tool_choice(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     started = time.perf_counter()
+    if _has_unsupported_toast_sales_scope(question):
+        return {
+            "tool_id": None,
+            "route_path": "review",
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "classifier": {"enabled": _classifier_enabled(), "reason": "unsupported_toast_sales_scope"},
+        }
     tool_id = _deterministic_route_tool_id(question, ctx)
     if tool_id:
         return {

@@ -80,51 +80,6 @@
   }
   .ec-page * { box-sizing: border-box; }
 
-  .ec-page .ec-topstrip {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-  .ec-page .ec-badge {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--gold-bright); background: rgba(228,179,64,0.12);
-    padding: 6px 12px; border-radius: 999px; letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .ec-page .ec-spacer { flex: 1; }
-
-  .ec-page .ec-intro {
-    font-size: 12px; color: var(--cream-faint); font-style: italic;
-    line-height: 1.5; margin-bottom: 16px; max-width: 680px;
-  }
-
-  /* KPI strip */
-  .ec-page .ec-kpis {
-    display: grid; grid-template-columns: repeat(5,1fr); gap: 10px;
-    margin-bottom: 16px;
-  }
-  .ec-page .ec-kpi {
-    background: var(--surface); border: 0.5px solid var(--border);
-    border-radius: var(--radius); padding: 12px 13px;
-    position: relative; overflow: hidden;
-  }
-  .ec-page .ec-kpi::before {
-    content:''; position: absolute; left:0; top:0; bottom:0; width:3px;
-    background: var(--kc, var(--gold));
-  }
-  .ec-page .ec-kpi.k-total { --kc: var(--gold); }
-  .ec-page .ec-kpi.k-verbal { --kc: var(--lvl-verbal); }
-  .ec-page .ec-kpi.k-written { --kc: var(--lvl-written); }
-  .ec-page .ec-kpi.k-final { --kc: var(--lvl-final); }
-  .ec-page .ec-kpi.k-pos { --kc: var(--lvl-positive); }
-  .ec-page .ec-kpi .lbl {
-    font-size: 9px; font-weight: 700; color: var(--cream-meta);
-    text-transform: uppercase; letter-spacing: 0.12em;
-  }
-  .ec-page .ec-kpi .val {
-    font-family: 'Instrument Serif', serif; font-style: italic;
-    font-size: 30px; line-height: 1; color: var(--kc, var(--gold)); margin-top: 3px;
-  }
-
   .ec-page .ec-toolbar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     margin-bottom: 6px;
@@ -155,10 +110,6 @@
   }
   .ec-page .ec-add:hover { filter: brightness(1.08); }
   .ec-page .ec-add .pl { font-size: 17px; line-height: 1; }
-  .ec-page .ec-hint {
-    font-size: 12px; color: var(--cream-faint); font-style: italic;
-    margin: 8px 0 12px;
-  }
   .ec-page .ec-note {
     font-size: 12px; color: var(--lvl-final);
     background: rgba(232,155,64,0.10);
@@ -395,7 +346,6 @@
 
   @media (max-width: 720px) {
     .ec-page { padding: 14px 13px 24px; }
-    .ec-page .ec-kpis { grid-template-columns: repeat(3,1fr); }
     .ec-page .ec-add { margin-left: 0; width: 100%; justify-content: center; margin-top: 4px; }
     .ec-page .ec-tabs { width: 100%; }
     .ec-page .ec-tab { flex: 1; justify-content: center; }
@@ -408,23 +358,9 @@
     .ec-page .ec-av { width: 38px; height: 38px; }
     .ec-page .ec-lvlgrid { grid-template-columns: 1fr; }
   }
-  @media (max-width: 460px) { .ec-page .ec-kpis { grid-template-columns: 1fr 1fr; } }
 </style>
 
 <div class="ec-page" id="ecPage" data-view="all">
-
-  <div class="ec-topstrip">
-    <span class="ec-badge">{{ page_label }}</span>
-    <span class="ec-spacer"></span>
-  </div>
-
-  <div class="ec-kpis">
-    <div class="ec-kpi k-total"><div class="lbl">On File</div><div class="val">{{ kpis.total }}</div></div>
-    <div class="ec-kpi k-verbal"><div class="lbl">Verbal / Coaching</div><div class="val">{{ kpis.verbal }}</div></div>
-    <div class="ec-kpi k-written"><div class="lbl">Written</div><div class="val">{{ kpis.written }}</div></div>
-    <div class="ec-kpi k-final"><div class="lbl">Final Notice</div><div class="val">{{ kpis.final }}</div></div>
-    <div class="ec-kpi k-pos"><div class="lbl">Recognition</div><div class="val">{{ kpis.positive }}</div></div>
-  </div>
 
   {% if counseling_notice %}<div class="ec-note">{{ counseling_notice }}</div>{% endif %}
 
@@ -437,7 +373,6 @@
       <button type="button" class="ec-tab" data-view="clean">Clean Record <span class="ct" id="cCln">0</span></button>
     </div>
   </div>
-  <div class="ec-hint" id="ecHint"></div>
 
   <input type="text" class="ec-search" id="ecSearch" placeholder="Search employees by name or role..." autocomplete="off">
 
@@ -556,13 +491,6 @@
     if (v==="clean")  return !p.has_prior_issue;
     return true;
   }
-  var HINT = {
-    all:    "Every employee on the roster - click a name to see history or log an entry.",
-    issues: "Employees with a documented counseling issue (verbal, coaching, written, or final) on file.",
-    recog:  "Employees who have received recognition.",
-    clean:  "Employees with no counseling issue on file."
-  };
-
   var page = document.getElementById("ecPage");
   var roster = document.getElementById("ecRoster");
   var curView = "all";
@@ -589,7 +517,6 @@
     document.getElementById("cCln").textContent = PEOPLE.filter(function(p){return inView(p,"clean");}).length;
   }
   function renderRoster(){
-    document.getElementById("ecHint").textContent = HINT[curView];
     var q = curQuery;
     var list = PEOPLE.filter(function(p){
       if (!inView(p, curView)) return false;

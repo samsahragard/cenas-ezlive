@@ -4136,6 +4136,116 @@ def _ff_rolling_avg_by_slug(db, days: int = 30):
     return {slug: float(avg or 0) for slug, avg in rows}
 
 
+def _ff_catalog_lookup():
+    """Fresh-food item metadata keyed by slug, using the Place Order
+    tracking layout first and the legacy recent-order groups as fallback."""
+    lookup: dict = {}
+    for cat in _FRESH_FOOD_ORDER_LAYOUT:
+        for item in cat["items"]:
+            lookup[item["slug"]] = {
+                "label": item["label"],
+                "category": cat["name"],
+                "size": item.get("size") or "",
+            }
+    for cat, items in _FRESH_FOOD_ITEMS:
+        for slug in items:
+            lookup.setdefault(slug, {
+                "label": slug.replace("-", " ").title(),
+                "category": cat,
+                "size": "",
+            })
+    return lookup
+
+
+def _ff_target_order_date(raw: str | None = None):
+    """Return (local_today, delivery_date). Default delivery is tomorrow."""
+    today = _attn_now().date()
+    delivery_date = today + timedelta(days=1)
+    raw = (raw or "").strip()
+    if raw:
+        try:
+            delivery_date = datetime.fromisoformat(raw).date()
+        except Exception:
+            pass
+    return today, delivery_date
+
+
+def _ff_prior_weekday_dates(target_date, days: int = 30):
+    """Dates in the prior N-day window that match target_date's weekday."""
+    start = target_date - timedelta(days=days)
+    out = []
+    cur = start
+    while cur < target_date:
+        if cur.weekday() == target_date.weekday():
+            out.append(cur)
+        cur += timedelta(days=1)
+    return start, out
+
+
+def _ff_daily_avg_by_slug(db, target_date, days: int = 30):
+    """Day-specific 30-day usage average for planning the target delivery day.
+
+    Formula: sum(COALESCE(sent_qty, or_qty)) for prior orders with the same
+    delivery weekday, divided by the number of matching weekdays in the prior
+    window. Missing-order days count as zero, which makes this a daily usage
+    average instead of an average-of-orders.
+    """
+    from app.models import FreshFoodOrderLine, FreshFoodOrder
+
+    window_start, source_days = _ff_prior_weekday_dates(target_date, days=days)
+    divisor = max(len(source_days), 1)
+    rows = (db.query(FreshFoodOrderLine, FreshFoodOrder)
+              .join(FreshFoodOrder,
+                    FreshFoodOrder.id == FreshFoodOrderLine.order_id)
+              .filter(FreshFoodOrder.order_date >= window_start)
+              .filter(FreshFoodOrder.order_date < target_date)
+              .all())
+    stats: dict = {}
+    for ln, order in rows:
+        if not order.order_date or order.order_date.weekday() != target_date.weekday():
+            continue
+        qty = ln.sent_qty if ln.sent_qty is not None else ln.or_qty
+        if qty is None:
+            continue
+        slug = ln.item_slug
+        d = stats.setdefault(slug, {
+            "slug": slug,
+            "total_usage": 0.0,
+            "ordered_total": 0.0,
+            "sent_total": 0.0,
+            "line_count": 0,
+            "order_ids": set(),
+            "last_order_date": None,
+        })
+        d["total_usage"] += float(qty or 0)
+        d["ordered_total"] += float(ln.or_qty or 0)
+        d["sent_total"] += float(ln.sent_qty or 0)
+        d["line_count"] += 1
+        d["order_ids"].add(order.id)
+        if order.order_date and (
+            d["last_order_date"] is None or order.order_date > d["last_order_date"]
+        ):
+            d["last_order_date"] = order.order_date
+
+    for d in stats.values():
+        d["avg"] = d["total_usage"] / divisor
+        d["order_count"] = len(d["order_ids"])
+        d["source_day_count"] = len(source_days)
+        d["order_ids"] = sorted(d["order_ids"])
+
+    meta = {
+        "days": days,
+        "target_date": target_date,
+        "target_weekday": target_date.strftime("%A"),
+        "window_start": window_start,
+        "window_end": target_date - timedelta(days=1),
+        "source_days": source_days,
+        "source_day_count": len(source_days),
+        "formula": "SUM(COALESCE(sent_qty, or_qty)) / matching prior weekdays",
+    }
+    return stats, meta
+
+
 def _ff_window_tracker(db, days: int):
     """For Recent Orders top section. Returns
     {slug: {'tomball': float, 'copperfield': float, 'total': float,
@@ -4248,17 +4358,18 @@ def fresh_food_place_order():
     if not _manager_role_ok():
         abort(403)
     db = next(get_db())
+    today, delivery_date = _ff_target_order_date(request.args.get("order_date"))
     try:
-        avg_by_slug = _ff_rolling_avg_by_slug(db, days=30)
+        avg_stats, avg_meta = _ff_daily_avg_by_slug(db, delivery_date, days=30)
+        avg_by_slug = {slug: row["avg"] for slug, row in avg_stats.items()}
     finally:
         db.close()
-    from datetime import timedelta
-    today = datetime.utcnow().date()
-    rolling_days = [today + timedelta(days=i - 3) for i in range(7)]
     return render_template(
         "fresh_food_place_order.html",
         categories=_FRESH_FOOD_ORDER_LAYOUT,
-        rolling_days=rolling_days,
+        today_date=today,
+        delivery_date=delivery_date,
+        avg_meta=avg_meta,
         rolling_avg_by_slug=avg_by_slug,
         active="fresh_food_place_order",
     )
@@ -4271,10 +4382,11 @@ def fresh_food_place_order_submit():
     from app.models import FreshFoodOrder, FreshFoodOrderLine
     body = request.get_json(silent=True) or {}
     od_str = (body.get("order_date") or "").strip()
+    today, default_delivery_date = _ff_target_order_date()
     try:
-        order_date = datetime.fromisoformat(od_str).date() if od_str else datetime.utcnow().date()
+        order_date = datetime.fromisoformat(od_str).date() if od_str else default_delivery_date
     except Exception:
-        order_date = datetime.utcnow().date()
+        order_date = default_delivery_date
     lines = body.get("lines") or []
     user = getattr(g, "current_user", None)
     db = next(get_db())
@@ -4304,6 +4416,176 @@ def fresh_food_place_order_submit():
                 continue
         db.commit()
         return jsonify({"ok": True, "order_id": order.id})
+    finally:
+        db.close()
+
+
+@store_bp.route("/fresh-food/developer", methods=["GET"])
+def fresh_food_developer():
+    if not _manager_role_ok():
+        abort(403)
+    from app.models import FreshFoodOrder, FreshFoodOrderLine
+
+    today, delivery_date = _ff_target_order_date(request.args.get("order_date"))
+    catalog = _ff_catalog_lookup()
+    db = next(get_db())
+    try:
+        orders = (db.query(FreshFoodOrder)
+                    .order_by(FreshFoodOrder.placed_at.desc())
+                    .limit(100).all())
+        lines_by_order = _ff_lines_by_order(db, [o.id for o in orders])
+        avg_stats, avg_meta = _ff_daily_avg_by_slug(db, delivery_date, days=30)
+
+        item_stats: dict = {}
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        item_rows = (db.query(FreshFoodOrderLine, FreshFoodOrder)
+                       .join(FreshFoodOrder,
+                             FreshFoodOrder.id == FreshFoodOrderLine.order_id)
+                       .filter(FreshFoodOrder.placed_at >= cutoff)
+                       .all())
+        for ln, order in item_rows:
+            meta = catalog.get(ln.item_slug, {})
+            d = item_stats.setdefault(ln.item_slug, {
+                "slug": ln.item_slug,
+                "label": meta.get("label") or ln.item_slug.replace("-", " ").title(),
+                "category": meta.get("category") or ln.item_category or "",
+                "size": meta.get("size") or "",
+                "ordered": 0.0,
+                "sent": 0.0,
+                "usage": 0.0,
+                "on_hand_entries": 0,
+                "line_count": 0,
+                "orders": set(),
+                "last_placed_at": None,
+            })
+            ordered = float(ln.or_qty or 0)
+            sent = float(ln.sent_qty or 0)
+            usage = float((ln.sent_qty if ln.sent_qty is not None else ln.or_qty) or 0)
+            d["ordered"] += ordered
+            d["sent"] += sent
+            d["usage"] += usage
+            d["on_hand_entries"] += 1 if ln.inv_qty is not None else 0
+            d["line_count"] += 1
+            d["orders"].add(order.id)
+            if order.placed_at and (
+                d["last_placed_at"] is None or order.placed_at > d["last_placed_at"]
+            ):
+                d["last_placed_at"] = order.placed_at
+        for d in item_stats.values():
+            d["order_count"] = len(d["orders"])
+            d["orders"] = sorted(d["orders"])
+            d["last_placed_local"] = _central_dt(d["last_placed_at"])
+
+        order_summaries = []
+        orderer_stats: dict = {}
+        hour_stats: dict = {}
+        review_minutes = []
+        total_units_ordered = 0.0
+        total_units_sent = 0.0
+        total_line_count = 0
+        for o in orders:
+            olines = lines_by_order.get(o.id, [])
+            units_ordered = sum(float(ln.get("or_qty") or 0) for ln in olines)
+            units_sent = sum(float(ln.get("sent_qty") or 0) for ln in olines)
+            total_units_ordered += units_ordered
+            total_units_sent += units_sent
+            total_line_count += len(olines)
+            placed_local = _central_dt(o.placed_at)
+            completed_local = _central_dt(o.fulfilled_at)
+            minutes = None
+            if o.placed_at and o.fulfilled_at:
+                minutes = round((o.fulfilled_at - o.placed_at).total_seconds() / 60.0, 1)
+                review_minutes.append(minutes)
+            if placed_local:
+                hour_stats[placed_local.hour] = hour_stats.get(placed_local.hour, 0) + 1
+            orderer = o.placed_by_name or "Unknown"
+            od = orderer_stats.setdefault(orderer, {
+                "name": orderer,
+                "orders": 0,
+                "items": 0,
+                "units_ordered": 0.0,
+                "units_sent": 0.0,
+                "last_placed_local": None,
+            })
+            od["orders"] += 1
+            od["items"] += len(olines)
+            od["units_ordered"] += units_ordered
+            od["units_sent"] += units_sent
+            if placed_local and (
+                od["last_placed_local"] is None or placed_local > od["last_placed_local"]
+            ):
+                od["last_placed_local"] = placed_local
+            order_summaries.append({
+                "id": o.id,
+                "placed_local": placed_local,
+                "order_date": o.order_date,
+                "store_scope": o.store_scope or "both",
+                "placed_by": orderer,
+                "status": o.status,
+                "completed_local": completed_local,
+                "fulfilled_by": o.fulfilled_by_name or "",
+                "sent_date": o.sent_date,
+                "item_count": len(olines),
+                "units_ordered": units_ordered,
+                "units_sent": units_sent,
+                "review_minutes": minutes,
+            })
+
+        avg_rows = []
+        for cat in _FRESH_FOOD_ORDER_LAYOUT:
+            for item in cat["items"]:
+                st = avg_stats.get(item["slug"], {})
+                avg_rows.append({
+                    "slug": item["slug"],
+                    "label": item["label"],
+                    "category": cat["name"],
+                    "size": item.get("size") or "",
+                    "avg": float(st.get("avg") or 0),
+                    "total_usage": float(st.get("total_usage") or 0),
+                    "ordered_total": float(st.get("ordered_total") or 0),
+                    "sent_total": float(st.get("sent_total") or 0),
+                    "line_count": int(st.get("line_count") or 0),
+                    "order_count": int(st.get("order_count") or 0),
+                    "last_order_date": st.get("last_order_date"),
+                })
+
+        summary = {
+            "order_count": len(orders),
+            "active_count": sum(1 for o in orders if o.status == "active"),
+            "completed_count": sum(1 for o in orders if o.status == "completed"),
+            "line_count": total_line_count,
+            "units_ordered": total_units_ordered,
+            "units_sent": total_units_sent,
+            "orderer_count": len(orderer_stats),
+            "avg_review_minutes": (
+                sum(review_minutes) / len(review_minutes) if review_minutes else None
+            ),
+        }
+        hour_rows = [
+            {"hour": hour, "label": f"{((hour - 1) % 12) + 1} {'AM' if hour < 12 else 'PM'}", "orders": count}
+            for hour, count in sorted(hour_stats.items())
+        ]
+        item_rows_sorted = sorted(
+            item_stats.values(),
+            key=lambda r: (-r["usage"], r["label"]),
+        )
+        orderer_rows = sorted(
+            orderer_stats.values(),
+            key=lambda r: (-r["orders"], r["name"]),
+        )
+        return render_template(
+            "fresh_food_developer.html",
+            today_date=today,
+            delivery_date=delivery_date,
+            summary=summary,
+            orders=order_summaries,
+            item_rows=item_rows_sorted,
+            orderer_rows=orderer_rows,
+            hour_rows=hour_rows,
+            avg_rows=avg_rows,
+            avg_meta=avg_meta,
+            active="fresh_food_developer",
+        )
     finally:
         db.close()
 

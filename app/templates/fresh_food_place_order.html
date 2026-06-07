@@ -16,8 +16,7 @@
   /* Let the active content view stretch to fill remaining height so the
      content/context box maximizes information space and the sticky submit
      row stays pinned at the bottom (UI/layout only). */
-  #ffpo-today-view, #ffpo-week-view { flex: 1 1 auto; }
-  #ffpo-week-view .ffpo-grid-wrap { height: 100%; }
+  #ffpo-today-view { flex: 1 1 auto; }
   /* Darkening layer over the base_dashboard photo, scoped to .ffpo-page
      via position:absolute (NOT fixed) so the sidebar is never painted
      over (dck #11:13 diagnostic — matches incident reports cfab327).
@@ -128,31 +127,6 @@
     border: 0.5px solid rgba(156,203,118,0.30);
   }
 
-  /* --- mode toggle ------------------------------------------------- */
-  .ffpo-modes {
-    display: inline-flex;
-    gap: 4px;
-    background: rgba(0,0,0,0.30);
-    border: 0.5px solid rgba(217,164,54,0.18);
-    border-radius: 5px;
-    padding: 3px;
-    margin-bottom: 14px;
-  }
-  .ffpo-mode-btn {
-    padding: 7px 16px;
-    border-radius: 4px;
-    border: none;
-    background: transparent;
-    color: rgba(255,255,255,0.55);
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  .ffpo-mode-btn.active { background: #E4B340; color: #1a1208; border-radius: 4px; }
-
   /* --- TODAY (single-day) view ------------------------------------ */
   .ff-today-head {
     display: flex;
@@ -218,8 +192,9 @@
   }
   .ff-cat-thead, .ff-item-row {
     display: grid;
-    grid-template-columns: minmax(150px,1fr) 90px 100px 100px 96px;
-    gap: 10px;
+    grid-template-columns: minmax(128px, 168px) 68px 78px 86px 56px;
+    column-gap: 14px;
+    row-gap: 6px;
     align-items: center;
     padding: 7px 14px;
   }
@@ -230,19 +205,43 @@
     color: rgba(255,255,255,0.45);
     border-bottom: 0.5px solid rgba(255,255,255,0.05);
   }
-  .ff-cat-thead div:not(:first-child):not(:nth-child(2)) { text-align: right; }
-  .ff-cat-thead div:nth-child(2) { text-align: left; }
+  .ff-cat-thead > div:not(:first-child) { text-align: center; }
+  .ff-head-cell { line-height: 1.15; }
+  .ff-head-date {
+    display: block;
+    color: #E4B340;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .ff-head-day {
+    display: block;
+    margin-top: 2px;
+    color: rgba(255,255,255,0.68);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  .ff-head-label {
+    display: block;
+    margin-top: 5px;
+    color: rgba(255,255,255,0.45);
+  }
+  .ff-head-avg {
+    color: #E4B340;
+    font-size: 10.5px;
+  }
   .ff-item-row { border-bottom: 0.5px solid rgba(255,255,255,0.035); }
   .ff-item-row:last-child { border-bottom: 0; }
   .ff-item-row:nth-of-type(odd) { background: rgba(0,0,0,0.12); }
   .ff-item-name { font-size: 13px; font-weight: 500; color: #FAF6EC; }
   .ff-item-size {
-    text-align: left;
+    text-align: center;
     font-size: 12px;
     color: rgba(255,255,255,0.55);
     letter-spacing: 0.02em;
   }
   input.ff-num {
+    box-sizing: border-box;
     width: 100%;
     background: #E4B340;
     border: 1px solid #c79a2f;
@@ -259,7 +258,7 @@
   input.ff-num.has-value { border-color: #a07d1f; }
   input.ff-num-order.has-value { border-color: #1a1208; background: #edc25a; }
   .ff-avg {
-    text-align: right;
+    text-align: center;
     font-size: 11.5px;
     color: rgba(255,255,255,0.45);
     font-variant-numeric: tabular-nums;
@@ -268,150 +267,18 @@
 
   @media (max-width: 560px) {
     .ff-cat-thead, .ff-item-row {
-      grid-template-columns: 1fr 56px 62px 62px 50px;
-      gap: 6px;
+      grid-template-columns: minmax(112px, 1fr) 58px 62px 72px 44px;
+      gap: 10px;
       padding: 7px 10px;
     }
     input.ff-num { padding: 6px 5px; }
-  }
-
-  /* --- WEEKLY grid view (kept) ------------------------------------- */
-  .ffpo-grid-wrap {
-    background: rgba(255,255,255,0.03);
-    border: 0.5px solid rgba(217,164,54,0.10);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 12px;
-  }
-  .ffpo-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    max-width: 100%;
-  }
-  table.ffpo-grid {
-    border-collapse: separate;
-    border-spacing: 0;
-    width: 100%;
-    font-size: 12px;
-    color: #FAF6EC;
-    min-width: 920px;
-  }
-  table.ffpo-grid thead tr.row-day th {
-    background: #14110d;
-    color: rgba(255,255,255,0.85);
-    font-weight: 600;
-    text-align: center;
-    padding: 8px 10px;
-    border-bottom: 0.5px solid rgba(217,164,54,0.15);
-    font-size: 11.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    position: sticky;
-    top: 0;
-    z-index: 3;
-  }
-  table.ffpo-grid thead tr.row-sub th {
-    background: #0e0c08;
-    color: rgba(255,255,255,0.55);
-    font-weight: 500;
-    text-align: center;
-    padding: 4px 6px;
-    border-bottom: 0.5px solid rgba(217,164,54,0.15);
-    font-size: 9.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.10em;
-    position: sticky;
-    top: 28px;
-    z-index: 3;
-  }
-  table.ffpo-grid th.is-today, table.ffpo-grid th.is-tomorrow { color: #E4B340; }
-  table.ffpo-grid th.col-item, table.ffpo-grid th.col-avg {
-    text-align: left;
-    background: #14110d;
-    padding: 8px 12px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: rgba(255,255,255,0.65);
-  }
-  table.ffpo-grid th.col-item { position: sticky; left: 0; z-index: 4; min-width: 150px; }
-  table.ffpo-grid th.col-avg  { position: sticky; left: 150px; z-index: 4; min-width: 70px; text-align: right; }
-  table.ffpo-grid tr.cat-row td {
-    background: rgba(228,179,64,0.07);
-    color: #E4B340;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 10.5px;
-    padding: 6px 12px;
-    border-top: 0.5px solid rgba(217,164,54,0.10);
-    border-bottom: 0.5px solid rgba(217,164,54,0.10);
-  }
-  table.ffpo-grid td {
-    padding: 4px 6px;
-    border-bottom: 0.5px solid rgba(255,255,255,0.04);
-  }
-  table.ffpo-grid td.cell-item {
-    text-align: left;
-    padding: 6px 12px;
-    color: #FAF6EC;
-    font-weight: 500;
-    background: #0e0c08;
-    position: sticky;
-    left: 0;
-    z-index: 2;
-  }
-  table.ffpo-grid td.cell-item .cell-item-size {
-    color: rgba(255,255,255,0.40);
-    font-weight: 400;
-    font-size: 10.5px;
-  }
-  table.ffpo-grid td.cell-avg {
-    text-align: right;
-    color: rgba(255,255,255,0.50);
-    font-variant-numeric: tabular-nums;
-    padding-right: 12px;
-    background: #0e0c08;
-    position: sticky;
-    left: 150px;
-    z-index: 2;
-    font-size: 11px;
-  }
-  table.ffpo-grid td.cell-input { background: rgba(0,0,0,0.20); }
-  table.ffpo-grid td.is-today    { background: rgba(228,179,64,0.04); }
-  table.ffpo-grid td.is-tomorrow { background: rgba(228,179,64,0.10); }
-  table.ffpo-grid input.ffpo-num {
-    width: 56px;
-    background: #E4B340;
-    border: 1px solid #c79a2f;
-    color: #1a1208;
-    text-align: center;
-    padding: 4px 5px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: inherit;
-    font-variant-numeric: tabular-nums;
-  }
-  table.ffpo-grid input.ffpo-num::placeholder { color: #5c4a16; opacity: 1; }
-  table.ffpo-grid input.ffpo-num:focus {
-    outline: none;
-    border-color: #1a1208;
-    background: #edc25a;
-  }
-  table.ffpo-grid input.ffpo-num.is-tomorrow {
-    border-color: #1a1208;
-    background: #edc25a;
-  }
-  table.ffpo-grid td.is-past input.ffpo-num {
-    color: rgba(26,18,8,0.55);
-    background: rgba(228,179,64,0.55);
   }
 
   /* --- submit row + banners --------------------------------------- */
   .ffpo-submit-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 12px;
     flex-wrap: wrap;
     padding: 14px 16px;
@@ -422,7 +289,6 @@
     position: sticky;
     bottom: 0;
   }
-  .ffpo-submit-row .info { font-size: 11.5px; color: rgba(255,255,255,0.55); }
   .ffpo-submit-actions { display: flex; align-items: center; gap: 8px; }
   .ffpo-btn {
     display: inline-flex;
@@ -467,33 +333,30 @@
   <div class="ff-tabs">
     <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">Recent Orders</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>
-  {% set today = rolling_days[3] if rolling_days|length >= 4 else rolling_days[0] %}
-  {% set tomorrow = rolling_days[4] if rolling_days|length >= 5 else rolling_days[-1] %}
+  {% set today = today_date %}
+  {% set delivery = delivery_date %}
+  {% set today_short = '%02d/%d'|format(today.month, today.day) %}
+  {% set delivery_day = delivery.strftime('%A') %}
   {% set orderer = (g.current_user.full_name if g.current_user else 'unknown') %}
   {% set location = (g.current_location or 'both')|title %}
 
   <div class="ffpo-meta">
     <div>
       <span class="label">Order date</span>
-      <input type="date" id="ffpo-order-date" value="{{ tomorrow.isoformat() }}">
+      <input type="date" id="ffpo-order-date" value="{{ delivery.isoformat() }}">
     </div>
     <div style="margin-left:auto;">
       <span class="pill"><i class="ti ti-eye"></i>Cross-location visible</span>
     </div>
   </div>
 
-  <div class="ffpo-modes">
-    <button type="button" class="ffpo-mode-btn active" data-mode="today">Today</button>
-    <button type="button" class="ffpo-mode-btn" data-mode="week">Weekly grid</button>
-  </div>
-
-  {# ============ TODAY (single-day) view ============ #}
   <div id="ffpo-today-view">
     <div class="ff-today-head">
       <div>
         <div class="ff-eyebrow">Order for delivery</div>
-        <h2 class="ff-today-date" id="ff-today-date-label">{{ tomorrow.strftime('%A, %B %d') }}</h2>
+        <h2 class="ff-today-date" id="ff-today-date-label">{{ delivery.strftime('%A, %B %d') }}</h2>
         <div class="ff-today-by">Placed by <strong>{{ orderer }}</strong> at <strong>{{ location }}</strong></div>
       </div>
       <div class="ff-today-count" id="ff-today-count">0 items · 0 units ordered</div>
@@ -508,16 +371,23 @@
         <div class="ff-cat-table">
           <div class="ff-cat-thead">
             <div>Item</div>
+            <div class="ff-head-cell">
+              <span class="ff-head-date">{{ today_short }}</span>
+              <span class="ff-head-day">{{ today.strftime('%A') }}</span>
+              <span class="ff-head-label">On hand</span>
+            </div>
+            <div class="ff-head-cell">
+              <span class="ff-head-date">{{ today_short }}</span>
+              <span class="ff-head-day">{{ delivery_day }}</span>
+              <span class="ff-head-label">Order</span>
+            </div>
+            <div class="ff-head-cell ff-head-avg">{{ delivery_day }} avg</div>
             <div>Size</div>
-            <div>On hand</div>
-            <div>Order</div>
-            <div>30-day avg</div>
           </div>
           {% for item in cat['items'] %}
             {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
             <div class="ff-item-row">
               <div class="ff-item-name">{{ item.label }}</div>
-              <div class="ff-item-size">{{ item.size }}</div>
               <input type="number" step="1" min="0" inputmode="numeric"
                      class="ff-num"
                      data-kind="inv" data-slug="{{ item.slug }}" data-cat="{{ cat.name }}"
@@ -529,6 +399,7 @@
               <div class="ff-avg">
                 {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}<span class="unit">/d</span>{% else %}—{% endif %}
               </div>
+              <div class="ff-item-size">{{ item.size }}</div>
             </div>
           {% endfor %}
         </div>
@@ -536,76 +407,7 @@
     {% endfor %}
   </div>
 
-  {# ============ WEEKLY grid view ============ #}
-  <div id="ffpo-week-view" style="display:none;">
-    <div class="ffpo-grid-wrap">
-      <div class="ffpo-scroll">
-        <table class="ffpo-grid">
-          <thead>
-            <tr class="row-day">
-              <th class="col-item" rowspan="2">Item</th>
-              <th class="col-avg" rowspan="2">30d avg</th>
-              {% for d in rolling_days %}
-                {% set is_today = (d == today) %}
-                {% set is_tomorrow = (d == tomorrow) %}
-                <th colspan="2" class="{% if is_today %}is-today{% elif is_tomorrow %}is-tomorrow{% endif %}">
-                  {{ d.strftime('%a %m/%d') }}{% if is_today %} <span style="font-size:9px;opacity:0.7;">(TODAY)</span>{% endif %}
-                </th>
-              {% endfor %}
-            </tr>
-            <tr class="row-sub">
-              {% for d in rolling_days %}
-                <th>INV</th>
-                <th>OR</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for cat in categories %}
-              <tr class="cat-row">
-                <td colspan="{{ 2 + rolling_days|length * 2 }}">{{ cat.name }}</td>
-              </tr>
-              {% for item in cat['items'] %}
-                <tr>
-                  <td class="cell-item">{{ item.label }}{% if item.size %} <span class="cell-item-size">{{ item.size }}</span>{% endif %}</td>
-                  <td class="cell-avg">{{ '%.1f'|format(rolling_avg_by_slug.get(item.slug, 0)) }}</td>
-                  {% for d in rolling_days %}
-                    {% set is_today = (d == today) %}
-                    {% set is_tomorrow = (d == tomorrow) %}
-                    {% set is_past = (d < today) %}
-                    <td class="cell-input {% if is_today %}is-today{% elif is_tomorrow %}is-tomorrow{% elif is_past %}is-past{% endif %}">
-                      <input type="number" step="1" min="0"
-                             class="ffpo-num {% if is_tomorrow %}is-tomorrow{% endif %}"
-                             data-kind="inv"
-                             data-slug="{{ item.slug }}"
-                             data-cat="{{ cat.name }}"
-                             data-date="{{ d.isoformat() }}"
-                             inputmode="numeric">
-                    </td>
-                    <td class="cell-input {% if is_today %}is-today{% elif is_tomorrow %}is-tomorrow{% elif is_past %}is-past{% endif %}">
-                      <input type="number" step="1" min="0"
-                             class="ffpo-num {% if is_tomorrow %}is-tomorrow{% endif %}"
-                             data-kind="or"
-                             data-slug="{{ item.slug }}"
-                             data-cat="{{ cat.name }}"
-                             data-date="{{ d.isoformat() }}"
-                             inputmode="numeric">
-                    </td>
-                  {% endfor %}
-                </tr>
-              {% endfor %}
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <div class="ffpo-submit-row">
-    <div class="info">
-      <i class="ti ti-info-circle" style="color:#E4B340;"></i>
-      <span id="ffpo-submit-hint">Submit places the order for the date above. Both locations can see it.</span>
-    </div>
     <div class="ffpo-submit-actions">
       <button id="ffpo-cancel" class="ffpo-btn ghost" type="button" style="display:none;">Cancel</button>
       <button id="ffpo-submit" class="ffpo-btn" type="button">
@@ -620,19 +422,15 @@
 
 <script>
 (function(){
-  var modeBtns  = document.querySelectorAll('.ffpo-mode-btn');
   var todayView = document.getElementById('ffpo-today-view');
-  var weekView  = document.getElementById('ffpo-week-view');
   var dateInput = document.getElementById('ffpo-order-date');
   var dateLabel = document.getElementById('ff-today-date-label');
   var countEl   = document.getElementById('ff-today-count');
-  var hintEl    = document.getElementById('ffpo-submit-hint');
   var btn       = document.getElementById('ffpo-submit');
   var cancelBtn = document.getElementById('ffpo-cancel');
   var bannerOk  = document.getElementById('ffpo-banner-ok');
   var bannerErr = document.getElementById('ffpo-banner-err');
   var todayInputs = todayView.querySelectorAll('input.ff-num');
-  var mode = 'today';
   var confirming = false;
 
   function showOk(m){ bannerErr.style.display='none'; bannerOk.textContent=m; bannerOk.style.display='block'; }
@@ -646,24 +444,6 @@
     cancelBtn.style.display = 'none';
   }
 
-  function setMode(m){
-    mode = m;
-    for(var i=0; i<modeBtns.length; i++){
-      modeBtns[i].classList.toggle('active', modeBtns[i].getAttribute('data-mode') === m);
-    }
-    todayView.style.display = (m === 'today') ? '' : 'none';
-    weekView.style.display  = (m === 'week')  ? '' : 'none';
-    hintEl.textContent = (m === 'today')
-      ? 'Submit places the order for the date above. Both locations can see it.'
-      : 'Submit posts the highlighted date column only. Fill other columns for context.';
-    resetConfirm();
-  }
-  for(var i=0; i<modeBtns.length; i++){
-    modeBtns[i].addEventListener('click', (function(b){
-      return function(){ setMode(b.getAttribute('data-mode')); };
-    })(modeBtns[i]));
-  }
-
   function fmtLong(iso){
     try {
       return new Date(iso + 'T12:00:00').toLocaleDateString('en-US',
@@ -671,7 +451,12 @@
     } catch(e){ return iso; }
   }
   function syncDate(){ if(dateLabel) dateLabel.textContent = fmtLong(dateInput.value); }
-  dateInput.addEventListener('change', function(){ syncDate(); resetConfirm(); });
+  dateInput.addEventListener('change', function(){
+    if(!dateInput.value){ return; }
+    var url = new URL(window.location.href);
+    url.searchParams.set('order_date', dateInput.value);
+    window.location.href = url.toString();
+  });
   syncDate();
 
   function refreshCount(){
@@ -695,9 +480,7 @@
 
   function collectLines(){
     var lines = {};
-    var inputs = (mode === 'today')
-      ? todayInputs
-      : weekView.querySelectorAll('input.ffpo-num[data-date="' + dateInput.value + '"]');
+    var inputs = todayInputs;
     for(var i=0; i<inputs.length; i++){
       var el = inputs[i];
       var raw = el.value.trim();
@@ -741,11 +524,9 @@
       resetConfirm();
       if(j && j.ok){
         showOk('Order #' + j.order_id + ' placed for ' + date + ' (' + arr.length + ' items).');
-        var clearTargets = (mode === 'today')
-          ? todayInputs
-          : weekView.querySelectorAll('input.ffpo-num[data-date="' + date + '"]');
+        var clearTargets = todayInputs;
         for(var k=0; k<clearTargets.length; k++){ clearTargets[k].value = ''; }
-        if(mode === 'today') refreshCount();
+        refreshCount();
       } else {
         showErr('Submit failed: ' + (j.error || 'unknown error'));
       }

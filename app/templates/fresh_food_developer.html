@@ -1,0 +1,451 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'fresh_food_developer' %}
+{% block title %}Fresh Food - Developer - Cenas Kitchen{% endblock %}
+{% block topbar %}{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block content %}
+<style>
+  .ffdev-page { margin-top: 12px; position: relative; min-height: 100vh; }
+  .ffdev-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 12, 8, 0.72);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .ffdev-page > * { position: relative; z-index: 1; }
+
+  .ff-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(217,164,54,0.18);
+    margin-bottom: 14px;
+  }
+  .ff-tab {
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.55);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s;
+  }
+  .ff-tab:hover { color: #FAF6EC; }
+  .ff-tab.is-active { color: #E4B340; border-bottom-color: #E4B340; }
+
+  .ffh-hero {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .ffh-title {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #FAF6EC;
+  }
+  .ffh-title-accent { font-weight: 400; font-style: italic; color: #E4B340; }
+  .ffh-store {
+    margin-left: auto;
+    padding: 6px 14px;
+    background: rgba(228,179,64,0.14);
+    border: 1px solid rgba(217,164,54,0.30);
+    border-radius: 8px;
+    color: #E4B340;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .ffdev-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid rgba(217,164,54,0.10);
+    border-radius: 10px;
+    margin-bottom: 14px;
+  }
+  .ffdev-bar label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.55);
+  }
+  .ffdev-bar input[type="date"] {
+    background: rgba(0,0,0,0.30);
+    border: 0.5px solid rgba(217,164,54,0.25);
+    color: #FAF6EC;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .ffdev-window {
+    margin-left: auto;
+    color: rgba(255,255,255,0.62);
+    font-size: 12px;
+  }
+  .ffdev-window strong { color: #E4B340; }
+
+  .ffdev-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .ffdev-card {
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid rgba(217,164,54,0.10);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .ffdev-card .k {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.46);
+  }
+  .ffdev-card .v {
+    margin-top: 5px;
+    font-size: 21px;
+    font-weight: 700;
+    color: #FAF6EC;
+    font-variant-numeric: tabular-nums;
+  }
+  .ffdev-card .s { margin-top: 3px; color: rgba(255,255,255,0.45); font-size: 11px; }
+
+  .ffdev-section {
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid rgba(217,164,54,0.10);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .ffdev-section h2 {
+    margin: 0;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.10);
+    font-size: 13px;
+    font-weight: 700;
+    color: #FAF6EC;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ffdev-section h2 i { color: #E4B340; font-size: 16px; }
+  .ffdev-section h2 .h-sub {
+    margin-left: auto;
+    color: rgba(255,255,255,0.50);
+    font-size: 10.5px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .ffdev-note {
+    padding: 10px 16px;
+    color: rgba(255,255,255,0.68);
+    font-size: 12px;
+    border-bottom: 0.5px solid rgba(255,255,255,0.05);
+  }
+  .ffdev-note code {
+    color: #E4B340;
+    background: rgba(0,0,0,0.25);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+
+  .ffdev-table-wrap { overflow-x: auto; }
+  table.ffdev-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+    color: #FAF6EC;
+    font-size: 12px;
+  }
+  table.ffdev-table th,
+  table.ffdev-table td {
+    padding: 7px 12px;
+    border-bottom: 0.5px solid rgba(255,255,255,0.04);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.ffdev-table th {
+    background: #0e0c08;
+    color: rgba(255,255,255,0.55);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  table.ffdev-table th:first-child,
+  table.ffdev-table td:first-child,
+  table.ffdev-table th.left,
+  table.ffdev-table td.left { text-align: left; }
+  .muted { color: rgba(255,255,255,0.40); }
+  .status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .status-pill.active { background: rgba(228,179,64,0.16); color: #E4B340; }
+  .status-pill.completed { background: rgba(156,203,118,0.14); color: #9CCB76; }
+
+  @media (max-width: 900px) {
+    .ffdev-cards { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    .ffdev-window { margin-left: 0; width: 100%; }
+  }
+  @media (max-width: 560px) {
+    .ffdev-cards { grid-template-columns: 1fr 1fr; }
+    .ff-tab { padding: 10px 12px; }
+  }
+</style>
+
+<div class="ffdev-page">
+  <div class="ffh-hero">
+    <h1 class="ffh-title">Fresh Food <span class="ffh-title-accent">Developer</span></h1>
+    <span class="ffh-store">{{ (g.current_location or 'both')|title }}</span>
+  </div>
+  <div class="ff-tabs">
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">Recent Orders</a>
+    <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
+  </div>
+
+  <div class="ffdev-bar">
+    <label for="ffdev-order-date">Planning date</label>
+    <input type="date" id="ffdev-order-date" value="{{ delivery_date.isoformat() }}">
+    <div class="ffdev-window">
+      <strong>{{ avg_meta.target_weekday }} avg</strong> starts {{ avg_meta.window_start.isoformat() }}
+      through {{ avg_meta.window_end.isoformat() }} using {{ avg_meta.source_day_count }} matching day{{ '' if avg_meta.source_day_count == 1 else 's' }}.
+    </div>
+  </div>
+
+  <div class="ffdev-cards">
+    <div class="ffdev-card">
+      <div class="k">Recent orders</div>
+      <div class="v">{{ summary.order_count }}</div>
+      <div class="s">{{ summary.active_count }} active / {{ summary.completed_count }} completed</div>
+    </div>
+    <div class="ffdev-card">
+      <div class="k">Items tracked</div>
+      <div class="v">{{ summary.line_count }}</div>
+      <div class="s">last 100 orders</div>
+    </div>
+    <div class="ffdev-card">
+      <div class="k">Units ordered</div>
+      <div class="v">{{ '%.1f'|format(summary.units_ordered) }}</div>
+      <div class="s">{{ '%.1f'|format(summary.units_sent) }} sent</div>
+    </div>
+    <div class="ffdev-card">
+      <div class="k">Avg review time</div>
+      <div class="v">{% if summary.avg_review_minutes is not none %}{{ '%.0f'|format(summary.avg_review_minutes) }}m{% else %}-{% endif %}</div>
+      <div class="s">placed to completed</div>
+    </div>
+  </div>
+
+  <div class="ffdev-section">
+    <h2>
+      <i class="ti ti-calculator"></i>{{ avg_meta.target_weekday }} avg calculation
+      <span class="h-sub">source: prior {{ avg_meta.days }} days</span>
+    </h2>
+    <div class="ffdev-note">
+      Daily avg = <code>{{ avg_meta.formula }}</code>. Sent qty is used when completed; otherwise order qty is used. Missing matching weekdays count as zero.
+    </div>
+    <div class="ffdev-table-wrap">
+      <table class="ffdev-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="left">Category</th>
+            <th>Usage total</th>
+            <th>Ordered</th>
+            <th>Sent</th>
+            <th>Orders</th>
+            <th>Source days</th>
+            <th>{{ avg_meta.target_weekday }} avg</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in avg_rows %}
+            <tr>
+              <td class="left">{{ r.label }}</td>
+              <td class="left">{{ r.category }}</td>
+              <td>{{ '%.1f'|format(r.total_usage) }}</td>
+              <td>{{ '%.1f'|format(r.ordered_total) }}</td>
+              <td>{{ '%.1f'|format(r.sent_total) }}</td>
+              <td>{{ r.order_count }}</td>
+              <td>{{ avg_meta.source_day_count }}</td>
+              <td><strong>{{ '%.1f'|format(r.avg) }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ffdev-section">
+    <h2>
+      <i class="ti ti-history"></i>Order flow
+      <span class="h-sub">who, when, reviewed/completed</span>
+    </h2>
+    <div class="ffdev-table-wrap">
+      <table class="ffdev-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="left">Placed by</th>
+            <th>Placed time</th>
+            <th>Delivery date</th>
+            <th>Items</th>
+            <th>Ordered</th>
+            <th>Status</th>
+            <th>Completed time</th>
+            <th>Completed by</th>
+            <th>Minutes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+            <tr>
+              <td>{{ o.id }}</td>
+              <td class="left">{{ o.placed_by }}</td>
+              <td>{% if o.placed_local %}{{ o.placed_local.strftime('%m/%d %I:%M %p').lstrip('0') }}{% else %}<span class="muted">-</span>{% endif %}</td>
+              <td>{{ o.order_date.isoformat() if o.order_date else '-' }}</td>
+              <td>{{ o.item_count }}</td>
+              <td>{{ '%.1f'|format(o.units_ordered) }}</td>
+              <td><span class="status-pill {{ o.status }}">{{ o.status }}</span></td>
+              <td>{% if o.completed_local %}{{ o.completed_local.strftime('%m/%d %I:%M %p').lstrip('0') }}{% else %}<span class="muted">-</span>{% endif %}</td>
+              <td class="left">{% if o.fulfilled_by %}{{ o.fulfilled_by }}{% else %}<span class="muted">-</span>{% endif %}</td>
+              <td>{% if o.review_minutes is not none %}{{ '%.1f'|format(o.review_minutes) }}{% else %}<span class="muted">-</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="10" class="left muted">No orders yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ffdev-section">
+    <h2>
+      <i class="ti ti-chart-bar"></i>Item usage
+      <span class="h-sub">last 30 days by item</span>
+    </h2>
+    <div class="ffdev-table-wrap">
+      <table class="ffdev-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="left">Category</th>
+            <th>On hand entries</th>
+            <th>Orders</th>
+            <th>Ordered</th>
+            <th>Sent</th>
+            <th>Usage</th>
+            <th>Last placed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in item_rows %}
+            <tr>
+              <td class="left">{{ r.label }}</td>
+              <td class="left">{{ r.category }}</td>
+              <td>{{ r.on_hand_entries }}</td>
+              <td>{{ r.order_count }}</td>
+              <td>{{ '%.1f'|format(r.ordered) }}</td>
+              <td>{{ '%.1f'|format(r.sent) }}</td>
+              <td><strong>{{ '%.1f'|format(r.usage) }}</strong></td>
+              <td>{% if r.last_placed_local %}{{ r.last_placed_local.strftime('%m/%d %I:%M %p').lstrip('0') }}{% else %}<span class="muted">-</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="left muted">No item usage in the last 30 days.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ffdev-section">
+    <h2>
+      <i class="ti ti-users"></i>Orderers
+      <span class="h-sub">last 100 orders</span>
+    </h2>
+    <div class="ffdev-table-wrap">
+      <table class="ffdev-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Orders</th>
+            <th>Items</th>
+            <th>Units ordered</th>
+            <th>Units sent</th>
+            <th>Last placed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in orderer_rows %}
+            <tr>
+              <td class="left">{{ r.name }}</td>
+              <td>{{ r.orders }}</td>
+              <td>{{ r.items }}</td>
+              <td>{{ '%.1f'|format(r.units_ordered) }}</td>
+              <td>{{ '%.1f'|format(r.units_sent) }}</td>
+              <td>{% if r.last_placed_local %}{{ r.last_placed_local.strftime('%m/%d %I:%M %p').lstrip('0') }}{% else %}<span class="muted">-</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="left muted">No orderer history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ffdev-section">
+    <h2>
+      <i class="ti ti-clock"></i>Order time of day
+      <span class="h-sub">placed hour</span>
+    </h2>
+    <div class="ffdev-table-wrap">
+      <table class="ffdev-table" style="min-width:420px;">
+        <thead>
+          <tr><th>Hour</th><th>Orders placed</th></tr>
+        </thead>
+        <tbody>
+          {% for r in hour_rows %}
+            <tr><td class="left">{{ r.label }}</td><td>{{ r.orders }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="left muted">No placed-time history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var dateInput = document.getElementById('ffdev-order-date');
+  dateInput.addEventListener('change', function(){
+    if(!dateInput.value){ return; }
+    var url = new URL(window.location.href);
+    url.searchParams.set('order_date', dateInput.value);
+    window.location.href = url.toString();
+  });
+})();
+</script>
+{% endblock %}

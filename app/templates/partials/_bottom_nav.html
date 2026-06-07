@@ -67,7 +67,7 @@
   .ck-bnav-inner { display: flex; }
   .ck-bnav-inner-ai {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 62px repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 112px repeat(3, minmax(0, 1fr));
     align-items: end;
   }
   .ck-bnav-tab {
@@ -118,6 +118,12 @@
   .ck-bnav-tab.is-popping {
     background: rgba(255, 255, 255, 0.06);
   }
+  .ck-bnav-catering-tab {
+    transform: translateX(-8px);
+  }
+  .ck-bnav-kitchen-tab {
+    transform: translateX(8px);
+  }
   .ck-bnav-ai-tab {
     position: relative;
     justify-content: center;
@@ -139,8 +145,21 @@
     display: block;
     width: 176px !important;
     height: 124px !important;
-    pointer-events: auto !important;
+    pointer-events: none !important;
     filter: none;
+  }
+  .ck-bnav-ai-lightning {
+    position: absolute;
+    left: 50%;
+    bottom: -8px;
+    transform: translateX(-50%);
+    width: 176px;
+    height: 112px;
+    display: block;
+    z-index: 6;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0.96;
   }
   .ck-bnav-ai-tab .bn-lbl {
     position: absolute;
@@ -215,6 +234,17 @@
     .ck-bnav { display: block; }
     /* keep page content clear of the fixed bar */
     .layout > .main { padding-bottom: calc(78px + max(env(safe-area-inset-bottom, 0px), 12px)); }
+  }
+  @media (max-width: 420px) {
+    .ck-bnav-inner-ai {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) 104px repeat(3, minmax(0, 1fr));
+    }
+    .ck-bnav-catering-tab {
+      transform: translateX(-10px);
+    }
+    .ck-bnav-kitchen-tab {
+      transform: translateX(10px);
+    }
   }
 </style>
 <nav class="ck-bnav" aria-label="Primary navigation (mobile)">
@@ -294,13 +324,14 @@
        reachable as tabs. Same change as the Manager tab above — an <a>
        with no data-pop, so the popover JS skips it. #}
     <a href="/{{ store_slug }}/catering"
-       class="ck-bnav-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering', 'dev_ezcater_live_map'] %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-catering-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering', 'dev_ezcater_live_map'] %} active{% endif %}">
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
     </a>
     <a href="/{{ store_slug }}/today?tab=cena"
        class="ck-bnav-tab ck-bnav-ai-tab{% if _bn_active in ['assistant_page', 'sam_chat'] %} active{% endif %}"
        aria-label="Open Cenas AI assistant">
+      <canvas class="ck-bnav-ai-lightning" data-ck-ai-lightning data-width="176" data-height="112" aria-hidden="true"></canvas>
       <canvas data-ck-ai-orb data-width="176" data-height="124" aria-hidden="true"></canvas>
       <span class="bn-lbl">AI</span>
     </a>
@@ -311,7 +342,7 @@
        no data-pop, so the popover JS skips it. The kitchen surface keys were
        moved off the Operations tab (below) so they light Kitchen, not Ops. #}
     <a href="/{{ store_slug }}/kitchen"
-       class="ck-bnav-tab{% if _bn_active in ['kitchen_dashboard', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes'] %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-kitchen-tab{% if _bn_active in ['kitchen_dashboard', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes'] %} active{% endif %}">
       <i class="ti ti-tools-kitchen-2 bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Kitchen</span>
     </a>

@@ -430,10 +430,128 @@
     requestAnimationFrame(frame);
   }
 
+  function setupLightning(canvas, seedBase) {
+    if (!canvas || canvas.__ckAiLightningReady) return;
+    canvas.__ckAiLightningReady = true;
+
+    var cssW = numberAttr(canvas, "data-width", 176);
+    var cssH = numberAttr(canvas, "data-height", 112);
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+
+    var ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    var seed = seedBase || 911;
+    function rnd() {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed / 4294967296;
+    }
+
+    var strikes = [];
+    var nextStrike = 1;
+
+    function makeStrike() {
+      var startX = (cssW * (0.08 + rnd() * 0.84)) * dpr;
+      var startY = (cssH * (0.94 + rnd() * 0.10)) * dpr;
+      var targetX = (cssW * (0.45 + (rnd() - 0.5) * 0.24)) * dpr;
+      var targetY = (cssH * (0.10 + rnd() * 0.16)) * dpr;
+      var segs = 8 + (rnd() * 6 | 0);
+      var p = [];
+      for (var i = 0; i <= segs; i++) {
+        var k = i / segs;
+        var ease = 1 - Math.pow(1 - k, 1.35);
+        var centerPull = Math.sin(k * Math.PI) * (rnd() - 0.5) * 18 * dpr;
+        var jag = (rnd() - 0.5) * (8 + 12 * Math.sin(k * Math.PI)) * dpr;
+        p.push([
+          startX + (targetX - startX) * ease + jag + centerPull,
+          startY + (targetY - startY) * k + (rnd() - 0.5) * 5 * dpr
+        ]);
+      }
+
+      var branches = [];
+      if (rnd() < 0.8) {
+        var branchCount = 1 + (rnd() * 3 | 0);
+        for (var b = 0; b < branchCount; b++) {
+          var at = 2 + (rnd() * Math.max(2, segs - 4) | 0);
+          var base = p[at];
+          var dir = rnd() < 0.5 ? -1 : 1;
+          var len = (16 + rnd() * 26) * dpr;
+          var bp = [[base[0], base[1]]];
+          for (var j = 1; j <= 3; j++) {
+            bp.push([
+              base[0] + dir * len * j / 3 + (rnd() - 0.5) * 8 * dpr,
+              base[1] - len * 0.45 * j / 3 + (rnd() - 0.5) * 7 * dpr
+            ]);
+          }
+          branches.push(bp);
+        }
+      }
+
+      strikes.push({
+        p: p,
+        branches: branches,
+        life: 0.78 + rnd() * 0.35,
+        width: 0.9 + rnd() * 0.9,
+        col: rnd() < 0.5 ? BOLT_RED : BOLT_BLUE
+      });
+    }
+
+    function drawPath(points) {
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (var i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+      ctx.stroke();
+    }
+
+    function frame() {
+      if (--nextStrike <= 0) {
+        var burst = 2 + (rnd() * 4 | 0);
+        for (var i = 0; i < burst; i++) makeStrike();
+        nextStrike = 3 + (rnd() * 8 | 0);
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      for (var s = strikes.length - 1; s >= 0; s--) {
+        var st = strikes[s];
+        st.life -= 0.052;
+        if (st.life <= 0) {
+          strikes.splice(s, 1);
+          continue;
+        }
+        var col = mixColor(WHITE, st.col, 0.42);
+        var alpha = Math.min(1, st.life * 1.7);
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = rgb(col);
+        ctx.shadowColor = rgb(st.col);
+        ctx.shadowBlur = 10 * dpr;
+        ctx.lineWidth = st.width * dpr;
+        drawPath(st.p);
+        ctx.globalAlpha = alpha * 0.48;
+        ctx.lineWidth = Math.max(0.55, st.width * 0.48) * dpr;
+        st.branches.forEach(drawPath);
+      }
+      ctx.restore();
+      requestAnimationFrame(frame);
+    }
+
+    for (var i = 0; i < 8; i++) makeStrike();
+    requestAnimationFrame(frame);
+  }
+
   function init() {
     var canvases = document.querySelectorAll("canvas[data-ck-ai-orb]");
     canvases.forEach(function (canvas, index) {
       setupOrb(canvas, 37 + index * 97);
+    });
+    var lightningCanvases = document.querySelectorAll("canvas[data-ck-ai-lightning]");
+    lightningCanvases.forEach(function (canvas, index) {
+      setupLightning(canvas, 911 + index * 131);
     });
   }
 

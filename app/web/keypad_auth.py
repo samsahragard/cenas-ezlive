@@ -117,20 +117,22 @@ def _bump_failed_attempts_for_passcode(db, passcode: str) -> None:
 
 
 # ===========================================================================
-# Owner view-login (Sam-directed; current employees only)
+# Owner view-login (Sam-directed; current employees + drivers)
 # ===========================================================================
 # A SINGLE shared phone + a per-employee 5-digit code logs the OWNER straight
 # into THAT employee's REAL portal, so Sam can see exactly what each employee
-# sees when they sign in. Each employee keeps their normal login untouched;
-# this is a second door, for the owner. Codes live in the committed file
-# data/view_login_codes.json as {sha256(code): employee_id} so the repo never
-# stores the plaintext codes. A per-IP lockout makes the 5-digit space
-# infeasible to brute-force online.
+# sees when they sign in. The same shared phone + a per-driver 5-digit code
+# opens THAT driver's profile for owner review. Normal employee/driver logins
+# stay untouched; this is a second door, for the owner. Codes live in committed
+# data/*.json files as {sha256(code): row_id} so the repo never stores the
+# plaintext codes. A per-IP lockout makes the 5-digit space infeasible to
+# brute-force online.
 VIEW_LOGIN_PHONE = "5550000000"          # shared; intercepted before any real lookup
 _VIEW_LOGIN_MAX_FAILS = 8
 _VIEW_LOGIN_LOCKOUT_SECONDS = 600        # 10-minute lockout after MAX consecutive misses
 _view_login_fails: dict = {}             # ip -> (consecutive_fails, lock_until_epoch)
 _view_login_codes_cache = None
+_driver_view_login_codes_cache = None
 
 
 def _view_login_codes_path() -> str:
@@ -157,6 +159,29 @@ def _load_view_login_codes() -> dict:
     return _view_login_codes_cache
 
 
+def _driver_view_login_codes_path() -> str:
+    import os
+    return os.path.join(os.path.dirname(__file__), "..", "..",
+                        "data", "driver_view_login_codes.json")
+
+
+def _load_driver_view_login_codes() -> dict:
+    """{sha256(code): driver_id} from the committed driver owner-review file.
+    Returns {} if absent so the employee view-login behavior is unchanged."""
+    global _driver_view_login_codes_cache
+    if _driver_view_login_codes_cache is None:
+        import json
+        try:
+            with open(_driver_view_login_codes_path(), "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _driver_view_login_codes_cache = {
+                str(k): int(v) for k, v in (data.get("codes") or {}).items()
+            }
+        except Exception:
+            _driver_view_login_codes_cache = {}
+    return _driver_view_login_codes_cache
+
+
 def _view_login_client_ip() -> str:
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
@@ -165,13 +190,14 @@ def _view_login_client_ip() -> str:
 
 
 def _handle_view_login(code: str, nxt: str):
-    """Resolve a view-login code to an employee and open THAT employee's real
-    session (read-write — it is a genuine login, deliberately simple). 401 on
-    a bad code; per-IP lockout after repeated misses."""
+    """Resolve a view-login code to an employee OR driver and open that person's
+    portal session (read-write — it is a genuine login, deliberately simple).
+    401 on a bad code; per-IP lockout after repeated misses."""
     import hashlib
     import time
 
     code = (code or "").strip()
+    code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest() if code else ""
     ip = _view_login_client_ip()
     now = time.time()
     fails, until = _view_login_fails.get(ip, (0, 0.0))
@@ -181,8 +207,10 @@ def _handle_view_login(code: str, nxt: str):
                         "error": f"Too many attempts. Try again in {mins} min."}), 429
 
     mapping = _load_view_login_codes()
-    emp_id = mapping.get(hashlib.sha256(code.encode("utf-8")).hexdigest()) if code else None
-    if not emp_id:
+    emp_id = mapping.get(code_hash) if code_hash else None
+    driver_mapping = _load_driver_view_login_codes()
+    driver_id = driver_mapping.get(code_hash) if code_hash else None
+    if not emp_id and not driver_id:
         fails += 1
         if fails >= _VIEW_LOGIN_MAX_FAILS:
             _view_login_fails[ip] = (0, now + _VIEW_LOGIN_LOCKOUT_SECONDS)
@@ -191,6 +219,32 @@ def _handle_view_login(code: str, nxt: str):
         return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
 
     _view_login_fails.pop(ip, None)  # success clears the throttle
+    if driver_id and not emp_id:
+        from app.models import Driver
+        db = SessionLocal()
+        try:
+            driver_row = (db.query(Driver)
+                            .filter(Driver.id == driver_id, Driver.active.is_(True))
+                            .first())
+            if driver_row is None:
+                return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
+            for _k in ("user_id", "user_session_version", "partner_auth_ok",
+                       "employee_id", "employee_session_version", "active_store"):
+                session.pop(_k, None)
+            session.permanent = True
+            session["driver_id"] = driver_row.id
+            session["driver_name"] = driver_row.name
+            session["driver_location"] = driver_row.location
+            session["driver_session_version"] = driver_row.session_version
+            session["auth_ok"] = True
+            log.info("view-login: owner opened driver_id=%s portal", driver_row.id)
+        finally:
+            db.close()
+        dest = "/my-profile"
+        if nxt and nxt != "/" and nxt.startswith("/"):
+            dest = nxt
+        return jsonify({"ok": True, "next": dest})
+
     from app.models import Employee
     from app.web.employee_auth import _establish_employee_session
     db = SessionLocal()

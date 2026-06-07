@@ -55,8 +55,8 @@ _WRITE_OBJECT_RE = re.compile(
 
 _UNSUPPORTED_SALES_SCOPE_RE = re.compile(
     r"\b(sales|revenue|net\s+sales|gross\s+sales|toast\s+analytics)\b"
-    r".*\b(yesterday|last\s+night|previous\s+day)\b|"
-    r"\b(yesterday|last\s+night|previous\s+day)\b"
+    r".*\b(last\s+night|previous\s+day)\b|"
+    r"\b(last\s+night|previous\s+day)\b"
     r".*\b(sales|revenue|net\s+sales|gross\s+sales|toast\s+analytics)\b",
     re.IGNORECASE,
 )

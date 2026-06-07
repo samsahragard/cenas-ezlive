@@ -963,12 +963,11 @@ def test_runtime_toast_freshness_stale_sales_route_queues_instead_of_answering(t
     assert "net sales" not in data["answer"]
 
 
-def test_runtime_unsupported_yesterday_sales_scope_queues_before_stale_sales_answer(tmp_path, monkeypatch):
+def test_runtime_yesterday_sales_scope_answers_with_yesterday_payload(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     db_path = tmp_path / "assistant_review.sqlite"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
-    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
 
     principal = _principal("partner")
     principal["kind"] = "partner"
@@ -979,9 +978,26 @@ def test_runtime_unsupported_yesterday_sales_scope_queues_before_stale_sales_ans
         "tools": [_available_tool("toast.sales_summary")],
         "tool_data": {
             "toast.sales_summary": {
-                "label": "Today",
-                "sales": {"net": 150.89, "orders": 5},
-                "labor": {"hours": 52, "cost": 534.68, "ratio_pct": 354.4},
+                "period": "yesterday",
+                "label": "Yesterday",
+                "date_range": {"start": "20260606", "end": "20260606"},
+                "scope_note": "2 locations included.",
+                "sales": {
+                    "net": 9666.61,
+                    "gross": 9700.39,
+                    "discount": 33.78,
+                    "void": 132.00,
+                    "avg_order": 51.97,
+                    "orders": 186,
+                    "guests": 452,
+                    "sales_per_labor_hour": 30.61,
+                },
+                "labor": {
+                    "hours": 315.8,
+                    "cost": 3317.62,
+                    "ratio_pct": 34.3,
+                    "ratio_denominator_ok": True,
+                },
             },
         },
         "routed_tool_id": "toast.sales_summary",
@@ -990,10 +1006,11 @@ def test_runtime_unsupported_yesterday_sales_scope_queues_before_stale_sales_ans
     })
 
     assert status == 200
-    assert data["queued"] is True
-    assert data["reason"] == "data_question_needs_approved_tool"
-    assert data["routed_tool_id"] is None
-    assert "net sales" not in data["answer"]
+    assert data["queued"] is False
+    assert data["tool_id"] == "toast.sales_summary"
+    assert "Yesterday Toast Analytics (date range: 2026-06-06)" in data["answer"]
+    assert "net sales are $9,666.61" in data["answer"]
+    assert "34.3% of sales" in data["answer"]
 
 
 def test_runtime_answers_operator_toast_table_activity_with_approved_tool(tmp_path, monkeypatch):

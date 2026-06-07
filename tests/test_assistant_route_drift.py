@@ -70,6 +70,12 @@ DETERMINISTIC_ROUTE_CASES = [
         "tool_id": "toast.sales_summary",
     },
     {
+        "id": "sales_yesterday",
+        "question": "What were sales yesterday?",
+        "route_path": "deterministic",
+        "tool_id": "toast.sales_summary",
+    },
+    {
         "id": "toast_freshness",
         "question": "When did we last get Toast data?",
         "route_path": "deterministic",

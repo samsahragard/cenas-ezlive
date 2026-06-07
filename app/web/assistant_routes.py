@@ -1223,6 +1223,8 @@ def _toast_period_from_question(question: str) -> str:
     text = str(question or "").casefold()
     if "last week" in text or "previous week" in text:
         return "last_week"
+    if "yesterday" in text:
+        return "yesterday"
     if "this week" in text or re.search(r"\bweek\b", text):
         return "week"
     return "today"
@@ -1242,7 +1244,7 @@ def _has_unsupported_toast_sales_scope(question: str) -> bool:
     text = str(question or "")
     if not _TOAST_SALES_RE.search(text):
         return False
-    if re.search(r"\b(today|this\s+week|last\s+week|previous\s+week)\b", text, re.IGNORECASE):
+    if re.search(r"\b(today|yesterday|this\s+week|last\s+week|previous\s+week)\b", text, re.IGNORECASE):
         return False
     return bool(_TOAST_SALES_UNSUPPORTED_SCOPE_RE.search(text))
 

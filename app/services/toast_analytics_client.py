@@ -298,8 +298,11 @@ class ToastAnalyticsClient:
 
 def period_to_ymd_range(period: str) -> tuple[str, str, str]:
     """Returns (start_ymd, end_ymd, label) for a named period in CT.
-    period in {today, week, last_week}. Falls back to today on unknown values."""
+    period in {today, yesterday, week, last_week}. Falls back to today on unknown values."""
     today_ct = _ct_today().date()
+    if period == "yesterday":
+        yesterday = today_ct - timedelta(days=1)
+        return yesterday.strftime("%Y%m%d"), yesterday.strftime("%Y%m%d"), "Yesterday"
     if period == "week":
         # Week = Sun..today (matches the dashboard's existing 'This Week' pill)
         start = today_ct - timedelta(days=today_ct.isoweekday() % 7)

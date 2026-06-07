@@ -14,8 +14,8 @@
   {
     "id": "A2",
     "question": "What were sales yesterday?",
-    "expected_route_path": "review_or_deterministic",
-    "expected_tool_id": "toast.sales_summary_or_none",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "toast.sales_summary",
     "assertions": [
       {"type": "mirror_present"},
       {"type": "answer_not_prior_turn"},

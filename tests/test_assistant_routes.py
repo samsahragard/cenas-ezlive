@@ -1579,6 +1579,10 @@ def test_operator_toast_summary_tool_payload_is_sanitized(monkeypatch):
     assert payload["toast.sales_summary"]["period"] == "today"
     assert payload["toast.sales_summary"]["sales"] == {"net": 123.45, "orders": 3}
 
+    yesterday_payload = ar._approved_tool_data("what were Toast sales yesterday?", ctx)
+
+    assert yesterday_payload["toast.sales_summary"]["period"] == "yesterday"
+
 
 def test_labor_store_aggregate_payload_labels_metric_scopes(db_session, monkeypatch):
     today = date.today()
@@ -1676,7 +1680,6 @@ def test_unsupported_toast_sales_scope_does_not_route_to_today_summary():
     ctx = _wave1_partner_ctx()
 
     for question in (
-        "What were Toast sales yesterday?",
         "What were sales on 2026-06-01?",
         "Give me revenue for June 1",
     ):
@@ -2113,14 +2116,13 @@ def test_classifier_fallback_rejects_excluded_tool_ids(monkeypatch):
     assert route["classifier"]["reason"] == "not_allowed"
 
 
-def test_unsupported_sales_yesterday_queues_instead_of_using_today_scope():
+def test_yesterday_sales_routes_to_toast_summary_instead_of_review():
     ctx = _wave1_partner_ctx(stores=["tomball"])
 
-    should_queue, reason, required = ar._should_queue("What were sales yesterday?", ctx)
+    route = ar._route_approved_tool_choice("What were sales yesterday?", ctx)
 
-    assert should_queue is True
-    assert reason == "data_question_needs_approved_tool"
-    assert required == "ai.ask_claude"
+    assert route["tool_id"] == "toast.sales_summary"
+    assert route["route_path"] == "deterministic"
 
 
 def test_runtime_passthrough_tools_get_explicit_routed_ids():

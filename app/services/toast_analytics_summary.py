@@ -7,7 +7,7 @@ from typing import Any
 from app.services.toast_analytics_client import ToastAnalyticsClient, period_to_ymd_range
 
 
-VALID_PERIODS = {"today", "week", "last_week"}
+VALID_PERIODS = {"today", "yesterday", "week", "last_week"}
 LABOR_RATIO_MIN_ORDERS = 10
 LABOR_RATIO_MIN_NET_SALES = 500.0
 

@@ -5078,6 +5078,18 @@ def catering_dashboard():
         }
         for key, caption in _CATERING_DASH_TABS
     ]
+    ez_manage_pending_count = 0
+    db = next(get_db())
+    try:
+        from app.models import DeliveryRequest
+
+        ez_manage_pending_count = (
+            db.query(DeliveryRequest)
+            .filter(DeliveryRequest.status == "pending")
+            .count()
+        )
+    finally:
+        db.close()
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
     _t = date.today()
@@ -5089,6 +5101,7 @@ def catering_dashboard():
         today_label=today_label,
         active_tab=active_tab,
         tabs=tabs,
+        ez_manage_pending_count=ez_manage_pending_count,
     )
 
 
@@ -5610,8 +5623,11 @@ def vendors_dashboard():
 
 @store_bp.route("/catering/assign_driver", methods=["POST"])
 def catering_assign_driver():
-    from app.models import DriverAssignmentJob
-    import uuid
+    from app.services.driver_assignment_jobs import (
+        AssignmentAlreadyInProgress,
+        create_assignment_job,
+        wake_assignment_gateway,
+    )
     payload = request.get_json(silent=True) or {}
     order_id = (payload.get("order_id") or "").strip()
     new_driver = (payload.get("new_driver") or "").strip()
@@ -5621,30 +5637,19 @@ def catering_assign_driver():
 
     db = next(get_db())
     try:
-        # 5-second same-order guard. A pending/running job for this order
-        # within the last 5 seconds blocks a second submit.
-        cutoff = datetime.utcnow() - timedelta(seconds=5)
-        existing = (
-            db.query(DriverAssignmentJob)
-            .filter(DriverAssignmentJob.order_id == order_id)
-            .filter(DriverAssignmentJob.created_at >= cutoff)
-            .filter(DriverAssignmentJob.status.in_(("pending", "running")))
-            .first()
-        )
-        if existing:
+        try:
+            job = create_assignment_job(
+                db,
+                order_id=order_id,
+                current_driver=current_driver,
+                new_driver=new_driver,
+            )
+        except AssignmentAlreadyInProgress as exc:
             return jsonify({
                 "ok": False, "error": "assignment already in progress",
-                "job_id": existing.job_id,
+                "job_id": exc.job.job_id,
             }), 409
 
-        job = DriverAssignmentJob(
-            job_id=str(uuid.uuid4()),
-            order_id=order_id,
-            current_driver=current_driver,
-            new_driver=new_driver,
-            status="pending",
-        )
-        db.add(job)
         db.commit()
         job_id = job.job_id
     finally:
@@ -5655,12 +5660,7 @@ def catering_assign_driver():
     # CENA_GATEWAY_URL/jobs/driver-assign — aick runs the flow + POSTs
     # the result back to /catering/assign_driver/result. Gateway hop
     # out-of-band so a slow ezCater never blocks this HTTP response.
-    try:
-        from app.services.ezcater_driver_assigner import dispatch_assignment_job
-        dispatch_assignment_job(job_id, order_id, current_driver, new_driver)
-    except Exception:
-        logging.getLogger(__name__).exception(
-            "catering_assign_driver: dispatch raised (job stays pending)")
+    wake_assignment_gateway(job_id, order_id, current_driver, new_driver)
 
     return jsonify({"ok": True, "job_id": job_id}), 202
 

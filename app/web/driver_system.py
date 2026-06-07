@@ -14,7 +14,7 @@ Auth gating:
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Callable
 
@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 driver_system_bp = Blueprint("driver_system", __name__)
 
 MANAGER_ROLES = {"partner", "corporate", "gm", "manager"}
+APP_TZ = "America/Chicago"
 
 
 # ---- auth helpers ----
@@ -103,6 +104,43 @@ def _format_load(db, driver_id: int, today: date) -> str:
     if in_progress == 0:
         return f"{total} today (done)"
     return f"{total} today ({in_progress} in progress)"
+
+
+def _local_today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo(APP_TZ)).date()
+    except Exception:
+        return date.today()
+
+
+def _utc_bounds_for_local_day(day: date) -> tuple[datetime, datetime]:
+    try:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo(APP_TZ)
+        start = datetime(day.year, day.month, day.day, tzinfo=tz)
+        end = start + timedelta(days=1)
+        return (
+            start.astimezone(timezone.utc).replace(tzinfo=None),
+            end.astimezone(timezone.utc).replace(tzinfo=None),
+        )
+    except Exception:
+        start = datetime.combine(day, datetime.min.time())
+        return start, start + timedelta(days=1)
+
+
+def _fmt_local_dt(dt: datetime | None) -> str:
+    if not dt:
+        return "time unknown"
+    try:
+        from zoneinfo import ZoneInfo
+
+        local = dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ))
+    except Exception:
+        local = dt
+    return local.strftime("%I:%M %p").lstrip("0")
 
 
 def _potential_today(db, driver_id: int, today: date) -> float:
@@ -518,7 +556,8 @@ def ez_market_dismiss_notification(notif_id: int):
 @driver_system_bp.route("/ez-manage", methods=["GET"])
 @require_manager
 def ez_manage():
-    today = date.today()
+    today = _local_today()
+    today_start, tomorrow_start = _utc_bounds_for_local_day(today)
     db = SessionLocal()
     try:
         # Group pending requests by delivery
@@ -553,19 +592,41 @@ def ez_manage():
             if g_["rows"]:
                 g_["rows"][0]["recommended"] = True
 
-        # Today's approved count for header
-        approved_today = (
+        approved_orders = (
             db.query(Order)
             .filter(Order.status.in_(["approved", "picked_up", "en_route", "delivered"]))
-            .filter(Order.delivery_date == today.isoformat())
             .filter(Order.approved_at.isnot(None))
-            .count()
+            .filter(Order.approved_at >= today_start)
+            .filter(Order.approved_at < tomorrow_start)
+            .order_by(Order.approved_at.desc())
+            .all()
         )
+        from app.models import DriverAssignmentJob
+        approved_rows = []
+        for o in approved_orders:
+            approved_driver = db.get(Driver, o.assigned_driver_id) if o.assigned_driver_id else None
+            approved_by = db.get(User, o.approved_by_user_id) if o.approved_by_user_id else None
+            job = None
+            if o.external_order_id:
+                job = (
+                    db.query(DriverAssignmentJob)
+                    .filter(DriverAssignmentJob.order_id == o.external_order_id)
+                    .order_by(DriverAssignmentJob.created_at.desc())
+                    .first()
+                )
+            approved_rows.append({
+                "order": o,
+                "driver": approved_driver,
+                "approved_by": approved_by,
+                "assignment_job": job,
+                "approved_at_label": _fmt_local_dt(o.approved_at),
+            })
         ctx = {
             "active": "ez_manage",
             "groups": list(groups.values()),
             "pending_count": len(groups),
-            "approved_today_count": approved_today,
+            "approved_today_count": len(approved_rows),
+            "approved_rows": approved_rows,
         }
         return render_template("ez_manage.html", **ctx)
     finally:
@@ -607,6 +668,7 @@ def ez_manage_pending_count():
 @require_manager
 def ez_manage_approve(request_id: int):
     db = SessionLocal()
+    dispatch_payload = None
     try:
         req = db.get(DeliveryRequest, request_id)
         if not req:
@@ -616,11 +678,53 @@ def ez_manage_approve(request_id: int):
         if not order or not driver:
             abort(404)
         try:
+            from app.services.driver_assignment_jobs import (
+                AssignmentAlreadyInProgress,
+                create_assignment_job,
+                resolve_ezcater_driver_name,
+            )
+
+            current_ez_driver = order.ezcater_driver_name
+            ez_driver_name = resolve_ezcater_driver_name(db, driver, order)
             lifecycle.approve_request(db, order, driver, g.current_user.id)
+            order.assigned_driver = driver.name
+            order.ezcater_driver_name = ez_driver_name
+            assignment_note = ""
+            if order.external_order_id:
+                try:
+                    job = create_assignment_job(
+                        db,
+                        order_id=order.external_order_id,
+                        current_driver=current_ez_driver,
+                        new_driver=ez_driver_name,
+                    )
+                    dispatch_payload = {
+                        "job_id": job.job_id,
+                        "order_id": job.order_id,
+                        "current_driver": job.current_driver,
+                        "new_driver": job.new_driver,
+                    }
+                    assignment_note = " pwck assignment queued."
+                except AssignmentAlreadyInProgress:
+                    assignment_note = " pwck assignment already in progress."
+            else:
+                assignment_note = " No ezCater assignment queued: missing external order id."
             db.commit()
-            flash(f"Approved {driver.name} for {order.external_order_id or order.id}.", "ok")
+            if dispatch_payload:
+                from app.services.driver_assignment_jobs import wake_assignment_gateway
+
+                wake_assignment_gateway(**dispatch_payload)
+            flash(
+                f"Approved {ez_driver_name} for {order.external_order_id or order.id}."
+                f"{assignment_note}",
+                "ok",
+            )
         except lifecycle.IllegalTransition as e:
             db.rollback()
+            flash(f"Couldn't approve: {e}", "error")
+        except Exception as e:
+            db.rollback()
+            logger.exception("ez_manage_approve failed for request %s", request_id)
             flash(f"Couldn't approve: {e}", "error")
         return redirect(url_for("driver_system.ez_manage"))
     finally:

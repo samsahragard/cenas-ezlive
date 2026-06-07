@@ -2,7 +2,8 @@
 time-conflict regression tests for the ez-market request flow.
 
 Covers:
-  - approve_request creates DriverNotification rows for declined siblings
+  - approve_request creates DriverNotification rows for the approved driver
+    and declined siblings
   - find_conflicting_request detects time-window overlap
   - find_conflicting_request returns None when windows disjoint
   - find_conflicting_request handles legacy orders without time data
@@ -53,7 +54,8 @@ def _make_order(db_session, ext_id: str, *,
 
 def test_approve_request_notifies_losing_drivers(db_session):
     """When manager approves Driver A, declined siblings (B, C) each
-    get a 'order_taken_by_other' DriverNotification row."""
+    get a 'order_taken_by_other' DriverNotification row, and A gets an
+    approval notification."""
     a = _make_driver(db_session, "winner alpha")
     b = _make_driver(db_session, "loser beta")
     c = _make_driver(db_session, "loser gamma")
@@ -74,17 +76,20 @@ def test_approve_request_notifies_losing_drivers(db_session):
         .all()
     )
     notif_driver_ids = sorted(n.driver_id for n in notifs)
-    assert notif_driver_ids == sorted([b.id, c.id]), (
-        f"Expected notifs for losers {b.id},{c.id}; got {notif_driver_ids!r}"
+    assert notif_driver_ids == sorted([a.id, b.id, c.id]), (
+        f"Expected notifs for winner+losers {a.id},{b.id},{c.id}; got {notif_driver_ids!r}"
     )
-    for n in notifs:
-        assert n.kind == "order_taken_by_other"
-        assert "Another driver was given order" in n.message
-        assert n.read_at is None
+    by_driver = {n.driver_id: n for n in notifs}
+    assert by_driver[a.id].kind == "approved_by_manager"
+    assert "You were approved for order" in by_driver[a.id].message
+    for loser in (b, c):
+        assert by_driver[loser.id].kind == "order_taken_by_other"
+        assert "Another driver was given order" in by_driver[loser.id].message
+        assert by_driver[loser.id].read_at is None
 
 
-def test_approve_request_no_notifications_when_no_losers(db_session):
-    """Sole requester gets approved; no notification rows written."""
+def test_approve_request_notifies_sole_approved_driver(db_session):
+    """Sole requester gets an approval notification."""
     a = _make_driver(db_session, "sole requester")
     o = _make_order(db_session, "TEST-NOTIFY-2", status="requested")
     db_session.add(DeliveryRequest(
@@ -100,7 +105,11 @@ def test_approve_request_no_notifications_when_no_losers(db_session):
         .filter(DriverNotification.related_delivery_id == o.id)
         .all()
     )
-    assert notifs == []
+    assert len(notifs) == 1
+    assert notifs[0].driver_id == a.id
+    assert notifs[0].kind == "approved_by_manager"
+    assert "You were approved for order" in notifs[0].message
+    assert notifs[0].read_at is None
 
 
 # ----------------------------------------------------------------------

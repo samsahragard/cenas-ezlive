@@ -257,6 +257,31 @@
     opacity: 0.7;
   }
   .catdash .catd-tab.active .catd-tab-icon { opacity: 1; }
+  .catdash .catd-pending-star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--catd-red-bright);
+    text-shadow: 0 0 8px rgba(232, 88, 82, 0.75);
+    animation: catd-pending-star 0.9s steps(2, end) infinite;
+  }
+  .catdash .catd-pending-star.is-hidden { display: none; }
+  @keyframes catd-pending-star {
+    0%, 49% {
+      color: var(--catd-red-bright);
+      text-shadow: 0 0 8px rgba(232, 88, 82, 0.75);
+      opacity: 1;
+    }
+    50%, 100% {
+      color: var(--catd-teal-bright);
+      text-shadow: 0 0 8px rgba(91, 202, 197, 0.75);
+      opacity: 0.55;
+    }
+  }
 
   /* TAB CONTENT — one panel per tab; the inactive ones are hidden.
      Each panel is just a frame holding ONE iframe of the real page. */
@@ -393,6 +418,12 @@
          aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
         <svg class="catd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _catd_icons.get(t.key, _catd_icons['ez-orders'])|safe }}</svg>
         <span class="catd-tab-label">{{ t.label }}</span>
+        {% if t.key == 'ez-manage' %}
+        <span class="catd-pending-star{% if not ez_manage_pending_count %} is-hidden{% endif %}"
+              data-ezm-pending-star
+              aria-label="{{ ez_manage_pending_count }} pending Ez Manage request{{ '' if ez_manage_pending_count == 1 else 's' }}"
+              title="{{ ez_manage_pending_count }} pending Ez Manage request{{ '' if ez_manage_pending_count == 1 else 's' }}">&#9733;</span>
+        {% endif %}
       </a>
       {% endfor %}
     </div>
@@ -463,6 +494,27 @@
   var tabs = root.querySelectorAll(".catd-tab");
   var panels = root.querySelectorAll(".catd-panel");
   var loaded = {};   // tab key -> true once its iframe src has been set
+  var pendingStar = root.querySelector("[data-ezm-pending-star]");
+
+  function setPendingStar(count) {
+    if (!pendingStar) return;
+    var n = Number(count) || 0;
+    pendingStar.classList.toggle("is-hidden", n <= 0);
+    var label = n + " pending Ez Manage request" + (n === 1 ? "" : "s");
+    pendingStar.setAttribute("aria-label", label);
+    pendingStar.setAttribute("title", label);
+  }
+
+  function refreshPendingStar() {
+    if (!pendingStar || !window.fetch) return;
+    fetch("/ez-manage/pending-count.json", { credentials: "same-origin" })
+      .then(function (resp) { return resp.ok ? resp.json() : null; })
+      .then(function (data) {
+        if (data && data.ok) setPendingStar(data.pending_count);
+      })
+      .catch(function () {});
+  }
+  setInterval(refreshPendingStar, 30000);
 
   /* Hide one element inside the iframe document. Defensive: a missing
      node (a page that suppresses the shared topbar, say) is a no-op. */

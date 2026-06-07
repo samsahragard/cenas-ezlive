@@ -193,6 +193,14 @@ def approve_request(
     order.approved_by_user_id = decided_by_user_id
     order.approved_at = now
     _snapshot_potential_payout(order)
+    db.add(DriverNotification(
+        driver_id=driver.id,
+        kind="approved_by_manager",
+        message=(f"You were approved for order "
+                 f"#{order.id} ({order.client or 'unnamed'}, "
+                 f"{order.delivery_date or 'no date'})."),
+        related_delivery_id=order.id,
+    ))
     # Mark the winning request 'approved' and decline siblings on this order.
     sib_reqs = (
         db.query(DeliveryRequest)

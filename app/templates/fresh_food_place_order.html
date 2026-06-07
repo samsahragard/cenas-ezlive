@@ -338,6 +338,7 @@
   {% set today = today_date %}
   {% set delivery = delivery_date %}
   {% set today_short = '%02d/%d'|format(today.month, today.day) %}
+  {% set delivery_short = '%02d/%02d'|format(delivery.month, delivery.day) %}
   {% set delivery_day = delivery.strftime('%A') %}
   {% set orderer = (g.current_user.full_name if g.current_user else 'unknown') %}
   {% set location = (g.current_location or 'both')|title %}
@@ -377,7 +378,7 @@
               <span class="ff-head-label">On hand</span>
             </div>
             <div class="ff-head-cell">
-              <span class="ff-head-date">{{ today_short }}</span>
+              <span class="ff-head-date">{{ delivery_short }}</span>
               <span class="ff-head-day">{{ delivery_day }}</span>
               <span class="ff-head-label">Order</span>
             </div>

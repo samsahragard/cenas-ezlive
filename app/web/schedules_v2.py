@@ -558,9 +558,14 @@ def sv2_shift_new():
                 return jsonify({"ok": False, "error": blocker}), 409
         warn = scheduling_availability.warning(emp_id, start_at) if emp_id else None  # B8 hook
         now = datetime.utcnow()
+        # per-shift publish (Phase 2b): a new shift is HOLLOW -- published_at=None, so it
+        # is hidden from the employee + renders dashed in the Week Builder -- UNLESS the
+        # manager used "Save & publish" (publish=true), which makes it visible at once.
+        pub_at = now if data.get("publish") else None
         sh = Shift(schedule_id=sid, employee_id=emp_id, position_id=data.get("position_id"),
                    start_at=start_at, end_at=end_at, break_minutes=int(data.get("break_minutes") or 0),
-                   status=status, notes=data.get("notes"), created_at=now, updated_at=now)
+                   status=status, notes=data.get("notes"), published_at=pub_at,
+                   created_at=now, updated_at=now)
         db.add(sh)
         db.flush()
         for tid in (data.get("tag_ids") or []):
@@ -616,7 +621,15 @@ def sv2_shift_update(shift_id):
         # doesn't fit a bulk op and the employee CAN still work - ckai #1984.)
         warn = (scheduling_availability.warning(sh.employee_id, sh.start_at)
                 if (sh.employee_id and sh.start_at) else None)
-        sh.updated_at = datetime.utcnow()
+        # per-shift publish (Phase 2b): the edit modal sends publish=true ("Save &
+        # publish" -> republish this one shift, visible to the employee) or publish=false
+        # ("Save" -> hold the edit back: unpublish -> hollow, hidden until republished).
+        # Only touch published_at when the key is present, so a drag-reassign / bulk PUT
+        # (no publish key) leaves the shift's publish-state untouched.
+        now = datetime.utcnow()
+        if "publish" in data:
+            sh.published_at = now if data["publish"] else None
+        sh.updated_at = now
         db.commit()
         return jsonify({"ok": True, "id": sh.id, "status": sh.status, "warning": warn}), 200
     finally:

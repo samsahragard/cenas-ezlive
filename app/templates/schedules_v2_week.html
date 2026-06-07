@@ -422,7 +422,8 @@
         <button class="sv2-btn danger sv2-hidden" id="sv2-m-delete">Delete</button>
         <div class="sv2-spacer"></div>
         <button class="sv2-btn" id="sv2-m-cancel">Cancel</button>
-        <button class="sv2-btn primary" id="sv2-m-save">Save shift</button>
+        <button class="sv2-btn" id="sv2-m-save">Save</button>
+        <button class="sv2-btn primary" id="sv2-m-publish">Save &amp; publish</button>
       </div>
     </div>
   </div>
@@ -951,7 +952,7 @@
     return dateISO + "T" + hm + ":00";
   }
 
-  function saveShift() {
+  function saveShift(publish) {
     if (state.busy) return;
     var err = $("sv2-m-err"); err.textContent = "";
     var sched = state.board && state.board.schedule;
@@ -969,9 +970,10 @@
       start_at: start_at, end_at: end_at,
       break_minutes: toNum($("sv2-m-break").value) || 0,
       notes: $("sv2-m-notes").value || null,
-      tag_ids: tag_ids
+      tag_ids: tag_ids,
+      publish: !!publish
     };
-    state.busy = true; $("sv2-m-save").disabled = true;
+    state.busy = true; $("sv2-m-save").disabled = true; $("sv2-m-publish").disabled = true;
     var req;
     if (state.editing) {
       req = fetch(CFG.shiftUrlBase + "/" + state.editing.id, {
@@ -984,12 +986,12 @@
       });
     }
     req.then(parseJsonOrThrow).then(function (data) {
-      state.busy = false; $("sv2-m-save").disabled = false;
+      state.busy = false; $("sv2-m-save").disabled = false; $("sv2-m-publish").disabled = false;
       closeModal(); loadBoard();
       // B8: soft availability heads-up from ckai's warning() (shift still saved; never a 409)
       if (data && data.warning) toast("Heads up: " + data.warning);
     }).catch(function (e) {
-      state.busy = false; $("sv2-m-save").disabled = false;
+      state.busy = false; $("sv2-m-save").disabled = false; $("sv2-m-publish").disabled = false;
       err.textContent = (e && e.error) ? e.error : "Could not save the shift. Please try again.";
     });
   }
@@ -1100,7 +1102,8 @@
     if (state.board) renderGrid();
   };
   $("sv2-m-cancel").onclick = closeModal;
-  $("sv2-m-save").onclick = saveShift;
+  $("sv2-m-save").onclick = function () { saveShift(false); };
+  $("sv2-m-publish").onclick = function () { saveShift(true); };
   $("sv2-m-delete").onclick = deleteShift;
   mb.onclick = function (e) { if (e.target === mb) closeModal(); };
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && mb.classList.contains("show")) closeModal(); });

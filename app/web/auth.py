@@ -114,9 +114,8 @@ def login():
 
 @auth.route("/logout")
 def logout():
-    session.pop("auth_ok", None)
-    session.pop("partner_auth_ok", None)
-    return redirect(url_for("auth.login"))
+    session.clear()
+    return redirect(url_for("keypad_auth.login", _clear=1))
 
 
 @auth.route("/partner-login", methods=["GET", "POST"])
@@ -181,7 +180,7 @@ def store_picker():
     one way or another:
       • Keypad session (session.user_id + g.current_user) → role landing.
       • Legacy auth_ok-only session (chat tools / etc.) → Partner if
-        partner_auth_ok, otherwise we fall through to /partner-login.
+        partner_auth_ok, otherwise back to the phone-login screen.
     """
     from flask import g, redirect
     from app.web.keypad_auth import _landing_for_user
@@ -193,5 +192,7 @@ def store_picker():
     # /partner/ since that's what tools target.
     if session.get("partner_auth_ok"):
         return redirect("/partner/")
-    # Tier-1 only (auth_ok without partner) — go through partner-login.
-    return redirect(url_for("auth.partner_login"))
+    # Tier-1 only (auth_ok without a signed-in profile) is a stale
+    # post-logout browser state. Send humans back to the phone login instead
+    # of the old Partner password gate.
+    return redirect(url_for("keypad_auth.login", _clear=1))

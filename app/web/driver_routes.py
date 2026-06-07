@@ -684,12 +684,10 @@ def driver_logout():
     # Sam (2026-05-13) hit this after switching between driver-login and
     # partner-keypad-login: clicking Log out only cleared the driver_*
     # keys, so user_id lingered and the partner sidebar kept rendering.
-    # Preserve Tier-1 auth_ok so the user doesn't have to re-type the
-    # site password on re-open.
-    auth_ok = session.get("auth_ok")
+    # Clear Tier-1 auth_ok too; otherwise a bare / app reopen can pass the
+    # global gate with no profile and land on the legacy Partner password
+    # screen instead of the phone login.
     session.clear()
-    if auth_ok:
-        session["auth_ok"] = auth_ok
     # Add ?_clear=1 so the driver_keypad_login JS wipes the persisted
     # phone in localStorage. Logout means "this person is done on this
     # device" — force re-entry on next login. Banking pattern (Sam

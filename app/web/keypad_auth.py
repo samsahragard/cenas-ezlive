@@ -553,14 +553,11 @@ def change_passcode_submit():
 @keypad_auth.route("/keypad-logout", methods=["GET", "POST"])
 def logout():
     # Wipe every role key (user, driver, partner gate) so app reopen never
-    # lands on a stale dashboard for the wrong role. Preserve Tier-1
-    # auth_ok so the user doesn't have to re-type the site password on
-    # the way back in — that's a separate gate.
-    auth_ok = session.get("auth_ok")
+    # lands on a stale dashboard for the wrong role. Also clear Tier-1
+    # auth_ok so a bare / reopen cannot fall through to /partner-login; the
+    # phone keypad is the canonical post-logout entry point.
     session.clear()
-    if auth_ok:
-        session["auth_ok"] = auth_ok
-    resp = _no_store(redirect(url_for("keypad_auth.login")))
+    resp = _no_store(redirect(url_for("keypad_auth.login", _clear=1)))
     return resp
 
 

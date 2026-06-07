@@ -151,7 +151,12 @@ def emp_my_schedule_shifts():
 
         rows = (db.query(Shift)
                   .filter(Shift.employee_id == emp_id,
-                          Shift.schedule_id.in_(list(week_by_sched.keys())))
+                          Shift.schedule_id.in_(list(week_by_sched.keys())),
+                          # per-shift publish: only PUBLISHED shifts are visible to the
+                          # employee -- new/edited-but-unpublished shifts stay hidden until
+                          # the manager publishes them. (1a backfilled existing published
+                          # weeks, so no regression.)
+                          Shift.published_at.isnot(None))
                   .order_by(Shift.start_at).all())
         shift_ids = [sh.id for sh in rows]
 

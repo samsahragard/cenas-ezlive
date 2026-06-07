@@ -1,14 +1,19 @@
 {# Employee schedule view (Schedules V2, B5). Logged-in employee sees their own
-   PUBLISHED shifts for this + next week, grouped by week, and can ACCEPT (one tap)
-   or DECLINE (reason required - surfaces to the manager) each one.
+   PUBLISHED shifts for this + next week, grouped by week. Each published shift is
+   their ASSIGNED shift (Sam's reframe: no accept/decline). If they can't work one,
+   they RELEASE it into the B9 marketplace so a teammate can pick it up, subject to
+   manager approval. A shift with an active offer shows "In the marketplace" (open)
+   or "Picked up - pending manager OK" (taken); while open it can be un-released.
 
-   ck owns this template + the GET /employee/my-schedule page route.
-   aick owns the data + action endpoints:
-     GET  /employee/my-schedule/shifts        -> {ok, employee:{id,full_name}, shifts:[...]}
-     POST /employee/shifts/<id>/accept         -> {ok}            (no body)
-     POST /employee/shifts/<id>/decline {reason}-> {ok}           (reason required)
+   ck owns the GET /employee/my-schedule PAGE shell; aick owns this template (the
+   reframe) + the data endpoint:
+     GET /employee/my-schedule/shifts -> {ok, employee, shifts:[...]}
    per-shift: {id, schedule_id, week_start, start_at, end_at, break_minutes,
-               position_name, tag_names[], notes, response}  response=pending|accepted|declined
+               position_name, tag_names[], notes, response, offer}
+       offer = {id, status:"open"|"taken"} | null  (this employee's active release)
+   Release / un-release reuse ckai's B9 offer API:
+     POST /employee/shift-offers {shift_id, unrestricted:true}
+     POST /employee/shift-offers/<id>/cancel
 #}
 <!DOCTYPE html>
 <html lang="en">
@@ -159,6 +164,19 @@
   }
   .resp-badge.ok{ background: rgba(47,143,87,0.15); color: var(--ok-deep); border:1.5px solid rgba(47,143,87,0.45); }
   .resp-badge.no{ background: rgba(200,48,42,0.12); color: var(--red-deep); border:1.5px solid rgba(200,48,42,0.40); }
+  /* reframe: assigned (your shift) / market (released, open) / pending (picked up, awaiting manager) */
+  .resp-badge.assigned{ background: rgba(47,143,87,0.15); color: var(--ok-deep); border:1.5px solid rgba(47,143,87,0.45); }
+  .resp-badge.market{ background: rgba(228,179,64,0.14); color: var(--red-deep); border:1.5px solid rgba(228,179,64,0.48); }
+  .resp-badge.pending{ background: rgba(250,246,236,0.08); color: rgba(250,246,236,0.80); border:1.5px solid rgba(250,246,236,0.22); }
+  .btn-release{
+    margin-left:auto; border:1.5px solid rgba(228,179,64,0.45); border-radius:11px; padding:9px 16px;
+    background: rgba(228,179,64,0.10); color: var(--red-deep);
+    font-size:13px; font-weight:800; letter-spacing:0.4px; cursor:pointer;
+    transition: filter 120ms ease, transform 80ms ease;
+  }
+  .btn-release:hover{ background: rgba(228,179,64,0.18); }
+  .btn-release:active{ transform: translateY(1px); }
+  .btn-release:disabled{ opacity:0.55; cursor:default; }
   .btn-link{
     background:none; border:none; color: rgba(250,246,236,0.7);
     font-size:13px; font-weight:700; text-decoration:underline; cursor:pointer; padding:6px 4px;
@@ -249,7 +267,7 @@
 
   <div id="emp-weeks"></div>
 
-  <div class="footnote">Schedules V2 &middot; tap a shift to accept or decline</div>
+  <div class="footnote">Schedules V2 &middot; your published shifts</div>
 </div>
 
 {% set active_nav = 'my_schedule' %}{% include 'partials/_employee_nav.html' %}
@@ -336,35 +354,34 @@
   }
 
   // ---- render ---------------------------------------------------------------
-  function updateSummary(total, pending){
+  function updateSummary(total, released){
     if(!total){ elSummary.textContent = "This week & next"; return; }
     var s = total + (total === 1 ? " shift" : " shifts");
-    if(pending > 0){
+    if(released > 0){
       elSummary.innerHTML = esc(s) + '<span class="dot">&middot;</span>' +
-        '<span class="pend">' + pending + " awaiting your response</span>";
+        '<span class="pend">' + released + " in the marketplace</span>";
     } else {
-      elSummary.innerHTML = esc(s) + '<span class="dot">&middot;</span>all responses in';
+      elSummary.innerHTML = esc(s);
     }
   }
 
   function cardHtml(s){
     var color = posColor(s.position_name);
-    var resp = s.response || "pending";
+    var offer = s.offer;  // {id, status:"open"|"taken"} | null -- this employee's active release
 
     var meta = [];
     if(s.break_minutes) meta.push('<span class="brk">' + (+s.break_minutes) + 'm break</span>');
     (s.tag_names || []).forEach(function(t){ meta.push('<span class="tag">' + esc(t) + '</span>'); });
 
     var actions;
-    if(resp === "accepted"){
-      actions = '<span class="resp-badge ok">&#10003; Accepted</span>' +
-                '<button class="btn-link" data-act="decline-instead">Decline instead</button>';
-    } else if(resp === "declined"){
-      actions = '<span class="resp-badge no">Declined</span>' +
-                '<button class="btn-link" data-act="accept-instead">Accept instead</button>';
+    if(offer && offer.status === "taken"){
+      actions = '<span class="resp-badge pending">&#8635; Picked up &middot; pending manager OK</span>';
+    } else if(offer && offer.status === "open"){
+      actions = '<span class="resp-badge market">&#9873; In the marketplace</span>' +
+                '<button class="btn-link" data-act="unrelease" data-offer="' + (+offer.id) + '">Cancel release</button>';
     } else {
-      actions = '<button class="btn-accept" data-act="accept">Accept</button>' +
-                '<button class="btn-decline" data-act="decline">Decline</button>';
+      actions = '<span class="resp-badge assigned">&#10003; Assigned</span>' +
+                '<button class="btn-release" data-act="release">Release shift</button>';
     }
 
     return '' +
@@ -378,14 +395,6 @@
         (meta.length ? '<div class="scard-meta">' + meta.join('') + '</div>' : '') +
         (s.notes ? '<div class="scard-notes">' + esc(s.notes) + '</div>' : '') +
         '<div class="scard-actions">' + actions + '</div>' +
-        '<div class="decline-form" hidden>' +
-          '<textarea class="decline-reason" rows="2" placeholder="Reason for declining (required) - your manager will see this"></textarea>' +
-          '<div class="decline-hint">Let your manager know why so they can cover the shift.</div>' +
-          '<div class="decline-btns">' +
-            '<button class="btn-mini btn-ghost" data-act="decline-cancel">Cancel</button>' +
-            '<button class="btn-mini btn-decline-submit" data-act="decline-submit">Submit decline</button>' +
-          '</div>' +
-        '</div>' +
       '</div>';
   }
 
@@ -412,13 +421,13 @@
     });
     elWeeks.innerHTML = html;
 
-    var pending = shifts.filter(function(s){ return (s.response || "pending") === "pending"; }).length;
-    updateSummary(shifts.length, pending);
+    var released = shifts.filter(function(s){ return s.offer && (s.offer.status === "open" || s.offer.status === "taken"); }).length;
+    updateSummary(shifts.length, released);
   }
 
-  function setResponse(id, resp){
+  function setOffer(id, offer){
     for(var i = 0; i < state.shifts.length; i++){
-      if((+state.shifts[i].id) === (+id)){ state.shifts[i].response = resp; break; }
+      if((+state.shifts[i].id) === (+id)){ state.shifts[i].offer = offer; break; }
     }
   }
 
@@ -442,62 +451,52 @@
   }
 
   // ---- actions --------------------------------------------------------------
-  function shiftUrl(id, verb){ return CFG.shiftActionBase + "/" + id + "/" + verb; }
+  // Release = offer one of my own assigned shifts into the marketplace (ckai's
+  // POST /employee/shift-offers). unrestricted:true => anyone can pick it up
+  // (Sam: "allow everyone to see it"); a manager still approves before it moves.
+  var OFFER_BASE = "/employee/shift-offers";
 
-  async function postAction(id, verb, body){
+  async function postJson(url, body){
     var opts = { method: "POST", credentials: "same-origin", headers: { "Accept": "application/json" } };
     if(body){ opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
-    return fetch(shiftUrl(id, verb), opts);
+    return fetch(url, opts);
   }
 
-  function handleActionError(res){
+  function actionDenied(res){
     if(res.status === 401 || res.status === 403 || res.redirected){
       toast("That shift isn't on your schedule."); return; }
-    toast("Couldn't save that - try again.");
+    toast("Couldn't do that - try again.");
   }
 
-  async function doAccept(id, btn){
+  async function doRelease(id, btn){
     if(btn) btn.disabled = true;
     try{
-      var res = await postAction(id, "accept", null);
-      if(res.ok){ setResponse(id, "accepted"); render(); toast("Shift accepted."); }
-      else { handleActionError(res); if(btn) btn.disabled = false; }
+      var res = await postJson(OFFER_BASE, { shift_id: id, unrestricted: true });
+      var j = await res.json().catch(function(){ return {}; });
+      if(res.ok && j && j.ok && j.offer){
+        setOffer(id, { id: j.offer.id, status: j.offer.status }); render();
+        toast("Shift released - teammates can now pick it up.");
+      } else {
+        if(res.status === 401 || res.status === 403 || res.redirected){ actionDenied(res); }
+        else { toast((j && j.error) ? j.error : "Couldn't release that shift."); }
+        if(btn) btn.disabled = false;
+      }
     } catch(e){ toast("Network error - try again."); if(btn) btn.disabled = false; }
   }
 
-  async function doDecline(id, card, btn){
-    var ta = card.querySelector(".decline-reason");
-    var hint = card.querySelector(".decline-hint");
-    var reason = (ta && ta.value || "").trim();
-    if(!reason){
-      if(ta) ta.classList.add("invalid");
-      if(hint){ hint.textContent = "A reason is required to decline."; hint.classList.add("err"); }
-      if(ta) ta.focus();
-      return;
-    }
+  async function doUnrelease(id, offerId, btn){
     if(btn) btn.disabled = true;
     try{
-      var res = await postAction(id, "decline", { reason: reason });
-      if(res.ok){ setResponse(id, "declined"); render(); toast("Shift declined - your manager was notified."); }
-      else { handleActionError(res); if(btn) btn.disabled = false; }
+      var res = await postJson(OFFER_BASE + "/" + offerId + "/cancel", null);
+      var j = await res.json().catch(function(){ return {}; });
+      if(res.ok && j && j.ok){
+        setOffer(id, null); render();
+        toast("Release cancelled - the shift is yours again.");
+      } else {
+        toast((j && j.error) ? j.error : "Couldn't cancel - it may already be picked up.");
+        if(btn) btn.disabled = false;
+      }
     } catch(e){ toast("Network error - try again."); if(btn) btn.disabled = false; }
-  }
-
-  function openDecline(card){
-    var form = card.querySelector(".decline-form");
-    var actions = card.querySelector(".scard-actions");
-    if(actions) actions.style.display = "none";
-    if(form){
-      form.hidden = false;
-      var ta = form.querySelector(".decline-reason");
-      if(ta){ ta.classList.remove("invalid"); ta.focus(); }
-    }
-  }
-  function closeDecline(card){
-    var form = card.querySelector(".decline-form");
-    var actions = card.querySelector(".scard-actions");
-    if(form) form.hidden = true;
-    if(actions) actions.style.display = "";
   }
 
   elWeeks.addEventListener("click", function(ev){
@@ -507,12 +506,8 @@
     if(!card) return;
     var id = +card.dataset.shift;
     switch(btn.dataset.act){
-      case "accept":
-      case "accept-instead": doAccept(id, btn); break;
-      case "decline":
-      case "decline-instead": openDecline(card); break;
-      case "decline-cancel": closeDecline(card); break;
-      case "decline-submit": doDecline(id, card, btn); break;
+      case "release":   doRelease(id, btn); break;
+      case "unrelease": doUnrelease(id, +btn.dataset.offer, btn); break;
     }
   });
 

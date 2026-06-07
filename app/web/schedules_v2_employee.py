@@ -39,6 +39,7 @@ from app.models import (
     Schedule,
     Shift,
     ShiftAcceptance,
+    ShiftOffer,
     ShiftTag,
     Tag,
 )
@@ -67,9 +68,12 @@ def _week_bounds(today):
     return this_sat, this_sat + timedelta(days=7)
 
 
-def _serialize_shift(sh, week_start, position_name, tag_names, response):
-    """One shift as the API dict ck's client expects. `response` is the caller's
-    own accept/decline state ('accepted'|'declined'|None=pending)."""
+def _serialize_shift(sh, week_start, position_name, tag_names, response, offer=None):
+    """One shift as the API dict the client expects. `response` is the legacy
+    accept/decline state (kept for back-compat; no longer surfaced in the UI).
+    `offer` is THIS employee's active release of the shift -- {id, status} where
+    status is 'open' (in the marketplace) or 'taken' (a teammate picked it up,
+    pending manager approval) -- else None."""
     return {
         "id": sh.id,
         "schedule_id": sh.schedule_id,
@@ -81,6 +85,7 @@ def _serialize_shift(sh, week_start, position_name, tag_names, response):
         "tag_names": tag_names,
         "notes": sh.notes,
         "response": response,
+        "offer": offer,
     }
 
 
@@ -187,10 +192,23 @@ def emp_my_schedule_shifts():
                                 ShiftAcceptance.shift_id.in_(shift_ids)).all()):
                 resp_by_shift[a.shift_id] = a.response
 
+        # reframe: this employee's ACTIVE release per shift -- open = in the
+        # marketplace, taken = a teammate grabbed it (pending manager approval).
+        # Reuses ckai's ShiftOffer (B9), scoped to offers THIS employee made, so it
+        # never leaks another employee's marketplace activity.
+        offer_by_shift = {}
+        if shift_ids:
+            for o in (db.query(ShiftOffer)
+                        .filter(ShiftOffer.offered_by_employee_id == emp_id,
+                                ShiftOffer.shift_id.in_(shift_ids),
+                                ShiftOffer.status.in_(["open", "taken"])).all()):
+                offer_by_shift[o.shift_id] = {"id": o.id, "status": o.status}
+
         out = [_serialize_shift(sh, week_by_sched.get(sh.schedule_id),
                                 pos_name.get(sh.position_id),
                                 tags_by_shift.get(sh.id, []),
-                                resp_by_shift.get(sh.id))
+                                resp_by_shift.get(sh.id),
+                                offer_by_shift.get(sh.id))
                for sh in rows]
         return jsonify({"ok": True, "employee": emp_out, "shifts": out}), 200
     finally:

@@ -434,8 +434,8 @@
     if (!canvas || canvas.__ckAiLightningReady) return;
     canvas.__ckAiLightningReady = true;
 
-    var cssW = numberAttr(canvas, "data-width", 176);
-    var cssH = numberAttr(canvas, "data-height", 112);
+    var cssW = numberAttr(canvas, "data-width", 124);
+    var cssH = numberAttr(canvas, "data-height", 86);
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
@@ -450,66 +450,99 @@
     }
 
     var strikes = [];
-    var nextStrike = 1;
+    var nextStrike = 0.2 + rnd() * 0.6;
+    var lastTs = 0;
 
     function makeStrike() {
       var startX = (cssW * (0.08 + rnd() * 0.84)) * dpr;
-      var startY = (cssH * (0.94 + rnd() * 0.10)) * dpr;
-      var targetX = (cssW * (0.45 + (rnd() - 0.5) * 0.24)) * dpr;
-      var targetY = (cssH * (0.10 + rnd() * 0.16)) * dpr;
-      var segs = 8 + (rnd() * 6 | 0);
+      var startY = (cssH * (1.02 + rnd() * 0.18)) * dpr;
+      var targetX = (cssW * (0.5 + (rnd() - 0.5) * 0.22)) * dpr;
+      var targetY = (cssH * (0.06 + rnd() * 0.16)) * dpr;
+      var sideways = (rnd() - 0.5) * cssW * 0.22 * dpr;
+      var segs = 9 + (rnd() * 6 | 0);
       var p = [];
       for (var i = 0; i <= segs; i++) {
         var k = i / segs;
-        var ease = 1 - Math.pow(1 - k, 1.35);
-        var centerPull = Math.sin(k * Math.PI) * (rnd() - 0.5) * 18 * dpr;
-        var jag = (rnd() - 0.5) * (8 + 12 * Math.sin(k * Math.PI)) * dpr;
+        var ease = 1 - Math.pow(1 - k, 1.22);
+        var curve = Math.sin(k * Math.PI) * sideways;
+        var jag = (rnd() - 0.5) * (5 + 10 * Math.sin(k * Math.PI)) * dpr;
+        var liftNoise = (rnd() - 0.5) * 4 * dpr;
         p.push([
-          startX + (targetX - startX) * ease + jag + centerPull,
-          startY + (targetY - startY) * k + (rnd() - 0.5) * 5 * dpr
+          startX + (targetX - startX) * ease + curve + jag,
+          startY + (targetY - startY) * k + liftNoise
         ]);
       }
 
       var branches = [];
-      if (rnd() < 0.8) {
-        var branchCount = 1 + (rnd() * 3 | 0);
+      if (rnd() < 0.68) {
+        var branchCount = 1 + (rnd() * 2 | 0);
         for (var b = 0; b < branchCount; b++) {
           var at = 2 + (rnd() * Math.max(2, segs - 4) | 0);
           var base = p[at];
           var dir = rnd() < 0.5 ? -1 : 1;
-          var len = (16 + rnd() * 26) * dpr;
+          var len = (10 + rnd() * 22) * dpr;
           var bp = [[base[0], base[1]]];
           for (var j = 1; j <= 3; j++) {
             bp.push([
-              base[0] + dir * len * j / 3 + (rnd() - 0.5) * 8 * dpr,
-              base[1] - len * 0.45 * j / 3 + (rnd() - 0.5) * 7 * dpr
+              base[0] + dir * len * j / 3 + (rnd() - 0.5) * 6 * dpr,
+              base[1] - len * (0.22 + rnd() * 0.28) * j / 3 + (rnd() - 0.5) * 5 * dpr
             ]);
           }
-          branches.push(bp);
+          branches.push({
+            p: bp,
+            start: Math.max(0.12, Math.min(0.86, at / segs + (rnd() - 0.5) * 0.12)),
+            alpha: 0.36 + rnd() * 0.26
+          });
         }
       }
 
       strikes.push({
         p: p,
         branches: branches,
-        life: 0.78 + rnd() * 0.35,
-        width: 0.9 + rnd() * 0.9,
-        col: rnd() < 0.5 ? BOLT_RED : BOLT_BLUE
+        age: 0,
+        travel: 0.72 + rnd() * 0.62,
+        hold: 0.05 + rnd() * 0.08,
+        fade: 0.42 + rnd() * 0.38,
+        width: 0.7 + rnd() * 0.7,
+        col: rnd() < 0.54 ? BOLT_BLUE : BOLT_RED,
+        flicker: 0.8 + rnd() * 1.7
       });
     }
 
-    function drawPath(points) {
+    function drawPath(points, progress) {
+      if (!points.length || progress <= 0) return;
+      if (progress >= 1) progress = 1;
+      var scaled = progress * (points.length - 1);
+      var last = Math.floor(scaled);
+      var frac = scaled - last;
+
       ctx.beginPath();
       ctx.moveTo(points[0][0], points[0][1]);
-      for (var i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+      for (var i = 1; i <= last; i++) ctx.lineTo(points[i][0], points[i][1]);
+      if (last < points.length - 1) {
+        var a = points[last];
+        var b = points[last + 1];
+        ctx.lineTo(a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac);
+      }
       ctx.stroke();
     }
 
-    function frame() {
-      if (--nextStrike <= 0) {
-        var burst = 2 + (rnd() * 4 | 0);
+    function scheduleNext() {
+      nextStrike = 0.65 + rnd() * 1.6;
+      if (rnd() < 0.18) nextStrike += 0.65 + rnd() * 1.2;
+    }
+
+    function frame(nowMs) {
+      var now = nowMs * 0.001;
+      if (!lastTs) lastTs = now;
+      var dt = Math.min(0.06, Math.max(0.012, now - lastTs));
+      lastTs = now;
+
+      nextStrike -= dt;
+      if (nextStrike <= 0) {
+        var burst = rnd() < 0.22 ? 2 : 1;
         for (var i = 0; i < burst; i++) makeStrike();
-        nextStrike = 3 + (rnd() * 8 | 0);
+        scheduleNext();
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -519,28 +552,47 @@
       ctx.lineCap = "round";
       for (var s = strikes.length - 1; s >= 0; s--) {
         var st = strikes[s];
-        st.life -= 0.052;
-        if (st.life <= 0) {
+        st.age += dt;
+        var doneAt = st.travel + st.hold + st.fade;
+        if (st.age >= doneAt) {
           strikes.splice(s, 1);
           continue;
         }
+
+        var drawProgress = Math.min(1, st.age / st.travel);
+        var fadeAt = st.travel + st.hold;
+        var fade = st.age <= fadeAt ? 1 : Math.max(0, 1 - (st.age - fadeAt) / st.fade);
+        var flicker = 0.72 + 0.28 * Math.sin((st.age * 17 + st.flicker) * Math.PI);
         var col = mixColor(WHITE, st.col, 0.42);
-        var alpha = Math.min(1, st.life * 1.7);
-        ctx.globalAlpha = alpha;
+
+        ctx.globalAlpha = fade * flicker * 0.38;
         ctx.strokeStyle = rgb(col);
         ctx.shadowColor = rgb(st.col);
-        ctx.shadowBlur = 10 * dpr;
+        ctx.shadowBlur = 12 * dpr;
+        ctx.lineWidth = (st.width * 3.2) * dpr;
+        drawPath(st.p, drawProgress);
+
+        ctx.globalAlpha = fade * flicker * 0.82;
+        ctx.shadowBlur = 8 * dpr;
         ctx.lineWidth = st.width * dpr;
-        drawPath(st.p);
-        ctx.globalAlpha = alpha * 0.48;
-        ctx.lineWidth = Math.max(0.55, st.width * 0.48) * dpr;
-        st.branches.forEach(drawPath);
+        drawPath(st.p, drawProgress);
+
+        ctx.globalAlpha = fade * flicker * 0.42;
+        ctx.shadowBlur = 5 * dpr;
+        ctx.lineWidth = Math.max(0.45, st.width * 0.48) * dpr;
+        st.branches.forEach(function (br) {
+          var branchProgress = (drawProgress - br.start) / Math.max(0.1, 1 - br.start);
+          if (branchProgress > 0) {
+            ctx.globalAlpha = fade * flicker * br.alpha;
+            drawPath(br.p, branchProgress);
+          }
+        });
       }
       ctx.restore();
       requestAnimationFrame(frame);
     }
 
-    for (var i = 0; i < 8; i++) makeStrike();
+    makeStrike();
     requestAnimationFrame(frame);
   }
 

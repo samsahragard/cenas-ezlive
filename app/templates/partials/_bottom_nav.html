@@ -52,6 +52,11 @@
 {% set _bn_active = active|default('') or '' %}
 <style>
   .ck-bnav {
+    --ck-bnav-ai-track: 86px;
+    --ck-bnav-orb-w: 124px;
+    --ck-bnav-orb-h: 88px;
+    --ck-bnav-lightning-w: 124px;
+    --ck-bnav-lightning-h: 86px;
     display: none;                 /* shown <=1024px by the media query */
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
     border-top: 1px solid rgba(236, 227, 208, 0.15);
@@ -67,12 +72,14 @@
   .ck-bnav-inner { display: flex; }
   .ck-bnav-inner-ai {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 112px repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) var(--ck-bnav-ai-track) repeat(3, minmax(0, 1fr));
     align-items: end;
+    justify-items: stretch;
   }
   .ck-bnav-tab {
     flex: 1;
     display: flex; flex-direction: column; align-items: center; gap: 3px;
+    justify-content: center;
     padding: 9px 2px 7px;
     background: transparent; border: 0;
     border-top: 2px solid transparent; margin-top: -1px;
@@ -93,6 +100,9 @@
   .ck-bnav-inner-ai .ck-bnav-tab:not(.ck-bnav-ai-tab) {
     min-width: 0;
     overflow: hidden;
+    width: 100%;
+    min-height: 58px;
+    touch-action: manipulation;
   }
   .ck-bnav-inner-ai .ck-bnav-tab:not(.ck-bnav-ai-tab) .bn-lbl {
     max-width: 100%;
@@ -118,11 +128,27 @@
   .ck-bnav-tab.is-popping {
     background: rgba(255, 255, 255, 0.06);
   }
+  .ck-bnav-today-tab { grid-column: 1; }
+  .ck-bnav-manager-tab { grid-column: 2; }
+  .ck-bnav-catering-tab { grid-column: 3; }
+  .ck-bnav-ai-tab { grid-column: 4; }
+  .ck-bnav-kitchen-tab { grid-column: 5; }
+  .ck-bnav-operations-tab { grid-column: 6; }
+  .ck-bnav-vendors-tab { grid-column: 7; }
+  .ck-bnav-inner-expo {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) var(--ck-bnav-ai-track) repeat(3, minmax(0, 1fr));
+  }
+  .ck-bnav-inner-expo .ck-bnav-today-tab { grid-column: 1; }
+  .ck-bnav-inner-expo .ck-bnav-catering-tab { grid-column: 2; }
+  .ck-bnav-inner-expo .ck-bnav-ai-tab { grid-column: 3; }
+  .ck-bnav-inner-expo .ck-bnav-kitchen-tab { grid-column: 4; }
+  .ck-bnav-inner-expo .ck-bnav-operations-tab { grid-column: 5; }
+  .ck-bnav-inner-expo .ck-bnav-vendors-tab { grid-column: 6; }
   .ck-bnav-catering-tab {
-    transform: translateX(-8px);
+    transform: none;
   }
   .ck-bnav-kitchen-tab {
-    transform: translateX(8px);
+    transform: none;
   }
   .ck-bnav-ai-tab {
     position: relative;
@@ -139,22 +165,22 @@
   .ck-bnav-ai-tab .ck-ai-orb-stack {
     position: absolute !important;
     left: 50%;
-    bottom: -14px;
+    bottom: -8px;
     transform: translateX(-50%);
     z-index: 7;
     display: block;
-    width: 176px !important;
-    height: 124px !important;
+    width: var(--ck-bnav-orb-w) !important;
+    height: var(--ck-bnav-orb-h) !important;
     pointer-events: none !important;
     filter: none;
   }
   .ck-bnav-ai-lightning {
     position: absolute;
     left: 50%;
-    bottom: -8px;
+    bottom: -3px;
     transform: translateX(-50%);
-    width: 176px;
-    height: 112px;
+    width: var(--ck-bnav-lightning-w);
+    height: var(--ck-bnav-lightning-h);
     display: block;
     z-index: 6;
     pointer-events: none;
@@ -236,14 +262,24 @@
     .layout > .main { padding-bottom: calc(78px + max(env(safe-area-inset-bottom, 0px), 12px)); }
   }
   @media (max-width: 420px) {
-    .ck-bnav-inner-ai {
-      grid-template-columns: repeat(3, minmax(0, 1fr)) 104px repeat(3, minmax(0, 1fr));
+    .ck-bnav {
+      --ck-bnav-ai-track: 78px;
+      --ck-bnav-orb-w: 108px;
+      --ck-bnav-orb-h: 78px;
+      --ck-bnav-lightning-w: 112px;
+      --ck-bnav-lightning-h: 80px;
     }
-    .ck-bnav-catering-tab {
-      transform: translateX(-10px);
+  }
+  @media (max-width: 360px) {
+    .ck-bnav {
+      --ck-bnav-ai-track: 72px;
+      --ck-bnav-orb-w: 100px;
+      --ck-bnav-orb-h: 72px;
+      --ck-bnav-lightning-w: 104px;
+      --ck-bnav-lightning-h: 74px;
     }
-    .ck-bnav-kitchen-tab {
-      transform: translateX(10px);
+    .ck-bnav-inner-ai .ck-bnav-tab:not(.ck-bnav-ai-tab) .bn-lbl {
+      font-size: 6.5px;
     }
   }
 </style>
@@ -279,7 +315,7 @@
      Catering, Operations and Today tabs already had. #}
   {% endif %}
 
-  <div class="ck-bnav-inner{% if user_role != 'driver' %} ck-bnav-inner-ai{% endif %}">
+  <div class="ck-bnav-inner{% if user_role != 'driver' %} ck-bnav-inner-ai{% if user_role == 'expo' %} ck-bnav-inner-expo{% endif %}{% endif %}">
   {% if user_role == 'driver' %}
     {% for href, key, icon, label in [
       ('/ez-market',   'ez_market',   'ti-flame',     'Ez Market'),
@@ -302,7 +338,7 @@
        tabs below — an <a> with no data-pop, so the popover JS skips
        it. #}
     <a href="/{{ store_slug }}/today"
-       class="ck-bnav-tab{% if _bn_active in ['today_dashboard', 'dashboard', 'notifications', 'team_reports', 'sam_chat'] %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-today-tab{% if _bn_active in ['today_dashboard', 'dashboard', 'notifications', 'team_reports', 'sam_chat'] %} active{% endif %}">
       <i class="ti ti-layout-dashboard bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Today</span>
     </a>
@@ -312,7 +348,7 @@
        manager pages are reachable as tabs. #}
     {% if user_role != 'expo' %}
     <a href="/{{ store_slug }}/manager"
-       class="ck-bnav-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-manager-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
       <i class="ti ti-clipboard-text bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Manager</span>
     </a>
@@ -331,8 +367,8 @@
     <a href="/{{ store_slug }}/today?tab=cena"
        class="ck-bnav-tab ck-bnav-ai-tab{% if _bn_active in ['assistant_page', 'sam_chat'] %} active{% endif %}"
        aria-label="Open Cenas AI assistant">
-      <canvas class="ck-bnav-ai-lightning" data-ck-ai-lightning data-width="176" data-height="112" aria-hidden="true"></canvas>
-      <canvas data-ck-ai-orb data-width="176" data-height="124" aria-hidden="true"></canvas>
+      <canvas class="ck-bnav-ai-lightning" data-ck-ai-lightning data-width="124" data-height="86" aria-hidden="true"></canvas>
+      <canvas data-ck-ai-orb data-width="124" data-height="88" aria-hidden="true"></canvas>
       <span class="bn-lbl">AI</span>
     </a>
     {# Kitchen - per Sam #2239 (2026-05-31): added between Catering and
@@ -354,7 +390,7 @@
        Manager and Catering tabs above — an <a> with no data-pop, so
        the popover JS skips it. #}
     <a href="/{{ store_slug }}/operations"
-       class="ck-bnav-tab{% if _bn_active in ['operations_dashboard', 'partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-operations-tab{% if _bn_active in ['operations_dashboard', 'partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
       <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Operations</span>
     </a>
@@ -366,7 +402,7 @@
        Catering, Operations and Today tabs - an <a> with no data-pop,
        so the popover JS skips it. #}
     <a href="/{{ store_slug }}/vendors"
-       class="ck-bnav-tab{% if _bn_active == 'vendors_dashboard' or _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-vendors-tab{% if _bn_active == 'vendors_dashboard' or _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
       <i class="ti ti-leaf bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Vendors</span>
     </a>

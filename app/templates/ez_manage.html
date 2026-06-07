@@ -19,6 +19,8 @@
              padding: 10px 16px; color: rgba(255,255,255,0.62); cursor: pointer;
              font-size: 13px; font-weight: 500; }
   .ezm-tab.active { color: #fff; border-bottom-color: rgba(228,179,64,0.9); background: rgba(0,0,0,0.55); }
+  .ezm-panel { display: none; }
+  .ezm-panel.active { display: block; }
 
   .ezm-order {
     background: rgba(40,22,14,0.55); border: 0.5px solid rgba(217,164,54,0.18);
@@ -67,10 +69,27 @@
                 border-top: 0.5px solid rgba(255,255,255,0.06); }
 
   .ezm-empty { padding: 32px; text-align: center; color: rgba(236,227,208,0.55); }
+  .ezm-approved-card {
+    background: rgba(40,22,14,0.55); border: 0.5px solid rgba(156,203,118,0.28);
+    border-left: 3px solid #9CCB76; border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .ezm-approved-main { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+  .ezm-approved-title { font-size: 17px; font-weight: 600; color: #FAF6EC; }
+  .ezm-approved-sub { font-size: 12px; color: rgba(236,227,208,0.68); margin-top: 4px; }
+  .ezm-approved-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .ezm-pill {
+    border: 0.5px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 4px 8px;
+    font-size: 11px; color: rgba(236,227,208,0.82); background: rgba(0,0,0,0.18);
+  }
+  .ezm-pill.ok { color: #9CCB76; border-color: rgba(156,203,118,0.38); background: rgba(156,203,118,0.12); }
+  .ezm-pill.warn { color: #FFD970; border-color: rgba(255,217,112,0.35); background: rgba(255,217,112,0.10); }
+  .ezm-pill.error { color: #E2645C; border-color: rgba(226,100,92,0.40); background: rgba(226,100,92,0.12); }
 </style>
 {% endblock %}
 
 {% block content %}
+{% set default_panel = 'pending' if groups else ('approved' if approved_rows else 'pending') %}
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, msg in messages %}
     <div class="ezm-flash {{ category }}">{{ msg }}</div>
@@ -78,8 +97,8 @@
 {% endwith %}
 
 <div class="ezm-tabs">
-  <button class="ezm-tab active">Pending <span style="font-size:11px;opacity:0.7;">({{ pending_count }})</span></button>
-  <button class="ezm-tab">Approved today <span style="font-size:11px;opacity:0.7;">({{ approved_today_count }})</span></button>
+  <button class="ezm-tab{% if default_panel == 'pending' %} active{% endif %}" type="button" data-ezm-tab="pending">Pending <span style="font-size:11px;opacity:0.7;">({{ pending_count }})</span></button>
+  <button class="ezm-tab{% if default_panel == 'approved' %} active{% endif %}" type="button" data-ezm-tab="approved">Approved today <span style="font-size:11px;opacity:0.7;">({{ approved_today_count }})</span></button>
 </div>
 
 <dialog id="stack-modal" style="background: rgba(20,12,8,0.97); color: #FAF6EC;
@@ -107,6 +126,17 @@
 </dialog>
 <script>
 (function() {
+function initEzManage() {
+  document.querySelectorAll('[data-ezm-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.ezmTab;
+      document.querySelectorAll('[data-ezm-tab]').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('[data-ezm-panel]').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.ezmPanel === key);
+      });
+    });
+  });
+
   const modal = document.getElementById('stack-modal');
   const smDriver = document.getElementById('sm-driver-name');
   const smSubtitle = document.getElementById('sm-subtitle');
@@ -182,9 +212,16 @@
     modal.close();
     if (pendingForm) pendingForm.submit();
   });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEzManage);
+} else {
+  initEzManage();
+}
 })();
 </script>
 
+<div class="ezm-panel{% if default_panel == 'pending' %} active{% endif %}" data-ezm-panel="pending">
 {% if groups %}
   {% for g in groups %}
     {% set o = g.order %}
@@ -253,4 +290,44 @@
 {% else %}
   <div class="ezm-empty">No pending driver requests right now.</div>
 {% endif %}
+</div>
+
+<div class="ezm-panel{% if default_panel == 'approved' %} active{% endif %}" data-ezm-panel="approved">
+{% if approved_rows %}
+  {% for row in approved_rows %}
+    {% set o = row.order %}
+    {% set d = row.driver %}
+    {% set approver = row.approved_by %}
+    {% set job = row.assignment_job %}
+    <div class="ezm-approved-card">
+      <div class="ezm-approved-main">
+        <div>
+          <div class="ezm-approved-title">{{ o.external_order_id or ('Order #' ~ o.id) }} · {{ d.name if d else (o.assigned_driver or o.ezcater_driver_name or 'Driver assigned') }}</div>
+          <div class="ezm-approved-sub">{{ o.deliver_at or '—' }} · {{ o.delivery_date or 'no date' }} · {{ pickup_label(o) or '—' }} → {{ o.delivery_address or '—' }}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="ezm-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="ezm-payout-label">Driver pay</div>
+        </div>
+      </div>
+      <div class="ezm-approved-meta">
+        <span class="ezm-pill ok">Approved by {{ approver.full_name if approver else 'manager' }} at {{ row.approved_at_label }}</span>
+        <span class="ezm-pill">Selected: {{ o.ezcater_driver_name or o.assigned_driver or (d.name if d else 'driver') }}</span>
+        {% if job %}
+          <span class="ezm-pill {% if job.status == 'completed' %}ok{% elif job.status == 'failed' %}error{% else %}warn{% endif %}">
+            pwck {{ job.status }}{% if job.gateway_processed %} · {{ job.gateway_processed }}{% endif %}
+          </span>
+        {% else %}
+          <span class="ezm-pill warn">pwck not queued</span>
+        {% endif %}
+      </div>
+      {% if job and job.error_message %}
+        <div class="ezm-approved-sub" style="color:#E2645C;margin-top:8px;">{{ job.error_message }}</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="ezm-empty">No approvals recorded today yet.</div>
+{% endif %}
+</div>
 {% endblock %}

@@ -2015,6 +2015,33 @@ def _answer(payload: dict) -> tuple[dict, int]:
         }
 
     resolved_question = _resolved_question(question, previous_question)
+    if forced_review_reason:
+        row = _queue_for_review(question, principal, forced_review_reason, "ai.ask_claude", source)
+        answer = _queued_answer(forced_review_reason)
+        notice = None
+        notice_model = None
+        try:
+            notice, notice_model = _gemini_review_notice(principal, forced_review_reason, "ai.ask_claude", answer)
+        except Exception:  # noqa: BLE001
+            log.exception("assistant runtime gemini review notice failed")
+        if notice:
+            answer = notice
+        response = {
+            "ok": True,
+            "answer": answer,
+            "queued": True,
+            "queue_id": row["id"],
+            "storage": "ck",
+            "ck_question_id": row["ck_question_id"],
+            "reason": forced_review_reason,
+            "route_path": "review",
+            "routed_tool_id": None,
+            "route_meta": route_meta,
+        }
+        if notice and notice_model:
+            response["review_notice_model"] = notice_model
+        return response, 200
+
     approved = _approved_tool_answer(
         question,
         previous_question,
@@ -2062,7 +2089,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "ck_question_id": row["ck_question_id"],
             "reason": reason,
             "route_path": "review",
-            "routed_tool_id": routed_tool_id,
+            "routed_tool_id": None,
         }
         if notice and notice_model:
             response["review_notice_model"] = notice_model
@@ -2088,7 +2115,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "ck_question_id": row["ck_question_id"],
             "reason": "model_unavailable_or_no_answer",
             "route_path": "review",
-            "routed_tool_id": routed_tool_id,
+            "routed_tool_id": None,
         }, 200
 
     return {
@@ -2098,7 +2125,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
         "model": model,
         "storage": "ck_runtime",
         "route_path": "general",
-        "routed_tool_id": routed_tool_id,
+        "routed_tool_id": None,
     }, 200
 
 

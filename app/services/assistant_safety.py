@@ -10,6 +10,7 @@ import re
 
 _EXCLUDED_ACTION_RE = re.compile(
     r"\b("
+    r"exclude|dev\.[a-z0-9_.-]+|"
     r"shell|terminal|powershell|cmd(?:\.exe)?|command(?:\s+line)?|"
     r"deploy|render\s+(?:deploy|env|environment|restart)|"
     r"environment\s+variable|env\s+var|set\s+env|"
@@ -21,6 +22,17 @@ _EXCLUDED_ACTION_RE = re.compile(
     r"whatsapp|telegram|"
     r"sql|select\s+\*|query\s+database|"
     r"delete\s+(?:the\s+)?file|remove\s+(?:the\s+)?file"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_HARD_SENSITIVE_RE = re.compile(
+    r"\b("
+    r"password|passcode|token|secret|api\s+key|credential|pin|"
+    r"phone|email|address|customer|"
+    r"wage|payroll|pay\s+rate|hourly\s+rate|peer\s+pay|"
+    r"eligible_sales|cashsales|noncashsales|guid|"
+    r"all\s+employees|all\s+drivers|all\s+stores"
     r")\b",
     re.IGNORECASE,
 )
@@ -57,6 +69,8 @@ def force_review_reason(question: str) -> str | None:
         return None
     if _EXCLUDED_ACTION_RE.search(text):
         return "data_question_needs_approved_tool"
+    if _HARD_SENSITIVE_RE.search(text):
+        return "sensitive_or_operational_question_needs_approved_tool"
     if _UNSUPPORTED_SALES_SCOPE_RE.search(text):
         return "data_question_needs_approved_tool"
     if _WRITE_ACTION_RE.search(text) and _WRITE_OBJECT_RE.search(text):

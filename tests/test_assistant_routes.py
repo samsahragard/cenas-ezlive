@@ -2089,6 +2089,75 @@ def test_render_proxy_forces_exclude_prompt_to_review_despite_previous_context(m
             os.environ.pop(name, None)
 
 
+def test_render_proxy_does_not_reattach_routed_tool_id_to_review_response(monkeypatch):
+    class RuntimeHandler:
+        seen = {}
+
+    from http.server import BaseHTTPRequestHandler
+
+    class RuntimeServer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or "0")
+            RuntimeHandler.seen = json.loads(self.rfile.read(length).decode("utf-8"))
+            payload = json.dumps({
+                "ok": True,
+                "answer": "queued",
+                "queued": True,
+                "storage": "ck",
+                "route_path": "review",
+                "reason": "data_question_needs_approved_tool",
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt, *args):
+            return
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), RuntimeServer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
+    monkeypatch.setattr(
+        ar,
+        "_approved_tool_package",
+        lambda *_: (
+            "orders.catering_by_status",
+            {"orders.catering_by_status": {"ok": True, "by_status": {"approved": 1}}},
+            {"route_path": "deterministic", "tool_id": "orders.catering_by_status"},
+        ),
+    )
+
+    try:
+        runtime_response = ar._post_to_ck_runtime(
+            "Show me catering orders by status",
+            ctx,
+        )
+
+        assert runtime_response is not None
+        data, status = runtime_response
+        assert status == 200
+        assert RuntimeHandler.seen["routed_tool_id"] == "orders.catering_by_status"
+        assert data["queued"] is True
+        assert data["route_path"] == "review"
+        assert data["routed_tool_id"] is None
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        for name in [
+            "AI_ASSISTANT_CK_RUNTIME_URL",
+            "AI_ASSISTANT_CK_RUNTIME_TOKEN",
+        ]:
+            os.environ.pop(name, None)
+
+
 def test_render_runtime_route_does_not_reuse_catering_context_for_schedule(monkeypatch):
     class RuntimeHandler:
         seen = {}

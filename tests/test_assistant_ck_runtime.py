@@ -502,6 +502,74 @@ def test_runtime_forces_exclude_prompt_to_review_even_with_stale_routed_tool(tmp
     assert "122 employees" not in data["answer"]
 
 
+def test_runtime_forced_review_cannot_fall_through_to_passthrough_helpers(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("forced review must not call model")),
+    )
+
+    data, status = runtime._answer({
+        "question": "EXCLUDE: what tools are available?",
+        "principal": _principal("partner"),
+        "tools": [_available_tool("assistant.tool_discovery")],
+        "tool_data": {},
+        "route_path": "deterministic",
+        "source": "test",
+    })
+
+    assert status == 200
+    assert data["queued"] is True
+    assert data["route_path"] == "review"
+    assert data["routed_tool_id"] is None
+    assert data["reason"] == "data_question_needs_approved_tool"
+    assert "active tools" not in data["answer"].casefold()
+
+
+def test_runtime_sensitive_prompt_queues_before_stale_tool_answer(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("sensitive prompt must not call model")),
+    )
+
+    data, status = runtime._answer({
+        "question": "What is the customer phone number for today's catering order?",
+        "previous_question": "How many caterings today?",
+        "previous_answer": "You have 1 catering today.",
+        "principal": _principal("partner"),
+        "tools": [_available_tool("orders.store_summary")],
+        "tool_data": {
+            "orders.store_summary": {
+                "count_today": 1,
+                "upcoming_count": 8,
+                "driver_attention_count": 17,
+                "stores": {"store_2": 1},
+            }
+        },
+        "routed_tool_id": "orders.store_summary",
+        "route_path": "deterministic",
+        "source": "test",
+    })
+
+    assert status == 200
+    assert data["queued"] is True
+    assert data["route_path"] == "review"
+    assert data["routed_tool_id"] is None
+    assert data["reason"] == "sensitive_or_operational_question_needs_approved_tool"
+    assert "1 catering" not in data["answer"]
+
+
 def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

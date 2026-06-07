@@ -1662,7 +1662,11 @@ def _post_to_ck_runtime(
         if 200 <= resp.status_code < 300:
             if isinstance(data, dict):
                 data.setdefault("route_path", route_meta.get("route_path"))
-                data.setdefault("routed_tool_id", routed_tool_id)
+                if data.get("queued") is True or data.get("route_path") == "review":
+                    data["routed_tool_id"] = None
+                    data.setdefault("tool_id", None)
+                else:
+                    data.setdefault("routed_tool_id", routed_tool_id)
                 data.setdefault("route_meta", route_meta)
             return data, resp.status_code
         return {

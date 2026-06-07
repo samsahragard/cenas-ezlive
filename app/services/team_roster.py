@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from app.models import (CANONICAL_POSITIONS, Employee, EmployeePosition,
                         EmployeeStoreAssignment, Position, Shift, User)
+from app.services.role_buckets import (SECTION_HOURLY, SECTION_MANAGEMENT,
+                                       section_for_position, section_for_role)
 from app.services.role_hierarchy import role_domain
 
 # Canonical Position NAME -> role_hierarchy role key, so role_domain (which keys
@@ -26,6 +28,26 @@ _POSITION_ROLE_KEY = {
 _CANON_LC = {p.lower() for p in CANONICAL_POSITIONS}
 _STORE_LABELS = {"tomball": "Tomball", "copperfield": "Copperfield"}
 _STORE_ORDER = ["tomball", "copperfield"]
+
+# Per-store SECTION precedence for an employee spanning multiple sections: a
+# person who is both a manager (e.g. KM) and an hourly (e.g. Server) is placed
+# in MANAGEMENT (the higher bucket). Higher number = higher precedence.
+_SECTION_RANK = {SECTION_MANAGEMENT: 2, SECTION_HOURLY: 1}
+
+
+def _highest_section(pos_names):
+    """The HIGHEST per-store section (management > hourly) across an employee's
+    position names, via role_buckets.section_for_position(). Positions with no
+    section (partner/corporate tier-above, driver, unknown) are ignored. Returns
+    'management' | 'hourly' | None (None = no section-placed position)."""
+    best = None
+    best_rank = 0
+    for n in pos_names:
+        sec = section_for_position(n)
+        rank = _SECTION_RANK.get(sec, 0)
+        if rank > best_rank:
+            best, best_rank = sec, rank
+    return best
 
 
 def _domains(pos_names):
@@ -62,7 +84,13 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
     (union/OR). Returns {ok, filter, location, include_inactive,
     counts:{all,boh,foh}, stats:{showing,active_total,positions},
     stores:[{store_key,label,shown,active,employees:[{id,full_name,active,
-    positions:[{id,name}],domain,access_role,phone,email}]}]}."""
+    positions:[{id,name}],domain,section,access_role,phone,email}],
+    management:[...],hourly:[...]}]}.
+    Each employee row carries 'section' ('management'|'hourly'|None, the row's
+    HIGHEST section via role_buckets) and each store dict ALSO carries pre-
+    partitioned 'management'/'hourly' lists (the same cleaned rows, split by
+    section -- driver-only/non-section rows are in neither). Both additions are
+    ADDITIVE: the 'employees' full list and every existing field are unchanged."""
     location = (location or "all").strip().lower()
     flt = (flt or "all").strip().lower()
     # position -> set of lowercased canonical names (comma-split). 'all'/'' or a
@@ -113,6 +141,10 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
             "id": e.id, "full_name": e.full_name, "active": bool(e.active),
             "positions": [{"id": pid, "name": nm} for pid, nm in plist],
             "domain": _domain_label(dom),
+            # Per-store SECTION (S4, role_buckets): 'management' | 'hourly' |
+            # None, the HIGHEST section across the employee's positions. Additive
+            # -- existing consumers ignore it; the new grouping partitions on it.
+            "section": _highest_section([nm for _pid, nm in plist]),
             "access_role": role_by_uid.get(e.user_id),
             "phone": e.phone, "email": e.email,
             # Roster edit (roster-edit branch): address (free text the manager
@@ -168,12 +200,22 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
                          key=lambda r: (r["full_name"] or "").lower())
         clean = [{k: v for k, v in r.items() if not k.startswith("_")}
                  for r in members]
+        # Pre-partitioned section groups (S4): the SAME cleaned rows, split by
+        # their 'section'. management > hourly (placement is by the row's highest
+        # section, computed in _record). Driver-only / non-section-placed rows
+        # (section None) are intentionally in NEITHER group -- drivers show
+        # elsewhere (ez-driver). Purely additive: 'employees' (the full list) is
+        # untouched so current renderers keep working.
+        management = [r for r in clean if r.get("section") == SECTION_MANAGEMENT]
+        hourly = [r for r in clean if r.get("section") == SECTION_HOURLY]
         stores_out.append({
             "store_key": sk,
             "label": _STORE_LABELS.get(sk, (sk or "").title()),
             "shown": len(clean),
             "active": sum(1 for r in clean if r["active"]),
             "employees": clean,
+            "management": management,
+            "hourly": hourly,
         })
 
     return {
@@ -282,10 +324,12 @@ def backfill_user_links(db):
 
 
 def addable_positions_for(actor_role, db):
-    """Canonical Position rows [{id, name}] that an actor of `actor_role` may
-    ADD - computed from the SAME addable_roles() + position_role() the +Add 403
-    gate uses, so the +Add dropdown the FE renders can never drift from the
-    enforcement (Sam #2381/#2404). Sorted by name. Unknown/None actor -> []."""
+    """Canonical Position rows [{id, name, section}] that an actor of `actor_role`
+    may ADD - computed from the SAME addable_roles() + position_role() the +Add
+    403 gate uses, so the +Add dropdown the FE renders can never drift from the
+    enforcement (Sam #2381/#2404). Sorted by name. Unknown/None actor -> [].
+    'section' ('management'|'hourly'|None, via role_buckets) is ADDITIVE so the UI
+    can later split the two +Add buttons by section -- existing keys unchanged."""
     from app.services.permission_catalog import addable_roles, position_role
     allowed = addable_roles(actor_role)
     if not allowed:
@@ -293,8 +337,9 @@ def addable_positions_for(actor_role, db):
     out = []
     for p in db.query(Position).all():
         nm = (p.name or "").strip()
-        if nm.lower() in _CANON_LC and position_role(nm) in allowed:
-            out.append({"id": p.id, "name": nm})
+        role = position_role(nm)
+        if nm.lower() in _CANON_LC and role in allowed:
+            out.append({"id": p.id, "name": nm, "section": section_for_role(role)})
     out.sort(key=lambda x: x["name"])
     return out
 

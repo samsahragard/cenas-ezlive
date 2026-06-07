@@ -798,6 +798,40 @@
 
   // ---- modal ----
   var mb = $("sv2-modalback");
+
+  // aick: when this Week Builder runs EMBEDDED in the Team-workspace iframe, the
+  // embed grows the iframe to full CONTENT height (Sam #2888), so the modal's
+  // position:fixed backdrop pins to the TOP of the tall iframe and its flex-
+  // centered box lands at the iframe mid-point -- off-screen once you've scrolled
+  // down to a shift (looked like "clicking does nothing"). Detect embed + drop the
+  // modal box at the PARENT viewport's center so it opens where you're actually
+  // looking. Same-origin parent reads only; all wrapped so a cross-origin edge can
+  // never block the modal. Robust to the upcoming two-iframe (per-store) layout.
+  var IS_EMBED = false;
+  try { IS_EMBED = (window.self !== window.top); } catch (e) { IS_EMBED = true; }
+  function placeModalInView() {
+    if (!IS_EMBED) return;
+    try {
+      var pe = window.parent, fe = window.frameElement;
+      if (!pe || !fe) return;
+      var box = mb.querySelector(".sv2-modal");
+      if (!box) return;
+      var pScroll = pe.scrollY || pe.pageYOffset || 0;
+      var pH = pe.innerHeight || 0;
+      var ifTop = fe.getBoundingClientRect().top + pScroll;   // iframe top in parent doc
+      var centerLocal = (pScroll + pH / 2) - ifTop;           // parent viewport center, iframe-local
+      var mh = box.offsetHeight || 420;
+      mb.style.alignItems = "flex-start";
+      box.style.marginTop = Math.max(12, centerLocal - mh / 2) + "px";
+    } catch (e) {}
+  }
+  function clearModalPlacement() {
+    try {
+      mb.style.alignItems = "";
+      var box = mb.querySelector(".sv2-modal");
+      if (box) box.style.marginTop = "";
+    } catch (e) {}
+  }
   function openModal(opts) {
     // opts: { shift } to edit, or { empId, dateISO } to create
     state.editing = opts.shift || null;
@@ -853,13 +887,14 @@
       hide(del);
     }
     mb.classList.add("show");
+    placeModalInView();
     setTimeout(function () { start.focus(); }, 60);
   }
   function dayLabel(d) {
     if (!d) return "";
     return DOW[(d.getDay() + 6) % 7] + " " + MON[d.getMonth()] + " " + d.getDate();
   }
-  function closeModal() { mb.classList.remove("show"); state.editing = null; }
+  function closeModal() { mb.classList.remove("show"); clearModalPlacement(); state.editing = null; }
 
   function fillSelect(sel, items, vkey, lkey, zeroLabel) {
     var cur = sel.value;

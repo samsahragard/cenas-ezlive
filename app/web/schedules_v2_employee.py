@@ -57,9 +57,14 @@ def _require_emp():
 
 
 def _week_bounds(today):
-    """(this_monday, next_monday) as dates, from `today` (a date)."""
-    this_monday = today - timedelta(days=today.weekday())
-    return this_monday, this_monday + timedelta(days=7)
+    """(this_week_start, next_week_start) as dates. Weeks key to SATURDAY to match the
+    manager Week Builder (schedules_v2_week.html WEEK_START_DOW=6): schedules are stored
+    with a Saturday week_start, so the employee MUST query Saturdays. The old code anchored
+    to Monday, so the employee never matched their own Saturday-keyed schedule -> my-schedule
+    came up empty for everyone (pre-existing bug). Sat=weekday 5; days since the week's
+    Saturday = (today.weekday() - 5) % 7."""
+    this_sat = today - timedelta(days=(today.weekday() - 5) % 7)
+    return this_sat, this_sat + timedelta(days=7)
 
 
 def _serialize_shift(sh, week_start, position_name, tag_names, response):

@@ -38,6 +38,12 @@ try:
 except ImportError:  # pragma: no cover - allows running from scripts dir
     import assistant_review_ck_receiver as review_receiver  # type: ignore
 
+from app.services.assistant_safety import (
+    contextual_followup as _shared_contextual_followup,
+    force_review_reason as _shared_force_review_reason,
+    resolved_question as _shared_resolved_question,
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -1295,21 +1301,11 @@ def _labor_summary_answer(summary: dict) -> str:
 
 
 def _contextual_followup(question: str, previous_question: str) -> bool:
-    if not previous_question.strip():
-        return False
-    if re.search(r"^\s*(what about|how about|what baout|and\b|earlier|this morning|this afternoon|tonight)", question, re.IGNORECASE):
-        return True
-    if _OPERATIONAL_NOUN_RE.search(question):
-        return False
-    return bool(_FOLLOWUP_RE.search(question) or _DATA_TOOL_RE.search(question))
+    return _shared_contextual_followup(question, previous_question)
 
 
 def _resolved_question(question: str, previous_question: str = "") -> str:
-    question = str(question or "").strip()
-    previous_question = str(previous_question or "").strip()
-    if _contextual_followup(question, previous_question):
-        return f"{previous_question}\nFollow-up: {question}"
-    return question
+    return _shared_resolved_question(question, previous_question)
 
 
 def _route_required_verifications() -> int:
@@ -1845,6 +1841,9 @@ def _should_queue(question: str, principal: dict) -> tuple[bool, str, str | None
         return True, "not_authenticated", "ai.ask_claude_personal"
     if not _can_ask_personal(principal):
         return True, "missing_ai_permission", "ai.ask_claude_personal"
+    forced_review_reason = _shared_force_review_reason(question)
+    if forced_review_reason:
+        return True, forced_review_reason, "ai.ask_claude"
     if _SENSITIVE_RE.search(question):
         needed = "ai.ask_claude"
         if not _can_ask_operational(principal):
@@ -2001,6 +2000,19 @@ def _answer(payload: dict) -> tuple[dict, int]:
     source = str(payload.get("source") or "cenas_app")
     if not question:
         return {"ok": False, "error": "question required"}, 400
+
+    forced_review_reason = _shared_force_review_reason(question)
+    if forced_review_reason:
+        routed_tool_id = None
+        tool_data = {}
+        route_path = "review"
+        route_meta = {
+            **route_meta,
+            "tool_id": None,
+            "route_path": "review",
+            "reason": forced_review_reason,
+            "forced_review": True,
+        }
 
     resolved_question = _resolved_question(question, previous_question)
     approved = _approved_tool_answer(

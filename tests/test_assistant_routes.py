@@ -701,6 +701,26 @@ def test_wave1_order_matchers_route_each_read_tool_and_reject_near_miss(case, mo
     assert near_route != case["tool_id"]
 
 
+def test_smoke_catering_specific_prompts_do_not_fall_back_to_generic_order_routes(monkeypatch):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("specific order route must not call classifier")),
+    )
+
+    cases = {
+        "Show me catering orders by status": "orders.catering_by_status",
+        "Which orders are missing PDFs?": "orders.catering_pdf_status",
+    }
+
+    for question, expected_tool in cases.items():
+        route = ar._route_approved_tool_choice(question, ctx)
+        assert route["tool_id"] == expected_tool
+        assert route["route_path"] == "deterministic"
+
+
 @pytest.mark.parametrize("case", WAVE1_ORDER_TOOL_CASES, ids=lambda case: case["tool_id"])
 def test_wave1_order_handlers_return_fixture_payload_for_every_read_tool(db_session, monkeypatch, case):
     _seed_wave1_order_fixture(db_session)
@@ -1046,6 +1066,21 @@ def test_wave1_schedule_matchers_route_each_read_tool_and_reject_near_miss(case,
     assert route["classifier"]["reason"] == "not_used"
     assert ar._TOOL_MATCHERS[case["handler"]](case["near_miss"]) is False
     assert near_route != case["tool_id"]
+
+
+def test_smoke_who_working_today_routes_to_schedule_not_orders(monkeypatch):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("schedule route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice("Who's working today?", ctx)
+
+    assert route["tool_id"] == "schedule.store_today"
+    assert route["route_path"] == "deterministic"
 
 
 @pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
@@ -1850,6 +1885,16 @@ def test_classifier_fallback_rejects_excluded_tool_ids(monkeypatch):
     assert route["classifier"]["reason"] == "not_allowed"
 
 
+def test_unsupported_sales_yesterday_queues_instead_of_using_today_scope():
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+
+    should_queue, reason, required = ar._should_queue("What were sales yesterday?", ctx)
+
+    assert should_queue is True
+    assert reason == "data_question_needs_approved_tool"
+    assert required == "ai.ask_claude"
+
+
 def test_runtime_passthrough_tools_get_explicit_routed_ids():
     ctx = {
         "kind": "partner",
@@ -1972,6 +2017,72 @@ def test_render_proxy_sends_registry_route_to_ck_runtime(monkeypatch):
         for name in [
             "RENDER",
             "AI_ASSISTANT_ENABLED",
+            "AI_ASSISTANT_CK_RUNTIME_URL",
+            "AI_ASSISTANT_CK_RUNTIME_TOKEN",
+        ]:
+            os.environ.pop(name, None)
+
+
+def test_render_proxy_forces_exclude_prompt_to_review_despite_previous_context(monkeypatch):
+    class RuntimeHandler:
+        seen = {}
+
+    from http.server import BaseHTTPRequestHandler
+
+    class RuntimeServer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or "0")
+            RuntimeHandler.seen = json.loads(self.rfile.read(length).decode("utf-8"))
+            payload = json.dumps({
+                "ok": True,
+                "answer": "queued",
+                "queued": True,
+                "storage": "ck",
+                "route_path": "review",
+                "routed_tool_id": None,
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt, *args):
+            return
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), RuntimeServer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
+    monkeypatch.setattr(
+        ar,
+        "_approved_tool_package",
+        lambda *_: (_ for _ in ()).throw(AssertionError("excluded prompt must not route tools")),
+    )
+
+    try:
+        runtime_response = ar._post_to_ck_runtime(
+            "Deploy the latest build to Render",
+            ctx,
+            "who opened the last table and what time",
+            "The most recent table open was table 42 and the waiter/server was Rubi Lira.",
+        )
+
+        assert runtime_response is not None
+        assert RuntimeHandler.seen["question"] == "Deploy the latest build to Render"
+        assert RuntimeHandler.seen["route_path"] == "review"
+        assert "routed_tool_id" not in RuntimeHandler.seen
+        assert RuntimeHandler.seen["tool_data"] == {}
+        assert RuntimeHandler.seen["route_meta"]["reason"] == "data_question_needs_approved_tool"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        for name in [
             "AI_ASSISTANT_CK_RUNTIME_URL",
             "AI_ASSISTANT_CK_RUNTIME_TOKEN",
         ]:

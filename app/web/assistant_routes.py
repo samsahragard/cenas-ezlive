@@ -49,6 +49,11 @@ from app.services.assistant_handlers import drivers as driver_handlers
 from app.services.assistant_handlers import orders as order_handlers
 from app.services.assistant_handlers import schedule as schedule_handlers
 from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin_tool_registrations
+from app.services.assistant_safety import (
+    contextual_followup as _shared_contextual_followup,
+    force_review_reason as _shared_force_review_reason,
+    resolved_question as _shared_resolved_question,
+)
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
 log = logging.getLogger(__name__)
@@ -1565,21 +1570,11 @@ def _approved_tool_payload(question: str, ctx: dict[str, Any]) -> tuple[str | No
 
 
 def _contextual_followup(question: str, previous_question: str) -> bool:
-    if not previous_question.strip():
-        return False
-    if re.search(r"^\s*(what about|how about|what baout|and\b|earlier|this morning|this afternoon|tonight)", question, re.IGNORECASE):
-        return True
-    if _OPERATIONAL_NOUN_RE.search(question):
-        return False
-    return bool(_FOLLOWUP_RE.search(question) or _DATA_TOOL_RE.search(question))
+    return _shared_contextual_followup(question, previous_question)
 
 
 def _resolved_question(question: str, previous_question: str = "") -> str:
-    question = str(question or "").strip()
-    previous_question = str(previous_question or "").strip()
-    if _contextual_followup(question, previous_question):
-        return f"{previous_question}\nFollow-up: {question}"
-    return question
+    return _shared_resolved_question(question, previous_question)
 
 
 def _previous_question_from_body(body: dict[str, Any], current_question: str) -> str:
@@ -1619,8 +1614,23 @@ def _post_to_ck_runtime(
         "X-Ai-Assistant-Token": token,
         "Content-Type": "application/json",
     }
-    resolved_for_tools = _resolved_question(question, previous_question)
-    routed_tool_id, tool_data, route_meta = _approved_tool_package(resolved_for_tools, ctx)
+    forced_review_reason = _shared_force_review_reason(question)
+    if forced_review_reason:
+        routed_tool_id = None
+        tool_data = {}
+        route_meta = {
+            "tool_id": None,
+            "route_path": "review",
+            "latency_ms": 0,
+            "classifier": {
+                "enabled": _classifier_enabled(),
+                "reason": "forced_review",
+            },
+            "reason": forced_review_reason,
+        }
+    else:
+        resolved_for_tools = _resolved_question(question, previous_question)
+        routed_tool_id, tool_data, route_meta = _approved_tool_package(resolved_for_tools, ctx)
     payload = {
         "question": question,
         "principal": _runtime_principal(ctx),
@@ -1825,6 +1835,9 @@ def _should_queue(question: str, ctx: dict[str, Any]) -> tuple[bool, str, str | 
         return True, "not_authenticated", "ai.ask_claude_personal"
     if not ctx["can_ask_personal"]:
         return True, "missing_ai_permission", "ai.ask_claude_personal"
+    forced_review_reason = _shared_force_review_reason(question)
+    if forced_review_reason:
+        return True, forced_review_reason, "ai.ask_claude"
     if _SENSITIVE_RE.search(question):
         needed = "ai.ask_claude"
         if not ctx["can_ask_operational"]:

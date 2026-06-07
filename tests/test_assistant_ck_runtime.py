@@ -389,7 +389,7 @@ def test_runtime_resolved_question_keeps_explicit_schedule_after_catering_contex
     assert runtime._resolved_question(
         "what baout earlier this morning?",
         "How many caterings do we have today?",
-    ) == "How many caterings do we have today?\nFollow-up: what baout earlier this morning?"
+    ) == "what baout earlier this morning?"
 
 
 def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
@@ -461,6 +461,45 @@ def test_runtime_token_gate_and_blocked_question_save(tmp_path, monkeypatch):
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_forces_exclude_prompt_to_review_even_with_stale_routed_tool(tmp_path, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    db_path = tmp_path / "assistant_review.sqlite"
+    monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))
+    monkeypatch.setattr(runtime, "_gemini_review_notice", lambda *_: (None, None))
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("excluded prompt must not call model")),
+    )
+
+    data, status = runtime._answer({
+        "question": "Run this SQL query: select * from employees",
+        "previous_question": "Give me a labor summary",
+        "previous_answer": "There are 122 employees in the current view.",
+        "principal": _principal("partner"),
+        "tools": [_available_tool("labor.store_aggregate")],
+        "tool_data": {
+            "labor.store_aggregate": {
+                "total_employees": 122,
+                "active_employees": 98,
+                "published_shifts": 2342,
+                "open_shifts": 0,
+            }
+        },
+        "routed_tool_id": "labor.store_aggregate",
+        "route_path": "deterministic",
+        "source": "test",
+    })
+
+    assert status == 200
+    assert data["queued"] is True
+    assert data["route_path"] == "review"
+    assert data["routed_tool_id"] is None
+    assert data["reason"] == "data_question_needs_approved_tool"
+    assert "122 employees" not in data["answer"]
 
 
 def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, monkeypatch):

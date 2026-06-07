@@ -964,7 +964,10 @@ def _wants_order_lookup(question: str) -> bool:
     return (
         _order_context(question)
         and not _in_house_context(question)
-        and bool(re.search(r"\b(lookup|find|details?|show|order #|order id|ticket)\b", text))
+        and bool(
+            re.search(r"\b(lookup|find|details?|order #|order id|ticket)\b", text)
+            or re.search(r"\b[A-Z0-9]{2,4}-[A-Z0-9]{2,4}\b", str(question or ""), re.IGNORECASE)
+        )
     )
 
 
@@ -1000,7 +1003,7 @@ def _wants_pdf_status(question: str) -> bool:
     return (
         _order_context(question)
         and not _in_house_context(question)
-        and bool(re.search(r"\b(pdf|parse|processing status|uploaded)\b", text))
+        and bool(re.search(r"\b(pdfs?|parse|processing status|uploaded)\b", text))
     )
 
 

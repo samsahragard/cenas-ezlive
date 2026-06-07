@@ -499,7 +499,14 @@ def _txt(question: str) -> str:
 
 
 def _schedule_context(question: str) -> bool:
-    return bool(re.search(r"\b(schedule|schedules|shift|shifts|roster|time[- ]off|availability|unavailability|alarm|reminder)\b", _txt(question)))
+    text = _txt(question)
+    if re.search(
+        r"\b(who(?:'s|\s+is)?\s+working|who\s+works|working\s+(?:today|tomorrow)|"
+        r"(?:staff|team)\s+(?:today|tomorrow)|on\s+shift|clocked\s+in)\b",
+        text,
+    ):
+        return True
+    return bool(re.search(r"\b(schedule|schedules|shift|shifts|roster|time[- ]off|availability|unavailability|alarm|reminder)\b", text))
 
 
 def _wants_alarm_pending(question: str) -> bool:

@@ -1617,7 +1617,7 @@ def test_runtime_formats_routed_last_night_table_payload_with_waiter(monkeypatch
     assert "opened by Yadira Flores" in data["answer"]
 
 
-def test_runtime_queues_server_only_payload_for_opened_by_question(monkeypatch):
+def test_runtime_answers_server_only_payload_for_opened_by_question(monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 
     principal = _principal("partner")
@@ -1650,7 +1650,12 @@ def test_runtime_queues_server_only_payload_for_opened_by_question(monkeypatch):
         routed_tool_id="toast.table_activity",
     )
 
-    assert data is None
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == "toast.table_activity"
+    assert "table 82" in data["answer"]
+    assert "waiter/server as Maria Garcia" in data["answer"]
+    assert "did not return an opened-by employee" in data["answer"]
 
 
 def test_runtime_bare_waiter_question_routes_to_table_tool(monkeypatch):
@@ -1760,6 +1765,27 @@ def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_p
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_order_summary_names_requested_store_zeroes():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._orders_summary_answer(
+        {
+            "today": "2026-06-07",
+            "today_orders": 2,
+            "upcoming_orders": 7,
+            "needs_driver_orders": 0,
+            "live_tracking_orders": 1,
+            "active_tracking_orders": 0,
+            "today_by_store": {"tomball": 2},
+        },
+        "How many orders did Copperfield have today vs Tomball?",
+    )
+
+    assert "copperfield: 0" in answer
+    assert "tomball: 2" in answer
+    assert "Today catering orders by requested store" in answer
 
 
 def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, monkeypatch):

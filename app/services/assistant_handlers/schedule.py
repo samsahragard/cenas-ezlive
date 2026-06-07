@@ -115,6 +115,16 @@ def _week_start(value: date | None = None) -> date:
     return value - timedelta(days=value.weekday())
 
 
+def _requested_day(question: str) -> tuple[date, str]:
+    today = _today_local()
+    if re.search(r"\btomorrow\b", _txt(question)):
+        return (
+            today + timedelta(days=1),
+            "tomorrow_local_date_visible_allowed_schedule_stores",
+        )
+    return today, "local_date_visible_allowed_schedule_stores"
+
+
 def _safe_shift(
     db: Session,
     shift: Shift,
@@ -167,18 +177,21 @@ def _window_shifts(shifts: list[Shift], start: date, end: date) -> list[Shift]:
 
 
 def schedule_store_today(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    today = _today_local()
+    target_day, window_label = _requested_day(question)
     db = SessionLocal()
     try:
-        shifts = sorted(_window_shifts(_allowed_shifts(db, ctx), today, today), key=lambda row: row.start_at)
+        shifts = sorted(
+            _window_shifts(_allowed_shifts(db, ctx), target_day, target_day),
+            key=lambda row: row.start_at,
+        )
         employees = _employee_names(db)
         positions = _position_names(db)
         return _payload(
             "schedule.store_today",
             ctx,
             question=question,
-            date=today.isoformat(),
-            window_label="local_date_visible_allowed_schedule_stores",
+            date=target_day.isoformat(),
+            window_label=window_label,
             shift_count=len(shifts),
             open_shift_count=sum(1 for row in shifts if row.status == "open" or row.employee_id is None),
             assigned_shift_count=sum(1 for row in shifts if row.employee_id is not None),
@@ -540,7 +553,9 @@ def _wants_shift_swaps(question: str) -> bool:
 
 
 def _wants_today(question: str) -> bool:
-    return _schedule_context(question) and "today" in _txt(question)
+    return _schedule_context(question) and bool(
+        re.search(r"\b(today|tomorrow)\b", _txt(question))
+    )
 
 
 def _wants_week(question: str) -> bool:

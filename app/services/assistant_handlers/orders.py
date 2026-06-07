@@ -948,9 +948,37 @@ def _in_house_context(question: str) -> bool:
     return bool(re.search(r"\b(in[- ]house|quote|quotes)\b", _txt(question)))
 
 
+def _mentioned_store_keys(question: str) -> set[str]:
+    text = _txt(question)
+    stores: set[str] = set()
+    for alias, store in _STORE_ALIASES.items():
+        escaped = re.escape(alias).replace(r"\ ", r"\s+")
+        if re.search(rf"\b{escaped}\b", text):
+            stores.add(store)
+    return stores
+
+
+def _wants_today_store_comparison(question: str) -> bool:
+    text = _txt(question)
+    if not _order_context(question) or _in_house_context(question):
+        return False
+    if "today" not in text:
+        return False
+    stores = _mentioned_store_keys(question)
+    return len(stores) >= 2 or bool(
+        re.search(r"\b(vs|versus|compare|comparison)\b", text)
+        and re.search(r"\b(store|stores?|location|locations?)\b", text)
+    )
+
+
 def _wants_today(question: str) -> bool:
     text = _txt(question)
-    return _order_context(question) and not _in_house_context(question) and "today" in text
+    return (
+        _order_context(question)
+        and not _in_house_context(question)
+        and not _wants_today_store_comparison(question)
+        and "today" in text
+    )
 
 
 def _wants_tomorrow(question: str) -> bool:
@@ -970,7 +998,7 @@ def _wants_next_30(question: str) -> bool:
 
 def _wants_count(question: str) -> bool:
     text = _txt(question)
-    if _wants_returning_customers(question):
+    if _wants_returning_customers(question) or _wants_today_store_comparison(question):
         return False
     return _order_context(question) and not _in_house_context(question) and bool(re.search(r"\b(how many|count|total)\b", text))
 
@@ -984,6 +1012,7 @@ def _wants_by_store(question: str) -> bool:
     return (
         _order_context(question)
         and not _in_house_context(question)
+        and not _wants_today_store_comparison(question)
         and bool(re.search(r"\b(by store|store split|location split|by location)\b", text))
     )
 

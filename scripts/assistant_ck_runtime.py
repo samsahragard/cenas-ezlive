@@ -424,7 +424,7 @@ def _wants_toast_table_activity(question: str) -> bool:
         _TOAST_TABLE_ACTIVITY_RE.search(text)
         and re.search(
             r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|"
-            r"yesterday|last night|tonight|latest|recent|open|opened)\b",
+            r"yesterday|last night|tonight|latest|recent|activity|activities|open|opened)\b",
             text,
             re.IGNORECASE,
         )
@@ -934,7 +934,7 @@ def _toast_table_activity_needs_employee_refresh(summary: object, question: str 
     server_name = str(latest.get("server_name") or "").strip()
     wants_opened_by, wants_server = _toast_table_person_intent(question)
     if wants_opened_by and not opened_by:
-        return True
+        return not server_name
     if wants_server and not server_name:
         return True
     if opened_by or server_name:
@@ -987,6 +987,29 @@ def _requested_store(question: str) -> str | None:
     return None
 
 
+def _requested_store_list(question: str) -> list[str]:
+    text = question.casefold()
+    aliases = {
+        "tomball": "tomball",
+        "dos mas": "tomball",
+        "dos": "tomball",
+        "copperfield": "copperfield",
+        "uno mas": "copperfield",
+        "uno": "copperfield",
+    }
+    hits: list[tuple[int, str]] = []
+    for alias, store in aliases.items():
+        escaped = re.escape(alias).replace(r"\ ", r"\s+")
+        match = re.search(rf"\b{escaped}\b", text)
+        if match:
+            hits.append((match.start(), store))
+    ordered: list[str] = []
+    for _pos, store in sorted(hits):
+        if store not in ordered:
+            ordered.append(store)
+    return ordered
+
+
 def _requested_today_window(question: str) -> tuple[str, str] | None:
     text = question.casefold()
     if "earlier this morning" in text or "this morning" in text or re.search(r"\bmorning\b", text):
@@ -1013,7 +1036,8 @@ def _store_split(mapping: dict) -> str:
 
 
 def _orders_summary_answer(summary: dict, question: str = "") -> str:
-    requested_store = _requested_store(question)
+    requested_stores = _requested_store_list(question)
+    requested_store = requested_stores[0] if len(requested_stores) == 1 else None
     requested_window = _requested_today_window(question)
     today_date = str(summary.get("today") or "").strip()
     if requested_window:
@@ -1045,7 +1069,13 @@ def _orders_summary_answer(summary: dict, question: str = "") -> str:
     by_store = summary.get("today_by_store") or summary.get("by_store") or {}
     today_orders = _store_count(by_store, requested_store, today_orders)
     store_bits = [f"{store}: {count}" for store, count in sorted(by_store.items())]
-    if requested_store:
+    if len(requested_stores) >= 2:
+        compare_bits = [
+            f"{store}: {int((by_store or {}).get(store, 0) or 0)}"
+            for store in requested_stores
+        ]
+        answer = "Today catering orders by requested store: " + "; ".join(compare_bits) + "."
+    elif requested_store:
         answer = f"{requested_store} has {today_orders} {_plural(today_orders, 'catering')} today."
     else:
         answer = (

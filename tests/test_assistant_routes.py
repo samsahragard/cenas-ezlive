@@ -1187,6 +1187,22 @@ def test_smoke_who_working_today_routes_to_schedule_not_orders(monkeypatch):
     assert route["route_path"] == "deterministic"
 
 
+@pytest.mark.parametrize("question", ["What's tomorrow's schedule?", "Tomorrow's schedule"])
+def test_smoke_tomorrow_schedule_routes_to_local_date_schedule(monkeypatch, question):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("schedule route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(question, ctx)
+
+    assert route["tool_id"] == "schedule.store_today"
+    assert route["route_path"] == "deterministic"
+
+
 @pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])
 def test_wave1_schedule_handlers_return_fixture_payload_for_every_read_tool(db_session, monkeypatch, case):
     _seed_wave1_schedule_fixture(db_session)
@@ -1224,11 +1240,17 @@ def test_wave1_schedule_handlers_label_answer_windows(db_session, monkeypatch):
     ctx = _wave1_partner_ctx(stores=["tomball"])
 
     today_payload = schedule_handlers.schedule_store_today("who is working today?", ctx)
+    tomorrow_payload = schedule_handlers.schedule_store_today("tomorrow's schedule", ctx)
     week_payload = schedule_handlers.schedule_store_week("show this week", ctx)
     open_payload = schedule_handlers.schedule_open_shifts("open shifts", ctx)
+    tomorrow = schedule_handlers._today_local() + timedelta(days=1)
 
     assert today_payload["window_label"] == "local_date_visible_allowed_schedule_stores"
     assert today_payload["date"] == schedule_handlers._today_local().isoformat()
+    assert tomorrow_payload["window_label"] == "tomorrow_local_date_visible_allowed_schedule_stores"
+    assert tomorrow_payload["date"] == tomorrow.isoformat()
+    assert tomorrow_payload["shift_count"] == 1
+    assert tomorrow_payload["open_shift_count"] == 1
     assert week_payload["window_label"] == "current_week_visible_allowed_schedule_stores"
     assert week_payload["week_start"] == schedule_handlers._week_start().isoformat()
     assert week_payload["published_schedule_count"] == 1
@@ -2003,7 +2025,9 @@ def test_deterministic_matcher_scan_uses_registry_priority():
     rows = ar._scan_deterministic_matchers(
         [
             "who opened the last table?",
+            "show me table activity",
             "how many caterings today?",
+            "blorple snurf catering xyzzy",
             "hello there",
         ],
         ctx,
@@ -2011,10 +2035,51 @@ def test_deterministic_matcher_scan_uses_registry_priority():
 
     assert [row["tool_id"] for row in rows] == [
         "toast.table_activity",
+        "toast.table_activity",
         "orders.catering_today",
+        None,
         None,
     ]
     assert rows[-1]["route_path"] == "review"
+
+
+def test_generic_order_summary_does_not_route_bare_catering_gibberish():
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 99,
+        "display_name": "Partner User",
+        "store_slugs": ["dos"],
+        "current_store": "dos",
+        "path": "/partner/today",
+        "permissions": ["*"],
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+        "is_owner_operator": False,
+    }
+
+    question = "blorple snurf catering xyzzy"
+
+    assert ar._TOOL_MATCHERS["orders_store_summary"](question) is False
+    assert ar._deterministic_route_tool_id(question, ctx) is None
+
+
+def test_today_cross_store_order_compare_routes_to_summary_not_window_tool(monkeypatch):
+    ctx = _wave1_partner_ctx(stores=["tomball", "copperfield"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("cross-store order compare must not call classifier")),
+    )
+
+    question = "How many orders did Copperfield have today vs Tomball?"
+    route = ar._route_approved_tool_choice(question, ctx)
+
+    assert route["tool_id"] == "orders.store_summary"
+    assert route["route_path"] == "deterministic"
+    assert ar._TOOL_MATCHERS["orders_catering_today"](question) is False
+    assert ar._TOOL_MATCHERS["orders_catering_count"](question) is False
 
 
 def test_wave1_order_matchers_route_specific_tools_and_near_miss(monkeypatch):

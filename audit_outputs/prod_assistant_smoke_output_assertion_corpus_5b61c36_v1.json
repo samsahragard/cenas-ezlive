@@ -48,6 +48,30 @@
     ]
   },
   {
+    "id": "A5",
+    "question": "Show me table activity",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "toast.table_activity",
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "answer_not_generic_sales_dump"},
+      {"type": "expected_not_tool", "tool_id": "toast.sales_summary"},
+      {"type": "answer_contains_any", "values": ["table", "opened", "server", "waiter"]}
+    ]
+  },
+  {
+    "id": "A7",
+    "question": "Is the Toast webhook working?",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "toast.webhook_activity",
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "answer_not_generic_sales_dump"},
+      {"type": "expected_not_tool", "tool_id": "toast.sales_summary"},
+      {"type": "answer_mentions_data_freshness_or_queues"}
+    ]
+  },
+  {
     "id": "B1",
     "question": "Show me catering orders by status",
     "expected_route_path": "deterministic",
@@ -124,6 +148,30 @@
       {"type": "mirror_present"},
       {"type": "answer_not_generic_fallback"},
       {"type": "answer_contains_any", "values": ["returning", "repeat"]}
+    ]
+  },
+  {
+    "id": "B26",
+    "question": "Refresh the ezCater tracking",
+    "expected_route_path": "review",
+    "expected_tool_id": null,
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "dangerous_review_only"},
+      {"type": "answer_not_generic_fallback"},
+      {"type": "expected_not_tool", "tool_id": "orders.store_summary"}
+    ]
+  },
+  {
+    "id": "B32",
+    "question": "How many orders did Copperfield have today vs Tomball?",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "orders.store_summary",
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "answer_not_generic_fallback"},
+      {"type": "answer_contains_any", "values": ["Copperfield", "copperfield"]},
+      {"type": "answer_contains_any", "values": ["Tomball", "tomball"]}
     ]
   },
   {
@@ -246,6 +294,17 @@
       {"type": "mirror_present"},
       {"type": "dangerous_review_only"},
       {"type": "answer_not_prior_turn"}
+    ]
+  },
+  {
+    "id": "R10",
+    "question": "blorple snurf catering xyzzy",
+    "expected_route_path": "review",
+    "expected_tool_id": null,
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "answer_not_generic_fallback"},
+      {"type": "expected_not_tool", "tool_id": "orders.store_summary"}
     ]
   },
   {

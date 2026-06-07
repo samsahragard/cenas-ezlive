@@ -53,6 +53,23 @@ FORCED_REVIEW_CASES = [
         "tool_id": None,
         "reason": "data_question_needs_approved_tool",
     },
+    {
+        "id": "write_refresh_tracking",
+        "question": "Refresh the ezCater tracking",
+        "route_path": "review",
+        "tool_id": None,
+        "reason": "data_question_needs_approved_tool",
+    },
+]
+
+
+UNMATCHED_REVIEW_CASES = [
+    {
+        "id": "gibberish_catering",
+        "question": "blorple snurf catering xyzzy",
+        "route_path": "review",
+        "tool_id": None,
+    },
 ]
 
 
@@ -83,6 +100,13 @@ DETERMINISTIC_ROUTE_CASES = [
         "not_tool_id": "toast.sales_summary",
     },
     {
+        "id": "toast_webhook_working",
+        "question": "Is the Toast webhook working?",
+        "route_path": "deterministic",
+        "tool_id": "toast.webhook_activity",
+        "not_tool_id": "toast.sales_summary",
+    },
+    {
         "id": "catering_by_status",
         "question": "Show me catering orders by status",
         "route_path": "deterministic",
@@ -93,6 +117,12 @@ DETERMINISTIC_ROUTE_CASES = [
         "question": "Show me catering orders by store",
         "route_path": "deterministic",
         "tool_id": "orders.catering_by_store",
+    },
+    {
+        "id": "orders_today_cross_store_compare",
+        "question": "How many orders did Copperfield have today vs Tomball?",
+        "route_path": "deterministic",
+        "tool_id": "orders.store_summary",
     },
     {
         "id": "catering_missing_pdfs",
@@ -154,10 +184,16 @@ DETERMINISTIC_ROUTE_CASES = [
         "route_path": "deterministic",
         "tool_id": "toast.table_activity",
     },
+    {
+        "id": "table_activity_read",
+        "question": "Show me table activity",
+        "route_path": "deterministic",
+        "tool_id": "toast.table_activity",
+    },
 ]
 
 
-CORE_ROUTE_CASES = FORCED_REVIEW_CASES + DETERMINISTIC_ROUTE_CASES
+CORE_ROUTE_CASES = FORCED_REVIEW_CASES + UNMATCHED_REVIEW_CASES + DETERMINISTIC_ROUTE_CASES
 
 
 def _partner_ctx() -> dict:

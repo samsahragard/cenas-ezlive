@@ -40,7 +40,8 @@ _HARD_SENSITIVE_RE = re.compile(
 _WRITE_ACTION_RE = re.compile(
     r"\b("
     r"update|change|set|mark|assign|reassign|unassign|send|email|"
-    r"create|add|delete|remove|approve|deny|publish|cancel|void"
+    r"create|add|delete|remove|approve|deny|publish|cancel|void|"
+    r"refresh|resync|sync"
     r")\b",
     re.IGNORECASE,
 )
@@ -48,7 +49,8 @@ _WRITE_ACTION_RE = re.compile(
 _WRITE_OBJECT_RE = re.compile(
     r"\b("
     r"order|orders|status|driver|quote|email|shift|schedule|"
-    r"time[- ]off|availability|permission|role|expense"
+    r"time[- ]off|availability|permission|role|expense|"
+    r"tracking|ezcater"
     r")\b",
     re.IGNORECASE,
 )

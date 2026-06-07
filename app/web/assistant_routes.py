@@ -1273,7 +1273,7 @@ def _wants_toast_table_activity(question: str) -> bool:
         _TOAST_TABLE_ACTIVITY_RE.search(text)
         and re.search(
             r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|"
-            r"yesterday|last night|tonight|latest|recent|open|opened)\b",
+            r"yesterday|last night|tonight|latest|recent|activity|activities|open|opened)\b",
             text,
             re.IGNORECASE,
         )
@@ -1385,7 +1385,21 @@ def _wants_orders_store_summary(question: str) -> bool:
         )
     ):
         return False
-    return bool(_ORDERS_SUMMARY_RE.search(text))
+    if not _ORDERS_SUMMARY_RE.search(text):
+        return False
+    return bool(
+        re.search(
+            r"\b("
+            r"how\s+(?:many|amny)|count|total|totals?|summary|report|list|show\s+me|"
+            r"today|tomorrow|yesterday|upcoming|current|active|"
+            r"driver\s+attention|needs?\s+(?:a\s+)?driver|tracking\s+links?|"
+            r"store\s+split|by\s+store|location\s+split|by\s+location|"
+            r"have|missing|without|no"
+            r")\b",
+            text,
+            re.IGNORECASE,
+        )
+    )
 
 
 def _wants_drivers_store_summary(question: str) -> bool:

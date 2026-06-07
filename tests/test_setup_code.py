@@ -272,3 +272,42 @@ def test_code_is_identifier_scoped_no_cross_employee(app_bound):
     # instances); B's PIN was never set by A's code.
     b_fresh = db.query(Employee).filter_by(id=emp_b.id).one()
     assert b_fresh.passcode_hash is None
+
+
+# ============================================================
+# 7. LOGIN WITH THE CODE (Sam 2026-06-07): the employee enters email/phone + the
+#    manager's reset CODE at /employee/login/passcode and is signed in.
+# ============================================================
+def test_login_with_reset_code_signs_in_and_consumes_token(app_bound):
+    """A valid reset code logs the employee in (no separate page needed), becomes
+    their passcode, and consumes the shared token so the emailed link dies."""
+    flask_app, db = app_bound
+    emp = _make_employee(db, full_name="Cara C", email="cara@test.local",
+                         phone="2815550133")
+    code = setup_mod.send_setup_invite(emp.id)["code"]
+    assert _live_token(db, emp.id) is not None  # a live token exists pre-login
+
+    c = flask_app.test_client()
+    r = c.post("/employee/login/passcode",
+               json={"identifier": "cara@test.local", "passcode": code})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json().get("ok") is True
+
+    # the shared token is now consumed -> the emailed setup link is dead (first-wins)
+    assert _live_token(db, emp.id) is None
+    # the code is now the employee's passcode -> logging in with it again works
+    r2 = c.post("/employee/login/passcode",
+                json={"identifier": "cara@test.local", "passcode": code})
+    assert r2.status_code == 200
+
+
+def test_login_wrong_value_rejected(app_bound):
+    """A value that is neither the passcode nor a valid reset code -> 401."""
+    flask_app, db = app_bound
+    emp = _make_employee(db, full_name="Dan D", email="dan@test.local",
+                         phone="2815550144")
+    setup_mod.send_setup_invite(emp.id)
+    c = flask_app.test_client()
+    r = c.post("/employee/login/passcode",
+               json={"identifier": "dan@test.local", "passcode": "00000"})
+    assert r.status_code == 401

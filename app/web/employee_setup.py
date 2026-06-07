@@ -205,7 +205,14 @@ def send_setup_invite(employee_id, *, base_url: str | None = None) -> dict | Non
 @employee_auth.route("/employee/login/passcode", methods=["POST"])
 def login_passcode():
     """Email-or-phone + 5-digit passcode -> isolated employee session. 5-attempt
-    lockout (15 min). Generic failure messages (anti-enumeration)."""
+    lockout (15 min). Generic failure messages (anti-enumeration).
+
+    Sam 2026-06-07: a manager-issued RESET CODE also logs the employee in here --
+    they enter their email/phone + the code (instead of a PIN) and are signed in;
+    the code BECOMES their passcode (changeable later in their profile). This is
+    why the reset gives a code: the employee logs in with it directly (no separate
+    page needed). It consumes the shared single-use setup token, so the emailed
+    setup link stops working -- whichever they use FIRST wins."""
     data = request.get_json(silent=True) or {}
     ident = (data.get("identifier") or "").strip()
     passcode = (data.get("passcode") or "").strip()
@@ -214,23 +221,38 @@ def login_passcode():
     db = SessionLocal()
     try:
         emp = _find_employee_by_identifier(db, ident)
-        if emp is None or not emp.passcode_hash:
+        if emp is None:
             return jsonify({"ok": False, "error": "Login failed - check your details."}), 401
         now = datetime.utcnow()
         if emp.lockout_until and emp.lockout_until > now:
             return jsonify({"ok": False, "error": "Too many attempts. Try again shortly."}), 429
-        if not check_password_hash(emp.passcode_hash, passcode):
-            emp.failed_attempts = (emp.failed_attempts or 0) + 1
-            if emp.failed_attempts >= MAX_LOGIN_ATTEMPTS:
-                emp.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
-                emp.failed_attempts = 0
+        # 1) Normal passcode login.
+        if emp.passcode_hash and check_password_hash(emp.passcode_hash, passcode):
+            emp.failed_attempts = 0
+            emp.lockout_until = None
             db.commit()
-            return jsonify({"ok": False, "error": "Login failed - check your details."}), 401
-        emp.failed_attempts = 0
-        emp.lockout_until = None
+            stores = _establish_employee_session(emp)
+            return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
+        # 2) RESET-CODE login: a valid manager-issued code (identifier-scoped +
+        #    brute-force-capped in _resolve_setup_by_code) signs them in and becomes
+        #    their passcode; consumes the shared token so the emailed link is dead.
+        emp_c, row = _resolve_setup_by_code(db, ident, passcode)
+        if emp_c is not None:
+            emp_c.passcode_hash = generate_password_hash(passcode)
+            emp_c.failed_attempts = 0
+            emp_c.lockout_until = None
+            emp_c.session_version = (emp_c.session_version or 0) + 1
+            row.used = True   # consume the shared single-use token -> emailed link now dead
+            db.commit()
+            stores = _establish_employee_session(emp_c)
+            return _post_login_response(stores)
+        # 3) Neither a matching passcode nor a valid code -> count the failure.
+        emp.failed_attempts = (emp.failed_attempts or 0) + 1
+        if emp.failed_attempts >= MAX_LOGIN_ATTEMPTS:
+            emp.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+            emp.failed_attempts = 0
         db.commit()
-        stores = _establish_employee_session(emp)
-        return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
+        return jsonify({"ok": False, "error": "Login failed - check your details."}), 401
     finally:
         db.close()
 

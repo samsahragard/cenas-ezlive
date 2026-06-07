@@ -84,13 +84,6 @@
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     margin-bottom: 16px;
   }
-  .atr-page .atr-badge {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--gold-bright); background: rgba(228,179,64,0.12);
-    padding: 6px 12px; border-radius: 999px; letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .atr-page .atr-spacer { flex: 1; }
   .atr-page .atr-datenav {
     display: inline-flex; align-items: center;
     background: rgba(0,0,0,0.3); border: 0.5px solid var(--border);
@@ -409,8 +402,6 @@
 <div class="atr-page" id="atrPage" data-view="all">
 
   <div class="atr-topstrip">
-    <span class="atr-badge">{{ store_label }}</span>
-    <span class="atr-spacer"></span>
     <div class="atr-datenav">
       <a href="?date={{ prev_date }}" aria-label="Previous day">&#8249;</a>
       <span class="d">{{ date_display }}{% if is_today %}<span class="live">TODAY</span>{% endif %}</span>

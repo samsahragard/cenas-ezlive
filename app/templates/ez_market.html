@@ -264,7 +264,7 @@
           <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
         </div>
         <div>
-          <div class="em-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="em-payout">${{ "%.0f"|format(projected_payouts.get(o.id, 35)) }}</div>
           <div class="em-payout-label">Est. earn</div>
         </div>
       </div>
@@ -288,7 +288,7 @@
           <div class="em-time-sub">{{ o.external_order_id }} · {{ pickup_label(o) or '—' }}</div>
         </div>
         <div>
-          <div class="em-payout">${{ "%.2f"|format(o.paid_payout or o.potential_payout or 0) }}</div>
+          <div class="em-payout">${{ "%.2f"|format(o.paid_payout or projected_payouts.get(o.id, 35)) }}</div>
           <div class="em-payout-label">{{ 'Paid' if o.paid_payout else 'Est.' }}</div>
         </div>
       </div>

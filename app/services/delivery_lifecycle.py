@@ -37,7 +37,7 @@ from app.models import (
     DriverNotification,
     Order,
 )
-from app.services.ezcater_payroll import compute_one as compute_pay_one
+from app.services.delivery_pay_projection import projected_driver_pay
 
 logger = logging.getLogger(__name__)
 
@@ -78,18 +78,15 @@ def _check(transition: str, current: str | None) -> None:
 
 
 def _snapshot_potential_payout(order: Order) -> float | None:
-    """Compute potential_payout once and store it on the Order. Idempotent —
-    if already populated, returns the stored value without recomputing.
+    """Compute and store the projected driver pay for this order.
 
-    Uses the existing ezcater_payroll.compute_one so the formula stays
-    in one place. Returns None if we don't yet have enough data to compute
-    (e.g., the order hasn't been ingested far enough for tracking_status)."""
-    if order.potential_payout is not None:
-        return order.potential_payout
+    This is the estimate shown in Ez Market / Ez Manage before payroll is
+    finalized. It assumes the delivery will be tracked, so the under-20-mile
+    minimum is $35 instead of final-payroll's base-only $25.
+    """
     try:
-        pay = compute_pay_one(order, five_star=False)
-        order.potential_payout = pay.total
-        return pay.total
+        order.potential_payout = projected_driver_pay(order)
+        return order.potential_payout
     except Exception:
         logger.exception("potential_payout snapshot failed for order id=%s", order.id)
         return None

@@ -233,7 +233,7 @@ if (document.readyState === 'loading') {
           <div class="ezm-meta">{{ o.external_order_id }} · {{ o.headcount or '—' }} heads</div>
         </div>
         <div>
-          <div class="ezm-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="ezm-payout">${{ "%.0f"|format(g.payout or 0) }}</div>
           <div class="ezm-payout-label">Driver pay</div>
           <div style="font-size:11px;color:rgba(236,227,208,0.55);text-align:right;margin-top:2px;">
             {{ g.rows|length }} request{{ 's' if g.rows|length != 1 else '' }}
@@ -306,12 +306,13 @@ if (document.readyState === 'loading') {
           <div class="ezm-approved-sub">{{ o.deliver_at or '—' }} · {{ o.delivery_date or 'no date' }} · {{ pickup_label(o) or '—' }} → {{ o.delivery_address or '—' }}</div>
         </div>
         <div style="text-align:right;">
-          <div class="ezm-payout">${{ "%.0f"|format(o.potential_payout or 0) }}</div>
+          <div class="ezm-payout">${{ "%.0f"|format(row.payout or 0) }}</div>
           <div class="ezm-payout-label">Driver pay</div>
         </div>
       </div>
       <div class="ezm-approved-meta">
         <span class="ezm-pill ok">Approved by {{ approver.full_name if approver else 'manager' }} at {{ row.approved_at_label }}</span>
+        <span class="ezm-pill ok">Approved via Ez Market</span>
         <span class="ezm-pill">Selected: {{ o.ezcater_driver_name or o.assigned_driver or (d.name if d else 'driver') }}</span>
         {% if job %}
           <span class="ezm-pill {% if job.status == 'completed' %}ok{% elif job.status == 'failed' %}error{% else %}warn{% endif %}">

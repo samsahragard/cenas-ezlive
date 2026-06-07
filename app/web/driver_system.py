@@ -37,6 +37,7 @@ from app.models import (
 )
 from app.services import delivery_lifecycle as lifecycle
 from app.services import driver_scoring as scoring
+from app.services.delivery_pay_projection import projected_driver_pay
 
 logger = logging.getLogger(__name__)
 
@@ -145,14 +146,14 @@ def _fmt_local_dt(dt: datetime | None) -> str:
 
 def _potential_today(db, driver_id: int, today: date) -> float:
     today_iso = today.isoformat()
-    rows = (
-        db.query(Order.potential_payout)
+    orders = (
+        db.query(Order)
         .filter(Order.assigned_driver_id == driver_id)
         .filter(Order.status.in_(["approved", "picked_up", "en_route", "delivered"]))
         .filter(Order.delivery_date == today_iso)
         .all()
     )
-    return round(sum(r[0] or 0 for r in rows), 2)
+    return round(sum(projected_driver_pay(o) for o in orders), 2)
 
 
 def _my_queue_count(db, driver_id: int) -> int:
@@ -173,18 +174,9 @@ def _my_queue_count(db, driver_id: int) -> int:
 
 def _project_payout(order: Order) -> float:
     """Best-case potential payout for an unbid order so the card always shows
-    a number. Assumes the driver will track the delivery; same formula as
-    ezcater_payroll.compute_one with tracking forced on. Returns the stored
-    potential_payout if it's already been snapshotted (open_for_bidding)."""
-    if order.potential_payout is not None:
-        return order.potential_payout
-    from app.services.ezcater_payroll import (
-        BASE_PER_DELIVERY, BONUS_TRACKED, PER_MILE_OVER_20, MILES_THRESHOLD,
-    )
-    miles = order.pickup_miles or 0.0
-    extra_miles = max(0.0, miles - MILES_THRESHOLD)
-    bonus_miles = round(extra_miles * PER_MILE_OVER_20, 2)
-    return round(BASE_PER_DELIVERY + BONUS_TRACKED + bonus_miles, 2)
+    a number. Assumes the driver will track the delivery, so under-20-mile
+    trips show the $35 minimum."""
+    return projected_driver_pay(order)
 
 
 # origin_store_id -> kitchen slug used by ezcater_miles.KITCHEN_ADDRESSES
@@ -272,15 +264,15 @@ def _potential_week(db, driver_id: int, today: date) -> float:
     # Reuse the ezcater_payroll anchor math for period bounds.
     from app.services.ezcater_payroll import period_containing
     period_start, period_end, _ = period_containing(today)
-    rows = (
-        db.query(Order.potential_payout)
+    orders = (
+        db.query(Order)
         .filter(Order.assigned_driver_id == driver_id)
         .filter(Order.status.in_(["approved", "picked_up", "en_route", "delivered"]))
         .filter(Order.delivery_date >= period_start.isoformat())
         .filter(Order.delivery_date <= period_end.isoformat())
         .all()
     )
-    return round(sum(r[0] or 0 for r in rows), 2)
+    return round(sum(projected_driver_pay(o) for o in orders), 2)
 
 
 # ============================================================
@@ -375,7 +367,10 @@ def ez_market():
         # display (Sam 2026-05-12: every card needs a $ figure visible).
         from app.services.orders_query import group_orders_by_date
         available_groups = group_orders_by_date(available)
-        projected_payouts = {o.id: _project_payout(o) for o in available}
+        projected_payouts = {
+            o.id: _project_payout(o)
+            for o in [*available, *my_active, *my_history]
+        }
 
         # Header greeting — show the viewer's name regardless of role
         # (Sam 2026-05-12: "for a partner it would just say my name").
@@ -585,6 +580,7 @@ def ez_manage():
         # Sort each delivery's rows by recommendation rank
         tier_rank = {"top_rockstar": 0, "rockstar": 1, "trusted": 2, "new": 3}
         for g_ in groups.values():
+            g_["payout"] = _project_payout(g_["order"])
             g_["rows"].sort(key=lambda row: (
                 tier_rank.get(row["driver"].current_tier or "new", 9),
                 -(row["driver"].current_score or 0),
@@ -620,6 +616,7 @@ def ez_manage():
                 "approved_by": approved_by,
                 "assignment_job": job,
                 "approved_at_label": _fmt_local_dt(o.approved_at),
+                "payout": _project_payout(o),
             })
         ctx = {
             "active": "ez_manage",

@@ -508,7 +508,7 @@ def orders_list():
     if g.current_location == "both":
         from app.web.orders_browse import (
             list_orders_for_location, group_orders_by_date,
-            _active_drivers_by_prefix,
+            _active_drivers_by_prefix, _driver_status_by_order_id,
         )
         from app.services.orders_query import rotated_dispatch_letters
         db = next(get_db())
@@ -525,6 +525,7 @@ def orders_list():
                 groups=groups,
                 display_drivers=display_drivers,
                 active_drivers_by_prefix=_active_drivers_by_prefix(db),
+                driver_status_by_order_id=_driver_status_by_order_id(db, combined),
             )
         finally:
             db.close()

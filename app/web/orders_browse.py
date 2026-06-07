@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import Blueprint, render_template, send_file, redirect, url_for, abort, request, jsonify
 
 from app.db import get_db
-from app.models import Order
+from app.models import DeliveryRequest, DriverAssignmentJob, Order
 from app.services.orders_query import (
     LOCATION_TO_ORIGIN,
     LOCATION_LABELS,
@@ -107,9 +107,92 @@ def location_orders(location: str):
             groups=groups,
             display_drivers=display_drivers,
             active_drivers_by_prefix=_active_drivers_by_prefix(db),
+            driver_status_by_order_id=_driver_status_by_order_id(db, orders),
         )
     finally:
         db.close()
+
+
+def _driver_status_by_order_id(db, orders: list[Order]) -> dict[int, dict[str, str]]:
+    """Status pill above the ezCater driver dropdown on order cards."""
+    if not orders:
+        return {}
+
+    order_ids = [o.id for o in orders]
+    external_to_order = {
+        o.external_order_id: o
+        for o in orders
+        if o.external_order_id
+    }
+
+    from sqlalchemy import func
+
+    pending_counts = dict(
+        db.query(DeliveryRequest.delivery_id, func.count(DeliveryRequest.id))
+        .filter(DeliveryRequest.delivery_id.in_(order_ids))
+        .filter(DeliveryRequest.status == "pending")
+        .group_by(DeliveryRequest.delivery_id)
+        .all()
+    )
+    approved_request_ids = {
+        row[0]
+        for row in (
+            db.query(DeliveryRequest.delivery_id)
+            .filter(DeliveryRequest.delivery_id.in_(order_ids))
+            .filter(DeliveryRequest.status == "approved")
+            .all()
+        )
+    }
+
+    latest_jobs: dict[int, DriverAssignmentJob] = {}
+    external_ids = list(external_to_order)
+    if external_ids:
+        jobs = (
+            db.query(DriverAssignmentJob)
+            .filter(DriverAssignmentJob.order_id.in_(external_ids))
+            .order_by(DriverAssignmentJob.created_at.desc())
+            .all()
+        )
+        for job in jobs:
+            order = external_to_order.get(job.order_id)
+            if order and order.id not in latest_jobs:
+                latest_jobs[order.id] = job
+
+    out: dict[int, dict[str, str]] = {}
+    for order in orders:
+        pending_count = int(pending_counts.get(order.id) or 0)
+        if pending_count:
+            out[order.id] = {
+                "kind": "requested",
+                "label": f"{pending_count} Requested",
+                "title": "Driver request waiting in Ez Manage",
+            }
+            continue
+
+        if order.id in approved_request_ids or (
+            order.approved_at is not None and order.assigned_driver_id is not None
+        ):
+            out[order.id] = {
+                "kind": "approved",
+                "label": "EZ Approved",
+                "title": "Approved through Ez Manage from an Ez Market request",
+            }
+            continue
+
+        job = latest_jobs.get(order.id)
+        if job and job.status == "completed":
+            out[order.id] = {
+                "kind": "assigned",
+                "label": "EZ Assigned",
+                "title": "Assigned from the manager dropdown",
+            }
+        elif job and job.status in {"pending", "running"}:
+            out[order.id] = {
+                "kind": "assigning",
+                "label": "EZ Assigning",
+                "title": "Driver assignment is still in progress",
+            }
+    return out
 
 
 def _active_drivers_by_prefix(db) -> dict[int, list[str]]:

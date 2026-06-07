@@ -6016,7 +6016,8 @@ def team_workspace():
     _u = getattr(g, "current_user", None) or _lcu()
     is_partner = bool(_u and (getattr(_u, "permission_level", "") or "").lower() == "partner")
 
-    return render_template(
+    from flask import make_response as _make_response
+    _resp = _make_response(render_template(
         "team_workspace.html",
         active="partner_team",
         store_label=label,
@@ -6031,7 +6032,11 @@ def team_workspace():
         schedule_stores=schedule_stores,
         schedule_store_default=schedule_store_default,
         is_partner=is_partner,
-    )
+    ))
+    # Sam 2026-06-07: never serve a STALE Team Roster -- a cached old page is the
+    # likely reason "+Add showed everything" / the pre-tabs layout persisted.
+    _resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return _resp
 
 
 @store_bp.route("/operations", methods=["GET"])

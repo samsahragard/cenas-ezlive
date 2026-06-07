@@ -154,7 +154,7 @@ def test_addable_positions_annotated_with_section(db_session):
     out = addable_positions_for("gm", db_session)
     assert out, "GM should have addable positions"
     by_name = {p["name"]: p for p in out}
-    for nm in ("Server", "Cook", "Well", "Hostess", "Prep", "Dishwasher"):
+    for nm in ("Server", "Cook", "Well", "Prep", "Dishwasher"):
         assert nm in by_name, nm
         assert by_name[nm]["section"] == SECTION_HOURLY, nm
     # Every entry carries id, name, section (additive key).

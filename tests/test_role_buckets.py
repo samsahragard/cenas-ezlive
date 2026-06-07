@@ -14,8 +14,9 @@ from app.services.role_buckets import (
     section_for_role,
 )
 
-# The intentional tier-above roles -> section None (both-stores, NULL scope).
-TIER_ABOVE = {"partner", "corporate"}
+# The intentional tier-above role -> section None. corporate moved INTO Management
+# (Sam 2026-06-07); only partner stays section-less.
+TIER_ABOVE = {"partner"}
 
 
 def test_every_catalog_role_maps_to_one_section_or_is_tier_above():
@@ -33,12 +34,13 @@ def test_every_catalog_role_maps_to_one_section_or_is_tier_above():
             )
 
 
-def test_no_partner_or_corporate_in_mapping():
-    """partner/corporate are intentionally ABSENT from SECTION_FOR_ROLE."""
+def test_only_partner_is_tier_above():
+    """partner is intentionally ABSENT from SECTION_FOR_ROLE (tier-above -> None);
+    corporate is now a Management-section role (Sam 2026-06-07)."""
     assert "partner" not in SECTION_FOR_ROLE
-    assert "corporate" not in SECTION_FOR_ROLE
     assert section_for_role("partner") is None
-    assert section_for_role("corporate") is None
+    assert "corporate" in SECTION_FOR_ROLE
+    assert section_for_role("corporate") == SECTION_MANAGEMENT
 
 
 def test_management_roles():
@@ -49,6 +51,8 @@ def test_management_roles():
     assert section_for_role("corporate_chef") == SECTION_MANAGEMENT
     # expo -> management (Sam's approved bucket)
     assert section_for_role("expo") == SECTION_MANAGEMENT
+    # corporate -> management (Sam 2026-06-07: addable in the Management section)
+    assert section_for_role("corporate") == SECTION_MANAGEMENT
 
 
 def test_hourly_roles():
@@ -88,9 +92,9 @@ def test_section_for_position():
     assert section_for_position("Cook") == SECTION_HOURLY
     assert section_for_position("Prep") == SECTION_HOURLY
     assert section_for_position("Dishwasher") == SECTION_HOURLY
-    # tier-above positions -> None
+    # Corporate is now a Management-section role (Sam 2026-06-07); Partner stays tier-above.
+    assert section_for_position("Corporate") == SECTION_MANAGEMENT
     assert section_for_position("Partner") is None
-    assert section_for_position("Corporate") is None
     # unknown / None
     assert section_for_position("nope") is None
     assert section_for_position(None) is None

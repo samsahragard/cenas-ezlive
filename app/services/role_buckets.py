@@ -72,6 +72,7 @@ SECTION_FOR_ROLE: dict[str, str] = {
     "assistant_km":   SECTION_MANAGEMENT,
     "foh_manager":    SECTION_MANAGEMENT,
     "expo":           SECTION_MANAGEMENT,
+    "corporate":      SECTION_MANAGEMENT,  # Sam 2026-06-07: Corporate is addable IN the Management section (still permission tier rank-90 / both-stores)
     # HOURLY (floor staff, both houses)
     "bartender":      SECTION_HOURLY,
     "busser":         SECTION_HOURLY,
@@ -82,7 +83,9 @@ SECTION_FOR_ROLE: dict[str, str] = {
     "host":           SECTION_HOURLY,
     # DRIVER (in-house corporate driver; shown elsewhere / ez-driver)
     "corporate_driver": SECTION_DRIVER,
-    # partner, corporate => intentionally ABSENT (tier-above -> None)
+    # partner => intentionally ABSENT (tier-above -> None). corporate moved INTO
+    # Management (Sam 2026-06-07) so it is addable there; its permission tier is
+    # unchanged (rank 90 / both-stores) -- section is only the page grouping.
 }
 
 
@@ -112,7 +115,7 @@ def section_for_position(position_name):
 # tier-above roles stay intentionally absent. Catches a future typo (e.g. a
 # mis-spelled section token, or partner/corporate accidentally added).
 _KNOWN_ROLE_KEYS = {r["key"] for r in ROLES}
-_TIER_ABOVE_ROLES = frozenset({"partner", "corporate"})
+_TIER_ABOVE_ROLES = frozenset({"partner"})  # corporate now a Management-section role (Sam 2026-06-07); only partner stays section-less
 
 assert set(SECTION_FOR_ROLE.values()) <= set(SECTIONS), (
     "SECTION_FOR_ROLE maps to an unknown section token"

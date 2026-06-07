@@ -97,7 +97,7 @@ POSITION_TO_ROLE = {
     "gm": "gm", "km": "km", "assistant km": "assistant_km", "foh manager": "foh_manager",
     "busser": "busser", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "well", "bartender": "bartender", "cook": "cook",
-    "prep": "cook", "dishwasher": "cook",
+    "prep": "cook", "dishwasher": "cook", "expo": "expo",
 }
 
 def position_role(position_name):

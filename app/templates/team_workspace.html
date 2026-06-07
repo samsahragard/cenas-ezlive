@@ -130,6 +130,13 @@
   /* store sections + rows (dense, readable) */
   .tws-store { margin-bottom: 18px; }
   .tws-store-head { display: flex; align-items: baseline; gap: 10px; padding: 6px 2px 8px; border-bottom: 1px solid var(--tws-border-soft); margin-bottom: 4px; }
+  /* Store switcher tabs (Copperfield / Tomball) -- one store shown at a time (Sam 2026-06-07). */
+  .tws-store-tabs { display: flex; gap: 6px; margin: 2px 0 14px; border-bottom: 1px solid var(--tws-border); }
+  .tws-store-tab { appearance: none; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--tws-cream-meta); font: inherit; font-weight: 700; font-size: 15px; letter-spacing: .02em; padding: 8px 14px; margin-bottom: -1px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .tws-store-tab:hover { color: var(--tws-cream); }
+  .tws-store-tab.active { color: var(--tws-gold-bright); border-bottom-color: var(--tws-gold-bright); }
+  .tws-store-tab-meta { font-size: 11px; font-weight: 700; color: var(--tws-cream-meta); background: var(--tws-border-soft); border-radius: 999px; padding: 1px 8px; }
+  .tws-store-tab.active .tws-store-tab-meta { color: var(--tws-gold-bright); background: rgba(228,179,64,.12); }
   .tws-store-name { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tws-gold); }
   .tws-store-meta { font-size: 11.5px; color: var(--tws-cream-meta); }
   .tws-colhead, .tws-row { display: grid; grid-template-columns: 210px 1fr 120px; gap: 12px; align-items: center; }
@@ -586,7 +593,7 @@
   /* ---------------- Team roster: fetch + render against the contract ---------------- */
   // position is the MULTI-SELECT filter (Sam #2585): an ARRAY of selected
   // canonical names; empty array = "All positions" (no filter).
-  var state = { filter: "all", location: "all", position: [], include_inactive: false, board: null };
+  var state = { filter: "all", location: "all", position: [], include_inactive: false, board: null, activeStore: "" };
   var elRoster = document.getElementById("tws-roster");
 
   // Placeholder matching aick's #2296 shape, so the FE renders before ckai's
@@ -686,20 +693,55 @@
     // (s.hourly[]). The backend pre-partitions these; if an older payload omits
     // them, derive from employees[].section (rows with section null stay out of
     // both, as before). Each subsection carries its own section-scoped +Add.
-    var html = "";
-    (b.stores || []).forEach(function (s) {
+    // STORE TABS (Sam 2026-06-07: Copperfield / Tomball as SWITCHABLE TABS, not
+    // stacked one over the other). Render a tab per store + a panel per store;
+    // only the active store's panel is shown.
+    var stores = b.stores || [];
+    var tabsHtml = '<div class="tws-store-tabs" role="tablist">';
+    stores.forEach(function (s) {
+      tabsHtml += '<button class="tws-store-tab" type="button" role="tab" data-store-tab="' + esc(s.store_key) + '">' +
+                  esc(s.label) + '<span class="tws-store-tab-meta">' +
+                  ((s.shown != null) ? s.shown : (s.employees || []).length) + '</span></button>';
+    });
+    tabsHtml += '</div>';
+    var panelsHtml = "";
+    stores.forEach(function (s) {
       var emps = s.employees || [];
       var mgmt = s.management || emps.filter(function (e) { return e.section === "management"; });
       var hrly = s.hourly || emps.filter(function (e) { return e.section === "hourly"; });
       var totalShown = (s.shown != null) ? s.shown : emps.length;
-      html += '<div class="tws-store"><div class="tws-store-head"><span class="tws-store-name">' + esc(s.label) + '</span>' +
-              '<span class="tws-store-meta">' + totalShown + ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>';
-      html += renderSection(s.store_key, "Management", "management", mgmt);
-      html += renderSection(s.store_key, "Tipped / Hourly", "hourly", hrly);
-      html += '</div>';
+      panelsHtml += '<div class="tws-store" data-store-panel="' + esc(s.store_key) + '">' +
+              '<div class="tws-store-head"><span class="tws-store-meta">' + totalShown +
+              ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>';
+      panelsHtml += renderSection(s.store_key, "Management", "management", mgmt);
+      panelsHtml += renderSection(s.store_key, "Tipped / Hourly", "hourly", hrly);
+      panelsHtml += '</div>';
     });
-    elRoster.innerHTML = html || '<div class="tws-empty">No team members match these filters.</div>';
+    elRoster.innerHTML = stores.length ? (tabsHtml + panelsHtml) : '<div class="tws-empty">No team members match these filters.</div>';
+    // Keep the previously-active store if it still exists, else default to the first.
+    var keys = stores.map(function (s) { return s.store_key; });
+    if (keys.indexOf(state.activeStore) === -1) state.activeStore = keys[0] || "";
+    setActiveStore(state.activeStore);
   }
+
+  // Show one store's panel (and mark its tab active); hide the others.
+  function setActiveStore(key) {
+    state.activeStore = key;
+    elRoster.querySelectorAll("[data-store-tab]").forEach(function (t) {
+      t.classList.toggle("active", t.getAttribute("data-store-tab") === key);
+    });
+    elRoster.querySelectorAll("[data-store-panel]").forEach(function (p) {
+      p.style.display = (p.getAttribute("data-store-panel") === key) ? "" : "none";
+    });
+  }
+
+  // Delegated: clicking a store tab switches which store's panel is shown.
+  elRoster.addEventListener("click", function (ev) {
+    var tab = ev.target.closest("[data-store-tab]");
+    if (!tab) return;
+    ev.stopPropagation();
+    setActiveStore(tab.getAttribute("data-store-tab"));
+  });
 
   function load() {
     // Multi-select position: send the selected NAMES joined by commas; empty

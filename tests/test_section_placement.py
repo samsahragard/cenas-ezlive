@@ -63,10 +63,10 @@ def test_highest_section_role_hourly_only():
 
 
 def test_highest_section_role_ignores_tier_above_and_no_section():
-    """Partner/Corporate (tier-above -> section None) and Expo (no scheduling
-    role) never become the derived level: Partner+GM -> gm; Expo alone -> None."""
+    """Partner (tier-above -> section None) never becomes the derived level:
+    Partner+GM -> gm. Expo is now a real management role (Sam 2026-06-07) -> expo."""
     assert _highest_section_role(["Partner", "GM"]) == "gm"
-    assert _highest_section_role(["Expo"]) is None
+    assert _highest_section_role(["Expo"]) == "expo"
     assert _highest_section_role([]) is None
 
 

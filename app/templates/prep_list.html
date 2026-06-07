@@ -1,64 +1,7 @@
-{# ============================================================
-   prep_list.html — Prep List (production)
-   dck conversion of prep_list_v3 mockup (Sam: "make the live page
-   look EXACTLY like the rendering").
-
-   This is the kitchen's daily prep board. A master PrepItem list
-   (hot/cold/chop x item/sauce) is shown every day; the manager
-   checks which items need prep today, sets on-hand counts, assigns
-   a teammate, drives status, and submits + locks the record at end
-   of day. Selecting an item opens its detail panel on the right —
-   the recipe breakdown (ingredients auto-pulled from the linked
-   recipe), batch size, assignment, status, and notes.
-
-   ROUTE CONTRACT (store_routes.py — aick wires; see dck handoff doc):
-     sections -> ordered list of section dicts, one per
-                 category x kind block actually shown:
-       section -> key       ('hot'|'cold'|'chop'),
-                  kind      ('item'|'sauce'),
-                  label     (e.g. 'Hot Items', 'Cold Sauces', 'Chop'),
-                  col       ('left'|'right') — left col = hot;
-                            right col = cold + chop,
-                  total     (int — master items in this block),
-                  selected  (int — selected-today count),
-                  items     -> list[item]
-     item -> id            (PrepItem id),
-             entry_id      (PrepEntry id for today, or None),
-             name,
-             category      ('hot'|'cold'|'chop'),
-             kind          ('item'|'sauce'),
-             selected      (bool — flagged for prep today),
-             on_hand       (int or None),
-             assignee      (str or None),
-             status        ('selected'|'assigned'|'in-progress'|'done'),
-             batch_size    (str or None),
-             notes         (str or None),
-             recipe_id     (int or None),
-             recipe_name   (str or None),
-             yield_label   (str or None),
-             prep_minutes  (int or None),
-             shelf_days    (int or None),
-             ingredients   -> list[ {name, qty, unit} ]  (from recipe)
-     kpis  -> {total, selected, assigned, unassigned,
-               in_progress, done}
-     team  -> list[ {name, initials, done, in_progress, assigned} ]
-     locked        (bool — day submitted + locked),
-     lock_author   (str or None — who is running prep),
-     lock_hours    (str or None — e.g. '5h in'),
-     selected_date, today_iso, prev_date, next_date (iso strings),
-     date_display, is_today, store_label.
-   Forms POST to store.kitchen_prep_list_post (or the kitchen route
-   that replaces the placeholder — see handoff) with a hidden
-   form_action: toggle_select | set_on_hand | assign | set_status |
-   save_detail | submit_lock. Audience gate at the route.
-   ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'kitchen_prep_list' %}
 
-{% block title %}Prep List — Cenas Kitchen{% endblock %}
-{# Page Title Library: module PREP, two-word title "Prep List". The in-page
-   .prep-topstrip is only a store badge + runner status — base topbar carries
-   the title, so it is kept (not suppressed). #}
+{% block title %}Prep List - Cenas Kitchen{% endblock %}
 {% block page_module %}PREP{% endblock %}
 {% block page_module_class %}mod-prep{% endblock %}
 {% block page_title %}<span class="word-primary">Prep</span> <span class="ck-accent">List</span>{% endblock %}
@@ -72,849 +15,659 @@
 
 {% block content %}
 <style>
-  /* All custom properties + classes scoped to .prep-page so the v3
-     warm palette never leaks into the global sheet (atr-/dml-/ir-
-     pattern). Every var is --prep-*, every class is .prep-*. */
   .prep-page {
     --prep-red: #C73B36;
-    --prep-red-deep: #9B2A26;
-    --prep-red-bright: #E85852;
     --prep-gold: #E4B340;
     --prep-gold-bright: #FFD970;
     --prep-teal: #2EA39F;
     --prep-teal-bright: #5BCAC5;
-    --prep-blue: #6B9DD8;
     --prep-cream: #FAF6EC;
-    --prep-cream-dim: rgba(250,246,236,0.62);
-    --prep-cream-faint: rgba(250,246,236,0.38);
+    --prep-cream-dim: rgba(250,246,236,0.68);
+    --prep-cream-faint: rgba(250,246,236,0.42);
     --prep-bg-deep: #1a0d08;
     --prep-bg-warm: #28160e;
-    --prep-bg-card: rgba(40,22,14,0.65);
-    --prep-bg-card-hover: rgba(50,28,18,0.85);
-    --prep-bg-input: rgba(0,0,0,0.25);
+    --prep-bg-card: rgba(40,22,14,0.72);
+    --prep-bg-card-hover: rgba(52,28,18,0.9);
+    --prep-bg-input: rgba(0,0,0,0.28);
     --prep-border-subtle: rgba(217,164,54,0.18);
-    --prep-border-active: rgba(228,179,64,0.5);
-    --prep-radius-sm: 8px;
-    --prep-radius-md: 12px;
-    --prep-radius-lg: 16px;
+    --prep-border-active: rgba(228,179,64,0.52);
     --prep-hot: #E85852;
-    --prep-hot-dim: rgba(232,88,82,0.15);
     --prep-cold: #5BCAC5;
-    --prep-cold-dim: rgba(91,202,197,0.15);
     --prep-chop: #95C75F;
-    --prep-chop-dim: rgba(149,199,95,0.15);
-    position: relative;
-    isolation: isolate;
     color: var(--prep-cream);
     font-family: 'Manrope', system-ui, sans-serif;
     font-size: 14px;
-    line-height: 1.5;
-    /* SOLID opaque background — the app paints a restaurant photo
-       behind every page; this surface must hide it completely. */
     background: linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
     border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-lg);
+    border-radius: 16px;
     padding: 20px;
     margin: 0 0 48px;
-    /* Floor so the warm card reaches near the viewport bottom even on
-       sparse days (mirrors kitchen_dashboard's calc + min-height). */
     min-height: max(720px, calc(var(--ck-page-available-height, 100vh) - 60px));
-    overflow: hidden;
   }
-  /* Decorative tint only — position:absolute (NOT fixed) so it stays
-     inside the card and never tracks the viewport. */
-  .prep-page::before {
-    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199,59,54,0.12), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 80%, rgba(228,179,64,0.08), transparent);
-  }
-  .prep-page > * { position: relative; z-index: 1; }
   .prep-page *, .prep-page *::before, .prep-page *::after { box-sizing: border-box; }
-  .prep-page button { font-family: inherit; }
-
-  /* ---- Top strip ---- */
-  .prep-topstrip { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .prep-page button, .prep-page input, .prep-page textarea, .prep-page select { font-family: inherit; }
+  .prep-topstrip, .prep-control-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .prep-topstrip { margin-bottom: 14px; }
+  .prep-store-badge, .prep-runner, .prep-small-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
   .prep-store-badge {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--prep-gold-bright);
-    background: rgba(228,179,64,0.12); padding: 6px 12px; border-radius: 999px;
-    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--prep-gold-bright);
+    background: rgba(228,179,64,0.12);
+    padding: 6px 12px;
+    border-radius: 999px;
   }
   .prep-spacer { flex: 1; }
   .prep-runner {
-    display: inline-flex; align-items: center; gap: 8px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--prep-cream-dim);
-    padding: 6px 12px; background: var(--prep-bg-card);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: 999px; letter-spacing: 0.05em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--prep-cream-dim);
+    padding: 6px 12px;
+    background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 999px;
   }
   .prep-runner .dot {
-    width: 6px; height: 6px; border-radius: 50%; background: var(--prep-gold);
-    box-shadow: 0 0 6px var(--prep-gold); animation: prep-pulse 2s infinite;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--prep-gold);
+    box-shadow: 0 0 6px var(--prep-gold);
   }
-  @keyframes prep-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-  /* ---- KPI strip ---- */
-  .prep-kpi-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 16px; }
+  .prep-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .prep-kpi-box, .prep-panel, .prep-list-panel, .prep-section, .prep-report-card {
+    background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 12px;
+  }
   .prep-kpi-box {
-    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-md); padding: 12px 14px; position: relative; overflow: hidden;
+    padding: 12px 14px;
+    position: relative;
+    overflow: hidden;
   }
-  .prep-kpi-box::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--prep-kpi-color); }
+  .prep-kpi-box::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--prep-kpi-color, var(--prep-gold));
+  }
   .prep-kpi-box.total { --prep-kpi-color: var(--prep-gold); }
   .prep-kpi-box.selected { --prep-kpi-color: var(--prep-hot); }
   .prep-kpi-box.assigned { --prep-kpi-color: var(--prep-teal); }
   .prep-kpi-box.progress { --prep-kpi-color: var(--prep-gold-bright); }
   .prep-kpi-box.done { --prep-kpi-color: var(--prep-chop); }
   .prep-kpi-label {
-    font-size: 9px; font-weight: 700; color: var(--prep-cream-faint);
-    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 2px;
+    color: var(--prep-cream-faint);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
-  .prep-kpi-value { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 28px; color: var(--prep-kpi-color); line-height: 1; }
-  .prep-kpi-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint); margin-top: 2px; }
-
-  /* ---- Control bar ---- */
-  .prep-control-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .prep-kpi-value {
+    color: var(--prep-kpi-color, var(--prep-gold));
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    font-style: italic;
+    line-height: 1;
+    margin-top: 2px;
+  }
+  .prep-kpi-sub {
+    color: var(--prep-cream-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    margin-top: 2px;
+  }
+  .prep-control-bar { margin-bottom: 12px; }
   .prep-date-nav {
-    display: inline-flex; align-items: center; background: var(--prep-bg-card);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-md); overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 12px;
+    overflow: hidden;
   }
   .prep-date-nav-btn {
-    width: 36px; height: 40px; background: transparent; border: none; color: var(--prep-gold);
-    cursor: pointer; display: grid; place-items: center; transition: background 0.15s; text-decoration: none;
+    width: 36px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    color: var(--prep-gold);
+    text-decoration: none;
   }
-  .prep-date-nav-btn:hover { background: rgba(228,179,64,0.08); }
-  .prep-date-nav-btn svg { width: 14px; height: 14px; fill: currentColor; }
   .prep-date-display {
-    padding: 0 16px; color: var(--prep-cream); font-weight: 600; font-size: 13px;
-    border-left: 0.5px solid var(--prep-border-subtle); border-right: 0.5px solid var(--prep-border-subtle);
-    display: flex; align-items: center; gap: 6px; height: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px;
+    border-left: 0.5px solid var(--prep-border-subtle);
+    border-right: 0.5px solid var(--prep-border-subtle);
+    font-size: 13px;
+    font-weight: 700;
   }
   .prep-today-tag {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    color: var(--prep-gold-bright); background: rgba(228,179,64,0.15);
-    padding: 2px 6px; border-radius: 4px; letter-spacing: 0.1em;
+    color: var(--prep-gold-bright);
+    background: rgba(228,179,64,0.16);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    padding: 2px 6px;
   }
-  .prep-ctrl-btn {
-    height: 40px; padding: 0 14px; background: var(--prep-bg-card);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-md);
-    color: var(--prep-cream); font-size: 12px; font-weight: 600; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; text-decoration: none;
+  .prep-ctrl-btn, .prep-tab-link, .prep-save-btn {
+    min-height: 40px;
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: var(--prep-cream);
+    background: var(--prep-bg-card);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+    text-decoration: none;
   }
-  .prep-ctrl-btn:hover { border-color: var(--prep-border-active); color: var(--prep-gold-bright); }
-  .prep-ctrl-btn svg { width: 14px; height: 14px; fill: currentColor; }
-  .prep-ctrl-btn.primary {
+  .prep-ctrl-btn { padding: 0 14px; }
+  .prep-ctrl-btn.primary, .prep-save-btn {
+    color: var(--prep-bg-deep);
     background: linear-gradient(135deg, var(--prep-gold), var(--prep-gold-bright));
-    border-color: var(--prep-gold); color: var(--prep-bg-deep);
-    box-shadow: 0 4px 12px rgba(228,179,64,0.2);
+    border-color: var(--prep-gold);
   }
-  .prep-ctrl-btn.primary:hover { color: var(--prep-bg-deep); filter: brightness(1.05); }
-  .prep-ctrl-btn.submit {
-    background: linear-gradient(135deg, var(--prep-red), var(--prep-red-deep));
-    border-color: var(--prep-red-bright); color: var(--prep-cream);
-    box-shadow: 0 4px 12px rgba(199,59,54,0.2);
-  }
-  .prep-ctrl-btn.submit:hover { color: var(--prep-cream); filter: brightness(1.08); }
-  .prep-ctrl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .prep-ctrl-btn:hover, .prep-tab-link:hover { border-color: var(--prep-border-active); color: var(--prep-gold-bright); }
+  .prep-ctrl-btn.primary:hover, .prep-save-btn:hover { color: var(--prep-bg-deep); filter: brightness(1.06); }
+  .prep-ctrl-btn:disabled, .prep-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .prep-ctrl-form { display: inline-flex; }
-
-  /* ---- Lock notice ---- */
-  .prep-lock-notice {
-    margin-bottom: 16px; padding: 12px 14px;
-    background: linear-gradient(135deg, rgba(228,179,64,0.06), rgba(199,59,54,0.03));
-    border: 0.5px solid var(--prep-border-active); border-radius: var(--prep-radius-md);
-    display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--prep-cream);
+  .prep-page-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 0 0 16px;
+    padding: 4px;
+    width: fit-content;
+    max-width: 100%;
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 12px;
   }
-  .prep-lock-notice svg { width: 16px; height: 16px; fill: var(--prep-gold); flex-shrink: 0; }
-  .prep-lock-notice strong { color: var(--prep-gold-bright); font-weight: 700; }
-  .prep-lock-notice.is-locked { border-color: var(--prep-chop); }
-  .prep-lock-notice.is-locked svg { fill: var(--prep-chop); }
-  .prep-lock-notice.is-locked strong { color: var(--prep-chop); }
-
-  /* ---- Team today ---- */
-  .prep-team-section {
-    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-md); padding: 16px; margin-bottom: 16px;
+  .prep-tab-link {
+    min-height: 34px;
+    padding: 0 13px;
+    border-radius: 8px;
+    color: var(--prep-cream-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
-  .prep-team-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .prep-team-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-gold); }
-  .prep-team-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint); letter-spacing: 0.08em; }
-  .prep-team-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .prep-tab-link.active {
+    color: var(--prep-gold-bright);
+    background: rgba(228,179,64,0.14);
+    border-color: var(--prep-gold);
+  }
+  .prep-panel { padding: 16px; margin-bottom: 16px; }
+  .prep-panel-title {
+    color: var(--prep-gold);
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    font-style: italic;
+    line-height: 1.1;
+    margin-bottom: 10px;
+  }
+  .prep-team-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+  }
   .prep-team-card {
-    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-sm); padding: 10px 12px; display: flex; align-items: center; gap: 8px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 8px;
   }
   .prep-team-avatar {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--prep-bg-warm), var(--prep-bg-deep));
-    color: var(--prep-gold-bright); display: grid; place-items: center;
-    font-family: 'Instrument Serif', serif; font-size: 12px; font-weight: 700;
-    border: 1px solid var(--prep-border-subtle); flex-shrink: 0;
-  }
-  .prep-team-info { flex: 1; min-width: 0; }
-  .prep-team-name { font-size: 12px; font-weight: 700; color: var(--prep-cream); line-height: 1.2; }
-  .prep-team-stats { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-cream-faint); margin-top: 2px; letter-spacing: 0.05em; }
-  .prep-team-stats .done { color: var(--prep-chop); font-weight: 600; }
-  .prep-team-stats .pending { color: var(--prep-gold); font-weight: 600; }
-  .prep-team-add {
-    background: transparent; border: 1px dashed var(--prep-border-subtle);
-    border-radius: var(--prep-radius-sm); padding: 10px 12px; color: var(--prep-cream-faint);
-    cursor: pointer; font-size: 12px; font-weight: 600;
-    display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; text-decoration: none;
-  }
-  .prep-team-add:hover { border-color: var(--prep-gold); color: var(--prep-gold-bright); }
-  .prep-team-add svg { width: 14px; height: 14px; fill: currentColor; }
-  .prep-team-empty { font-size: 12px; color: var(--prep-cream-faint); font-style: italic; }
-
-  /* ---- Team-today 3-tab views (#14: Assigned / Status / Total ingredients) ---- */
-  /* Segmented control mirrors the .prep-batch-row / .prep-status-row visual
-     language (inset chips on the warm input surface). Scoped to .prep-tt-*. */
-  .prep-tt-tabs {
-    display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 14px;
-    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: 6px; flex-wrap: wrap;
-  }
-  .prep-tt-tab {
-    padding: 7px 14px; background: transparent; border: 0.5px solid transparent;
-    border-radius: 5px; color: var(--prep-cream-dim);
-    font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
-    text-transform: uppercase; letter-spacing: 0.06em; transition: all 0.15s;
-    display: inline-flex; align-items: center; gap: 6px;
-  }
-  .prep-tt-tab svg { width: 13px; height: 13px; fill: currentColor; }
-  .prep-tt-tab:hover { color: var(--prep-cream); }
-  .prep-tt-tab.active {
-    background: rgba(228,179,64,0.15); border-color: var(--prep-gold);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
     color: var(--prep-gold-bright);
+    background: rgba(228,179,64,0.1);
+    border: 1px solid var(--prep-border-subtle);
+    font-family: 'Instrument Serif', serif;
+    font-weight: 800;
   }
-  .prep-tt-tab .count {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    color: var(--prep-cream-faint); background: rgba(0,0,0,0.3);
-    padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em;
+  .prep-team-name { font-size: 12px; font-weight: 800; }
+  .prep-team-stats, .prep-empty {
+    color: var(--prep-cream-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
   }
-  .prep-tt-tab.active .count { color: var(--prep-gold-bright); background: rgba(228,179,64,0.18); }
-  .prep-tt-panel { display: none; }
-  .prep-tt-panel.active { display: block; }
-
-  /* Small status badge reused across the Assigned view (and matches the
-     detail-card status palette: completed=green, partly=amber,
-     not-needed=muted, not-completed=neutral). */
-  .prep-tt-badge {
-    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em;
-    text-transform: uppercase; border: 0.5px solid transparent;
-  }
-  .prep-tt-badge svg { width: 11px; height: 11px; fill: currentColor; }
-  .prep-tt-badge.not-completed { color: var(--prep-cream-dim); background: var(--prep-bg-input); border-color: var(--prep-border-subtle); }
-  .prep-tt-badge.partly { color: var(--prep-gold-bright); background: rgba(228,179,64,0.15); border-color: var(--prep-gold); }
-  .prep-tt-badge.completed { color: var(--prep-chop); background: rgba(149,199,95,0.15); border-color: var(--prep-chop); }
-  .prep-tt-badge.not-needed { color: var(--prep-cream-faint); background: rgba(250,246,236,0.06); border-color: var(--prep-cream-faint); }
-
-  /* ① Assigned-today rows */
-  .prep-tt-assigned-list { display: flex; flex-direction: column; gap: 6px; }
-  .prep-tt-arow {
-    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-sm);
-  }
-  .prep-tt-arow-body { flex: 1; min-width: 0; }
-  .prep-tt-arow-name { font-size: 12px; font-weight: 600; color: var(--prep-cream); line-height: 1.2; }
-  .prep-tt-arow-who {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; margin-top: 2px;
-    letter-spacing: 0.05em; display: block;
-  }
-  .prep-tt-arow-who.assigned { color: var(--prep-teal-bright); font-weight: 600; }
-  .prep-tt-arow-who.unassigned { color: var(--prep-red-bright); font-weight: 600; }
-
-  /* ① Previous-days history sub-list */
-  .prep-tt-hist-title {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
-    color: var(--prep-cream-faint); letter-spacing: 0.12em; text-transform: uppercase;
-    margin: 16px 0 8px;
-  }
-  .prep-tt-hist-list { display: flex; flex-direction: column; gap: 4px; }
-  .prep-tt-hrow {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 8px 12px; background: var(--prep-bg-input);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
-    color: var(--prep-cream); text-decoration: none; transition: all 0.15s;
-  }
-  .prep-tt-hrow:hover { border-color: var(--prep-border-active); background: var(--prep-bg-card-hover); }
-  .prep-tt-hrow .day { font-size: 12px; font-weight: 600; color: var(--prep-cream); }
-  .prep-tt-hrow .tally {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-cream-faint);
-    letter-spacing: 0.04em; text-align: right;
-  }
-  .prep-tt-hrow .tally .done { color: var(--prep-chop); font-weight: 600; }
-
-  /* ② Status stat chips */
-  .prep-tt-stats { display: flex; flex-wrap: wrap; gap: 8px; }
-  .prep-tt-stat {
-    flex: 1 1 120px; min-width: 110px; padding: 10px 12px;
-    background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-sm); position: relative; overflow: hidden;
-  }
-  .prep-tt-stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--prep-stat-color, var(--prep-gold)); }
-  .prep-tt-stat.selected { --prep-stat-color: var(--prep-hot); }
-  .prep-tt-stat.assigned { --prep-stat-color: var(--prep-teal); }
-  .prep-tt-stat.not-completed { --prep-stat-color: var(--prep-cream-dim); }
-  .prep-tt-stat.partly { --prep-stat-color: var(--prep-gold-bright); }
-  .prep-tt-stat.completed { --prep-stat-color: var(--prep-chop); }
-  .prep-tt-stat.not-needed { --prep-stat-color: var(--prep-cream-faint); }
-  .prep-tt-stat-label {
-    font-size: 9px; font-weight: 700; color: var(--prep-cream-faint);
-    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px;
-  }
-  .prep-tt-stat-value { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 24px; color: var(--prep-stat-color, var(--prep-gold)); line-height: 1; }
-
-  /* ③ Total-ingredients two-column list */
-  .prep-tt-ing-list { background: var(--prep-bg-input); border-radius: var(--prep-radius-sm); overflow: hidden; }
-  .prep-tt-ing-head {
-    display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 7px 12px;
-    background: rgba(0,0,0,0.3); border-bottom: 0.5px solid var(--prep-border-subtle);
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    color: var(--prep-cream-faint); letter-spacing: 0.1em; text-transform: uppercase;
-  }
-  .prep-tt-ing-head .total { text-align: right; }
-  .prep-tt-ing-row {
-    display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 9px 12px;
-    border-bottom: 0.5px solid rgba(228,179,64,0.06); align-items: center;
-  }
-  .prep-tt-ing-row:last-child { border-bottom: none; }
-  .prep-tt-ing-name { font-size: 12px; color: var(--prep-cream); }
-  .prep-tt-ing-qty { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--prep-gold-bright); text-align: right; }
-
-  .prep-tt-empty { font-size: 12px; color: var(--prep-cream-faint); font-style: italic; padding: 4px 0; }
-
-  /* ---- Main grid ---- */
-  /* align-items: stretch + a shared min-height floor so BOTH the board
-     and the detail panel fill the page height down (maximizing content
-     space) instead of collapsing to their content height. */
-  .prep-main-grid {
-    display: grid; grid-template-columns: 1fr 420px; gap: 16px; align-items: stretch;
-    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
-  }
-
-  /* ---- List panel ---- */
-  /* Tall enough to reach near the viewport bottom (mirrors the
-     kitchen_dashboard embed-frame pattern: calc(100vh - <X>) + a sane
-     floor) so the board fills the page instead of stopping short. */
-  .prep-list-panel {
-    background: var(--prep-bg-card); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-md); overflow: hidden;
-    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
-    display: flex; flex-direction: column;
-  }
-  .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; flex: 1; }
+  .prep-list-panel { overflow: hidden; }
+  .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; }
   .prep-col-divider { border-right: 0.5px solid var(--prep-border-subtle); }
-
+  .prep-section { border-radius: 0; border-width: 0 0 0.5px 0; overflow: hidden; }
   .prep-section-header {
-    padding: 14px 16px; background: var(--prep-section-bg, rgba(228,179,64,0.08));
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: rgba(228,179,64,0.08);
     border-bottom: 0.5px solid var(--prep-border-subtle);
-    display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 1;
   }
-  .prep-section-header.hot { --prep-section-bg: rgba(232,88,82,0.12); }
-  .prep-section-header.cold { --prep-section-bg: rgba(91,202,197,0.12); }
-  .prep-section-header.chop { --prep-section-bg: rgba(149,199,95,0.12); }
+  .prep-section-header.hot { background: rgba(232,88,82,0.12); }
+  .prep-section-header.cold { background: rgba(91,202,197,0.12); }
+  .prep-section-header.chop { background: rgba(149,199,95,0.12); }
   .prep-section-title {
-    font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px;
-    color: var(--prep-section-color, var(--prep-gold)); line-height: 1; flex: 1;
+    flex: 1;
+    color: var(--prep-gold);
+    font-family: 'Instrument Serif', serif;
+    font-size: 21px;
+    font-style: italic;
   }
   .prep-section-header.hot .prep-section-title { color: var(--prep-hot); }
   .prep-section-header.cold .prep-section-title { color: var(--prep-cold); }
   .prep-section-header.chop .prep-section-title { color: var(--prep-chop); }
   .prep-section-meta {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint);
-    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--prep-cream-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
+  .prep-item-block { border-bottom: 0.5px solid rgba(228,179,64,0.08); }
+  .prep-item-toggle {
+    width: 100%;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+  .prep-item-toggle:hover { background: rgba(228,179,64,0.05); }
+  .prep-item-toggle.open {
+    background: rgba(228,179,64,0.13);
+    box-shadow: inset 3px 0 0 var(--prep-gold);
+  }
+  .prep-item-name {
+    flex: 1;
+    min-width: 0;
+    color: var(--prep-cream);
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .prep-item-toggle.open .prep-item-name,
+  .prep-item-toggle.has-work .prep-item-name { color: var(--prep-gold-bright); }
+  .prep-item-pill, .prep-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 0.5px solid var(--prep-border-subtle);
+    color: var(--prep-cream-dim);
+    background: var(--prep-bg-input);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .prep-badge.completed { color: var(--prep-chop); border-color: rgba(149,199,95,0.5); background: rgba(149,199,95,0.12); }
+  .prep-badge.partly { color: var(--prep-gold-bright); border-color: var(--prep-gold); background: rgba(228,179,64,0.12); }
+  .prep-badge.not-needed { color: var(--prep-cream-faint); }
+  .prep-item-chevron { color: var(--prep-gold); transition: transform 0.15s; }
+  .prep-item-toggle.open .prep-item-chevron { transform: rotate(90deg); }
+  .prep-inline-panel {
+    display: none;
+    padding: 14px 16px 18px;
+    background: rgba(0,0,0,0.18);
+    border-top: 0.5px solid var(--prep-border-subtle);
+  }
+  .prep-inline-panel.open { display: block; }
+  .prep-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .prep-form-field { display: flex; flex-direction: column; gap: 6px; }
+  .prep-form-field.full { grid-column: 1 / -1; }
+  .prep-form-label {
+    color: var(--prep-gold);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .prep-input, .prep-select, .prep-textarea {
+    width: 100%;
+    color: var(--prep-cream);
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .prep-input, .prep-select { height: 42px; padding: 0 11px; }
+  .prep-textarea { min-height: 76px; resize: vertical; padding: 10px 11px; }
+  .prep-input:focus, .prep-select:focus, .prep-textarea:focus {
+    outline: none;
+    border-color: var(--prep-gold);
+  }
+  .prep-status-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .prep-status-choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .prep-status-chip {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    color: var(--prep-cream-dim);
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .prep-status-choice input:checked + .prep-status-chip {
+    color: var(--prep-gold-bright);
+    background: rgba(228,179,64,0.16);
+    border-color: var(--prep-gold);
+  }
+  .prep-status-choice input[value="completed"]:checked + .prep-status-chip {
+    color: var(--prep-chop);
+    background: rgba(149,199,95,0.14);
+    border-color: var(--prep-chop);
+  }
+  .prep-helper-box {
+    display: none;
+    padding: 10px;
+    background: rgba(228,179,64,0.06);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 8px;
+  }
+  .prep-helper-box.show { display: block; }
+  .prep-helper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+  }
+  .prep-helper-check {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 6px 8px;
+    color: var(--prep-cream-dim);
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .prep-save-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .prep-save-btn { padding: 0 18px; border: 0; }
+  .prep-ingredients {
+    margin-top: 10px;
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .prep-ingredients summary {
+    cursor: pointer;
+    padding: 10px 12px;
+    color: var(--prep-gold-bright);
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .prep-ingredient-row, .prep-report-row, .prep-dev-row {
+    display: grid;
+    gap: 10px;
+    align-items: center;
+    border-top: 0.5px solid rgba(228,179,64,0.08);
+    padding: 10px 12px;
+  }
+  .prep-ingredient-row { grid-template-columns: 1fr auto auto; }
+  .prep-ingredient-name, .prep-report-main { font-weight: 800; }
+  .prep-ingredient-qty, .prep-ingredient-unit, .prep-report-meta, .prep-dev-meta {
+    color: var(--prep-cream-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+  .prep-report-grid { display: flex; flex-direction: column; gap: 8px; }
+  .prep-report-row {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+    background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 10px;
+  }
+  .prep-report-action { justify-self: end; }
+  .prep-dev-row {
+    grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1.2fr);
+    background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 10px;
+  }
+  .prep-dev-action { color: var(--prep-gold-bright); font-weight: 900; text-transform: uppercase; }
+  .prep-dev-json {
+    color: var(--prep-cream-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+  .prep-empty {
+    padding: 16px;
+    color: var(--prep-cream-faint);
+    font-style: italic;
+  }
+  .prep-page svg { width: 14px; height: 14px; fill: currentColor; }
 
-  .prep-col-header-row {
-    display: grid; grid-template-columns: 80px 1fr 36px; padding: 6px 16px;
-    background: rgba(0,0,0,0.3); border-bottom: 0.5px solid var(--prep-border-subtle);
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-    color: var(--prep-cream-faint); letter-spacing: 0.1em; text-transform: uppercase; gap: 8px;
-  }
-  .prep-col-header-row .oh { text-align: center; }
-  .prep-col-header-row .check { text-align: center; }
-
-  .prep-item-row {
-    display: grid; grid-template-columns: 80px 1fr 36px; padding: 10px 16px;
-    border-bottom: 0.5px solid rgba(228,179,64,0.05); align-items: center; gap: 8px;
-    cursor: pointer; transition: background 0.15s; width: 100%; text-align: left;
-    background: transparent; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit;
-  }
-  .prep-item-row:hover { background: rgba(228,179,64,0.04); }
-  .prep-item-row.selected { background: rgba(228,179,64,0.1); }
-  .prep-item-row.active { background: rgba(228,179,64,0.18); box-shadow: inset 3px 0 0 var(--prep-gold); }
-  .prep-item-row:last-child { border-bottom: none; }
-  .prep-item-oh { display: flex; align-items: center; gap: 4px; }
-  .prep-oh-form { display: flex; }
-  .prep-oh-input {
-    width: 64px; padding: 7px 6px; background: var(--prep-bg-input);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: 4px; color: var(--prep-cream);
-    font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; text-align: center;
-  }
-  .prep-oh-input:focus { outline: none; border-color: var(--prep-gold); }
-  .prep-oh-input.empty { color: var(--prep-cream-faint); }
-  .prep-oh-input.has-value { color: var(--prep-gold-bright); border-color: var(--prep-border-active); }
-  .prep-item-body { min-width: 0; }
-  .prep-item-name { font-size: 13px; font-weight: 600; color: var(--prep-cream); line-height: 1.2; }
-  .prep-item-row.selected .prep-item-name { color: var(--prep-gold-bright); }
-  .prep-item-row.active .prep-item-name { color: var(--prep-gold-bright); font-weight: 700; }
-  .prep-item-meta {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-cream-faint);
-    margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  }
-  .prep-item-meta .assignee { color: var(--prep-teal-bright); font-weight: 600; }
-  .prep-item-meta .done { color: var(--prep-chop); font-weight: 600; }
-  .prep-item-meta .in-progress { color: var(--prep-gold-bright); font-weight: 600; }
-  .prep-item-meta .not-needed { color: var(--prep-cream-faint); font-weight: 600; }
-  .prep-item-meta .unassigned { color: var(--prep-red-bright); font-weight: 600; }
-  .prep-check-form { display: flex; justify-self: center; }
-  .prep-check-box {
-    width: 24px; height: 24px; border-radius: 6px;
-    border: 1.5px solid var(--prep-border-subtle); background: var(--prep-bg-input);
-    cursor: pointer; display: grid; place-items: center; transition: all 0.15s; padding: 0;
-  }
-  .prep-check-box svg { width: 14px; height: 14px; fill: var(--prep-bg-deep); opacity: 0; transition: opacity 0.15s; }
-  .prep-item-row.selected .prep-check-box,
-  .prep-item-row.active .prep-check-box { background: var(--prep-gold); border-color: var(--prep-gold); }
-  .prep-item-row.selected .prep-check-box svg,
-  .prep-item-row.active .prep-check-box svg { opacity: 1; }
-  .prep-list-empty { padding: 44px 24px; text-align: center; color: var(--prep-cream-faint); grid-column: 1 / -1; }
-  .prep-list-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-cream-dim); margin-bottom: 6px; }
-  .prep-section-empty { padding: 18px 16px; font-size: 11px; color: var(--prep-cream-faint); font-style: italic; }
-
-  /* ---- Detail panel ---- */
-  /* Flex column + min-height floor so the panel (and its "No item
-     selected" empty state / open detail card) stretches the full height
-     of the board column down, matching .prep-list-panel. */
-  .prep-detail-panel {
-    background: var(--prep-bg-warm); border: 0.5px solid var(--prep-border-active);
-    border-radius: var(--prep-radius-md); overflow: hidden; position: sticky; top: 16px;
-    display: flex; flex-direction: column;
-    min-height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
-  }
-  .prep-detail-empty { flex: 1; padding: 60px 24px; text-align: center; color: var(--prep-cream-faint); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .prep-detail-empty svg { width: 48px; height: 48px; fill: var(--prep-cream-faint); opacity: 0.5; margin-bottom: 12px; }
-  .prep-detail-empty .big { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--prep-cream-dim); margin-bottom: 6px; }
-  .prep-detail-card { display: none; }
-  .prep-detail-card.open { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-
-  .prep-detail-header {
-    padding: 16px 18px; position: relative;
-    background: linear-gradient(135deg, rgba(228,179,64,0.1), rgba(199,59,54,0.04));
-    border-bottom: 0.5px solid var(--prep-border-subtle);
-  }
-  .prep-detail-close {
-    position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%;
-    background: var(--prep-gold); border: none;
-    color: var(--prep-bg-deep); cursor: pointer; display: grid; place-items: center; transition: all 0.15s;
-  }
-  .prep-detail-close:hover { background: var(--prep-gold-bright); }
-  .prep-detail-close svg { width: 18px; height: 18px; fill: currentColor; }
-  .prep-detail-cat {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
-    color: var(--prep-detail-color, var(--prep-gold)); letter-spacing: 0.12em;
-    text-transform: uppercase; margin-bottom: 4px;
-  }
-  .prep-detail-header.hot .prep-detail-cat { color: var(--prep-hot); }
-  .prep-detail-header.cold .prep-detail-cat { color: var(--prep-cold); }
-  .prep-detail-header.chop .prep-detail-cat { color: var(--prep-chop); }
-  .prep-detail-title { font-family: 'Instrument Serif', serif; font-size: 26px; color: var(--prep-cream); line-height: 1; margin-bottom: 8px; }
-  .prep-detail-meta-row {
-    display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace;
-    font-size: 10px; color: var(--prep-cream-dim); flex-wrap: wrap;
-  }
-  .prep-detail-meta-row .sep { width: 2px; height: 2px; border-radius: 50%; background: var(--prep-cream-faint); }
-  .prep-detail-meta-row .yield { color: var(--prep-gold-bright); font-weight: 600; }
-
-  .prep-detail-body { padding: 16px 18px; flex: 1; min-height: 0; max-height: calc(100vh - 160px); overflow-y: auto; }
-  .prep-detail-section { margin-bottom: 18px; }
-  .prep-detail-section-title {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--prep-gold);
-    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .prep-detail-section-title svg { width: 12px; height: 12px; fill: currentColor; }
-  .prep-detail-section-title .from-recipe { margin-left: auto; color: var(--prep-cream-faint); font-size: 9px; font-weight: 500; }
-
-  /* Batch size selector */
-  .prep-batch-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
-  .prep-batch-opt {
-    padding: 10px; background: var(--prep-bg-input); border: 0.5px solid var(--prep-border-subtle);
-    border-radius: var(--prep-radius-sm); color: var(--prep-cream-dim);
-    font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: all 0.15s;
-    letter-spacing: 0.05em; text-transform: uppercase;
-  }
-  .prep-batch-opt.active { background: rgba(228,179,64,0.15); border-color: var(--prep-gold); color: var(--prep-gold-bright); }
-  .prep-batch-opt .sub { display: block; font-size: 9px; font-weight: 500; margin-top: 2px; opacity: 0.7; text-transform: none; letter-spacing: 0; }
-
-  /* Ingredient list */
-  .prep-ingredient-list { background: var(--prep-bg-input); border-radius: var(--prep-radius-sm); overflow: hidden; }
-  .prep-ingredient-row {
-    display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 9px 12px;
-    border-bottom: 0.5px solid rgba(228,179,64,0.06); align-items: center;
-  }
-  .prep-ingredient-row:last-child { border-bottom: none; }
-  .prep-ingredient-name { font-size: 12px; color: var(--prep-cream); }
-  .prep-ingredient-qty { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--prep-gold-bright); text-align: right; }
-  .prep-ingredient-unit {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--prep-cream-faint);
-    text-transform: uppercase; letter-spacing: 0.05em; width: 40px; text-align: left;
-  }
-  .prep-ingredient-empty { padding: 12px; font-size: 11px; color: var(--prep-cream-faint); font-style: italic; }
-
-  /* Assignment */
-  .prep-assign-input {
-    width: 100%; padding: 10px 12px; background: var(--prep-bg-input);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
-    color: var(--prep-cream); font-family: inherit; font-size: 13px;
-  }
-  .prep-assign-input:focus { outline: none; border-color: var(--prep-gold); }
-  .prep-assign-input::placeholder { color: var(--prep-cream-faint); }
-  .prep-assign-form { display: flex; gap: 8px; align-items: center; }
-  .prep-assign-save {
-    height: 40px; padding: 0 14px; background: var(--prep-gold); border: 0; border-radius: var(--prep-radius-sm);
-    color: var(--prep-bg-deep); font-weight: 700; font-size: 12px; cursor: pointer;
-    letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
-  }
-  .prep-assign-save:hover { filter: brightness(1.08); }
-  .prep-assigned-pill {
-    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-    background: rgba(46,163,159,0.12); border: 0.5px solid rgba(46,163,159,0.4);
-    border-radius: var(--prep-radius-sm); font-size: 12px; color: var(--prep-teal-bright); font-weight: 600;
-  }
-  .prep-assigned-pill .avatar {
-    width: 22px; height: 22px; border-radius: 50%; background: rgba(46,163,159,0.3);
-    color: var(--prep-teal-bright); display: grid; place-items: center;
-    font-family: 'Instrument Serif', serif; font-size: 11px; font-weight: 700; flex-shrink: 0;
-  }
-  .prep-assigned-pill .meta { flex: 1; min-width: 0; }
-  .prep-assigned-pill .name { color: var(--prep-cream); font-weight: 700; }
-  .prep-assigned-pill .schedule {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--prep-teal-bright);
-    font-weight: 600; letter-spacing: 0.05em; margin-top: 1px; display: block;
-  }
-  .prep-reassign-btn {
-    background: transparent; border: none; color: var(--prep-cream-faint); font-size: 10px;
-    cursor: pointer; padding: 4px; font-weight: 600; text-decoration: underline;
-  }
-  .prep-reassign-btn:hover { color: var(--prep-gold-bright); }
-
-  /* Status buttons (4 states: not-completed / partly / completed / not-needed) */
-  .prep-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .prep-status-form { display: flex; }
-  .prep-status-btn {
-    width: 100%; padding: 10px 8px; background: var(--prep-bg-input);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
-    color: var(--prep-cream-dim); font-size: 11px; font-weight: 700; cursor: pointer;
-    text-transform: uppercase; letter-spacing: 0.06em; transition: all 0.15s;
-    display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .prep-status-btn svg { width: 14px; height: 14px; fill: currentColor; }
-  .prep-status-btn:hover { border-color: var(--prep-border-active); color: var(--prep-cream); }
-  /* not-completed = neutral/todo, partly = amber, completed = green, not-needed = muted grey */
-  .prep-status-btn.not-completed.active { background: var(--prep-bg-input); border-color: var(--prep-cream-dim); color: var(--prep-cream); }
-  .prep-status-btn.partly.active { background: rgba(228,179,64,0.15); border-color: var(--prep-gold); color: var(--prep-gold-bright); }
-  .prep-status-btn.completed.active { background: rgba(149,199,95,0.15); border-color: var(--prep-chop); color: var(--prep-chop); }
-  .prep-status-btn.not-needed.active { background: rgba(250,246,236,0.06); border-color: var(--prep-cream-faint); color: var(--prep-cream-faint); }
-
-  /* Notes field */
-  .prep-notes-field {
-    width: 100%; padding: 10px 12px; background: var(--prep-bg-input);
-    border: 0.5px solid var(--prep-border-subtle); border-radius: var(--prep-radius-sm);
-    color: var(--prep-cream); font-family: inherit; font-size: 12px;
-    resize: vertical; min-height: 50px; line-height: 1.5;
-  }
-  .prep-notes-field:focus { outline: none; border-color: var(--prep-gold); }
-  .prep-notes-field::placeholder { color: var(--prep-cream-faint); }
-  .prep-notes-save {
-    margin-top: 8px; padding: 8px 14px; background: var(--prep-gold); border: 0;
-    border-radius: 6px; color: var(--prep-bg-deep); font-weight: 700; font-size: 11px;
-    cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase;
-  }
-  .prep-notes-save:hover { filter: brightness(1.08); }
-
-  .prep-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 99; }
-
-  /* ---- Mobile (folds in the v3 single-column phone design) ---- */
-  @media (max-width: 1100px) {
-    .prep-main-grid { grid-template-columns: 1fr; }
-    .prep-detail-panel {
-      position: fixed; inset: 0; border-radius: 0; z-index: 100;
-      transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
-    }
-    .prep-detail-panel.mobile-open { transform: translateX(0); }
-    .prep-detail-body { max-height: calc(100vh - 80px); }
-    .prep-backdrop.show { display: block; }
-  }
-  @media (max-width: 900px) { .prep-kpi-strip { grid-template-columns: repeat(3,1fr); } }
-  @media (max-width: 760px) {
+  @media (max-width: 900px) {
+    .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .prep-columns-grid { grid-template-columns: 1fr; }
-    .prep-col-divider { border-right: none; border-bottom: 0.5px solid var(--prep-border-subtle); }
+    .prep-col-divider { border-right: 0; border-bottom: 0.5px solid var(--prep-border-subtle); }
+    .prep-report-row, .prep-dev-row { grid-template-columns: 1fr; }
+    .prep-report-action { justify-self: start; }
   }
-  @media (max-width: 540px) {
-    .prep-kpi-strip { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 560px) {
     .prep-page { padding: 14px; }
+    .prep-kpi-strip, .prep-form-grid, .prep-status-row { grid-template-columns: 1fr; }
+    .prep-date-display { padding: 0 10px; font-size: 12px; }
+    .prep-page-tabs { width: 100%; }
+    .prep-tab-link { flex: 1 1 120px; }
   }
 </style>
 
 {% macro prep_icon(name) %}
   {%- if name == 'chev' -%}<svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
   {%- elif name == 'chev-l' -%}<svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-  {%- elif name == 'close' -%}<svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
   {%- elif name == 'check' -%}<svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
   {%- elif name == 'clock' -%}<svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z"/></svg>
-  {%- elif name == 'cal' -%}<svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+  {%- elif name == 'cal' -%}<svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
   {%- elif name == 'copy' -%}<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-  {%- elif name == 'bulb' -%}<svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
   {%- elif name == 'download' -%}<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
-  {%- elif name == 'lock' -%}<svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
-  {%- elif name == 'plus' -%}<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
-  {%- elif name == 'pot' -%}<svg viewBox="0 0 24 24"><path d="M21 6h-3.17L16 4h-6v2h5.12l1.83 2H21v12H5v-9H3v9c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8 14c0 2.76 2.24 5 5 5s5-2.24 5-5-2.24-5-5-5-5 2.24-5 5zm5-3c1.65 0 3 1.35 3 3s-1.35 3-3 3-3-1.35-3-3 1.35-3 3-3zM5 6h3V4H5V1H3v3H0v2h3v3h2z"/></svg>
-  {%- elif name == 'fork' -%}<svg viewBox="0 0 24 24"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
   {%- elif name == 'user' -%}<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-  {%- elif name == 'pencil' -%}<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-  {%- elif name == 'circle' -%}<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+  {%- elif name == 'fork' -%}<svg viewBox="0 0 24 24"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
+  {%- elif name == 'pencil' -%}<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/></svg>
   {%- elif name == 'list' -%}<svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
   {%- endif -%}
 {% endmacro %}
 
-{# Repeated prep item-row — server-rendered for every PrepItem in a
-   section block. POSTs (on-hand, prep toggle) target the kitchen
-   prep-list route. Clicking the row body opens the detail panel. #}
+{% macro status_badge(status) %}
+  {% set label = {'completed':'Completed','partly':'Partly','not-needed':'Not needed','not-completed':'Not complete'}.get(status, 'Not complete') %}
+  <span class="prep-badge {{ status }}">{{ label }}</span>
+{% endmacro %}
+
+{% macro hidden_common(item_id, tab='board', date_value=selected_date) %}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+  <input type="hidden" name="item_id" value="{{ item_id }}">
+  <input type="hidden" name="view_date" value="{{ date_value }}">
+  <input type="hidden" name="active_tab" value="{{ tab }}">
+{% endmacro %}
+
 {% macro item_row(it) %}
   {% set post_url = url_for('store.kitchen_prep_list_post', store_slug=store_slug) %}
-  <div class="prep-item-row{{ ' selected' if it.selected else '' }}" id="prep-row-{{ it.id }}"
-       data-item="{{ it.id }}"
-       onclick="prepSelect('{{ it.id }}', this)">
-    <div class="prep-item-oh" onclick="event.stopPropagation();">
-      <form class="prep-oh-form" method="POST" action="{{ post_url }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-        <input type="hidden" name="form_action" value="set_on_hand">
-        <input type="hidden" name="item_id" value="{{ it.id }}">
-        <input type="hidden" name="view_date" value="{{ selected_date }}">
-        <input type="number" min="0" max="999" name="on_hand"
-               class="prep-oh-input {{ 'has-value' if it.on_hand is not none else 'empty' }}"
-               value="{{ it.on_hand if it.on_hand is not none else '' }}"
-               placeholder="?" {{ 'disabled' if locked else '' }}
-               onchange="this.form.submit()">
+  {% set is_open = (open_item_id == it.id) %}
+  {% set has_work = it.selected or it.on_hand is not none or it.prep_qty is not none or it.assignee or it.notes %}
+  <div class="prep-item-block" id="prep-item-{{ it.id }}">
+    <button class="prep-item-toggle{{ ' open' if is_open else '' }}{{ ' has-work' if has_work else '' }}"
+            type="button"
+            data-prep-toggle="{{ it.id }}"
+            aria-expanded="{{ 'true' if is_open else 'false' }}"
+            aria-controls="prep-panel-{{ it.id }}">
+      <span class="prep-item-name">{{ it.name }}</span>
+      {% if has_work %}{{ status_badge(it.status) }}{% endif %}
+      {% if it.assignee %}<span class="prep-item-pill">{{ it.assignee }}</span>{% endif %}
+      <span class="prep-item-chevron">{{ prep_icon('chev') }}</span>
+    </button>
+    <div class="prep-inline-panel{{ ' open' if is_open else '' }}" id="prep-panel-{{ it.id }}" data-prep-panel="{{ it.id }}">
+      <form method="POST" action="{{ post_url }}" class="prep-tracker-form">
+        {{ hidden_common(it.id, 'board') }}
+        <input type="hidden" name="form_action" value="save_tracker">
+        <input type="hidden" name="open_item_id" value="{{ it.id }}">
+        <div class="prep-form-grid">
+          <label class="prep-form-field">
+            <span class="prep-form-label">On hand</span>
+            <input class="prep-input" type="number" min="0" max="9999" name="on_hand"
+                   value="{{ it.on_hand if it.on_hand is not none else '' }}"
+                   placeholder="How much they have" {{ 'disabled' if locked else '' }}>
+          </label>
+          <label class="prep-form-field">
+            <span class="prep-form-label">Prep</span>
+            <input class="prep-input" type="number" min="0" max="9999" name="prep_qty"
+                   value="{{ it.prep_qty if it.prep_qty is not none else '' }}"
+                   placeholder="How much they are prepping" {{ 'disabled' if locked else '' }}>
+          </label>
+          <label class="prep-form-field full">
+            <span class="prep-form-label">Assign to</span>
+            <select class="prep-select" name="assignee_name" {{ 'disabled' if locked else '' }}>
+              <option value="">Assign a teammate...</option>
+              {% if it.assignee and it.assignee not in all_staff %}
+              <option value="{{ it.assignee }}" selected>{{ it.assignee }}</option>
+              {% endif %}
+              {% for staff in all_staff %}
+              <option value="{{ staff }}" {{ 'selected' if staff == it.assignee else '' }}>{{ staff }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="prep-form-field full">
+            <span class="prep-form-label">Status</span>
+            <div class="prep-status-row">
+              {% for st, label in [('not-completed','Not complete'), ('partly','Partly complete'), ('completed','Completed')] %}
+              <label class="prep-status-choice">
+                <input type="radio" name="status" value="{{ st }}"
+                       {{ 'checked' if it.status == st or (st == 'not-completed' and it.status not in ('partly','completed')) else '' }}
+                       {{ 'disabled' if locked else '' }}>
+                <span class="prep-status-chip">{{ label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="prep-form-field full prep-helper-box{{ ' show' if it.status == 'partly' or it.helper_names else '' }}" data-helper-box>
+            <span class="prep-form-label">Who helped</span>
+            <div class="prep-helper-grid">
+              {% for staff in all_staff %}
+              <label class="prep-helper-check">
+                <input type="checkbox" name="helper_names" value="{{ staff }}"
+                       {{ 'checked' if staff in it.helper_names else '' }}
+                       {{ 'disabled' if locked else '' }}>
+                <span>{{ staff }}</span>
+              </label>
+              {% else %}
+              <div class="prep-empty">No employees loaded yet.</div>
+              {% endfor %}
+            </div>
+          </div>
+          <label class="prep-form-field full">
+            <span class="prep-form-label">Notes</span>
+            <textarea class="prep-textarea" name="notes"
+                      placeholder="Batch notes, substitutions, hold-backs..."
+                      {{ 'disabled' if locked else '' }}>{{ it.notes or '' }}</textarea>
+          </label>
+          <div class="prep-form-field full">
+            <div class="prep-save-row">
+              <button class="prep-save-btn" type="submit" {{ 'disabled' if locked else '' }}>Save</button>
+              {% if it.completed_by %}
+              <span class="prep-small-mono">Completed by {{ it.completed_by }}{% if it.completed_at_label %} at {{ it.completed_at_label }}{% endif %}</span>
+              {% endif %}
+            </div>
+            <details class="prep-ingredients">
+              <summary>{{ prep_icon('fork') }} Ingredients</summary>
+              {% if it.ingredients %}
+                {% for ing in it.ingredients %}
+                <div class="prep-ingredient-row">
+                  <div class="prep-ingredient-name">{{ ing.name }}</div>
+                  <div class="prep-ingredient-qty">{{ ing.qty }}</div>
+                  <div class="prep-ingredient-unit">{{ ing.unit }}</div>
+                </div>
+                {% endfor %}
+              {% else %}
+                <div class="prep-empty">
+                  {% if it.recipe_id %}No ingredients listed on the linked recipe.
+                  {% else %}No recipe linked. Link one in Recipes to auto-pull ingredients.{% endif %}
+                </div>
+              {% endif %}
+            </details>
+          </div>
+        </div>
       </form>
     </div>
-    <div class="prep-item-body">
-      <div class="prep-item-name">{{ it.name }}</div>
-      {% if it.selected %}
-      <div class="prep-item-meta">
-        {% if it.status == 'completed' %}
-          <span class="done">&#10003; Completed</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
-        {% elif it.status == 'partly' %}
-          <span class="in-progress">&#9203; Partly completed</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
-        {% elif it.status == 'not-needed' %}
-          <span class="not-needed">Not needed</span>{% if it.assignee %} &middot; {{ it.assignee }}{% endif %}
-        {% elif it.assignee %}
-          <span class="assignee">&rarr; {{ it.assignee }}</span>
-        {% else %}
-          <span class="unassigned">Unassigned</span>
-        {% endif %}
-      </div>
-      {% endif %}
-    </div>
-    <form class="prep-check-form" method="POST" action="{{ post_url }}" onclick="event.stopPropagation();">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-      <input type="hidden" name="form_action" value="toggle_select">
-      <input type="hidden" name="item_id" value="{{ it.id }}">
-      <input type="hidden" name="view_date" value="{{ selected_date }}">
-      <button class="prep-check-box" type="submit" {{ 'disabled' if locked else '' }}
-              aria-label="{{ 'Unselect' if it.selected else 'Select' }} {{ it.name }} for prep">
-        {{ prep_icon('check') }}
-      </button>
-    </form>
   </div>
 {% endmacro %}
 
-{# A category x kind section (header + column labels + its rows). #}
 {% macro item_section(sec) %}
-  <div class="prep-section-header {{ sec.key }}">
-    <div class="prep-section-title">{{ sec.label }}</div>
-    <div class="prep-section-meta">{{ sec.total }} &middot; {{ sec.selected }} selected</div>
-  </div>
-  <div class="prep-col-header-row">
-    <div class="oh">On Hand</div>
-    <div>Item</div>
-    <div class="check">Prep?</div>
-  </div>
-  {% if sec['items'] %}
-    {% for it in sec['items'] %}{{ item_row(it) }}{% endfor %}
-  {% else %}
-    <div class="prep-section-empty">No items in this section yet.</div>
-  {% endif %}
-{% endmacro %}
-
-{# Detail panel card — one per item; JS reveals the selected one. #}
-{% macro detail_card(it) %}
-  {% set post_url = url_for('store.kitchen_prep_list_post', store_slug=store_slug) %}
-  {% set cat_label = {'hot':'Hot','cold':'Cold','chop':'Chop'} %}
-  {% set kind_label = {'item':'Item','sauce':'Sauce'} %}
-  <div class="prep-detail-card" id="prep-d-{{ it.id }}" data-item="{{ it.id }}">
-    <div class="prep-detail-header {{ it.category }}">
-      <button class="prep-detail-close" type="button" onclick="prepCloseDetail()" aria-label="Close">{{ prep_icon('close') }}</button>
-      <div class="prep-detail-cat">
-        {{ cat_label.get(it.category, it.category) }} {{ kind_label.get(it.kind, '') }}
-        {%- if it.status == 'completed' %} &middot; completed
-        {%- elif it.status == 'partly' %} &middot; partly completed
-        {%- elif it.status == 'not-needed' %} &middot; not needed
-        {%- elif it.assignee %} &middot; assigned{% endif %}
-      </div>
-      <div class="prep-detail-title">{{ it.name }}</div>
-      <div class="prep-detail-meta-row">
-        {% if it.yield_label %}<span class="yield">Yield: {{ it.yield_label }}</span>{% endif %}
-        {% if it.yield_label and (it.prep_minutes or it.shelf_days) %}<span class="sep"></span>{% endif %}
-        {% if it.prep_minutes %}<span>{{ it.prep_minutes }} min prep</span>{% endif %}
-        {% if it.prep_minutes and it.shelf_days %}<span class="sep"></span>{% endif %}
-        {% if it.shelf_days %}<span>{{ it.shelf_days }} day shelf</span>{% endif %}
-        {% if not it.yield_label and not it.prep_minutes and not it.shelf_days %}<span>Recipe details unavailable</span>{% endif %}
-      </div>
+  <section class="prep-section">
+    <div class="prep-section-header {{ sec.key }}">
+      <div class="prep-section-title">{{ sec.label }}</div>
+      <div class="prep-section-meta">{{ sec.total }} items</div>
     </div>
-    <div class="prep-detail-body">
-
-      {# ---- Batch size ---- #}
-      <div class="prep-detail-section">
-        <div class="prep-detail-section-title">{{ prep_icon('pot') }} Batch size</div>
-        <form method="POST" action="{{ post_url }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-          <input type="hidden" name="form_action" value="save_detail">
-          <input type="hidden" name="item_id" value="{{ it.id }}">
-          <input type="hidden" name="view_date" value="{{ selected_date }}">
-          <div class="prep-batch-row">
-            <button class="prep-batch-opt{{ ' active' if it.batch_size != 'double' else '' }}" type="submit"
-                    name="batch_size" value="single" {{ 'disabled' if locked else '' }}>
-              Single{% if it.yield_label %}<span class="sub">{{ it.yield_label }}</span>{% endif %}
-            </button>
-            <button class="prep-batch-opt{{ ' active' if it.batch_size == 'double' else '' }}" type="submit"
-                    name="batch_size" value="double" {{ 'disabled' if locked else '' }}>
-              Double<span class="sub">2&times; recipe</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {# ---- Assignment ---- #}
-      <div class="prep-detail-section">
-        <div class="prep-detail-section-title">{{ prep_icon('user') }} Assigned to</div>
-        {% if it.assignee %}
-        <div class="prep-assigned-pill">
-          <div class="avatar">{{ it.assignee_initials or (it.assignee[:2]|upper) }}</div>
-          <div class="meta">
-            <span class="name">{{ it.assignee }}</span>
-            <span class="schedule">On the prep team today</span>
-          </div>
-          <form method="POST" action="{{ post_url }}" style="display:flex;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-            <input type="hidden" name="form_action" value="assign">
-            <input type="hidden" name="item_id" value="{{ it.id }}">
-            <input type="hidden" name="view_date" value="{{ selected_date }}">
-            <input type="hidden" name="assignee_name" value="">
-            <button class="prep-reassign-btn" type="submit" {{ 'disabled' if locked else '' }}>Reassign</button>
-          </form>
-        </div>
-        {% else %}
-        <form class="prep-assign-form" method="POST" action="{{ post_url }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-          <input type="hidden" name="form_action" value="assign">
-          <input type="hidden" name="item_id" value="{{ it.id }}">
-          <input type="hidden" name="view_date" value="{{ selected_date }}">
-          <input class="prep-assign-input prep-assign-typeahead" type="text" name="assignee_name" maxlength="120"
-                 list="prep-staff-list" autocomplete="off"
-                 placeholder="Assign a teammate&hellip;" {{ 'disabled' if locked else '' }}>
-          <button class="prep-assign-save" type="submit" {{ 'disabled' if locked else '' }}>Assign</button>
-        </form>
-        {% endif %}
-      </div>
-
-      {# ---- Status ---- #}
-      {# Four states; keys match the server whitelist. 'not-completed' is
-         the DEFAULT — active whenever status isn't one of the other three
-         (covers legacy 'selected'/'assigned'/None values too). #}
-      <div class="prep-detail-section">
-        <div class="prep-detail-section-title">{{ prep_icon('clock') }} Status</div>
-        <div class="prep-status-row">
-          {% for st, cls, lbl, icn in [
-              ('not-completed','not-completed','Not completed','circle'),
-              ('partly','partly','Partly completed','clock'),
-              ('completed','completed','Completed','check'),
-              ('not-needed','not-needed','Not needed','close')] %}
-          <form class="prep-status-form" method="POST" action="{{ post_url }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-            <input type="hidden" name="form_action" value="set_status">
-            <input type="hidden" name="item_id" value="{{ it.id }}">
-            <input type="hidden" name="view_date" value="{{ selected_date }}">
-            <input type="hidden" name="status" value="{{ st }}">
-            <button class="prep-status-btn {{ cls }}{{ ' active' if it.status == st or (st == 'not-completed' and it.status not in ('partly','completed','not-needed')) else '' }}"
-                    type="submit" {{ 'disabled' if locked else '' }}>
-              {{ prep_icon(icn) }} {{ lbl }}
-            </button>
-          </form>
-          {% endfor %}
-        </div>
-      </div>
-
-      {# ---- Notes ---- #}
-      <div class="prep-detail-section">
-        <div class="prep-detail-section-title">{{ prep_icon('pencil') }} Notes</div>
-        <form method="POST" action="{{ post_url }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-          <input type="hidden" name="form_action" value="save_detail">
-          <input type="hidden" name="item_id" value="{{ it.id }}">
-          <input type="hidden" name="view_date" value="{{ selected_date }}">
-          <textarea class="prep-notes-field" name="notes"
-                    placeholder="Batch notes, substitutions, hold-backs&hellip;"
-                    {{ 'disabled' if locked else '' }}>{{ it.notes or '' }}</textarea>
-          {% if not locked %}<button class="prep-notes-save" type="submit">Save notes</button>{% endif %}
-        </form>
-      </div>
-
-      {# ---- Ingredients (auto-pulled from the linked recipe) ---- #}
-      <div class="prep-detail-section">
-        <div class="prep-detail-section-title">
-          {{ prep_icon('fork') }} Ingredients needed
-          {% if it.recipe_id %}<span class="from-recipe">FROM RECIPE</span>{% endif %}
-        </div>
-        <div class="prep-ingredient-list">
-          {% if it.ingredients %}
-            {% for ing in it.ingredients %}
-            <div class="prep-ingredient-row">
-              <div class="prep-ingredient-name">{{ ing.name }}</div>
-              <div class="prep-ingredient-qty">{{ ing.qty }}</div>
-              <div class="prep-ingredient-unit">{{ ing.unit }}</div>
-            </div>
-            {% endfor %}
-          {% else %}
-            <div class="prep-ingredient-empty">
-              {% if it.recipe_id %}No ingredients listed on the linked recipe.
-              {% else %}No recipe linked &mdash; link one in Recipes to auto-pull ingredients.{% endif %}
-            </div>
-          {% endif %}
-        </div>
-      </div>
-
-    </div>
-  </div>
+    {% if sec['items'] %}
+      {% for it in sec['items'] %}{{ item_row(it) }}{% endfor %}
+    {% else %}
+      <div class="prep-empty">No items in this section yet.</div>
+    {% endif %}
+  </section>
 {% endmacro %}
 
 <div class="prep-page">
-
   <div class="prep-topstrip">
-    <span class="prep-store-badge">{{ store_slug|upper }}{% if (store_label|upper) != (store_slug|upper) %} &middot; {{ store_label|upper }}{% endif %}</span>
+    <span class="prep-store-badge">{{ store_slug|upper }}{% if (store_label|upper) != (store_slug|upper) %} - {{ store_label|upper }}{% endif %}</span>
     <span class="prep-spacer"></span>
-    {% if lock_author %}
-    <span class="prep-runner"><span class="dot"></span>{{ lock_author }} running prep{% if lock_hours %} &middot; {{ lock_hours }}{% endif %}</span>
-    {% else %}
     <span class="prep-runner"><span class="dot"></span>Prep board open</span>
-    {% endif %}
   </div>
 
-  {# ---- KPI strip ---- #}
   <div class="prep-kpi-strip">
     <div class="prep-kpi-box total">
       <div class="prep-kpi-label">Total items</div>
@@ -943,181 +696,59 @@
     </div>
   </div>
 
-  {# ---- Control bar ---- #}
   <div class="prep-control-bar">
-    {# Primary create action pulled FAR LEFT, before the date/period controls. #}
     <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
       <input type="hidden" name="form_action" value="copy_yesterday">
       <input type="hidden" name="view_date" value="{{ selected_date }}">
+      <input type="hidden" name="active_tab" value="{{ active_prep_tab }}">
       <button class="prep-ctrl-btn primary" type="submit" {{ 'disabled' if locked else '' }}>
         {{ prep_icon('copy') }} Copy yesterday's prep
       </button>
     </form>
     <div class="prep-date-nav">
-      <a class="prep-date-nav-btn" href="?date={{ prev_date }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
+      <a class="prep-date-nav-btn" href="?date={{ prev_date }}&tab={{ active_prep_tab }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
       <div class="prep-date-display">
         {{ date_display }}
         {% if is_today %}<span class="prep-today-tag">TODAY</span>{% endif %}
       </div>
-      <a class="prep-date-nav-btn" href="?date={{ next_date }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
+      <a class="prep-date-nav-btn" href="?date={{ next_date }}&tab={{ active_prep_tab }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
     </div>
-    <a class="prep-ctrl-btn" href="?date={{ prev_date }}">{{ prep_icon('cal') }} View past days</a>
+    <a class="prep-ctrl-btn" href="?date={{ prev_date }}&tab=recent">{{ prep_icon('cal') }} View past days</a>
     <span class="prep-spacer"></span>
     <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} Export today</button>
   </div>
 
-  {# ---- Prep team today (#14: 3-tab views — Assigned / Status / Total ingredients) ---- #}
-  {# Status-key -> (badge class, label, icon) map, reused by the Assigned view.
-     Keys match the server whitelist; anything else falls back to 'not-completed'. #}
-  {% set tt_status = {
-       'completed':     ('completed',     'Completed',     'check'),
-       'partly':        ('partly',        'Partly',        'clock'),
-       'not-needed':    ('not-needed',    'Not needed',    'close'),
-       'not-completed': ('not-completed', 'Not completed', 'circle')
-     } %}
-  <div class="prep-team-section">
-    <div class="prep-team-header">
-      <div class="prep-team-title">Prep team today</div>
-      <div class="prep-team-sub">{{ team|length }} ON SHIFT &middot; MATCHED TO SCHEDULE</div>
-    </div>
+  <nav class="prep-page-tabs" aria-label="Prep list views">
+    {% for tab in prep_tabs %}
+    <a class="prep-tab-link{{ ' active' if active_prep_tab == tab.key else '' }}"
+       href="?date={{ selected_date }}&tab={{ tab.key }}">{{ tab.label }}</a>
+    {% endfor %}
+  </nav>
 
-    <div class="prep-tt-tabs" role="tablist" aria-label="Prep team views">
-      <button class="prep-tt-tab active" type="button" role="tab" aria-selected="true"
-              data-tt-tab="assigned" id="prep-tt-tab-assigned" aria-controls="prep-tt-panel-assigned">
-        {{ prep_icon('user') }} Assigned <span class="count">{{ assigned_today|length }}</span>
-      </button>
-      <button class="prep-tt-tab" type="button" role="tab" aria-selected="false"
-              data-tt-tab="status" id="prep-tt-tab-status" aria-controls="prep-tt-panel-status">
-        {{ prep_icon('clock') }} Status
-      </button>
-      <button class="prep-tt-tab" type="button" role="tab" aria-selected="false"
-              data-tt-tab="totals" id="prep-tt-tab-totals" aria-controls="prep-tt-panel-totals">
-        {{ prep_icon('fork') }} Total ingredients <span class="count">{{ total_ingredients|length }}</span>
-      </button>
-    </div>
-
-    {# ① ASSIGNED — today's assigned recipes (item + who) + browsable history #}
-    <div class="prep-tt-panel active" id="prep-tt-panel-assigned" role="tabpanel"
-         aria-labelledby="prep-tt-tab-assigned" data-tt-panel="assigned">
+  {% if active_prep_tab == 'board' %}
+    <section class="prep-panel">
+      <div class="prep-panel-title">Prep team today</div>
       <div class="prep-team-list">
         {% for member in team %}
         <div class="prep-team-card">
           <div class="prep-team-avatar">{{ member.initials }}</div>
-          <div class="prep-team-info">
+          <div>
             <div class="prep-team-name">{{ member.name }}</div>
-            <div class="prep-team-stats">
-              {% if member.done or member.in_progress %}
-                <span class="done">{{ member.done }} done</span> &middot; <span class="pending">{{ member.in_progress }} in progress</span>
-              {% else %}
-                <span class="pending">{{ member.assigned }} assigned</span>
-              {% endif %}
-            </div>
+            <div class="prep-team-stats">{{ member.done }} done - {{ member.in_progress }} partly - {{ member.assigned }} assigned</div>
           </div>
         </div>
         {% else %}
-        <div class="prep-team-empty">No teammates on the prep roster yet.</div>
+        <div class="prep-empty">No teammates on the prep roster yet.</div>
         {% endfor %}
       </div>
+    </section>
 
-      {% if assigned_today %}
-      <div class="prep-tt-assigned-list" style="margin-top:12px;">
-        {% for a in assigned_today %}
-        {% set badge = tt_status.get(a.status, tt_status['not-completed']) %}
-        <div class="prep-tt-arow">
-          <div class="prep-tt-arow-body">
-            <div class="prep-tt-arow-name">{{ a.name }}</div>
-            {% if a.assignee %}
-              <span class="prep-tt-arow-who assigned">&rarr; {{ a.assignee }}</span>
-            {% else %}
-              <span class="prep-tt-arow-who unassigned">Unassigned</span>
-            {% endif %}
-          </div>
-          <span class="prep-tt-badge {{ badge[0] }}">{{ prep_icon(badge[2]) }} {{ badge[1] }}</span>
-        </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="prep-tt-empty" style="margin-top:12px;">Nothing assigned yet today.</div>
-      {% endif %}
-
-      {% if assignment_history %}
-      <div class="prep-tt-hist-title">Previous days</div>
-      <div class="prep-tt-hist-list">
-        {% for row in assignment_history %}
-        <a class="prep-tt-hrow" href="?date={{ row.date }}">
-          <span class="day">{{ row.display }}</span>
-          <span class="tally">{{ row.assigned }} assigned &middot; <span class="done">{{ row.completed }} completed</span></span>
-        </a>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-
-    {# ② STATUS — current-day rollup as compact stat chips #}
-    <div class="prep-tt-panel" id="prep-tt-panel-status" role="tabpanel"
-         aria-labelledby="prep-tt-tab-status" data-tt-panel="status">
-      <div class="prep-tt-stats">
-        <div class="prep-tt-stat selected">
-          <div class="prep-tt-stat-label">Selected</div>
-          <div class="prep-tt-stat-value">{{ today_status.selected }}</div>
-        </div>
-        <div class="prep-tt-stat assigned">
-          <div class="prep-tt-stat-label">Assigned</div>
-          <div class="prep-tt-stat-value">{{ today_status.assigned }}</div>
-        </div>
-        <div class="prep-tt-stat not-completed">
-          <div class="prep-tt-stat-label">Not completed</div>
-          <div class="prep-tt-stat-value">{{ today_status.not_completed }}</div>
-        </div>
-        <div class="prep-tt-stat partly">
-          <div class="prep-tt-stat-label">Partly</div>
-          <div class="prep-tt-stat-value">{{ today_status.partly }}</div>
-        </div>
-        <div class="prep-tt-stat completed">
-          <div class="prep-tt-stat-label">Completed</div>
-          <div class="prep-tt-stat-value">{{ today_status.completed }}</div>
-        </div>
-        <div class="prep-tt-stat not-needed">
-          <div class="prep-tt-stat-label">Not needed</div>
-          <div class="prep-tt-stat-value">{{ today_status.not_needed }}</div>
-        </div>
-      </div>
-    </div>
-
-    {# ③ TOTAL INGREDIENTS — combined across ALL assigned recipes (pre-summed) #}
-    <div class="prep-tt-panel" id="prep-tt-panel-totals" role="tabpanel"
-         aria-labelledby="prep-tt-tab-totals" data-tt-panel="totals">
-      {% if total_ingredients %}
-      <div class="prep-tt-ing-list">
-        <div class="prep-tt-ing-head">
-          <div>Ingredient</div>
-          <div class="total">Total</div>
-        </div>
-        {% for ing in total_ingredients %}
-        <div class="prep-tt-ing-row">
-          <div class="prep-tt-ing-name">{{ ing.name }}</div>
-          <div class="prep-tt-ing-qty">{{ ing.qty }}</div>
-        </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="prep-tt-empty">Assign recipes to see combined ingredients.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ---- Main grid: two-column item board + detail panel ---- #}
-  <div class="prep-main-grid">
-
-    <div class="prep-list-panel">
+    <section class="prep-list-panel">
       {% set left_sections = sections|selectattr('col', 'equalto', 'left')|list %}
       {% set right_sections = sections|selectattr('col', 'equalto', 'right')|list %}
       {% if not sections %}
-      <div class="prep-list-empty">
-        <div class="big">No prep items in the master list yet</div>
-        <div>Seed the master list (hot / cold / chop) so the kitchen can build the day's board.</div>
-      </div>
+      <div class="prep-empty">No prep items in the master list yet.</div>
       {% else %}
       <div class="prep-columns-grid">
         <div class="prep-col-divider">
@@ -1128,29 +759,113 @@
         </div>
       </div>
       {% endif %}
-    </div>
+    </section>
 
-    <div class="prep-detail-panel" id="prepDetailPane">
-      <div class="prep-detail-empty" id="prepDetailEmpty">
-        {{ prep_icon('list') }}
-        <div class="big">No item selected</div>
-        <div>Tap any item on the board to pull its recipe breakdown, assign the work, and track progress.</div>
+  {% elif active_prep_tab == 'recent' %}
+    <section class="prep-panel">
+      <div class="prep-panel-title">Recent Date</div>
+      <div class="prep-report-grid">
+        {% for row in recent_entries %}
+        <div class="prep-report-row">
+          <div>
+            <div class="prep-report-main">{{ row.item }}</div>
+            <div class="prep-report-meta">{{ row.date_label }} - on hand {{ row.on_hand if row.on_hand is not none else '-' }} - prep {{ row.prep_qty if row.prep_qty is not none else '-' }}</div>
+          </div>
+          <div>
+            {{ status_badge(row.status) }}
+            <div class="prep-report-meta">
+              {% if row.completed_by %}Completed by {{ row.completed_by }}{% if row.completed_at_label %} at {{ row.completed_at_label }}{% endif %}
+              {% elif row.assignee %}Assigned to {{ row.assignee }}
+              {% else %}Unassigned{% endif %}
+              {% if row.helpers %}<br>Helped by {{ row.helpers|join(', ') }}{% endif %}
+            </div>
+          </div>
+          <div class="prep-report-action">
+            {% if row.status != 'completed' %}
+            <form method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
+              {{ hidden_common(row.item_id, 'recent', row.date) }}
+              <input type="hidden" name="form_action" value="set_status">
+              <input type="hidden" name="status" value="completed">
+              <button class="prep-ctrl-btn primary" type="submit">Complete</button>
+            </form>
+            {% else %}
+            <span class="prep-small-mono">Done</span>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="prep-empty">No recent prep activity yet.</div>
+        {% endfor %}
       </div>
-      {% for sec in sections %}
-        {% for it in sec['items'] %}{{ detail_card(it) }}{% endfor %}
-      {% endfor %}
-    </div>
-    <div class="prep-backdrop" id="prepBackdrop" onclick="prepCloseDetail()"></div>
+    </section>
 
-  </div>
+  {% elif active_prep_tab == 'performance' %}
+    <section class="prep-panel">
+      <div class="prep-panel-title">Performance</div>
+      <div class="prep-report-grid">
+        {% for row in performance_rows %}
+        <div class="prep-report-row">
+          <div>
+            <div class="prep-report-main">{{ row.name }}</div>
+            <div class="prep-report-meta">Toast / schedule hours: {{ row.hours_label or '0' }}</div>
+          </div>
+          <div class="prep-report-meta">
+            {{ row.assigned }} assigned - {{ row.started }} started - {{ row.partly }} partly - {{ row.completed }} completed - {{ row.helped }} helped
+          </div>
+          <div class="prep-report-meta">
+            {{ row.completion_rate }}% complete<br>{{ row.productivity_label or '0' }} completed/hr
+          </div>
+        </div>
+        {% else %}
+        <div class="prep-empty">No employee performance data yet.</div>
+        {% endfor %}
+      </div>
+    </section>
+
+  {% elif active_prep_tab == 'developer' %}
+    <section class="prep-panel">
+      <div class="prep-panel-title">Developer</div>
+      <div class="prep-small-mono" style="margin-bottom:10px;">Audit events</div>
+      <div class="prep-report-grid">
+        {% for ev in developer_events %}
+        <div class="prep-dev-row">
+          <div class="prep-dev-meta">{{ ev.at }}<br>{{ ev.date }}</div>
+          <div>
+            <div class="prep-dev-action">{{ ev.action }}</div>
+            <div class="prep-report-main">{{ ev.item }}</div>
+            <div class="prep-dev-meta">By {{ ev.actor }}</div>
+          </div>
+          <div class="prep-dev-json">{{ ev.details|tojson }}</div>
+        </div>
+        {% else %}
+        <div class="prep-empty">No audit events have been recorded yet.</div>
+        {% endfor %}
+      </div>
+
+      <div class="prep-small-mono" style="margin:16px 0 10px;">Entry snapshots</div>
+      <div class="prep-report-grid">
+        {% for row in developer_entries %}
+        <div class="prep-dev-row">
+          <div class="prep-dev-meta">{{ row.date }}<br>Updated {{ row.updated or '-' }}</div>
+          <div>
+            <div class="prep-report-main">{{ row.item }}</div>
+            <div class="prep-dev-meta">{{ row.status }} - assigned {{ row.assignee or '-' }} - helpers {{ row.helpers|join(', ') if row.helpers else '-' }}</div>
+          </div>
+          <div class="prep-dev-json">
+            on_hand={{ row.on_hand if row.on_hand is not none else 'null' }},
+            prep={{ row.prep_qty if row.prep_qty is not none else 'null' }},
+            created={{ row.created or 'null' }},
+            completed_by={{ row.completed_by or 'null' }},
+            completed_at={{ row.completed_at or 'null' }}
+          </div>
+        </div>
+        {% else %}
+        <div class="prep-empty">No entry snapshots yet.</div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
 </div>
-
-{# Shared staff roster for the "Assigned to" typeahead. Every assign
-   input points at this <datalist> via list="prep-staff-list"; the
-   options are populated client-side from the all_staff JSON embed
-   (see scripts block) — the single source of truth, mirroring the
-   attendance_tracking PEOPLE pattern. No new libraries. #}
-<datalist id="prep-staff-list"></datalist>
 {% endblock %}
 
 {% block scripts %}
@@ -1158,70 +873,53 @@
 (function () {
   'use strict';
 
-  // ---- "Assigned to" typeahead roster ----
-  // Server embeds all_staff = JSON list of full-name strings only,
-  // e.g. ["Maria Lopez","Juan Perez"] (mirrors attendance_tracking's
-  // "var PEOPLE = rows|tojson" embed). We feed it into the shared
-  // <datalist id="prep-staff-list"> that every assign input is bound
-  // to via list=, giving a native filter-as-you-type dropdown with no
-  // new libraries. The chosen name lands in the existing
-  // name="assignee_name" input and submits via the existing Assign form.
-  var ALL_STAFF = {{ (all_staff if all_staff is defined else []) | tojson }};
-  (function populateStaffList() {
-    var dl = document.getElementById('prep-staff-list');
-    if (!dl || !Array.isArray(ALL_STAFF)) return;
-    dl.innerHTML = ALL_STAFF.map(function (name) {
-      var opt = document.createElement('option');
-      opt.value = (name == null ? '' : String(name));
-      return opt.outerHTML;
-    }).join('');
-  })();
-
-  // ---- Item selection + detail panel ----
-  function prepSelect(id, row) {
-    document.querySelectorAll('.prep-item-row').forEach(function (r) {
-      r.classList.toggle('active', r === row);
-    });
-    document.querySelectorAll('.prep-detail-card').forEach(function (c) {
-      c.classList.toggle('open', c.id === 'prep-d-' + id);
-    });
-    var empty = document.getElementById('prepDetailEmpty');
-    if (empty) empty.style.display = 'none';
-    if (window.matchMedia('(max-width: 1100px)').matches) {
-      document.getElementById('prepDetailPane').classList.add('mobile-open');
-      document.getElementById('prepBackdrop').classList.add('show');
-    }
+  function syncHelperBox(form) {
+    var box = form.querySelector('[data-helper-box]');
+    if (!box) return;
+    var partly = form.querySelector('input[name="status"][value="partly"]');
+    var hasCheckedHelper = !!form.querySelector('input[name="helper_names"]:checked');
+    box.classList.toggle('show', !!(partly && partly.checked) || hasCheckedHelper);
   }
-  function prepCloseDetail() {
-    document.getElementById('prepDetailPane').classList.remove('mobile-open');
-    document.getElementById('prepBackdrop').classList.remove('show');
-    document.querySelectorAll('.prep-item-row').forEach(function (r) { r.classList.remove('active'); });
-  }
-  window.prepSelect = prepSelect;
-  window.prepCloseDetail = prepCloseDetail;
 
-  // ---- On-hand input visual state ----
-  document.querySelectorAll('.prep-oh-input').forEach(function (i) {
-    i.addEventListener('input', function () {
-      var has = i.value !== '' && i.value != null;
-      i.classList.toggle('has-value', has);
-      i.classList.toggle('empty', !has);
+  document.querySelectorAll('[data-prep-toggle]').forEach(function (toggle) {
+    toggle.addEventListener('click', function () {
+      var id = toggle.getAttribute('data-prep-toggle');
+      var panel = document.querySelector('[data-prep-panel="' + id + '"]');
+      if (!panel) return;
+      var open = !panel.classList.contains('open');
+      panel.classList.toggle('open', open);
+      toggle.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        panel.querySelectorAll('.prep-tracker-form').forEach(syncHelperBox);
+      }
     });
   });
 
-  // ---- Export today (client-side CSV of the prep board) ----
+  document.querySelectorAll('.prep-tracker-form').forEach(function (form) {
+    form.querySelectorAll('input[name="status"]').forEach(function (radio) {
+      radio.addEventListener('change', function () { syncHelperBox(form); });
+    });
+    syncHelperBox(form);
+  });
+
   var exportBtn = document.getElementById('prepExport');
   if (exportBtn) {
     exportBtn.addEventListener('click', function () {
-      var rows = [['Item', 'On hand', 'Selected', 'Status', 'Assignee']];
-      document.querySelectorAll('.prep-item-row').forEach(function (row) {
-        var name = (row.querySelector('.prep-item-name') || {}).textContent || '';
-        var ohEl = row.querySelector('.prep-oh-input');
-        var oh = ohEl ? ohEl.value : '';
-        var selected = row.classList.contains('selected') ? 'yes' : 'no';
-        var metaEl = row.querySelector('.prep-item-meta');
-        var meta = metaEl ? metaEl.textContent.replace(/\s+/g, ' ').trim() : '';
-        rows.push([name.trim(), oh, selected, meta, '']);
+      var rows = [['Item', 'On hand', 'Prep', 'Status', 'Assignee', 'Notes']];
+      document.querySelectorAll('.prep-item-block').forEach(function (block) {
+        var name = (block.querySelector('.prep-item-name') || {}).textContent || '';
+        var form = block.querySelector('.prep-tracker-form');
+        if (!form) return;
+        var status = form.querySelector('input[name="status"]:checked');
+        rows.push([
+          name.trim(),
+          (form.querySelector('input[name="on_hand"]') || {}).value || '',
+          (form.querySelector('input[name="prep_qty"]') || {}).value || '',
+          status ? status.value : '',
+          (form.querySelector('select[name="assignee_name"]') || {}).value || '',
+          (form.querySelector('textarea[name="notes"]') || {}).value || ''
+        ]);
       });
       var csv = rows.map(function (r) {
         return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
@@ -1230,31 +928,12 @@
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'prep-list-' + ('{{ selected_date }}' || 'day') + '.csv';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     });
   }
-
-  // ---- "Prep team today" 3-tab segmented control (#14) ----
-  // Pure show/hide of the .prep-tt-panel blocks; no network, no forms.
-  (function initTeamTabs() {
-    var tabs = Array.prototype.slice.call(document.querySelectorAll('.prep-tt-tab'));
-    if (!tabs.length) return;
-    var panels = Array.prototype.slice.call(document.querySelectorAll('.prep-tt-panel'));
-    function activate(key) {
-      tabs.forEach(function (t) {
-        var on = t.getAttribute('data-tt-tab') === key;
-        t.classList.toggle('active', on);
-        t.setAttribute('aria-selected', on ? 'true' : 'false');
-      });
-      panels.forEach(function (p) {
-        p.classList.toggle('active', p.getAttribute('data-tt-panel') === key);
-      });
-    }
-    tabs.forEach(function (t) {
-      t.addEventListener('click', function () { activate(t.getAttribute('data-tt-tab')); });
-    });
-  })();
 })();
 </script>
 {% endblock %}

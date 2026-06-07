@@ -2806,16 +2806,45 @@ class PrepEntry(Base):
 
     selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     on_hand: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prep_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
     assignee_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    helper_names: Mapped[str | None] = mapped_column(Text, nullable=True)
     # selected | assigned | in-progress | done
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="selected")
     batch_size: Mapped[str | None] = mapped_column(String(16), nullable=True)   # single | double
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     author_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
     item: Mapped["PrepItem"] = relationship()
+
+
+class PrepAuditLog(Base):
+    """Append-only audit events for Prep List changes. This feeds the
+    kitchen Developer tab without making the daily entry row carry every
+    historical action inline."""
+    __tablename__ = "kitchen_prep_audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("kitchen_prep_entry.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    prep_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("kitchen_prep_item.id", ondelete="SET NULL"),
+        nullable=True, index=True)
+    item_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    actor_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    action: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    details_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 # ============================================================

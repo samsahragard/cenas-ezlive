@@ -3083,6 +3083,86 @@ def _prep_recipe_name_map(db):
     return _NameMap()
 
 
+def _prep_actor_name(user):
+    if user is not None:
+        return (
+            getattr(user, "full_name", None)
+            or getattr(user, "name", None)
+            or getattr(user, "email", None)
+            or getattr(user, "phone", None)
+        )
+    return session.get("employee_name") or session.get("user_name") or "Unknown"
+
+
+def _prep_load_helpers(raw):
+    import json as _json
+    if not raw:
+        return []
+    try:
+        data = _json.loads(raw)
+    except Exception:
+        data = [p.strip() for p in str(raw).split(",")]
+    return [str(p).strip() for p in (data or []) if str(p).strip()]
+
+
+def _prep_dump_helpers(names):
+    import json as _json
+    clean = []
+    seen = set()
+    for name in names or []:
+        n = str(name or "").strip()[:120]
+        key = n.lower()
+        if n and key not in seen:
+            clean.append(n)
+            seen.add(key)
+    return _json.dumps(clean) if clean else None
+
+
+def _prep_log_event(db, entry, item, user, action, details=None):
+    """Append one Developer-tab audit row. Failures here should never block
+    the kitchen from saving the actual prep work."""
+    import json as _json
+    try:
+        from app.models import PrepAuditLog
+        db.add(PrepAuditLog(
+            entry_id=(entry.id if entry else None),
+            entry_date=(entry.entry_date if entry else date.today()),
+            store_scope=(entry.store_scope if entry else None),
+            prep_item_id=(item.id if item else None),
+            item_name=(item.name if item else None),
+            actor_user_id=(getattr(user, "id", None) if user else None),
+            actor_name=_prep_actor_name(user),
+            action=action,
+            details_json=_json.dumps(details or {}, default=str),
+        ))
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep audit log failed (non-fatal)")
+
+
+def _prep_status_label(status):
+    status = {"done": "completed", "in-progress": "partly",
+              "selected": "not-completed"}.get(status, status)
+    return {
+        "not-completed": "Not completed",
+        "partly": "Partly completed",
+        "completed": "Completed",
+        "not-needed": "Not needed",
+    }.get(status or "not-completed", "Not completed")
+
+
+def _prep_time_label(dt):
+    if not dt:
+        return None
+    return dt.strftime("%I:%M %p").lstrip("0")
+
+
+def _prep_datetime_label(dt):
+    if not dt:
+        return None
+    return f"{dt:%b} {dt.day}, {dt.year} {_prep_time_label(dt)}"
+
+
 def _parse_qty(s):
     """Parse a quantity like '12 CUPS', '1/2 BAG', '1 1/2 GALL', '2.5 LB'
     into (float_value, unit). Returns (None, original) if the leading
@@ -3222,7 +3302,7 @@ def _prep_total_ingredients(sel_views):
 
 def _render_prep_list_v3(db, label, active_key):
     """Prep List v3 board. ?date=<iso> picks the day (default today)."""
-    from app.models import PrepItem, PrepEntry
+    from app.models import PrepItem, PrepEntry, PrepAuditLog
     raw = request.args.get("date") or ""
     try:
         sel = date.fromisoformat(raw) if raw else date.today()
@@ -3230,6 +3310,13 @@ def _render_prep_list_v3(db, label, active_key):
         sel = date.today()
     today = date.today()
     loc = g.current_location
+    active_prep_tab = (request.args.get("tab") or "board").strip().lower()
+    if active_prep_tab not in ("board", "recent", "performance", "developer"):
+        active_prep_tab = "board"
+    try:
+        open_item_id = int(request.args.get("open") or 0)
+    except (TypeError, ValueError):
+        open_item_id = 0
 
     def _scoped(q, model):
         if loc in ("tomball", "copperfield"):
@@ -3280,11 +3367,16 @@ def _render_prep_list_v3(db, label, active_key):
             "kind": pi.kind,
             "selected": bool(e and e.selected),
             "on_hand": (e.on_hand if e else None),
+            "prep_qty": (e.prep_qty if e else None),
             "assignee": (e.assignee_name if e else None),
             "assignee_initials": _prep_initials(e.assignee_name) if (e and e.assignee_name) else None,
+            "helper_names": _prep_load_helpers(e.helper_names) if e else [],
             "status": status,
             "batch_size": (e.batch_size if e else None),
             "notes": (e.notes if e else None),
+            "completed_by": (e.completed_by_name if e else None),
+            "completed_at": (e.completed_at if e else None),
+            "completed_at_label": _prep_time_label(e.completed_at) if e else None,
             "recipe_id": rid,
             "recipe_name": (pi.name if rid else None),
             "yield_label": y, "prep_minutes": mins, "shelf_days": shelf,
@@ -3371,6 +3463,202 @@ def _render_prep_list_v3(db, label, active_key):
     except Exception:
         assignment_history = []
 
+    def _meaningful_entry(e):
+        st = {"done": "completed", "in-progress": "partly",
+              "selected": "not-completed"}.get(e.status, e.status)
+        return bool(
+            e.selected or e.on_hand is not None or e.prep_qty is not None
+            or e.assignee_name or e.helper_names or e.notes
+            or st in ("partly", "completed", "not-needed")
+        )
+
+    recent_entries = []
+    try:
+        recent_q = (
+            db.query(PrepEntry, PrepItem)
+            .join(PrepItem, PrepEntry.prep_item_id == PrepItem.id)
+            .filter(
+                PrepEntry.entry_date >= (sel - timedelta(days=14)),
+                PrepEntry.entry_date <= sel,
+            )
+        )
+        recent_rows = _scoped(recent_q, PrepEntry).order_by(
+            PrepEntry.entry_date.desc(), PrepEntry.updated_at.desc()).all()
+        for e, pi in recent_rows:
+            if not _meaningful_entry(e):
+                continue
+            st = {"done": "completed", "in-progress": "partly",
+                  "selected": "not-completed"}.get(e.status, e.status)
+            helpers = _prep_load_helpers(e.helper_names)
+            recent_entries.append({
+                "entry_id": e.id,
+                "item_id": pi.id,
+                "item": pi.name,
+                "date": e.entry_date.isoformat(),
+                "date_label": f"{e.entry_date:%a}, {e.entry_date:%b} {e.entry_date.day}",
+                "assignee": e.assignee_name,
+                "helpers": helpers,
+                "status": st or "not-completed",
+                "status_label": _prep_status_label(st),
+                "on_hand": e.on_hand,
+                "prep_qty": e.prep_qty,
+                "completed_by": e.completed_by_name or (
+                    e.assignee_name if st == "completed" else None),
+                "completed_at_label": _prep_time_label(e.completed_at),
+                "notes": e.notes,
+            })
+            if len(recent_entries) >= 60:
+                break
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep recent entries failed (non-fatal)")
+        recent_entries = []
+
+    performance_rows = []
+    try:
+        from app.models import AttendanceShift, Employee, Schedule, Shift
+        perf = {}
+
+        def _slot(name):
+            key = (name or "").strip()
+            if not key:
+                return None
+            return perf.setdefault(key, {
+                "name": key, "assigned": 0, "started": 0, "partly": 0,
+                "completed": 0, "helped": 0, "hours": 0.0,
+            })
+
+        for v in sel_views:
+            s = _slot(v.get("assignee"))
+            if s is not None:
+                s["assigned"] += 1
+                if (v.get("on_hand") is not None or v.get("prep_qty") is not None
+                        or v.get("notes")):
+                    s["started"] += 1
+                if v["status"] == "partly":
+                    s["partly"] += 1
+                if v["status"] == "completed":
+                    s["completed"] += 1
+            for helper in v.get("helper_names") or []:
+                hs = _slot(helper)
+                if hs is not None:
+                    hs["helped"] += 1
+
+        attn_q = db.query(AttendanceShift).filter(AttendanceShift.entry_date == sel)
+        attn_rows = _scoped(attn_q, AttendanceShift).all()
+        for sh in attn_rows:
+            s = _slot(sh.employee_name)
+            if s is None:
+                continue
+            start = sh.clock_in or sh.scheduled_start
+            end = sh.clock_out or sh.scheduled_end
+            if start and end and end > start:
+                s["hours"] += max((end - start).total_seconds() / 3600.0, 0.0)
+
+        day_start = datetime.combine(sel, datetime.min.time())
+        day_end = day_start + timedelta(days=1)
+        sched_q = (
+            db.query(Shift, Employee.full_name)
+            .join(Schedule, Shift.schedule_id == Schedule.id)
+            .join(Employee, Shift.employee_id == Employee.id)
+            .filter(
+                Shift.employee_id.isnot(None),
+                Shift.start_at >= day_start,
+                Shift.start_at < day_end,
+            )
+        )
+        if loc in ("tomball", "copperfield"):
+            sched_q = sched_q.filter(Schedule.store_key == loc)
+        for sh, emp_name in sched_q.all():
+            s = _slot(emp_name)
+            if s is None or s["hours"] > 0:
+                continue
+            mins = max((sh.end_at - sh.start_at).total_seconds() / 60.0, 0.0)
+            mins = max(mins - float(sh.break_minutes or 0), 0.0)
+            s["hours"] += mins / 60.0
+
+        for name in all_staff:
+            _slot(name)
+
+        for row in perf.values():
+            hours = row["hours"]
+            completion_rate = (
+                (row["completed"] / row["assigned"]) if row["assigned"] else 0.0
+            )
+            productivity = (row["completed"] / hours) if hours else 0.0
+            row["hours_label"] = f"{hours:.1f}".rstrip("0").rstrip(".")
+            row["completion_rate"] = int(round(completion_rate * 100))
+            row["productivity_label"] = f"{productivity:.2f}".rstrip("0").rstrip(".")
+            performance_rows.append(row)
+        performance_rows.sort(
+            key=lambda r: (-r["completed"], -r["partly"], r["name"].lower()))
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep performance rows failed (non-fatal)")
+        performance_rows = []
+
+    developer_events = []
+    developer_entries = []
+    try:
+        import json as _json
+        audit_q = db.query(PrepAuditLog).filter(
+            PrepAuditLog.entry_date >= (sel - timedelta(days=30)))
+        audit_rows = _scoped(audit_q, PrepAuditLog).order_by(
+            PrepAuditLog.created_at.desc()).limit(120).all()
+        for a in audit_rows:
+            try:
+                details = _json.loads(a.details_json) if a.details_json else {}
+            except Exception:
+                details = {"raw": a.details_json}
+            developer_events.append({
+                "at": _prep_datetime_label(a.created_at),
+                "date": a.entry_date.isoformat(),
+                "actor": a.actor_name or "Unknown",
+                "action": a.action,
+                "item": a.item_name or "Item",
+                "details": details,
+            })
+
+        dev_q = (
+            db.query(PrepEntry, PrepItem)
+            .join(PrepItem, PrepEntry.prep_item_id == PrepItem.id)
+            .filter(
+                PrepEntry.entry_date >= (sel - timedelta(days=14)),
+                PrepEntry.entry_date <= sel,
+            )
+        )
+        for e, pi in _scoped(dev_q, PrepEntry).order_by(
+                PrepEntry.updated_at.desc()).limit(120).all():
+            if not _meaningful_entry(e):
+                continue
+            st = {"done": "completed", "in-progress": "partly",
+                  "selected": "not-completed"}.get(e.status, e.status)
+            developer_entries.append({
+                "date": e.entry_date.isoformat(),
+                "item": pi.name,
+                "status": _prep_status_label(st),
+                "on_hand": e.on_hand,
+                "prep_qty": e.prep_qty,
+                "assignee": e.assignee_name,
+                "helpers": _prep_load_helpers(e.helper_names),
+                "created": _prep_datetime_label(e.created_at),
+                "updated": _prep_datetime_label(e.updated_at),
+                "completed_by": e.completed_by_name,
+                "completed_at": _prep_datetime_label(e.completed_at),
+            })
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep developer rows failed (non-fatal)")
+        developer_events = []
+        developer_entries = []
+
+    prep_tabs = [
+        {"key": "board", "label": "Prep Board"},
+        {"key": "recent", "label": "Recent Date"},
+        {"key": "performance", "label": "Performance"},
+        {"key": "developer", "label": "Developer"},
+    ]
+
     return render_template(
         "prep_list.html",
         page_label=label, active=active_key,
@@ -3379,6 +3667,13 @@ def _render_prep_list_v3(db, label, active_key):
         assigned_today=assigned_today, today_status=today_status,
         total_ingredients=total_ingredients,
         assignment_history=assignment_history,
+        active_prep_tab=active_prep_tab,
+        prep_tabs=prep_tabs,
+        open_item_id=open_item_id,
+        recent_entries=recent_entries,
+        performance_rows=performance_rows,
+        developer_events=developer_events,
+        developer_entries=developer_entries,
         locked=locked, lock_author=None, lock_hours=None,
         selected_date=sel.isoformat(), today_iso=today.isoformat(),
         prev_date=(sel - timedelta(days=1)).isoformat(),
@@ -3417,9 +3712,19 @@ def _prep_list_v3_post(db, store_scope, user):
         if e is None and create:
             e = PrepEntry(entry_date=d, prep_item_id=item_id,
                           store_scope=store_scope, author_id=uid,
-                          status="selected", selected=False)
+                          status="not-completed", selected=False)
             db.add(e)
+            db.flush()
         return e
+
+    def _parse_nonneg_int(field):
+        raw = (request.form.get(field) or "").strip()
+        if raw == "":
+            return None
+        try:
+            return max(0, min(int(raw), 9999))
+        except (TypeError, ValueError):
+            return None
 
     # submit_lock / copy_yesterday operate on the whole day, not one item.
     if action == "submit_lock":
@@ -3427,6 +3732,9 @@ def _prep_list_v3_post(db, store_scope, user):
             if loc in ("tomball", "copperfield") and e.store_scope not in (loc, None):
                 continue
             e.locked = True
+            _prep_log_event(db, e, e.item, user, "submitted", {
+                "locked": True,
+            })
         db.commit()
         return
 
@@ -3440,8 +3748,11 @@ def _prep_list_v3_post(db, store_scope, user):
             e = _entry_for(src.prep_item_id)
             if e and not e.locked:
                 e.selected = True
-                if e.status == "selected":
-                    e.status = "selected"
+                if e.status in ("selected", None):
+                    e.status = "not-completed"
+                _prep_log_event(db, e, e.item, user, "copied", {
+                    "from_date": prev.isoformat(),
+                })
         db.commit()
         return
 
@@ -3453,34 +3764,49 @@ def _prep_list_v3_post(db, store_scope, user):
     e = _entry_for(item_id)
     if e is None or e.locked:
         return
+    pi = e.item or db.get(PrepItem, item_id)
 
     if action == "toggle_select":
         e.selected = not e.selected
         if not e.selected:
             e.status = "not-completed"
+        _prep_log_event(db, e, pi, user, "selected" if e.selected else "unselected", {
+            "selected": e.selected,
+        })
 
     elif action == "set_on_hand":
-        raw = (request.form.get("on_hand") or "").strip()
-        if raw == "":
-            e.on_hand = None
-        else:
-            try:
-                e.on_hand = max(0, min(int(raw), 999))
-            except (TypeError, ValueError):
-                pass
+        e.on_hand = _parse_nonneg_int("on_hand")
+        _prep_log_event(db, e, pi, user, "on_hand", {
+            "on_hand": e.on_hand,
+        })
 
     elif action == "assign":
         name = (request.form.get("assignee_name") or "").strip()[:120]
         e.assignee_name = name or None
         if name:
             e.selected = True
+        _prep_log_event(db, e, pi, user, "assigned", {
+            "assignee": e.assignee_name,
+        })
 
     elif action == "set_status":
         st = (request.form.get("status") or "not-completed").strip()
         if st in ("not-completed", "partly", "completed", "not-needed"):
+            old_status = e.status
             e.status = st
             if st in ("partly", "completed"):
                 e.selected = True
+            if st == "completed":
+                e.completed_by_name = _prep_actor_name(user)
+                e.completed_at = datetime.utcnow()
+            elif old_status == "completed":
+                e.completed_by_name = None
+                e.completed_at = None
+            _prep_log_event(db, e, pi, user,
+                            "completed" if st == "completed" else "status", {
+                                "from": old_status,
+                                "to": st,
+                            })
 
     elif action == "save_detail":
         if "batch_size" in request.form:
@@ -3489,6 +3815,54 @@ def _prep_list_v3_post(db, store_scope, user):
         if "notes" in request.form:
             e.notes = (request.form.get("notes") or "").strip() or None
         e.selected = True
+        _prep_log_event(db, e, pi, user, "detail", {
+            "batch_size": e.batch_size,
+            "notes": bool(e.notes),
+        })
+
+    elif action == "save_tracker":
+        old = {
+            "status": e.status,
+            "on_hand": e.on_hand,
+            "prep_qty": e.prep_qty,
+            "assignee": e.assignee_name,
+            "helpers": _prep_load_helpers(e.helper_names),
+            "notes": bool(e.notes),
+        }
+        e.selected = True
+        e.on_hand = _parse_nonneg_int("on_hand")
+        e.prep_qty = _parse_nonneg_int("prep_qty")
+        e.assignee_name = (request.form.get("assignee_name") or "").strip()[:120] or None
+        helper_names = request.form.getlist("helper_names")
+        if not helper_names:
+            helper_names = [
+                n.strip() for n in (request.form.get("helper_names_text") or "").split(",")
+                if n.strip()
+            ]
+        e.helper_names = _prep_dump_helpers(helper_names)
+        st = (request.form.get("status") or "not-completed").strip()
+        if st not in ("not-completed", "partly", "completed"):
+            st = "not-completed"
+        e.status = st
+        e.notes = (request.form.get("notes") or "").strip() or None
+        if st == "completed":
+            e.completed_by_name = _prep_actor_name(user)
+            e.completed_at = datetime.utcnow()
+        else:
+            e.completed_by_name = None
+            e.completed_at = None
+        _prep_log_event(db, e, pi, user,
+                        "completed" if st == "completed" else "updated", {
+                            "from": old,
+                            "to": {
+                                "status": e.status,
+                                "on_hand": e.on_hand,
+                                "prep_qty": e.prep_qty,
+                                "assignee": e.assignee_name,
+                                "helpers": _prep_load_helpers(e.helper_names),
+                                "notes": bool(e.notes),
+                            },
+                        })
 
     db.commit()
 
@@ -4771,9 +5145,17 @@ def kitchen_prep_list_post():
         _prep_list_v3_post(db, store_scope, user)
     finally:
         db.close()
-    return redirect(url_for(
-        "store.kitchen_prep_list",
-        date=(request.form.get("view_date") or None)))
+    redirect_args = {}
+    view_date = request.form.get("view_date") or None
+    if view_date:
+        redirect_args["date"] = view_date
+    tab = (request.form.get("active_tab") or "board").strip().lower()
+    if tab in ("board", "recent", "performance", "developer"):
+        redirect_args["tab"] = tab
+    open_item = (request.form.get("open_item_id") or request.form.get("item_id") or "").strip()
+    if open_item and tab == "board":
+        redirect_args["open"] = open_item
+    return redirect(url_for("store.kitchen_prep_list", **redirect_args))
 
 
 @store_bp.route("/kitchen/<page>", methods=["GET"])

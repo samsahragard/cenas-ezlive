@@ -1170,38 +1170,61 @@ def create_app():
     # rendering); PrepEntry = per-item-per-day working row. Additive.
     try:
         from sqlalchemy import inspect as _sa_insp_pl
+        from sqlalchemy import text as _sa_text_pl
         from app.db import engine as _eng_pl, SessionLocal as _SL_pl
         from app.models import (
             Base as _Base_pl, PrepItem as _PI_pl, PrepEntry as _PE_pl,
+            PrepAuditLog as _PAL_pl,
         )
         if _eng_pl is not None:
             insp_pl = _sa_insp_pl(_eng_pl)
             existing = set(insp_pl.get_table_names())
-            to_create = [m.__table__ for m in (_PI_pl, _PE_pl)
+            to_create = [m.__table__ for m in (_PI_pl, _PE_pl, _PAL_pl)
                          if m.__tablename__ not in existing]
             if to_create:
                 _Base_pl.metadata.create_all(bind=_eng_pl, tables=to_create)
                 logging.getLogger(__name__).info(
                     "prep list v3: created %d tables (%s)",
                     len(to_create), [t.name for t in to_create])
+            if "kitchen_prep_entry" in set(insp_pl.get_table_names()):
+                _entry_cols_pl = {
+                    c["name"] for c in insp_pl.get_columns("kitchen_prep_entry")
+                }
+                _entry_additions_pl = [
+                    ("prep_qty", "INTEGER"),
+                    ("helper_names", "TEXT"),
+                    ("completed_by_name", "VARCHAR(120)"),
+                    ("completed_at", "TIMESTAMP"),
+                ]
+                _added_entry_cols_pl = []
+                with _eng_pl.begin() as conn:
+                    for _col_pl, _ddl_pl in _entry_additions_pl:
+                        if _col_pl not in _entry_cols_pl:
+                            conn.execute(_sa_text_pl(
+                                f"ALTER TABLE kitchen_prep_entry ADD COLUMN {_col_pl} {_ddl_pl}"))
+                            _added_entry_cols_pl.append(_col_pl)
+                if _added_entry_cols_pl:
+                    logging.getLogger(__name__).info(
+                        "prep list v3: backfilled entry columns %s",
+                        _added_entry_cols_pl)
             _prep_seed = [
                 ("hot", "item", ["Masa Flour", "Charros", "Refried",
                     "Black Bean", "Costillas", "Cochina", "Taco Meat",
                     "Pollo Ranchero", "Chicken Stock", "Mexican Butter",
-                    "Vegetales", "Charro Mix", "Spinach Mix"]),
+                    "Vegetales", "Charro Mix", "Spinach Mix", "Empanadas"]),
                 ("hot", "sauce", ["Seafood Sauce", "Tomatillo Mix",
                     "Tomatillo Sauce", "Ranchera Sauce", "Poblano Sauce",
                     "Street Taco Sauce", "BBQ Sauce", "Chile Con Queso",
                     "Chile Gravy", "Chips"]),
                 ("cold", "item", ["Salad Mix", "Shredded Lettuce",
-                    "Cabbage Mix", "Pickled Onions"]),
+                    "Cabbage Mix", "Pickled Onions", "Salad Shrimp"]),
                 ("cold", "sauce", ["Roja", "Verde", "Ranch",
                     "Avocado Ranch", "Honey Mustard",
                     "Beef Fajita Marination", "Chipotle Mayo",
                     "Chipotle Cream", "Cilantro Ginger"]),
                 ("chop", "item", ["Cebolla de Parrilla", "Cebolla Pelado",
                     "Onions Chop", "Bell Pepper", "Enchilada Cheese",
-                    "Queso Fresco", "Poblano", "Mango"]),
+                    "Queso Fresco", "Poblano", "Mango", "Jalapenos"]),
             ]
             _db_pl = _SL_pl()
             try:
@@ -1215,6 +1238,39 @@ def create_app():
                     _db_pl.commit()
                     logging.getLogger(__name__).info(
                         "prep list v3: seeded %d master items", _so)
+                else:
+                    _existing_keys_pl = {
+                        (
+                            (_row.name or "").strip().lower(),
+                            (_row.category or "").strip().lower(),
+                            (_row.kind or "").strip().lower(),
+                            _row.store_scope,
+                        )
+                        for _row in _db_pl.query(_PI_pl).all()
+                    }
+                    _max_so_pl = max(
+                        [
+                            _row.sort_order or 0
+                            for _row in _db_pl.query(_PI_pl.sort_order).all()
+                        ] or [0])
+                    _inserted_pl = 0
+                    for _cat_pl, _kind_pl, _names_pl in _prep_seed:
+                        for _nm_pl in _names_pl:
+                            _key_pl = (
+                                _nm_pl.strip().lower(), _cat_pl, _kind_pl, None)
+                            if _key_pl in _existing_keys_pl:
+                                continue
+                            _max_so_pl += 1
+                            _db_pl.add(_PI_pl(
+                                name=_nm_pl, category=_cat_pl, kind=_kind_pl,
+                                sort_order=_max_so_pl))
+                            _existing_keys_pl.add(_key_pl)
+                            _inserted_pl += 1
+                    if _inserted_pl:
+                        _db_pl.commit()
+                        logging.getLogger(__name__).info(
+                            "prep list v3: inserted %d missing master items",
+                            _inserted_pl)
             finally:
                 _db_pl.close()
     except Exception:

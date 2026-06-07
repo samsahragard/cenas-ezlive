@@ -34,7 +34,8 @@ from app.models import (CANONICAL_POSITIONS, CenaToastLink, Employee,
                         EmployeeStoreAssignment, EmployeeUnavailabilityBlock,
                         Position, User)
 from app.web.permissions import current_user_id, require_level
-from app.web.schedules_v2 import _MGR, _store
+from app.web.schedules_v2 import (_MGR, _store, _highest_section_role,
+                                 apply_section_placement_to_user)
 from app.web.store_routes import store_bp
 
 
@@ -338,10 +339,18 @@ def sv2_employee_assign(emp_id):
         # identical to sv2_employee_add (schedules_v2.py:147-172). REMOVE is not
         # rank-gated: a manager clearing a stale assignment shouldn't be blocked
         # by their own rank, and remove only deletes existing rows.
+        # S5 SECTION-SCOPED assign: the FE may send an explicit 'section'
+        # ('management'|'hourly'|'driver'); if absent we derive it from the ADD
+        # positions. A mixed ADD (management + hourly in one call) is rejected.
+        req_section = (data.get("section") or "").strip().lower() or None
+        if req_section is not None and req_section not in ("management", "hourly", "driver"):
+            return jsonify({"ok": False, "error": "Unknown section: %s." % req_section}), 400
+
         add_pids = list(dict.fromkeys([p for (p, _s) in add_pairs]))
         valid_pids = set()
         if add_pids:
             from app.services.permission_catalog import addable_roles, position_role
+            from app.services.role_buckets import section_for_position
             _canon_lc = {c.lower() for c in CANONICAL_POSITIONS}
             found = {p.id: p for p in
                      db.query(Position).filter(Position.id.in_(add_pids)).all()}
@@ -350,14 +359,37 @@ def sv2_employee_assign(emp_id):
                     valid_pids.add(pid)
             if [pid for pid in add_pids if pid not in valid_pids]:
                 return jsonify({"ok": False, "error": "Unknown or non-canonical position(s)."}), 400
+            _valid_names = [p.name for pid, p in found.items() if pid in valid_pids]
+            # Section-consistency: all ADD positions in ONE section (skip tier-
+            # above / no-section positions: partner/corporate/Expo).
+            _pos_sections = {section_for_position(nm) for nm in _valid_names}
+            _pos_sections.discard(None)
+            if len(_pos_sections) > 1:
+                return jsonify({"ok": False,
+                                "error": "One assign is one section - don't mix %s."
+                                         % " + ".join(sorted(_pos_sections))}), 400
+            derived_section = next(iter(_pos_sections), None)
+            if req_section is not None and derived_section is not None and req_section != derived_section:
+                return jsonify({"ok": False,
+                                "error": "Positions are %s, not %s." % (derived_section, req_section)}), 400
+            section = req_section or derived_section
+            # Rank-gate (strictly-below-rank) tightened by section: each ADD
+            # position's role must be addable AND -- when a section is in play --
+            # within that section tier (role_buckets).
             _allowed = addable_roles(getattr(db.get(User, current_user_id()), "permission_level", None))
-            _over = sorted({p.name for pid, p in found.items()
-                            if pid in valid_pids
-                            and position_role(p.name) and position_role(p.name) not in _allowed})
+            _over = sorted({nm for nm in _valid_names
+                            if position_role(nm) and position_role(nm) not in _allowed})
             if _over:
                 return jsonify({"ok": False,
                                 "error": "Your role can only assign positions below your own - not: %s."
                                          % ", ".join(_over)}), 403
+            if section is not None:
+                _wrong = sorted({nm for nm in _valid_names
+                                 if section_for_position(nm) not in (None, section)})
+                if _wrong:
+                    return jsonify({"ok": False,
+                                    "error": "Positions outside the %s section: %s."
+                                             % (section, ", ".join(_wrong))}), 400
 
         # REMOVE first, then ADD (so a same-pair remove+add nets to present).
         for (pid, sk) in dict.fromkeys(rem_pairs):
@@ -380,8 +412,19 @@ def sv2_employee_assign(emp_id):
                 db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
                 have_stores.add(sk)
 
+        # S5 PLACEMENT->PERMISSION: flush the new EmployeePosition/Assignment rows
+        # so the derivation reads the post-assign state, then push the derived
+        # permission_level + store_scope onto the linked User (no-op if there is
+        # none -- a pure scheduling employee). The tier GUARDS run inside
+        # apply_section_placement_to_user; a violation -> clean 4xx, not a 500.
+        from app.services import tier_invariants as ti
         try:
+            db.flush()
+            apply_section_placement_to_user(db, emp, db.get(User, current_user_id()))
             db.commit()
+        except ti.TierInvariantError as e:
+            db.rollback()
+            return jsonify({"ok": False, "error": str(e)}), 409
         except IntegrityError:
             # concurrent manager raced us on a unique constraint -> row exists
             # either way; re-read the resulting state below.

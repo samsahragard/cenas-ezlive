@@ -300,6 +300,17 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
                   "transcripts.search", "transcripts.read"},
     "bartender": {"ai.ask_claude_personal", "ai.view_transcripts",
                   "transcripts.search", "transcripts.read"},
+    # S6b uniformity (ck, 2026-06-07): cashier + well were the two hourly
+    # roles MISSING from this dict while the other five carried the self-only
+    # baseline — _user_has resolved them to set() (deny-all) rather than the
+    # self-only surface. Added here with EXACTLY the same self-only baseline so
+    # all seven hourly roles are identical and self-only (own profile + own
+    # rank; the personal-AI + transcripts tags read only the actor's own data,
+    # grant no roster/admin/labor/sales reach).
+    "cashier":   {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
+    "well":      {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
 
     # Schedules V2 / Block 1 (Sam #1742). The employee scheduling identity
     # (Tier-5). V2 scope tags are forward-declared here; the V2 routes get

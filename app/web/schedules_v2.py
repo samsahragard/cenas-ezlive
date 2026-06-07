@@ -65,6 +65,140 @@ def _dt(s):
     return datetime.fromisoformat(s) if s else None
 
 
+# ==========================================================================
+# S5 -- PLACEMENT drives PERMISSION (Sam team-roster store-split).
+# When a manager adds/assigns someone into a (store, section), the SAME action
+# that writes EmployeePosition(store_key)+EmployeeStoreAssignment also pushes the
+# derived permission onto the linked User: permission_level = the highest-rank
+# section role the person holds, store_scope = derived from their store-assignment
+# set. This keeps PLACEMENT (the roster) and PERMISSION (require_level / the
+# permission catalog) from drifting -- one write, one source of truth.
+#
+# These helpers are PURE over (db, employee) -- no Flask request state -- so the
+# new test exercises them directly without standing up create_app. They are
+# imported by schedules_v2_roster.py (which already pulls _MGR/_store from here).
+# ==========================================================================
+def _section_of_position_name(name):
+    """The per-store SECTION ('management'|'hourly'|'driver'|None) for a canonical
+    position NAME, via role_buckets. None = tier-above (partner/corporate),
+    Expo/driver-access (no scheduling role), or unknown. Never raises."""
+    from app.services.role_buckets import section_for_position
+    return section_for_position(name)
+
+
+def _highest_section_role(position_names):
+    """The permission_catalog ROLE key with the HIGHEST ROLE_RANK among the given
+    canonical position names that map to a SECTION (management/hourly/driver).
+
+    Positions whose role is tier-above (partner/corporate -> section None) or that
+    have no scheduling role (Expo, unknown) are ignored -- they never become the
+    derived permission_level here (partner/corporate are set through the Team
+    admin path + guarded separately). Ties break on the role key for determinism.
+    Returns the role key (str) or None when no position maps to a section."""
+    from app.services.permission_catalog import ROLE_RANK, position_role
+    from app.services.role_buckets import section_for_position
+    best_role = None
+    best_rank = None
+    for nm in position_names:
+        if section_for_position(nm) is None:
+            continue  # tier-above / no-section position -> never the derived level
+        role = position_role(nm)
+        if not role:
+            continue
+        rank = ROLE_RANK.get(role)
+        if rank is None:
+            continue
+        if best_rank is None or rank > best_rank or (rank == best_rank and role < best_role):
+            best_role, best_rank = role, rank
+    return best_role
+
+
+def _derive_store_scope(store_keys, level):
+    """Derive User.store_scope from an employee's EmployeeStoreAssignment set.
+
+    Convention (matches team_routes._parse_role_form + the User model):
+      * partner / corporate -> NULL (they span every store implicitly).
+      * single store         -> that store key ('tomball' | 'copperfield').
+      * multiple stores       -> the sorted CSV ('copperfield,tomball').
+      * no stores             -> NULL (nothing to scope to).
+    Only the two canonical stores are considered; unknown keys are dropped."""
+    if level in ("partner", "corporate"):
+        return None
+    keys = sorted({(s or "").strip().lower() for s in store_keys
+                   if (s or "").strip().lower() in ("tomball", "copperfield")})
+    if not keys:
+        return None
+    if len(keys) == 1:
+        return keys[0]
+    return ",".join(keys)
+
+
+def _employee_position_names(db, emp_id):
+    """The canonical position NAMES an employee currently holds (across stores),
+    de-duped. Reads EmployeePosition -> Position.name; non-canonical (Sling junk)
+    rows are dropped so they never drive the derived permission level."""
+    rows = db.query(EmployeePosition).filter_by(employee_id=emp_id).all()
+    pids = {r.position_id for r in rows}
+    if not pids:
+        return []
+    names = []
+    for p in db.query(Position).filter(Position.id.in_(pids)).all():
+        if _is_canonical_position(p.name):
+            names.append(p.name)
+    return names
+
+
+def _employee_store_keys(db, emp_id):
+    """The set of store keys an employee is assigned to (the scope basis)."""
+    return {a.store_key for a in
+            db.query(EmployeeStoreAssignment).filter_by(employee_id=emp_id).all()}
+
+
+def apply_section_placement_to_user(db, emp, actor):
+    """Push the employee's DERIVED placement onto their linked User (if any).
+
+    Reads the employee's current canonical positions + store assignments (the
+    rows the add/assign endpoint just wrote), derives permission_level (highest
+    section role) + store_scope, runs the tier GUARDS, and writes both onto the
+    linked User. No-op when:
+      * the employee has no linked User (invite/setup pending) -- the role is
+        carried by the EmployeePosition rows themselves and applied to the User
+        when it is created/linked (backfill_manager_positions /
+        backfill_user_links at boot); we do NOT invent a parallel store here.
+      * no position maps to a section (nothing to derive).
+
+    GUARDS (tier_invariants): a derived partner is gated through
+    assert_partner_change_allowed(create/promote); a derived corporate must span
+    both stores (assert_corporate_both_stores). A TierInvariantError propagates to
+    the caller, which turns it into a clean 4xx (NOT a 500). Does NOT commit --
+    the caller owns the transaction. Returns the derived (level, store_scope) or
+    (None, None) when nothing was applied."""
+    if emp is None or getattr(emp, "user_id", None) is None:
+        return (None, None)
+    names = _employee_position_names(db, emp.id)
+    level = _highest_section_role(names)
+    if level is None:
+        return (None, None)
+    scope = _derive_store_scope(_employee_store_keys(db, emp.id), level)
+
+    from app.services import tier_invariants as ti
+    user = db.get(User, emp.user_id)
+    if user is None:
+        return (None, None)
+    # GUARD partner: only the two pinned identities may BECOME a partner. We pass
+    # a target carrying the candidate level + the user's email so the allow-list
+    # check (keyed by email) runs; promoting to partner from a lower level is a
+    # 'promote'.
+    if level == "partner" and (user.permission_level or "").strip().lower() != "partner":
+        ti.assert_partner_change_allowed(actor, user, "promote")
+    # GUARD corporate: a corporate user must span both stores (store_scope NULL).
+    if level == "corporate":
+        ti.assert_corporate_both_stores({"permission_level": "corporate", "store_scope": scope})
+    user.permission_level = level
+    user.store_scope = scope
+    return (level, scope)
+
+
 @store_bp.route("/schedules-v2/employees/add", methods=["POST"])
 @require_level(_MGR)
 def sv2_employee_add():
@@ -132,6 +266,15 @@ def sv2_employee_add():
     if not store_keys:
         return jsonify({"ok": False, "error": "Pick at least one store so they are schedulable."}), 400
 
+    # S5 SECTION-SCOPED add: the FE may send an explicit 'section'
+    # ('management'|'hourly'|'driver'); if absent we DERIVE it from the chosen
+    # positions below. A mixed add (management + hourly positions in one call) is
+    # rejected -- one +Add is one section (Sam team-roster split). Normalized here;
+    # validated against the positions inside the DB block (needs the names).
+    req_section = (data.get("section") or "").strip().lower() or None
+    if req_section is not None and req_section not in ("management", "hourly", "driver"):
+        return jsonify({"ok": False, "error": "Unknown section: %s." % req_section}), 400
+
     db = SessionLocal()
     try:
         # Email is the login identity (login + invite key off it), so it must be
@@ -155,24 +298,70 @@ def sv2_employee_add():
             if [pid for pid in position_ids if pid not in valid_pids]:
                 return jsonify({"ok": False, "error": "Unknown or non-canonical position(s)."}), 400
 
-        # Rank-gate (Sam #2381 / #2404): a manager adds only roles STRICTLY BELOW
-        # their own rank - map each chosen canonical position to its permissions
-        # role and reject any the adder ties or outranks. Authoritative server
-        # check (the +Add dropdown is rank-filtered FE-side too). GM/KM/Corp-Chef
-        # are peers (a GM can't add a KM); Asst-KM/FOH-Mgr are peers; partner +
-        # corporate are the only tiers that add GM/KM/Corp-Chef.
+        # The canonical names of the validated positions (used by both the
+        # section-consistency check + the rank-gate below).
+        _valid_names = [p.name for p in
+                        db.query(Position).filter(Position.id.in_(valid_pids)).all()]
+
+        # S5 SECTION-SCOPED: every chosen position must belong to the SAME section
+        # (no mixing management + hourly in one +Add). Positions with a real
+        # section (management/hourly/driver) are checked; tier-above / no-section
+        # positions (partner/corporate/Expo) carry no section and are skipped here
+        # (partner/corporate flow through Team admin + the tier guards). If the FE
+        # sent an explicit 'section' it must match; else we derive it.
+        from app.services.role_buckets import section_for_position
+        _pos_sections = {section_for_position(nm) for nm in _valid_names}
+        _pos_sections.discard(None)
+        if len(_pos_sections) > 1:
+            return jsonify({"ok": False,
+                            "error": "One +Add is one section - don't mix %s."
+                                     % " + ".join(sorted(_pos_sections))}), 400
+        derived_section = next(iter(_pos_sections), None)
+        if req_section is not None and derived_section is not None and req_section != derived_section:
+            return jsonify({"ok": False,
+                            "error": "Positions are %s, not %s." % (derived_section, req_section)}), 400
+        section = req_section or derived_section
+
+        # Rank-gate (Sam #2381 / #2404 + S5 section-tightening): a manager adds
+        # only roles STRICTLY BELOW their own rank AND within the chosen section
+        # tier. addable_roles() already encodes the strictly-below-rank rule; we
+        # additionally require each chosen position's role to sit in `section`
+        # (via role_buckets) so a manager can't slip a same-section higher tier in.
+        # Authoritative server check (the +Add dropdown is rank+section-filtered
+        # FE-side too). partner + corporate are the only tiers that add GM/KM/
+        # Corp-Chef.
         from app.services.permission_catalog import addable_roles, position_role
         _allowed = addable_roles(getattr(db.get(User, current_user_id()), "permission_level", None))
-        _over = sorted({p.name for p in
-                        db.query(Position).filter(Position.id.in_(valid_pids)).all()
-                        if position_role(p.name) and position_role(p.name) not in _allowed})
+        _over = sorted({nm for nm in _valid_names
+                        if position_role(nm) and position_role(nm) not in _allowed})
         if _over:
             return jsonify({"ok": False,
                             "error": "Your role can only add positions below your own - not: %s."
                                      % ", ".join(_over)}), 403
+        # Section-tier mismatch: a chosen position whose section differs from the
+        # add's section (only possible when the FE forced a section that some
+        # position contradicts -- the consistency check above already blocks the
+        # cross-section mix, so this is the belt for a single-position forced add).
+        if section is not None:
+            _wrong = sorted({nm for nm in _valid_names
+                             if section_for_position(nm) not in (None, section)})
+            if _wrong:
+                return jsonify({"ok": False,
+                                "error": "Positions outside the %s section: %s."
+                                         % (section, ", ".join(_wrong))}), 400
 
         emp = Employee(full_name=full_name, email=email, phone=phone, active=True)
         db.add(emp)
+        # S5 PLACEMENT->PERMISSION: a brand-new +Add employee has NO linked User
+        # yet (the User is created later via Team admin and linked, or the boot
+        # backfill links it). So apply_section_placement_to_user is a NO-OP here
+        # (user_id is None) -- the derived role is carried by the EmployeePosition
+        # rows we write below, and backfill_manager_positions / backfill_user_links
+        # set the User's permission_level from those rows when the User appears. We
+        # still run the tier GUARD on the DERIVED level so a management +Add that
+        # would imply a partner/corporate placement is rejected up front (clean
+        # 4xx, never a 500) rather than silently creating an unguarded row.
+        from app.services import tier_invariants as ti
         try:
             db.flush()
             for sk in dict.fromkeys(store_keys):       # multi-store (Sam #2315), de-duped
@@ -184,7 +373,23 @@ def sv2_employee_add():
                          else [(p, s) for p in valid_pids for s in store_keys])
             for (pid, sk) in dict.fromkeys(_ep_pairs):
                 db.add(EmployeePosition(employee_id=emp.id, position_id=pid, store_key=sk))
+            # Derive the placement permission from the just-written positions +
+            # stores, run the tier guards, and -- if a User is somehow already
+            # linked (re-add of an existing identity) -- write it onto the User.
+            derived_level = _highest_section_role(_valid_names)
+            if derived_level == "partner":
+                ti.assert_partner_change_allowed(
+                    db.get(User, current_user_id()), {"email": email}, "create")
+            if derived_level == "corporate":
+                ti.assert_corporate_both_stores(
+                    {"permission_level": "corporate",
+                     "store_scope": _derive_store_scope(store_keys, derived_level)})
+            apply_section_placement_to_user(
+                db, emp, db.get(User, current_user_id()))
             db.commit()
+        except ti.TierInvariantError as e:
+            db.rollback()
+            return jsonify({"ok": False, "error": str(e)}), 409
         except Exception:
             db.rollback()
             return jsonify({"ok": False,

@@ -42,9 +42,12 @@ import pytest
 from app.services.permissions import ROLE_PERMISSIONS, _user_has
 
 
-# The five hourly-tier roles (role_buckets => SECTION_HOURLY on the catalog
+# The seven hourly-tier roles (role_buckets => SECTION_HOURLY on the catalog
 # side; here we name the ROLE_PERMISSIONS keys that exist as hourly identities).
-HOURLY_ROLES = ("cook", "server", "busser", "host", "bartender")
+# cashier + well joined the explicit list under S6b uniformity (2026-06-07):
+# they were the two hourly roles missing from ROLE_PERMISSIONS and now carry
+# the identical self-only baseline as the other five.
+HOURLY_ROLES = ("cook", "server", "busser", "host", "bartender", "cashier", "well")
 
 # The exact self-only surface an hourly role may hold: the personal-AI +
 # transcripts baseline. These tags read ONLY the acting user's own data; none

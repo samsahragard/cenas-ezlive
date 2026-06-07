@@ -693,6 +693,60 @@ def sv2_shift_bulk_copy():
         db.close()
 
 
+@store_bp.route("/schedules-v2/shifts/copy-to-date", methods=["POST"])
+@require_level(_MGR)
+def sv2_shift_copy_to_date():
+    """Phase 2e: copy the multi-selected shifts onto a target DAY in the same store,
+    keeping each shift's clock time + duration. Copies land HOLLOW (published_at=None)
+    so employees can't see them until (re)published. Options: `unassign` -> the copies
+    are open/unassigned; `skip_checks` -> bypass the B7 approved-time-off guard (else a
+    conflicting copy is brought over UNASSIGNED so coverage is preserved rather than
+    dropped, mirroring bulk-copy). Same-store guard per shift."""
+    data = request.get_json(silent=True) or {}
+    shift_ids = data.get("shift_ids") or []
+    target = (data.get("target_date") or "").strip()
+    unassign = bool(data.get("unassign"))
+    skip_checks = bool(data.get("skip_checks"))
+    if not shift_ids or not target:
+        return jsonify({"ok": False, "error": "shift_ids + target_date required"}), 400
+    try:
+        tdate = _date.fromisoformat(target)
+    except ValueError:
+        return jsonify({"ok": False, "error": "target_date must be YYYY-MM-DD"}), 400
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        copied = skipped = opened_for_timeoff = 0
+        for sid in shift_ids:
+            sh = _shift_in_store(db, sid)  # same-store guard; foreign/unknown -> skip
+            if sh is None or sh.start_at is None or sh.end_at is None:
+                skipped += 1
+                continue
+            new_start = datetime.combine(tdate, sh.start_at.time())
+            new_end = new_start + (sh.end_at - sh.start_at)  # preserve duration (overnight-safe)
+            emp_id = None if unassign else sh.employee_id
+            status = "assigned" if emp_id else "open"
+            # B7: don't DROP a conflict -- bring it over UNASSIGNED (coverage preserved),
+            # unless the manager explicitly chose to skip the checks.
+            if emp_id and not skip_checks and scheduling_timeoff.conflict(emp_id, new_start.date()):
+                emp_id, status = None, "open"
+                opened_for_timeoff += 1
+            nsh = Shift(schedule_id=sh.schedule_id, employee_id=emp_id, position_id=sh.position_id,
+                        start_at=new_start, end_at=new_end, break_minutes=sh.break_minutes,
+                        status=status, notes=sh.notes, published_at=None,
+                        created_at=now, updated_at=now)
+            db.add(nsh)
+            db.flush()
+            for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all():
+                db.add(ShiftTag(shift_id=nsh.id, tag_id=st.tag_id, created_at=now))
+            copied += 1
+        db.commit()
+        return jsonify({"ok": True, "copied": copied, "skipped": skipped,
+                        "opened_for_timeoff": opened_for_timeoff}), 201
+    finally:
+        db.close()
+
+
 @store_bp.route("/schedules-v2/schedule/<int:schedule_id>/publish", methods=["POST"])
 @require_level(_MGR)
 def sv2_schedule_publish(schedule_id):

@@ -279,6 +279,25 @@
   .sv2-selbtn.danger { border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.12); color: var(--sk-red-bright); }
   .sv2-selbtn.danger:hover { background: rgba(232,88,82,.22); }
   .sv2-selbtn.ghost { border-color: rgba(244,231,208,.22); background: transparent; color: var(--sk-cream-dim); font-weight: 800; }
+  /* Phase 2e: copy-to-date panel (inline, drops below the bulk toolbar) */
+  .sv2-copypanel {
+    margin: 0 0 8px; padding: 12px 14px; border-radius: 10px;
+    background: rgba(28,16,9,.98); border: 1px solid rgba(228,179,64,.4); box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  }
+  .sv2-copypanel.sv2-hidden { display: none; }
+  .sv2-cp-title { font-size: 13px; font-weight: 800; color: var(--sk-cream); margin-bottom: 9px; }
+  .sv2-cp-days { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
+  .sv2-cp-day {
+    min-width: 60px; text-align: center; padding: 7px 8px; border-radius: 8px;
+    border: 1px solid rgba(228,179,64,.3); background: rgba(228,179,64,.06);
+    color: var(--sk-cream); font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1.2;
+  }
+  .sv2-cp-day:hover { background: rgba(228,179,64,.16); }
+  .sv2-cp-day.sel { background: #E4B340; color: #20130a; border-color: #E4B340; }
+  .sv2-cp-day .d-dow { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+  .sv2-cp-opt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sk-cream-dim); margin-bottom: 6px; cursor: pointer; }
+  .sv2-cp-opt input { cursor: pointer; }
+  .sv2-cp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
   .sv2-btn.warn { color: var(--sk-red-bright); border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.08); }
   .sv2-btn.warn:hover { background: rgba(232,88,82,.16); border-color: rgba(232,88,82,.7); }
   .sv2-btn.warn.toggled { background: rgba(232,88,82,.22); border-color: var(--sk-red-bright); }
@@ -408,6 +427,16 @@
       <button class="sv2-selbtn" id="sv2-sel-copy" title="Copy selected to another date">Copy</button>
       <button class="sv2-selbtn danger" id="sv2-sel-delete" title="Delete selected shifts">Delete</button>
       <button class="sv2-selbtn ghost" id="sv2-sel-clear" title="Clear selection">&times;</button>
+    </div>
+    <div id="sv2-copypanel" class="sv2-copypanel sv2-hidden">
+      <div class="sv2-cp-title">Copy <span id="sv2-cp-n">0</span> selected to which day?</div>
+      <div class="sv2-cp-days" id="sv2-cp-days"></div>
+      <label class="sv2-cp-opt"><input type="checkbox" id="sv2-cp-unassign"> Ignore employees &mdash; copied shifts become unassigned</label>
+      <label class="sv2-cp-opt"><input type="checkbox" id="sv2-cp-skip"> Skip all conflict &amp; labor checks</label>
+      <div class="sv2-cp-actions">
+        <button class="sv2-selbtn ghost" id="sv2-cp-cancel">Cancel</button>
+        <button class="sv2-selbtn" id="sv2-cp-go" disabled>Copy</button>
+      </div>
     </div>
     <table class="sv2-grid">
       <thead><tr id="sv2-head"></tr></thead>
@@ -1213,6 +1242,7 @@
   function updateSelToolbar() {
     var n = selectedIds().length;
     if (elBody) elBody.classList.toggle("sv2-selecting", n > 0);
+    if (n === 0) closeCopyPanel();
     if (!elSelbar) return;
     if (n > 0) { elSelCount.textContent = n + (n === 1 ? " shift selected" : " shifts selected"); show(elSelbar); }
     else hide(elSelbar);
@@ -1240,7 +1270,61 @@
     $("sv2-sel-delete").onclick = deleteSelected;
     $("sv2-sel-clear").onclick = clearSelection;
     $("sv2-sel-edit").onclick = function () { toast("Bulk edit is coming in the next update."); };
-    $("sv2-sel-copy").onclick = function () { toast("Copy to another date is coming in the next update."); };
+    $("sv2-sel-copy").onclick = openCopyPanel;
+  }
+
+  // ---- copy-to-date (Phase 2e) ----
+  var elCopyPanel = $("sv2-copypanel"), elCpDays = $("sv2-cp-days"),
+      elCpN = $("sv2-cp-n"), elCpGo = $("sv2-cp-go");
+  var cpTarget = null;
+  function openCopyPanel() {
+    var ids = selectedIds();
+    if (!ids.length || !state.board || !state.board.schedule) return;
+    if (elCpN) elCpN.textContent = ids.length;
+    cpTarget = null; if (elCpGo) elCpGo.disabled = true;
+    var u = $("sv2-cp-unassign"), sk = $("sv2-cp-skip");
+    if (u) u.checked = false; if (sk) sk.checked = false;
+    var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], html = "";
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(state.weekStart, i), iso = isoDate(d);
+      html += '<button class="sv2-cp-day" data-iso="' + iso + '">' +
+                '<span class="d-dow">' + DOW[d.getDay()] + '</span>' + d.getDate() + '</button>';
+    }
+    if (elCpDays) elCpDays.innerHTML = html;
+    show(elCopyPanel);
+  }
+  function closeCopyPanel() { if (elCopyPanel) hide(elCopyPanel); cpTarget = null; }
+  function doCopy() {
+    var ids = selectedIds();
+    if (!ids.length || !cpTarget || state.busy) return;
+    state.busy = true; if (elCpGo) elCpGo.disabled = true;
+    var url = CFG.shiftNewUrl.replace(/\/new$/, "/copy-to-date");
+    var body = {
+      shift_ids: ids.map(function (x) { return +x; }), target_date: cpTarget,
+      unassign: !!($("sv2-cp-unassign") && $("sv2-cp-unassign").checked),
+      skip_checks: !!($("sv2-cp-skip") && $("sv2-cp-skip").checked)
+    };
+    fetch(url, { method: "POST", headers: jsonHeaders(), credentials: "same-origin", body: JSON.stringify(body) })
+      .then(parseJsonOrThrow).then(function (j) {
+        state.busy = false;
+        var c = (j && j.copied) || 0, msg = "Copied " + c + (c === 1 ? " shift" : " shifts");
+        if (j && j.opened_for_timeoff) msg += " (" + j.opened_for_timeoff + " left unassigned for time-off)";
+        toast(msg);
+        state.selected = {}; closeCopyPanel(); loadBoard();
+      }).catch(function (e) {
+        state.busy = false; if (elCpGo) elCpGo.disabled = false;
+        toast((e && e.error) ? e.error : "Could not copy the shifts.", true);
+      });
+  }
+  if (elCpDays) {
+    elCpDays.onclick = function (e) {
+      var b = e.target.closest ? e.target.closest(".sv2-cp-day") : null;
+      if (!b) return;
+      var cur = elCpDays.querySelector(".sv2-cp-day.sel"); if (cur) cur.classList.remove("sel");
+      b.classList.add("sel"); cpTarget = b.getAttribute("data-iso"); if (elCpGo) elCpGo.disabled = false;
+    };
+    $("sv2-cp-cancel").onclick = closeCopyPanel;
+    $("sv2-cp-go").onclick = doCopy;
   }
 
   // go

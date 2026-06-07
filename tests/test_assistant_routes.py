@@ -1257,6 +1257,59 @@ def test_wave1_schedule_handlers_label_answer_windows(db_session, monkeypatch):
     assert week_payload["draft_schedule_count"] == 0
     assert open_payload["window_label"] == "remaining_today_forward_current_view"
     assert open_payload["as_of_date"] == schedule_handlers._today_local().isoformat()
+    assert open_payload["by_schedule_status"] == {"published": 1}
+
+
+def test_wave1_schedule_payloads_include_zero_visible_store_rows(db_session, monkeypatch):
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+    ctx = _wave1_partner_ctx(stores=["tomball", "copperfield"])
+
+    tomorrow_payload = schedule_handlers.schedule_store_today("tomorrow's schedule", ctx)
+    open_payload = schedule_handlers.schedule_open_shifts("open shifts", ctx)
+
+    assert tomorrow_payload["visible_store_keys"] == ["copperfield", "tomball"]
+    assert tomorrow_payload["by_store"] == {"copperfield": 0, "tomball": 1}
+    assert tomorrow_payload["stores_without_visible_rows"] == ["copperfield"]
+    assert open_payload["visible_store_keys"] == ["copperfield", "tomball"]
+    assert open_payload["by_store"] == {"copperfield": 0, "tomball": 1}
+    assert open_payload["stores_without_visible_rows"] == ["copperfield"]
+
+
+def test_week_open_count_and_open_shifts_are_different_labeled_windows(db_session, monkeypatch):
+    fixed_today = date(2026, 6, 7)
+    monkeypatch.setattr(schedule_handlers, "_today_local", lambda: fixed_today)
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+    tomball_schedule = db_session.query(Schedule).filter_by(store_key="tomball").one()
+    db_session.add_all([
+        Shift(
+            schedule_id=tomball_schedule.id,
+            employee_id=None,
+            start_at=datetime(2026, 6, 6, 10, 0),
+            end_at=datetime(2026, 6, 6, 15, 0),
+            status="open",
+        ),
+        Shift(
+            schedule_id=tomball_schedule.id,
+            employee_id=None,
+            start_at=datetime(2026, 6, 6, 16, 0),
+            end_at=datetime(2026, 6, 6, 21, 0),
+            status="open",
+        ),
+    ])
+    db_session.commit()
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+
+    week_payload = schedule_handlers.schedule_store_week("show this week", ctx)
+    open_payload = schedule_handlers.schedule_open_shifts("open shifts", ctx)
+
+    assert week_payload["window_label"] == "current_week_visible_allowed_schedule_stores"
+    assert open_payload["window_label"] == "remaining_today_forward_current_view"
+    assert week_payload["week_start"] == "2026-06-01"
+    assert open_payload["as_of_date"] == "2026-06-07"
+    assert week_payload["open_shift_count"] == 2
+    assert open_payload["count"] == 1
 
 
 @pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])

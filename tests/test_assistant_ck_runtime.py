@@ -2193,8 +2193,7 @@ def test_runtime_schedule_today_labels_local_visible_allowed_rows():
 
     assert "Local-date shifts for 2026-06-07 from allowed schedule stores" in answer
     assert "2 visible schedule shifts" in answer
-    assert "Store split for visible rows: tomball: 2" in answer
-    assert "not a closed-store signal" in answer
+    assert "Store split for allowed schedule stores: tomball: 2" in answer
 
 
 def test_runtime_schedule_week_labels_window_and_draft_published_open_scope():
@@ -2231,12 +2230,47 @@ def test_runtime_open_shifts_labels_today_forward_current_view_not_week():
             "as_of_date": "2026-06-07",
             "count": 2,
             "by_store": {"tomball": 2},
+            "by_schedule_status": {"draft": 1, "published": 1},
         },
         "schedule.open_shifts",
     )
 
     assert "Remaining today-forward open schedule shifts in the current view as of local date 2026-06-07: 2" in answer
+    assert "Open count schedule-status scope: draft: 1; published: 1" in answer
     assert "week" not in answer.casefold()
+
+
+def test_runtime_schedule_answers_list_allowed_stores_without_visible_rows():
+    from scripts import assistant_ck_runtime as runtime
+
+    today_answer = runtime._schedule_read_answer(
+        {
+            "ok": True,
+            "date": "2026-06-08",
+            "shift_count": 1,
+            "assigned_shift_count": 0,
+            "open_shift_count": 1,
+            "total_hours": 5,
+            "by_store": {"copperfield": 0, "tomball": 1},
+            "stores_without_visible_rows": ["copperfield"],
+        },
+        "schedule.store_today",
+    )
+    open_answer = runtime._schedule_read_answer(
+        {
+            "ok": True,
+            "as_of_date": "2026-06-07",
+            "count": 1,
+            "by_store": {"copperfield": 0, "tomball": 1},
+            "stores_without_visible_rows": ["copperfield"],
+        },
+        "schedule.open_shifts",
+    )
+
+    assert "Store split for allowed schedule stores: copperfield: 0; tomball: 1" in today_answer
+    assert "No visible schedule rows for: copperfield" in today_answer
+    assert "Store split: copperfield: 0; tomball: 1" in open_answer
+    assert "No visible schedule rows for: copperfield" in open_answer
 
 
 def test_runtime_labor_summary_labels_historical_shift_scope_and_cached_hours():

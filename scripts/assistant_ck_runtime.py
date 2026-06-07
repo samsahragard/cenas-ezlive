@@ -1304,6 +1304,16 @@ def _schedule_shift_labels(rows: list[dict], limit: int = 4) -> str:
     return "; ".join(labels)
 
 
+def _stores_without_visible_rows_text(payload: dict) -> str:
+    stores = payload.get("stores_without_visible_rows") or []
+    if not isinstance(stores, list) or not stores:
+        return ""
+    labels = [str(store).strip() for store in stores if str(store).strip()]
+    if not labels:
+        return ""
+    return " No visible schedule rows for: " + ", ".join(labels[:6]) + "."
+
+
 def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     if not isinstance(payload, dict) or payload.get("ok") is False:
         return "I could not read the approved schedule data for that question, so I saved it for Sam review."
@@ -1321,10 +1331,11 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += (
-                " Store split for visible rows: "
+                " Store split for allowed schedule stores: "
                 + split
-                + ". Stores without visible rows are not listed; that is not a closed-store signal."
+                + "."
             )
+        answer += _stores_without_visible_rows_text(payload)
         sample = _schedule_shift_labels(payload.get("shifts") or [])
         if sample:
             answer += " First shifts: " + sample + "."
@@ -1366,6 +1377,7 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
+        answer += _stores_without_visible_rows_text(payload)
         return answer
 
     if tool_id == "schedule.open_shifts":
@@ -1376,9 +1388,17 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
             f"Remaining today-forward open schedule {_plural(count, 'shift')} "
             f"in the current view{date_suffix}: {count}."
         )
+        schedule_status_split = _dict_split(payload.get("by_schedule_status") or {})
+        if schedule_status_split:
+            answer += (
+                " Open count schedule-status scope: "
+                + schedule_status_split
+                + "."
+            )
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
+        answer += _stores_without_visible_rows_text(payload)
         sample = _schedule_shift_labels(payload.get("shifts") or [])
         if sample:
             answer += " First open shifts: " + sample + "."

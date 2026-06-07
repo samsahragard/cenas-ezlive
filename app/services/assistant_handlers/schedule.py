@@ -79,6 +79,26 @@ def _allowed_shifts(db: Session, ctx: dict[str, Any]) -> list[Shift]:
     return db.query(Shift).filter(Shift.schedule_id.in_(list(schedule_ids))).all()
 
 
+def _visible_store_keys(db: Session, ctx: dict[str, Any]) -> list[str]:
+    allowed = _tool_store_filter(ctx)
+    if allowed is not None:
+        return sorted(store for store in allowed if store and store != "unknown")
+    return sorted({
+        store
+        for row in _allowed_schedules(db, ctx)
+        for store in [_normalize_store(row.store_key)]
+        if store and store != "unknown"
+    })
+
+
+def _shift_store_counts(db: Session, shifts: list[Shift], store_keys: list[str]) -> dict[str, int]:
+    counts = {store: 0 for store in store_keys}
+    for row in shifts:
+        store = _schedule_store(db, row.schedule_id)
+        counts[store] = counts.get(store, 0) + 1
+    return counts
+
+
 def _allowed_employee_ids(db: Session, ctx: dict[str, Any]) -> set[int]:
     allowed = _tool_store_filter(ctx)
     if allowed is not None and not allowed:
@@ -180,12 +200,14 @@ def schedule_store_today(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     target_day, window_label = _requested_day(question)
     db = SessionLocal()
     try:
+        visible_store_keys = _visible_store_keys(db, ctx)
         shifts = sorted(
             _window_shifts(_allowed_shifts(db, ctx), target_day, target_day),
             key=lambda row: row.start_at,
         )
         employees = _employee_names(db)
         positions = _position_names(db)
+        by_store = _shift_store_counts(db, shifts, visible_store_keys)
         return _payload(
             "schedule.store_today",
             ctx,
@@ -196,7 +218,9 @@ def schedule_store_today(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
             open_shift_count=sum(1 for row in shifts if row.status == "open" or row.employee_id is None),
             assigned_shift_count=sum(1 for row in shifts if row.employee_id is not None),
             total_hours=round(sum(_shift_hours(row) for row in shifts), 2),
-            by_store=dict(Counter(_schedule_store(db, row.schedule_id) for row in shifts)),
+            visible_store_keys=visible_store_keys,
+            by_store=by_store,
+            stores_without_visible_rows=[store for store, count in by_store.items() if count == 0],
             by_status=dict(Counter(str(row.status or "unknown") for row in shifts)),
             shifts=[_safe_shift(db, row, employees, positions) for row in shifts[:MAX_SAMPLE_ROWS]],
             truncated=len(shifts) > MAX_SAMPLE_ROWS,
@@ -210,11 +234,13 @@ def schedule_store_week(question: str, ctx: dict[str, Any], *, tool_id: str = "s
     end = start + timedelta(days=6)
     db = SessionLocal()
     try:
+        visible_store_keys = _visible_store_keys(db, ctx)
         schedules = [
             row for row in _allowed_schedules(db, ctx)
             if row.week_start == start
         ]
         shifts = sorted(_window_shifts(_allowed_shifts(db, ctx), start, end), key=lambda row: row.start_at)
+        by_store = _shift_store_counts(db, shifts, visible_store_keys)
         return _payload(
             tool_id,
             ctx,
@@ -229,7 +255,9 @@ def schedule_store_week(question: str, ctx: dict[str, Any], *, tool_id: str = "s
             open_shift_count=sum(1 for row in shifts if row.status == "open" or row.employee_id is None),
             assigned_shift_count=sum(1 for row in shifts if row.employee_id is not None),
             total_hours=round(sum(_shift_hours(row) for row in shifts), 2),
-            by_store=dict(Counter(_schedule_store(db, row.schedule_id) for row in shifts)),
+            visible_store_keys=visible_store_keys,
+            by_store=by_store,
+            stores_without_visible_rows=[store for store, count in by_store.items() if count == 0],
             by_status=dict(Counter(str(row.status or "unknown") for row in shifts)),
         )
     finally:
@@ -244,6 +272,9 @@ def schedule_open_shifts(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     today = _today_local()
     db = SessionLocal()
     try:
+        visible_store_keys = _visible_store_keys(db, ctx)
+        schedules = _allowed_schedules(db, ctx)
+        schedule_by_id = {row.id: row for row in schedules}
         shifts = [
             row for row in _allowed_shifts(db, ctx)
             if (row.status == "open" or row.employee_id is None)
@@ -252,6 +283,11 @@ def schedule_open_shifts(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
         ]
         shifts = sorted(shifts, key=lambda row: row.start_at)
         positions = _position_names(db)
+        schedule_statuses = Counter(
+            str((schedule_by_id.get(row.schedule_id).status if row.schedule_id else None) or "unknown")
+            for row in shifts
+        )
+        by_store = _shift_store_counts(db, shifts, visible_store_keys)
         return _payload(
             "schedule.open_shifts",
             ctx,
@@ -259,7 +295,10 @@ def schedule_open_shifts(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
             as_of_date=today.isoformat(),
             window_label="remaining_today_forward_current_view",
             count=len(shifts),
-            by_store=dict(Counter(_schedule_store(db, row.schedule_id) for row in shifts)),
+            visible_store_keys=visible_store_keys,
+            by_store=by_store,
+            stores_without_visible_rows=[store for store, count in by_store.items() if count == 0],
+            by_schedule_status=dict(schedule_statuses),
             shifts=[_safe_shift(db, row, {}, positions) for row in shifts[:MAX_SAMPLE_ROWS]],
             truncated=len(shifts) > MAX_SAMPLE_ROWS,
         )

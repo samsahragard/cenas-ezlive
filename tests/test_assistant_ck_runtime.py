@@ -1155,6 +1155,49 @@ def test_runtime_answers_operator_toast_webhook_activity_with_approved_tool(tmp_
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
 
 
+def test_runtime_builds_toast_webhook_payload_when_render_passes_route_only(monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_toast_webhook_activity_payload",
+        lambda question: {
+            "ok": True,
+            "generated_at": "2026-06-06T17:00:00Z",
+            "data_class": "toast_webhook_activity_sanitized",
+            "scope": {"store_key": None, "business_date": "20260606"},
+            "counts": {
+                "events": 10,
+                "orders": 4,
+                "checks": 4,
+                "selections": 9,
+                "payments": 2,
+                "employee_facts": 12,
+            },
+            "recent_last_hour_events": 3,
+            "fact_types_for_scope": [],
+            "latest_orders": [],
+            "raw_payloads_included": False,
+        },
+    )
+
+    data = runtime._approved_tool_answer(
+        "When did we last get data from Toast?",
+        "",
+        _principal("partner"),
+        [_available_tool("toast.webhook_activity")],
+        {},
+        routed_tool_id="toast.webhook_activity",
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["storage"] == "toast_webhook_activity_tool"
+    assert data["tool_id"] == "toast.webhook_activity"
+    assert "Toast webhook database is connected" in data["answer"]
+    assert "10 webhook events" in data["answer"]
+
+
 def test_runtime_queues_toast_webhook_when_routed_payload_is_error(tmp_path, monkeypatch):
     from scripts import assistant_ck_runtime as runtime
 

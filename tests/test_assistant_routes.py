@@ -1668,7 +1668,7 @@ def test_operator_toast_data_freshness_routes_to_webhook_not_sales(monkeypatch):
     monkeypatch.setattr(
         ar,
         "_toast_webhook_activity_tool_payload",
-        lambda question: {"data_class": "toast_webhook_activity_sanitized", "question": question},
+        lambda question: (_ for _ in ()).throw(AssertionError("webhook is CK-runtime passthrough")),
     )
     monkeypatch.setattr(
         ar,
@@ -1680,7 +1680,7 @@ def test_operator_toast_data_freshness_routes_to_webhook_not_sales(monkeypatch):
 
     assert tool_id == "toast.webhook_activity"
     assert route["tool_id"] == "toast.webhook_activity"
-    assert "toast.webhook_activity" in payload
+    assert payload == {}
     assert "toast.sales_summary" not in payload
 
 
@@ -1807,7 +1807,7 @@ def test_operator_toast_table_activity_payload_handles_bare_waiter_question(monk
     assert seen["location"] is None
 
 
-def test_operator_toast_webhook_activity_payload(monkeypatch):
+def test_operator_toast_webhook_activity_routes_as_runtime_passthrough(monkeypatch):
     ctx = {
         "kind": "partner",
         "role": "partner",
@@ -1824,12 +1824,14 @@ def test_operator_toast_webhook_activity_payload(monkeypatch):
     monkeypatch.setattr(
         ar,
         "_toast_webhook_activity_tool_payload",
-        lambda question: {"data_class": "toast_webhook_activity_sanitized", "question": question},
+        lambda question: (_ for _ in ()).throw(AssertionError("webhook is CK-runtime passthrough")),
     )
 
-    payload = ar._approved_tool_data("what live Toast webhook events came in today?", ctx)
+    tool_id, payload, route = ar._approved_tool_package("what live Toast webhook events came in today?", ctx)
 
-    assert payload["toast.webhook_activity"]["data_class"] == "toast_webhook_activity_sanitized"
+    assert tool_id == "toast.webhook_activity"
+    assert route["tool_id"] == "toast.webhook_activity"
+    assert payload == {}
     assert "toast.employee_profiles" not in payload
 
 

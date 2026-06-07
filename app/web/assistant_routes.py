@@ -226,6 +226,7 @@ _SESSION_CONTEXT_ROUTE_RE = re.compile(
 _RUNTIME_PASSTHROUGH_TOOL_IDS = {
     "assistant.session_context",
     "assistant.tool_discovery",
+    "toast.webhook_activity",
 }
 _SECRET_TEXT_RE = re.compile(
     r"(?i)\b("

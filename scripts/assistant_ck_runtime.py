@@ -1898,6 +1898,12 @@ def _approved_tool_answer(
         }
     if routed_tool_id == "toast.webhook_activity" and _toast_webhook_tool_authorized(principal, tools):
         webhook_activity = tool_data.get("toast.webhook_activity") if isinstance(tool_data, dict) else None
+        if webhook_activity is None:
+            try:
+                webhook_activity = _toast_webhook_activity_payload(resolved_question)
+            except Exception:  # noqa: BLE001
+                log.exception("assistant runtime: failed to build toast.webhook_activity")
+                webhook_activity = None
         if not _tool_payload_ok(webhook_activity):
             return None
         return {

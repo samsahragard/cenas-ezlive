@@ -74,14 +74,11 @@
   .tws-sub2panel { display: none; }
   .tws-sub2panel.active { display: block; }
 
-  /* Schedule toolbar row (Sam #2600): the sub-tabs sit left, the store selector
-     sits at the right end of the same bar -- grouped with the controls, near the
-     Week Builder's in-iframe position filter. Only shown to both-store users. */
+  /* Schedule toolbar row: the sub-tabs [Week | Time off | Availability]. The old
+     store selector is removed (S7 store-split -- both stores always render), so
+     only the sub-tab bar remains in this row. */
   .tws-sched-toolbar { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; }
   .tws-sched-toolbar .tws-subbar { flex: 1 1 auto; margin-bottom: 0; }
-  .tws-sched-store-group { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
-  .tws-sched-storelbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tws-cream-meta); }
-  #tws-sched-store { min-width: 150px; }
 
   /* filter row */
   .tws-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
@@ -148,6 +145,14 @@
   .tws-status.on .dot { background: #4caf50; }
   .tws-status.off .dot { background: var(--tws-cream-meta); }
   .tws-empty { padding: 26px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
+
+  /* S8: Management / Tipped-Hourly subsections inside each store block, each with
+     its own section-scoped +Add button on the right of the sub-heading. */
+  .tws-section { margin: 10px 0 14px; }
+  .tws-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 6px; }
+  .tws-sec-title { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tws-cream-dim); }
+  .tws-sec-add { font-size: 11.5px; padding: 5px 11px; }
+  .tws-sec-empty { padding: 12px 6px; font-size: 12.5px; color: var(--tws-cream-meta); font-style: italic; }
 
   /* click-to-edit roster rows (roster-edit branch) */
   .tws-colhead.editable { grid-template-columns: 28px 1fr auto; gap: 10px; }
@@ -284,6 +289,9 @@
   .tws-modal { width: 100%; max-width: 460px; background: var(--tws-card); border: 1px solid var(--tws-border); border-radius: var(--tws-radius); padding: 22px; }
   .tws-modal h2 { font-family: 'Instrument Serif', serif; font-size: 24px; color: var(--tws-cream); }
   .tws-modal-sub { font-size: 12.5px; color: var(--tws-cream-meta); margin: 6px 0 16px; line-height: 1.5; }
+  /* S8: fixed store + section context line at the top of the +Add modal */
+  .tws-add-context { font-size: 12.5px; color: var(--tws-cream-dim); margin: 0 0 14px; padding: 8px 11px; background: var(--tws-bg); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); }
+  .tws-add-context b { color: var(--tws-gold-bright); font-weight: 700; }
   .tws-fld { display: block; margin-bottom: 14px; }
   .tws-fld > span { display: block; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--tws-cream-meta); margin-bottom: 6px; }
   .tws-fld input { width: 100%; font-family: inherit; font-size: 14px; color: var(--tws-cream); background: var(--tws-bg); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 9px 11px; }
@@ -312,17 +320,21 @@
     <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
   </div>
 
-  {# ---- TEAM panel (the new roster; binds to aick's contract) ---- #}
+  {# ---- TEAM panel (the new roster; binds to aick's contract) ----
+     S7/S8 store-split (Sam #-roster): BOTH stores are always shown as two
+     labeled blocks (renderBoard loops b.stores), so the global location
+     dropdown is GONE and the single global +Add is REPLACED by section-scoped
+     +Add buttons rendered INSIDE each store block (one in Management, one in
+     Hourly). The pill/position/inactive filters stay global (apply to both
+     blocks). #}
   <div class="tws-panel active" id="tws-panel-team" data-sub-panel="team" role="tabpanel">
     <div class="tws-filterbar">
-      <button class="tws-addbtn" id="tws-add">+ Add</button>
       <div class="tws-pills" id="tws-pills">
         <button class="tws-pill active" data-filter="all">All<span class="ct" data-ct="all">--</span></button>
         <button class="tws-pill" data-filter="boh">BOH<span class="ct" data-ct="boh">--</span></button>
         <button class="tws-pill" data-filter="foh">FOH<span class="ct" data-ct="foh">--</span></button>
       </div>
       <span class="tws-spacer"></span>
-      <select class="tws-select" id="tws-loc" aria-label="Location"><option value="all">Both stores</option></select>
       <div class="tws-posfilter" id="tws-pos-wrap">
         <button type="button" class="tws-select" id="tws-pos-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filter by position">All positions</button>
         <div class="tws-pos-pop hidden" id="tws-pos-pop" role="group" aria-label="Filter by position"></div>
@@ -340,64 +352,82 @@
   </div>
 
   {# ---- SCHEDULE panel: nested [Week | Time off | Availability], each a chrome-stripped iframe of the existing mgr page (aick #2333) ----
-     Store selector (Sam #2589): schedules live per concrete store (/dos/ + /uno/);
-     a user who can reach BOTH stores picks which store's schedule to build, and
-     the pick swaps ALL three iframe srcs (Week/Time-off/Availability). The slug is
-     carried as data-store on the panel; each iframe builds its src from that slug +
-     its own data-path. Server defaults to the URL store when it's concrete. #}
-  <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel"
-       data-store="{{ schedule_store_default }}">
+     S7 store-split: BOTH stores are always shown. The old single/both store
+     <select> + both-mode scaffolding is REMOVED; instead each sub-tab panel
+     renders TWO labeled iframe blocks -- Copperfield (/uno/) then Tomball
+     (/dos/) -- each a SINGLE-store iframe pointing straight at that store's slug.
+     The three sub-tabs (Week / Time off / Availability) still toggle the
+     .tws-sub2panel blocks; since each panel now holds two store iframes, the
+     toggle reveals BOTH stores for the active sub-tab. Each iframe has its own
+     unique data-embed-frame key "<sub2>-<slug>" so loadFrame/stripChrome/reveal
+     operate per store, UNCHANGED. The stripChrome content-height-grow mechanism
+     (~:464) is untouched and simply runs once per store iframe. #}
+  <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
     <div class="tws-sched-toolbar">
       <div class="tws-subbar" role="tablist">
         <button class="tws-subtab active" data-sub2="week" type="button" role="tab">Week</button>
         <button class="tws-subtab" data-sub2="timeoff" type="button" role="tab">Time off</button>
         <button class="tws-subtab" data-sub2="availability" type="button" role="tab">Availability</button>
       </div>
-      {% if schedule_stores and schedule_stores|length > 1 %}
-      <div class="tws-sched-store-group">
-        <label class="tws-sched-storelbl" for="tws-sched-store">Store</label>
-        <select class="tws-select" id="tws-sched-store" aria-label="Schedule store">
-          {% for s in schedule_stores %}
-          <option value="{{ s.slug }}"{% if s.slug == schedule_store_default %} selected{% endif %}>{{ s.label }}</option>
-          {% endfor %}
-          {# Both stores (Sam #2675b): show every store's schedule STACKED for the active sub-tab. #}
-          <option value="both">Both stores</option>
-        </select>
-      </div>
-      {% endif %}
     </div>
+    {# WEEK sub-tab: Copperfield + Tomball stacked #}
     <div class="tws-sub2panel active" data-sub2-panel="week">
-      <div class="tws-embed-wrap">
-        <div class="tws-embed-loading" data-embed-loading="week"><span class="tws-embed-dot"></span><span>Loading Week Builder</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="week" data-path="schedules-v2/?embed=1" data-src="/{{ schedule_store_default }}/schedules-v2/?embed=1" title="Week Builder" loading="lazy"></iframe>
+      <div class="tws-embed-wrap both">
+        <div class="tws-sched-storehead">Copperfield</div>
+        <div class="tws-embed-loading" data-embed-loading="week-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Week Builder</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="week-uno" data-src="/uno/schedules-v2/?embed=1" title="Copperfield Week Builder" loading="lazy"></iframe>
+        <div class="tws-sched-storehead">Tomball</div>
+        <div class="tws-embed-loading" data-embed-loading="week-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Week Builder</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="week-dos" data-src="/dos/schedules-v2/?embed=1" title="Tomball Week Builder" loading="lazy"></iframe>
       </div>
     </div>
+    {# TIME OFF sub-tab: Copperfield + Tomball stacked #}
     <div class="tws-sub2panel" data-sub2-panel="timeoff">
-      <div class="tws-embed-wrap">
-        <div class="tws-embed-loading" data-embed-loading="timeoff"><span class="tws-embed-dot"></span><span>Loading Time off</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="timeoff" data-path="schedules-v2/time-off?embed=1" data-src="/{{ schedule_store_default }}/schedules-v2/time-off?embed=1" title="Time off" loading="lazy"></iframe>
+      <div class="tws-embed-wrap both">
+        <div class="tws-sched-storehead">Copperfield</div>
+        <div class="tws-embed-loading" data-embed-loading="timeoff-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Time off</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="timeoff-uno" data-src="/uno/schedules-v2/time-off?embed=1" title="Copperfield Time off" loading="lazy"></iframe>
+        <div class="tws-sched-storehead">Tomball</div>
+        <div class="tws-embed-loading" data-embed-loading="timeoff-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Time off</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="timeoff-dos" data-src="/dos/schedules-v2/time-off?embed=1" title="Tomball Time off" loading="lazy"></iframe>
       </div>
     </div>
+    {# AVAILABILITY sub-tab: Copperfield + Tomball stacked #}
     <div class="tws-sub2panel" data-sub2-panel="availability">
-      <div class="tws-embed-wrap">
-        <div class="tws-embed-loading" data-embed-loading="availability"><span class="tws-embed-dot"></span><span>Loading Availability</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="availability" data-path="schedules-v2/availability?embed=1" data-src="/{{ schedule_store_default }}/schedules-v2/availability?embed=1" title="Availability" loading="lazy"></iframe>
+      <div class="tws-embed-wrap both">
+        <div class="tws-sched-storehead">Copperfield</div>
+        <div class="tws-embed-loading" data-embed-loading="availability-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Availability</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="availability-uno" data-src="/uno/schedules-v2/availability?embed=1" title="Copperfield Availability" loading="lazy"></iframe>
+        <div class="tws-sched-storehead">Tomball</div>
+        <div class="tws-embed-loading" data-embed-loading="availability-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Availability</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="availability-dos" data-src="/dos/schedules-v2/availability?embed=1" title="Tomball Availability" loading="lazy"></iframe>
       </div>
     </div>
   </div>
 
-  {# ---- MARKET panel: the B9 manager approval queue (Pending/All live inside the page), chrome-stripped iframe (aick #2333) ---- #}
+  {# ---- MARKET panel: the B9 manager approval queue (Pending/All live inside the page), chrome-stripped iframe (aick #2333) ----
+     S7 store-split: render the marketplace iframe twice -- Copperfield (/uno/)
+     then Tomball (/dos/) -- each in its own labeled block. Each iframe keeps a
+     unique data-embed-frame key ("market-uno" / "market-dos") so the existing
+     loadFrame/stripChrome pipeline runs once per store, unchanged. #}
   <div class="tws-panel" id="tws-panel-market" data-sub-panel="market" role="tabpanel">
-    <div class="tws-embed-wrap">
-      <div class="tws-embed-loading" data-embed-loading="market"><span class="tws-embed-dot"></span><span>Loading Market</span></div>
-      <iframe class="tws-embed-frame" data-embed-frame="market" data-src="/{{ store_slug }}/schedules-v2/marketplace?embed=1" title="Market" loading="lazy"></iframe>
+    <div class="tws-embed-wrap both">
+      <div class="tws-sched-storehead">Copperfield</div>
+      <div class="tws-embed-loading" data-embed-loading="market-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Market</span></div>
+      <iframe class="tws-embed-frame" data-embed-frame="market-uno" data-src="/uno/schedules-v2/marketplace?embed=1" title="Copperfield Market" loading="lazy"></iframe>
+      <div class="tws-sched-storehead">Tomball</div>
+      <div class="tws-embed-loading" data-embed-loading="market-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Market</span></div>
+      <iframe class="tws-embed-frame" data-embed-frame="market-dos" data-src="/dos/schedules-v2/marketplace?embed=1" title="Tomball Market" loading="lazy"></iframe>
     </div>
   </div>
 
-  {# ---- LINK panel (Sam #2629): match Cena team members <-> Toast employees; you verify each. The Toast side wires up once the Toast API lands (samai). ---- #}
+  {# ---- LINK panel (Sam #2629): match Cena team members <-> Toast employees; you verify each. The Toast side wires up once the Toast API lands (samai). ----
+     S7 store-split: loadLink already queries BOTH stores (LINK_STORES dos+uno).
+     The output is now organized into two clearly-labeled store blocks: each
+     store renders its own Copperfield/Tomball header + its own "Cena | Toast"
+     column header (emitted by loadLink), so the global column header is removed. #}
   <div class="tws-panel" id="tws-panel-link" data-sub-panel="link" role="tabpanel">
     <p class="tws-sub">Match each Cena team member to their Toast employee. You confirm every match; once verified, that person's Toast hours, timecards and pay load onto their Cena profile.</p>
-    <div class="tws-link-head"><span>Cena</span><span>Toast</span></div>
     <div id="tws-link-rows" class="tws-link-rows"><div class="tws-empty">Loading team...</div></div>
   </div>
 
@@ -410,15 +440,20 @@
      canonical name (incl. unheld ones), value = the NAME (Sam roster-fix #3). #}
   <script type="application/json" id="tws-filter-positions">{{ (filter_positions or [])|tojson }}</script>
 
-  {# +Add team member modal (Sam #2310-2317: Name / Phone / Email + multi Position + multi Store -> invite) #}
+  {# +Add team member modal (Sam #2310-2317: Name / Phone / Email + Position -> invite)
+     S8 store-split: store + section are now FIXED by which section-scoped +Add
+     button opened the modal (no in-modal store picker). The context line shows
+     the target store + section, and the position list is filtered to that
+     section's addable positions for that store. #}
   <div class="tws-modal-back" id="tws-add-back">
     <div class="tws-modal" role="dialog" aria-modal="true" aria-labelledby="tws-add-title">
       <h2 id="tws-add-title">Add a team member</h2>
       <p class="tws-modal-sub">They get an email setup link to finish their profile and set a passcode -- no passcode needed now; they show Active once they set up their login.</p>
+      <div class="tws-add-context" id="tws-add-context"></div>
       <label class="tws-fld"><span>Full name</span><input type="text" id="tws-f-name" autocomplete="off"></label>
       <label class="tws-fld"><span>Phone</span><input type="tel" id="tws-f-phone" autocomplete="off"></label>
       <label class="tws-fld"><span>Email</span><input type="email" id="tws-f-email" autocomplete="off"></label>
-      <div class="tws-fld"><span>Positions per store -- check the roles they work AT each store</span><div class="tws-multi" id="tws-f-pos"></div></div>
+      <div class="tws-fld"><span>Positions -- check the roles they work in this section</span><div class="tws-multi" id="tws-f-pos"></div></div>
       <div class="tws-modal-err" id="tws-add-err"></div>
       <div class="tws-modal-actions">
         <button class="tws-btn-ghost" id="tws-add-cancel" type="button">Cancel</button>
@@ -490,89 +525,27 @@
     var url = frame.getAttribute("data-src");
     frame.setAttribute("src", url + (String(url).includes("?") ? "&" : "?") + "_cb=" + _IFCB);
   }
-  /* ---- "Both stores" mode scaffolding (Sam #2675b) ----
-     When the Schedule store dropdown is "both", each sub-tab's embed-wrap shows
-     TWO iframes stacked -- the existing PRIMARY iframe points at /dos/<path>
-     (Tomball) and a dynamically-injected SECONDARY iframe (data-embed-frame
-     "<key>-2") points at /uno/<path> (Copperfield) -- each under a small
-     store-label header. The secondary iframe is a first-class lazy-load citizen
-     (its own data-src + loading shim), so loadFrame/stripChrome/reveal work on
-     it UNCHANGED. Switching back to one store tears the injected nodes down, so
-     the single-store view is exactly the original one-iframe layout. */
-  var BOTH_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
-  var bothMode = false;
-  function secKey(key) { return key + "-2"; }
-  // Idempotently build the both-mode scaffold for one sub-tab key: a header above
-  // the primary iframe, then a header + loading shim + secondary iframe after it.
-  function buildBothScaffold(key) {
-    var primary = root.querySelector('[data-embed-frame="' + key + '"]');
-    if (!primary) return;
-    var wrap = primary.parentNode;
-    wrap.classList.add("both");
-    var path = primary.getAttribute("data-path") || "";
-    // header for the PRIMARY (first store)
-    var h1 = wrap.querySelector('[data-storehead="' + key + '"]');
-    if (!h1) {
-      h1 = document.createElement("div");
-      h1.className = "tws-sched-storehead";
-      h1.setAttribute("data-storehead", key);
-      h1.textContent = BOTH_STORES[0].label;
-      wrap.insertBefore(h1, primary);
-    }
-    // header + shim + iframe for the SECONDARY (second store)
-    var sk = secKey(key);
-    var sec = root.querySelector('[data-embed-frame="' + sk + '"]');
-    if (!sec) {
-      var h2 = document.createElement("div");
-      h2.className = "tws-sched-storehead";
-      h2.setAttribute("data-storehead", sk);
-      h2.textContent = BOTH_STORES[1].label;
-      wrap.appendChild(h2);
-      var shim2 = document.createElement("div");
-      shim2.className = "tws-embed-loading";
-      shim2.setAttribute("data-embed-loading", sk);
-      shim2.innerHTML = '<span class="tws-embed-dot"></span><span>Loading ' + BOTH_STORES[1].label + '</span>';
-      wrap.appendChild(shim2);
-      sec = document.createElement("iframe");
-      sec.className = "tws-embed-frame";
-      sec.setAttribute("data-embed-frame", sk);
-      sec.setAttribute("data-path", path);
-      sec.setAttribute("title", BOTH_STORES[1].label + " schedule");
-      sec.setAttribute("loading", "lazy");
-      wrap.appendChild(sec);
-    }
-    // point primary at store 1, secondary at store 2 (always, in both-mode)
-    primary.setAttribute("data-src", "/" + BOTH_STORES[0].slug + "/" + path);
-    sec.setAttribute("data-src", "/" + BOTH_STORES[1].slug + "/" + path);
+  /* ---- per-store Schedule frames (S7 store-split) ----
+     Both stores are ALWAYS shown: each sub-tab panel holds two static iframes
+     with fixed keys "<sub2>-uno" (Copperfield) and "<sub2>-dos" (Tomball), each
+     pointing straight at its store slug in the markup. The old single/both
+     <select> + dynamic both-mode scaffolding is gone; loadSchedFrame just loads
+     both per-store frames for the active sub-tab via the UNCHANGED loadFrame
+     (which drives stripChrome/reveal per iframe). */
+  var SCHED_STORE_SLUGS = ["uno", "dos"];   // Copperfield, Tomball
+  function loadSchedFrame(sub2) {
+    SCHED_STORE_SLUGS.forEach(function (slug) { loadFrame(sub2 + "-" + slug); });
   }
-  // Remove the injected secondary iframe + both headers + the secondary shim for
-  // one sub-tab key, and drop its loaded guard, so only the primary iframe remains.
-  function teardownBothScaffold(key) {
-    var primary = root.querySelector('[data-embed-frame="' + key + '"]');
-    var wrap = primary ? primary.parentNode : null;
-    if (wrap) wrap.classList.remove("both");
-    var sk = secKey(key);
-    if (wrap) {
-      var heads = wrap.querySelectorAll(".tws-sched-storehead");
-      for (var i = 0; i < heads.length; i++) heads[i].parentNode.removeChild(heads[i]);
-    }
-    var sec = root.querySelector('[data-embed-frame="' + sk + '"]');
-    if (sec) sec.parentNode.removeChild(sec);
-    var shim2 = root.querySelector('[data-embed-loading="' + sk + '"]');
-    if (shim2) shim2.parentNode.removeChild(shim2);
-    loaded[sk] = false;
-  }
-  // Load a Schedule sub-tab: in both-mode load BOTH iframes, else just the one.
-  function loadSchedFrame(key) {
-    if (bothMode) { loadFrame(key); loadFrame(secKey(key)); }
-    else { loadFrame(key); }
+  // S7: the Market tab also shows both stores -- load both marketplace iframes.
+  function loadMarketFrames() {
+    SCHED_STORE_SLUGS.forEach(function (slug) { loadFrame("market-" + slug); });
   }
   var activeSub2 = "week";
   function show(sub) {
     tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-sub") === sub); });
     panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
     if (sub === "schedule") loadSchedFrame(activeSub2);   // load the active Schedule sub-tab's iframe(s)
-    else if (sub === "market") loadFrame("market");
+    else if (sub === "market") loadMarketFrames();        // S7: both stores' marketplace iframes
     else if (sub === "link") loadLink();             // Sam #2629
   }
   tabs.forEach(function (t) {
@@ -589,56 +562,10 @@
       loadSchedFrame(activeSub2);
     });
   });
-  /* ---- Schedule STORE switch (Sam #2589) ----
-     A both-store user picks which concrete store's schedule to build. The pick
-     repoints ALL THREE Schedule iframes (Week / Time off / Availability) at the
-     new store by rebuilding each src from <slug> + the iframe's own data-path,
-     then resets their loaded state (so a re-open re-fetches) and reloads whichever
-     Schedule sub-tab is showing right now. /dos/ = Tomball, /uno/ = Copperfield. */
-  var schedPanel = document.getElementById("tws-panel-schedule");
-  var schedStoreSel = document.getElementById("tws-sched-store");
-  var SCHED_KEYS = ["week", "timeoff", "availability"];
-  // Reset ONE iframe's lazy-load state: blank its src, re-arm its loading shim,
-  // drop its loaded guard -- so the next time it's shown it re-fetches (reveal()
-  // re-runs on its load). Shared by single-store + both-store repointing.
-  function resetFrame(key) {
-    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
-    if (!frame) return;
-    loaded[key] = false;
-    frame.classList.remove("ready");
-    frame.removeAttribute("src");
-    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
-    if (shim) shim.classList.remove("gone");
-  }
-  if (schedStoreSel && schedPanel) {
-    schedStoreSel.addEventListener("change", function () {
-      var slug = schedStoreSel.value;
-      if (!slug) return;
-      schedPanel.setAttribute("data-store", slug);
-      if (slug === "both") {
-        // BOTH stores (Sam #2675b): scaffold a second iframe per sub-tab, point
-        // primary -> /dos/ + secondary -> /uno/, reset both, reveal the headers.
-        bothMode = true;
-        SCHED_KEYS.forEach(function (key) {
-          buildBothScaffold(key);   // sets data-src for primary + secondary, adds .both
-          resetFrame(key);
-          resetFrame(secKey(key));
-        });
-      } else {
-        // Single concrete store: tear down any injected second iframe + headers,
-        // repoint the primary at /<slug>/<path>, reset it. Original layout restored.
-        bothMode = false;
-        SCHED_KEYS.forEach(function (key) {
-          teardownBothScaffold(key);   // removes secondary iframe + headers + .both
-          var frame = root.querySelector('[data-embed-frame="' + key + '"]');
-          if (frame) frame.setAttribute("data-src", "/" + slug + "/" + (frame.getAttribute("data-path") || ""));
-          resetFrame(key);
-        });
-      }
-      // reload the Schedule sub-tab currently in view, if the Schedule tab is open
-      if (schedPanel.classList.contains("active")) loadSchedFrame(activeSub2);
-    });
-  }
+  /* ---- Schedule STORE switch REMOVED (S7 store-split) ----
+     The old single/both store <select> (#tws-sched-store) + its iframe-repoint
+     handler are gone: both stores are now always rendered as static per-store
+     iframes (week-uno/week-dos, ...) so there is nothing to switch. */
 
   // honour ?sub= on load
   var initial = (new URLSearchParams(location.search)).get("sub") || "team";
@@ -658,16 +585,69 @@
     stats: { showing: 3, active_total: 3, positions: 4 },
     stores: [
       { store_key: "dos", label: "Tomball", shown: 2, active: 2, employees: [
-        { id: 1, full_name: "Alex Rivera", active: true, positions: [{ id: 11, name: "Server" }, { id: 13, name: "Bartender" }], domain: "foh", access_role: null, email: "alex@x.com", phone: "281-555-0101" },
-        { id: 2, full_name: "Sam Operator", active: true, positions: [{ id: 1, name: "Partner" }, { id: 14, name: "Cook" }], domain: "both", access_role: "partner", email: "sam@x.com", phone: "281-555-0102" }
+        { id: 1, full_name: "Alex Rivera", active: true, section: "hourly", positions: [{ id: 11, name: "Server" }, { id: 13, name: "Bartender" }], domain: "foh", access_role: null, email: "alex@x.com", phone: "281-555-0101" },
+        { id: 2, full_name: "Sam Operator", active: true, section: "management", positions: [{ id: 1, name: "Partner" }, { id: 14, name: "Cook" }], domain: "both", access_role: "partner", email: "sam@x.com", phone: "281-555-0102" }
       ] },
       { store_key: "uno", label: "Copperfield", shown: 1, active: 1, employees: [
-        { id: 3, full_name: "Jordan Cook", active: true, positions: [{ id: 14, name: "Cook" }], domain: "boh", access_role: null, email: "jordan@x.com", phone: "281-555-0103" }
+        { id: 3, full_name: "Jordan Cook", active: true, section: "hourly", positions: [{ id: 14, name: "Cook" }], domain: "boh", access_role: null, email: "jordan@x.com", phone: "281-555-0103" }
       ] }
     ]
   };
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  // Canonical store list [{key,label}] -- sourced from the roster payload's
+  // stores[].store_key/label (replaces the removed #tws-loc options as the store
+  // enumerator for buildAssignPicker + buildAddOptions). Keeps whatever store_key
+  // the backend returns (uno/dos) so the (position|store_key) pairs stay correct.
+  var STORE_LIST = [];
+
+  // Render ONE employee row + its (empty) inline-edit shell. `n` is the 1-based
+  // index within its subsection. Identical markup to the pre-split row.
+  function renderRow(e, n) {
+    // positions: leadership/role chips first, then alpha -- a consistent order
+    // so the column reads cleanly (Sam #2806); role chips get the gold style.
+    var poss = (e.positions || []).slice().sort(function (a, b) {
+      var ar = isRolePos(a.name) ? 0 : 1, br = isRolePos(b.name) ? 0 : 1;
+      return ar - br || String(a.name || "").localeCompare(String(b.name || ""));
+    });
+    var chips = poss.length
+      ? poss.map(function (p) { return '<span class="tws-chip' + (isRolePos(p.name) ? ' role' : '') + '">' + esc(p.name) + '</span>'; }).join("")
+      : '<span class="tws-nopos">No positions yet</span>';
+    // Access-role pill removed (Sam #2582): permissions follow the POSITION now.
+    var ph = (e.phone || "").trim();
+    var phHtml = ph
+      ? '<span class="tws-phone"><i class="ti ti-phone"></i>' + esc(ph) + '</span>'
+      : '<span class="tws-phone none">No phone</span>';
+    // Row = [#] [name + positions stacked] [phone, right-aligned + caret]. Phone
+    // sits in its own auto column so position chips can never push it out of
+    // alignment (Sam #2806/#2807). data-emp carries the full record.
+    return '<div class="tws-row editable' + (e.active ? "" : " inactive") + '" data-emp-row="' + e.id + '"' +
+           ' data-emp="' + esc(JSON.stringify(e)) + '">' +
+           '<div class="tws-rnum">' + n + '</div>' +
+           '<div class="tws-namecell"><div class="tws-name">' + esc(e.full_name) + '</div>' +
+             '<div class="tws-poschips">' + chips + '</div></div>' +
+           '<div class="tws-phonecell">' + phHtml + '<span class="caret ti ti-chevron-down"></span></div>' +
+           '</div>' +
+           '<div class="tws-edit" data-emp-edit="' + e.id + '"></div>';
+  }
+
+  // Render ONE labeled subsection (Management or Tipped/Hourly) inside a store
+  // block: a sub-heading + a section-scoped "+ Add" button (store + section are
+  // FIXED on the button via data-add-store / data-add-section), the column head,
+  // and the rows. An empty section still shows its header + Add (so a manager can
+  // add the first person there). `section` is 'management' | 'hourly'.
+  function renderSection(storeKey, title, section, rows) {
+    var head = '<div class="tws-sec-head"><span class="tws-sec-title">' + esc(title) + '</span>' +
+      '<button class="tws-addbtn tws-sec-add" type="button" data-add-store="' + esc(storeKey) + '" data-add-section="' + section + '">+ Add</button></div>';
+    var body = '<div class="tws-colhead editable"><span>#</span><span>Name</span><span class="tws-ph-h">Phone</span></div>';
+    if (rows.length) {
+      rows.forEach(function (e, i) { body += renderRow(e, i + 1); });
+    } else {
+      body += '<div class="tws-sec-empty">No one here matches these filters.</div>';
+    }
+    return '<div class="tws-section">' + head + body + '</div>';
+  }
 
   function renderBoard(b) {
     state.board = b;
@@ -683,46 +663,27 @@
     // each checkbox value = the NAME, and we include every canonical position
     // -- even ones nobody currently holds -- not just positions on shown rows.
     buildPosFilter();
-    var locSel = document.getElementById("tws-loc");
-    if (locSel && locSel.options.length <= 1) {
-      (b.stores || []).forEach(function (s) { var o = document.createElement("option"); o.value = s.store_key; o.textContent = s.label; locSel.appendChild(o); });
-    }
+    // Refresh the canonical store list from the payload (store_key + label) so
+    // the +Add / assign pickers enumerate the right stores without #tws-loc.
+    STORE_LIST = (b.stores || []).map(function (s) { return { key: s.store_key, label: s.label }; });
     // rows -- COLLAPSED row shows NAME, JOB(s), PHONE (Sam #2504). Click a row to
     // expand an inline edit panel (contact / reset-pin / assign). One open at a time.
     openEmpId = null;  // a fresh render rebuilds every row -> no panel is open
+    // S7/S8 store-split: for EACH store render a labeled block, split into a
+    // MANAGEMENT subsection (s.management[]) and a TIPPED/HOURLY subsection
+    // (s.hourly[]). The backend pre-partitions these; if an older payload omits
+    // them, derive from employees[].section (rows with section null stay out of
+    // both, as before). Each subsection carries its own section-scoped +Add.
     var html = "";
     (b.stores || []).forEach(function (s) {
-      if (!s.employees || !s.employees.length) return;
+      var emps = s.employees || [];
+      var mgmt = s.management || emps.filter(function (e) { return e.section === "management"; });
+      var hrly = s.hourly || emps.filter(function (e) { return e.section === "hourly"; });
+      var totalShown = (s.shown != null) ? s.shown : emps.length;
       html += '<div class="tws-store"><div class="tws-store-head"><span class="tws-store-name">' + esc(s.label) + '</span>' +
-              '<span class="tws-store-meta">' + (s.shown != null ? s.shown : s.employees.length) + ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>' +
-              '<div class="tws-colhead editable"><span>#</span><span>Name</span><span class="tws-ph-h">Phone</span></div>';
-      s.employees.forEach(function (e, i) {
-        // positions: leadership/role chips first, then alpha -- a consistent order
-        // so the column reads cleanly (Sam #2806); role chips get the gold style.
-        var poss = (e.positions || []).slice().sort(function (a, b) {
-          var ar = isRolePos(a.name) ? 0 : 1, br = isRolePos(b.name) ? 0 : 1;
-          return ar - br || String(a.name || "").localeCompare(String(b.name || ""));
-        });
-        var chips = poss.length
-          ? poss.map(function (p) { return '<span class="tws-chip' + (isRolePos(p.name) ? ' role' : '') + '">' + esc(p.name) + '</span>'; }).join("")
-          : '<span class="tws-nopos">No positions yet</span>';
-        // Access-role pill removed (Sam #2582): permissions follow the POSITION now.
-        var ph = (e.phone || "").trim();
-        var phHtml = ph
-          ? '<span class="tws-phone"><i class="ti ti-phone"></i>' + esc(ph) + '</span>'
-          : '<span class="tws-phone none">No phone</span>';
-        // Row = [#] [name + positions stacked] [phone, right-aligned + caret]. Phone
-        // sits in its own auto column so position chips can never push it out of
-        // alignment (Sam #2806/#2807). data-emp carries the full record.
-        html += '<div class="tws-row editable' + (e.active ? "" : " inactive") + '" data-emp-row="' + e.id + '"' +
-                ' data-emp="' + esc(JSON.stringify(e)) + '">' +
-                '<div class="tws-rnum">' + (i + 1) + '</div>' +
-                '<div class="tws-namecell"><div class="tws-name">' + esc(e.full_name) + '</div>' +
-                  '<div class="tws-poschips">' + chips + '</div></div>' +
-                '<div class="tws-phonecell">' + phHtml + '<span class="caret ti ti-chevron-down"></span></div>' +
-                '</div>' +
-                '<div class="tws-edit" data-emp-edit="' + e.id + '"></div>';
-      });
+              '<span class="tws-store-meta">' + totalShown + ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>';
+      html += renderSection(s.store_key, "Management", "management", mgmt);
+      html += renderSection(s.store_key, "Tipped / Hourly", "hourly", hrly);
       html += '</div>';
     });
     elRoster.innerHTML = html || '<div class="tws-empty">No team members match these filters.</div>';
@@ -784,7 +745,10 @@
         if (!res.ok && d.ok === undefined && !d.error) return;
         var confirmed = {};
         res.links.forEach(function (l) { confirmed[l.cena_emp_id] = l; });
+        // S7 store-split: each store is its own labeled block with its own
+        // "Cena | Toast" column header (the global header was removed).
         html += '<div class="tws-link-store">' + esc(s.label) + '</div>';
+        html += '<div class="tws-link-head"><span>Cena</span><span>Toast</span></div>';
         if (!res.ok || d.ok === false) {
           html += '<div class="tws-link-row"><div class="tws-link-cena ph">' + esc(d.error || "Toast unavailable") + '</div><div class="tws-link-toast"></div></div>';
           return;
@@ -1042,7 +1006,8 @@
       p.classList.add("active"); state.filter = p.getAttribute("data-filter"); load();
     });
   });
-  document.getElementById("tws-loc").addEventListener("change", function (e) { state.location = e.target.value; load(); });
+  // S7: the global location dropdown (#tws-loc) is gone -- both stores always show.
+  // state.location stays "all" so load() keeps fetching both stores (unchanged qs).
   document.getElementById("tws-inactive").addEventListener("change", function (e) { state.include_inactive = e.target.checked; load(); });
 
   /* ---------------- multi-select POSITION filter popover (Sam #2585) ----------------
@@ -1134,21 +1099,23 @@
   function buildAssignPicker(emp) {
     var addable = [];
     try { addable = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]"); } catch (e) { addable = []; }
-    var locSel = document.getElementById("tws-loc");
     if (!addable.length) {
       return '<p class="tws-edit-hint">Your role can\'t reassign positions.</p>';
     }
     var byStore = emp.positions_by_store || {};
     var out = "";
-    for (var j = 1; j < locSel.options.length; j++) {  // skip "Both stores"
-      var skey = locSel.options[j].value, slabel = locSel.options[j].textContent;
+    // S7: enumerate stores from STORE_LIST (the roster payload) now that #tws-loc
+    // is gone. Each store offers the full addable set (reassign isn't section-
+    // scoped); value stays "<position_id>|<store_key>" so /assign is unchanged.
+    STORE_LIST.forEach(function (st) {
+      var skey = st.key, slabel = st.label;
       var held = byStore[skey] || [];
       var labels = addable.map(function (p) {
         var on = held.indexOf(p.id) !== -1 ? " checked" : "";
         return '<label><input type="checkbox" value="' + esc(String(p.id)) + '|' + esc(skey) + '"' + on + '> ' + esc(p.name) + '</label>';
       }).join("");
       out += '<div class="tws-store-grp"><div class="lbl">' + esc(slabel) + '</div><div class="tws-multi">' + labels + '</div></div>';
-    }
+    });
     return out;
   }
 
@@ -1422,36 +1389,64 @@
     }
   });
 
-  /* ---------------- +Add team member (Sam #2310-2317) ---------------- */
+  /* ---------------- +Add team member (Sam #2310-2317; S8 store+section-scoped) ----------------
+     There are now TWO +Add buttons per store block (Management + Tipped/Hourly),
+     rendered by renderBoard with data-add-store + data-add-section. Clicking one
+     opens the SAME modal but with the target store + section FIXED: addCtx holds
+     them, the position list is FILTERED to that section's addable positions, and
+     every checkbox's store_key is the fixed store. No in-modal store picker. */
   var addBack = document.getElementById("tws-add-back");
+  // The store/section the currently-open +Add modal is scoped to.
+  var addCtx = { store_key: "", store_label: "", section: "" };
+
+  function sectionLabel(section) { return section === "management" ? "Management" : "Tipped / Hourly"; }
+
+  // Build the (single-store, section-filtered) position checkboxes for the modal.
+  // tws-addable = the SAME rank-gated set as the 403 add-gate (zero drift); we
+  // keep only entries whose .section matches addCtx.section. Each checkbox value
+  // is "<position_id>|<store_key>" with store_key FIXED to addCtx.store_key.
   function buildAddOptions() {
-    // Positions are assigned PER STORE (Sam #2435/#2457): render the rank-gated
-    // addable positions (tws-addable = the SAME set as the 403 gate, zero drift)
-    // under EACH store, so a manager can give e.g. Manager @ Tomball + Server @
-    // Copperfield on one login. Each checkbox value is "<position_id>|<store_key>"
-    // -> the submit sends (position, store) pairs to sv2_employee_add.
     var posWrap = document.getElementById("tws-f-pos");
-    if (posWrap && !posWrap.childNodes.length) {
-      var addable = [];
-      try { addable = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]"); } catch (e) { addable = []; }
-      if (!addable.length) {
-        posWrap.innerHTML = '<span style="font-size:12px;color:var(--tws-cream-meta)">Your role can\'t add team members.</span>';
-        return;
-      }
-      var locSel = document.getElementById("tws-loc");
-      for (var j = 1; j < locSel.options.length; j++) {  // skip "Both stores"
-        var skey = locSel.options[j].value, slabel = locSel.options[j].textContent;
-        posWrap.insertAdjacentHTML("beforeend",
-          '<div style="width:100%;margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tws-gold)">' + esc(slabel) + '</div>');
-        addable.forEach(function (p) {
-          posWrap.insertAdjacentHTML("beforeend",
-            '<label><input type="checkbox" value="' + esc(String(p.id)) + '|' + esc(skey) + '"> ' + esc(p.name) + '</label>');
-        });
-      }
+    if (!posWrap) return;
+    posWrap.innerHTML = "";   // rebuilt every open: options depend on store+section
+    var addable = [];
+    try { addable = JSON.parse((document.getElementById("tws-addable") || {}).textContent || "[]"); } catch (e) { addable = []; }
+    if (!addable.length) {
+      posWrap.innerHTML = '<span style="font-size:12px;color:var(--tws-cream-meta)">Your role can\'t add team members.</span>';
+      return;
     }
+    var inSection = addable.filter(function (p) { return p.section === addCtx.section; });
+    if (!inSection.length) {
+      posWrap.innerHTML = '<span style="font-size:12px;color:var(--tws-cream-meta)">No ' + esc(sectionLabel(addCtx.section)) + ' positions you can add here.</span>';
+      return;
+    }
+    inSection.forEach(function (p) {
+      posWrap.insertAdjacentHTML("beforeend",
+        '<label><input type="checkbox" value="' + esc(String(p.id)) + '|' + esc(addCtx.store_key) + '"> ' + esc(p.name) + '</label>');
+    });
   }
+
+  // Open the modal scoped to one store + section (from the clicked +Add button).
+  function openAddFor(storeKey, section) {
+    var st = null;
+    STORE_LIST.forEach(function (s) { if (s.key === storeKey) st = s; });
+    addCtx = { store_key: storeKey, store_label: (st ? st.label : storeKey), section: section };
+    var ctxEl = document.getElementById("tws-add-context");
+    if (ctxEl) ctxEl.innerHTML = 'Adding to <b>' + esc(addCtx.store_label) + '</b> &middot; <b>' + esc(sectionLabel(section)) + '</b>';
+    buildAddOptions();
+    document.getElementById("tws-add-err").textContent = "";
+    addBack.classList.add("open");
+  }
+
   function closeAdd() { addBack.classList.remove("open"); }
-  document.getElementById("tws-add").addEventListener("click", function () { buildAddOptions(); document.getElementById("tws-add-err").textContent = ""; addBack.classList.add("open"); });
+  // Delegated: the section-scoped +Add buttons live inside the (re-rendered)
+  // roster, so listen on elRoster. Each carries its fixed store + section.
+  elRoster.addEventListener("click", function (ev) {
+    var addBtn = ev.target.closest("[data-add-store]");
+    if (!addBtn) return;
+    ev.stopPropagation();   // don't let the click bubble to a roster row toggle
+    openAddFor(addBtn.getAttribute("data-add-store"), addBtn.getAttribute("data-add-section"));
+  });
   document.getElementById("tws-add-cancel").addEventListener("click", closeAdd);
   addBack.addEventListener("click", function (e) { if (e.target === addBack) closeAdd(); });
   document.getElementById("tws-add-send").addEventListener("click", function () {
@@ -1459,26 +1454,28 @@
     var name = document.getElementById("tws-f-name").value.trim();
     var phone = document.getElementById("tws-f-phone").value.trim();
     var email = document.getElementById("tws-f-email").value.trim();
+    // store_key is FIXED to addCtx.store_key (baked into each checkbox value).
     var pairs = Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked")).map(function (c) {
       var parts = c.value.split("|"); return { position_id: parts[0], store_key: parts[1] };
     });
     if (!name || !email) { err.textContent = "Name and email are required."; return; }
-    if (!pairs.length) { err.textContent = "Check at least one position under the store(s) they'll work."; return; }
+    if (!pairs.length) { err.textContent = "Check at least one position for this section."; return; }
     err.textContent = "Sending...";
     // sv2_employee_add per-store (ck part 1 @ 1d16060): assignments = (position, store)
-    // pairs -> one EmployeePosition per pair (store_key) + a store-assignment per store + invite
+    // pairs -> one EmployeePosition per pair (store_key) + a store-assignment + invite.
+    // S8: store_key is fixed to this block's store; include the section so the
+    // backend enforces section-scoping. Payload shape is otherwise UNCHANGED.
     fetch("/{{ store_slug }}/schedules-v2/employees/add", {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ full_name: name, phone: phone, email: email, assignments: pairs })
+      body: JSON.stringify({ full_name: name, phone: phone, email: email, assignments: pairs, section: addCtx.section })
     })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok || (res.d && res.d.ok === false)) { err.textContent = (res.d && res.d.error) || "Could not send the invite."; return; }
         closeAdd();
         ["tws-f-name", "tws-f-phone", "tws-f-email"].forEach(function (id) { document.getElementById(id).value = ""; });
-        document.getElementById("tws-f-pos").innerHTML = "";  // rebuild grouped options on next open
-        Array.prototype.slice.call(document.querySelectorAll("#tws-f-pos input:checked")).forEach(function (c) { c.checked = false; });
+        document.getElementById("tws-f-pos").innerHTML = "";  // rebuilt (store+section-scoped) on next open
         load();  // refresh the roster (the new member appears Active once they set up)
       })
       .catch(function () { err.textContent = "Invite endpoint not live yet (aick's +Add backend pending)."; });

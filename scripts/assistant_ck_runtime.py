@@ -1115,6 +1115,9 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     if not isinstance(payload, dict) or payload.get("ok") is False:
         return "I could not read the approved catering data for that question, so I saved it for Sam review."
     if payload.get("found") is False:
+        searched = str(payload.get("searched_token") or "").strip()
+        if searched:
+            return f"I did not find a matching visible catering record for {searched}."
         return "I did not find a matching visible catering record for that question."
 
     if tool_id in {

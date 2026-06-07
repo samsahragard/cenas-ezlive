@@ -348,18 +348,19 @@ def _has_explicit_order_reference(question: str) -> bool:
     return False
 
 
-def _find_order(orders: list[Order], question: str) -> Order | None:
+def _find_order(orders: list[Order], question: str) -> tuple[Order | None, str | None]:
     token = _lookup_token(question)
     if token:
         token_cf = token.casefold()
         for order in orders:
             if str(order.external_order_id or "").casefold() == token_cf:
-                return order
+                return order, token
         for order in orders:
             if token_cf in str(order.external_order_id or "").casefold():
-                return order
+                return order, token
+        return None, token
     sorted_orders = _sort_orders(orders)
-    return sorted_orders[-1] if sorted_orders else None
+    return (sorted_orders[-1] if sorted_orders else None), None
 
 
 def _details_by_external_id(db: Session, external_ids: set[str]) -> dict[str, EzcaterOrderDetails]:
@@ -692,14 +693,21 @@ def catering_order_lookup(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
         orders = _allowed_orders(db, ctx)
-        order = _find_order(orders, question)
+        order, searched_token = _find_order(orders, question)
         if not order:
-            return _payload("orders.catering_order_lookup", ctx, question=question, found=False)
+            return _payload(
+                "orders.catering_order_lookup",
+                ctx,
+                question=question,
+                found=False,
+                searched_token=searched_token,
+            )
         return _payload(
             "orders.catering_order_lookup",
             ctx,
             question=question,
             found=True,
+            searched_token=searched_token,
             order=_safe_order(order),
         )
     finally:
@@ -710,15 +718,22 @@ def catering_order_items_safe(question: str, ctx: dict[str, Any]) -> dict[str, A
     db = SessionLocal()
     try:
         orders = _allowed_orders(db, ctx)
-        order = _find_order(orders, question)
+        order, searched_token = _find_order(orders, question)
         if not order:
-            return _payload("orders.catering_order_items_safe", ctx, question=question, found=False)
+            return _payload(
+                "orders.catering_order_items_safe",
+                ctx,
+                question=question,
+                found=False,
+                searched_token=searched_token,
+            )
         items = list(order.items or [])
         return _payload(
             "orders.catering_order_items_safe",
             ctx,
             question=question,
             found=True,
+            searched_token=searched_token,
             order=_safe_order(order, include_tracking=False),
             item_count=len(items),
             items=[_safe_item(item) for item in items[:MAX_ITEM_ROWS]],
@@ -1077,13 +1092,13 @@ def _wants_order_items(question: str) -> bool:
 
 def _wants_order_lookup(question: str) -> bool:
     text = _txt(question)
+    real_id = _REAL_EZCATER_ID_RE.search(str(question or ""))
+    real_id_with_digit = bool(real_id and re.search(r"\d", real_id.group(1)))
+    explicit_lookup = bool(re.search(r"\b(lookup|find|details?|order #|order id|ticket)\b", text))
     return (
         _order_context(question)
         and not _in_house_context(question)
-        and bool(
-            re.search(r"\b(lookup|find|details?|order #|order id|ticket)\b", text)
-            or re.search(r"\b[A-Z0-9]{2,4}-[A-Z0-9]{2,4}\b", str(question or ""), re.IGNORECASE)
-        )
+        and bool(explicit_lookup or real_id_with_digit)
     )
 
 

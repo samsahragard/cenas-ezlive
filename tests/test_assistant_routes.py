@@ -751,6 +751,29 @@ def test_order_lookup_token_does_not_return_keyword_stop_words(question):
 
 
 @pytest.mark.parametrize(
+    ("question", "expected_tool"),
+    [
+        ("any tex-mex catering orders today", "orders.catering_today"),
+        ("show mon-fri catering orders this week", "orders.catering_week"),
+    ],
+)
+def test_hyphenated_menu_or_day_phrases_do_not_route_to_order_lookup(monkeypatch, question, expected_tool):
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("hyphenated non-id route must not call classifier")),
+    )
+
+    route = ar._route_approved_tool_choice(question, ctx)
+
+    assert route["tool_id"] == expected_tool
+    assert route["route_path"] == "deterministic"
+    assert ar._TOOL_MATCHERS["orders_catering_order_lookup"](question) is False
+
+
+@pytest.mark.parametrize(
     "question",
     [
         "what items get ordered most in catering",
@@ -896,6 +919,7 @@ def test_wave1_order_handlers_fail_closed_without_staff_store_scope(db_session, 
     )
     data_only = dict(payload)
     data_only["question"] = ""
+    data_only["searched_token"] = ""
     encoded = json.dumps(data_only, sort_keys=True).lower()
 
     assert payload["ok"] is True
@@ -1555,6 +1579,50 @@ def test_order_items_tool_payload_is_sanitized_and_store_scoped(db_session, monk
     assert "713-555" not in encoded
     assert "private customer" not in encoded
     assert "hidden ave" not in encoded
+
+
+def test_catering_order_lookup_missing_token_returns_found_false_without_latest_fallback(db_session, monkeypatch):
+    _seed_wave1_order_fixture(db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = ar._approved_tool_data("Look up catering order ZZZ-999", _wave1_partner_ctx(stores=["tomball"]))
+
+    data = payload["orders.catering_order_lookup"]
+    encoded = json.dumps(data, sort_keys=True).lower()
+    assert data["found"] is False
+    assert data["searched_token"] == "ZZZ-999"
+    assert "order" not in data
+    assert "to-today" not in encoded
+    assert "to-tomorrow" not in encoded
+    assert "cf-today" not in encoded
+
+
+def test_catering_order_items_missing_token_returns_found_false_without_latest_fallback(db_session, monkeypatch):
+    _seed_wave1_order_fixture(db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = ar._approved_tool_data("What items are on order ZZZ-999?", _wave1_partner_ctx(stores=["tomball"]))
+
+    data = payload["orders.catering_order_items_safe"]
+    encoded = json.dumps(data, sort_keys=True).lower()
+    assert data["found"] is False
+    assert data["searched_token"] == "ZZZ-999"
+    assert "order" not in data
+    assert "items" not in data
+    assert "to-today" not in encoded
+    assert "to-tomorrow" not in encoded
+    assert "cf-today" not in encoded
+
+
+def test_catering_order_lookup_without_token_still_falls_back_to_latest_visible_order(db_session, monkeypatch):
+    _seed_wave1_order_fixture(db_session)
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.catering_order_lookup("show me the latest catering order", _wave1_partner_ctx(stores=["tomball"]))
+
+    assert payload["found"] is True
+    assert payload["searched_token"] is None
+    assert payload["order"]["external_order_id"] == "TO-TOMORROW"
 
 
 def test_order_handler_respects_staff_store_scope_directly(db_session, monkeypatch):

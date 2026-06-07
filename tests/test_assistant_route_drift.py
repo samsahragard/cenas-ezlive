@@ -20,7 +20,7 @@ from scripts import assistant_ck_runtime as ck_runtime
 CORPUS_PATH = (
     Path(__file__).resolve().parents[1]
     / "audit_outputs"
-    / "prod_assistant_smoke_output_assertion_corpus_5b61c36_v1.json"
+    / "prod_assistant_smoke_output_assertion_corpus_169a706_v2.json"
 )
 
 
@@ -145,6 +145,12 @@ DETERMINISTIC_ROUTE_CASES = [
     {
         "id": "catering_order_lookup",
         "question": "Look up catering order W7T-UF9",
+        "route_path": "deterministic",
+        "tool_id": "orders.catering_order_lookup",
+    },
+    {
+        "id": "catering_order_lookup_missing",
+        "question": "Look up catering order ZZZ-999",
         "route_path": "deterministic",
         "tool_id": "orders.catering_order_lookup",
     },

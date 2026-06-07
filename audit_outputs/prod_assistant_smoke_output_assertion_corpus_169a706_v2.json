@@ -107,6 +107,19 @@
     ]
   },
   {
+    "id": "B8N",
+    "question": "Look up catering order ZZZ-999",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "orders.catering_order_lookup",
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "payload_field_equals", "field": "found", "value": false},
+      {"type": "payload_field_equals", "field": "searched_token", "value": "ZZZ-999"},
+      {"type": "answer_contains_any", "values": ["ZZZ-999", "did not find", "matching visible"]},
+      {"type": "answer_has_no_substituted_order_id", "requested_id": "ZZZ-999"}
+    ]
+  },
+  {
     "id": "B13",
     "question": "What items get ordered most in catering?",
     "expected_route_path": "deterministic",

@@ -2131,6 +2131,51 @@ def test_runtime_answers_wave1_order_items_with_explicit_route(monkeypatch):
     assert "fajita_pack" in data["answer"]
 
 
+@pytest.mark.parametrize(
+    "tool_id",
+    [
+        "orders.catering_order_lookup",
+        "orders.catering_order_items_safe",
+    ],
+)
+def test_runtime_order_not_found_answer_uses_searched_token_not_substituted_order_id(tool_id, monkeypatch):
+    from scripts import assistant_ck_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("not-found order formatter must not call model")),
+    )
+    principal = _principal("partner")
+    principal["kind"] = "partner"
+    payload = {
+        "ok": True,
+        "generated_at": "2026-06-06T12:00:00Z",
+        "data_class": "orders_read_sanitized",
+        "found": False,
+        "searched_token": "ZZZ-999",
+        "order": {"external_order_id": "TO-TODAY"},
+        "item_count": 1,
+        "items": [{"qty": 2, "label": "fajita_pack"}],
+    }
+
+    data = runtime._approved_tool_answer(
+        "what was on order ZZZ-999?",
+        "",
+        principal,
+        [_available_tool(tool_id)],
+        {tool_id: payload},
+        routed_tool_id=tool_id,
+    )
+
+    assert data is not None
+    assert data["queued"] is False
+    assert data["tool_id"] == tool_id
+    assert "ZZZ-999" in data["answer"]
+    assert "TO-TODAY" not in data["answer"]
+    assert "the selected order" not in data["answer"]
+
+
 def test_runtime_wave1_order_routes_are_verifiable():
     from scripts import assistant_ck_runtime as runtime
 

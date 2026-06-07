@@ -402,10 +402,17 @@ def sv2_employee_add():
     # It never raises into us (logs the link on SMTP failure), so the add still
     # succeeds + a re-add/re-invite just issues a fresh token.
     from app.web.employee_setup import send_setup_invite
-    send_setup_invite(emp_id)
-    return jsonify({"ok": True, "employee_id": emp_id,
-                    "stores": store_keys, "position_ids": sorted(valid_pids),
-                    "message": "Invitation emailed to %s." % email}), 200
+    invite = send_setup_invite(emp_id)
+    # Dual-channel (Sam 2026-06-07): the invite mints BOTH an emailed link and a
+    # manager-displayed code on one single-use token. Surface the code so the
+    # manager can hand it over; omit gracefully if there was no invite (no email).
+    resp = {"ok": True, "employee_id": emp_id,
+            "stores": store_keys, "position_ids": sorted(valid_pids),
+            "message": "Invitation emailed to %s." % email}
+    setup_code = (invite or {}).get("code")
+    if setup_code:
+        resp["setup_code"] = setup_code
+    return jsonify(resp), 200
 
 
 @store_bp.route("/schedules-v2/schedule/new", methods=["POST"])

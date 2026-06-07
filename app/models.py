@@ -3209,6 +3209,15 @@ class EmployeeSetupToken(Base):
         ForeignKey("employees.id", ondelete="CASCADE"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # sha256 hex
+    # Dual-channel reset (Sam 2026-06-07): a short MANAGER-DISPLAYED code, tied to
+    # this SAME single-use row, as an alternative to the email link. Stored as
+    # sha256 hex of the 6-digit code (lookupable, not reversible). NULLABLE so old
+    # rows (link-only) remain valid; code_attempts gives the 6-digit code its own
+    # per-token brute-force lockout (the link token is high-entropy, but a 6-digit
+    # code is guessable, so it needs an attempt cap). The boot ALTER (app/__init__.py)
+    # adds both columns to the populated table.
+    code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # sha256 hex of the short code
+    code_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

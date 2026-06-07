@@ -25,7 +25,8 @@ import os
 import secrets
 from datetime import datetime, timedelta
 
-from flask import has_request_context, jsonify, request, session
+from flask import (has_request_context, jsonify, render_template, request,
+                   session)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
@@ -37,8 +38,9 @@ from app.web.employee_auth import (_establish_employee_session,
 log = logging.getLogger(__name__)
 
 PASSCODE_LEN = 5                # 5-digit numeric PIN (matches keypad_auth)
+SETUP_CODE_LEN = 6              # short MANAGER-DISPLAYED reset code (dual-channel)
 SETUP_TOKEN_TTL_HOURS = 72      # invite link lifetime
-MAX_LOGIN_ATTEMPTS = 5          # passcode-login lockout threshold
+MAX_LOGIN_ATTEMPTS = 5          # passcode-login lockout threshold (also caps per-token code guesses)
 LOCKOUT_MINUTES = 15            # lockout duration after MAX_LOGIN_ATTEMPTS
 
 
@@ -88,14 +90,76 @@ def _resolve_setup_token(db, token: str):
     return (emp, row) if emp is not None else (None, None)
 
 
-def send_setup_invite(employee_id, *, base_url: str | None = None) -> str | None:
-    """Create a one-time setup token for the employee + email the setup link via
-    the orders@ SMTP. Returns the raw token (for logging/testing) or None if the
-    employee/email is missing. Called by the admin-add flow (aick). Never raises
-    into the caller - a send failure is logged (with the link, for testing) so the
-    admin-add still succeeds; a re-invite just issues a fresh token."""
+def _resolve_setup_by_code(db, identifier: str, code: str):
+    """(employee, token_row) for a VALID setup token whose code matches, scoped to
+    the identifier's ACTIVE employee, else (None, None).
+
+    SECURITY:
+      * IDENTIFIER-SCOPED: resolve the employee from the identifier (email/phone)
+        FIRST, then look for THAT employee's valid token whose code_hash == sha(code).
+        Employee A's code can NEVER set employee B's passcode (no cross-employee use).
+      * VALID = used=False AND expires_at>now (so a consumed link -> code dead, and
+        an expired/superseded token never matches).
+      * BRUTE-FORCE CAP: a 6-digit code is guessable, so each wrong code increments
+        the row's code_attempts; once >= MAX_LOGIN_ATTEMPTS the token is rejected
+        (returns (None,None)) even for the right code -- the manager must re-issue.
+        The increment is committed so the cap survives across requests.
+    Anti-enumeration: callers surface a single generic failure for every miss."""
+    if not (identifier or "").strip() or not (code or "").strip():
+        return None, None
+    emp = _find_employee_by_identifier(db, identifier)
+    if emp is None:
+        return None, None
+    # The newest valid (unused, unexpired) token for THIS employee. send_setup_invite
+    # invalidates prior unused tokens, so at most one is live; order by id desc for safety.
+    row = (db.query(EmployeeSetupToken)
+             .filter(EmployeeSetupToken.employee_id == emp.id,
+                     EmployeeSetupToken.used.is_(False),
+                     EmployeeSetupToken.expires_at > datetime.utcnow())
+             .order_by(EmployeeSetupToken.id.desc())
+             .first())
+    if row is None or not row.code_hash:
+        return None, None
+    # Hard lockout once the per-token guess cap is hit (reject even a correct code).
+    if (row.code_attempts or 0) >= MAX_LOGIN_ATTEMPTS:
+        return None, None
+    if not secrets.compare_digest(row.code_hash, _sha(code)):
+        row.code_attempts = (row.code_attempts or 0) + 1
+        try:
+            db.commit()
+        except Exception:  # noqa: BLE001 - never let a counter write mask the auth failure
+            db.rollback()
+        return None, None
+    return emp, row
+
+
+def _gen_setup_code() -> str:
+    """A zero-padded SETUP_CODE_LEN-digit numeric code (cryptographically random).
+    secrets.randbelow gives a uniform draw over 0..10**n-1, then zero-pad so every
+    code is exactly n digits (incl. leading zeros)."""
+    return str(secrets.randbelow(10 ** SETUP_CODE_LEN)).zfill(SETUP_CODE_LEN)
+
+
+def send_setup_invite(employee_id, *, base_url: str | None = None) -> dict | None:
+    """Create a one-time setup token for the employee that backs BOTH reset
+    channels -- the emailed link AND a short MANAGER-DISPLAYED code -- and email
+    the link via the orders@ SMTP.
+
+    Dual-channel (Sam 2026-06-07): the link token and the 6-digit code live on the
+    SAME single-use EmployeeSetupToken row, so whichever the employee uses FIRST
+    consumes the row (used=True) and the OTHER stops working. Before inserting the
+    new row, all prior UNUSED tokens for this employee are invalidated (used=True)
+    so only the newest reset is live (an old link + old code both die).
+
+    Returns {"token": raw, "code": code} (raw values, for the manager response /
+    testing) or None if the employee/email is missing. The raw code is returned
+    ONLY to the manager via the reset/add response; it is NEVER stored in plaintext
+    or logged. Called by the admin-add + reset-PIN flows. Never raises into the
+    caller - a send failure is logged (with the link, NOT the code) so the action
+    still succeeds; a re-invite just issues a fresh token + code."""
     emp_email = emp_name = None
     raw = secrets.token_urlsafe(32)
+    code = _gen_setup_code()
     now = datetime.utcnow()
     db = SessionLocal()
     try:
@@ -103,7 +167,15 @@ def send_setup_invite(employee_id, *, base_url: str | None = None) -> str | None
         if emp is None or not (emp.email or "").strip():
             log.warning("[employee-setup] no employee/email for id=%s; invite skipped", employee_id)
             return None
+        # Invalidate any prior UNUSED tokens for this employee so only the NEWEST
+        # reset is live (old link + old code both become dead). Single-use rows are
+        # consumed via used=True, so flipping unused ones to used kills them too.
+        (db.query(EmployeeSetupToken)
+           .filter(EmployeeSetupToken.employee_id == emp.id,
+                   EmployeeSetupToken.used.is_(False))
+           .update({EmployeeSetupToken.used: True}, synchronize_session=False))
         db.add(EmployeeSetupToken(employee_id=emp.id, token_hash=_sha(raw),
+                                  code_hash=_sha(code), code_attempts=0,
                                   expires_at=now + timedelta(hours=SETUP_TOKEN_TTL_HOURS),
                                   used=False, created_at=now))
         db.commit()
@@ -121,10 +193,10 @@ def send_setup_invite(employee_id, *, base_url: str | None = None) -> str | None
         from app.services import brief_email
         brief_email._smtp_send(emp_email, "Set up your Cenas Kitchen account", body)
         log.info("[employee-setup] invite emailed to employee %s", employee_id)
-    except Exception as e:  # noqa: BLE001 - never break admin-add; log the link for testing
+    except Exception as e:  # noqa: BLE001 - never break admin-add; log the link (NOT the code) for testing
         log.warning("[employee-setup] invite email NOT sent (employee %s): %s -- setup link: %s",
                     employee_id, e, link)
-    return raw
+    return {"token": raw, "code": code}
 
 
 # --------------------------------------------------------------------------
@@ -179,43 +251,114 @@ def setup_info(token):
         db.close()
 
 
-@employee_auth.route("/employee/setup/<token>/complete", methods=["POST"])
-def setup_complete(token):
-    """The employee sets their 5-digit passcode + completes their profile. Token-
-    scoped (sets ONLY the token's own employee -> no IDOR) + single-use (consumed
-    here). On success, logs them straight in."""
-    data = request.get_json(silent=True) or {}
-    passcode = (data.get("passcode") or "").strip()
+def _apply_passcode(db, emp, row, *, passcode, phone, full_name):
+    """Shared single-use-token consume + passcode set for BOTH reset channels
+    (the link and the code). Validates+sets the 5-digit passcode, requires+
+    normalizes the phone (Sam #2606), bumps session_version (kills stale sessions,
+    guardrail #4), consumes the SAME row (row.used=True -> the other channel for
+    this reset stops working), commits (handling the duplicate-phone 409), and
+    establishes the employee session.
+
+    Returns a Flask response: the post-login response on success, or an error
+    tuple ((json, status)). Centralizing this guarantees the link path and the code
+    path consume the IDENTICAL single-use row -> first-wins is structural, not
+    duplicated per endpoint."""
+    passcode = (passcode or "").strip()
     if not _valid_passcode(passcode):
         return jsonify({"ok": False, "error": "Passcode must be exactly 5 digits."}), 400
     # Phone is REQUIRED at setup (Sam #2606): the normal /keypad-login is phone+PIN, so
     # an employee needs a phone on file to sign in there. Validate + normalize up front.
     from app.services.ezcater_known_drivers_seed import normalize_phone
-    norm_phone = normalize_phone((data.get("phone") or "").strip())
+    norm_phone = normalize_phone((phone or "").strip())
     if not norm_phone or len(norm_phone) < 10:
         return jsonify({"ok": False, "error": "A valid phone number is required."}), 400
+    emp.passcode_hash = generate_password_hash(passcode)
+    full_name = (full_name or "").strip()
+    if full_name:
+        emp.full_name = full_name
+    emp.phone = norm_phone   # required + normalized above (Sam #2606)
+    emp.failed_attempts = 0
+    emp.lockout_until = None
+    emp.session_version = (emp.session_version or 0) + 1  # bump -> invalidate any stale session (guardrail #4)
+    emp.updated_at = datetime.utcnow()
+    row.used = True   # consume the single-use token (the OTHER channel for this reset now dies)
+    try:
+        db.commit()
+    except Exception:  # e.g. a duplicate phone (Employee.phone is UNIQUE)
+        db.rollback()
+        return jsonify({"ok": False,
+                        "error": "Could not save - that phone may already be on file."}), 409
+    stores = _establish_employee_session(emp)
+    return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
+
+
+@employee_auth.route("/employee/setup/<token>/complete", methods=["POST"])
+def setup_complete(token):
+    """The employee sets their 5-digit passcode + completes their profile via the
+    emailed LINK. Token-scoped (sets ONLY the token's own employee -> no IDOR) +
+    single-use (consumed via _apply_passcode -> the matching CODE for this reset
+    stops working). On success, logs them straight in."""
+    data = request.get_json(silent=True) or {}
     db = SessionLocal()
     try:
         emp, row = _resolve_setup_token(db, token)
         if emp is None:
             return jsonify({"ok": False, "error": "This setup link is invalid or has expired."}), 410
-        emp.passcode_hash = generate_password_hash(passcode)
-        full_name = (data.get("full_name") or "").strip()
-        if full_name:
-            emp.full_name = full_name
-        emp.phone = norm_phone   # required + normalized above (Sam #2606)
-        emp.failed_attempts = 0
-        emp.lockout_until = None
-        emp.session_version = (emp.session_version or 0) + 1  # bump -> invalidate any stale session (guardrail #4)
-        emp.updated_at = datetime.utcnow()
-        row.used = True   # consume the single-use token
-        try:
-            db.commit()
-        except Exception:  # e.g. a duplicate phone (Employee.phone is UNIQUE)
-            db.rollback()
-            return jsonify({"ok": False,
-                            "error": "Could not save - that phone may already be on file."}), 409
-        stores = _establish_employee_session(emp)
-        return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
+        return _apply_passcode(db, emp, row,
+                               passcode=(data.get("passcode") or "").strip(),
+                               phone=(data.get("phone") or "").strip(),
+                               full_name=(data.get("full_name") or "").strip())
     finally:
         db.close()
+
+
+@employee_auth.route("/employee/setup/code/complete", methods=["POST"])
+def setup_code_complete():
+    """The employee sets their 5-digit passcode via the short MANAGER-DISPLAYED
+    CODE (the second reset channel). JSON: {identifier, code, passcode, phone,
+    full_name}. Resolves the code SCOPED to the identifier's employee, then runs
+    _apply_passcode -> consumes the SAME single-use row, so the email link for this
+    SAME reset immediately stops working (first-wins).
+
+    Anti-enumeration: a bad identifier/code is a single generic 410 (same as a
+    used/expired token); the per-token guess cap returns 429 once tripped."""
+    data = request.get_json(silent=True) or {}
+    identifier = (data.get("identifier") or "").strip()
+    code = (data.get("code") or "").strip()
+    if not identifier or not code:
+        return jsonify({"ok": False, "error": "Enter your email or phone and the code."}), 400
+    db = SessionLocal()
+    try:
+        # Distinguish a hard lockout (429) from a generic miss (410) WITHOUT leaking
+        # whether the identifier exists: only an identifier that resolves to an
+        # employee with a live, attempt-capped token yields 429.
+        emp_probe = _find_employee_by_identifier(db, identifier)
+        if emp_probe is not None:
+            live = (db.query(EmployeeSetupToken)
+                      .filter(EmployeeSetupToken.employee_id == emp_probe.id,
+                              EmployeeSetupToken.used.is_(False),
+                              EmployeeSetupToken.expires_at > datetime.utcnow())
+                      .order_by(EmployeeSetupToken.id.desc())
+                      .first())
+            if live is not None and (live.code_attempts or 0) >= MAX_LOGIN_ATTEMPTS:
+                return jsonify({"ok": False,
+                                "error": "Too many attempts. Ask your manager for a new code."}), 429
+        emp, row = _resolve_setup_by_code(db, identifier, code)
+        if emp is None:
+            return jsonify({"ok": False, "error": "That code is invalid or has expired."}), 410
+        return _apply_passcode(db, emp, row,
+                               passcode=(data.get("passcode") or "").strip(),
+                               phone=(data.get("phone") or "").strip(),
+                               full_name=(data.get("full_name") or "").strip())
+    finally:
+        db.close()
+
+
+@employee_auth.route("/employee/setup-code", methods=["GET"])
+def employee_setup_code_page():
+    """Render the mobile page where an employee enters their email/phone + the
+    short MANAGER-DISPLAYED code to set their passcode (the code-channel companion
+    to GET /employee/setup/<token>). Anonymous-reachable (the code is the
+    credential; no employee session yet -- covered by the /employee/setup EXEMPT
+    prefix). The UI phase refines the template; this route just renders the shell."""
+    return render_template("employee_setup_code.html")

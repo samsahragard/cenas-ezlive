@@ -188,6 +188,18 @@
   .tws-resetbtn:disabled { opacity: .55; cursor: default; }
   .tws-resetbtn.danger { color: #ff7a7a; border-color: rgba(255,122,122,.38); }
   .tws-resetbtn.danger:hover { border-color: rgba(255,122,122,.7); background: rgba(255,122,122,.10); }
+  /* Reset-PIN code display (dual-channel: emailed link + manager-shown code). The
+     reset response now returns setup_code; show it in a highlighted, copyable box
+     so the manager can read it out / hand it over. Additive -- hidden until a
+     reset returns a code. */
+  .tws-pin-code { display: none; margin-top: 12px; padding: 14px 16px; background: rgba(217,164,54,.10); border: 1px solid rgba(217,164,54,.45); border-radius: var(--tws-radius-sm); }
+  .tws-pin-code.show { display: block; }
+  .tws-pin-code-lbl { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; margin: 0 0 8px; }
+  .tws-pin-code-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .tws-pin-code-digits { font-family: 'Courier New', ui-monospace, monospace; font-size: 30px; font-weight: 700; letter-spacing: .22em; color: var(--tws-cream); padding-left: 2px; user-select: all; }
+  .tws-pin-code-copy { font-family: inherit; font-size: 11.5px; font-weight: 600; color: var(--tws-cream); background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 6px 12px; cursor: pointer; }
+  .tws-pin-code-copy:hover { border-color: var(--tws-gold); }
+  .tws-pin-code-note { font-size: 11.5px; color: var(--tws-cream-meta); line-height: 1.5; margin: 10px 0 0; }
   /* Availability editor -- dark-themed time grid (Sam #2808): native time inputs
      were rendering as bright white boxes against the dark panel. color-scheme:dark
      makes the picker dark; the indicator filter tints the clock icon gold. */
@@ -1141,11 +1153,21 @@
         '<div class="tws-edit-row"><button class="tws-save" data-act="save-contact" type="button">Save contact</button>' +
           '<span class="tws-edit-msg" data-msg="contact"></span></div>' +
       '</div>' +
-      // 2) RESET PIN
+      // 2) RESET PIN -- dual-channel: emails a fresh setup link AND returns a
+      // short manager-shown code. Both ride ONE single-use token; whichever the
+      // employee uses first sets the PIN, the other stops working.
       '<div class="tws-edit-sec"><h4>Reset passcode</h4>' +
-        '<p class="tws-edit-hint">Emails a fresh setup link and signs out their current session.</p>' +
+        '<p class="tws-edit-hint">Emails a fresh setup link and shows you a code to hand over. Either one sets their PIN; signs out their current session.</p>' +
         '<div class="tws-edit-row"><button class="tws-resetbtn" data-act="reset-pin" type="button">Reset PIN</button>' +
           '<span class="tws-edit-msg" data-msg="pin"></span></div>' +
+        '<div class="tws-pin-code" data-pin-code>' +
+          '<p class="tws-pin-code-lbl">Setup code</p>' +
+          '<div class="tws-pin-code-row">' +
+            '<span class="tws-pin-code-digits" data-pin-digits></span>' +
+            '<button class="tws-pin-code-copy" data-act="copy-code" type="button">Copy</button>' +
+          '</div>' +
+          '<p class="tws-pin-code-note" data-pin-note></p>' +
+        '</div>' +
       '</div>' +
       // 3) ASSIGN POSITIONS + STORES
       '<div class="tws-edit-sec"><h4>Positions &amp; stores</h4>' +
@@ -1285,11 +1307,32 @@
       return;
     }
 
+    if (act === "copy-code") {
+      // Copy the displayed setup code to the clipboard (manager hands it over).
+      var box = btn.closest("[data-pin-code]");
+      var digitsEl = box && box.querySelector("[data-pin-digits]");
+      var code = digitsEl ? (digitsEl.textContent || "").trim() : "";
+      if (!code) return;
+      var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1500); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(code).then(done, function () {}); }
+        else {
+          var rng = document.createRange(); rng.selectNodeContents(digitsEl);
+          var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rng);
+          document.execCommand("copy"); sel.removeAllRanges(); done();
+        }
+      } catch (e) {}
+      return;
+    }
+
     if (act === "reset-pin") {
       var pm = msgEl(editEl, "pin");
-      if (!window.confirm("Reset this team member's passcode? They'll be emailed a fresh setup link and signed out of any current session.")) return;
+      if (!window.confirm("Reset this team member's passcode? They'll be emailed a setup link AND you'll get a code to hand over (either one sets their PIN); they'll be signed out of any current session.")) return;
       setMsg(pm, "Resetting...", true);
       btn.disabled = true;
+      // hide any code from a prior reset in this panel before re-requesting
+      var codeBox = editEl.querySelector("[data-pin-code]");
+      if (codeBox) codeBox.classList.remove("show");
       fetch("/{{ store_slug }}/schedules-v2/employees/" + empId + "/reset-pin", {
         method: "POST", credentials: "same-origin",
         headers: { "Content-Type": "application/json", "Accept": "application/json" }
@@ -1298,7 +1341,22 @@
         .then(function (res) {
           btn.disabled = false;
           if (!res.ok || (res.d && res.d.ok === false)) { setMsg(pm, (res.d && res.d.error) || "Could not reset.", false); return; }
-          setMsg(pm, "Setup link emailed; their old session is signed out.", true);
+          var d = res.d || {};
+          // Dual-channel: when the backend returns a setup_code, surface it in the
+          // highlighted box for the manager to read out / copy. Falls back to the
+          // link-only message when no code (e.g. employee has no email).
+          if (d.setup_code && codeBox) {
+            var emp = empFromRow(elRoster.querySelector('[data-emp-row="' + empId + '"]')) || {};
+            var nm = (emp.full_name || "this team member");
+            var digitsEl2 = codeBox.querySelector("[data-pin-digits]");
+            var noteEl = codeBox.querySelector("[data-pin-note]");
+            if (digitsEl2) digitsEl2.textContent = String(d.setup_code);
+            if (noteEl) noteEl.textContent = "Give this code to " + nm + ", or they can use the emailed link. Whichever they use first sets their PIN; the other stops working.";
+            codeBox.classList.add("show");
+            setMsg(pm, "Setup link emailed and code generated. Their old session is signed out.", true);
+          } else {
+            setMsg(pm, d.message || "Setup link emailed; their old session is signed out.", true);
+          }
         })
         .catch(function () { btn.disabled = false; setMsg(pm, "Network error -- try again.", false); });
       return;

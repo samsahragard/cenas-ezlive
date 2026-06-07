@@ -379,6 +379,35 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("employees column backfill failed (non-fatal)")
 
+    # Dual-channel PIN reset (Sam 2026-06-07): add employee_setup_tokens.code_hash
+    # + code_attempts so a reset can ALSO mint a short manager-displayed code on the
+    # SAME single-use token. create_all() won't ALTER the already-populated
+    # employee_setup_tokens table, so add them here, each gated on column absence
+    # (safe + idempotent on every boot). code_hash is nullable (old link-only rows
+    # stay valid); code_attempts is NOT NULL DEFAULT 0 -> a safe SQLite ADD COLUMN.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_sc, text as _sa_text_sc
+        from app.db import engine as _eng_sc
+        if _eng_sc is not None:
+            insp = _sa_inspect_sc(_eng_sc)
+            if "employee_setup_tokens" in insp.get_table_names():
+                _sccols = {c["name"] for c in insp.get_columns("employee_setup_tokens")}
+                _scadd = []
+                with _eng_sc.begin() as conn:
+                    for col_name, col_def in (
+                        ("code_hash",     "VARCHAR(64)"),
+                        ("code_attempts", "INTEGER NOT NULL DEFAULT 0"),
+                    ):
+                        if col_name not in _sccols:
+                            conn.execute(_sa_text_sc(
+                                f"ALTER TABLE employee_setup_tokens ADD COLUMN {col_name} {col_def}"))
+                            _scadd.append(col_name)
+                if _scadd:
+                    logging.getLogger(__name__).info(
+                        "employee_setup_tokens table: backfilled missing columns %s", _scadd)
+    except Exception:
+        logging.getLogger(__name__).exception("employee_setup_tokens column backfill failed (non-fatal)")
+
     # Sam #2872: add shifts.display_name (historical import shows a former, no-record
     # employee's name struck-through). create_all() won't ALTER the existing shifts
     # table, so add it here, gated on absence -- safe + idempotent on every boot.

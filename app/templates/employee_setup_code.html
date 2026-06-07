@@ -196,7 +196,7 @@
       <label for="code">Setup code</label>
       <input id="code" name="code" type="text" inputmode="numeric"
              autocomplete="one-time-code" autocapitalize="none" autocorrect="off"
-             spellcheck="false" maxlength="6" pattern="[0-9]*" placeholder="------" />
+             spellcheck="false" maxlength="5" pattern="[0-9]*" placeholder="-----" />
     </div>
 
     <div class="field">
@@ -238,7 +238,7 @@
   var SUBMIT_URL    = {{ (submit_url|default('/employee/setup/code/complete'))|tojson }};
   var DASHBOARD_URL = {{ (dashboard_url|default('/employee/dashboard'))|tojson }};
   var PASSCODE_LEN  = {{ passcode_len|default(5) }};
-  var CODE_LEN      = {{ code_len|default(6) }};
+  var CODE_LEN      = {{ code_len|default(5) }};
   var PREFILL_ID    = {{ (prefill_identifier|default(''))|tojson }};
 
   var form     = document.getElementById('setup-form');

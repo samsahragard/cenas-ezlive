@@ -137,6 +137,8 @@
   .tws-store-tab.active { color: var(--tws-gold-bright); border-bottom-color: var(--tws-gold-bright); }
   .tws-store-tab-meta { font-size: 11px; font-weight: 700; color: var(--tws-cream-meta); background: var(--tws-border-soft); border-radius: 999px; padding: 1px 8px; }
   .tws-store-tab.active .tws-store-tab-meta { color: var(--tws-gold-bright); background: rgba(228,179,64,.12); }
+  /* Section label inside the per-store position picker (Management / Tipped-Hourly). */
+  .tws-assign-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tws-cream-meta); margin: 8px 0 4px; }
   .tws-store-name { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tws-gold); }
   .tws-store-meta { font-size: 11.5px; color: var(--tws-cream-meta); }
   .tws-colhead, .tws-row { display: grid; grid-template-columns: 210px 1fr 120px; gap: 12px; align-items: center; }
@@ -1158,17 +1160,26 @@
     }
     var byStore = emp.positions_by_store || {};
     var out = "";
-    // S7: enumerate stores from STORE_LIST (the roster payload) now that #tws-loc
-    // is gone. Each store offers the full addable set (reassign isn't section-
-    // scoped); value stays "<position_id>|<store_key>" so /assign is unchanged.
-    STORE_LIST.forEach(function (st) {
-      var skey = st.key, slabel = st.label;
-      var held = byStore[skey] || [];
-      var labels = addable.map(function (p) {
+    // Sam 2026-06-07: split the per-store picker into MANAGEMENT (the 7) and
+    // TIPPED/HOURLY (the 8) groups -- not one flat "everything" list. Tier-above
+    // positions (section null, e.g. Partner) are not assignable here, so they are
+    // dropped. A person can still hold across both groups (e.g. KM + Prep).
+    var mgmtPos = addable.filter(function (p) { return p.section === "management"; });
+    var hrlyPos = addable.filter(function (p) { return p.section === "hourly"; });
+    function grp(list, held, skey) {
+      return list.map(function (p) {
         var on = held.indexOf(p.id) !== -1 ? " checked" : "";
         return '<label><input type="checkbox" value="' + esc(String(p.id)) + '|' + esc(skey) + '"' + on + '> ' + esc(p.name) + '</label>';
       }).join("");
-      out += '<div class="tws-store-grp"><div class="lbl">' + esc(slabel) + '</div><div class="tws-multi">' + labels + '</div></div>';
+    }
+    // value stays "<position_id>|<store_key>" so /assign is unchanged.
+    STORE_LIST.forEach(function (st) {
+      var skey = st.key, slabel = st.label;
+      var held = byStore[skey] || [];
+      out += '<div class="tws-store-grp"><div class="lbl">' + esc(slabel) + '</div>';
+      if (mgmtPos.length) out += '<div class="tws-assign-sec">Management</div><div class="tws-multi">' + grp(mgmtPos, held, skey) + '</div>';
+      if (hrlyPos.length) out += '<div class="tws-assign-sec">Tipped / Hourly</div><div class="tws-multi">' + grp(hrlyPos, held, skey) + '</div>';
+      out += '</div>';
     });
     return out;
   }

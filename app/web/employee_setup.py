@@ -38,7 +38,7 @@ from app.web.employee_auth import (_establish_employee_session,
 log = logging.getLogger(__name__)
 
 PASSCODE_LEN = 5                # 5-digit numeric PIN (matches keypad_auth)
-SETUP_CODE_LEN = 6              # short MANAGER-DISPLAYED reset code (dual-channel)
+SETUP_CODE_LEN = 5              # short MANAGER-DISPLAYED reset code (dual-channel; matches the 5-digit PIN, Sam 2026-06-07)
 SETUP_TOKEN_TTL_HOURS = 72      # invite link lifetime
 MAX_LOGIN_ATTEMPTS = 5          # passcode-login lockout threshold (also caps per-token code guesses)
 LOCKOUT_MINUTES = 15            # lockout duration after MAX_LOGIN_ATTEMPTS

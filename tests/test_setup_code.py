@@ -88,7 +88,7 @@ def test_send_setup_invite_returns_six_digit_code(app_bound):
     assert isinstance(invite, dict)
     assert set(invite) == {"token", "code"}
     code = invite["code"]
-    assert code.isdigit() and len(code) == setup_mod.SETUP_CODE_LEN == 6
+    assert code.isdigit() and len(code) == setup_mod.SETUP_CODE_LEN == 5
 
     # The raw code is NEVER stored: only sha256(code) lands in code_hash.
     row = _live_token(db, emp.id)
@@ -119,7 +119,7 @@ def test_reset_endpoint_includes_setup_code(app_bound):
     assert r.status_code == 200, r.get_data(as_text=True)
     body = r.get_json()
     assert body["ok"] is True
-    assert body["setup_code"].isdigit() and len(body["setup_code"]) == 6
+    assert body["setup_code"].isdigit() and len(body["setup_code"]) == 5
 
 
 # ============================================================

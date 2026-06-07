@@ -218,6 +218,7 @@
   .sv2-cell:hover .sv2-addhint { opacity: 1; }
 
   .sv2-chip {
+    position: relative;
     display: block; border-radius: 7px; padding: 5px 7px; margin-bottom: 4px;
     background: var(--sk-bg-card-hi); border-left: 3px solid var(--foh);
     cursor: pointer; transition: transform .05s, background .12s;
@@ -245,6 +246,39 @@
   .sv2-chip-resp-tag { font-size: 9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:800; margin-top:1px; }
   .sv2-chip-resp-tag.declined { color: var(--sk-red-bright); }
   .sv2-chip-resp-tag.accepted { color: var(--sk-teal-bright); font-weight:700; }
+  /* Phase 2d: multi-select checkbox (shows on chip hover or while a selection is active)
+     + selected-chip outline. The box toggles selection; the chip body still opens the editor. */
+  .sv2-chip-check {
+    position: absolute; top: 4px; right: 4px; width: 15px; height: 15px;
+    border: 1.5px solid var(--sk-cream-faint); border-radius: 4px;
+    background: rgba(20,11,6,.72); display: none; z-index: 3; cursor: pointer;
+  }
+  .sv2-chip:hover .sv2-chip-check,
+  .sv2-selecting .sv2-chip-check { display: block; }
+  .sv2-chip.selected { box-shadow: inset 0 0 0 2px #E4B340; }
+  .sv2-chip.selected .sv2-chip-check { display: block; background: #E4B340; border-color: #E4B340; }
+  .sv2-chip.selected .sv2-chip-check::after {
+    content: "\2713"; position: absolute; top: -3px; left: 1px; font-size: 12px; font-weight: 800; color: #20130a;
+  }
+  /* Phase 2d: bulk-action toolbar -- sticky at the top of the grid while a selection is active */
+  .sv2-seltoolbar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 9px;
+    margin: 0 0 8px; padding: 8px 12px; border-radius: 10px;
+    background: linear-gradient(180deg, rgba(40,22,14,.98), rgba(28,16,9,.98));
+    border: 1px solid rgba(228,179,64,.45); box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  }
+  .sv2-seltoolbar.sv2-hidden { display: none; }
+  .sv2-selcount { font-size: 12.5px; font-weight: 800; color: var(--sk-cream); }
+  .sv2-seltoolbar .sv2-spacer { flex: 1 1 auto; }
+  .sv2-selbtn {
+    border: 1px solid rgba(228,179,64,.4); border-radius: 8px; padding: 6px 11px;
+    background: rgba(228,179,64,.1); color: var(--sk-cream); font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: background .12s;
+  }
+  .sv2-selbtn:hover { background: rgba(228,179,64,.2); }
+  .sv2-selbtn.danger { border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.12); color: var(--sk-red-bright); }
+  .sv2-selbtn.danger:hover { background: rgba(232,88,82,.22); }
+  .sv2-selbtn.ghost { border-color: rgba(244,231,208,.22); background: transparent; color: var(--sk-cream-dim); font-weight: 800; }
   .sv2-btn.warn { color: var(--sk-red-bright); border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.08); }
   .sv2-btn.warn:hover { background: rgba(232,88,82,.16); border-color: rgba(232,88,82,.7); }
   .sv2-btn.warn.toggled { background: rgba(232,88,82,.22); border-color: var(--sk-red-bright); }
@@ -367,6 +401,14 @@
   </div>
 
   <div id="sv2-gridwrap" class="sv2-gridwrap sv2-hidden">
+    <div id="sv2-seltoolbar" class="sv2-seltoolbar sv2-hidden">
+      <span class="sv2-selcount" id="sv2-selcount">0 selected</span>
+      <span class="sv2-spacer"></span>
+      <button class="sv2-selbtn" id="sv2-sel-edit" title="Edit selected shifts">Edit</button>
+      <button class="sv2-selbtn" id="sv2-sel-copy" title="Copy selected to another date">Copy</button>
+      <button class="sv2-selbtn danger" id="sv2-sel-delete" title="Delete selected shifts">Delete</button>
+      <button class="sv2-selbtn ghost" id="sv2-sel-clear" title="Clear selection">&times;</button>
+    </div>
     <table class="sv2-grid">
       <thead><tr id="sv2-head"></tr></thead>
       <tbody id="sv2-body"></tbody>
@@ -456,6 +498,7 @@
     cellDate: null,       // ISO date string for a new shift
     selTags: {},          // tag_id -> true while modal open
     declinedOnly: false,  // B5: manager filter to isolate declined shifts for reassignment
+    selected: {},         // Phase 2d: shift_id -> true for multi-select (bulk edit / copy / delete)
     busy: false
   };
 
@@ -580,6 +623,7 @@
       .then(function (data) {
         if (!data || data.ok === false) { throw { code: "bad" }; }
         state.board = data;
+        state.selected = {};  // Phase 2d: a fresh board (week nav / refresh) clears multi-select
         hide(elLoading);
         buildPosFilter();
         setStatus();
@@ -707,7 +751,9 @@
                 : resp === "accepted" ? '<div class="sv2-chip-resp-tag accepted">&#10003; Accepted</div>'
                 : "";
     var unpubTag = unpub ? '<div class="sv2-chip-unpub">unpublished</div>' : "";
+    if (state.selected[s.id]) cls += " selected";
     return '<div class="' + cls + '" data-shift="' + s.id + '"' + style + '>' +
+             '<div class="sv2-chip-check" data-check="' + s.id + '"></div>' +
              '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + unpubTag + '</div>';
   }
 
@@ -752,6 +798,7 @@
     bench.forEach(function (emp) { rows += rowHtml(emp, "current"); });
     elBody.innerHTML = rows;
     renderFilterHint(people, roster.length);
+    updateSelToolbar();  // Phase 2d: keep the bulk-action bar in sync after a (re)render
   }
 
   // Distinct display_names of former (no-record) staff among the loaded week's shifts.
@@ -1130,6 +1177,10 @@
 
   // grid click delegation: chip -> edit, empty cell -> new
   elBody.onclick = function (e) {
+    // Phase 2d: a click on the chip's checkbox toggles selection (for bulk
+    // edit / copy / delete) rather than opening the shift editor.
+    var box = e.target.closest ? e.target.closest(".sv2-chip-check") : null;
+    if (box) { e.stopPropagation(); toggleSelect(box.getAttribute("data-check")); return; }
     var chip = e.target.closest ? e.target.closest(".sv2-chip") : null;
     if (chip) {
       var sid = chip.getAttribute("data-shift");
@@ -1143,6 +1194,54 @@
       openModal({ empId: cell.getAttribute("data-emp"), dateISO: cell.getAttribute("data-date") });
     }
   };
+
+  // ---- multi-select bulk actions (Phase 2d) ----
+  var elSelbar = $("sv2-seltoolbar"), elSelCount = $("sv2-selcount");
+  function selectedIds() { return Object.keys(state.selected); }
+  function toggleSelect(id) {
+    if (state.selected[id]) delete state.selected[id]; else state.selected[id] = true;
+    var chip = elBody.querySelector('.sv2-chip[data-shift="' + id + '"]');
+    if (chip) chip.classList.toggle("selected", !!state.selected[id]);
+    updateSelToolbar();
+  }
+  function clearSelection() {
+    state.selected = {};
+    var on = elBody.querySelectorAll(".sv2-chip.selected");
+    for (var i = 0; i < on.length; i++) on[i].classList.remove("selected");
+    updateSelToolbar();
+  }
+  function updateSelToolbar() {
+    var n = selectedIds().length;
+    if (elBody) elBody.classList.toggle("sv2-selecting", n > 0);
+    if (!elSelbar) return;
+    if (n > 0) { elSelCount.textContent = n + (n === 1 ? " shift selected" : " shifts selected"); show(elSelbar); }
+    else hide(elSelbar);
+  }
+  function deleteSelected() {
+    var ids = selectedIds();
+    if (!ids.length || state.busy) return;
+    if (!window.confirm("Delete " + ids.length + (ids.length === 1 ? " shift" : " shifts") + "? This can't be undone.")) return;
+    state.busy = true;
+    var total = ids.length, done = 0, failed = 0;
+    function finish() {
+      if (done + failed < total) return;
+      state.busy = false; state.selected = {};
+      if (failed) toast(failed + " of " + total + " couldn't be deleted.", true);
+      else toast(total + (total === 1 ? " shift deleted." : " shifts deleted."));
+      loadBoard();
+    }
+    ids.forEach(function (id) {
+      fetch(CFG.shiftUrlBase + "/" + id, { method: "DELETE", headers: jsonHeaders(), credentials: "same-origin" })
+        .then(parseJsonOrThrow).then(function () { done++; finish(); })
+        .catch(function () { failed++; finish(); });
+    });
+  }
+  if (elSelbar) {
+    $("sv2-sel-delete").onclick = deleteSelected;
+    $("sv2-sel-clear").onclick = clearSelection;
+    $("sv2-sel-edit").onclick = function () { toast("Bulk edit is coming in the next update."); };
+    $("sv2-sel-copy").onclick = function () { toast("Copy to another date is coming in the next update."); };
+  }
 
   // go
   loadBoard();

@@ -503,13 +503,31 @@
     if (!sch) {
       hide(elPublish);
     } else {
-      show(elPublish);
       var pub = (sch.status === "published");
-      elPublish.textContent = pub ? "Re-publish" : "Publish";
-      elPublish.classList.toggle("primary", !pub);
-      elPublish.disabled = false;
+      var pend = countPending();
+      // per-shift publish (Phase 2c): once the week is published, the button is a
+      // quieter "Re-publish (N)" ONLY while there are pending (hollow) shifts; when
+      // everything is published (nothing pending) we HIDE it -- there's nothing left
+      // to re-publish (Sam: "when it's all published it should not show the
+      // re-publish option again"). A draft always shows the primary "Publish".
+      if (pub && pend === 0) {
+        hide(elPublish);
+      } else {
+        show(elPublish);
+        elPublish.textContent = pub ? ("Re-publish (" + pend + ")") : "Publish";
+        elPublish.classList.toggle("primary", !pub);
+        elPublish.disabled = false;
+      }
     }
     updateDeclinedToggle();
+  }
+
+  // per-shift publish (Phase 2c): how many shifts are NOT yet published (hollow) --
+  // new, or edited-then-"Save"d, shifts the employee can't see until a (re)publish.
+  function countPending() {
+    var sh = (state.board && state.board.shifts) || [], n = 0;
+    for (var i = 0; i < sh.length; i++) if (sh[i].published_at == null) n++;
+    return n;
   }
 
   // B5: count + surface DECLINED shifts so a manager can reassign them. Stays
@@ -1034,9 +1052,11 @@
     var sch = state.board && state.board.schedule;
     if (!sch) return;
     var pub = (sch.status === "published");
+    var pend = countPending();
     var msg = pub
-      ? "Re-publish this week's schedule? Employees will see the latest version of their shifts."
-      : "Publish this week's schedule? Employees will be able to see and accept or decline their shifts.";
+      ? ("Re-publish " + pend + " new or edited shift" + (pend === 1 ? "" : "s") +
+         "? The assigned employees will see the latest version of their shifts.")
+      : "Publish this week's schedule? Employees will be able to see their assigned shifts.";
     if (!window.confirm(msg)) return;
     state.busy = true;
     elPublish.disabled = true;

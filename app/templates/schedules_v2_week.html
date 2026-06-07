@@ -298,6 +298,18 @@
   .sv2-cp-opt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sk-cream-dim); margin-bottom: 6px; cursor: pointer; }
   .sv2-cp-opt input { cursor: pointer; }
   .sv2-cp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  /* Phase 2e: bulk-edit panel (inline, mirrors the copy panel) */
+  .sv2-editpanel {
+    margin: 0 0 8px; padding: 12px 14px; border-radius: 10px;
+    background: rgba(28,16,9,.98); border: 1px solid rgba(228,179,64,.4); box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  }
+  .sv2-editpanel.sv2-hidden { display: none; }
+  .sv2-be-row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+  .sv2-be-lab { font-size: 12px; font-weight: 700; color: var(--sk-cream-dim); min-width: 46px; }
+  .sv2-be-input { flex: 1 1 auto; max-width: 240px; }
+  input.sv2-be-input { padding: 6px 9px; border-radius: 8px; border: 1px solid rgba(228,179,64,.3);
+    background: rgba(20,11,6,.7); color: var(--sk-cream); font-size: 13px; }
+  .sv2-be-input.sv2-hidden { display: none; }
   .sv2-btn.warn { color: var(--sk-red-bright); border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.08); }
   .sv2-btn.warn:hover { background: rgba(232,88,82,.16); border-color: rgba(232,88,82,.7); }
   .sv2-btn.warn.toggled { background: rgba(232,88,82,.22); border-color: var(--sk-red-bright); }
@@ -436,6 +448,28 @@
       <div class="sv2-cp-actions">
         <button class="sv2-selbtn ghost" id="sv2-cp-cancel">Cancel</button>
         <button class="sv2-selbtn" id="sv2-cp-go" disabled>Copy</button>
+      </div>
+    </div>
+    <div id="sv2-editpanel" class="sv2-editpanel sv2-hidden">
+      <div class="sv2-cp-title">Edit <span id="sv2-be-n">0</span> selected</div>
+      <div class="sv2-be-row">
+        <label class="sv2-be-lab" for="sv2-be-field">Change</label>
+        <select id="sv2-be-field" class="sv2-select sv2-be-input">
+          <option value="position">Position</option>
+          <option value="start">Start time</option>
+          <option value="end">End time</option>
+          <option value="break">Break (minutes)</option>
+        </select>
+      </div>
+      <div class="sv2-be-row">
+        <label class="sv2-be-lab">to</label>
+        <select id="sv2-be-pos" class="sv2-select sv2-be-input"></select>
+        <input id="sv2-be-time" class="sv2-be-input sv2-hidden" type="time">
+        <input id="sv2-be-break" class="sv2-be-input sv2-hidden" type="number" min="0" step="5" value="30">
+      </div>
+      <div class="sv2-cp-actions">
+        <button class="sv2-selbtn ghost" id="sv2-be-cancel">Cancel</button>
+        <button class="sv2-selbtn" id="sv2-be-apply">Apply to all</button>
       </div>
     </div>
     <table class="sv2-grid">
@@ -1242,7 +1276,7 @@
   function updateSelToolbar() {
     var n = selectedIds().length;
     if (elBody) elBody.classList.toggle("sv2-selecting", n > 0);
-    if (n === 0) closeCopyPanel();
+    if (n === 0) { closeCopyPanel(); closeEditPanel(); }
     if (!elSelbar) return;
     if (n > 0) { elSelCount.textContent = n + (n === 1 ? " shift selected" : " shifts selected"); show(elSelbar); }
     else hide(elSelbar);
@@ -1269,7 +1303,7 @@
   if (elSelbar) {
     $("sv2-sel-delete").onclick = deleteSelected;
     $("sv2-sel-clear").onclick = clearSelection;
-    $("sv2-sel-edit").onclick = function () { toast("Bulk edit is coming in the next update."); };
+    $("sv2-sel-edit").onclick = openEditPanel;
     $("sv2-sel-copy").onclick = openCopyPanel;
   }
 
@@ -1280,6 +1314,7 @@
   function openCopyPanel() {
     var ids = selectedIds();
     if (!ids.length || !state.board || !state.board.schedule) return;
+    closeEditPanel();
     if (elCpN) elCpN.textContent = ids.length;
     cpTarget = null; if (elCpGo) elCpGo.disabled = true;
     var u = $("sv2-cp-unassign"), sk = $("sv2-cp-skip");
@@ -1325,6 +1360,70 @@
     };
     $("sv2-cp-cancel").onclick = closeCopyPanel;
     $("sv2-cp-go").onclick = doCopy;
+  }
+
+  // ---- bulk edit (Phase 2e) ----
+  var elEditPanel = $("sv2-editpanel"), beField = $("sv2-be-field"),
+      bePos = $("sv2-be-pos"), beTime = $("sv2-be-time"), beBreak = $("sv2-be-break"),
+      beN = $("sv2-be-n"), beApplyBtn = $("sv2-be-apply");
+  function beSync() {
+    if (!beField) return;
+    var f = beField.value;
+    (f === "position" ? show : hide)(bePos);
+    (f === "start" || f === "end" ? show : hide)(beTime);
+    (f === "break" ? show : hide)(beBreak);
+  }
+  function openEditPanel() {
+    var ids = selectedIds();
+    if (!ids.length || !state.board) return;
+    closeCopyPanel();
+    if (beN) beN.textContent = ids.length;
+    if (bePos) fillSelect(bePos, state.board.positions || [], "id", "name", "No position");
+    if (beField) beField.value = "position";
+    if (beApplyBtn) beApplyBtn.disabled = false;
+    beSync();
+    show(elEditPanel);
+  }
+  function closeEditPanel() { if (elEditPanel) hide(elEditPanel); }
+  function beApply() {
+    var ids = selectedIds();
+    if (!ids.length || state.busy || !beField) return;
+    var f = beField.value, common = null, timeVal = null;
+    if (f === "position") common = { position_id: bePos.value ? +bePos.value : null };
+    else if (f === "break") common = { break_minutes: +beBreak.value || 0 };
+    else { timeVal = beTime.value; if (!timeVal) { toast("Pick a time first.", true); return; } }
+    state.busy = true; if (beApplyBtn) beApplyBtn.disabled = true;
+    var byId = {}; (state.board.shifts || []).forEach(function (s) { byId[s.id] = s; });
+    var total = ids.length, done = 0, failed = 0, skipped = 0;
+    function finish() {
+      if (done + failed + skipped < total) return;
+      state.busy = false;
+      var m = "Updated " + done + (done === 1 ? " shift" : " shifts");
+      if (skipped) m += " — " + skipped + " skipped (would invert the time)";
+      if (failed) toast(m + ", " + failed + " failed.", true); else toast(m);
+      state.selected = {}; closeEditPanel(); loadBoard();
+    }
+    ids.forEach(function (id) {
+      var sh = byId[id];
+      if (!sh) { skipped++; finish(); return; }
+      var body;
+      if (common) { body = common; }
+      else {
+        var base = String((f === "end" ? sh.end_at : sh.start_at) || sh.start_at).split("T")[0];
+        var iso = combineDateTime(base, timeVal);
+        if (f === "start" && sh.end_at && iso >= sh.end_at) { skipped++; finish(); return; }
+        if (f === "end" && sh.start_at && iso <= sh.start_at) { skipped++; finish(); return; }
+        body = (f === "start") ? { start_at: iso } : { end_at: iso };
+      }
+      fetch(CFG.shiftUrlBase + "/" + id, { method: "PUT", headers: jsonHeaders(), credentials: "same-origin", body: JSON.stringify(body) })
+        .then(parseJsonOrThrow).then(function () { done++; finish(); })
+        .catch(function () { failed++; finish(); });
+    });
+  }
+  if (beField) {
+    beField.onchange = beSync;
+    $("sv2-be-cancel").onclick = closeEditPanel;
+    $("sv2-be-apply").onclick = beApply;
   }
 
   // go

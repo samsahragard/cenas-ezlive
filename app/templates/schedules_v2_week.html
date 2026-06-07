@@ -227,6 +227,14 @@
   .sv2-chip.boh { border-left-color: var(--boh); }
   .sv2-chip.foh { border-left-color: var(--foh); }
   .sv2-chip.open { border-left-color: var(--open); border-style: dashed; }
+  /* per-shift publish: an UNPUBLISHED shift renders HOLLOW (transparent fill + dashed
+     outline) so it's obvious it isn't published yet + the employee can't see it. The
+     position color stays on the (now dashed) left bar. */
+  .sv2-chip.unpublished { background: transparent;
+    border-top: 1px dashed var(--sk-cream-faint); border-right: 1px dashed var(--sk-cream-faint);
+    border-bottom: 1px dashed var(--sk-cream-faint); border-left-style: dashed; }
+  .sv2-chip-unpub { font-size: 9px; letter-spacing:.09em; text-transform:uppercase;
+    color: var(--sk-cream-faint); font-weight:700; margin-top:2px; }
   .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
   .sv2-chip-pos { font-size: 11px; color: var(--sk-cream-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sv2-chip-open-tag { font-size: 10px; letter-spacing:.1em; text-transform:uppercase; color: var(--open); font-weight:700; }
@@ -670,7 +678,8 @@
     // B5: only ASSIGNED shifts carry an acceptance response (pending|accepted|declined);
     // `response` is absent until aick's board JSON includes it, so this is a no-op until then.
     var resp = open ? "" : String(s.response || "").toLowerCase();
-    var cls = "sv2-chip" + (open ? " open" : "") +
+    var unpub = (s.published_at == null);  // per-shift publish: null = NOT yet published -> hollow + hidden from the employee until published
+    var cls = "sv2-chip" + (open ? " open" : "") + (unpub ? " unpublished" : "") +
               (resp === "declined" ? " declined" : (resp === "accepted" ? " accepted" : ""));
     var style = open ? "" : ' style="border-left-color:' + posColor(s.position_id) + '"';
     var posLine = open ? '<div class="sv2-chip-open-tag">Open</div>'
@@ -678,8 +687,9 @@
     var respTag = resp === "declined" ? '<div class="sv2-chip-resp-tag declined">Declined</div>'
                 : resp === "accepted" ? '<div class="sv2-chip-resp-tag accepted">&#10003; Accepted</div>'
                 : "";
+    var unpubTag = unpub ? '<div class="sv2-chip-unpub">unpublished</div>' : "";
     return '<div class="' + cls + '" data-shift="' + s.id + '"' + style + '>' +
-             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + '</div>';
+             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + unpubTag + '</div>';
   }
 
   // Does this employee HOLD one of the filtered positions? (Sam #2589: a position

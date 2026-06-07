@@ -24,6 +24,7 @@ _POSITION_ROLE_KEY = {
     "gm": "gm", "km": "km", "assistant km": "assistant_km", "foh manager": "foh_manager",
     "busser": "busser", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "bartender", "bartender": "bartender", "cook": "cook",
+    "prep": "cook", "dishwasher": "cook",
 }
 _CANON_LC = {p.lower() for p in CANONICAL_POSITIONS}
 _STORE_LABELS = {"tomball": "Tomball", "copperfield": "Copperfield"}

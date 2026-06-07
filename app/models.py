@@ -3277,8 +3277,8 @@ class Position(Base):
 
 
 # The canonical schedule-position catalog (Sam 2026-05-31): the ONLY jobs that
-# may appear in the manager schedule dropdowns - 13 front-of-house roles + Cook
-# = 14. Everything else in the positions table is Sling-import residue (C-Grill,
+# may appear in the manager schedule dropdowns. Everything else in the positions
+# table is Sling-import residue (C-Grill,
 # C-Prep, Chba, Chip, Cenas Togo, Dish, ...) and is filtered OUT of the board's
 # position list (see app.web.schedules_v2). The management roles (Partner,
 # Corporate, GM, KM, ...) are User permission levels, not Sling positions, so
@@ -3290,7 +3290,7 @@ class Position(Base):
 CANONICAL_POSITIONS = [
     "Partner", "Corporate", "Corporate Chef", "GM", "KM", "Assistant KM",
     "FOH Manager", "Expo", "Busser", "Hostess", "Cashier", "Server", "Well",
-    "Bartender", "Cook",
+    "Bartender", "Cook", "Prep", "Dishwasher",
 ]
 
 

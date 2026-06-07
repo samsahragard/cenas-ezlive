@@ -86,6 +86,8 @@ def test_section_for_position():
     assert section_for_position("Well") == SECTION_HOURLY
     assert section_for_position("Server") == SECTION_HOURLY
     assert section_for_position("Cook") == SECTION_HOURLY
+    assert section_for_position("Prep") == SECTION_HOURLY
+    assert section_for_position("Dishwasher") == SECTION_HOURLY
     # tier-above positions -> None
     assert section_for_position("Partner") is None
     assert section_for_position("Corporate") is None

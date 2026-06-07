@@ -90,13 +90,14 @@ def addable_roles(actor_role):
 
 
 # Canonical scheduling-position NAME -> permissions ROLE key, for the +Add
-# rank-gate (the 14 positions map to their role; expo/driver are access-only,
+# rank-gate (canonical positions map to their role; expo/driver are access-only,
 # not scheduling positions, so they aren't here). 'Well' -> well, 'Hostess' -> host.
 POSITION_TO_ROLE = {
     "partner": "partner", "corporate": "corporate", "corporate chef": "corporate_chef",
     "gm": "gm", "km": "km", "assistant km": "assistant_km", "foh manager": "foh_manager",
     "busser": "busser", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "well", "bartender": "bartender", "cook": "cook",
+    "prep": "cook", "dishwasher": "cook",
 }
 
 def position_role(position_name):

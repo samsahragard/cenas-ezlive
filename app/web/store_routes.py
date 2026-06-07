@@ -3411,12 +3411,13 @@ def _render_prep_list_v3(db, label, active_key):
         "not_completed": sum(1 for v in sel_views if v["status"] == "not-completed"),
     }
 
-    # Prep team — aggregated from today's assignee names.
-    team_map = {}
+    # Prep team — driven by today's schedule rows with Position = Prep, then
+    # annotated with today's prep assignments.
+    assignment_map = {}
     for v in sel_views:
         if not v["assignee"]:
             continue
-        t = team_map.setdefault(v["assignee"], {
+        t = assignment_map.setdefault(v["assignee"], {
             "name": v["assignee"], "initials": _prep_initials(v["assignee"]),
             "done": 0, "in_progress": 0, "assigned": 0})
         if v["status"] == "completed":
@@ -3425,7 +3426,59 @@ def _render_prep_list_v3(db, label, active_key):
             t["in_progress"] += 1
         else:
             t["assigned"] += 1
-    team = sorted(team_map.values(), key=lambda t: t["name"])
+
+    team_map = {}
+    try:
+        from app.models import Employee, Position, Schedule, Shift
+        day_start = datetime.combine(sel, datetime.min.time())
+        day_end = day_start + timedelta(days=1)
+        q = (
+            db.query(Shift, Employee.full_name, Position.name)
+            .join(Schedule, Shift.schedule_id == Schedule.id)
+            .join(Employee, Shift.employee_id == Employee.id)
+            .outerjoin(Position, Shift.position_id == Position.id)
+            .filter(
+                Shift.employee_id.isnot(None),
+                Shift.start_at >= day_start,
+                Shift.start_at < day_end,
+            )
+        )
+        if loc in ("tomball", "copperfield"):
+            q = q.filter(Schedule.store_key == loc)
+        for shift, employee_name, position_name in q.all():
+            if (position_name or "").strip().lower() != "prep":
+                continue
+            name = (employee_name or shift.display_name or "").strip()
+            if not name:
+                continue
+            assigned = assignment_map.get(name, {})
+            shift_label = ""
+            if shift.start_at and shift.end_at:
+                shift_label = f"{_prep_time_label(shift.start_at)}-{_prep_time_label(shift.end_at)}"
+            row = team_map.setdefault(name, {
+                "name": name,
+                "initials": _prep_initials(name),
+                "done": assigned.get("done", 0),
+                "in_progress": assigned.get("in_progress", 0),
+                "assigned": assigned.get("assigned", 0),
+                "shift_labels": [],
+                "position": "Prep",
+            })
+            if shift_label and shift_label not in row["shift_labels"]:
+                row["shift_labels"].append(shift_label)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep scheduled team rows failed (non-fatal)")
+        team_map = {}
+
+    team = []
+    for row in team_map.values():
+        total_active = row["done"] + row["in_progress"] + row["assigned"]
+        row["has_assignment"] = total_active > 0
+        row["assignment_count"] = total_active
+        row["shift_label"] = ", ".join(row.pop("shift_labels", [])) or "Prep shift"
+        team.append(row)
+    team.sort(key=lambda t: t["name"])
 
     # ---- #14 (samai): aggregated views for the "Prep team today" strip ----
     assigned_today = [

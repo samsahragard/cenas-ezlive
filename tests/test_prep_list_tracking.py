@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 from flask import Flask, g
@@ -97,3 +97,78 @@ def test_recent_complete_records_completion_actor(db_session):
     audit = db_session.query(PrepAuditLog).filter_by(action="completed").one()
     assert audit.entry_date == day
     assert audit.item_name == "Empanadas"
+
+
+def test_prep_team_today_uses_scheduled_prep_position(db_session, monkeypatch):
+    from app.models import (
+        Employee,
+        Position,
+        PrepEntry,
+        PrepItem,
+        Schedule,
+        Shift,
+    )
+    from app.web.store_routes import _render_prep_list_v3
+
+    prep_position = Position(name="Prep", store_key=None)
+    cook_position = Position(name="Cook", store_key=None)
+    prep_employee = Employee(full_name="Paul Prep", active=True)
+    cook_employee = Employee(full_name="Carl Cook", active=True)
+    item = PrepItem(name="Masa Flour", category="hot", kind="item", sort_order=1)
+    schedule = Schedule(store_key="copperfield", week_start=date(2026, 6, 1))
+    db_session.add_all([
+        prep_position,
+        cook_position,
+        prep_employee,
+        cook_employee,
+        item,
+        schedule,
+    ])
+    db_session.flush()
+    db_session.add_all([
+        Shift(
+            schedule_id=schedule.id,
+            employee_id=prep_employee.id,
+            position_id=prep_position.id,
+            start_at=datetime(2026, 6, 7, 9, 0),
+            end_at=datetime(2026, 6, 7, 15, 0),
+            status="assigned",
+        ),
+        Shift(
+            schedule_id=schedule.id,
+            employee_id=cook_employee.id,
+            position_id=cook_position.id,
+            start_at=datetime(2026, 6, 7, 9, 0),
+            end_at=datetime(2026, 6, 7, 15, 0),
+            status="assigned",
+        ),
+        PrepEntry(
+            entry_date=date(2026, 6, 7),
+            prep_item_id=item.id,
+            selected=True,
+            status="partly",
+            assignee_name="Paul Prep",
+        ),
+    ])
+    db_session.commit()
+
+    captured = {}
+
+    def fake_render(_template, **context):
+        captured.update(context)
+        return "ok"
+
+    monkeypatch.setattr("app.web.store_routes.render_template", fake_render)
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    with app.test_request_context("/uno/kitchen/prep-list?date=2026-06-07"):
+        g.current_location = "copperfield"
+        assert _render_prep_list_v3(db_session, "Prep List", "kitchen_prep_list") == "ok"
+
+    team = captured["team"]
+    assert [member["name"] for member in team] == ["Paul Prep"]
+    assert team[0]["has_assignment"] is True
+    assert team[0]["assignment_count"] == 1
+    assert team[0]["in_progress"] == 1
+    assert team[0]["shift_label"] == "9:00 AM-3:00 PM"

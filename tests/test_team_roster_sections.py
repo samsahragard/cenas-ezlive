@@ -42,16 +42,22 @@ def _seed(db):
     _pos(db, "Cook", 4)      # hourly
     _pos(db, "Well", 5)      # hourly (role 'well')
     _pos(db, "Hostess", 6)   # hourly (role 'host')
+    _pos(db, "Prep", 7)      # hourly kitchen (role 'cook')
+    _pos(db, "Dishwasher", 8)  # hourly kitchen (role 'cook')
 
     # Tomball roster:
     #  - Gina: GM only            -> management
     #  - Carl: Cook only          -> hourly
     #  - Mia:  Server + KM (span) -> management (highest wins)
     #  - Wendy: Well only         -> hourly
+    #  - Paul: Prep only          -> hourly
+    #  - Dora: Dishwasher only    -> hourly
     _emp(db, 10, "Gina GM",  ["tomball"], {"tomball": [1]})
     _emp(db, 11, "Carl Cook", ["tomball"], {"tomball": [4]})
     _emp(db, 12, "Mia Span", ["tomball"], {"tomball": [3, 2]})
     _emp(db, 13, "Wendy Well", ["tomball"], {"tomball": [5]})
+    _emp(db, 14, "Paul Prep", ["tomball"], {"tomball": [7]})
+    _emp(db, 15, "Dora Dish", ["tomball"], {"tomball": [8]})
     db.commit()
 
 
@@ -67,8 +73,9 @@ def test_store_dict_has_section_groups_and_keeps_employees(db_session):
     # Additive: the full 'employees' list is still present + complete.
     assert set(tom) >= {"employees", "management", "hourly"}
     assert {r["full_name"] for r in tom["employees"]} == {
-        "Gina GM", "Carl Cook", "Mia Span", "Wendy Well"}
-    assert tom["shown"] == 4
+        "Gina GM", "Carl Cook", "Mia Span", "Wendy Well",
+        "Paul Prep", "Dora Dish"}
+    assert tom["shown"] == 6
 
 
 def test_partition_by_highest_section(db_session):
@@ -81,8 +88,8 @@ def test_partition_by_highest_section(db_session):
 
     # Gina (GM) + Mia (Server+KM -> highest = management) in management.
     assert mgmt == {"Gina GM", "Mia Span"}
-    # Carl (Cook) + Wendy (Well) in hourly. Mia is NOT double-counted.
-    assert hrly == {"Carl Cook", "Wendy Well"}
+    # Carl (Cook), Wendy (Well), Paul (Prep), Dora (Dishwasher) in hourly.
+    assert hrly == {"Carl Cook", "Wendy Well", "Paul Prep", "Dora Dish"}
     assert mgmt.isdisjoint(hrly)
 
 
@@ -95,6 +102,8 @@ def test_employee_row_carries_section(db_session):
     assert by_name["Mia Span"]["section"] == SECTION_MANAGEMENT  # highest wins
     assert by_name["Carl Cook"]["section"] == SECTION_HOURLY
     assert by_name["Wendy Well"]["section"] == SECTION_HOURLY
+    assert by_name["Paul Prep"]["section"] == SECTION_HOURLY
+    assert by_name["Dora Dish"]["section"] == SECTION_HOURLY
 
 
 def test_non_section_employee_in_neither_group(db_session):
@@ -140,12 +149,12 @@ def test_groups_present_for_all_stores_view(db_session):
 def test_addable_positions_annotated_with_section(db_session):
     _seed(db_session)
     # A GM actor can add roles strictly below GM rank (Asst-KM/FOH-Mgr + floor),
-    # which here means the hourly canonical positions we seeded (Server/Cook/
-    # Well/Hostess). GM/KM are NOT addable by a GM (peers), so they won't appear.
+    # which here means the hourly canonical positions we seeded. GM/KM are NOT
+    # addable by a GM (peers), so they won't appear.
     out = addable_positions_for("gm", db_session)
     assert out, "GM should have addable positions"
     by_name = {p["name"]: p for p in out}
-    for nm in ("Server", "Cook", "Well", "Hostess"):
+    for nm in ("Server", "Cook", "Well", "Hostess", "Prep", "Dishwasher"):
         assert nm in by_name, nm
         assert by_name[nm]["section"] == SECTION_HOURLY, nm
     # Every entry carries id, name, section (additive key).

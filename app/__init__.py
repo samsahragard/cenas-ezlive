@@ -480,14 +480,14 @@ def create_app():
         logging.getLogger(__name__).exception("perf_shift_cache markers backfill failed (non-fatal)")
 
     # Idempotent seed of the canonical schedule positions (Sam 2026-05-31): the
-    # 14 jobs that must appear in the manager schedule dropdowns (13 FOH roles +
-    # Cook). The management roles (Partner, Corporate, GM, KM, ...) are User
+    # jobs that must appear in the manager schedule dropdowns. The management
+    # roles (Partner, Corporate, GM, KM, ...) are User
     # permission levels, not Sling-imported Position rows, so they may be absent;
     # create any missing canonical name as an all-store row (store_key=NULL).
     # Runs at single-threaded startup (no worker race) and is gated on name
     # absence, so it is safe + idempotent on every boot. NON-DESTRUCTIVE: only
     # inserts missing names; never edits/deletes a Position row (the board READ
-    # is filtered to these 14 - see schedules_v2.CANONICAL_POSITIONS).
+    # is filtered to CANONICAL_POSITIONS).
     try:
         from sqlalchemy import inspect as _sa_inspect_pos
         from app.db import SessionLocal as _SL_pos, engine as _eng_pos

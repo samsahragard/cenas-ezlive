@@ -259,6 +259,13 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
   }
+  .prep-team-status {
+    display: inline-block;
+    margin-top: 3px;
+    color: var(--prep-gold-bright);
+    font-weight: 900;
+  }
+  .prep-team-status.assigned { color: var(--prep-chop); }
   .prep-list-panel { overflow: hidden; }
   .prep-columns-grid { display: grid; grid-template-columns: 1fr 1fr; }
   .prep-col-divider { border-right: 0.5px solid var(--prep-border-subtle); }
@@ -371,7 +378,7 @@
     border-radius: 8px;
     font-size: 13px;
   }
-  .prep-input, .prep-select { height: 42px; padding: 0 11px; }
+  .prep-input, .prep-select { height: 40px; padding: 0 10px; }
   .prep-textarea { min-height: 76px; resize: vertical; padding: 10px 11px; }
   .prep-input:focus, .prep-select:focus, .prep-textarea:focus {
     outline: none;
@@ -384,19 +391,21 @@
   }
   .prep-status-choice input { position: absolute; opacity: 0; pointer-events: none; }
   .prep-status-chip {
-    min-height: 44px;
+    min-height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 7px 6px;
     color: var(--prep-cream-dim);
     background: var(--prep-bg-input);
     border: 0.5px solid var(--prep-border-subtle);
     border-radius: 8px;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 900;
     text-align: center;
     text-transform: uppercase;
+    line-height: 1.12;
+    white-space: normal;
   }
   .prep-status-choice input:checked + .prep-status-chip {
     color: var(--prep-gold-bright);
@@ -452,6 +461,10 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
+  .prep-ingredients[open] summary {
+    border-bottom: 0.5px solid var(--prep-border-subtle);
+    background: rgba(228,179,64,0.08);
+  }
   .prep-ingredient-row, .prep-report-row, .prep-dev-row {
     display: grid;
     gap: 10px;
@@ -503,7 +516,15 @@
   }
   @media (max-width: 560px) {
     .prep-page { padding: 14px; }
-    .prep-kpi-strip, .prep-form-grid, .prep-status-row { grid-template-columns: 1fr; }
+    .prep-kpi-strip { grid-template-columns: 1fr; }
+    .prep-inline-panel { padding: 12px 10px 16px; }
+    .prep-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .prep-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+    .prep-form-label { font-size: 9px; letter-spacing: 0.1em; }
+    .prep-input, .prep-select { height: 36px; padding: 0 8px; font-size: 12px; }
+    .prep-status-chip { min-height: 36px; padding: 5px 3px; font-size: 8.5px; letter-spacing: 0.02em; }
+    .prep-save-btn { min-height: 36px; padding: 0 15px; }
+    .prep-ingredients summary { padding: 9px 10px; font-size: 11px; }
     .prep-date-display { padding: 0 10px; font-size: 12px; }
     .prep-page-tabs { width: 100%; }
     .prep-tab-link { flex: 1 1 120px; }
@@ -562,13 +583,13 @@
             <span class="prep-form-label">On hand</span>
             <input class="prep-input" type="number" min="0" max="9999" name="on_hand"
                    value="{{ it.on_hand if it.on_hand is not none else '' }}"
-                   placeholder="How much they have" {{ 'disabled' if locked else '' }}>
+                   placeholder="Qty on hand" {{ 'disabled' if locked else '' }}>
           </label>
           <label class="prep-form-field">
             <span class="prep-form-label">Prep</span>
             <input class="prep-input" type="number" min="0" max="9999" name="prep_qty"
                    value="{{ it.prep_qty if it.prep_qty is not none else '' }}"
-                   placeholder="How much they are prepping" {{ 'disabled' if locked else '' }}>
+                   placeholder="Qty prepping" {{ 'disabled' if locked else '' }}>
           </label>
           <label class="prep-form-field full">
             <span class="prep-form-label">Assign to</span>
@@ -735,7 +756,18 @@
           <div class="prep-team-avatar">{{ member.initials }}</div>
           <div>
             <div class="prep-team-name">{{ member.name }}</div>
-            <div class="prep-team-stats">{{ member.done }} done - {{ member.in_progress }} partly - {{ member.assigned }} assigned</div>
+            <div class="prep-team-stats">
+              {{ member.shift_label }}
+              <br>
+              {% if member.has_assignment %}
+                <span class="prep-team-status assigned">Assigned to {{ member.assignment_count }} prep{% if member.assignment_count != 1 %}s{% endif %}</span>
+                {% if member.done or member.in_progress %}
+                  <br>{{ member.done }} done - {{ member.in_progress }} partly
+                {% endif %}
+              {% else %}
+                <span class="prep-team-status">Not assigned to prep</span>
+              {% endif %}
+            </div>
           </div>
         </div>
         {% else %}
@@ -901,6 +933,15 @@
       radio.addEventListener('change', function () { syncHelperBox(form); });
     });
     syncHelperBox(form);
+  });
+
+  document.querySelectorAll('.prep-ingredients').forEach(function (details) {
+    details.addEventListener('toggle', function () {
+      if (!details.open) return;
+      window.setTimeout(function () {
+        details.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 0);
+    });
   });
 
   var exportBtn = document.getElementById('prepExport');

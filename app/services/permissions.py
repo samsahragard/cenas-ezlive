@@ -278,26 +278,28 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     # etc.) is a deliberate follow-up once these roles have actual app
     # surfaces — see the precondition spec §6 Q1. Do NOT mistake the thin
     # set for an oversight.
-    # Sam #1063 (2026-05-26): drivers.admin opened to every non-driver
-    # role. The hourly-tier roles get the tag here too so when the user
-    # taxonomy fills out, a cook or server can also add a driver from
-    # their store. Store scope is auto-enforced by the /<store>/drivers
-    # URL prefix + blueprint before_request.
+    # S6b (Sam, 2026-06-07): HOURLY is SELF-ONLY — no company permissions.
+    # Sam's #1063 grant (drivers.admin / drivers.view_roster /
+    # drivers.reset_passcode opened to every non-driver role) is REVERSED for
+    # the hourly tier here: an hourly user (cook / server / busser / host /
+    # bartender) must NOT hold any company / admin / labor / sales tag. Their
+    # effective perms are the self-only surface ONLY — own profile + own rank,
+    # which on the tag side is the personal-AI + transcripts baseline that expo
+    # + driver already share (these tags read the actor's own data; they grant
+    # no roster/admin/labor/sales reach). Driver administration stays with the
+    # management + corporate tiers (km / assistant_km / corporate_chef /
+    # foh_manager / expo / gm / corporate still hold drivers.* above). The
+    # ezCater 'driver' role is a SEPARATE system entirely and is untouched.
     "cook":      {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read",
-                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
+                  "transcripts.search", "transcripts.read"},
     "server":    {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read",
-                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
+                  "transcripts.search", "transcripts.read"},
     "busser":    {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read",
-                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
+                  "transcripts.search", "transcripts.read"},
     "host":      {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read",
-                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
+                  "transcripts.search", "transcripts.read"},
     "bartender": {"ai.ask_claude_personal", "ai.view_transcripts",
-                  "transcripts.search", "transcripts.read",
-                  "drivers.admin", "drivers.view_roster", "drivers.reset_passcode"},
+                  "transcripts.search", "transcripts.read"},
 
     # Schedules V2 / Block 1 (Sam #1742). The employee scheduling identity
     # (Tier-5). V2 scope tags are forward-declared here; the V2 routes get

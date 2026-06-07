@@ -48,7 +48,6 @@ LEVEL_OPTIONS = [
     ("gm",              "GM"),
     ("km",              "Kitchen Manager"),
     ("assistant_km",    "Assistant KM"),
-    ("prep_manager",    "Prep Manager"),
     ("foh_manager",     "FOH Manager"),
     ("expo",            "Expo"),
 ]

@@ -3251,7 +3251,7 @@ class Position(Base):
 # would silently wipe migrated employees' assignments; we never delete here.
 CANONICAL_POSITIONS = [
     "Partner", "Corporate", "Corporate Chef", "GM", "KM", "Assistant KM",
-    "FOH Manager", "Busser", "Hostess", "Cashier", "Server", "Well",
+    "FOH Manager", "Expo", "Busser", "Hostess", "Cashier", "Server", "Well",
     "Bartender", "Cook",
 ]
 

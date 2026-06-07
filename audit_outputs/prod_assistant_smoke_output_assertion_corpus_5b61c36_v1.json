@@ -221,6 +221,32 @@
     ]
   },
   {
+    "id": "D1T",
+    "question": "Tomorrow's schedule",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "schedule.store_today",
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "payload_scope", "date": "tomorrow", "window_label_prefix": "tomorrow_"},
+      {"type": "answer_states_scope_label", "must_include": ["tomorrow", "Store split"]},
+      {"type": "expected_not_tool", "tool_id": "schedule.store_week"},
+      {"type": "expected_not_tool", "tool_id": "schedule.view"}
+    ]
+  },
+  {
+    "id": "D1W",
+    "question": "Who's working tomorrow?",
+    "expected_route_path": "deterministic",
+    "expected_tool_id": "schedule.store_today",
+    "assertions": [
+      {"type": "mirror_present"},
+      {"type": "payload_scope", "date": "tomorrow", "window_label_prefix": "tomorrow_"},
+      {"type": "answer_states_scope_label", "must_include": ["tomorrow", "Store split"]},
+      {"type": "expected_not_tool", "tool_id": "schedule.store_week"},
+      {"type": "expected_not_tool", "tool_id": "schedule.view"}
+    ]
+  },
+  {
     "id": "D2",
     "question": "Show me this week's schedule",
     "expected_route_path": "deterministic",

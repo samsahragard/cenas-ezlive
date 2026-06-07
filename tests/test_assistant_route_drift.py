@@ -155,6 +155,18 @@ DETERMINISTIC_ROUTE_CASES = [
         "tool_id": "schedule.store_today",
     },
     {
+        "id": "schedule_tomorrow_schedule",
+        "question": "Tomorrow's schedule",
+        "route_path": "deterministic",
+        "tool_id": "schedule.store_today",
+    },
+    {
+        "id": "schedule_who_working_tomorrow",
+        "question": "Who's working tomorrow?",
+        "route_path": "deterministic",
+        "tool_id": "schedule.store_today",
+    },
+    {
         "id": "schedule_open_shifts",
         "question": "Show me open shifts",
         "route_path": "deterministic",

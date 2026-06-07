@@ -1187,7 +1187,15 @@ def test_smoke_who_working_today_routes_to_schedule_not_orders(monkeypatch):
     assert route["route_path"] == "deterministic"
 
 
-@pytest.mark.parametrize("question", ["What's tomorrow's schedule?", "Tomorrow's schedule"])
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What's tomorrow's schedule?",
+        "Tomorrow's schedule",
+        "Who works tomorrow?",
+        "Who's working tomorrow?",
+    ],
+)
 def test_smoke_tomorrow_schedule_routes_to_local_date_schedule(monkeypatch, question):
     ctx = _wave1_partner_ctx(stores=["tomball"])
     monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
@@ -1201,6 +1209,33 @@ def test_smoke_tomorrow_schedule_routes_to_local_date_schedule(monkeypatch, ques
 
     assert route["tool_id"] == "schedule.store_today"
     assert route["route_path"] == "deterministic"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What's tomorrow's schedule?",
+        "Tomorrow's schedule",
+        "Who works tomorrow?",
+        "Who's working tomorrow?",
+    ],
+)
+def test_tomorrow_schedule_approved_payload_uses_tomorrow_local_date(db_session, monkeypatch, question):
+    _seed_wave1_schedule_fixture(db_session)
+    monkeypatch.setattr(schedule_handlers, "SessionLocal", lambda: db_session)
+    ctx = _wave1_partner_ctx(stores=["tomball"])
+    tomorrow = schedule_handlers._today_local() + timedelta(days=1)
+
+    tool_id, payload, route = ar._approved_tool_package(question, ctx)
+
+    assert route["route_path"] == "deterministic"
+    assert tool_id == "schedule.store_today"
+    assert set(payload) == {"schedule.store_today"}
+    schedule_payload = payload["schedule.store_today"]
+    assert schedule_payload["date"] == tomorrow.isoformat()
+    assert schedule_payload["window_label"] == "tomorrow_local_date_visible_allowed_schedule_stores"
+    assert schedule_payload["shift_count"] == 1
+    assert schedule_payload["by_store"] == {"tomball": 1}
 
 
 @pytest.mark.parametrize("case", WAVE1_SCHEDULE_TOOL_CASES, ids=lambda case: case["tool_id"])

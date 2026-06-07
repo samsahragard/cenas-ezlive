@@ -3390,6 +3390,13 @@ class Shift(Base):
     # (no Employee record), employee_id is NULL and display_name carries their name
     # so the week-view renders it struck-through. NULL for normal shifts.
     display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Sam (Sling-parity): PER-SHIFT publish state. NULL = unpublished -> renders
+    # "hollow"/outline in the Week Builder + HIDDEN from the employee (they only see
+    # published shifts). Set = published (filled + visible). Editing a published shift
+    # via "Save" clears it (unpublish that one shift); "Save & Publish" / the re-publish
+    # action sets it. Backfilled on boot from the schedule's published_at so existing
+    # published weeks stay visible -> no regression.
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

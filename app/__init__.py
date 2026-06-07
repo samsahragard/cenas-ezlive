@@ -396,6 +396,41 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("shifts.display_name backfill failed (non-fatal)")
 
+    # Sam (Sling-parity): per-shift publish state (shifts.published_at). NULL = unpublished
+    # (hollow + hidden from the employee); set = published. Add the column, then BACKFILL
+    # existing shifts in PUBLISHED schedules so already-published weeks stay visible to
+    # employees (published_at := the schedule's published_at, else its updated_at). Additive,
+    # one-time (gated on column absence), and never touches draft/unpublished shifts.
+    try:
+        from sqlalchemy import inspect as _sa_insp_pub, text as _sa_text_pub
+        from app.db import engine as _eng_pub
+        if _eng_pub is not None:
+            _insp_pub = _sa_insp_pub(_eng_pub)
+            if "shifts" in _insp_pub.get_table_names():
+                _shcols = {c["name"] for c in _insp_pub.get_columns("shifts")}
+                if "published_at" not in _shcols:
+                    # 1) add the column in its OWN txn so the model<->table match is
+                    #    guaranteed even if the backfill below hiccups.
+                    with _eng_pub.begin() as conn:
+                        conn.execute(_sa_text_pub("ALTER TABLE shifts ADD COLUMN published_at TIMESTAMP"))
+                    logging.getLogger(__name__).info("shifts table: added published_at column")
+                    # 2) backfill existing published-week shifts in a SEPARATE txn (prep
+                    #    for the per-shift employee filter); a failure leaves the column
+                    #    intact + retryable -- never a model/table mismatch.
+                    try:
+                        with _eng_pub.begin() as conn:
+                            conn.execute(_sa_text_pub(
+                                "UPDATE shifts SET published_at = COALESCE("
+                                "(SELECT s.published_at FROM schedules s WHERE s.id = shifts.schedule_id), "
+                                "(SELECT s.updated_at FROM schedules s WHERE s.id = shifts.schedule_id)) "
+                                "WHERE published_at IS NULL AND schedule_id IN "
+                                "(SELECT id FROM schedules WHERE status = 'published')"))
+                        logging.getLogger(__name__).info("shifts table: backfilled published_at for published-week shifts")
+                    except Exception:
+                        logging.getLogger(__name__).exception("shifts.published_at backfill failed (non-fatal; column intact)")
+    except Exception:
+        logging.getLogger(__name__).exception("shifts.published_at add/backfill failed (non-fatal)")
+
     # Phase 3.5 hardening (Sam #2973, N4/N5): add per-shift markers to perf_shift_cache.
     # create_all won't ALTER the existing table, so add gated-on-absence (idempotent).
     try:

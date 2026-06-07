@@ -243,6 +243,11 @@
   .sv2-chip.declined { border-left-color: var(--sk-red-bright) !important; background: rgba(232,88,82,.14); box-shadow: inset 0 0 0 1px rgba(232,88,82,.45); }
   .sv2-chip.declined .sv2-chip-time { color: var(--sk-red-bright); }
   .sv2-chip.accepted { box-shadow: inset 0 0 0 1px rgba(91,202,197,.4); }
+  /* Phase 2f: drag-to-reassign -- drag a chip onto another person's row to reassign it */
+  .sv2-chip[draggable="true"] { cursor: grab; }
+  .sv2-chip.sv2-dragging { opacity: .45; }
+  tr.sv2-drophover > .sv2-namecol { box-shadow: inset 3px 0 0 #E4B340; }
+  tr.sv2-drophover > .sv2-cell { background: rgba(228,179,64,.12); }
   .sv2-chip-resp-tag { font-size: 9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:800; margin-top:1px; }
   .sv2-chip-resp-tag.declined { color: var(--sk-red-bright); }
   .sv2-chip-resp-tag.accepted { color: var(--sk-teal-bright); font-weight:700; }
@@ -815,7 +820,7 @@
                 : "";
     var unpubTag = unpub ? '<div class="sv2-chip-unpub">unpublished</div>' : "";
     if (state.selected[s.id]) cls += " selected";
-    return '<div class="' + cls + '" data-shift="' + s.id + '"' + style + '>' +
+    return '<div class="' + cls + '" data-shift="' + s.id + '" draggable="true"' + style + '>' +
              '<div class="sv2-chip-check" data-check="' + s.id + '"></div>' +
              '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + unpubTag + '</div>';
   }
@@ -1257,6 +1262,57 @@
       openModal({ empId: cell.getAttribute("data-emp"), dateISO: cell.getAttribute("data-date") });
     }
   };
+
+  // ---- drag-to-reassign (Phase 2f): drag a chip onto another person's row ----
+  var dragId = null, dropRow = null;
+  function clearDropHover() { if (dropRow) dropRow.classList.remove("sv2-drophover"); dropRow = null; }
+  function setDropHover(tr) { if (dropRow === tr) return; clearDropHover(); dropRow = tr; if (tr) tr.classList.add("sv2-drophover"); }
+  function shiftById(id) {
+    var shifts = (state.board && state.board.shifts) || [];
+    for (var i = 0; i < shifts.length; i++) if (String(shifts[i].id) === String(id)) return shifts[i];
+    return null;
+  }
+  elBody.addEventListener("dragstart", function (e) {
+    var chip = e.target.closest ? e.target.closest(".sv2-chip") : null;
+    if (!chip) return;
+    dragId = chip.getAttribute("data-shift");
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", dragId); } catch (_e) {} }
+    chip.classList.add("sv2-dragging");
+  });
+  elBody.addEventListener("dragend", function (e) {
+    var chip = e.target.closest ? e.target.closest(".sv2-chip") : null;
+    if (chip) chip.classList.remove("sv2-dragging");
+    clearDropHover(); dragId = null;
+  });
+  elBody.addEventListener("dragover", function (e) {
+    if (!dragId) return;
+    var cell = e.target.closest ? e.target.closest(".sv2-cell") : null;
+    if (!cell) return;
+    var tr = cell.parentNode;
+    if (tr && tr.classList && tr.classList.contains("former")) return;  // historical row -> not droppable
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    setDropHover(tr);
+  });
+  elBody.addEventListener("drop", function (e) {
+    if (!dragId) return;
+    var cell = e.target.closest ? e.target.closest(".sv2-cell") : null;
+    if (!cell) { clearDropHover(); return; }
+    var tr = cell.parentNode;
+    if (tr && tr.classList && tr.classList.contains("former")) { clearDropHover(); return; }
+    e.preventDefault();
+    var sid = dragId; dragId = null; clearDropHover();
+    if (state.busy) return;
+    var sh = shiftById(sid); if (!sh) return;
+    var targetEmp = cell.getAttribute("data-emp");          // "" -> Open row (unassign)
+    var newEmp = targetEmp ? +targetEmp : null;
+    var curEmp = (sh.employee_id == null) ? null : +sh.employee_id;
+    if (curEmp === newEmp) return;                          // dropped on the same person -> no-op
+    state.busy = true;
+    fetch(CFG.shiftUrlBase + "/" + sid, { method: "PUT", headers: jsonHeaders(), credentials: "same-origin", body: JSON.stringify({ employee_id: newEmp }) })
+      .then(parseJsonOrThrow).then(function () { state.busy = false; toast(newEmp ? "Shift reassigned." : "Shift moved to Open."); loadBoard(); })
+      .catch(function (er) { state.busy = false; toast((er && er.error) ? er.error : "Could not reassign the shift.", true); });
+  });
 
   // ---- multi-select bulk actions (Phase 2d) ----
   var elSelbar = $("sv2-seltoolbar"), elSelCount = $("sv2-selcount");

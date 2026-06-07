@@ -81,12 +81,21 @@ SAM_EMAIL: str = "samsahragard@gmail.com"
 # Masood -- login email NOT yet known. Clearly-marked placeholder.
 # TODO: Sam to provide Masood's login email/id. Until then the second partner
 # slot is UNPINNED and the module runs in SAFE MODE (see module docstring).
-MASOOD_EMAIL: str | None = None  # TODO: Sam to provide Masood's login email/id.
+MASOOD_EMAIL: str | None = "masood@cenaskitchen.com"  # Sam-provided 2026-06-07.
 
 # The env var that is the documented ESCAPE HATCH: when set (non-empty), it
 # REPLACES the built-in allow-list entirely so nobody can be locked out of the
 # partner tier by a stale / wrong pin.
 PARTNER_EMAILS_ENV = "ROSTER_PARTNER_EMAILS"
+
+# Masood logs in by PHONE, so pin him by phone TOO -- robust even if his User
+# row's email is blank/different (Sam-provided 2026-06-07). Sam is email-pinned
+# only (SAM_PHONE stays None). The login PIN is a CREDENTIAL and is NEVER stored
+# here -- only the phone, which is the identity the guard matches on.
+SAM_PHONE: str | None = None
+MASOOD_PHONE: str | None = "8322832219"
+# Parallel escape hatch for phones (digits, comma-separated).
+PARTNER_PHONES_ENV = "ROSTER_PARTNER_PHONES"
 
 # The two permission_level values this module guards.
 PARTNER_LEVEL = "partner"
@@ -171,15 +180,61 @@ def partner_identities() -> frozenset[str]:
     return frozenset(builtin)
 
 
+def _norm_phone(value) -> str | None:
+    """Normalize an identity to a comparable phone (last 10 digits). Accepts a
+    User-like .phone, dict['phone'], or a digit-rich str. Returns None when no
+    >=10-digit phone can be derived (so an email string yields None here)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        raw = value
+    elif isinstance(value, dict):
+        raw = value.get("phone")
+    else:
+        raw = getattr(value, "phone", None)
+    if not raw or not isinstance(raw, str):
+        return None
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else None
+
+
+def _env_partner_phones() -> list[str] | None:
+    """Escape-hatch phone override from ROSTER_PARTNER_PHONES (last-10-digit
+    strings). Read at CALL time. None when unset/empty."""
+    raw = os.getenv(PARTNER_PHONES_ENV)
+    if not raw:
+        return None
+    out = []
+    for p in raw.split(","):
+        d = "".join(ch for ch in p if ch.isdigit())
+        if len(d) >= 10:
+            out.append(d[-10:])
+    return out or None
+
+
+def partner_phones() -> frozenset[str]:
+    """Resolved fixed partner PHONE allow-list (last-10-digit strings).
+    ROSTER_PARTNER_PHONES replaces the built-ins when set. Pure; no DB."""
+    override = _env_partner_phones()
+    if override is not None:
+        return frozenset(override)
+    builtin = [p for p in (_norm_phone(SAM_PHONE), _norm_phone(MASOOD_PHONE))
+               if p is not None]
+    return frozenset(builtin)
+
+
 def is_safe_mode() -> bool:
-    """True when the partner allow-list has fewer than two pinned identities
-    (i.e. Masood is not yet known and no env override supplies a second slot).
+    """True when fewer than two partners are pinned across BOTH the email and
+    phone allow-lists (the second/Masood slot is empty and no env override
+    supplies it). Masood may be pinned by email and/or phone -- either ends safe
+    mode. Sam is always email-pinned (SAM_PHONE stays None) -> exactly one token;
+    an unpinned Masood -> 1 token -> safe mode.
 
     In safe mode the no-3rd-partner rule + protection of the KNOWN pins still
     hold, but removal/demotion of the as-yet-unpinned second slot is NOT
-    hard-blocked (there is no concrete identity to protect). See module
-    docstring. Pure: derived from partner_identities()."""
-    return len(partner_identities()) < 2
+    hard-blocked. Pure."""
+    tokens = set(partner_identities()) | set(partner_phones())
+    return len(tokens) < 2
 
 
 # ============================================================
@@ -191,9 +246,12 @@ def can_be_partner(identity) -> bool:
     (case-insensitive). An identity with no derivable email can never be a
     partner. Pure; no DB."""
     email = _norm_email(identity)
-    if email is None:
-        return False
-    return email in partner_identities()
+    if email is not None and email in partner_identities():
+        return True
+    phone = _norm_phone(identity)
+    if phone is not None and phone in partner_phones():
+        return True
+    return False
 
 
 def is_pinned_partner(identity) -> bool:

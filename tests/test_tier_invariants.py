@@ -12,6 +12,7 @@ import pytest
 from app.services import tier_invariants as ti
 from app.services.tier_invariants import (
     MASOOD_EMAIL,
+    MASOOD_PHONE,
     SAM_EMAIL,
     TierInvariantError,
     assert_corporate_both_stores,
@@ -21,6 +22,7 @@ from app.services.tier_invariants import (
     is_safe_mode,
     normalize_store_scope,
     partner_identities,
+    partner_phones,
 )
 
 
@@ -34,6 +36,7 @@ def _user(level=None, store_scope=None, email=None):
 def _clear_env(monkeypatch):
     """Default every test to NO env override unless it sets one explicitly."""
     monkeypatch.delenv(ti.PARTNER_EMAILS_ENV, raising=False)
+    monkeypatch.delenv(ti.PARTNER_PHONES_ENV, raising=False)
 
 
 @pytest.fixture
@@ -44,17 +47,30 @@ def masood_pinned(monkeypatch):
     return "masood@cenaskitchen.com"
 
 
-# ---- Masood placeholder + default allow-list -------------------------------
-def test_masood_placeholder_is_none_by_default():
-    """The shipped placeholder is None until Sam provides the real email."""
-    assert MASOOD_EMAIL is None
+@pytest.fixture
+def unpinned_masood(monkeypatch):
+    """Simulate the original SAFE MODE: clear Masood's email + phone pins and any
+    env override, leaving only Sam pinned (the second slot empty)."""
+    monkeypatch.setattr(ti, "MASOOD_EMAIL", None)
+    monkeypatch.setattr(ti, "MASOOD_PHONE", None)
+    monkeypatch.delenv(ti.PARTNER_EMAILS_ENV, raising=False)
+    monkeypatch.delenv(ti.PARTNER_PHONES_ENV, raising=False)
 
 
-def test_default_allowlist_is_sam_only_and_safe_mode():
-    """With no env + Masood unpinned, allow-list = {Sam} and we're in SAFE MODE."""
+# ---- Masood pinned + default allow-list ------------------------------------
+def test_masood_pinned_by_default():
+    """Sam pinned Masood 2026-06-07: email + phone are set (the PIN is a
+    credential and is NEVER stored in this module)."""
+    assert MASOOD_EMAIL == "masood@cenaskitchen.com"
+    assert MASOOD_PHONE == "8322832219"
+    assert can_be_partner("masood@cenaskitchen.com") is True
+
+
+def test_default_allowlist_is_both_partners_not_safe_mode():
+    """With both pins set (default), allow-list = {Sam, Masood} and NOT safe mode."""
     ids = partner_identities()
-    assert ids == frozenset({SAM_EMAIL.lower()})
-    assert is_safe_mode() is True
+    assert ids == frozenset({SAM_EMAIL.lower(), "masood@cenaskitchen.com"})
+    assert is_safe_mode() is False
 
 
 # ---- can_be_partner --------------------------------------------------------
@@ -74,6 +90,33 @@ def test_no_email_cannot_be_partner():
     assert can_be_partner(None) is False
     assert can_be_partner(_user(email=None)) is False
     assert can_be_partner("") is False
+
+
+# ---- phone pinning (Masood logs in by phone) -------------------------------
+def test_masood_recognized_by_phone_only_user():
+    """A User identified by PHONE (no email) is still a pinned partner -- robust
+    to a phone-login partner whose User row email is blank/different."""
+    masood_by_phone = {"permission_level": "partner", "store_scope": None,
+                       "email": None, "phone": "8322832219"}
+    assert can_be_partner(masood_by_phone) is True
+    # formatted phone variants normalize the same way (last 10 digits)
+    assert can_be_partner({"phone": "(832) 283-2219"}) is True
+    assert can_be_partner({"phone": "+1 832-283-2219"}) is True
+
+
+def test_random_phone_not_partner():
+    assert can_be_partner({"phone": "5551234567"}) is False
+    assert partner_phones() == frozenset({"8322832219"})
+
+
+def test_removing_masood_by_phone_rejected():
+    """Demoting/removing the phone-identified Masood is rejected (he is pinned)."""
+    with pytest.raises(TierInvariantError):
+        assert_partner_change_allowed(
+            actor=_user(email=SAM_EMAIL),
+            target={"phone": "832-283-2219", "permission_level": "partner"},
+            action="remove",
+        )
 
 
 # ---- 3rd-partner rejected (create/promote) ---------------------------------
@@ -142,7 +185,7 @@ def test_removing_masood_rejected_once_pinned(masood_pinned):
 
 
 # ---- SAFE MODE: unpinned slot not locked out -------------------------------
-def test_safe_mode_does_not_lock_out_unpinned_slot():
+def test_safe_mode_does_not_lock_out_unpinned_slot(unpinned_masood):
     """In safe mode (Masood unpinned), demoting/removing a NON-pinned identity
     is allowed -- we don't hard-block the empty second slot."""
     assert is_safe_mode() is True
@@ -183,9 +226,10 @@ def test_escape_hatch_is_case_insensitive(monkeypatch):
 
 
 def test_empty_env_falls_back_to_builtin(monkeypatch):
-    """An empty / whitespace-only env var is treated as 'no override'."""
+    """An empty / whitespace-only env var is treated as 'no override' -> the
+    built-in {Sam, Masood} allow-list."""
     monkeypatch.setenv(ti.PARTNER_EMAILS_ENV, "   ,  ")
-    assert partner_identities() == frozenset({SAM_EMAIL.lower()})
+    assert partner_identities() == frozenset({SAM_EMAIL.lower(), "masood@cenaskitchen.com"})
 
 
 # ---- corporate store_scope NULL enforced -----------------------------------

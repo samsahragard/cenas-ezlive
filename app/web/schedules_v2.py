@@ -275,6 +275,7 @@ def sv2_board():
                     "break_minutes": sh.break_minutes, "status": sh.status,
                     "notes": sh.notes, "tag_ids": tag_ids,
                     "display_name": sh.display_name,  # Sam #2872: former-staff name (employee_id NULL) -> struck-through
+                    "published_at": sh.published_at.isoformat() if sh.published_at else None,  # per-shift publish: null = hollow/unpublished
                 })
         # positions: filtered to the CANONICAL 14 (Sam #2227 - 13 FOH + Cook);
         # Sling-import junk (C-Grill, C-Prep, Chba, Dish, ...) is hidden. store_key
@@ -483,6 +484,11 @@ def sv2_schedule_publish(schedule_id):
         if sched.published_at is None:
             sched.published_at = now
         sched.updated_at = now
+        # per-shift publish: stamp every still-unpublished shift in this week so publish
+        # flips the pending/new/edited shifts hollow->filled + makes them visible to the
+        # employee. Already-published shifts keep their original published_at.
+        for _sh in db.query(Shift).filter_by(schedule_id=sched.id).filter(Shift.published_at.is_(None)).all():
+            _sh.published_at = now
         db.commit()
         # B6 hook (ckai #1912): create pending shift_alarms AFTER the status flip.
         # No-op stub today; wrapped so a future B6 error can never fail the publish.

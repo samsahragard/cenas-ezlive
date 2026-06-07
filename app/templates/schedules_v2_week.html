@@ -283,6 +283,12 @@
     border-radius: var(--sk-radius-sm); padding: 9px 11px;
   }
   .sv2-input:focus, .sv2-select:focus, .sv2-textarea:focus { outline: none; border-color: var(--sk-border-active); }
+  /* aick: theme the native <select> dropdown -- the OS default highlight was a
+     jarring bright blue on the dark panel. Dark option rows + gold selected/hover,
+     and accent-color tints the keyboard-highlight where the browser supports it. */
+  .sv2-select { accent-color: var(--sk-gold-bright); }
+  .sv2-select option { background-color: #1c0f08; color: var(--sk-cream); }
+  .sv2-select option:checked, .sv2-select option:hover { background: rgba(228,179,64,.25); color: var(--sk-gold-bright); }
   .sv2-textarea { resize: vertical; min-height: 56px; }
   .sv2-row2 { display: flex; gap: 10px; }
   .sv2-row2 > * { flex: 1; }
@@ -460,9 +466,9 @@
   function parseISO(s) { return s ? new Date(s) : null; }
   function hhmm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function fmtTime(d) {
-    var h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? "a" : "p";
+    var h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? "am" : "pm";
     var h12 = h % 12; if (h12 === 0) h12 = 12;
-    return h12 + (m ? ":" + pad(m) : "") + ap;
+    return h12 + (m ? ":" + pad(m) : "") + " " + ap;  // "4 pm" / "4:30 pm" -- minutes only when non-zero
   }
 
   // ---- DOM refs ----
@@ -658,7 +664,7 @@
 
   function chipHtml(s) {
     var sd = parseISO(s.start_at), ed = parseISO(s.end_at);
-    var t = (sd ? fmtTime(sd) : "?") + "-" + (ed ? fmtTime(ed) : "?");
+    var t = (sd ? fmtTime(sd) : "?") + " - " + (ed ? fmtTime(ed) : "?");
     var p = posById(s.position_id);
     var open = (s.employee_id == null && !s.display_name);  // former-staff (display_name set) renders as a real chip, not "Open"
     // B5: only ASSIGNED shifts carry an acceptance response (pending|accepted|declined);

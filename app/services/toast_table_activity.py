@@ -11,6 +11,7 @@ except ImportError:  # pragma: no cover - Python 3.8 fallback only
     ZoneInfo = None  # type: ignore[assignment]
 
 from app.services.toast_client import ToastClient, restaurant_guids
+from app.services.assistant_routing_shared import STORE_ALIASES, normalize_store_key
 
 log = logging.getLogger(__name__)
 
@@ -53,17 +54,12 @@ def _format_ct(value: datetime) -> str:
 
 def normalize_location(location: str | None) -> str | None:
     value = str(location or "").strip().casefold()
-    aliases = {
-        "tomball": "tomball",
-        "dos": "tomball",
-        "dos mas": "tomball",
-        "copperfield": "copperfield",
-        "uno": "copperfield",
-        "uno mas": "copperfield",
-        "both": None,
-        "all": None,
-    }
-    return aliases.get(value, value or None)
+    if value in {"both", "all"}:
+        return None
+    if not value:
+        return None
+    normalized = normalize_store_key(value)
+    return normalized if normalized != "unknown" else None
 
 
 def _location_label(location: str | None) -> str:

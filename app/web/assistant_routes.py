@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import re
-import hashlib
 import threading
 import time
 import urllib.parse
@@ -44,15 +43,48 @@ from app.web.permissions import accessible_store_slugs
 from app.services.assistant_tool_inventory import (
     is_excluded_non_routable,
     iter_partner_tool_definitions,
+    iter_readonly_operational_tool_specs,
 )
 from app.services.assistant_handlers import drivers as driver_handlers
 from app.services.assistant_handlers import orders as order_handlers
 from app.services.assistant_handlers import schedule as schedule_handlers
 from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin_tool_registrations
-from app.services.assistant_safety import (
+from app.services.assistant_routing_shared import (
+    DATA_TOOL_RE as _DATA_TOOL_RE,
+    DEFAULT_GEMINI_MODEL as _DEFAULT_GEMINI_MODEL,
+    FOLLOWUP_RE as _FOLLOWUP_RE,
+    MAX_QUESTION_CHARS as _MAX_QUESTION_CHARS,
+    OPERATIONAL_NOUN_RE as _OPERATIONAL_NOUN_RE,
+    REVIEW_STATUS as _REVIEW_STATUS,
+    SENSITIVE_RE as _SENSITIVE_RE,
+    SECRET_DEFAULTS as _SECRET_DEFAULTS,
+    TOAST_DATA_FRESHNESS_RE as _TOAST_DATA_FRESHNESS_RE,
+    TOAST_EMPLOYEE_PROFILE_RE as _TOAST_EMPLOYEE_PROFILE_RE,
+    TOAST_SALES_RE as _TOAST_SALES_RE,
+    TOAST_SALES_UNSUPPORTED_SCOPE_RE as _TOAST_SALES_UNSUPPORTED_SCOPE_RE,
+    TOAST_TABLE_ACTIVITY_RE as _TOAST_TABLE_ACTIVITY_RE,
+    TOAST_WEBHOOK_ACTIVITY_RE as _TOAST_WEBHOOK_ACTIVITY_RE,
     contextual_followup as _shared_contextual_followup,
     force_review_reason as _shared_force_review_reason,
+    has_unsupported_toast_sales_scope as _has_unsupported_toast_sales_scope,
+    normalize_store_key as _normalize_store_key,
+    now_iso as _now_iso,
+    provider_timeout_ms as _provider_timeout_ms,
+    queued_answer as _queued_answer,
+    read_secret as _read_secret,
+    requested_store as _requested_store,
     resolved_question as _shared_resolved_question,
+    review_reason_label as _review_reason_label,
+    review_risk_level as _review_risk_level,
+    stable_hash as _stable_hash,
+    toast_period_from_question as _toast_period_from_question,
+    toast_table_business_date_from_question as _toast_table_business_date_from_question,
+    today_ct as _today_ct,
+    wants_toast_data_freshness as _wants_toast_data_freshness,
+    wants_toast_employee_profiles as _wants_toast_employee_profiles,
+    wants_toast_sales_summary as _wants_toast_sales_summary,
+    wants_toast_table_activity as _wants_toast_table_activity,
+    wants_toast_webhook_activity as _wants_toast_webhook_activity,
 )
 from app.services.permissions import ROLE_PERMISSIONS, has_permission
 
@@ -61,113 +93,12 @@ log = logging.getLogger(__name__)
 assistant_bp = Blueprint("assistant", __name__)
 
 _QUEUE_LOCK = threading.Lock()
-_MAX_QUESTION_CHARS = 2000
-_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-_REVIEW_STATUS = "needs_review"
 _CK_REVIEW_PATH = "/review/question"
 _CK_RUNTIME_PATH = "/assistant/answer"
 _CENA_REVIEW_SESSION_TITLE = "Cenas AI Review"
 _CENA_REVIEW_SESSION_PREFIX = "Cenas AI Review: "
 _CENA_REVIEW_CLIP_CHARS = 8000
 _CENA_REVIEW_PAYLOAD_PREFIX = "CENAS_ASSISTANT_REVIEW_V2\n"
-_SECRET_DEFAULTS = {
-    "GEMINI_API_KEY": [
-        r"C:\Users\sam\cena-secrets\gemini_api_key.txt",
-        r"C:\Users\sam\cena\.secrets\gemini_api_key.txt",
-        r"C:\Users\sam\cena-secrets\google_api_key.txt",
-    ],
-}
-_SENSITIVE_RE = re.compile(
-    r"\b("
-    r"password|passcode|token|secret|api key|credential|pin|"
-    r"phone|email|address|customer|"
-    r"wage|payroll|pay rate|hourly rate|peer pay|"
-    r"sales|revenue|eligible_sales|cashsales|noncashsales|guid|"
-    r"all employees|all drivers|all stores"
-    r")\b",
-    re.IGNORECASE,
-)
-_DATA_TOOL_RE = re.compile(
-    r"\b("
-    r"how many|how amny|count|total|report|summary|list|show me|who|which|"
-    r"order|orders|driver|drivers|employee|employees|staff|team|"
-    r"schedule|shift|roster|attendance|incident|write up|"
-    r"tip|tips|labor|staffing|inventory|vendor|customer|ezcater|catering|caterings|"
-    r"late|tracking|tracking link|tracking links|delivery|deliveries|toast|"
-    r"table|tables|talbe|floor|opened|open|pay|bonus|fee|fees|"
-    r"tool|tools|file|files|filesystem|shell|sql|render|deploy|git|env|"
-    r"log|logs|restart|dev chat|sam chat|permission|permissions"
-    r")\b",
-    re.IGNORECASE,
-)
-_TOAST_SALES_RE = re.compile(
-    r"\b("
-    r"toast|sales|revenue|net sales|gross sales|"
-    r"average order|avg order|labor percent|labor ratio|sales per labor"
-    r")\b",
-    re.IGNORECASE,
-)
-_TOAST_TABLE_ACTIVITY_RE = re.compile(
-    r"\b("
-    r"table|tables|talbe|floor|seated|seat|opened|open check|"
-    r"check|ticket|waiter|server|opened by|opened it|"
-    r"most recent.*open|latest.*open"
-    r")\b",
-    re.IGNORECASE,
-)
-_TOAST_WEBHOOK_ACTIVITY_RE = re.compile(
-    r"\b("
-    r"toast\s+webhook|webhooks?|live\s+toast|toast\s+live|"
-    r"event|events|order_updated|ordering_schedule|restaurant_availability|"
-    r"menus?|stock|packaging|checks?|items?|plates?|payments?|closeouts?|"
-    r"rang\s+in|rung\s+in|voids?|closed\s+checks?"
-    r")\b",
-    re.IGNORECASE,
-)
-_CATERING_ITEM_AGGREGATE_RE = re.compile(
-    r"\b("
-    r"what\s+items?\s+get\s+ordered\s+most|"
-    r"items?\s+(?:get\s+)?ordered\s+most|"
-    r"most\s+ordered|"
-    r"ordered\s+most|"
-    r"most\s+popular|"
-    r"popular\s+items?|"
-    r"best[-\s]+selling|"
-    r"top[-\s]+selling"
-    r")\b",
-    re.IGNORECASE,
-)
-_TOAST_DATA_FRESHNESS_RE = re.compile(
-    r"\bwhen\s+(?:did|was|were)\s+(?:we\s+)?last\b|"
-    r"\b(?:last|latest|most\s+recent)\s+(?:toast\s+)?(?:data|webhook|webhooks?|events?|sync|update)\b|"
-    r"\btoast\s+(?:data|webhook|webhooks?)\b.*\b(?:fresh|freshness|stale|updated?|sync(?:ed)?|working|connected|last)\b|"
-    r"\b(?:fresh|freshness|stale|updated?|sync(?:ed)?|working|connected)\b.*\btoast\s+(?:data|webhook|webhooks?)\b",
-    re.IGNORECASE,
-)
-_TOAST_SALES_UNSUPPORTED_SCOPE_RE = re.compile(
-    r"\b("
-    r"yesterday|last\s+night|previous\s+day|"
-    r"last\s+month|this\s+month|month\s+to\s+date|mtd|"
-    r"ytd|year\s+to\s+date|last\s+year|this\s+year|"
-    r"last\s+\d+\s+days|past\s+\d+\s+days|"
-    r"between|from\s+.+\s+to\s+|"
-    r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|"
-    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
-    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|"
-    r"(?:last|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
-    r")\b",
-    re.IGNORECASE,
-)
-_TOAST_EMPLOYEE_PROFILE_RE = re.compile(
-    r"\b("
-    r"toast\s+employee|employee\s+toast|employee\s+profile|profile\s+db|"
-    r"personal(?:ized)?\s+db|employee\s+database|employee\s+files?|"
-    r"cena_employee_\d+|employee\s+(?:id\s*)?#?\s*\d+|"
-    r"toast\s+facts?|server\s+activity|tables\s+served|checks?\s+(?:opened|closed)|"
-    r"items?\s+r(?:ang|ung)\s+in|payments?\s+handled"
-    r")\b",
-    re.IGNORECASE,
-)
 _ORDERS_SUMMARY_RE = re.compile(
     r"\b("
     r"catering|caterings|ezcater|orders?|deliver(?:y|ies)|"
@@ -188,24 +119,6 @@ _LABOR_SUMMARY_RE = re.compile(
     r"\b("
     r"labor|staffing|staff summary|employee summary|employees?|"
     r"attendance|shifts?|published shifts?|open shifts?|hours"
-    r")\b",
-    re.IGNORECASE,
-)
-_OPERATIONAL_NOUN_RE = re.compile(
-    r"\b("
-    r"catering|caterings|order|orders|delivery|deliveries|"
-    r"driver|drivers|labor|employee|employees|staff|team|"
-    r"table|tables|talbe|floor|"
-    r"schedule|schedules|shift|shifts|roster|attendance|"
-    r"availability|unavailability|time[- ]off|alarm|reminder|reminders"
-    r")\b",
-    re.IGNORECASE,
-)
-_FOLLOWUP_RE = re.compile(
-    r"\b("
-    r"what about|how about|what baout|earlier|morning|afternoon|"
-    r"evening|tonight|today|tomorrow|yesterday|last night|this week|"
-    r"tomball|dos|dos mas|copperfield|uno|uno mas"
     r")\b",
     re.IGNORECASE,
 )
@@ -238,53 +151,74 @@ _SECRET_TEXT_RE = re.compile(
 
 
 _INTERNAL_TOOL_REGISTRY_KEYS = {"handler", "matcher", "formatter", "priority"}
+
+
+def _label_from_tool_id(tool_id: str) -> str:
+    return re.sub(r"[_\-.]+", " ", tool_id).strip().title()
+
+
+def _readonly_operational_priority(tool_id: str) -> int:
+    if tool_id.startswith("employee."):
+        return 115
+    if tool_id.startswith("schedules."):
+        return 235
+    if tool_id.startswith("kitchen."):
+        return 350
+    if tool_id.startswith("attendance."):
+        return 345
+    if tool_id.startswith("vendors."):
+        return 355
+    return 360
+
+
+def _readonly_operational_registry_entry(spec: dict[str, Any]) -> dict[str, Any]:
+    tool_id = str(spec.get("tool_id") or "").strip()
+    roles = [str(role) for role in (spec.get("intended_roles") or []) if role]
+    is_employee_self_tool = tool_id.startswith("employee.")
+    return {
+        "tool_id": tool_id,
+        "label": _label_from_tool_id(tool_id),
+        "description": str(spec.get("description") or ""),
+        "required_permissions": (
+            ["ai.ask_claude_personal"] if is_employee_self_tool else ["ai.ask_claude"]
+        ),
+        "session_types": roles or (["employee", "staff", "partner"] if is_employee_self_tool else ["staff", "partner"]),
+        "store_scope": "own_profile" if is_employee_self_tool else "current_user_store_scope",
+        "data_class": tool_id.split(".", 1)[0] if "." in tool_id else "operations",
+        "read_write_class": "read_only",
+        "status": "active",
+        "implementation_status": "implemented",
+        "handler": f"readonly_operational:{tool_id}",
+        "matcher": f"readonly_operational:{tool_id}",
+        "formatter": "readonly_operational",
+        "priority": _readonly_operational_priority(tool_id),
+    }
+
+
+_READONLY_OPERATIONAL_SPECS = {
+    str(spec.get("tool_id") or ""): spec
+    for spec in iter_readonly_operational_tool_specs()
+    if spec.get("tool_id")
+}
+_READONLY_OPERATIONAL_TOOL_IDS = frozenset(_READONLY_OPERATIONAL_SPECS)
 _TOOL_REGISTRY: list[dict[str, Any]] = list(iter_builtin_tool_registrations())
 _KNOWN_TOOL_IDS = {tool["tool_id"] for tool in _TOOL_REGISTRY}
+for _readonly_spec in _READONLY_OPERATIONAL_SPECS.values():
+    _readonly_tool = _readonly_operational_registry_entry(_readonly_spec)
+    if _readonly_tool["tool_id"] in _KNOWN_TOOL_IDS:
+        continue
+    _TOOL_REGISTRY.append(_readonly_tool)
+    _KNOWN_TOOL_IDS.add(_readonly_tool["tool_id"])
 for _partner_tool in iter_partner_tool_definitions():
     if _partner_tool["tool_id"] in _KNOWN_TOOL_IDS:
         continue
     _TOOL_REGISTRY.append(_partner_tool)
     _KNOWN_TOOL_IDS.add(_partner_tool["tool_id"])
-del _partner_tool
-
-
-def _now_iso() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-
-def _today_ct() -> date:
-    # Match the existing Toast report date handling on Windows hosts.
-    return (datetime.now(timezone.utc) - timedelta(hours=5)).date()
-
-
-def _stable_hash(value: Any) -> str:
-    payload = json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+del _partner_tool, _readonly_spec, _readonly_tool
 
 
 def _redact_text(value: str) -> str:
     return _SECRET_TEXT_RE.sub("[REDACTED]", value)
-
-
-def _read_secret(env_name: str) -> str:
-    value = (os.getenv(env_name) or "").strip()
-    if value:
-        return value
-    file_value = (os.getenv(env_name + "_FILE") or "").strip()
-    candidates = [file_value] if file_value else []
-    candidates.extend(_SECRET_DEFAULTS.get(env_name, []))
-    for raw_path in candidates:
-        if not raw_path:
-            continue
-        path = Path(raw_path)
-        try:
-            if path.exists():
-                value = path.read_text(encoding="utf-8").strip()
-                if value:
-                    return value
-        except OSError:
-            continue
-    return ""
 
 
 def _env_truthy(name: str) -> bool:
@@ -348,13 +282,6 @@ def _assistant_enabled() -> bool:
     if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ENABLED"):
         return False
     return not _env_truthy("AI_ASSISTANT_DISABLED")
-
-
-def _review_risk_level(reason: str | None) -> str:
-    reason_text = (reason or "").casefold()
-    if any(term in reason_text for term in ("sensitive", "operational", "data", "permission")):
-        return "blocked"
-    return "normal"
 
 
 def _queue_path() -> Path:
@@ -457,7 +384,11 @@ def _has_all_permissions(ctx: dict[str, Any], permissions: list[str]) -> bool:
 
 
 def _has_partner_tool_access(ctx: dict[str, Any]) -> bool:
-    return bool(ctx.get("is_owner_operator") or ctx.get("role") == "partner")
+    return bool(
+        ctx.get("is_owner_operator")
+        or ctx.get("role") == "partner"
+        or ctx.get("kind") in {"partner", "staff", "employee"}
+    )
 
 
 def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
@@ -944,18 +875,7 @@ def _store_key_for_order(order: Order) -> str:
         or order.reported_store
         or "unknown"
     )
-    value = str(raw).strip().casefold()
-    aliases = {
-        "1": "copperfield",
-        "uno": "copperfield",
-        "uno mas": "copperfield",
-        "copperfield": "copperfield",
-        "2": "tomball",
-        "dos": "tomball",
-        "dos mas": "tomball",
-        "tomball": "tomball",
-    }
-    return aliases.get(value, value or "unknown")
+    return _normalize_store_key(raw)
 
 
 def _order_needs_driver(order: Order) -> bool:
@@ -1220,94 +1140,6 @@ def _tool_is_available(ctx: dict[str, Any], tool_id: str) -> bool:
     )
 
 
-def _toast_period_from_question(question: str) -> str:
-    text = str(question or "").casefold()
-    if "last week" in text or "previous week" in text:
-        return "last_week"
-    if "yesterday" in text:
-        return "yesterday"
-    if "this week" in text or re.search(r"\bweek\b", text):
-        return "week"
-    return "today"
-
-
-def _wants_toast_data_freshness(question: str) -> bool:
-    text = str(question or "")
-    if not re.search(r"\b(toast|webhook)\b", text, re.IGNORECASE):
-        return False
-    return bool(
-        _TOAST_DATA_FRESHNESS_RE.search(text)
-        and re.search(r"\b(toast|webhook|data|events?|sync|update)\b", text, re.IGNORECASE)
-    )
-
-
-def _has_unsupported_toast_sales_scope(question: str) -> bool:
-    text = str(question or "")
-    if not _TOAST_SALES_RE.search(text):
-        return False
-    if re.search(r"\b(today|yesterday|this\s+week|last\s+week|previous\s+week)\b", text, re.IGNORECASE):
-        return False
-    return bool(_TOAST_SALES_UNSUPPORTED_SCOPE_RE.search(text))
-
-
-def _wants_toast_sales_summary(question: str) -> bool:
-    text = str(question or "")
-    if (
-        _wants_toast_data_freshness(text)
-        or _has_unsupported_toast_sales_scope(text)
-        or _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
-        or _TOAST_EMPLOYEE_PROFILE_RE.search(text)
-    ):
-        return False
-    return bool(_TOAST_SALES_RE.search(text))
-
-
-def _wants_toast_table_activity(question: str) -> bool:
-    text = str(question or "")
-    if _TOAST_TABLE_ACTIVITY_RE.search(text) and re.search(
-        r"\b(who\s+opened|waiter|server|opened\s+by|opened\s+it)\b",
-        text,
-        re.IGNORECASE,
-    ):
-        return True
-    return bool(
-        _TOAST_TABLE_ACTIVITY_RE.search(text)
-        and re.search(
-            r"\b(tomball|dos|dos mas|copperfield|uno|uno mas|today|"
-            r"yesterday|last night|tonight|latest|recent|activity|activities|open|opened)\b",
-            text,
-            re.IGNORECASE,
-        )
-    )
-
-
-def _toast_table_business_date_from_question(question: str) -> str | None:
-    text = str(question or "").casefold()
-    today = _today_ct()
-    if re.search(r"\b(last night|yesterday|previous night)\b", text):
-        return (today - timedelta(days=1)).strftime("%Y%m%d")
-    if re.search(r"\b(today|tonight)\b", text):
-        return today.strftime("%Y%m%d")
-    return None
-
-
-def _requested_store(question: str) -> str | None:
-    text = str(question or "").casefold()
-    aliases = {
-        "tomball": "tomball",
-        "dos mas": "tomball",
-        "dos": "tomball",
-        "copperfield": "copperfield",
-        "uno mas": "copperfield",
-        "uno": "copperfield",
-    }
-    for alias, store in aliases.items():
-        escaped = re.escape(alias).replace(r"\ ", r"\s+")
-        if re.search(rf"\b{escaped}\b", text):
-            return store
-    return None
-
-
 def _toast_sales_summary_tool_payload(period: str) -> dict[str, Any]:
     from app.services.toast_analytics_summary import analytics_summary_payload
 
@@ -1321,55 +1153,6 @@ def _toast_table_activity_tool_payload(
     from app.services.toast_table_activity import latest_table_activity_payload
 
     return latest_table_activity_payload(location, business_date=business_date)
-
-
-def _wants_toast_webhook_activity(question: str) -> bool:
-    text = str(question or "")
-    if re.search(r"\bwhat\s+was\s+on\s+order\b|\border\s+[A-Za-z0-9][A-Za-z0-9_-]{2,}\b", text, re.IGNORECASE):
-        return False
-    if _CATERING_ITEM_AGGREGATE_RE.search(text) and not re.search(
-        r"\b(toast|webhooks?|live|events?|checks?|payments?|plates?|closeouts?|voids?|rang|rung|menus?|stock|packaging)\b",
-        text,
-        re.IGNORECASE,
-    ):
-        return False
-    if (
-        re.search(r"\b(catering|caterings|ezcater|in[- ]house|quotes?)\b", text, re.IGNORECASE)
-        and not re.search(
-            r"\b(toast|webhooks?|rang|rung|checks?|payments?|closeouts?|voids?)\b",
-            text,
-            re.IGNORECASE,
-        )
-    ):
-        return False
-    if _TOAST_EMPLOYEE_PROFILE_RE.search(text):
-        return False
-    if _wants_toast_data_freshness(text):
-        return True
-    return bool(
-        _TOAST_WEBHOOK_ACTIVITY_RE.search(text)
-        and re.search(
-            r"\b(toast|webhook|live|events?|orders?|checks?|items?|plates?|"
-            r"payments?|closeouts?|closed|rang|rung|void|menus?|stock|packaging)\b",
-            text,
-            re.IGNORECASE,
-        )
-    )
-
-
-def _wants_toast_employee_profiles(question: str) -> bool:
-    text = str(question or "")
-    return bool(
-        _TOAST_EMPLOYEE_PROFILE_RE.search(text)
-        or (
-            re.search(r"\b(employee|server|waiter|cashier|staff)\b", text, re.IGNORECASE)
-            and re.search(
-                r"\b(toast|tables?|checks?|items?|plates?|payments?|rang|rung|served|profile|facts?)\b",
-                text,
-                re.IGNORECASE,
-            )
-        )
-    )
 
 
 def _wants_orders_store_summary(question: str) -> bool:
@@ -1433,6 +1216,170 @@ def _toast_employee_profiles_tool_payload(question: str) -> dict[str, Any]:
     return toast_employee_profile_payload(question)
 
 
+def _question_text(question: str) -> str:
+    return str(question or "").casefold()
+
+
+def _contains_any(text: str, *patterns: str) -> bool:
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
+def _employee_self_context(text: str) -> bool:
+    return bool(
+        re.search(r"\b(my|mine|myself)\b", text)
+        or re.search(r"\bemployee(?:\s+id)?\s*#?\d+\b", text)
+    )
+
+
+def _wants_readonly_operational_tool(tool_id: str, question: str) -> bool:
+    text = _question_text(question)
+    if tool_id.startswith("employee."):
+        if tool_id == "employee.my_open_shifts":
+            return "open shift" in text and _contains_any(text, r"\b(my|available|pick\s*up|pickup)\b")
+        if not _employee_self_context(text):
+            return False
+        if tool_id == "employee.my_profile.read":
+            return _contains_any(text, r"\bprofile\b", r"\babout\s+me\b", r"\bmy\s+info\b")
+        if tool_id == "employee.my_contact.read":
+            return _contains_any(text, r"\bcontact\b", r"\bphone\b", r"\bemail\b")
+        if tool_id == "employee.my_stores.read":
+            return _contains_any(text, r"\bstores?\b", r"\blocations?\b")
+        if tool_id == "employee.my_positions.read":
+            return _contains_any(text, r"\bpositions?\b", r"\bjobs?\b", r"\broles?\b")
+        if tool_id == "employee.my_schedule.today":
+            return _contains_any(text, r"\bschedules?\b", r"\bshifts?\b") and not re.search(r"\bweek\b", text)
+        if tool_id == "employee.my_schedule.week":
+            return _contains_any(text, r"\bschedules?\b", r"\bshifts?\b") and re.search(r"\bweek\b", text)
+        if tool_id == "employee.my_recent_shifts":
+            return _contains_any(text, r"\brecent\s+shifts?\b", r"\bpast\s+shifts?\b", r"\bshift\s+history\b")
+        if tool_id == "employee.my_availability.read":
+            return "availability" in text or "available" in text
+        if tool_id == "employee.my_time_off.status":
+            return _contains_any(text, r"\btime[-\s]?off\b", r"\bpto\b", r"\bvacation\b")
+        if tool_id == "employee.my_shift_alarm_settings":
+            return _contains_any(text, r"\balarm\b", r"\breminder\b", r"\bnotification\b")
+        if tool_id == "employee.my_attendance_summary":
+            return _contains_any(text, r"\battendance\b", r"\blate\b", r"\bno[-\s]?show\b", r"\bcallout\b")
+        if tool_id == "employee.my_day_breakdown":
+            return _contains_any(text, r"\bday\s+breakdown\b", r"\btoday\s+breakdown\b")
+        return False
+
+    if tool_id == "schedules.today_view":
+        if _contains_any(text, r"\bdrivers?\b", r"\bcatering\b", r"\borders?\b"):
+            return False
+        return _contains_any(text, r"\btoday'?s?\s+schedules?\b", r"\btomorrow'?s?\s+schedules?\b", r"\bwho(?:'s|\s+is)?\s+working\b")
+    if tool_id == "schedules.week_view":
+        return _contains_any(text, r"\bweekly\s+schedules?\b", r"\bschedule\s+week\b", r"\bweek(?:ly)?\s+shift")
+    if tool_id == "kitchen.recipe_lookup":
+        return "recipe" in text and _contains_any(text, r"\blookup\b", r"\bdetails?\b", r"\bhow\s+do\s+i\s+make\b", r"\brecipe\s+for\b")
+    if tool_id == "kitchen.recipe_search":
+        return "recipe" in text and _contains_any(text, r"\bsearch\b", r"\bfind\b", r"\blist\b", r"\bshow\b")
+    if tool_id == "kitchen.prep_list_today":
+        return _contains_any(text, r"\bprep\s+list\b", r"\btoday'?s?\s+prep\b")
+    if tool_id == "kitchen.prep_entries_by_day":
+        return _contains_any(text, r"\bprep\s+entries\b", r"\bprep\s+by\s+day\b", r"\bprep\s+for\b")
+    if tool_id == "vendors.vendor_recent_orders":
+        return _contains_any(text, r"\bvendors?\b", r"\bwebstaurant\b", r"\brestaurant\s+depot\b") and _contains_any(text, r"\borders?\b", r"\brecent\b")
+    if tool_id == "attendance.manager_board_summary":
+        return _contains_any(text, r"\battendance\s+board\b", r"\battendance\s+summary\b", r"\bwho\s+is\s+late\b")
+    if tool_id == "attendance.late_summary":
+        return _contains_any(text, r"\blate\b", r"\btardy\b") and "attendance" in text
+    if tool_id == "attendance.no_show_summary":
+        return _contains_any(text, r"\bno[-\s]?show\b", r"\bno\s+show\b")
+    if tool_id == "attendance.callout_summary":
+        return _contains_any(text, r"\bcall[-\s]?out\b", r"\bcalled\s+out\b")
+    if tool_id == "attendance.missed_punch_summary":
+        return _contains_any(text, r"\bmissed\s+punch\b", r"\bmissing\s+punch\b", r"\bclock(?:ed)?\s+out\b")
+    return False
+
+
+def _requested_operational_day(question: str) -> date:
+    text = _question_text(question)
+    today = _today_ct()
+    if re.search(r"\btomorrow\b", text):
+        return today + timedelta(days=1)
+    if re.search(r"\b(yesterday|last\s+night|previous\s+day)\b", text):
+        return today - timedelta(days=1)
+    return today
+
+
+def _requested_operational_week_start(question: str) -> date:
+    day = _requested_operational_day(question)
+    return day - timedelta(days=day.weekday())
+
+
+def _operational_store_arg(question: str, ctx: dict[str, Any]) -> str | None:
+    text = _question_text(question)
+    if re.search(r"\b(all|both)\s+(?:stores?|locations?)\b", text):
+        return None
+    requested = _requested_store(question)
+    if requested:
+        return requested
+    current = _normalize_store_key(ctx.get("current_store"))
+    if current != "unknown":
+        return current
+    stores = [_normalize_store_key(store) for store in (ctx.get("store_slugs") or [])]
+    stores = [store for store in stores if store != "unknown"]
+    return stores[0] if len(stores) == 1 else None
+
+
+def _operational_employee_id_arg(question: str, ctx: dict[str, Any]) -> int | str | None:
+    match = re.search(r"\bemployee(?:\s+id)?\s*#?\s*(\d+)\b", str(question or ""), re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return ctx.get("principal_id")
+
+
+def _operational_recipe_arg(question: str, key: str) -> str | None:
+    text = str(question or "").strip()
+    match = re.search(r"\b(?:recipe|make|for)\s+([A-Za-z][A-Za-z0-9 _-]{1,80})", text, re.IGNORECASE)
+    if match:
+        return re.sub(r"\s+", " ", match.group(1)).strip(" ?.")
+    if key == "query":
+        return text[:120]
+    return None
+
+
+def _operational_readonly_args(tool_id: str, question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    day = _requested_operational_day(question)
+    args: dict[str, Any] = {}
+    if tool_id.startswith("employee."):
+        args["employee_id"] = _operational_employee_id_arg(question, ctx)
+        if tool_id in {"employee.my_schedule.today", "employee.my_day_breakdown"}:
+            args["date"] = day.isoformat()
+        if tool_id == "employee.my_schedule.week":
+            args["week_start"] = _requested_operational_week_start(question).isoformat()
+        if tool_id in {"employee.my_recent_shifts", "employee.my_open_shifts", "employee.my_time_off.status"}:
+            args["limit"] = 20
+        if tool_id == "employee.my_attendance_summary":
+            args["days"] = 30
+        return args
+    if tool_id.startswith(("schedules.", "kitchen.prep_", "attendance.")):
+        args["store"] = _operational_store_arg(question, ctx)
+        args["date"] = day.isoformat()
+        args["week_start"] = _requested_operational_week_start(question).isoformat()
+    if tool_id == "kitchen.recipe_search":
+        args.update({"query": _operational_recipe_arg(question, "query"), "limit": 10})
+    elif tool_id == "kitchen.recipe_lookup":
+        args["name"] = _operational_recipe_arg(question, "name")
+    elif tool_id == "vendors.vendor_recent_orders":
+        args.update({
+            "vendor": None,
+            "store": _operational_store_arg(question, ctx),
+            "limit": 10,
+        })
+        vendor_match = re.search(r"\b(webstaurant|restaurant\s+depot|ezcater|sysco)\b", question, re.IGNORECASE)
+        if vendor_match:
+            args["vendor"] = vendor_match.group(1).casefold()
+    return args
+
+
+def _operational_readonly_tool_payload(tool_id: str, question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    from app.services.assistant_operational_tools import run_operational_tool
+
+    return run_operational_tool(tool_id, _operational_readonly_args(tool_id, question, ctx))
+
+
 _TOOL_MATCHERS = {
     **order_handlers.ORDER_TOOL_MATCHERS,
     **schedule_handlers.SCHEDULE_TOOL_MATCHERS,
@@ -1444,6 +1391,11 @@ _TOOL_MATCHERS = {
     "toast_webhook_activity": _wants_toast_webhook_activity,
     "toast_employee_profiles": _wants_toast_employee_profiles,
 }
+for _tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
+    _TOOL_MATCHERS[f"readonly_operational:{_tool_id}"] = (
+        lambda question, tool_id=_tool_id: _wants_readonly_operational_tool(tool_id, question)
+    )
+del _tool_id
 
 
 def _approved_tool_handlers() -> dict[str, Any]:
@@ -1470,6 +1422,10 @@ def _approved_tool_handlers() -> dict[str, Any]:
             lambda question, ctx: _toast_employee_profiles_tool_payload(question)
         ),
     }
+    for tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
+        handlers[f"readonly_operational:{tool_id}"] = (
+            lambda question, ctx, tool_id=tool_id: _operational_readonly_tool_payload(tool_id, question, ctx)
+        )
     return handlers
 
 
@@ -1819,17 +1775,6 @@ def _queue_for_review(question: str, ctx: dict[str, Any], reason: str,
     return row
 
 
-def _queued_answer(reason: str) -> str:
-    if reason in {
-        "sensitive_or_operational_question_needs_approved_tool",
-        "data_question_needs_approved_tool",
-    }:
-        return "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
-    if reason == "not_authenticated":
-        return "Please sign in first. I saved the question for Sam review."
-    return "I can't safely answer that from your current permissions yet, so I saved it for Sam review."
-
-
 def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
     key = _read_secret("GEMINI_API_KEY")
     if not key:
@@ -1841,30 +1786,13 @@ def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
         return None, None
 
     model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
-    client = genai.Client(api_key=key)
+    client = genai.Client(
+        api_key=key,
+        http_options={"timeout": _provider_timeout_ms()},
+    )
     resp = client.models.generate_content(model=model, contents=prompt)
     text = (getattr(resp, "text", None) or "").strip()
     return text or None, model
-
-
-def _review_reason_label(reason: str) -> str:
-    labels = {
-        "not_authenticated": "the user is not signed in",
-        "missing_ai_permission": "the current user does not have assistant permission",
-        "sensitive_or_operational_question_requires_higher_permission": (
-            "the question needs higher operational permission"
-        ),
-        "sensitive_or_operational_question_needs_approved_tool": (
-            "the question needs an approved Cenas data tool"
-        ),
-        "data_question_requires_higher_permission": (
-            "the question needs higher data permission"
-        ),
-        "data_question_needs_approved_tool": (
-            "the question needs an approved Cenas data tool"
-        ),
-    }
-    return labels.get(reason, "the current permissions or tooling require Sam review")
 
 
 def _review_notice_prompt(ctx: dict[str, Any], reason: str, required_permission: str | None,
@@ -2046,14 +1974,6 @@ def assistant_ask():
     if should_queue:
         row = _queue_for_review(question, ctx, reason, required)
         answer = _queued_answer(reason)
-        notice = None
-        notice_model = None
-        try:
-            notice, notice_model = _gemini_review_notice(ctx, reason, required, answer)
-        except Exception:
-            log.exception("assistant gemini review notice failed")
-        if notice:
-            answer = notice
         response = {
             "ok": True,
             "answer": answer,
@@ -2065,8 +1985,6 @@ def assistant_ask():
             "route_path": "review",
             "routed_tool_id": None,
         }
-        if notice and notice_model:
-            response["review_notice_model"] = notice_model
         return respond(response)
 
     try:

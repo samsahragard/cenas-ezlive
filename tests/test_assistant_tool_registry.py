@@ -118,7 +118,7 @@ def test_wave1_orders_reads_are_registered_without_write_like_actions():
         assert tools[tool_id]["matcher"] == handler
         assert tools[tool_id]["formatter"] == handler
         assert tools[tool_id]["read_write_class"] == "read_only"
-        assert tools[tool_id]["status"] == "review_gated"
+        assert tools[tool_id]["status"] == "active"
         assert tools[tool_id]["operator_enabled"] is True
         assert tools[tool_id]["required_permissions"] == ["ai.ask_claude", "orders.view"]
     assert "orders.update_status" not in tools
@@ -134,7 +134,7 @@ def test_wave1_schedule_reads_are_registered_without_write_like_actions():
         assert tools[tool_id]["matcher"] == handler
         assert tools[tool_id]["formatter"] == handler
         assert tools[tool_id]["read_write_class"] == "read_only"
-        assert tools[tool_id]["status"] == "review_gated"
+        assert tools[tool_id]["status"] == "active"
         assert tools[tool_id]["operator_enabled"] is True
         assert tools[tool_id]["required_permissions"] == ["ai.ask_claude", "schedule.view"]
     for write_tool in [

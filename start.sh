@@ -55,9 +55,13 @@ fi
 # Optional sanity log — visible in Render's deploy logs.
 "$TS_BIN/tailscale" --socket="$TS_SOCK" ip -4 || true
 
-# 4) Exec the Flask app under gunicorn. 2 workers + 120s timeout sized for
-#    the /sam/chat SSE streams (each stream pins a worker until done).
+# 4) Exec the Flask app under gunicorn. Threaded workers keep the app
+#    responsive when /sam/chat SSE streams pin long-lived requests.
+WEB_WORKERS="${WEB_CONCURRENCY:-2}"
+WEB_THREADS="${GUNICORN_THREADS:-4}"
 exec gunicorn wsgi:app \
     --bind "0.0.0.0:${PORT}" \
-    --workers 2 \
+    --worker-class gthread \
+    --workers "${WEB_WORKERS}" \
+    --threads "${WEB_THREADS}" \
     --timeout 120

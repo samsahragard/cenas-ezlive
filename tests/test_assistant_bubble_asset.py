@@ -12,7 +12,7 @@ def test_assistant_bubble_waits_for_enabled_context_before_showing():
     assert "window.self !== window.top" in script
     assert "function dedupeRoots()" in script
     assert script.index(root_hidden) < script.index('fetch("/assistant/context"')
-    assert script.index(root_shown) > script.index("!data.enabled")
+    assert root_shown in script[script.index("!data.enabled"):]
 
 
 def test_assistant_bubble_script_is_versioned_for_mobile_cache():
@@ -28,3 +28,37 @@ def test_assistant_bubble_sends_previous_question_for_followups():
     assert "var previousQuestion = lastUserQuestion;" in script
     assert "lastUserQuestion = question;" in script
     assert "previous_question: previousQuestion" in script
+
+
+def test_assistant_bubble_does_not_render_on_full_assistant_page():
+    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
+
+    assert "function isFullAssistantPage()" in script
+    assert 'window.location.pathname === "/assistant"' in script
+    assert 'params.get("tab") === "cena"' in script
+    assert "if (hideRootOnFullAssistantPage()) return;" in script
+
+
+def test_assistant_bubble_suppresses_on_url_changes():
+    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
+
+    assert "function watchAssistantUrlChanges()" in script
+    assert '"pushState", "replaceState"' in script
+    assert "window.history[name] = function ()" in script
+    assert "hideRootOnFullAssistantPage();" in script
+    assert 'window.addEventListener("popstate", hideRootOnFullAssistantPage);' in script
+
+
+def test_assistant_bubble_hides_root_on_assistant_url():
+    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
+
+    assert "function hideRootOnFullAssistantPage()" in script
+    assert 'root.getAttribute("data-ckai-url-suppressed") === "true"' in script
+    assert 'root.removeAttribute("hidden");' in script
+    assert 'root.removeAttribute("data-ckai-url-suppressed");' in script
+    assert 'root.setAttribute("hidden", "hidden");' in script
+    assert 'root.setAttribute("data-ckai-url-suppressed", "true");' in script
+    assert "if (hideRootOnFullAssistantPage()) return;" in script
+    assert "if (hideRootOnFullAssistantPage()) return;" in script[
+        script.index('fetch("/assistant/context"'):
+    ]

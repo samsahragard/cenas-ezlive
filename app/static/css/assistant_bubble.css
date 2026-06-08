@@ -4,6 +4,12 @@
   bottom: calc(78px + env(safe-area-inset-bottom));
   z-index: 9999;
   font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+.ckai-root,
+.ckai-root * {
+  box-sizing: border-box;
 }
 
 .ckai-orb {
@@ -63,15 +69,16 @@
   position: absolute;
   right: 0;
   bottom: 76px;
-  width: min(380px, calc(100vw - 28px));
-  max-height: min(620px, calc(100vh - 140px));
+  width: min(390px, calc(100vw - 28px));
+  max-height: min(620px, calc(100vh - 150px));
+  max-height: min(620px, calc(100dvh - 150px));
   display: grid;
-  grid-template-rows: auto minmax(180px, 1fr) auto;
-  border: 1px solid rgba(217, 164, 54, 0.28);
+  grid-template-rows: auto minmax(176px, 1fr) auto;
+  border: 1px solid rgba(119, 155, 169, 0.34);
   border-radius: 12px;
-  background: rgba(21, 10, 6, 0.96);
+  background: rgba(13, 18, 20, 0.97);
   color: #faf6ec;
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.56);
   overflow: hidden;
   backdrop-filter: blur(12px);
 }
@@ -86,13 +93,13 @@
   justify-content: space-between;
   gap: 12px;
   padding: 13px 14px;
-  border-bottom: 1px solid rgba(217, 164, 54, 0.18);
-  background: linear-gradient(135deg, rgba(60, 32, 18, 0.92), rgba(18, 8, 5, 0.96));
+  border-bottom: 1px solid rgba(119, 155, 169, 0.2);
+  background: linear-gradient(135deg, rgba(30, 48, 53, 0.94), rgba(12, 16, 18, 0.98));
 }
 
 .ckai-title {
   font-weight: 800;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .ckai-title-wrap {
@@ -104,6 +111,7 @@
   font-size: 11px;
   line-height: 1.2;
   color: rgba(250, 246, 236, 0.58);
+  overflow-wrap: anywhere;
 }
 
 .ckai-close {
@@ -123,31 +131,98 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ckai-msg {
   max-width: 88%;
+  min-width: 0;
   padding: 10px 11px;
   border-radius: 10px;
   font-size: 13px;
-  line-height: 1.42;
-  white-space: pre-wrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .ckai-assistant {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(241, 248, 247, 0.08);
+  border: 1px solid rgba(163, 204, 197, 0.16);
 }
 
 .ckai-user {
   align-self: flex-end;
-  background: rgba(228, 179, 64, 0.18);
-  border: 1px solid rgba(228, 179, 64, 0.28);
+  background: rgba(229, 183, 67, 0.2);
+  border: 1px solid rgba(229, 183, 67, 0.34);
 }
 
 .ckai-queued {
   border-color: rgba(232, 155, 64, 0.45);
+}
+
+.ckai-meta {
+  margin-bottom: 5px;
+  color: rgba(250, 246, 236, 0.54);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.ckai-msg-body {
+  display: grid;
+  gap: 8px;
+}
+
+.ckai-paragraph {
+  margin: 0;
+}
+
+.ckai-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ckai-list li + li {
+  margin-top: 4px;
+}
+
+.ckai-store-line {
+  color: #ffe08a;
+  font-weight: 800;
+}
+
+.ckai-pending {
+  min-width: 62px;
+}
+
+.ckai-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+}
+
+.ckai-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(250, 246, 236, 0.72);
+  animation: ckaiTyping 1.1s ease-in-out infinite;
+}
+
+.ckai-typing span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.ckai-typing span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@keyframes ckaiTyping {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.48; }
+  40% { transform: translateY(-3px); opacity: 1; }
 }
 
 .ckai-form {
@@ -168,6 +243,7 @@
   color: #faf6ec;
   padding: 10px;
   font: inherit;
+  line-height: 1.35;
 }
 
 .ckai-send {
@@ -198,6 +274,31 @@
   }
   .ckai-panel {
     width: calc(100vw - 24px);
-    max-height: min(560px, calc(100vh - 128px));
+    bottom: 68px;
+    max-height: min(540px, calc(100vh - 156px));
+    max-height: min(540px, calc(100dvh - 156px));
+  }
+  .ckai-messages {
+    min-height: 160px;
+    padding: 12px;
+    gap: 9px;
+  }
+  .ckai-msg {
+    max-width: 92%;
+    font-size: 13px;
+  }
+  .ckai-form {
+    grid-template-columns: 1fr 58px;
+    padding: 10px;
+  }
+  .ckai-send {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ckai-orb-ring,
+  .ckai-typing span {
+    animation: none;
   }
 }

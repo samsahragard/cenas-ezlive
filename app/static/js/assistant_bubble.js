@@ -26,12 +26,146 @@
     return node;
   }
 
-  function addMessage(list, role, text) {
+  var STORE_LABELS = {
+    dos: "Tomball",
+    uno: "Copperfield",
+    both: "Both stores",
+    partner: "Partner",
+    corporate: "Corporate"
+  };
+
+  var ROLE_LABELS = {
+    assistant_km: "assistant km",
+    corporate_chef: "corporate chef",
+    corporate_driver: "corporate driver",
+    foh_manager: "foh manager",
+    prep_manager: "prep manager"
+  };
+
+  function cleanText(text) {
+    return String(text || "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function uniqueLabels(values) {
+    var seen = {};
+    return values.filter(function (value) {
+      if (!value || seen[value]) return false;
+      seen[value] = true;
+      return true;
+    });
+  }
+
+  function roleLabel(role) {
+    var key = String(role || "user").replace(/-/g, "_").toLowerCase();
+    return ROLE_LABELS[key] || key.replace(/_/g, " ");
+  }
+
+  function storeScopeLabel(principal) {
+    var slugs = Array.isArray(principal.store_slugs) ? principal.store_slugs : [];
+    var labels = uniqueLabels(slugs.map(function (slug) {
+      var key = String(slug || "").toLowerCase();
+      return STORE_LABELS[key] || (key ? key.replace(/-/g, " ") : "");
+    }));
+    if (!labels.length && (principal.role === "partner" || principal.role === "corporate" || principal.is_owner_operator)) {
+      return "all stores";
+    }
+    if (labels.length === 2 && labels.indexOf("Tomball") !== -1 && labels.indexOf("Copperfield") !== -1) {
+      return "Tomball + Copperfield";
+    }
+    return labels.join(" + ");
+  }
+
+  function activeToolLabel(count) {
+    return count + " active " + (count === 1 ? "tool" : "tools");
+  }
+
+  function headerStatusLabel(principal, activeTools) {
+    var role = roleLabel(principal.role || principal.kind || "user");
+    var scope = storeScopeLabel(principal);
+    return role + " - " + activeToolLabel(activeTools.length) + (scope ? " - " + scope : "");
+  }
+
+  function isStoreLine(line) {
+    return /^(tomball|copperfield|both stores|all stores|partner|corporate)\s*[:\-]/i.test(line || "");
+  }
+
+  function appendPlainBlock(parent, block) {
+    var lines = block.split("\n");
+    var paragraph = el("p", "ckai-paragraph");
+    lines.forEach(function (line, index) {
+      var span = el("span", isStoreLine(line) ? "ckai-line ckai-store-line" : "ckai-line", line);
+      paragraph.appendChild(span);
+      if (index < lines.length - 1) paragraph.appendChild(document.createElement("br"));
+    });
+    parent.appendChild(paragraph);
+  }
+
+  function renderText(parent, text) {
+    var clean = cleanText(text);
+    if (!clean) {
+      parent.textContent = "";
+      return;
+    }
+    clean.split(/\n{2,}/).forEach(function (block) {
+      var lines = block.split("\n").filter(function (line) { return line.trim(); });
+      var ordered = lines.length > 1 && lines.every(function (line) { return /^\s*\d+[.)]\s+/.test(line); });
+      var bulleted = lines.length > 1 && lines.every(function (line) { return /^\s*[-*]\s+/.test(line); });
+      if (ordered || bulleted) {
+        var list = el(ordered ? "ol" : "ul", "ckai-list");
+        lines.forEach(function (line) {
+          var item = el("li");
+          item.textContent = line.replace(/^\s*(?:\d+[.)]|[-*])\s+/, "");
+          list.appendChild(item);
+        });
+        parent.appendChild(list);
+        return;
+      }
+      appendPlainBlock(parent, block);
+    });
+  }
+
+  function renderMessage(row, text, options) {
+    row.textContent = "";
+    row.classList.toggle("ckai-pending", !!(options && options.pending));
+    if (options && options.meta) {
+      row.appendChild(el("div", "ckai-meta", options.meta));
+    }
+    if (options && options.pending) {
+      var typing = el("div", "ckai-typing");
+      typing.setAttribute("aria-label", "Thinking");
+      typing.appendChild(el("span"));
+      typing.appendChild(el("span"));
+      typing.appendChild(el("span"));
+      row.appendChild(typing);
+      return;
+    }
+    var body = el("div", "ckai-msg-body");
+    renderText(body, text);
+    row.appendChild(body);
+  }
+
+  function scrollMessages(list) {
+    window.requestAnimationFrame(function () {
+      list.scrollTop = list.scrollHeight;
+    });
+  }
+
+  function addMessage(list, role, text, options) {
     var row = el("div", "ckai-msg ckai-" + role);
-    row.textContent = text || "";
+    renderMessage(row, text || "", options || {});
     list.appendChild(row);
-    list.scrollTop = list.scrollHeight;
+    scrollMessages(list);
     return row;
+  }
+
+  function responseMeta(data) {
+    if (!data) return "";
+    if (data.queued) return "Saved for review";
+    return "";
   }
 
   function setStatus(node, text) {
@@ -105,12 +239,11 @@
         }
         root.removeAttribute("hidden");
         var principal = data.principal || {};
-        var role = principal.role || "user";
         var activeTools = (data.tools || []).filter(function (tool) {
-          return tool.available;
+          return tool && tool.available === true;
         });
-        setStatus(status, role + " - " + activeTools.length + " active " + (activeTools.length === 1 ? "tool" : "tools"));
-        intro.textContent = "Ask me a Cenas question. Partner catalog tools are available by role; unimplemented tools are saved for Sam review.";
+        setStatus(status, headerStatusLabel(principal, activeTools));
+        renderMessage(intro, "Ask me a Cenas question. I will answer from your role and store access.");
       })
       .catch(function () {
         setStatus(status, "Review-gated");
@@ -128,7 +261,7 @@
 
     function resizeInput() {
       input.style.height = "auto";
-      input.style.height = Math.min(input.scrollHeight, 120) + "px";
+      input.style.height = (input.value.trim() ? Math.min(input.scrollHeight, 112) : 42) + "px";
     }
 
     function appendTranscript(text) {
@@ -227,8 +360,8 @@
       lastUserQuestion = question;
       input.value = "";
       resizeInput();
-      addMessage(messages, "user", question);
-      var pending = addMessage(messages, "assistant", "Thinking...");
+      addMessage(messages, "user", question, previousAnswer ? { meta: "Follow-up" } : {});
+      var pending = addMessage(messages, "assistant", "", { pending: true });
       send.disabled = true;
       fetch("/assistant/ask", {
         method: "POST",
@@ -244,17 +377,23 @@
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-          pending.textContent = data && data.answer ? data.answer : "I could not answer that yet.";
+          renderMessage(
+            pending,
+            data && data.answer ? data.answer : "I could not answer that yet.",
+            { meta: responseMeta(data) }
+          );
           if (data && data.answer) {
             lastAssistantAnswer = data.answer;
           }
           if (data && data.queued) {
             pending.classList.add("ckai-queued");
           }
+          scrollMessages(messages);
         })
         .catch(function () {
-          pending.textContent = "I could not reach the assistant right now.";
+          renderMessage(pending, "I could not reach the assistant right now.");
           pending.classList.add("ckai-queued");
+          scrollMessages(messages);
         })
         .finally(function () {
           send.disabled = false;

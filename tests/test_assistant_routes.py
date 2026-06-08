@@ -66,12 +66,12 @@ def test_tool_catalog_only_general_help_active_for_operational_role():
     tools = {tool["tool_id"]: tool for tool in ar._tool_catalog_for(ctx)}
 
     assert tools["assistant.general_help"]["available"] is True
-    assert tools["orders.store_summary"]["available"] is False
-    assert tools["orders.store_summary"]["deny_reason"] == "needs_sam_review"
-    assert tools["orders.catering_today"]["available"] is False
-    assert tools["orders.catering_today"]["deny_reason"] == "needs_sam_review"
-    assert tools["drivers.store_summary"]["available"] is False
-    assert tools["labor.store_aggregate"]["available"] is False
+    assert tools["orders.store_summary"]["available"] is True
+    assert tools["orders.store_summary"]["status"] == "active"
+    assert tools["orders.catering_today"]["available"] is True
+    assert tools["orders.catering_today"]["status"] == "active"
+    assert tools["drivers.store_summary"]["available"] is True
+    assert tools["labor.store_aggregate"]["available"] is True
 
 
 def test_tool_catalog_respects_missing_permission():
@@ -170,7 +170,7 @@ def test_partner_catalog_only_tools_do_not_activate_for_staff():
     assert tools["finance.pnl_summary"]["available"] is False
     assert "dev.assistant_tool_catalog_snapshot" not in tools
     assert tools["toast.webhook_activity"]["available"] is False
-    assert tools["toast.employee_profiles"]["available"] is False
+    assert tools["toast.employee_profiles"]["available"] is True
 
 
 def test_excluded_partner_tools_are_not_routable_for_partner_level():

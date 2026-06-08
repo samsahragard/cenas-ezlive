@@ -33,14 +33,7 @@ from app.models import (
     TimeOffRequest,
     VendorRecentOrder,
 )
-
-
-STORE_ALIASES = {
-    "uno": "copperfield",
-    "dos": "tomball",
-    "copperfield": "copperfield",
-    "tomball": "tomball",
-}
+from app.services.assistant_routing_shared import STORE_ALIASES, normalize_store_key
 
 
 def _today() -> date:
@@ -73,7 +66,7 @@ def _store(value: Any = None) -> str | None:
     key = str(value).strip().lower()
     if key in {"all", "both", "partner", "corporate"}:
         return None
-    return STORE_ALIASES.get(key, key)
+    return normalize_store_key(key)
 
 
 def _limit(value: Any, default: int = 20, maximum: int = 100) -> int:

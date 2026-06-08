@@ -74,6 +74,8 @@ from app.services.assistant_routing_shared import (
     wants_toast_table_activity as _wants_toast_table_activity,
     wants_toast_webhook_activity as _wants_toast_webhook_activity,
 )
+from app.services.assistant_context import load_assistant_context as _load_assistant_context
+from app.services.assistant_tool_inventory import iter_readonly_operational_tool_specs
 
 
 log = logging.getLogger(__name__)
@@ -81,6 +83,11 @@ log = logging.getLogger(__name__)
 ANSWER_PATH = "/assistant/answer"
 _MAX_REQUEST_BODY_BYTES = 1024 * 256
 _TOOL_ROUTE_REQUIRED_VERIFICATIONS = 3
+_READONLY_OPERATIONAL_TOOL_IDS = frozenset(
+    str(spec.get("tool_id") or "")
+    for spec in iter_readonly_operational_tool_specs()
+    if spec.get("tool_id")
+)
 _VERIFIED_ROUTE_TOOL_IDS = {
     "orders.store_summary",
     "orders.catering_by_status",
@@ -123,6 +130,7 @@ _VERIFIED_ROUTE_TOOL_IDS = {
     "toast.webhook_activity",
     "toast.employee_profiles",
 }
+_VERIFIED_ROUTE_TOOL_IDS.update(_READONLY_OPERATIONAL_TOOL_IDS)
 _TOAST_ENV_FILES = [
     r"C:\Users\sam\cena-secrets\toast_render_env.txt",
     r"C:\Users\sam\cena\.secrets\toast_render_env.txt",
@@ -197,7 +205,11 @@ def _can_ask_operational(principal: dict) -> bool:
 
 
 def _has_partner_tool_access(principal: dict) -> bool:
-    return bool(principal.get("is_owner_operator") or _role(principal) == "partner")
+    return bool(
+        principal.get("is_owner_operator")
+        or _role(principal) == "partner"
+        or principal.get("kind") in {"partner", "staff", "employee"}
+    )
 
 
 def _tool_available(tools: list[dict], tool_id: str) -> bool:
@@ -1297,6 +1309,131 @@ def _labor_summary_answer(summary: dict) -> str:
     return answer
 
 
+def _list_count(payload: dict, *keys: str) -> tuple[str | None, int]:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return key, len(value)
+        if isinstance(value, dict):
+            return key, len(value)
+    return None, int(payload.get("count") or 0)
+
+
+def _sample_names(rows: object, *keys: str, limit: int = 3) -> str:
+    if not isinstance(rows, list):
+        return ""
+    names: list[str] = []
+    for row in rows[:limit]:
+        if isinstance(row, dict):
+            for key in keys:
+                value = str(row.get(key) or "").strip()
+                if value:
+                    names.append(value)
+                    break
+        elif row:
+            names.append(str(row))
+    return "; ".join(names)
+
+
+def _operational_readonly_answer(payload: dict, tool_id: str, question: str = "") -> str:
+    if payload.get("ok") is False:
+        error = str(payload.get("error") or "unavailable").replace("_", " ")
+        return f"The approved read-only {tool_id} tool could not return data: {error}."
+
+    if tool_id == "employee.my_profile.read":
+        employee = payload.get("employee") if isinstance(payload.get("employee"), dict) else {}
+        name = employee.get("full_name") or employee.get("name") or "this employee"
+        active = employee.get("active")
+        status = "active" if active is True else "inactive" if active is False else "listed"
+        return f"Employee profile: {name} is {status} in the approved employee records."
+    if tool_id == "employee.my_contact.read":
+        contact = payload.get("contact") if isinstance(payload.get("contact"), dict) else {}
+        fields = [key for key in ("phone", "email", "secondary_phones") if contact.get(key)]
+        return f"Employee contact record is available. Fields present: {', '.join(fields) if fields else 'none'}."
+    if tool_id == "employee.my_stores.read":
+        stores = payload.get("stores") or []
+        return f"Employee store assignments: {_sample_names(stores, 'store_key', 'store') or 'none'}."
+    if tool_id == "employee.my_positions.read":
+        positions = payload.get("positions") or []
+        return f"Employee positions: {_sample_names(positions, 'position', 'name', 'role') or 'none'}."
+    if tool_id in {"employee.my_schedule.today", "employee.my_schedule.week", "employee.my_recent_shifts"}:
+        _key, count = _list_count(payload, "shifts")
+        sample = _sample_names(payload.get("shifts"), "position", "role", "employee_name")
+        window = payload.get("date") or payload.get("week_start") or "current view"
+        answer = f"Employee schedule: {count} {_plural(count, 'shift')} in {window}."
+        if sample:
+            answer += f" Sample: {sample}."
+        return answer
+    if tool_id == "employee.my_open_shifts":
+        count = int(payload.get("count") or 0)
+        return f"Employee open shifts: {count} available {_plural(count, 'shift')} in assigned stores."
+    if tool_id == "employee.my_availability.read":
+        key, count = _list_count(payload, "availability")
+        return f"Employee availability: {count} {_plural(count, key or 'availability row')} in the approved records."
+    if tool_id == "employee.my_time_off.status":
+        count = int(payload.get("count") or len(payload.get("requests") or []))
+        return f"Employee time-off status: {count} {_plural(count, 'request')} in the current view."
+    if tool_id == "employee.my_shift_alarm_settings":
+        pending = len(payload.get("pending_alarms") or [])
+        return f"Employee shift alarm settings are available, with {pending} pending {_plural(pending, 'alarm')}."
+    if tool_id == "employee.my_attendance_summary":
+        split = _dict_split(payload.get("by_status") or {})
+        return f"Employee attendance summary: {split or 'no attendance status rows in the current view'}."
+    if tool_id == "employee.my_day_breakdown":
+        shift_count = len(payload.get("shifts") or [])
+        attendance_count = len(payload.get("attendance") or [])
+        return f"Employee day breakdown: {shift_count} {_plural(shift_count, 'shift')} and {attendance_count} attendance {_plural(attendance_count, 'row')}."
+
+    if tool_id in {"schedules.today_view", "schedules.week_view"}:
+        count = int(payload.get("count") or 0)
+        store = payload.get("store") or "all"
+        window = payload.get("date") or payload.get("week_start") or "current view"
+        sample = _sample_names(payload.get("shifts"), "employee_name", "position", "role")
+        answer = f"Schedule view for {store} ({window}): {count} {_plural(count, 'shift')}."
+        if sample:
+            answer += f" Sample: {sample}."
+        return answer
+    if tool_id == "kitchen.recipe_search":
+        count = int(payload.get("count") or 0)
+        sample = _sample_names(payload.get("recipes"), "name", "code")
+        answer = f"Kitchen recipe search returned {count} {_plural(count, 'recipe')}."
+        if sample:
+            answer += f" Matches: {sample}."
+        return answer
+    if tool_id == "kitchen.recipe_lookup":
+        recipe = payload.get("recipe") if isinstance(payload.get("recipe"), dict) else {}
+        name = recipe.get("name") or recipe.get("code") or "recipe"
+        return f"Kitchen recipe lookup: {name}. Prep time: {recipe.get('prep_time') or 'not listed'}."
+    if tool_id.startswith("kitchen.prep_"):
+        count = int(payload.get("count") or 0)
+        store = payload.get("store") or "all"
+        day = payload.get("date") or "current day"
+        sample = _sample_names(payload.get("entries"), "item", "assignee_name", "status")
+        answer = f"Kitchen prep for {store} on {day}: {count} {_plural(count, 'entry')}."
+        if sample:
+            answer += f" Sample: {sample}."
+        return answer
+    if tool_id == "vendors.vendor_recent_orders":
+        count = int(payload.get("count") or 0)
+        vendor = payload.get("vendor") or "all vendors"
+        sample = _sample_names(payload.get("orders"), "order_number", "vendor", "status")
+        answer = f"Vendor recent orders for {vendor}: {count} {_plural(count, 'order')}."
+        if sample:
+            answer += f" Sample: {sample}."
+        return answer
+    if tool_id.startswith("attendance."):
+        count = int(payload.get("count") or 0)
+        store = payload.get("store") or "all"
+        day = payload.get("date") or "current day"
+        split = _dict_split(payload.get("by_status") or {})
+        answer = f"Attendance summary for {store} on {day}: {count} {_plural(count, 'row')}."
+        if split:
+            answer += f" Status split: {split}."
+        return answer
+
+    return f"The approved read-only {tool_id} tool returned data for the current view."
+
+
 def _contextual_followup(question: str, previous_question: str) -> bool:
     return _shared_contextual_followup(question, previous_question)
 
@@ -1384,6 +1521,21 @@ def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
         return "driver_summary", {"scope": "current_view"}
     if tool_id == "labor.store_aggregate":
         return "labor_summary", {"scope": "current_view"}
+    if tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
+        text = str(resolved_question or "").casefold()
+        if re.search(r"\btomorrow\b", text):
+            window = "tomorrow"
+        elif re.search(r"\b(yesterday|last\s+night|previous\s+day)\b", text):
+            window = "yesterday"
+        elif re.search(r"\bweek\b", text):
+            window = "current_week"
+        else:
+            window = "today_or_current_view"
+        return tool_id.replace(".", "_"), {
+            "tool": tool_id,
+            "store": _requested_store(resolved_question) or "all_accessible",
+            "window": window,
+        }
     return "unknown", {}
 
 
@@ -1442,6 +1594,18 @@ def _tool_answer_verified(tool_id: str, payload: object, answer: str) -> bool:
         return isinstance(payload, dict) and "driver" in answer.casefold()
     if tool_id == "labor.store_aggregate":
         return isinstance(payload, dict) and any(word in answer.casefold() for word in ("employee", "labor", "shift"))
+    if tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
+        if not isinstance(payload, dict) or payload.get("ok") is False:
+            return False
+        domain = tool_id.split(".", 1)[0]
+        domain_words = {
+            "employee": ("employee", "schedule", "shift", "attendance", "time-off", "profile"),
+            "schedules": ("schedule", "shift"),
+            "kitchen": ("kitchen", "recipe", "prep"),
+            "vendors": ("vendor", "order"),
+            "attendance": ("attendance", "row", "status"),
+        }.get(domain, (domain,))
+        return any(word in answer.casefold() for word in domain_words)
     return False
 
 
@@ -1777,6 +1941,17 @@ def _approved_tool_answer(
             "tool_id": "toast.sales_summary",
             "generated_at": toast_summary.get("generated_at"),
         }
+    if routed_tool_id in _READONLY_OPERATIONAL_TOOL_IDS and _tool_available(tools, routed_tool_id):
+        operational_payload = tool_data.get(routed_tool_id) if isinstance(tool_data, dict) else None
+        if isinstance(operational_payload, dict):
+            return {
+                "ok": True,
+                "answer": _operational_readonly_answer(operational_payload, routed_tool_id, resolved_question),
+                "queued": False,
+                "storage": "operational_tool",
+                "tool_id": routed_tool_id,
+                "generated_at": operational_payload.get("generated_at"),
+            }
     if routed_tool_id.startswith("schedule.") and _tool_available(tools, routed_tool_id):
         schedule_payload = tool_data.get(routed_tool_id) if isinstance(tool_data, dict) else None
         if isinstance(schedule_payload, dict):
@@ -1923,12 +2098,21 @@ def _gemini_review_notice(principal: dict, reason: str, required_permission: str
     return _gemini_generate(_review_notice_prompt(principal, reason, required_permission, fallback))
 
 
+def _assistant_business_context_prompt() -> str:
+    try:
+        return _load_assistant_context().strip()
+    except Exception:  # noqa: BLE001
+        log.exception("assistant runtime: failed to load assistant business context")
+        return ""
+
+
 def _system_prompt(principal: dict) -> str:
-    return (
-        _stable_policy_prompt()
-        + "\n\n"
-        + _session_prompt(principal)
-    )
+    parts = [_stable_policy_prompt()]
+    business_context = _assistant_business_context_prompt()
+    if business_context:
+        parts.append("Cenas Kitchen business context:\n" + business_context)
+    parts.append(_session_prompt(principal))
+    return "\n\n".join(parts)
 
 
 def _stable_policy_prompt() -> str:

@@ -18,22 +18,16 @@ from app.models import (
     OrderItem,
     ProcessingOrder,
 )
+from app.services.assistant_routing_shared import (
+    STORE_ALIASES as _STORE_ALIASES,
+    normalize_store_key as _normalize_store_key,
+)
 
 
 MAX_SAMPLE_ROWS = 20
 MAX_ITEM_ROWS = 25
 _COMPLETE_STATUSES = {"completed", "complete", "delivered", "cancelled", "canceled", "void"}
 _ACTIVE_TRACKING_DONE = {"", "expired", "completed", "complete", "delivered", "cancelled", "canceled"}
-_STORE_ALIASES = {
-    "1": "copperfield",
-    "uno": "copperfield",
-    "uno mas": "copperfield",
-    "copperfield": "copperfield",
-    "2": "tomball",
-    "dos": "tomball",
-    "dos mas": "tomball",
-    "tomball": "tomball",
-}
 _LOOKUP_TOKEN_STOP_WORDS = {
     "order",
     "orders",
@@ -108,8 +102,7 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _normalize_store(raw: Any) -> str:
-    value = str(raw or "").strip().casefold()
-    return _STORE_ALIASES.get(value, value or "unknown")
+    return _normalize_store_key(raw)
 
 
 def _store_key_for_order(order: Order) -> str:

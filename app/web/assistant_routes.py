@@ -43,6 +43,7 @@ from app.web.permissions import accessible_store_slugs
 from app.services.assistant_tool_inventory import (
     is_excluded_non_routable,
     iter_partner_tool_definitions,
+    iter_readonly_operational_tool_specs,
 )
 from app.services.assistant_handlers import drivers as driver_handlers
 from app.services.assistant_handlers import orders as order_handlers
@@ -150,14 +151,70 @@ _SECRET_TEXT_RE = re.compile(
 
 
 _INTERNAL_TOOL_REGISTRY_KEYS = {"handler", "matcher", "formatter", "priority"}
+
+
+def _label_from_tool_id(tool_id: str) -> str:
+    return re.sub(r"[_\-.]+", " ", tool_id).strip().title()
+
+
+def _readonly_operational_priority(tool_id: str) -> int:
+    if tool_id.startswith("employee."):
+        return 115
+    if tool_id.startswith("schedules."):
+        return 235
+    if tool_id.startswith("kitchen."):
+        return 350
+    if tool_id.startswith("attendance."):
+        return 345
+    if tool_id.startswith("vendors."):
+        return 355
+    return 360
+
+
+def _readonly_operational_registry_entry(spec: dict[str, Any]) -> dict[str, Any]:
+    tool_id = str(spec.get("tool_id") or "").strip()
+    roles = [str(role) for role in (spec.get("intended_roles") or []) if role]
+    is_employee_self_tool = tool_id.startswith("employee.")
+    return {
+        "tool_id": tool_id,
+        "label": _label_from_tool_id(tool_id),
+        "description": str(spec.get("description") or ""),
+        "required_permissions": (
+            ["ai.ask_claude_personal"] if is_employee_self_tool else ["ai.ask_claude"]
+        ),
+        "session_types": roles or (["employee", "staff", "partner"] if is_employee_self_tool else ["staff", "partner"]),
+        "store_scope": "own_profile" if is_employee_self_tool else "current_user_store_scope",
+        "data_class": tool_id.split(".", 1)[0] if "." in tool_id else "operations",
+        "read_write_class": "read_only",
+        "status": "active",
+        "implementation_status": "implemented",
+        "handler": f"readonly_operational:{tool_id}",
+        "matcher": f"readonly_operational:{tool_id}",
+        "formatter": "readonly_operational",
+        "priority": _readonly_operational_priority(tool_id),
+    }
+
+
+_READONLY_OPERATIONAL_SPECS = {
+    str(spec.get("tool_id") or ""): spec
+    for spec in iter_readonly_operational_tool_specs()
+    if spec.get("tool_id")
+}
+_READONLY_OPERATIONAL_TOOL_IDS = frozenset(_READONLY_OPERATIONAL_SPECS)
 _TOOL_REGISTRY: list[dict[str, Any]] = list(iter_builtin_tool_registrations())
 _KNOWN_TOOL_IDS = {tool["tool_id"] for tool in _TOOL_REGISTRY}
+for _readonly_spec in _READONLY_OPERATIONAL_SPECS.values():
+    _readonly_tool = _readonly_operational_registry_entry(_readonly_spec)
+    if _readonly_tool["tool_id"] in _KNOWN_TOOL_IDS:
+        continue
+    _TOOL_REGISTRY.append(_readonly_tool)
+    _KNOWN_TOOL_IDS.add(_readonly_tool["tool_id"])
 for _partner_tool in iter_partner_tool_definitions():
     if _partner_tool["tool_id"] in _KNOWN_TOOL_IDS:
         continue
     _TOOL_REGISTRY.append(_partner_tool)
     _KNOWN_TOOL_IDS.add(_partner_tool["tool_id"])
-del _partner_tool
+del _partner_tool, _readonly_spec, _readonly_tool
 
 
 def _redact_text(value: str) -> str:
@@ -327,7 +384,11 @@ def _has_all_permissions(ctx: dict[str, Any], permissions: list[str]) -> bool:
 
 
 def _has_partner_tool_access(ctx: dict[str, Any]) -> bool:
-    return bool(ctx.get("is_owner_operator") or ctx.get("role") == "partner")
+    return bool(
+        ctx.get("is_owner_operator")
+        or ctx.get("role") == "partner"
+        or ctx.get("kind") in {"partner", "staff", "employee"}
+    )
 
 
 def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1155,6 +1216,170 @@ def _toast_employee_profiles_tool_payload(question: str) -> dict[str, Any]:
     return toast_employee_profile_payload(question)
 
 
+def _question_text(question: str) -> str:
+    return str(question or "").casefold()
+
+
+def _contains_any(text: str, *patterns: str) -> bool:
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
+def _employee_self_context(text: str) -> bool:
+    return bool(
+        re.search(r"\b(my|mine|myself)\b", text)
+        or re.search(r"\bemployee(?:\s+id)?\s*#?\d+\b", text)
+    )
+
+
+def _wants_readonly_operational_tool(tool_id: str, question: str) -> bool:
+    text = _question_text(question)
+    if tool_id.startswith("employee."):
+        if tool_id == "employee.my_open_shifts":
+            return "open shift" in text and _contains_any(text, r"\b(my|available|pick\s*up|pickup)\b")
+        if not _employee_self_context(text):
+            return False
+        if tool_id == "employee.my_profile.read":
+            return _contains_any(text, r"\bprofile\b", r"\babout\s+me\b", r"\bmy\s+info\b")
+        if tool_id == "employee.my_contact.read":
+            return _contains_any(text, r"\bcontact\b", r"\bphone\b", r"\bemail\b")
+        if tool_id == "employee.my_stores.read":
+            return _contains_any(text, r"\bstores?\b", r"\blocations?\b")
+        if tool_id == "employee.my_positions.read":
+            return _contains_any(text, r"\bpositions?\b", r"\bjobs?\b", r"\broles?\b")
+        if tool_id == "employee.my_schedule.today":
+            return _contains_any(text, r"\bschedules?\b", r"\bshifts?\b") and not re.search(r"\bweek\b", text)
+        if tool_id == "employee.my_schedule.week":
+            return _contains_any(text, r"\bschedules?\b", r"\bshifts?\b") and re.search(r"\bweek\b", text)
+        if tool_id == "employee.my_recent_shifts":
+            return _contains_any(text, r"\brecent\s+shifts?\b", r"\bpast\s+shifts?\b", r"\bshift\s+history\b")
+        if tool_id == "employee.my_availability.read":
+            return "availability" in text or "available" in text
+        if tool_id == "employee.my_time_off.status":
+            return _contains_any(text, r"\btime[-\s]?off\b", r"\bpto\b", r"\bvacation\b")
+        if tool_id == "employee.my_shift_alarm_settings":
+            return _contains_any(text, r"\balarm\b", r"\breminder\b", r"\bnotification\b")
+        if tool_id == "employee.my_attendance_summary":
+            return _contains_any(text, r"\battendance\b", r"\blate\b", r"\bno[-\s]?show\b", r"\bcallout\b")
+        if tool_id == "employee.my_day_breakdown":
+            return _contains_any(text, r"\bday\s+breakdown\b", r"\btoday\s+breakdown\b")
+        return False
+
+    if tool_id == "schedules.today_view":
+        if _contains_any(text, r"\bdrivers?\b", r"\bcatering\b", r"\borders?\b"):
+            return False
+        return _contains_any(text, r"\btoday'?s?\s+schedules?\b", r"\btomorrow'?s?\s+schedules?\b", r"\bwho(?:'s|\s+is)?\s+working\b")
+    if tool_id == "schedules.week_view":
+        return _contains_any(text, r"\bweekly\s+schedules?\b", r"\bschedule\s+week\b", r"\bweek(?:ly)?\s+shift")
+    if tool_id == "kitchen.recipe_lookup":
+        return "recipe" in text and _contains_any(text, r"\blookup\b", r"\bdetails?\b", r"\bhow\s+do\s+i\s+make\b", r"\brecipe\s+for\b")
+    if tool_id == "kitchen.recipe_search":
+        return "recipe" in text and _contains_any(text, r"\bsearch\b", r"\bfind\b", r"\blist\b", r"\bshow\b")
+    if tool_id == "kitchen.prep_list_today":
+        return _contains_any(text, r"\bprep\s+list\b", r"\btoday'?s?\s+prep\b")
+    if tool_id == "kitchen.prep_entries_by_day":
+        return _contains_any(text, r"\bprep\s+entries\b", r"\bprep\s+by\s+day\b", r"\bprep\s+for\b")
+    if tool_id == "vendors.vendor_recent_orders":
+        return _contains_any(text, r"\bvendors?\b", r"\bwebstaurant\b", r"\brestaurant\s+depot\b") and _contains_any(text, r"\borders?\b", r"\brecent\b")
+    if tool_id == "attendance.manager_board_summary":
+        return _contains_any(text, r"\battendance\s+board\b", r"\battendance\s+summary\b", r"\bwho\s+is\s+late\b")
+    if tool_id == "attendance.late_summary":
+        return _contains_any(text, r"\blate\b", r"\btardy\b") and "attendance" in text
+    if tool_id == "attendance.no_show_summary":
+        return _contains_any(text, r"\bno[-\s]?show\b", r"\bno\s+show\b")
+    if tool_id == "attendance.callout_summary":
+        return _contains_any(text, r"\bcall[-\s]?out\b", r"\bcalled\s+out\b")
+    if tool_id == "attendance.missed_punch_summary":
+        return _contains_any(text, r"\bmissed\s+punch\b", r"\bmissing\s+punch\b", r"\bclock(?:ed)?\s+out\b")
+    return False
+
+
+def _requested_operational_day(question: str) -> date:
+    text = _question_text(question)
+    today = _today_ct()
+    if re.search(r"\btomorrow\b", text):
+        return today + timedelta(days=1)
+    if re.search(r"\b(yesterday|last\s+night|previous\s+day)\b", text):
+        return today - timedelta(days=1)
+    return today
+
+
+def _requested_operational_week_start(question: str) -> date:
+    day = _requested_operational_day(question)
+    return day - timedelta(days=day.weekday())
+
+
+def _operational_store_arg(question: str, ctx: dict[str, Any]) -> str | None:
+    text = _question_text(question)
+    if re.search(r"\b(all|both)\s+(?:stores?|locations?)\b", text):
+        return None
+    requested = _requested_store(question)
+    if requested:
+        return requested
+    current = _normalize_store_key(ctx.get("current_store"))
+    if current != "unknown":
+        return current
+    stores = [_normalize_store_key(store) for store in (ctx.get("store_slugs") or [])]
+    stores = [store for store in stores if store != "unknown"]
+    return stores[0] if len(stores) == 1 else None
+
+
+def _operational_employee_id_arg(question: str, ctx: dict[str, Any]) -> int | str | None:
+    match = re.search(r"\bemployee(?:\s+id)?\s*#?\s*(\d+)\b", str(question or ""), re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return ctx.get("principal_id")
+
+
+def _operational_recipe_arg(question: str, key: str) -> str | None:
+    text = str(question or "").strip()
+    match = re.search(r"\b(?:recipe|make|for)\s+([A-Za-z][A-Za-z0-9 _-]{1,80})", text, re.IGNORECASE)
+    if match:
+        return re.sub(r"\s+", " ", match.group(1)).strip(" ?.")
+    if key == "query":
+        return text[:120]
+    return None
+
+
+def _operational_readonly_args(tool_id: str, question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    day = _requested_operational_day(question)
+    args: dict[str, Any] = {}
+    if tool_id.startswith("employee."):
+        args["employee_id"] = _operational_employee_id_arg(question, ctx)
+        if tool_id in {"employee.my_schedule.today", "employee.my_day_breakdown"}:
+            args["date"] = day.isoformat()
+        if tool_id == "employee.my_schedule.week":
+            args["week_start"] = _requested_operational_week_start(question).isoformat()
+        if tool_id in {"employee.my_recent_shifts", "employee.my_open_shifts", "employee.my_time_off.status"}:
+            args["limit"] = 20
+        if tool_id == "employee.my_attendance_summary":
+            args["days"] = 30
+        return args
+    if tool_id.startswith(("schedules.", "kitchen.prep_", "attendance.")):
+        args["store"] = _operational_store_arg(question, ctx)
+        args["date"] = day.isoformat()
+        args["week_start"] = _requested_operational_week_start(question).isoformat()
+    if tool_id == "kitchen.recipe_search":
+        args.update({"query": _operational_recipe_arg(question, "query"), "limit": 10})
+    elif tool_id == "kitchen.recipe_lookup":
+        args["name"] = _operational_recipe_arg(question, "name")
+    elif tool_id == "vendors.vendor_recent_orders":
+        args.update({
+            "vendor": None,
+            "store": _operational_store_arg(question, ctx),
+            "limit": 10,
+        })
+        vendor_match = re.search(r"\b(webstaurant|restaurant\s+depot|ezcater|sysco)\b", question, re.IGNORECASE)
+        if vendor_match:
+            args["vendor"] = vendor_match.group(1).casefold()
+    return args
+
+
+def _operational_readonly_tool_payload(tool_id: str, question: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    from app.services.assistant_operational_tools import run_operational_tool
+
+    return run_operational_tool(tool_id, _operational_readonly_args(tool_id, question, ctx))
+
+
 _TOOL_MATCHERS = {
     **order_handlers.ORDER_TOOL_MATCHERS,
     **schedule_handlers.SCHEDULE_TOOL_MATCHERS,
@@ -1166,6 +1391,11 @@ _TOOL_MATCHERS = {
     "toast_webhook_activity": _wants_toast_webhook_activity,
     "toast_employee_profiles": _wants_toast_employee_profiles,
 }
+for _tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
+    _TOOL_MATCHERS[f"readonly_operational:{_tool_id}"] = (
+        lambda question, tool_id=_tool_id: _wants_readonly_operational_tool(tool_id, question)
+    )
+del _tool_id
 
 
 def _approved_tool_handlers() -> dict[str, Any]:
@@ -1192,6 +1422,10 @@ def _approved_tool_handlers() -> dict[str, Any]:
             lambda question, ctx: _toast_employee_profiles_tool_payload(question)
         ),
     }
+    for tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
+        handlers[f"readonly_operational:{tool_id}"] = (
+            lambda question, ctx, tool_id=tool_id: _operational_readonly_tool_payload(tool_id, question, ctx)
+        )
     return handlers
 
 

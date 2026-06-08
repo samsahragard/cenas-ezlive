@@ -4,6 +4,9 @@ from pathlib import Path
 import pytest
 
 from app.services import assistant_routing_shared as shared
+from app.services import assistant_operational_tools
+from app.services import toast_table_activity
+from app.services.assistant_handlers import orders as order_handlers
 from app.web import assistant_routes as routes
 from scripts import assistant_ck_runtime as runtime
 
@@ -120,6 +123,22 @@ def test_shared_store_aliases_drive_both_route_layers():
     assert runtime._requested_store_list("Copperfield vs Tomball") == ["copperfield", "tomball"]
     assert routes._requested_store is shared.requested_store
     assert runtime._requested_store_list is shared.requested_store_list
+
+
+def test_shared_store_aliases_drive_tool_handlers():
+    assert order_handlers._STORE_ALIASES is shared.STORE_ALIASES
+    assert order_handlers._normalize_store("dos mas") == "tomball"
+    assert order_handlers._normalize_store("uno") == "copperfield"
+
+    assert toast_table_activity.STORE_ALIASES is shared.STORE_ALIASES
+    assert toast_table_activity.normalize_location("all") is None
+    assert toast_table_activity.normalize_location("both") is None
+    assert toast_table_activity.normalize_location("dos") == "tomball"
+    assert toast_table_activity.normalize_location("uno mas") == "copperfield"
+
+    assert assistant_operational_tools.STORE_ALIASES is shared.STORE_ALIASES
+    assert assistant_operational_tools._store("both") is None
+    assert assistant_operational_tools._store("dos mas") == "tomball"
 
 
 def test_runtime_forced_review_returns_without_notice_model(tmp_path, monkeypatch):

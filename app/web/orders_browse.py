@@ -100,6 +100,7 @@ def location_orders(location: str):
         orders = list_orders_for_location(db, location)
         groups = group_orders_by_date(orders)
         display_drivers = rotated_dispatch_letters(groups)
+        from app.services.ezcater_management_presenter import compact_order_card
         return render_template(
             "orders_by_store.html",
             location=location,
@@ -108,6 +109,7 @@ def location_orders(location: str):
             display_drivers=display_drivers,
             active_drivers_by_prefix=_active_drivers_by_prefix(db),
             driver_status_by_order_id=_driver_status_by_order_id(db, orders),
+            compact_order_card=compact_order_card,
         )
     finally:
         db.close()

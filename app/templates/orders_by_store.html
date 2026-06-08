@@ -24,6 +24,8 @@
    same effect. The per-day "combined view" link still points at
    /orders/<location>/<grp.date>.
    ============================================================ #}
+{# audit surface — raw ezCater storefront, intentionally pre-collapse #}
+{# Raw source marker: reported_store. Manager cards below display the physical kitchen label. #}
 {% extends "base_dashboard.html" %}
 {% set active = 'ezcater_orders' %}
 {% block title %}{{ location_label }}{% if not (location_label or '').endswith('Orders') %} Orders{% endif %} — Cenas Kitchen{% endblock %}
@@ -154,6 +156,102 @@
   }
   .ezo-page .ezo-card.c-assigned { --cc: var(--teal-bright); }
   .ezo-page .ezo-card.c-needs    { --cc: var(--red-bright); }
+  .ezo-page .ezo-sheet-card {
+    padding: 0;
+    overflow: hidden;
+  }
+  .ezo-page .ez-sheet-top {
+    display: grid;
+    grid-template-columns: minmax(120px, 1.25fr) minmax(90px, .8fr) minmax(86px, .72fr) minmax(92px, .75fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 13px 14px 11px;
+    border-bottom: 0.5px solid rgba(250,246,236,0.07);
+  }
+  .ezo-page .ez-sheet-id {
+    color: var(--gold-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+  }
+  .ezo-page .ez-sheet-store,
+  .ezo-page .ez-sheet-date,
+  .ezo-page .ez-sheet-weekday {
+    color: var(--cream);
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .ezo-page .ez-sheet-pay {
+    color: var(--gold-bright);
+    font-size: 21px;
+    font-weight: 900;
+    text-align: right;
+    text-shadow: 0 0 12px rgba(255,200,80,0.45);
+  }
+  .ezo-page .ez-sheet-summary {
+    display: grid;
+    grid-template-columns: minmax(120px, .9fr) minmax(170px, 1.25fr) minmax(150px, 1.15fr);
+    gap: 12px;
+    align-items: center;
+    padding: 11px 14px 12px;
+  }
+  .ezo-page .ez-sheet-muted {
+    color: var(--cream-faint);
+    font-size: 12px;
+  }
+  .ezo-page .ez-sheet-strong {
+    color: var(--cream);
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .ezo-page .ez-sheet-label {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--cream-meta);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .ezo-page .ez-sheet-dropdown {
+    border-top: 0.5px solid rgba(250,246,236,0.07);
+  }
+  .ezo-page .ez-sheet-dropdown summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 9px 14px;
+    background: linear-gradient(180deg, #f6cb45 0%, #d99a08 100%);
+    color: #241409;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .ezo-page .ez-sheet-dropdown summary::-webkit-details-marker { display: none; }
+  .ezo-page .ez-sheet-dropdown summary::after {
+    content: '+';
+    float: right;
+    font-size: 12px;
+  }
+  .ezo-page .ez-sheet-dropdown[open] summary::after { content: '-'; }
+  .ezo-page .ez-sheet-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 12px;
+    padding: 13px 14px 15px;
+    background: rgba(0,0,0,0.18);
+  }
+  .ezo-page .ez-sheet-detail-wide { grid-column: span 2; }
+  .ezo-page .ez-sheet-driver-zone {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
 
   .ezo-page .ezo-cardtop {
     display: flex; justify-content: space-between;
@@ -367,6 +465,13 @@
     .ezo-page { padding: 14px 12px 24px; }
     .ezo-page .ezo-tab,
     .ezo-page .ezo-act { flex: 1 0 auto; justify-content: center; }
+    .ezo-page .ez-sheet-top,
+    .ezo-page .ez-sheet-summary,
+    .ezo-page .ez-sheet-detail-grid {
+      grid-template-columns: 1fr;
+    }
+    .ezo-page .ez-sheet-pay { text-align: left; }
+    .ezo-page .ez-sheet-detail-wide { grid-column: auto; }
   }
 </style>
 
@@ -439,106 +544,97 @@
              restores the click-to-detail the prior table had (Sam #8:52).
              Interactive children (the Unhook button) stopPropagation so
              they don't also trigger this navigation. #}
-          <div class="ezo-card {{ 'c-assigned' if _has else 'c-needs' }}"
-               onclick="window.location='/orders/view/{{ o.external_order_id }}'">
-            <div class="ezo-cardtop">
+          {% set _ck_prefix = 2 if _row_scope == 'tomball' else (1 if _row_scope == 'copperfield' else 0) %}
+          {% set _driver_options = (active_drivers_by_prefix or {}).get(_ck_prefix) or [] %}
+          {% set _driver_state = (driver_status_by_order_id or {}).get(o.id) %}
+          {% set _status_label = _driver_state.label if _driver_state else ('EZ Assigned' if _has else 'Needs driver') %}
+          {% set card = compact_order_card(o, payout=o.potential_payout, status_label=_status_label, current_driver=o.ezcater_driver_name, display_driver=_dispatch) %}
+          <div class="ezo-card ezo-sheet-card {{ 'c-assigned' if _has else 'c-needs' }}"
+               data-click-url="/orders/view/{{ o.external_order_id }}">
+            <div class="ez-sheet-top">
+              <a class="ez-sheet-id" href="/orders/view/{{ o.external_order_id }}" onclick="event.stopPropagation();">{{ card.external_id }}</a>
+              <div class="ez-sheet-store">{{ card.store_label }}</div>
+              <div class="ez-sheet-date">{{ card.date_label }}</div>
+              <div class="ez-sheet-weekday">{{ card.weekday_label }}</div>
+              <div class="ez-sheet-pay">{{ card.payout_label }}</div>
+            </div>
+            <div class="ez-sheet-summary">
               <div>
-                <div class="ezo-time">{{ o.deliver_at or '—' }}</div>
-                <div class="ezo-code">{{ o.external_order_id or 'NO ID' }}</div>
+                <span class="ez-sheet-label">Status</span>
+                <span class="ez-sheet-strong">{{ card.status_label }}</span>
               </div>
-              {% if _has %}
-                <span class="ezo-badge b-assigned">Assigned</span>
-              {% else %}
-                <span class="ezo-badge b-needs">Needs driver</span>
-              {% endif %}
-            </div>
-            <div class="ezo-client">{{ o.client or '—' }}</div>
-            <div class="ezo-addr">{{ o.delivery_address or '—' }}</div>
-
-            {# Sam #856 2026-05-24: always-on row showing the live
-               'Assigned Driver' field as ezCater reports it. When a
-               new order lands the cron auto-assigns Masood / Sam
-               (default in-house drivers) and that value lands here;
-               when a manager picks via the dropdown below + the
-               flow completes, this same value updates. Empty source
-               renders 'no driver'. #}
-            <div class="ezo-ezdriver">
-              <span class="ezo-ezdriver-label">current ez-driver:</span>
-              <span class="ezo-ezdriver-name {{ 'empty' if not o.ezcater_driver_name }}">
-                {{ o.ezcater_driver_name or 'no driver' }}
-              </span>
-            </div>
-
-            <div class="ezo-cardbot">
-              <span class="ezo-chip">&#128205; {{ _row_loc }}</span>
-              {% if _has %}
-                <span class="ezo-chip driver">&#128100; {{ _dispatch }}</span>
-              {% else %}
-                <span class="ezo-chip nodriver">&#9888; Needs driver</span>
-              {% endif %}
-              <span class="ezo-botspacer"></span>
-              {# Sam #669 driver-assignment dropdown — manager picks a
-                 real in-house driver from the store's roster, change
-                 fires the Selenium re-assignment flow on aick. The
-                 store's roster comes from EzcaterKnownDriver via the
-                 active_drivers_by_prefix dict; ck_prefix 2 = Tomball,
-                 1 = Copperfield. Cards in other-store contexts (no
-                 ck_prefix match) get no dropdown — assignment isn't
-                 meaningful there. #}
-              {% set _ck_prefix = 2 if _row_scope == 'tomball' else (1 if _row_scope == 'copperfield' else 0) %}
-              {% set _driver_options = (active_drivers_by_prefix or {}).get(_ck_prefix) or [] %}
-              {% if _driver_options %}
-                {% set _driver_state = (driver_status_by_order_id or {}).get(o.id) %}
-                {# data-store-scope is the PAGE's store_slug (dos/uno/
-                   corporate/partner) for the assign_driver POST route
-                   which lives on store_bp. _row_scope above is a
-                   different value (tomball/copperfield) used by the
-                   unassign-courier endpoint on orders_browse — don't
-                   reuse it here or the POST 404s. #}
-                <span class="ezo-driver-pick"
-                      data-order="{{ o.external_order_id }}"
-                      data-store-scope="{{ g.current_store }}"
-                      data-current="{{ o.ezcater_driver_name or '' }}"
-                      onclick="event.stopPropagation();">
-                  {% if _driver_state %}
-                    <span class="ezo-assignment-state ezo-state-{{ _driver_state.kind }}"
-                          title="{{ _driver_state.title }}">
-                      {{ _driver_state.label }}
+              <div>
+                <span class="ez-sheet-label">Employee dropdown</span>
+                {% if _driver_options %}
+                  <span class="ezo-driver-pick"
+                        data-order="{{ o.external_order_id }}"
+                        data-store-scope="{{ g.current_store }}"
+                        data-current="{{ o.ezcater_driver_name or '' }}"
+                        onclick="event.stopPropagation();">
+                    {# data-store-scope is the PAGE's store_slug (dos/uno/
+                       corporate/partner) for the assign_driver POST route
+                       which lives on store_bp. _row_scope above is a
+                       different value (tomball/copperfield) used by the
+                       unassign-courier endpoint on orders_browse. #}
+                    {% set _inhouse = 'Masood CK #1' if _ck_prefix == 1 else ('Sam CK #2' if _ck_prefix == 2 else '') %}
+                    <span class="ezo-driver-control">
+                      <select onchange="assignDriver(this);">
+                        <option value="">- pick driver -</option>
+                        <option value="__no_driver__">- no driver (unhook only) -</option>
+                        {% if _inhouse %}
+                          <option value="{{ _inhouse }}"
+                                  {% if o.ezcater_driver_name and _inhouse == o.ezcater_driver_name %}selected{% endif %}>
+                            {{ _inhouse }}
+                          </option>
+                        {% endif %}
+                        {% for name in _driver_options %}
+                          <option value="{{ name }}"
+                                  {% if o.ezcater_driver_name and name == o.ezcater_driver_name %}selected{% endif %}>
+                            {{ name }}
+                          </option>
+                        {% endfor %}
+                      </select>
+                      <span class="ezo-driver-status"></span>
                     </span>
-                  {% endif %}
-                  {# Sam #864 2026-05-24: include the in-house default
-                     driver (Masood CK#1 for Copperfield, Sam CK#2 for
-                     Tomball) as a first-class dropdown option so
-                     managers can pick the default explicitly — same
-                     name the webhook hardcoded table uses. #}
-                  {% set _inhouse = 'Masood CK #1' if _ck_prefix == 1 else ('Sam CK #2' if _ck_prefix == 2 else '') %}
-                  <span class="ezo-driver-control">
-                    <select onchange="assignDriver(this);">
-                      <option value="">— pick driver —</option>
-                      <option value="__no_driver__">— no driver (unhook only) —</option>
-                      {% if _inhouse %}
-                        <option value="{{ _inhouse }}"
-                                {% if o.ezcater_driver_name and _inhouse == o.ezcater_driver_name %}selected{% endif %}>
-                          {{ _inhouse }}
-                        </option>
-                      {% endif %}
-                      {% for name in _driver_options %}
-                        <option value="{{ name }}"
-                                {% if o.ezcater_driver_name and name == o.ezcater_driver_name %}selected{% endif %}>
-                          {{ name }}
-                        </option>
-                      {% endfor %}
-                    </select>
-                    <span class="ezo-driver-status"></span>
                   </span>
-                </span>
-              {% endif %}
-              {# 'Unhook driver' button removed per Sam #835 2026-05-24
-                 — the dropdown's '— no driver (unhook only) —' option
-                 covers this on the cards. Order DETAIL page (order_view)
-                 still has the 'Free up ezCater driver field' button as
-                 the backup path. #}
+                {% else %}
+                  <span class="ez-sheet-muted">No roster options</span>
+                {% endif %}
+              </div>
+              <div>
+                <span class="ez-sheet-label">Current ezCater driver</span>
+                <span class="ez-sheet-strong">{{ card.current_driver_label }}</span>
+              </div>
             </div>
+            <details class="ez-sheet-dropdown" onclick="event.stopPropagation();">
+              <summary>DROPDOWN INFORMATION</summary>
+              <div class="ez-sheet-detail-grid">
+                <div>
+                  <span class="ez-sheet-label">Pickup</span>
+                  <span class="ez-sheet-strong">{{ card.pickup_name }}</span>
+                </div>
+                <div class="ez-sheet-detail-wide">
+                  <span class="ez-sheet-label">Pickup address</span>
+                  <span class="ez-sheet-muted">{{ card.pickup_address }}</span>
+                </div>
+                <div>
+                  <span class="ez-sheet-label">Distance</span>
+                  <span class="ez-sheet-muted">{{ card.miles_label }}</span>
+                </div>
+                <div>
+                  <span class="ez-sheet-label">Heads</span>
+                  <span class="ez-sheet-muted">{{ card.heads_label }}</span>
+                </div>
+                <div class="ez-sheet-detail-wide">
+                  <span class="ez-sheet-label">Dropoff</span>
+                  <span class="ez-sheet-muted">{{ card.dropoff_address }}</span>
+                </div>
+                <div>
+                  <span class="ez-sheet-label">Driver</span>
+                  <span class="ez-sheet-muted">{{ card.display_driver or 'Driver A' }}</span>
+                </div>
+              </div>
+            </details>
           </div>
         {% endfor %}
       </div>
@@ -554,6 +650,17 @@
 </div>
 
 <script>
+// Compact cards keep the old click-to-order behavior while ignoring
+// interactive controls inside the card.
+(function () {
+  document.querySelectorAll('.ezo-card[data-click-url]').forEach(function (card) {
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, select, option, form, details, summary, input, textarea')) return;
+      window.location = card.dataset.clickUrl;
+    });
+  });
+})();
+
 // Week day-strip — clicking a cell smooth-scrolls to that day's
 // section and moves the active highlight. Pure client-side, no nav.
 (function () {

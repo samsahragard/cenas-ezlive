@@ -571,6 +571,7 @@ def orders_list():
             combined = tom + cop
             groups = group_orders_by_date(combined)
             display_drivers = rotated_dispatch_letters(groups)
+            from app.services.ezcater_management_presenter import compact_order_card
             return render_template(
                 "orders_by_store.html",
                 location="both",
@@ -579,6 +580,7 @@ def orders_list():
                 display_drivers=display_drivers,
                 active_drivers_by_prefix=_active_drivers_by_prefix(db),
                 driver_status_by_order_id=_driver_status_by_order_id(db, combined),
+                compact_order_card=compact_order_card,
             )
         finally:
             db.close()

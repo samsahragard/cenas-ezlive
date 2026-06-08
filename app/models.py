@@ -30,7 +30,14 @@ def _local_today() -> date:
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(os.getenv("APP_TZ", "America/Chicago"))).date()
     except Exception:
-        return date.today()
+        utc_now = datetime.utcnow()
+        y = utc_now.year
+        mar1 = date(y, 3, 1)
+        second_sunday_march = mar1 + timedelta(days=(6 - mar1.weekday()) % 7 + 7)
+        nov1 = date(y, 11, 1)
+        first_sunday_nov = nov1 + timedelta(days=(6 - nov1.weekday()) % 7)
+        offset = -5 if second_sunday_march <= utc_now.date() < first_sunday_nov else -6
+        return (utc_now + timedelta(hours=offset)).date()
 
 
 class Order(Base):

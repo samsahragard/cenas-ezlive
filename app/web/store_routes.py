@@ -35,12 +35,23 @@ from app.services.permissions import requires_permission
 APP_TZ = os.getenv("APP_TZ", "America/Chicago")
 
 
+def _central_offset_hours(utc_now: datetime) -> int:
+    """Fallback for hosts without IANA tzdata: US Central DST by date."""
+    y = utc_now.year
+    mar1 = date(y, 3, 1)
+    second_sunday_march = mar1 + timedelta(days=(6 - mar1.weekday()) % 7 + 7)
+    nov1 = date(y, 11, 1)
+    first_sunday_nov = nov1 + timedelta(days=(6 - nov1.weekday()) % 7)
+    return -5 if second_sunday_march <= utc_now.date() < first_sunday_nov else -6
+
+
 def _local_today() -> date:
     try:
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(APP_TZ)).date()
     except Exception:
-        return date.today()
+        utc_now = datetime.utcnow()
+        return (utc_now + timedelta(hours=_central_offset_hours(utc_now))).date()
 
 
 def _today_label() -> str:

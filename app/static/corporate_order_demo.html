@@ -214,14 +214,10 @@ select{font-family:var(--body)}
 .login{min-height:92vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:20px 0}
 .login .big{font-family:var(--disp);font-weight:800;font-size:clamp(40px,9vw,68px);letter-spacing:.03em;text-transform:uppercase;line-height:.95}
 .login .big em{font-style:normal;color:var(--gold)}
-.login .sb{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.14em;text-transform:uppercase;margin-bottom:26px}
-.profiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;width:100%;max-width:720px}
-.pcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 16px;text-align:left;transition:border-color .15s, transform .15s}
+.profiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;width:100%;max-width:720px;margin-top:26px}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 16px;text-align:center;transition:border-color .15s, transform .15s;min-height:72px;display:flex;align-items:center;justify-content:center}
 .pcard:hover{border-color:var(--gold);transform:translateY(-2px)}
-.pcard .nm{font-family:var(--disp);font-weight:700;font-size:21px;letter-spacing:.04em;text-transform:uppercase}
-.pcard .rl{font-family:var(--mono);font-size:11px;margin-top:6px;letter-spacing:.06em;text-transform:uppercase}
-.pcard .rl.c{color:var(--red2)} .pcard .rl.s{color:var(--gold2)}
-.login .ftn{margin-top:30px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.pcard .nm{font-family:var(--disp);font-weight:700;font-size:21px;letter-spacing:.04em;text-transform:uppercase;line-height:1}
 
 /* toast */
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
@@ -359,14 +355,11 @@ function render(){
 
 function loginView(){return `<div class="login">
  <div class="big">Corporate <em>Order</em></div>
- <div class="sb">Cenas Kitchen · Supply Line</div>
  <div class="profiles">${USERS.map(u=>`
-  <button class="pcard" data-act="login" data-a="${u.id}">
-   <div class="nm">${u.name}</div>
-   <div class="rl ${u.role==='corporate'?'c':'s'}">${u.title}</div>
-  </button>`).join('')}
- </div>
- <div class="ftn">Select your location and enter its passcode. Demo build — production uses your normal platform session.</div>
+   <button class="pcard" data-act="login" data-a="${u.id}">
+    <div class="nm">${u.name}</div>
+   </button>`).join('')}
+  </div>
 </div>`;}
 
 function topbar(){const u=S.user;

@@ -18,8 +18,41 @@
     return window.location.pathname === "/assistant" || params.get("tab") === "cena";
   }
 
+  function hideRootOnFullAssistantPage() {
+    var root = dedupeRoots();
+    if (!isFullAssistantPage()) {
+      if (root && root.getAttribute("data-ckai-url-suppressed") === "true") {
+        root.removeAttribute("hidden");
+        root.removeAttribute("data-ckai-url-suppressed");
+      }
+      return false;
+    }
+    if (root) {
+      root.setAttribute("hidden", "hidden");
+      root.setAttribute("data-ckai-url-suppressed", "true");
+    }
+    return true;
+  }
+
+  function watchAssistantUrlChanges() {
+    if (window.__cenasAssistantUrlWatcher) return;
+    window.__cenasAssistantUrlWatcher = true;
+    ["pushState", "replaceState"].forEach(function (name) {
+      var original = window.history && window.history[name];
+      if (typeof original !== "function") return;
+      window.history[name] = function () {
+        var result = original.apply(this, arguments);
+        hideRootOnFullAssistantPage();
+        return result;
+      };
+    });
+    window.addEventListener("popstate", hideRootOnFullAssistantPage);
+  }
+
+  watchAssistantUrlChanges();
+
   if (window.__cenasAssistantLoaded) {
-    dedupeRoots();
+    hideRootOnFullAssistantPage();
     return;
   }
   window.__cenasAssistantLoaded = true;
@@ -183,7 +216,7 @@
 
   function init() {
     if (dedupeRoots()) return;
-    if (isFullAssistantPage()) return;
+    if (hideRootOnFullAssistantPage()) return;
 
     var root = el("div", "ckai-root");
     root.setAttribute("hidden", "hidden");
@@ -243,6 +276,7 @@
           root.setAttribute("hidden", "hidden");
           return;
         }
+        if (hideRootOnFullAssistantPage()) return;
         root.removeAttribute("hidden");
         var principal = data.principal || {};
         var activeTools = (data.tools || []).filter(function (tool) {

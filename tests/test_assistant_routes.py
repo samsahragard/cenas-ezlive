@@ -1661,6 +1661,60 @@ def test_order_handler_respects_staff_store_scope_directly(db_session, monkeypat
     assert payload["orders"][0]["external_order_id"] == "TB-TODAY"
 
 
+@pytest.mark.parametrize(
+    ("question", "expected_store", "expected_order", "blocked_order"),
+    [
+        ("Tomball caterings today", "tomball", "TB-TODAY", "CF-TODAY"),
+        ("Copperfield caterings today", "copperfield", "CF-TODAY", "TB-TODAY"),
+    ],
+)
+def test_order_handler_owner_operator_named_store_filters_raw_store_ids(
+    db_session,
+    monkeypatch,
+    question,
+    expected_store,
+    expected_order,
+    blocked_order,
+):
+    today = date.today()
+    db_session.add_all([
+        Order(
+            external_order_id="TB-TODAY",
+            delivery_date=today.isoformat(),
+            origin_store_id="store_2",
+            status="approved",
+        ),
+        Order(
+            external_order_id="CF-TODAY",
+            delivery_date=today.isoformat(),
+            origin_store_id="store_1",
+            status="approved",
+        ),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(order_handlers, "SessionLocal", lambda: db_session)
+
+    payload = order_handlers.catering_today(
+        question,
+        {
+            "kind": "partner",
+            "role": "partner",
+            "store_slugs": ["tomball", "copperfield"],
+            "current_store": None,
+            "permissions": ["*"],
+            "is_owner_operator": True,
+        },
+    )
+    encoded = json.dumps(payload, sort_keys=True).lower()
+
+    assert payload["count"] == 1
+    assert payload["by_store"] == {expected_store: 1}
+    assert payload["orders"][0]["external_order_id"] == expected_order
+    assert blocked_order.casefold() not in encoded
+    assert "store_1" not in encoded
+    assert "store_2" not in encoded
+
+
 def test_order_payload_suppressed_without_orders_permission(monkeypatch):
     ctx = {
         "kind": "partner",
@@ -2812,6 +2866,111 @@ def test_render_ask_proxies_to_ck_runtime(monkeypatch):
         assert mirror_previous == "How many caterings do we have today?"
         assert mirror_prev_answer == ""
         assert mirror_asked_at.endswith("Z")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+        for name in [
+            "RENDER",
+            "AI_ASSISTANT_ENABLED",
+            "AI_ASSISTANT_CK_RUNTIME_URL",
+            "AI_ASSISTANT_CK_RUNTIME_TOKEN",
+            "ASSISTANT_REVIEW_TIMEOUT_SECONDS",
+        ]:
+            os.environ.pop(name, None)
+
+
+def test_render_catering_time_followup_packages_store_summary_for_runtime(monkeypatch):
+    class RuntimeHandler:
+        seen = {}
+
+    from http.server import BaseHTTPRequestHandler
+
+    class RuntimeServer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or "0")
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            RuntimeHandler.seen = body
+            payload = json.dumps({
+                "ok": True,
+                "answer": "For earlier this morning, there were 2 catering orders. Store split: tomball: 1; copperfield: 1.",
+                "queued": False,
+                "model": "gemini-2.5-flash",
+                "storage": "operational_tool",
+                "tool_id": body.get("routed_tool_id"),
+                "routed_tool_id": body.get("routed_tool_id"),
+            }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, fmt, *args):
+            return
+
+    port = _free_port()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), RuntimeServer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+
+    ctx = _wave1_partner_ctx(stores=["tomball", "copperfield"])
+    monkeypatch.setattr(ar, "_principal_context", lambda: ctx)
+    monkeypatch.setattr(ar, "_mirror_assistant_turn_to_cena_chat", lambda *args: None)
+    monkeypatch.setattr(
+        ar,
+        "_approved_tool_handlers",
+        lambda: {
+            "orders_store_summary": lambda question, _ctx: {
+                "ok": True,
+                "tool_id": "orders.store_summary",
+                "question": question,
+                "today": "2026-06-08",
+                "today_orders": 3,
+                "upcoming_orders": 5,
+                "needs_driver_orders": 0,
+                "live_tracking_orders": 0,
+                "active_tracking_orders": 0,
+                "today_by_store": {"tomball": 2, "copperfield": 1},
+                "today_time_windows": {"morning": 2},
+                "today_time_windows_by_store": {"morning": {"tomball": 1, "copperfield": 1}},
+            },
+        },
+    )
+    monkeypatch.setenv("RENDER", "1")
+    monkeypatch.setenv("AI_ASSISTANT_ENABLED", "1")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "runtime-token")
+    monkeypatch.setenv("ASSISTANT_REVIEW_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(
+        ar,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("Render must not call Gemini directly")),
+    )
+
+    try:
+        res = app.test_client().post(
+            "/assistant/ask",
+            json={
+                "question": "what about earlier this morning",
+                "previous_question": "how many caterings today",
+                "previous_answer": "There are 3 catering orders in the today view.",
+            },
+        )
+        data = res.get_json()
+
+        assert res.status_code == 200
+        assert data["queued"] is False
+        assert data["tool_id"] == "orders.store_summary"
+        assert RuntimeHandler.seen["routed_tool_id"] == "orders.store_summary"
+        assert RuntimeHandler.seen["route_path"] == "deterministic"
+        assert RuntimeHandler.seen["tool_data"]["orders.store_summary"]["today_time_windows"]["morning"] == 2
+        assert "how many caterings today" in RuntimeHandler.seen["tool_data"]["orders.store_summary"]["question"]
+        assert "earlier this morning" in RuntimeHandler.seen["tool_data"]["orders.store_summary"]["question"]
     finally:
         httpd.shutdown()
         httpd.server_close()

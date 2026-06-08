@@ -54,6 +54,7 @@ GOLDEN_QUESTIONS: list[dict[str, Any]] = [
         "tool_id": "orders.catering_today",
         "expected_route_args": {"store": "all_accessible", "window": "current_view"},
         "answer_terms": ["catering order", "today", "store split"],
+        "answer_not_terms": ["store_1", "store_2"],
         "tool_payload": {
             "ok": True,
             "generated_at": "2026-06-08T12:00:00Z",
@@ -70,6 +71,7 @@ GOLDEN_QUESTIONS: list[dict[str, Any]] = [
         "tool_id": "orders.catering_today",
         "expected_route_args": {"store": "tomball", "window": "current_view"},
         "answer_terms": ["catering order", "today", "tomball"],
+        "answer_not_terms": ["store_1", "store_2", "copperfield"],
         "tool_payload": {
             "ok": True,
             "generated_at": "2026-06-08T12:00:00Z",
@@ -86,6 +88,7 @@ GOLDEN_QUESTIONS: list[dict[str, Any]] = [
         "tool_id": "orders.catering_today",
         "expected_route_args": {"store": "copperfield", "window": "current_view"},
         "answer_terms": ["catering order", "today", "copperfield"],
+        "answer_not_terms": ["store_1", "store_2", "tomball"],
         "tool_payload": {
             "ok": True,
             "generated_at": "2026-06-08T12:00:00Z",
@@ -104,6 +107,15 @@ GOLDEN_QUESTIONS: list[dict[str, Any]] = [
         "tool_id": "orders.store_summary",
         "expected_route_args": {"store": "all_accessible", "window": "morning"},
         "answer_terms": ["earlier this morning", "catering order", "store split"],
+        "answer_not_terms": [
+            "all-store",
+            "raw-store",
+            "review",
+            "model is not available",
+            "model_unavailable",
+            "store_1",
+            "store_2",
+        ],
         "tool_payload": {
             "ok": True,
             "generated_at": "2026-06-08T12:00:00Z",
@@ -253,6 +265,9 @@ def _case_result(case: dict[str, Any]) -> dict[str, Any]:
     for term in case.get("answer_terms") or []:
         if str(term).casefold() not in answer_lc:
             failures.append(f"answer missing term {term!r}")
+    for term in case.get("answer_not_terms") or []:
+        if str(term).casefold() in answer_lc:
+            failures.append(f"answer contained rejected term {term!r}")
     if not runtime._tool_answer_verified(case["tool_id"], case["tool_payload"], answer):
         failures.append("runtime verifier rejected the answer shape")
 
@@ -274,7 +289,7 @@ def run_golden_questions(review_db: str | Path | None = None) -> list[dict[str, 
     old_notice = runtime._gemini_review_notice
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     if review_db is None:
-        temp_dir = tempfile.TemporaryDirectory(prefix="assistant-golden-")
+        temp_dir = tempfile.TemporaryDirectory(prefix="assistant-golden-", ignore_cleanup_errors=True)
         review_db = Path(temp_dir.name) / "assistant_review.sqlite"
     os.environ["ASSISTANT_REVIEW_DB"] = str(review_db)
     runtime._gemini_answer = lambda *_args, **_kwargs: (None, None)

@@ -390,7 +390,7 @@ def test_runtime_resolved_question_keeps_explicit_schedule_after_catering_contex
     assert runtime._resolved_question(
         "what baout earlier this morning?",
         "How many caterings do we have today?",
-    ) == "what baout earlier this morning?"
+    ) == "How many caterings do we have today? what baout earlier this morning?"
 
 
 def test_runtime_forbidden_post_drains_bounded_request_body(monkeypatch):
@@ -1801,7 +1801,8 @@ def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_p
         assert data["tool_id"] == "orders.store_summary"
         assert "earlier this morning (2026-06-05)" in data["answer"]
         assert "2 catering orders" in data["answer"]
-        assert "copperfield: 1" in data["answer"]
+        assert "Copperfield: 1" in data["answer"]
+        assert "Tomball: 1" in data["answer"]
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -1826,9 +1827,30 @@ def test_runtime_order_summary_names_requested_store_zeroes():
         "How many orders did Copperfield have today vs Tomball?",
     )
 
-    assert "copperfield: 0" in answer
-    assert "tomball: 2" in answer
+    assert "Copperfield: 0" in answer
+    assert "Tomball: 2" in answer
     assert "Today catering orders by requested store" in answer
+
+
+def test_runtime_catering_today_answer_uses_friendly_store_names():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._orders_read_answer(
+        {
+            "ok": True,
+            "window": "today",
+            "count": 3,
+            "by_store": {"store_1": 1, "store_2": 2},
+            "orders": [{"external_order_id": "CF-TODAY"}, {"external_order_id": "TO-TODAY"}],
+        },
+        "orders.catering_today",
+        "how many caterings today",
+    )
+
+    assert "Copperfield: 1" in answer
+    assert "Tomball: 2" in answer
+    assert "store_1" not in answer
+    assert "store_2" not in answer
 
 
 def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, monkeypatch):

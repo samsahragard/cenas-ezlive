@@ -64,6 +64,18 @@ _UNSUPPORTED_SALES_SCOPE_RE = re.compile(
     r".*\b(sales|revenue|net\s+sales|gross\s+sales|toast\s+analytics)\b",
     re.IGNORECASE,
 )
+_CATERING_CONTEXT_RE = re.compile(
+    r"\b(catering|caterings|ezcater|delivery|deliveries|orders?)\b",
+    re.IGNORECASE,
+)
+_CATERING_TIME_FOLLOWUP_RE = re.compile(
+    r"\b("
+    r"what\s+about|how\s+about|what\s+baout|"
+    r"earlier\s+this\s+morning|this\s+morning|earlier\s+today|"
+    r"morning|afternoon|evening|tonight"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def force_review_reason(question: str) -> str | None:
@@ -83,19 +95,32 @@ def force_review_reason(question: str) -> str | None:
 
 
 def contextual_followup(question: str, previous_question: str) -> bool:
-    """Broad contextual routing is disabled until the HOLD regressions pass.
+    """Return whether a narrow follow-up may borrow prior operational context.
 
-    The UI may still send previous_question/previous_answer for audit and for
-    narrow runtime helpers that read the prior answer directly, but routing must
-    be based on the current prompt alone.
+    Broad contextual routing stays disabled. The allowed case is a time-window
+    follow-up after a catering/order question, e.g. "what about earlier this
+    morning" after "how many caterings today".
     """
-    return False
+    current = str(question or "").strip()
+    previous = str(previous_question or "").strip()
+    if not current or not previous:
+        return False
+    if not _CATERING_TIME_FOLLOWUP_RE.search(current):
+        return False
+    if not _CATERING_CONTEXT_RE.search(previous):
+        return False
+    if _CATERING_CONTEXT_RE.search(current):
+        return False
+    return True
 
 
 def resolved_question(question: str, previous_question: str = "") -> str:
     """Question text used for routing/safety checks."""
-    del previous_question
-    return str(question or "").strip()
+    current = str(question or "").strip()
+    previous = str(previous_question or "").strip()
+    if contextual_followup(current, previous):
+        return f"{previous} {current}".strip()
+    return current
 
 
 _READ_ONLY_CLASS = "read_only"

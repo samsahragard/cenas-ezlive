@@ -36,10 +36,18 @@ SECRET_DEFAULTS = {
 
 STORE_ALIASES = {
     "1": "copperfield",
+    "store_1": "copperfield",
+    "store 1": "copperfield",
+    "store_3": "copperfield",
+    "store 3": "copperfield",
     "uno": "copperfield",
     "uno mas": "copperfield",
     "copperfield": "copperfield",
     "2": "tomball",
+    "store_2": "tomball",
+    "store 2": "tomball",
+    "store_4": "tomball",
+    "store 4": "tomball",
     "dos": "tomball",
     "dos mas": "tomball",
     "tomball": "tomball",

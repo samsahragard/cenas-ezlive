@@ -59,6 +59,7 @@ from app.services.assistant_routing_shared import (
     provider_timeout_ms as _provider_timeout_ms,
     queued_answer as _queued_answer,
     read_secret as _read_secret,
+    normalize_store_key as _normalize_store_key,
     requested_store as _requested_store,
     requested_store_list as _requested_store_list,
     resolved_question as _shared_resolved_question,
@@ -820,9 +821,32 @@ def _store_count(mapping: dict, store: str | None, default_total: int) -> int:
     return int((mapping or {}).get(store, 0) or 0)
 
 
+def _store_label(store: str) -> str:
+    normalized = _normalize_store_key(store)
+    labels = {
+        "copperfield": "Copperfield",
+        "tomball": "Tomball",
+    }
+    return labels.get(normalized, normalized)
+
+
+def _normalized_store_counts(mapping: dict) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    if not isinstance(mapping, dict):
+        return counts
+    for raw_store, raw_count in mapping.items():
+        store = _normalize_store_key(raw_store)
+        try:
+            count = int(raw_count or 0)
+        except (TypeError, ValueError):
+            count = 0
+        counts[store] = counts.get(store, 0) + count
+    return counts
+
+
 def _store_split(mapping: dict) -> str:
     return "; ".join(
-        f"{store}: {count}" for store, count in sorted((mapping or {}).items())
+        f"{_store_label(store)}: {count}" for store, count in sorted((mapping or {}).items())
     )
 
 
@@ -836,13 +860,13 @@ def _orders_summary_answer(summary: dict, question: str = "") -> str:
         window_counts = summary.get("today_time_windows") or {}
         window_by_store = summary.get("today_time_windows_by_store") or {}
         count = int(window_counts.get(window_key) or 0)
-        store_counts = window_by_store.get(window_key) or {}
+        store_counts = _normalized_store_counts(window_by_store.get(window_key) or {})
         if requested_store:
             count = int(store_counts.get(requested_store) or 0)
         date_suffix = f" ({today_date})" if today_date else ""
         if requested_store:
             answer = (
-                f"For {label}{date_suffix}, {requested_store} has "
+                f"For {label}{date_suffix}, {_store_label(requested_store)} has "
                 f"{count} {_plural(count, 'catering order')}."
             )
         else:
@@ -857,17 +881,17 @@ def _orders_summary_answer(summary: dict, question: str = "") -> str:
     needs_driver = int(summary.get("needs_driver_orders") or 0)
     live_tracking = int(summary.get("live_tracking_orders") or 0)
     active_tracking = int(summary.get("active_tracking_orders") or 0)
-    by_store = summary.get("today_by_store") or summary.get("by_store") or {}
+    by_store = _normalized_store_counts(summary.get("today_by_store") or summary.get("by_store") or {})
     today_orders = _store_count(by_store, requested_store, today_orders)
-    store_bits = [f"{store}: {count}" for store, count in sorted(by_store.items())]
+    store_bits = [f"{_store_label(store)}: {count}" for store, count in sorted(by_store.items())]
     if len(requested_stores) >= 2:
         compare_bits = [
-            f"{store}: {int((by_store or {}).get(store, 0) or 0)}"
+            f"{_store_label(store)}: {int((by_store or {}).get(store, 0) or 0)}"
             for store in requested_stores
         ]
         answer = "Today catering orders by requested store: " + "; ".join(compare_bits) + "."
     elif requested_store:
-        answer = f"{requested_store} has {today_orders} {_plural(today_orders, 'catering order')} today."
+        answer = f"{_store_label(requested_store)} has {today_orders} {_plural(today_orders, 'catering order')} today."
     else:
         answer = (
             f"You have {today_orders} {_plural(today_orders, 'catering order')} today"
@@ -902,6 +926,14 @@ def _dict_split(mapping: dict, limit: int = 6) -> str:
     return "; ".join(f"{key}: {value}" for key, value in pairs[:limit])
 
 
+def _store_dict_split(mapping: dict, limit: int = 6) -> str:
+    normalized = _normalized_store_counts(mapping)
+    if not normalized:
+        return ""
+    pairs = sorted(normalized.items(), key=lambda item: str(item[0]))
+    return "; ".join(f"{_store_label(key)}: {value}" for key, value in pairs[:limit])
+
+
 def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     if not isinstance(payload, dict) or payload.get("ok") is False:
         return "I could not read the approved catering data for that question, so I saved it for Sam review."
@@ -920,7 +952,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
         count = int(payload.get("count") or 0)
         window = str(payload.get("window") or "requested window").replace("_", " ")
         answer = f"{_there_is_are(count)} {count} {_plural(count, 'catering order')} in the {window} view."
-        split = _dict_split(payload.get("by_store") or {})
+        split = _store_dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
         ids = _order_id_list(payload.get("orders") or [])
@@ -939,7 +971,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
         )
 
     if tool_id == "orders.catering_by_store":
-        split = _dict_split(payload.get("by_store") or {}) or "no visible stores"
+        split = _store_dict_split(payload.get("by_store") or {}) or "no visible stores"
         return f"Catering store split: {split}."
 
     if tool_id == "orders.catering_by_status":
@@ -969,7 +1001,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     if tool_id == "orders.catering_tracking_missing":
         count = int(payload.get("count") or 0)
         answer = f"{count} active {_plural(count, 'catering order')} {_count_verb(count, 'is', 'are')} missing tracking links."
-        split = _dict_split(payload.get("by_store") or {})
+        split = _store_dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
         return answer

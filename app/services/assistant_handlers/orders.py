@@ -21,6 +21,7 @@ from app.models import (
 from app.services.assistant_routing_shared import (
     STORE_ALIASES as _STORE_ALIASES,
     normalize_store_key as _normalize_store_key,
+    requested_store as _requested_store,
 )
 
 
@@ -125,6 +126,17 @@ def _tool_store_filter(ctx: dict[str, Any]) -> set[str] | None:
     return {_normalize_store(store) for store in (ctx.get("store_slugs") or [])}
 
 
+def _effective_store_filter(ctx: dict[str, Any], question: str = "") -> set[str] | None:
+    allowed = _tool_store_filter(ctx)
+    requested = _requested_store(question)
+    requested_filter = {_normalize_store(requested)} if requested else None
+    if allowed is None:
+        return requested_filter
+    if requested_filter is None:
+        return allowed
+    return allowed & requested_filter
+
+
 def _status_key(value: Any) -> str:
     return str(value or "unknown").strip().casefold() or "unknown"
 
@@ -179,9 +191,9 @@ def _money(value: Any) -> float:
         return 0.0
 
 
-def _allowed_orders(db: Session, ctx: dict[str, Any]) -> list[Order]:
+def _allowed_orders(db: Session, ctx: dict[str, Any], question: str = "") -> list[Order]:
     orders = db.query(Order).all()
-    allowed = _tool_store_filter(ctx)
+    allowed = _effective_store_filter(ctx, question)
     if allowed is None:
         return orders
     if not allowed:
@@ -189,9 +201,9 @@ def _allowed_orders(db: Session, ctx: dict[str, Any]) -> list[Order]:
     return [order for order in orders if _store_key_for_order(order) in allowed]
 
 
-def _allowed_quotes(db: Session, ctx: dict[str, Any]) -> list[InHouseCateringQuote]:
+def _allowed_quotes(db: Session, ctx: dict[str, Any], question: str = "") -> list[InHouseCateringQuote]:
     quotes = db.query(InHouseCateringQuote).all()
-    allowed = _tool_store_filter(ctx)
+    allowed = _effective_store_filter(ctx, question)
     if allowed is None:
         return quotes
     if not allowed:
@@ -387,7 +399,7 @@ def _orders_window_payload(
 ) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _filter_by_range(_allowed_orders(db, ctx), start, end)
+        orders = _filter_by_range(_allowed_orders(db, ctx, question), start, end)
         sorted_orders = _sort_orders(orders)
         by_store = Counter(_store_key_for_order(order) for order in sorted_orders)
         by_status = Counter(_status_key(order.status) for order in sorted_orders)
@@ -420,7 +432,7 @@ def orders_store_summary(question_or_ctx: str | dict[str, Any], ctx: dict[str, A
     today = date.today()
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         by_store: dict[str, int] = {}
         today_by_store: dict[str, int] = {}
         today_time_windows: dict[str, int] = {
@@ -534,7 +546,7 @@ def catering_count(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
         today = date.today()
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         today_orders = _filter_by_range(orders, today, today)
         tomorrow = today + timedelta(days=1)
         return _payload(
@@ -554,7 +566,7 @@ def catering_count(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_by_status(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         return _payload(
             "orders.catering_by_status",
             ctx,
@@ -569,7 +581,7 @@ def catering_by_status(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_by_store(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         return _payload(
             "orders.catering_by_store",
             ctx,
@@ -584,7 +596,7 @@ def catering_by_store(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_needs_driver(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = [order for order in _allowed_orders(db, ctx) if _order_needs_driver(order)]
+        orders = [order for order in _allowed_orders(db, ctx, question) if _order_needs_driver(order)]
         sorted_orders = _sort_orders(orders)
         return _payload(
             "orders.catering_needs_driver",
@@ -602,7 +614,7 @@ def catering_needs_driver(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_live_tracking(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = [order for order in _allowed_orders(db, ctx) if order.delivery_tracking_id]
+        orders = [order for order in _allowed_orders(db, ctx, question) if order.delivery_tracking_id]
         active_orders = [order for order in orders if _is_tracking_active(order)]
         return _payload(
             "orders.catering_live_tracking",
@@ -622,7 +634,7 @@ def catering_tracking_missing(question: str, ctx: dict[str, Any]) -> dict[str, A
     db = SessionLocal()
     try:
         orders = [
-            order for order in _allowed_orders(db, ctx)
+            order for order in _allowed_orders(db, ctx, question)
             if not order.delivery_tracking_id and _status_key(order.status) not in _COMPLETE_STATUSES
         ]
         return _payload(
@@ -641,7 +653,7 @@ def catering_tracking_missing(question: str, ctx: dict[str, Any]) -> dict[str, A
 def catering_uuid_status(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         with_uuid = [order for order in orders if order.delivery_tracking_id]
         return _payload(
             "orders.catering_uuid_status",
@@ -663,7 +675,7 @@ def catering_late_risk(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
         today = date.today()
         now_minute = datetime.now().hour * 60 + datetime.now().minute
         risky: list[Order] = []
-        for order in _filter_by_range(_allowed_orders(db, ctx), today, today):
+        for order in _filter_by_range(_allowed_orders(db, ctx, question), today, today):
             status = _status_key(order.status)
             minute = _order_delivery_minute(order)
             if status not in _COMPLETE_STATUSES and minute is not None and minute < now_minute:
@@ -685,7 +697,7 @@ def catering_late_risk(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_order_lookup(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         order, searched_token = _find_order(orders, question)
         if not order:
             return _payload(
@@ -710,7 +722,7 @@ def catering_order_lookup(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_order_items_safe(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         order, searched_token = _find_order(orders, question)
         if not order:
             return _payload(
@@ -739,7 +751,7 @@ def catering_order_items_safe(question: str, ctx: dict[str, Any]) -> dict[str, A
 def catering_item_mix(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         visible_order_ids = {order.id for order in orders}
         rows = db.query(OrderItem).filter(OrderItem.order_id.in_(list(visible_order_ids))).all() if visible_order_ids else []
         mix: dict[str, dict[str, Any]] = {}
@@ -764,7 +776,7 @@ def catering_item_mix(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_fees_summary(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         details = _details_by_external_id(db, _visible_external_ids(orders))
         commission = sum(int(row.commission_cents or 0) for row in details.values()) / 100
         service = sum(int(row.service_fee_cents or 0) for row in details.values()) / 100
@@ -788,7 +800,7 @@ def catering_fees_summary(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_payout_safe_summary(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         return _payload(
             "orders.catering_payout_safe_summary",
             ctx,
@@ -807,7 +819,7 @@ def catering_payout_safe_summary(question: str, ctx: dict[str, Any]) -> dict[str
 def catering_pdf_status(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         external_ids = _visible_external_ids(orders)
         processing_rows = _processing_rows(db, external_ids)
         details = _details_by_external_id(db, external_ids)
@@ -833,7 +845,7 @@ def catering_pdf_status(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
 def catering_driver_assignment_summary(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         visible_ids = _visible_external_ids(orders)
         rows = (
             db.query(DriverAssignmentJob)
@@ -869,7 +881,7 @@ def catering_driver_assignment_summary(question: str, ctx: dict[str, Any]) -> di
 def catering_returning_customers_aggregate(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        orders = _allowed_orders(db, ctx)
+        orders = _allowed_orders(db, ctx, question)
         counts = Counter(
             str(order.client or "").strip().casefold()
             for order in orders
@@ -894,7 +906,7 @@ def catering_returning_customers_aggregate(question: str, ctx: dict[str, Any]) -
 def in_house_quotes_summary(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        quotes = _allowed_quotes(db, ctx)
+        quotes = _allowed_quotes(db, ctx, question)
         recent = sorted(quotes, key=lambda quote: quote.created_at or datetime.min, reverse=True)
         return _payload(
             "orders.in_house_quotes_summary",
@@ -914,7 +926,7 @@ def in_house_quotes_summary(question: str, ctx: dict[str, Any]) -> dict[str, Any
 def in_house_quote_lookup(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        quotes = _allowed_quotes(db, ctx)
+        quotes = _allowed_quotes(db, ctx, question)
         token = _lookup_token(question)
         quote: InHouseCateringQuote | None = None
         if token and token.isdigit():
@@ -979,12 +991,22 @@ def _wants_today_store_comparison(question: str) -> bool:
     )
 
 
+def _wants_today_time_window(question: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(earlier\s+this\s+morning|this\s+morning|earlier\s+today|morning|afternoon|evening|tonight)\b",
+            _txt(question),
+        )
+    )
+
+
 def _wants_today(question: str) -> bool:
     text = _txt(question)
     return (
         _order_context(question)
         and not _in_house_context(question)
         and not _wants_today_store_comparison(question)
+        and not _wants_today_time_window(question)
         and "today" in text
     )
 
@@ -1006,7 +1028,7 @@ def _wants_next_30(question: str) -> bool:
 
 def _wants_count(question: str) -> bool:
     text = _txt(question)
-    if _wants_returning_customers(question) or _wants_today_store_comparison(question):
+    if _wants_returning_customers(question) or _wants_today_store_comparison(question) or _wants_today_time_window(question):
         return False
     return _order_context(question) and not _in_house_context(question) and bool(re.search(r"\b(how many|count|total)\b", text))
 

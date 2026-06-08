@@ -55,6 +55,7 @@ MANAGER_ROLES = {
     "expo",
 }
 APP_TZ = "America/Chicago"
+ACTIVE_DELIVERY_STATUSES = ["approved", "picked_up", "en_route"]
 
 
 # ---- auth helpers ----
@@ -91,6 +92,31 @@ def require_manager(fn: Callable):
 
 
 # ---- shared helpers ----
+
+def _active_delivery_for_driver_on_date(
+    db,
+    driver_id: int,
+    delivery_date: str | None,
+    *,
+    exclude_order_id: int | None = None,
+) -> Order | None:
+    """An in-progress assignment for this driver on the candidate date.
+
+    The one-driver/one-delivery rule is same-day only. A delivery on a
+    different date should never trip the stack modal or block approval.
+    """
+    q = (
+        db.query(Order)
+        .filter(Order.assigned_driver_id == driver_id)
+        .filter(Order.status.in_(ACTIVE_DELIVERY_STATUSES))
+    )
+    if delivery_date:
+        q = q.filter(Order.delivery_date == delivery_date)
+    else:
+        q = q.filter(Order.delivery_date.is_(None))
+    if exclude_order_id is not None:
+        q = q.filter(Order.id != exclude_order_id)
+    return q.order_by(Order.deliver_at.asc(), Order.id.asc()).first()
 
 def _format_load(db, driver_id: int, today: date) -> str:
     """SPEC §5: '0 today' / '3 today (1 in progress)' / '2 today (done)' format."""
@@ -685,6 +711,22 @@ def ez_manage_approve(request_id: int):
         if not order or not driver:
             abort(404)
         try:
+            same_day_active = _active_delivery_for_driver_on_date(
+                db,
+                driver.id,
+                order.delivery_date,
+                exclude_order_id=order.id,
+            )
+            if same_day_active is not None:
+                flash(
+                    f"Couldn't approve: {driver.name} already has an active "
+                    f"delivery on {order.delivery_date or 'this date'} "
+                    f"({same_day_active.external_order_id or same_day_active.id}). "
+                    "Pick another driver.",
+                    "error",
+                )
+                return redirect(url_for("driver_system.ez_manage"))
+
             from app.services.driver_assignment_jobs import (
                 AssignmentAlreadyInProgress,
                 create_assignment_job,
@@ -838,34 +880,24 @@ def ez_manage_feasibility_check():
         new_o = db.get(Order, new_id)
         if not driver or not new_o:
             return jsonify({"ok": False, "error": "driver or delivery not found"}), 404
-        active = (
-            db.query(Order)
-            .filter(Order.assigned_driver_id == driver.id)
-            .filter(Order.status.in_(["approved", "picked_up", "en_route"]))
-            .first()
+        active = _active_delivery_for_driver_on_date(
+            db,
+            driver.id,
+            new_o.delivery_date,
+            exclude_order_id=new_o.id,
         )
         if not active:
             return jsonify({"ok": True, "stack_needed": False})
-        if active.origin_store_id != new_o.origin_store_id:
-            return jsonify({"ok": True, "stack_needed": True, "feasible": False,
-                            "reason": "different origin stores"})
-        if active.delivery_date != new_o.delivery_date:
-            return jsonify({"ok": True, "stack_needed": True, "feasible": False,
-                            "reason": "different delivery dates"})
-        # Map to dispatch_planner's expected dict shape
-        def _to_planner(o: Order) -> dict:
-            return {
-                "order_id": str(o.id),
-                "origin_store_id": o.origin_store_id,
-                "delivery_address": o.delivery_address,
-                "date": o.delivery_date,
-                "deliver_at": o.deliver_at,
-                "delivery_window": o.delivery_window,
-            }
-        from app.services.routing_service import compute_pair_route_plan
-        result = compute_pair_route_plan(_to_planner(active), _to_planner(new_o))
-        return jsonify({"ok": True, "stack_needed": True, "feasible": result.get("feasible", False),
-                        "result": result})
+        return jsonify({
+            "ok": True,
+            "stack_needed": True,
+            "blocked": True,
+            "feasible": False,
+            "reason": "driver already has an active delivery on this date",
+            "active_delivery_id": active.id,
+            "active_external_order_id": active.external_order_id,
+            "active_delivery_date": active.delivery_date,
+        })
     finally:
         db.close()
 

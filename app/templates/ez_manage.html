@@ -144,6 +144,7 @@ function initEzManage() {
   const smDetails = document.getElementById('sm-details');
   const smConfirm = document.getElementById('sm-confirm');
   let pendingForm = null;
+  let pendingBlocked = false;
 
   document.querySelectorAll('.ezm-approve-form').forEach(form => {
     form.addEventListener('submit', async (e) => {
@@ -166,8 +167,21 @@ function initEzManage() {
         }
         // Stack confirmation needed
         pendingForm = form;
+        pendingBlocked = false;
         smDriver.textContent = driverName;
-        if (data.feasible === false && data.reason) {
+        if (data.blocked) {
+          pendingBlocked = true;
+          smSubtitle.textContent = 'Same-day driver limit';
+          smVerdict.textContent = '⚠ Cannot combine — ' + data.reason;
+          smVerdict.style.background = 'rgba(226,100,92,0.18)';
+          smVerdict.style.color = '#E2645C';
+          smDetails.textContent =
+            `Active delivery: ${data.active_external_order_id || data.active_delivery_id || '—'}\n` +
+            `Delivery date: ${data.active_delivery_date || '—'}\n\n` +
+            'Pick another driver for this same-day delivery.';
+          smConfirm.textContent = 'Pick another driver';
+          smConfirm.style.background = 'rgba(226,100,92,0.30)';
+        } else if (data.feasible === false && data.reason) {
           smSubtitle.textContent = 'Hard filter failed';
           smVerdict.textContent = '⚠ Cannot combine — ' + data.reason;
           smVerdict.style.background = 'rgba(226,100,92,0.18)';
@@ -210,6 +224,11 @@ function initEzManage() {
 
   smConfirm.addEventListener('click', () => {
     modal.close();
+    if (pendingBlocked) {
+      pendingBlocked = false;
+      pendingForm = null;
+      return;
+    }
     if (pendingForm) pendingForm.submit();
   });
 }

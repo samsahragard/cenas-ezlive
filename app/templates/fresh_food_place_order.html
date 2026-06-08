@@ -1,11 +1,8 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'fresh_food_place_order' %}
 {% block title %}Fresh Food — Place Order — Cenas Kitchen{% endblock %}
-{# Page header is an inline hero inside the content block (ck #8:44) —
-   base page_title/page_subtitle emptied so there's no stacked title row.
-   The inline .ffh-title is already a Page-Title-Library two-word treatment
-   ("Fresh Food" / "Ordering"); suppress the shared topbar so the restyled
-   brand-mark band does not duplicate it. #}
+{# The shared title row is suppressed so the Fresh Food tool starts directly
+   at its working tabs and order controls. #}
 {% block topbar %}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
@@ -53,37 +50,6 @@
   .ff-tab:hover { color: #FAF6EC; }
   .ff-tab.is-active { color: #E4B340; border-bottom-color: #E4B340; }
 
-  /* Inline hero header (ck #8:44 — replaces the base stacked title +
-     verbose meta row; mockup-style brand mark + store pill on one row). */
-  .ffh-hero {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-  }
-  .ffh-title {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    color: #FAF6EC;
-    letter-spacing: -0.01em;
-  }
-  .ffh-title-accent { font-weight: 400; font-style: italic; color: #E4B340; }
-  .ffh-store {
-    margin-left: auto;
-    padding: 6px 14px;
-    background: rgba(228,179,64,0.14);
-    border: 1px solid rgba(217,164,54,0.30);
-    border-radius: 8px;
-    color: #E4B340;
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
   /* --- shared meta bar --------------------------------------------- */
   .ffpo-meta {
     display: flex;
@@ -114,18 +80,6 @@
     font-size: 13px;
     font-family: inherit;
   }
-  .ffpo-meta .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    font-size: 10.5px;
-    font-weight: 600;
-    background: rgba(156,203,118,0.14);
-    color: #9CCB76;
-    border: 0.5px solid rgba(156,203,118,0.30);
-  }
 
   /* --- TODAY (single-day) view ------------------------------------ */
   .ff-today-head {
@@ -136,22 +90,9 @@
     flex-wrap: wrap;
     margin-bottom: 4px;
   }
-  .ff-eyebrow {
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.45);
-    margin-bottom: 5px;
-  }
   .ff-today-date { margin: 0; font-size: 25px; font-weight: 700; color: #FAF6EC; letter-spacing: -0.01em; }
   .ff-today-by { margin-top: 6px; font-size: 12.5px; color: rgba(255,255,255,0.55); }
   .ff-today-by strong { color: #E4B340; font-weight: 600; }
-  .ff-today-count {
-    font-size: 12px;
-    color: rgba(255,255,255,0.60);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
   .ff-today-legend {
     font-size: 11px;
     color: rgba(255,255,255,0.45);
@@ -175,13 +116,6 @@
     font-size: 11.5px;
     letter-spacing: 0.10em;
     text-transform: uppercase;
-  }
-  .ff-cat-count {
-    margin-left: auto;
-    font-size: 10px;
-    font-weight: 500;
-    color: rgba(255,255,255,0.40);
-    letter-spacing: 0.08em;
   }
   .ff-cat-table {
     background: rgba(255,255,255,0.03);
@@ -326,10 +260,6 @@
 </style>
 
 <div class="ffpo-page">
-  <div class="ffh-hero">
-    <h1 class="ffh-title">Fresh Food <span class="ffh-title-accent">Ordering</span></h1>
-    <span class="ffh-store">{{ (g.current_location or 'both')|title }}</span>
-  </div>
   <div class="ff-tabs">
     <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">Recent Orders</a>
@@ -348,26 +278,20 @@
       <span class="label">Order date</span>
       <input type="date" id="ffpo-order-date" value="{{ delivery.isoformat() }}">
     </div>
-    <div style="margin-left:auto;">
-      <span class="pill"><i class="ti ti-eye"></i>Cross-location visible</span>
-    </div>
   </div>
 
   <div id="ffpo-today-view">
     <div class="ff-today-head">
       <div>
-        <div class="ff-eyebrow">Order for delivery</div>
         <h2 class="ff-today-date" id="ff-today-date-label">{{ delivery.strftime('%A, %B %d') }}</h2>
         <div class="ff-today-by">Placed by <strong>{{ orderer }}</strong> at <strong>{{ location }}</strong></div>
       </div>
-      <div class="ff-today-count" id="ff-today-count">0 items · 0 units ordered</div>
     </div>
 
     {% for cat in categories %}
       <div class="ff-cat-block">
         <div class="ff-cat-bar">
           <span>{{ cat.name }}</span>
-          <span class="ff-cat-count">{{ cat['items']|length }} item{{ '' if cat['items']|length == 1 else 's' }}</span>
         </div>
         <div class="ff-cat-table">
           <div class="ff-cat-thead">
@@ -426,7 +350,6 @@
   var todayView = document.getElementById('ffpo-today-view');
   var dateInput = document.getElementById('ffpo-order-date');
   var dateLabel = document.getElementById('ff-today-date-label');
-  var countEl   = document.getElementById('ff-today-count');
   var btn       = document.getElementById('ffpo-submit');
   var cancelBtn = document.getElementById('ffpo-cancel');
   var bannerOk  = document.getElementById('ffpo-banner-ok');
@@ -461,18 +384,10 @@
   syncDate();
 
   function refreshCount(){
-    var slugs = {}, units = 0;
     for(var i=0; i<todayInputs.length; i++){
       var el = todayInputs[i];
       el.classList.toggle('has-value', el.value.trim() !== '');
-      if(el.getAttribute('data-kind') === 'or'){
-        var v = parseFloat(el.value);
-        if(!isNaN(v) && v > 0){ slugs[el.getAttribute('data-slug')] = 1; units += v; }
-      }
     }
-    var n = Object.keys(slugs).length;
-    countEl.textContent = n + ' item' + (n === 1 ? '' : 's') + ' · ' +
-      (Math.round(units * 10) / 10) + ' units ordered';
   }
   for(var j=0; j<todayInputs.length; j++){
     todayInputs[j].addEventListener('input', function(){ refreshCount(); resetConfirm(); });

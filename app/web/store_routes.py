@@ -64,6 +64,25 @@ def _today_label() -> str:
     return f"{_t:%a, %b} {_t.day}"
 
 
+def _is_expo_insights_path(path: str, store_slug: str | None) -> bool:
+    """True only for the real store-scoped Insights pages Expo cannot open."""
+    slug = (store_slug or "").strip().lower()
+    if not slug:
+        return False
+    norm = (path or "").strip().lower().rstrip("/")
+    blocked_prefixes = (
+        f"/{slug}/reports/sales",
+        f"/{slug}/reports/labor",
+        f"/{slug}/reports/server-performance",
+        f"/{slug}/labor",
+        f"/{slug}/sales",
+        f"/{slug}/performance",
+        f"/{slug}/forecast",
+    )
+    return any(norm == prefix or norm.startswith(prefix + "/")
+               for prefix in blocked_prefixes)
+
+
 # slug → location filter for downstream report functions
 STORE_TO_LOCATION = {
     "dos":       "tomball",
@@ -146,10 +165,7 @@ def _per_store_gate():
 
     # (2) Expo: deny any Insights-section URL outright.
     if u.permission_level == "expo":
-        path = (request.path or "").lower()
-        insights_paths = ("/reports/sales", "/reports/labor", "/reports/server-performance",
-                          "/labor", "/sales", "/performance", "/forecast")
-        if any(p in path for p in insights_paths):
+        if _is_expo_insights_path(request.path or "", target):
             return ("Forbidden — Expo accounts don't have Insights access.", 403)
 
     # (1) Per-store scope block.
@@ -5996,7 +6012,7 @@ def team_workspace():
     dashboards: the roster loads client-side from
     GET /<store>/schedules-v2/team-roster; this route only renders the page
     with the store context (store_slug drives the iframe srcs + the fetch)."""
-    if not _operations_full_access_ok():
+    if not has_dashboard_access("dash.operations"):
         abort(403)
     label = g.store_label or "Cenas Kitchen"
     today_label = _today_label()
@@ -6086,7 +6102,10 @@ def operations_dashboard():
     require_dashboard_access("dash.operations")
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
-        dash_tab_specs = [tab for tab in _OPERATIONS_DASH_TABS if tab[0] == "corp-order"]
+        dash_tab_specs = [
+            tab for tab in _OPERATIONS_DASH_TABS
+            if tab[0] in ("team", "corp-order")
+        ]
     valid = {key for key, _, _ in dash_tab_specs}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:

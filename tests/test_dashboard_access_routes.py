@@ -13,9 +13,13 @@ from app.models import Employee, EmployeePosition, Position, User
 def dashboard_app(db_session, monkeypatch):
     from app import create_app
     from app import db as appdb
+    from app.web import driver_system as driver_mod
+    from app.web import schedules_v2_roster as roster_mod
     from app.web import store_routes as store_mod
 
     monkeypatch.setattr(appdb, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(driver_mod, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(roster_mod, "SessionLocal", lambda: db_session)
 
     def _get_db():
         yield db_session
@@ -94,11 +98,13 @@ def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
     ops = client.get("/dos/operations?tab=team")
     assert ops.status_code == 200
     ops_tabs = _tab_keys(ops.get_data(as_text=True))
-    assert ops_tabs == {"corp-order"}
+    assert ops_tabs == {"team", "corp-order"}
 
-    assert client.get("/dos/team").status_code == 403
+    assert client.get("/dos/team").status_code == 200
+    assert client.get("/dos/schedules-v2/team-roster").status_code == 200
     assert client.get("/dos/corporate-order").status_code == 200
     assert client.get("/dos/corporate-order/reports").status_code == 403
+    assert client.get("/dos/performance").status_code == 403
 
 
 def test_km_gets_manager_and_full_operations_tabs(dashboard_app):
@@ -139,3 +145,60 @@ def test_store_scope_blocks_other_store_dashboard(dashboard_app):
     assert resp.status_code in {302, 403}
     if resp.status_code == 302:
         assert resp.headers["Location"].endswith("/dos/")
+
+
+@pytest.mark.parametrize(
+    ("uid", "role", "position"),
+    [
+        (201, "corporate", "Corporate"),
+        (202, "corporate_chef", "Corporate Chef"),
+        (203, "gm", "GM"),
+        (204, "km", "KM"),
+        (205, "foh_manager", "FOH Manager"),
+        (206, "assistant_km", "Assistant KM"),
+        (207, "expo", "Expo"),
+    ],
+)
+def test_management_roles_can_access_catering_driver_manage_and_team_roster(
+    dashboard_app, uid, role, position
+):
+    flask_app, db = dashboard_app
+    actor = _seed_actor(db, uid=uid, role=role, position=position)
+    client = _client_as(flask_app, actor)
+
+    assert client.get("/dos/catering?tab=ez-manage").status_code == 200
+    assert client.get("/ez-manage").status_code == 200
+    assert client.get("/dos/team").status_code == 200
+    assert client.get("/dos/vendors?tab=performance-food").status_code == 200
+    assert client.get("/dos/vendors/performance-food/recent-orders").status_code == 200
+    roster = client.get("/dos/schedules-v2/team-roster")
+    assert roster.status_code == 200
+    assert roster.get_json() is not None
+
+
+def test_expo_can_access_all_vendor_tabs_but_not_insights(dashboard_app):
+    flask_app, db = dashboard_app
+    expo = _seed_actor(db, uid=120, role="expo", position="Expo")
+    client = _client_as(flask_app, expo)
+
+    vendors = client.get("/dos/vendors?tab=performance-food")
+    assert vendors.status_code == 200
+    assert _tab_keys(vendors.get_data(as_text=True)) == {
+        "produce",
+        "webstaurant",
+        "performance-food",
+        "restaurant-depot",
+        "specs",
+    }
+
+    for path in (
+        "/dos/produce/",
+        "/dos/vendors/webstaurant/recent-orders",
+        "/dos/vendors/performance-food/recent-orders",
+        "/dos/vendors/restaurant-depot/recent-orders",
+        "/dos/vendors/specs/recent-orders",
+    ):
+        assert client.get(path).status_code == 200, path
+
+    assert client.get("/dos/performance").status_code == 403
+    assert client.get("/dos/reports/server-performance").status_code == 403

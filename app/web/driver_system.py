@@ -9,7 +9,7 @@ Auth gating:
   - Driver-facing pages (/ez-market, /my-profile, /pay-history) require
     a driver session (session['driver_id'] set by /driver/login).
   - Manager-facing pages (/ez-manage) require a keypad-authenticated User
-    with permission_level in {partner, corporate, gm, manager}.
+    with one of the management dashboard roles.
 """
 from __future__ import annotations
 
@@ -43,7 +43,17 @@ logger = logging.getLogger(__name__)
 
 driver_system_bp = Blueprint("driver_system", __name__)
 
-MANAGER_ROLES = {"partner", "corporate", "gm", "manager"}
+MANAGER_ROLES = {
+    "partner",
+    "corporate",
+    "corporate_chef",
+    "gm",
+    "manager",
+    "km",
+    "assistant_km",
+    "foh_manager",
+    "expo",
+}
 APP_TZ = "America/Chicago"
 
 

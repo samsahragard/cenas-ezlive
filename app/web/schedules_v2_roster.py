@@ -24,8 +24,9 @@ it's the last link in the onboarding -> schedulable chain (samai's end-to-end).
 from __future__ import annotations
 
 from datetime import datetime
+from functools import wraps
 
-from flask import jsonify, request
+from flask import g, jsonify, redirect, request, url_for
 from sqlalchemy.exc import IntegrityError
 
 from app.db import SessionLocal
@@ -33,10 +34,38 @@ from app.models import (CANONICAL_POSITIONS, CenaToastIgnore, CenaToastLink, Emp
                         EmployeeAvailability, EmployeePosition,
                         EmployeeStoreAssignment, EmployeeUnavailabilityBlock,
                         Position, User)
-from app.web.permissions import current_user_id, require_level
+from app.web.permissions import current_user_id, load_current_user, require_level
 from app.web.schedules_v2 import (_MGR, _store, _highest_section_role,
                                  apply_section_placement_to_user)
 from app.web.store_routes import store_bp
+
+
+TEAM_ROSTER_READ_ROLES = {
+    "partner",
+    "corporate",
+    "corporate_chef",
+    "gm",
+    "manager",
+    "km",
+    "assistant_km",
+    "foh_manager",
+    "expo",
+}
+
+
+def require_team_roster_read(fn):
+    """Read-only roster access for dashboard management roles, including Expo."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        user = getattr(g, "current_user", None) or load_current_user()
+        if user is None:
+            nxt = request.full_path if request.full_path else request.path
+            return redirect(url_for("keypad_auth.login", next=nxt))
+        role = (getattr(user, "permission_level", "") or "").strip().lower()
+        if role not in TEAM_ROSTER_READ_ROLES:
+            return ("Forbidden - your account doesn't have access to this page.", 403)
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 @store_bp.route("/schedules-v2/roster", methods=["POST"])
@@ -126,7 +155,7 @@ def sv2_roster_add():
 
 
 @store_bp.route("/schedules-v2/team-roster", methods=["GET"])
-@require_level(_MGR)
+@require_team_roster_read
 def sv2_team_roster():
     """Unified Team-tab roster (Project 1 unify, Sam #2261): wraps aick's team_roster()
     read -> jsonify, the exact shape ck's FE binds to (counts{all,boh,foh} + stats +

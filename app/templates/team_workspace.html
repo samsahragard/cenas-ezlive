@@ -221,16 +221,22 @@
   .tws-phonecell { display: inline-flex; align-items: center; gap: 2px; justify-self: end; white-space: nowrap; }
   .tws-ph-h { text-align: right; }
   .tws-nopos { font-size: 11px; font-style: italic; color: var(--tws-cream-meta); opacity: .7; }
-  /* Link tab (Sam #2629): two-column Cena | Toast match list */
-  .tws-link-head { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 4px 4px 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  /* Link tab (Sam #2629; 3-col Cena | Toast | Verify, per-store tabs + manual-link dropdowns Sam 2026-06-07) */
+  .tws-link-head { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1.25fr) 96px; gap: 12px; padding: 4px 4px 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  .tws-link-head span:last-child { text-align: right; }
   .tws-link-rows { display: flex; flex-direction: column; }
-  .tws-link-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--tws-border-soft); align-items: center; }
+  .tws-link-row { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1.25fr) 96px; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--tws-border-soft); align-items: center; }
   .tws-link-cena .nm { color: var(--tws-cream); font-weight: 600; }
   .tws-link-cena .ph { color: var(--tws-cream-meta); font-size: 12px; }
   .tws-link-toast { color: var(--tws-cream-meta); font-size: 12.5px; }
   .tws-link-toast.pending { font-style: italic; opacity: .75; }
   .tws-link-toast .nm { color: var(--tws-cream); }
   .tws-link-store { padding: 14px 4px 4px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tws-gold); font-weight: 700; }
+  /* action column + group sub-headers ("batches") + manual-link dropdown */
+  .tws-link-act { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+  .tws-link-group { padding: 12px 4px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--tws-cream-meta); }
+  .tws-link-select { font-family: inherit; font-size: 12.5px; color: var(--tws-cream); background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 4px 6px; max-width: 100%; width: 100%; }
+  .tws-link-select:hover { border-color: var(--tws-gold); }
   .tws-link-cena.ph { color: var(--tws-cream-meta); font-size: 12.5px; }
   .tws-conf { font-size: 10px; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; margin-left: 7px; vertical-align: middle; }
   .tws-conf.high { background: rgba(96,176,96,.18); color: #8fd28f; }
@@ -755,6 +761,7 @@
   // once confirmed it shows "Linked" + Unlink. Calls BOTH stores; a store the manager
   // can't reach is skipped, a Toast outage (502) shows a note.
   var linkLoaded = false;
+  var linkActiveStore = null;        // which store tab is showing (Copperfield-only / Tomball-only)
   var LINK_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
   function _ljson(r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d || {} }; }); }
   function linkCtrl(isLinked) {
@@ -764,11 +771,75 @@
       ? '<button class="tws-link-btn linked" data-link-act="unlink" type="button">Linked &#10003;</button>'
       : '<button class="tws-link-btn" data-link-act="verify" type="button">Verify</button>';
   }
+  // Candidate dropdowns for MANUAL linking (Sam 2026-06-07).
+  function _toastOpts(ut) {
+    var o = '<option value="">Select Toast match&hellip;</option>';
+    ut.forEach(function (t) { o += '<option value="' + esc(t.toast_id || "") + '" data-name="' + esc(t.name || "") + '">' + esc(t.name || "") + '</option>'; });
+    return o;
+  }
+  function _cenaOpts(uc) {
+    var o = '<option value="">Select a person&hellip;</option>';
+    uc.forEach(function (c) { o += '<option value="' + esc(String(c.emp_id)) + '" data-name="' + esc(c.name || "") + '">' + esc(c.name || "") + '</option>'; });
+    return o;
+  }
+  var _LINK_HEAD = '<div class="tws-link-head"><span>Cena</span><span>Toast</span><span>Verify</span></div>';
+  // Build ONE store's panel: 3-col table (Cena | Toast | Action) split into "batches" --
+  // Matched (verify/linked), No-Toast-match (pick a Toast), Toast-only (pick a person).
+  function _linkStorePanel(s, res) {
+    var d = res.d || {};
+    if (!res.ok || d.ok === false) {
+      return _LINK_HEAD + '<div class="tws-link-row"><div class="tws-link-cena ph">' + esc(d.error || "Toast unavailable") + '</div><div class="tws-link-toast"></div><div class="tws-link-act"></div></div>';
+    }
+    var sugg = d.suggestions || [], uc = d.unmatched_cena || [], ut = d.unmatched_toast || [];
+    if (!sugg.length && !uc.length && !ut.length) {
+      return _LINK_HEAD + '<div class="tws-link-row"><div class="tws-link-cena ph">No team members at this store.</div><div class="tws-link-toast"></div><div class="tws-link-act"></div></div>';
+    }
+    var confirmed = {};
+    (res.links || []).forEach(function (l) { confirmed[l.cena_emp_id] = l; });
+    var out = _LINK_HEAD;
+    // BATCH 1: matched / suggested -> Verify (or Linked).
+    if (sugg.length) {
+      out += '<div class="tws-link-group">Matched</div>';
+      sugg.forEach(function (m) {
+        var conf = (m.confidence === "high") ? "high" : "low";
+        var cf = confirmed[m.cena_emp_id];
+        var isLinked = cf && String(cf.toast_id) === String(m.toast_id);
+        out += '<div class="tws-link-row' + (isLinked ? " linkable" : "") + '" data-store="' + esc(s.slug) + '" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '" data-toast-name="' + esc(m.toast_name || "") + '">' +
+          '<div class="tws-link-cena"><div class="nm">' + esc(m.cena_name || "") + '</div><div class="ph">' + esc(m.cena_phone || "No phone") + '</div></div>' +
+          '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span> <span class="tws-conf ' + conf + '">' + conf + '</span></div>' +
+          '<div class="tws-link-act">' + linkCtrl(isLinked) + '<span class="tws-link-caret">&#9662;</span></div>' +
+        '</div>';
+      });
+    }
+    // BATCH 2: Cena person with NO Toast match -> pick a Toast from the dropdown.
+    if (uc.length) {
+      out += '<div class="tws-link-group">No Toast match &mdash; pick one</div>';
+      uc.forEach(function (c) {
+        out += '<div class="tws-link-row" data-store="' + esc(s.slug) + '" data-link-rowtype="cena" data-cena-id="' + c.emp_id + '">' +
+          '<div class="tws-link-cena"><div class="nm">' + esc(c.name || "") + '</div><div class="ph">' + esc(c.phone || "No phone") + '</div></div>' +
+          '<div class="tws-link-toast">' + (ut.length ? '<select class="tws-link-select">' + _toastOpts(ut) + '</select>' : '<span class="pending">no unlinked Toast people</span>') + '</div>' +
+          '<div class="tws-link-act">' + ((IS_PARTNER && ut.length) ? '<button class="tws-link-btn" data-link-act="manual-link" type="button">Link</button>' : '') + '</div>' +
+        '</div>';
+      });
+    }
+    // BATCH 3: Toast person with NO Cena profile -> pick an app person from the dropdown.
+    if (ut.length) {
+      out += '<div class="tws-link-group">Toast only &mdash; pick a profile</div>';
+      ut.forEach(function (t) {
+        out += '<div class="tws-link-row" data-store="' + esc(s.slug) + '" data-link-rowtype="toast" data-toast-id="' + esc(t.toast_id || "") + '" data-toast-name="' + esc(t.name || "") + '">' +
+          '<div class="tws-link-cena">' + (uc.length ? '<select class="tws-link-select">' + _cenaOpts(uc) + '</select>' : '<span class="ph">no unlinked people</span>') + '</div>' +
+          '<div class="tws-link-toast"><span class="nm">' + esc(t.name || "") + '</span> <span class="tws-conf toastonly">Toast only</span></div>' +
+          '<div class="tws-link-act">' + ((IS_PARTNER && uc.length) ? '<button class="tws-link-btn" data-link-act="manual-link" type="button">Link</button>' : '') + '</div>' +
+        '</div>';
+      });
+    }
+    return out;
+  }
   function loadLink() {
     if (linkLoaded) return;
     linkLoaded = true;
     var el = document.getElementById("tws-link-rows");
-    el.innerHTML = '<div class="tws-empty">Matching Cena to Toast...</div>';
+    el.innerHTML = '<div class="tws-empty">Matching Cena to Toast&hellip;</div>';
     Promise.all(LINK_STORES.map(function (s) {
       var base = "/" + s.slug + "/schedules-v2/toast/";
       var opt = { headers: { "Accept": "application/json" }, credentials: "same-origin" };
@@ -777,52 +848,36 @@
         fetch(base + "links", opt).then(_ljson).catch(function () { return { ok: false, d: {} }; })
       ]).then(function (pair) { return { s: s, ok: pair[0].ok, d: pair[0].d, links: (pair[1].d && pair[1].d.links) || [] }; });
     })).then(function (results) {
-      var html = "";
-      results.forEach(function (res) {
-        var s = res.s, d = res.d || {};
-        // Skip a store this manager can't reach (gate returns non-JSON / no error field).
-        if (!res.ok && d.ok === undefined && !d.error) return;
-        var confirmed = {};
-        res.links.forEach(function (l) { confirmed[l.cena_emp_id] = l; });
-        // S7 store-split: each store is its own labeled block with its own
-        // "Cena | Toast" column header (the global header was removed).
-        html += '<div class="tws-link-store">' + esc(s.label) + '</div>';
-        html += '<div class="tws-link-head"><span>Cena</span><span>Toast</span></div>';
-        if (!res.ok || d.ok === false) {
-          html += '<div class="tws-link-row"><div class="tws-link-cena ph">' + esc(d.error || "Toast unavailable") + '</div><div class="tws-link-toast"></div></div>';
-          return;
-        }
-        var sugg = d.suggestions || [], uc = d.unmatched_cena || [], ut = d.unmatched_toast || [];
-        if (!sugg.length && !uc.length && !ut.length) {
-          html += '<div class="tws-link-row"><div class="tws-link-cena ph">No team members at this store.</div><div class="tws-link-toast"></div></div>';
-        }
-        sugg.forEach(function (m) {
-          var conf = (m.confidence === "high") ? "high" : "low";
-          var cf = confirmed[m.cena_emp_id];
-          var isLinked = cf && String(cf.toast_id) === String(m.toast_id);
-          // A VERIFIED row is expandable: mark .linkable + add a caret so it reads
-          // as clickable (clicking opens the person's Toast data panel below).
-          html += '<div class="tws-link-row' + (isLinked ? " linkable" : "") + '" data-store="' + esc(s.slug) + '" data-cena-id="' + m.cena_emp_id + '" data-toast-id="' + esc(m.toast_id || "") + '" data-toast-name="' + esc(m.toast_name || "") + '">' +
-            '<div class="tws-link-cena"><div class="nm">' + esc(m.cena_name || "") + '</div><div class="ph">' + esc(m.cena_phone || "No phone") + '</div></div>' +
-            '<div class="tws-link-toast"><span class="nm">' + esc(m.toast_name || "") + '</span><span class="tws-conf ' + conf + '">' + conf + '</span>' + linkCtrl(isLinked) + '<span class="tws-link-caret">&#9662;</span></div>' +
-          '</div>';
-        });
-        uc.forEach(function (c) {
-          html += '<div class="tws-link-row" data-cena-id="' + c.emp_id + '">' +
-            '<div class="tws-link-cena"><div class="nm">' + esc(c.name || "") + '</div><div class="ph">' + esc(c.phone || "No phone") + '</div></div>' +
-            '<div class="tws-link-toast pending">No Toast match</div>' +
-          '</div>';
-        });
-        ut.forEach(function (t) {
-          html += '<div class="tws-link-row" data-toast-id="' + esc(t.toast_id || "") + '">' +
-            '<div class="tws-link-cena ph">(no Cena profile)</div>' +
-            '<div class="tws-link-toast"><span class="nm">' + esc(t.name || "") + '</span><span class="tws-conf toastonly">Toast only</span></div>' +
-          '</div>';
-        });
+      // Keep only stores this manager can reach (a blocked store returns non-JSON / no error field).
+      var avail = results.filter(function (res) {
+        var d = res.d || {};
+        return res.ok || d.ok !== undefined || d.error;
       });
-      el.innerHTML = html || '<div class="tws-empty">No Toast data available.</div>';
+      if (!avail.length) { el.innerHTML = '<div class="tws-empty">No Toast data available.</div>'; return; }
+      if (!linkActiveStore || !avail.some(function (r) { return r.s.slug === linkActiveStore; })) {
+        linkActiveStore = avail[0].s.slug;
+      }
+      // Store TABS (Copperfield-only / Tomball-only): one panel visible at a time.
+      var tabs = '<div class="tws-store-tabs" id="tws-link-tabs">';
+      avail.forEach(function (res) {
+        tabs += '<button type="button" class="tws-store-tab' + (res.s.slug === linkActiveStore ? " active" : "") + '" data-link-store-tab="' + esc(res.s.slug) + '">' + esc(res.s.label) + '</button>';
+      });
+      tabs += '</div>';
+      var panels = "";
+      avail.forEach(function (res) {
+        panels += '<div class="tws-link-storepanel" data-link-store-panel="' + esc(res.s.slug) + '"' + (res.s.slug === linkActiveStore ? "" : ' style="display:none"') + '>' + _linkStorePanel(res.s, res) + '</div>';
+      });
+      el.innerHTML = tabs + panels;
     });
   }
+  function _setLinkStore(slug) {
+    linkActiveStore = slug;
+    var el = document.getElementById("tws-link-rows");
+    if (!el) return;
+    el.querySelectorAll("[data-link-store-tab]").forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-link-store-tab") === slug); });
+    el.querySelectorAll("[data-link-store-panel]").forEach(function (p) { p.style.display = (p.getAttribute("data-link-store-panel") === slug) ? "" : "none"; });
+  }
+  function reloadLink() { linkLoaded = false; loadLink(); }
   /* ---- per-person Toast DATA PANEL (Sam #2629, final piece) ----
      Once a Cena<->Toast match is VERIFIED (a "Linked" row), the manager can
      expand that person's Toast data inline: hours, recent timecards (clock
@@ -1001,12 +1056,37 @@
     var rows = document.getElementById("tws-link-rows");
     if (!rows) return;
     rows.addEventListener("click", function (ev) {
+      // Store tab switch (Copperfield-only / Tomball-only).
+      var tab = ev.target.closest("[data-link-store-tab]");
+      if (tab) { _setLinkStore(tab.getAttribute("data-link-store-tab")); return; }
       var btn = ev.target.closest("[data-link-act]");
       if (!btn) return;
       var row = btn.closest(".tws-link-row");
       if (!row) return;
       var act = btn.getAttribute("data-link-act");
       var slug = row.getAttribute("data-store");
+      // MANUAL link (Sam 2026-06-07): read the dropdown choice, link the chosen pair,
+      // then reload the tab so the pools update. rowtype "cena" = a Cena person picking a
+      // Toast; "toast" = a Toast person picking an app profile.
+      if (act === "manual-link") {
+        var sel = row.querySelector(".tws-link-select");
+        if (!sel || !sel.value) { if (sel) { sel.style.borderColor = "#c4604f"; } return; }
+        var selName = (sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].getAttribute("data-name")) || "";
+        var rt = row.getAttribute("data-link-rowtype");
+        var mbody = (rt === "cena")
+          ? { cena_emp_id: row.getAttribute("data-cena-id"), toast_id: sel.value, toast_name: selName }
+          : { cena_emp_id: sel.value, toast_id: row.getAttribute("data-toast-id"), toast_name: row.getAttribute("data-toast-name") };
+        btn.disabled = true;
+        fetch("/" + slug + "/schedules-v2/toast/link", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify(mbody)
+        })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (dd) { return { ok: r.ok, d: dd }; }); })
+          .then(function (resp) { if (resp.ok && resp.d && resp.d.ok !== false) { reloadLink(); } else { btn.disabled = false; } })
+          .catch(function () { btn.disabled = false; });
+        return;
+      }
       var body = (act === "verify")
         ? { cena_emp_id: row.getAttribute("data-cena-id"), toast_id: row.getAttribute("data-toast-id"), toast_name: row.getAttribute("data-toast-name") }
         : { cena_emp_id: row.getAttribute("data-cena-id") };

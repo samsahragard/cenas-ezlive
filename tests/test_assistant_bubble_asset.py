@@ -1,64 +1,19 @@
 from pathlib import Path
 
 
-def test_assistant_bubble_waits_for_enabled_context_before_showing():
-    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
-
-    root_hidden = 'root.setAttribute("hidden", "hidden");'
-    root_shown = "root.removeAttribute(\"hidden\");"
-
-    assert root_hidden in script
-    assert root_shown in script
-    assert "window.self !== window.top" in script
-    assert "function dedupeRoots()" in script
-    assert script.index(root_hidden) < script.index('fetch("/assistant/context"')
-    assert root_shown in script[script.index("!data.enabled"):]
-
-
-def test_assistant_bubble_script_is_versioned_for_mobile_cache():
+def test_dashboard_no_longer_loads_floating_assistant_bubble():
     template = Path("app/templates/base_dashboard.html").read_text(encoding="utf-8")
 
-    assert "assistant_bubble.js') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}" in template
+    assert "assistant_bubble.css" not in template
+    assert "assistant_bubble.js" not in template
+    assert "ckai-root" not in template
 
 
-def test_assistant_bubble_sends_previous_question_for_followups():
-    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
+def test_sidebar_keeps_top_left_ai_orb_entry():
+    sidebar = Path("app/templates/partials/sidebar.html").read_text(encoding="utf-8")
+    css = Path("app/static/css/sidebar.css").read_text(encoding="utf-8")
 
-    assert 'var lastUserQuestion = "";' in script
-    assert "var previousQuestion = lastUserQuestion;" in script
-    assert "lastUserQuestion = question;" in script
-    assert "previous_question: previousQuestion" in script
-
-
-def test_assistant_bubble_does_not_render_on_full_assistant_page():
-    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
-
-    assert "function isFullAssistantPage()" in script
-    assert 'window.location.pathname === "/assistant"' in script
-    assert 'params.get("tab") === "cena"' in script
-    assert "if (hideRootOnFullAssistantPage()) return;" in script
-
-
-def test_assistant_bubble_suppresses_on_url_changes():
-    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
-
-    assert "function watchAssistantUrlChanges()" in script
-    assert '"pushState", "replaceState"' in script
-    assert "window.history[name] = function ()" in script
-    assert "hideRootOnFullAssistantPage();" in script
-    assert 'window.addEventListener("popstate", hideRootOnFullAssistantPage);' in script
-
-
-def test_assistant_bubble_hides_root_on_assistant_url():
-    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
-
-    assert "function hideRootOnFullAssistantPage()" in script
-    assert 'root.getAttribute("data-ckai-url-suppressed") === "true"' in script
-    assert 'root.removeAttribute("hidden");' in script
-    assert 'root.removeAttribute("data-ckai-url-suppressed");' in script
-    assert 'root.setAttribute("hidden", "hidden");' in script
-    assert 'root.setAttribute("data-ckai-url-suppressed", "true");' in script
-    assert "if (hideRootOnFullAssistantPage()) return;" in script
-    assert "if (hideRootOnFullAssistantPage()) return;" in script[
-        script.index('fetch("/assistant/context"'):
-    ]
+    assert "ck-sb-ai-orb" in sidebar
+    assert "data-ck-ai-orb" in sidebar
+    assert "/{{ store_slug }}/today?tab=cena" in sidebar
+    assert ".ck-sb-ai-orb" in css

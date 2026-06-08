@@ -15,7 +15,6 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/assistant_bubble.css') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}">
   {# Page Title Library fonts — Manrope (titles) + JetBrains Mono (brand mark
      / metadata). Several rebuilt pages already self-import these; loading
      them in base means the shared topbar renders in the library typeface
@@ -806,6 +805,5 @@
   })();
 </script>
 {% block scripts %}{% endblock %}
-<script src="{{ url_for('static', filename='js/assistant_bubble.js') }}?v={{ config.get('RENDER_GIT_COMMIT', 'local')[:7] }}" defer></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask
+from flask import Flask, jsonify, render_template, request
 import click
 from dotenv import load_dotenv
 
@@ -285,6 +285,40 @@ def create_app():
     # deliberately keep reading reported_store directly.
     from app.domain.normalize import pickup_label as _pickup_label
     app.jinja_env.globals["pickup_label"] = _pickup_label
+
+    def _wants_json_error_response() -> bool:
+        if request.path.endswith(".json") or request.blueprint in {
+            "assistant",
+            "toast_webhook",
+            "ezcater_tracking_watch",
+        }:
+            return True
+        best = request.accept_mimetypes.best_match(["application/json", "text/html"])
+        return best == "application/json" and (
+            request.accept_mimetypes["application/json"]
+            >= request.accept_mimetypes["text/html"]
+        )
+
+    def _render_update_error(error, status_code: int):
+        if _wants_json_error_response():
+            return jsonify({
+                "ok": False,
+                "error": "temporary_update",
+                "message": "Sam is making an update. Please try again shortly.",
+            }), status_code
+        return render_template("update_error.html", status_code=status_code), status_code
+
+    @app.errorhandler(500)
+    def _friendly_500(error):
+        return _render_update_error(error, 500)
+
+    @app.errorhandler(502)
+    def _friendly_502(error):
+        return _render_update_error(error, 502)
+
+    @app.errorhandler(503)
+    def _friendly_503(error):
+        return _render_update_error(error, 503)
 
     # Ensure model tables exist. Idempotent — won't recreate or alter
     # existing tables, just creates any missing ones. This is a backstop

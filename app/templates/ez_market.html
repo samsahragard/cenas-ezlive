@@ -101,6 +101,71 @@
   .em-banner { padding: 6px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
   .em-banner.pending { background: rgba(228,179,64,0.14); color: #E4B340; }
   .em-banner.approved { background: rgba(156,203,118,0.14); color: #9CCB76; }
+
+  .em-manager-sheet { display: flex; flex-direction: column; gap: 16px; }
+  .em-manager-day {
+    color: #FFD970; font-size: 13px; font-weight: 800;
+    letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px;
+  }
+  .em-sheet-card {
+    background: rgba(36,20,9,0.92);
+    border: 0.5px solid rgba(217,164,54,0.28);
+    border-radius: 9px; overflow: hidden;
+  }
+  .em-sheet-top {
+    display: grid;
+    grid-template-columns: minmax(120px, 1.25fr) minmax(90px, .8fr) minmax(86px, .72fr) minmax(92px, .75fr) auto;
+    gap: 10px; align-items: center; padding: 13px 14px 11px;
+    border-bottom: 0.5px solid rgba(250,246,236,0.07);
+  }
+  .em-sheet-id {
+    color: #FFD970; font-family: 'JetBrains Mono', monospace;
+    font-size: 16px; font-weight: 900; letter-spacing: 0.04em;
+    text-decoration: none;
+  }
+  .em-sheet-cell { color: #FAF6EC; font-size: 13px; font-weight: 800; }
+  .em-sheet-pay {
+    color: #FFD970; font-size: 21px; font-weight: 900; text-align: right;
+    text-shadow: 0 0 12px rgba(255,200,80,0.45);
+  }
+  .em-sheet-summary {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) minmax(150px, 1.15fr) minmax(120px, .85fr);
+    gap: 12px; align-items: center; padding: 11px 14px 12px;
+  }
+  .em-sheet-label {
+    display: block; margin-bottom: 3px; color: rgba(250,246,236,0.45);
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .em-sheet-strong { color: #FAF6EC; font-size: 13px; font-weight: 800; }
+  .em-sheet-muted { color: rgba(250,246,236,0.64); font-size: 12px; }
+  .em-sheet-dropdown { border-top: 0.5px solid rgba(250,246,236,0.07); }
+  .em-sheet-dropdown summary {
+    list-style: none; cursor: pointer; padding: 9px 14px;
+    background: linear-gradient(180deg, #f6cb45 0%, #d99a08 100%);
+    color: #241409; font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 900; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .em-sheet-dropdown summary::-webkit-details-marker { display: none; }
+  .em-sheet-dropdown summary::after { content: '+'; float: right; }
+  .em-sheet-dropdown[open] summary::after { content: '-'; }
+  .em-sheet-detail-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 12px; padding: 13px 14px 15px; background: rgba(0,0,0,0.18);
+  }
+  .em-sheet-detail-wide { grid-column: span 2; }
+  .em-sheet-link { color: #FFD970; text-decoration: none; font-weight: 800; }
+  .em-sheet-link:hover { text-decoration: underline; }
+
+  @media (max-width: 620px) {
+    .em-sheet-top,
+    .em-sheet-summary,
+    .em-sheet-detail-grid { grid-template-columns: 1fr; }
+    .em-sheet-pay { text-align: left; }
+    .em-sheet-detail-wide { grid-column: auto; }
+  }
 </style>
 <script>
   // 30s polling refresh (SPEC §4)
@@ -144,6 +209,75 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if not viewer_is_driver %}
+<div class="em-manager-sheet">
+  {% if available_groups %}
+    {% for grp in available_groups %}
+      <section class="em-manager-day">
+        {{ grp.display }} <span class="em-sheet-muted">· {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }}</span>
+      </section>
+      {% for o in grp.orders %}
+        {% set _status = 'EZ Approved' if o.status in ['approved', 'picked_up', 'en_route', 'delivered'] else (o.status or 'Available') %}
+        {% set card = compact_order_card(o, payout=projected_payouts.get(o.id, 35), competing_count=competing.get(o.id, 0), status_label=_status) %}
+        <article class="em-sheet-card">
+          <div class="em-sheet-top">
+            <a class="em-sheet-id" href="/orders/view/{{ o.external_order_id }}">{{ card.external_id }}</a>
+            <div class="em-sheet-cell">{{ card.store_label }}</div>
+            <div class="em-sheet-cell">{{ card.date_label }}</div>
+            <div class="em-sheet-cell">{{ card.weekday_label }}</div>
+            <div class="em-sheet-pay">{{ card.payout_label }}</div>
+          </div>
+          <div class="em-sheet-summary">
+            <div>
+              <span class="em-sheet-label">Status</span>
+              <span class="em-sheet-strong">{{ card.status_label }}</span>
+            </div>
+            <div>
+              <span class="em-sheet-label">Employee dropdown</span>
+              <span class="em-sheet-muted">{{ card.current_driver_label }}</span>
+            </div>
+            <div>
+              <span class="em-sheet-label">Market</span>
+              <span class="em-sheet-strong">{{ card.competing_label }}</span>
+            </div>
+          </div>
+          <details class="em-sheet-dropdown">
+            <summary>DROPDOWN INFORMATION</summary>
+            <div class="em-sheet-detail-grid">
+              <div>
+                <span class="em-sheet-label">Pickup</span>
+                <span class="em-sheet-strong">{{ card.pickup_name }}</span>
+              </div>
+              <div class="em-sheet-detail-wide">
+                <span class="em-sheet-label">Pickup address</span>
+                <span class="em-sheet-muted">{{ card.pickup_address }}</span>
+              </div>
+              <div>
+                <span class="em-sheet-label">Distance</span>
+                <span class="em-sheet-muted">{{ card.miles_label }}</span>
+              </div>
+              <div>
+                <span class="em-sheet-label">Heads</span>
+                <span class="em-sheet-muted">{{ card.heads_label }}</span>
+              </div>
+              <div class="em-sheet-detail-wide">
+                <span class="em-sheet-label">Dropoff</span>
+                <span class="em-sheet-muted">{{ card.dropoff_address }}</span>
+              </div>
+              <div>
+                <span class="em-sheet-label">Order</span>
+                <a class="em-sheet-link" href="/orders/view/{{ o.external_order_id }}">Open order</a>
+              </div>
+            </div>
+          </details>
+        </article>
+      {% endfor %}
+    {% endfor %}
+  {% else %}
+    <div class="em-empty">No upcoming orders right now. Refreshing every 30 seconds.</div>
+  {% endif %}
+</div>
+{% else %}
 {# Stats + tabs shown to everyone (Sam 2026-05-12). For non-drivers,
    driver-only values render as 'n/a' but the category stays visible. #}
 <div class="em-stats">
@@ -298,6 +432,7 @@
     <div class="em-empty">{% if viewer_is_driver %}No history yet.{% else %}n/a — driver feature.{% endif %}</div>
   {% endif %}
 </div>
+{% endif %}
 
 <script>
 function showTab(name) {

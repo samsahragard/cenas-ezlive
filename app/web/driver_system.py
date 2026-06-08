@@ -402,6 +402,7 @@ def ez_market():
         # /orders/<location> page uses, and projected payouts for the card
         # display (Sam 2026-05-12: every card needs a $ figure visible).
         from app.services.orders_query import group_orders_by_date
+        from app.services.ezcater_management_presenter import compact_order_card
         available_groups = group_orders_by_date(available)
         projected_payouts = {
             o.id: _project_payout(o)
@@ -457,6 +458,7 @@ def ez_market():
             "stat_my_queue": _my_queue_count(db, driver.id) if driver else None,
             "stat_potential_week": _potential_week(db, driver.id, today) if driver else None,
             "current_tier": (driver.current_tier or "new") if driver else None,
+            "compact_order_card": compact_order_card,
         }
         return render_template("ez_market.html", **ctx)
     finally:
@@ -591,6 +593,7 @@ def ez_manage():
     today_start, tomorrow_start = _utc_bounds_for_local_day(today)
     db = SessionLocal()
     try:
+        from app.services.ezcater_management_presenter import compact_order_card
         # Group pending requests by delivery
         pending_reqs = (
             db.query(DeliveryRequest)
@@ -660,6 +663,7 @@ def ez_manage():
             "pending_count": len(groups),
             "approved_today_count": len(approved_rows),
             "approved_rows": approved_rows,
+            "compact_order_card": compact_order_card,
         }
         return render_template("ez_manage.html", **ctx)
     finally:

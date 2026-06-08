@@ -85,6 +85,115 @@
   .ezm-pill.ok { color: #9CCB76; border-color: rgba(156,203,118,0.38); background: rgba(156,203,118,0.12); }
   .ezm-pill.warn { color: #FFD970; border-color: rgba(255,217,112,0.35); background: rgba(255,217,112,0.10); }
   .ezm-pill.error { color: #E2645C; border-color: rgba(226,100,92,0.40); background: rgba(226,100,92,0.12); }
+
+  .ezm-sheet-card {
+    background: rgba(36,20,9,0.92);
+    border: 0.5px solid rgba(217,164,54,0.28);
+    border-radius: 9px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .ezm-sheet-top {
+    display: grid;
+    grid-template-columns: minmax(120px, 1.25fr) minmax(90px, .8fr) minmax(86px, .72fr) minmax(92px, .75fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 13px 14px 11px;
+    border-bottom: 0.5px solid rgba(250,246,236,0.07);
+  }
+  .ezm-sheet-id {
+    color: #FFD970;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+  }
+  .ezm-sheet-cell { color: #FAF6EC; font-size: 13px; font-weight: 800; }
+  .ezm-sheet-pay {
+    color: #FFD970;
+    font-size: 21px;
+    font-weight: 900;
+    text-align: right;
+    text-shadow: 0 0 12px rgba(255,200,80,0.45);
+  }
+  .ezm-sheet-summary {
+    display: grid;
+    grid-template-columns: minmax(120px, .9fr) minmax(190px, 1.25fr);
+    gap: 12px;
+    align-items: center;
+    padding: 11px 14px 12px;
+  }
+  .ezm-sheet-label {
+    display: block;
+    margin-bottom: 3px;
+    color: rgba(250,246,236,0.45);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .ezm-sheet-strong { color: #FAF6EC; font-size: 13px; font-weight: 800; }
+  .ezm-sheet-muted { color: rgba(250,246,236,0.64); font-size: 12px; }
+  .ezm-sheet-dropdown { border-top: 0.5px solid rgba(250,246,236,0.07); }
+  .ezm-sheet-dropdown summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    background: rgba(228,179,64,0.08);
+    border-top: 0.5px solid rgba(228,179,64,0.14);
+    color: #FFD970;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .ezm-sheet-dropdown summary::-webkit-details-marker { display: none; }
+  .ezm-sheet-dropdown summary::after { content: 'show'; float: right; color: rgba(250,246,236,0.58); }
+  .ezm-sheet-dropdown[open] summary::after { content: 'hide'; }
+  .ezm-sheet-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 12px;
+    padding: 13px 14px 15px;
+    background: rgba(0,0,0,0.18);
+  }
+  .ezm-sheet-detail-wide { grid-column: span 2; }
+  .ezm-sheet-driver-list {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 2px;
+  }
+  .ezm-sheet-driver-row {
+    display: grid;
+    grid-template-columns: minmax(170px, 1fr) minmax(160px, 1fr) auto auto;
+    gap: 9px;
+    align-items: center;
+    border: 0.5px solid rgba(217,164,54,0.18);
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: rgba(36,20,9,0.7);
+  }
+  .ezm-sheet-driver-row.recommended {
+    border-color: rgba(228,179,64,0.5);
+    background: rgba(228,179,64,0.08);
+  }
+
+  @media (max-width: 720px) {
+    .ezm-sheet-top,
+    .ezm-sheet-summary,
+    .ezm-sheet-detail-grid,
+    .ezm-sheet-driver-row {
+      grid-template-columns: 1fr;
+    }
+    .ezm-sheet-pay { text-align: left; }
+    .ezm-sheet-detail-wide,
+    .ezm-sheet-driver-list { grid-column: auto; }
+  }
 </style>
 {% endblock %}
 
@@ -244,67 +353,103 @@ if (document.readyState === 'loading') {
 {% if groups %}
   {% for g in groups %}
     {% set o = g.order %}
-    <div class="ezm-order">
-      <div class="ezm-order-head">
-        <div class="ezm-order-info">
-          <div class="ezm-time">{{ o.deliver_at or '—' }}</div>
-          <div class="ezm-route">{{ pickup_label(o) or '—' }} → {{ o.delivery_address or '—' }}</div>
-          <div class="ezm-meta">{{ o.external_order_id }} · {{ o.headcount or '—' }} heads</div>
+    {% set first_row = g.rows[0] if g.rows else none %}
+    {% set first_driver = first_row.driver if first_row else none %}
+    {% set card = compact_order_card(o, payout=g.payout, competing_count=g.rows|length, status_label='Pending request', current_driver=(first_driver.name if first_driver else none)) %}
+    <article class="ezm-sheet-card">
+      <div class="ezm-sheet-top">
+        <a class="ezm-sheet-id" href="/orders/view/{{ o.external_order_id }}">{{ card.external_id }}</a>
+        <div class="ezm-sheet-cell">{{ card.store_label }}</div>
+        <div class="ezm-sheet-cell">{{ card.date_label }}</div>
+        <div class="ezm-sheet-cell">{{ card.weekday_label }}</div>
+        <div class="ezm-sheet-pay">{{ card.payout_label }}</div>
+      </div>
+      <div class="ezm-sheet-summary">
+        <div>
+          <span class="ezm-sheet-label">Bidding</span>
+          <span class="ezm-sheet-strong">{{ g.rows|length }} request{{ 's' if g.rows|length != 1 else '' }}</span>
         </div>
         <div>
-          <div class="ezm-payout">${{ "%.0f"|format(g.payout or 0) }}</div>
-          <div class="ezm-payout-label">Driver pay</div>
-          <div style="font-size:11px;color:rgba(236,227,208,0.55);text-align:right;margin-top:2px;">
-            {{ g.rows|length }} request{{ 's' if g.rows|length != 1 else '' }}
-          </div>
+          <span class="ezm-sheet-label">Recommended</span>
+          <span class="ezm-sheet-strong">{{ first_driver.name if first_driver else 'No driver' }}</span>
+          {% if first_row %}
+            <div class="ezm-sheet-muted">
+              {{ first_row.load_str }}
+              {% if first_driver and first_driver.lifetime_delivery_count < 20 %}
+                · {{ first_driver.lifetime_delivery_count }} lifetime · Still in trial
+              {% elif first_driver %}
+                · score {{ first_driver.current_score or '—' }}/100
+              {% endif %}
+            </div>
+          {% endif %}
         </div>
       </div>
-
-      {% for row in g.rows %}
-      <div class="ezm-driver-row {% if row.get('recommended') %}recommended{% endif %}">
-        {% if row.get('recommended') %}
-          <div style="position:absolute;top:8px;left:12px;"><span class="ezm-recommended-tag">★ Recommended</span></div>
-        {% endif %}
-        {% set d = row.driver %}
-        <div class="ezm-avatar">{{ (d.name or '?')[0:2].upper() }}</div>
-        <div class="ezm-driver-info">
-          <div class="ezm-driver-name">{{ d.name }}
-            <span class="tier-{{ d.current_tier or 'new' }}" style="font-size:11px;font-weight:400;margin-left:4px;">
-              {{ (d.current_tier or 'new').replace('_', ' ').title() }}
-            </span>
+      <details class="ezm-sheet-dropdown">
+        <summary>Details</summary>
+        <div class="ezm-sheet-detail-grid">
+          <div>
+            <span class="ezm-sheet-label">Pickup</span>
+            <span class="ezm-sheet-strong">{{ card.pickup_name }}</span>
           </div>
-          <div class="ezm-driver-stats">
-            {{ row.load_str }}
-            {% if d.lifetime_delivery_count < 20 %}
-              · {{ d.lifetime_delivery_count }} lifetime · <span style="color:#E4B340;">Still in trial</span>
-            {% else %}
-              · score {{ d.current_score or '—' }}/100
-            {% endif %}
+          <div class="ezm-sheet-detail-wide">
+            <span class="ezm-sheet-label">Pickup address</span>
+            <span class="ezm-sheet-muted">{{ card.pickup_address }}</span>
+          </div>
+          <div>
+            <span class="ezm-sheet-label">Distance</span>
+            <span class="ezm-sheet-muted">{{ card.miles_label }}</span>
+          </div>
+          <div>
+            <span class="ezm-sheet-label">Heads</span>
+            <span class="ezm-sheet-muted">{{ card.heads_label }}</span>
+          </div>
+          <div class="ezm-sheet-detail-wide">
+            <span class="ezm-sheet-label">Dropoff</span>
+            <span class="ezm-sheet-muted">{{ card.dropoff_address }}</span>
+          </div>
+          <div class="ezm-sheet-driver-list">
+            {% for row in g.rows %}
+              {% set d = row.driver %}
+              <div class="ezm-sheet-driver-row {% if row.get('recommended') %}recommended{% endif %}">
+                <div>
+                  <span class="ezm-sheet-label">{% if row.get('recommended') %}Recommended{% else %}Driver{% endif %}</span>
+                  <span class="ezm-sheet-strong">{{ d.name }}</span>
+                </div>
+                <div class="ezm-sheet-muted">
+                  {{ row.load_str }}
+                  {% if d.lifetime_delivery_count < 20 %}
+                    · {{ d.lifetime_delivery_count }} lifetime · Still in trial
+                  {% else %}
+                    · score {{ d.current_score or '—' }}/100
+                  {% endif %}
+                </div>
+                <form method="POST" action="{{ url_for('driver_system.ez_manage_approve', request_id=row.request.id) }}"
+                      class="ezm-approve-form" data-driver-id="{{ d.id }}" data-new-delivery-id="{{ o.id }}"
+                      data-driver-name="{{ d.name }}" style="display:inline;">
+                  <button type="submit" class="ezm-btn ezm-btn-approve {% if row.get('recommended') %}recommended{% endif %}">
+                    {% if row.get('recommended') %}Approve {{ (d.name or '').split()[0] }}{% else %}Approve{% endif %}
+                  </button>
+                </form>
+                <form method="POST" action="{{ url_for('driver_system.ez_manage_decline', request_id=row.request.id) }}" style="display:inline;">
+                  <button type="submit" class="ezm-btn ezm-btn-decline">Decline</button>
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="ezm-sheet-driver-list">
+            <div class="ezm-footer" style="padding:0;border-top:none;">
+              <form method="POST" action="{{ url_for('driver_system.ez_manage_back_to_bidding', delivery_id=o.id) }}" style="display:inline;">
+                <button type="submit" class="ezm-btn ezm-btn-ghost">Send back to bidding</button>
+              </form>
+              <form method="POST" action="{{ url_for('driver_system.ez_manage_decline_all', delivery_id=o.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Decline all and cancel this order?');">
+                <button type="submit" class="ezm-btn ezm-btn-ghost" style="color:#E2645C;">Decline all</button>
+              </form>
+            </div>
           </div>
         </div>
-        <form method="POST" action="{{ url_for('driver_system.ez_manage_approve', request_id=row.request.id) }}"
-              class="ezm-approve-form" data-driver-id="{{ d.id }}" data-new-delivery-id="{{ o.id }}"
-              data-driver-name="{{ d.name }}" style="display:inline;">
-          <button type="submit" class="ezm-btn ezm-btn-approve {% if row.get('recommended') %}recommended{% endif %}">
-            {% if row.get('recommended') %}Approve {{ (d.name or '').split()[0] }}{% else %}Approve{% endif %}
-          </button>
-        </form>
-        <form method="POST" action="{{ url_for('driver_system.ez_manage_decline', request_id=row.request.id) }}" style="display:inline;">
-          <button type="submit" class="ezm-btn ezm-btn-decline">Decline</button>
-        </form>
-      </div>
-      {% endfor %}
-
-      <div class="ezm-footer">
-        <form method="POST" action="{{ url_for('driver_system.ez_manage_back_to_bidding', delivery_id=o.id) }}" style="display:inline;">
-          <button type="submit" class="ezm-btn ezm-btn-ghost">Send back to bidding</button>
-        </form>
-        <form method="POST" action="{{ url_for('driver_system.ez_manage_decline_all', delivery_id=o.id) }}" style="display:inline;"
-              onsubmit="return confirm('Decline all and cancel this order?');">
-          <button type="submit" class="ezm-btn ezm-btn-ghost" style="color:#E2645C;">Decline all</button>
-        </form>
-      </div>
-    </div>
+      </details>
+    </article>
   {% endfor %}
 {% else %}
   <div class="ezm-empty">No pending driver requests right now.</div>
@@ -326,7 +471,6 @@ if (document.readyState === 'loading') {
         </div>
         <div style="text-align:right;">
           <div class="ezm-payout">${{ "%.0f"|format(row.payout or 0) }}</div>
-          <div class="ezm-payout-label">Driver pay</div>
         </div>
       </div>
       <div class="ezm-approved-meta">

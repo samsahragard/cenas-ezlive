@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cenas Kitchen Update</title>
+  <style>
+    :root {
+      --bg: #1f0f08;
+      --panel: #2a150d;
+      --gold: #e4b340;
+      --gold-bright: #ffd970;
+      --cream: #faf6ec;
+      --muted: rgba(250,246,236,0.68);
+      --border: rgba(228,179,64,0.35);
+    }
+    html, body {
+      min-height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--cream);
+      font-family: Manrope, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .update-card {
+      width: min(680px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 18px 80px rgba(0,0,0,0.35);
+    }
+    .eyebrow {
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0 0 16px;
+      color: var(--gold-bright);
+      font-size: clamp(28px, 5vw, 46px);
+      line-height: 1.02;
+    }
+    p {
+      margin: 0;
+      color: var(--cream);
+      font-size: 18px;
+      line-height: 1.55;
+    }
+    .spanish {
+      margin-top: 22px;
+      padding-top: 22px;
+      border-top: 1px solid rgba(250,246,236,0.10);
+    }
+    .small {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main class="update-card" role="main">
+    <div class="eyebrow">Cenas Kitchen</div>
+    <h1>Quick update in progress</h1>
+    <p>Hello. This is a new app. If you're seeing this page, it's because Sam is making an update. Please allow 15 seconds to a minute and it will be back. Thank you.</p>
+    <div class="spanish">
+      <p>Hola. Esta es una aplicación nueva. Si estás viendo esta página, es porque Sam está haciendo una actualización. Espera de 15 segundos a un minuto y volverá. Gracias.</p>
+    </div>
+    <p class="small">Status {{ status_code or 502 }}</p>
+  </main>
+</body>
+</html>

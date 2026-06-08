@@ -530,6 +530,32 @@ def driver_logs():
         db.close()
 
 
+# Store-scoping for the driver order view (Sam 2026-06-07): a driver only sees
+# orders from THEIR store. origin_store_id keys per store mirror the manager
+# dashboard (ezcater_routes: store_2/store_4 = Tomball, store_1/store_3 =
+# Copperfield). The driver's store is home_store_id ('dos' = Tomball, 'uno' =
+# Copperfield, per the keypad STORE_TO_LOCATION), falling back to the legacy
+# .location string. Unknown/both -> None: no scoping, so a mis-configured driver
+# still sees their assigned work rather than an empty list -- it never mis-scopes,
+# it either scopes to the right store or leaves the view as-is.
+_TOMBALL_ORIGIN_STORES = ("store_2", "store_4")
+_COPPERFIELD_ORIGIN_STORES = ("store_1", "store_3")
+
+
+def _driver_origin_stores(driver):
+    hs = (getattr(driver, "home_store_id", None) or "").strip().lower()
+    if hs == "dos":
+        return _TOMBALL_ORIGIN_STORES
+    if hs == "uno":
+        return _COPPERFIELD_ORIGIN_STORES
+    loc = (getattr(driver, "location", None) or "").strip().lower()
+    if "tomball" in loc or loc == "dos":
+        return _TOMBALL_ORIGIN_STORES
+    if "copperfield" in loc or loc == "uno":
+        return _COPPERFIELD_ORIGIN_STORES
+    return None
+
+
 @driver.route("/driver/orders", methods=["GET"])
 def driver_orders():
     driver_id = session.get("driver_id")
@@ -543,13 +569,18 @@ def driver_orders():
             session.pop("driver_name", None)
             session.pop("driver_location", None)
             return redirect(url_for("driver.driver_login"))
-        orders = (
+        oq = (
             db.query(Order)
             .filter(Order.assigned_driver_id == found.id)
             .filter(Order.status.in_(["approved", "picked_up", "en_route", "delivered"]))
-            .order_by(Order.delivery_date.asc(), Order.deliver_at.asc(), Order.id.asc())
-            .all()
         )
+        _stores = _driver_origin_stores(found)
+        if _stores:
+            # Sam 2026-06-07: scope the driver's list to their own store only.
+            oq = oq.filter(Order.origin_store_id.in_(_stores))
+        orders = oq.order_by(
+            Order.delivery_date.asc(), Order.deliver_at.asc(), Order.id.asc()
+        ).all()
         return render_template(
             "driver_orders.html",
             active="driver_orders",

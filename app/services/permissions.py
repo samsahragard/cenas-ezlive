@@ -244,15 +244,28 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "kds.view_alerts",  # FOH-side anomalies only
     },
 
+    # Expo is a MANAGEMENT-section role (role_buckets) -- Sam 2026-06-07: "Expo is
+    # in the management team, she should get the management profile." Brought up from
+    # the old near-hourly set to the FLOOR-MANAGEMENT baseline (mirrors assistant_km /
+    # foh_manager: labor + sales view, manager log, orders, drivers, kds) so an Expo
+    # actually gets management access -- not just dash.kitchen. Pairs with adding
+    # "expo" to MGR_UP in permission_catalog.py (the dashboard/catalog side). The
+    # partner still tunes each store on the Permissions page. ADDITIVE -> never locks
+    # anyone out (only grants more than before).
     "expo": {
-        "orders.view",
+        "labor.view_own_wage", "labor.view_own_hours", "labor.view_others_hours",
+        "labor.view_boh_costs", "labor.view_store_summary",
+        "sales.view_today", "sales.view_history",
+        "orders.view", "orders.view_history",
+        "orders.assign_driver", "orders.unassign_driver",
         "orders.mark_picked_up", "orders.mark_delivered",
         "orders.edit_attachments",
-        # Sam #1063 (2026-05-26): drivers.admin opened to non-driver roles.
         "drivers.admin", "drivers.view_roster", "drivers.reset_passcode",
-        "ai.ask_claude_personal", "ai.view_transcripts",
+        "manager_log.write", "manager_log.read_own_store",
+        "ai.ask_claude", "ai.ask_claude_personal", "ai.view_transcripts",
+        "email.view_own_mailbox", "email.view_shared_mailbox", "email.send",
         "transcripts.search", "transcripts.read",
-        "kds.view_kitchen_display",
+        "kds.view_alerts", "kds.view_kitchen_display",
     },
 
     "driver": {

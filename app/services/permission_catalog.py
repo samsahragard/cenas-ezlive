@@ -54,7 +54,7 @@ PARTNER     = ["partner"]
 CORP_UP     = ["partner", "corporate", "corporate_chef"]                       # corporate tier+
 GM_UP       = ["partner", "corporate", "corporate_chef", "gm"]                 # GM-and-above
 MGR_UP      = ["partner", "corporate", "corporate_chef", "gm", "km",
-               "assistant_km", "foh_manager"]                                  # manager-level+
+               "assistant_km", "foh_manager", "expo"]                          # manager-level+ (expo added 2026-06-07: it's a Management-section role -> must inherit the mgmt tier, not read as near-hourly)
 KITCHEN_MGR = ["partner", "corporate_chef", "km"]                              # KM + chefs
 KITCHEN     = ["partner", "corporate_chef", "km", "cook", "expo"]              # kitchen staff
 DRIVERS_MGR = ["partner", "corporate", "gm", "corporate_driver"]              # drivers + mgrs

@@ -6,6 +6,8 @@ the safety boundary stays identical on both sides of the assistant hop.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from typing import Any
 
 
 _EXCLUDED_ACTION_RE = re.compile(
@@ -94,3 +96,60 @@ def resolved_question(question: str, previous_question: str = "") -> str:
     """Question text used for routing/safety checks."""
     del previous_question
     return str(question or "").strip()
+
+
+_READ_ONLY_CLASS = "read_only"
+_DANGEROUS_TOOL_CLASSES = frozenset(
+    {
+        "action_confirmation",
+        "write",
+        "write_action",
+        "mutation",
+        "mutating",
+        "destructive",
+        "dangerous",
+    }
+)
+_UNAVAILABLE_TOOL_STATUSES = frozenset(
+    {
+        "blocked",
+        "disabled",
+        "draft",
+        "inactive",
+        "review_gated",
+        "stub",
+    }
+)
+
+
+def tool_review_reason(tool: Mapping[str, Any] | None, question: str = "") -> str | None:
+    """Return why a proposed tool call must be held for review.
+
+    This is intentionally metadata-only: the route/runtime layers own tool
+    execution and permission scoping, while this helper pins the safety rule
+    that approved read-only tools are not review-gated merely for being data
+    tools. Forced prompt-level review still wins over any stale routed tool.
+    """
+    forced = force_review_reason(question)
+    if forced:
+        return forced
+    if not isinstance(tool, Mapping):
+        return "tool_call_missing_metadata"
+
+    read_write_class = str(tool.get("read_write_class") or "").strip().casefold()
+    if read_write_class and read_write_class != _READ_ONLY_CLASS:
+        return "tool_call_requires_sam_review"
+    if read_write_class in _DANGEROUS_TOOL_CLASSES:
+        return "tool_call_requires_sam_review"
+
+    if tool.get("available") is False:
+        return "tool_call_unavailable_needs_review"
+    status = str(tool.get("status") or "").strip().casefold()
+    if tool.get("available") is not True and status in _UNAVAILABLE_TOOL_STATUSES:
+        return "tool_call_unavailable_needs_review"
+    return None
+
+
+def tool_call_is_review_gated(tool: Mapping[str, Any] | None, question: str = "") -> bool:
+    """Boolean wrapper for callers/tests that only need the gate verdict."""
+    return tool_review_reason(tool, question) is not None

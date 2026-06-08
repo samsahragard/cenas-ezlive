@@ -115,10 +115,12 @@ def _establish_employee_session(emp) -> list[str]:
     (POST /employee/select-store), which sets it."""
     for k in ("user_id", "user_session_version",
               "driver_id", "driver_name", "driver_location",
-              "driver_session_version", "partner_auth_ok", "active_store"):
+              "driver_session_version", "partner_auth_ok", "active_store",
+              "employee_name"):
         session.pop(k, None)
     session.permanent = True
     session["employee_id"] = emp.id
+    session["employee_name"] = (getattr(emp, "full_name", None) or "").strip() or "Employee"
     session["employee_session_version"] = emp.session_version  # stale-session gate (guardrail #4)
     session["auth_ok"] = True   # passes auth.py:_gate; does NOT grant partner.
     # UNIFY login-fold (Project 1, Sam #2261; seam ckai-locked #2295): a team member
@@ -211,7 +213,7 @@ def logout():
     AND the folded manager keys (user_id / user_session_version) the UNIFY login-fold
     sets for a LINKED team member - else a linked manager logging out of the employee
     app would keep their management session. Other principals were cleared on login."""
-    for k in ("employee_id", "employee_session_version", "auth_ok",
+    for k in ("employee_id", "employee_name", "employee_session_version", "auth_ok",
               "active_store", "user_id", "user_session_version"):
         session.pop(k, None)
     return jsonify({"ok": True}), 200
@@ -297,7 +299,7 @@ def dashboard_page():
         emp = db.query(Employee).filter(Employee.id == emp_id).first()
         if emp is None:
             # Stale/cleared employee — drop the session keys + bounce to login.
-            for k in ("employee_id", "employee_session_version", "auth_ok"):
+            for k in ("employee_id", "employee_name", "employee_session_version", "auth_ok"):
                 session.pop(k, None)
             return redirect("/employee/login")
 
@@ -1127,6 +1129,6 @@ def install(app):
             db.close()
         sv = session.get("employee_session_version")
         if emp is None or not emp.active or (sv is not None and sv != emp.session_version):
-            for k in ("employee_id", "employee_session_version", "auth_ok"):
+            for k in ("employee_id", "employee_name", "employee_session_version", "auth_ok"):
                 session.pop(k, None)
         return None

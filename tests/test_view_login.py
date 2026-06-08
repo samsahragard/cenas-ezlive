@@ -64,6 +64,7 @@ def test_correct_code_opens_that_employee(app_emp):
     assert r.get_json()["ok"] is True
     with c.session_transaction() as s:
         assert s.get("employee_id") == eid
+        assert s.get("employee_name") == "Test Emp"
         assert s.get("auth_ok") is True
         # never a partner/owner session via the view-login
         assert s.get("partner_auth_ok") is None
@@ -145,6 +146,7 @@ def test_linked_employee_opens_pure_employee_session(app_linked_emp):
     assert r.get_json()["next"] == "/employee/dashboard"
     with c.session_transaction() as s:
         assert s.get("employee_id") == eid
+        assert s.get("employee_name") == "Linked Emp"
         assert s.get("user_id") is None
         assert s.get("user_session_version") is None
         assert s.get("partner_auth_ok") is None

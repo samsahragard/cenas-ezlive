@@ -151,6 +151,30 @@ def test_tool_catalog_activates_approved_tools_for_partner_level():
     assert sum(1 for tool in tools.values() if tool["available"]) < len(PARTNER_TOOL_IDS)
 
 
+def test_assistant_context_resolves_employee_session_name(db_session, monkeypatch):
+    test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr(ar, "SessionLocal", test_session_factory)
+    employee = Employee(full_name="Jolie Jasso", active=True, session_version=1)
+    db_session.add(employee)
+    db_session.commit()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["employee_id"] = employee.id
+        sess["employee_session_version"] = employee.session_version
+        sess["auth_ok"] = True
+
+    response = client.get("/assistant/context")
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["principal"]["kind"] == "employee"
+    assert data["principal"]["display_name"] == "Jolie Jasso"
+
+
 def test_partner_catalog_only_tools_do_not_activate_for_staff():
     ctx = {
         "kind": "staff",

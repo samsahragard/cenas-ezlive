@@ -392,6 +392,22 @@ def _has_partner_tool_access(ctx: dict[str, Any]) -> bool:
     )
 
 
+def _employee_display_name(employee_id: Any) -> str | None:
+    try:
+        emp_id = int(employee_id)
+    except (TypeError, ValueError):
+        return None
+    if SessionLocal is None:
+        return None
+    db = SessionLocal()
+    try:
+        employee = db.get(Employee, emp_id)
+        name = (getattr(employee, "full_name", None) or "").strip() if employee else ""
+        return name or None
+    finally:
+        db.close()
+
+
 def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
     session_type = ctx.get("kind")
     catalog: list[dict[str, Any]] = []
@@ -448,8 +464,12 @@ def _principal_context() -> dict[str, Any]:
     elif session.get("employee_id") and not user:
         role = "employee"
         kind = "employee"
-        display_name = session.get("employee_name") or "Employee"
         principal_id = session.get("employee_id")
+        display_name = (
+            session.get("employee_name")
+            or _employee_display_name(principal_id)
+            or "Employee"
+        )
         stores = []
     elif user is not None:
         role = getattr(user, "permission_level", None) or "unknown"

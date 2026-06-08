@@ -378,59 +378,6 @@
     scroll-margin-top: 16px;
   }
 
-  .mdl-page .day-detail-header {
-    background: var(--ck-bg-card);
-    border: 0.5px solid var(--ck-border-active);
-    border-radius: var(--radius-md);
-    padding: 14px 16px;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .mdl-page .day-detail-date {
-    font-family: 'Instrument Serif', serif;
-    font-style: italic;
-    font-size: 22px;
-    color: var(--ck-cream);
-    line-height: 1;
-    flex: 1;
-  }
-
-  .mdl-page .day-detail-date .day-prefix {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-style: normal;
-    font-weight: 700;
-    color: var(--ck-cream-faint);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-right: 6px;
-  }
-
-  .mdl-page .today-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-gold-bright);
-    background: rgba(228, 179, 64, 0.2);
-    padding: 3px 8px;
-    border-radius: 4px;
-    letter-spacing: 0.1em;
-  }
-
-  .mdl-page .past-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--ck-cream-dim);
-    background: rgba(0, 0, 0, 0.3);
-    padding: 3px 8px;
-    border-radius: 4px;
-    letter-spacing: 0.1em;
-  }
-
   /* Backdate notice when adding to past day */
   .mdl-page .backdate-notice {
     background: rgba(46, 163, 159, 0.08);
@@ -991,8 +938,6 @@
      days[0] = most-recent day -> "Today" card; days[1:] -> recent list. #}
   <div class="frame" id="dashboardView">
 
-    <h1>Manager <span class="accent">Log</span></h1>
-
     {% if days %}
     {% set today = days[0] %}
     <div class="today-wrap">
@@ -1050,21 +995,9 @@
 
     {# ===== INLINE DAY SECTIONS =====
        One section per day, rendered inline below the Recent list and
-       scrolled to via openDay(iso). No hide/show — always visible. #}
+       scrolled to via openDay(iso). Date context stays in the list/today card. #}
     {% for day in days %}
     <div class="day-section" id="day-{{ day.iso }}" data-iso="{{ day.iso }}">
-
-      <div class="day-detail-header">
-        <div class="day-detail-date">
-          <span class="day-prefix">{{ day.dow|upper }}</span>
-          <span>{{ day.label }}</span>
-        </div>
-        {% if day.is_today %}
-        <span class="today-tag">TODAY</span>
-        {% else %}
-        <span class="past-tag">PAST DAY</span>
-        {% endif %}
-      </div>
 
       {# Backdate notice for past days #}
       {% if not day.is_today %}

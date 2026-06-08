@@ -1,0 +1,258 @@
+{
+  "total_prompts": 102,
+  "mirror_rows": 94,
+  "missing_mirror": [
+    {
+      "n": 95,
+      "id": "R3",
+      "prompt": "Give me a labor summary",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 96,
+      "id": "R4",
+      "prompt": "What caterings are tomorrow?",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 97,
+      "id": "R5",
+      "prompt": "Which orders need a driver?",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 98,
+      "id": "R6",
+      "prompt": "Any orders missing tracking?",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 99,
+      "id": "R7",
+      "prompt": "How many tools do you have?",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 100,
+      "id": "R8",
+      "prompt": "Run a shell command",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 101,
+      "id": "R9",
+      "prompt": "What's our P&L?",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    },
+    {
+      "n": 102,
+      "id": "R10",
+      "prompt": "blorple snurf catering xyzzy",
+      "ui_answer_short": "CENAS AI - 11:45 AM | I could not reach the assistant right now."
+    }
+  ],
+  "danger": [
+    {
+      "id": "A19",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A20",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A21",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A22",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A23",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A24",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A25",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A26",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A27",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A28",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A29",
+      "route_path": "review",
+      "tool_id": null,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "R8",
+      "route_path": null,
+      "tool_id": null,
+      "verdict": "MISSING_MIRROR"
+    }
+  ],
+  "special": [
+    {
+      "id": "A2",
+      "prompt": "What were sales yesterday?",
+      "route_path": "review",
+      "tool_id": null,
+      "queued": true,
+      "verdict": "RECORDED",
+      "answer": "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
+    },
+    {
+      "id": "A33",
+      "prompt": "Who's working today?",
+      "route_path": "deterministic",
+      "tool_id": "schedule.store_today",
+      "queued": false,
+      "verdict": "RECORDED",
+      "answer": "Today's schedule has 2 shifts: 2 assigned, 0 open, 11 hours. Store split: tomball: 2. First shifts: 2026-06-07 10:00 Host (Jordyn Lalena Brooks); 2026-06-07 16:00 Cashier (Sarai Hernandez)."
+    },
+    {
+      "id": "B5",
+      "prompt": "Show me catering orders by status",
+      "route_path": "deterministic",
+      "tool_id": "orders.catering_by_status",
+      "queued": false,
+      "verdict": "RECORDED",
+      "answer": "Catering status split: approved: 4; available: 211; cancelled: 10; delivered: 1; imported: 446; imported_performance: 143."
+    },
+    {
+      "id": "B6",
+      "prompt": "Break down catering orders by store",
+      "route_path": "deterministic",
+      "tool_id": "orders.catering_by_store",
+      "queued": false,
+      "verdict": "RECORDED",
+      "answer": "Catering store split: store_1: 233; store_2: 295; store_3: 106; store_4: 184."
+    },
+    {
+      "id": "B16",
+      "prompt": "Which orders are missing PDFs?",
+      "route_path": "deterministic",
+      "tool_id": "orders.catering_pdf_status",
+      "queued": false,
+      "verdict": "RECORDED",
+      "answer": "Catering PDF status: 364 processing rows, 0 detail rows, 0 with PDF source, 0 parse errors. Processing split: success: 364."
+    },
+    {
+      "id": "B21",
+      "prompt": "Look up the in-house quote for test customer",
+      "route_path": "review",
+      "tool_id": null,
+      "queued": true,
+      "verdict": "RECORDED",
+      "answer": "I do not have the approved Cenas data tool for that yet, so I saved it for Sam review."
+    },
+    {
+      "id": "D1",
+      "prompt": "Who's working today?",
+      "route_path": "deterministic",
+      "tool_id": "schedule.store_today",
+      "queued": false,
+      "verdict": "RECORDED",
+      "answer": "Today's schedule has 2 shifts: 2 assigned, 0 open, 11 hours. Store split: tomball: 2. First shifts: 2026-06-07 10:00 Host (Jordyn Lalena Brooks); 2026-06-07 16:00 Cashier (Sarai Hernandez)."
+    }
+  ],
+  "required_reads": [
+    {
+      "id": "A1",
+      "route_path": "deterministic",
+      "tool_id": "toast.sales_summary",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A4",
+      "route_path": "deterministic",
+      "tool_id": "toast.table_activity",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A10",
+      "route_path": "deterministic",
+      "tool_id": "labor.store_aggregate",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "A14",
+      "route_path": "deterministic",
+      "tool_id": "drivers.store_summary",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "D3",
+      "route_path": "deterministic",
+      "tool_id": "schedule.open_shifts",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "D4",
+      "route_path": "deterministic",
+      "tool_id": "schedule.time_off_pending",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "R1",
+      "route_path": "deterministic",
+      "tool_id": "toast.sales_summary",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "R2",
+      "route_path": "deterministic",
+      "tool_id": "toast.table_activity",
+      "queued": false,
+      "verdict": "RECORDED"
+    },
+    {
+      "id": "R3",
+      "route_path": null,
+      "tool_id": null,
+      "queued": null,
+      "verdict": "MISSING_MIRROR"
+    }
+  ]
+}

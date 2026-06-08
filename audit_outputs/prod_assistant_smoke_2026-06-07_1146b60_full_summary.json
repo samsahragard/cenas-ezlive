@@ -1,0 +1,17 @@
+{
+  "total": 102,
+  "mirror_missing": 0,
+  "non_200": [],
+  "deterministic": 57,
+  "review_null": 45,
+  "other_route": [],
+  "retry_captured": [
+    "B8",
+    "B9"
+  ],
+  "files": [
+    "C:/Users/sam/toast-webhook-deploy/audit_outputs/prod_assistant_smoke_2026-06-07_1146b60_full.json",
+    "C:/Users/sam/toast-webhook-deploy/audit_outputs/prod_assistant_smoke_2026-06-07_1146b60_full.csv",
+    "C:/Users/sam/toast-webhook-deploy/audit_outputs/prod_assistant_smoke_2026-06-07_1146b60_full.md"
+  ]
+}

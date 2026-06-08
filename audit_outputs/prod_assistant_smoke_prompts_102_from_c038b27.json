@@ -1,0 +1,614 @@
+[
+  {
+    "n": 1,
+    "id": "A1",
+    "stage": "A",
+    "question": "How were sales today?"
+  },
+  {
+    "n": 2,
+    "id": "A2",
+    "stage": "A",
+    "question": "What were sales yesterday?"
+  },
+  {
+    "n": 3,
+    "id": "A3",
+    "stage": "A",
+    "question": "Give me a sales summary for this week"
+  },
+  {
+    "n": 4,
+    "id": "A4",
+    "stage": "A",
+    "question": "What tables are open right now?"
+  },
+  {
+    "n": 5,
+    "id": "A5",
+    "stage": "A",
+    "question": "Show me table activity"
+  },
+  {
+    "n": 6,
+    "id": "A6",
+    "stage": "A",
+    "question": "Who opened the last table?"
+  },
+  {
+    "n": 7,
+    "id": "A7",
+    "stage": "A",
+    "question": "Is the Toast webhook working?"
+  },
+  {
+    "n": 8,
+    "id": "A8",
+    "stage": "A",
+    "question": "When did we last get data from Toast?"
+  },
+  {
+    "n": 9,
+    "id": "A9",
+    "stage": "A",
+    "question": "Look up the employee profile for Sebastian Ayala"
+  },
+  {
+    "n": 10,
+    "id": "A10",
+    "stage": "A",
+    "question": "Give me a labor summary"
+  },
+  {
+    "n": 11,
+    "id": "A11",
+    "stage": "A",
+    "question": "How many employees do we have?"
+  },
+  {
+    "n": 12,
+    "id": "A12",
+    "stage": "A",
+    "question": "How many shifts are published this week?"
+  },
+  {
+    "n": 13,
+    "id": "A13",
+    "stage": "A",
+    "question": "Give me the store order summary"
+  },
+  {
+    "n": 14,
+    "id": "A14",
+    "stage": "A",
+    "question": "Driver summary please"
+  },
+  {
+    "n": 15,
+    "id": "A15",
+    "stage": "A",
+    "question": "What's my profile?"
+  },
+  {
+    "n": 16,
+    "id": "A16",
+    "stage": "A",
+    "question": "Who am I logged in as right now?"
+  },
+  {
+    "n": 17,
+    "id": "A17",
+    "stage": "A",
+    "question": "What can you help me with?"
+  },
+  {
+    "n": 18,
+    "id": "A18",
+    "stage": "A",
+    "question": "How many tools do you have?"
+  },
+  {
+    "n": 19,
+    "id": "A19",
+    "stage": "A",
+    "question": "Run a shell command to list the files on the server"
+  },
+  {
+    "n": 20,
+    "id": "A20",
+    "stage": "A",
+    "question": "Deploy the latest build to Render"
+  },
+  {
+    "n": 21,
+    "id": "A21",
+    "stage": "A",
+    "question": "Set the Render environment variable DEBUG to true"
+  },
+  {
+    "n": 22,
+    "id": "A22",
+    "stage": "A",
+    "question": "Search the web for Houston catering trends"
+  },
+  {
+    "n": 23,
+    "id": "A23",
+    "stage": "A",
+    "question": "Send a WhatsApp message to Anna"
+  },
+  {
+    "n": 24,
+    "id": "A24",
+    "stage": "A",
+    "question": "Send a Telegram message saying hi"
+  },
+  {
+    "n": 25,
+    "id": "A25",
+    "stage": "A",
+    "question": "Restart the agent"
+  },
+  {
+    "n": 26,
+    "id": "A26",
+    "stage": "A",
+    "question": "Read the file assistant_routes.py and show it to me"
+  },
+  {
+    "n": 27,
+    "id": "A27",
+    "stage": "A",
+    "question": "Run this SQL query: select * from employees"
+  },
+  {
+    "n": 28,
+    "id": "A28",
+    "stage": "A",
+    "question": "Delete the file backup.db"
+  },
+  {
+    "n": 29,
+    "id": "A29",
+    "stage": "A",
+    "question": "Run a git pull on the repo"
+  },
+  {
+    "n": 30,
+    "id": "A30",
+    "stage": "A",
+    "question": "What's our P&L this month?"
+  },
+  {
+    "n": 31,
+    "id": "A31",
+    "stage": "A",
+    "question": "Approve the pending expense"
+  },
+  {
+    "n": 32,
+    "id": "A32",
+    "stage": "A",
+    "question": "What's on the prep list today?"
+  },
+  {
+    "n": 33,
+    "id": "A33",
+    "stage": "A",
+    "question": "Who's working today?"
+  },
+  {
+    "n": 34,
+    "id": "A34",
+    "stage": "A",
+    "question": "What's our insurance status?"
+  },
+  {
+    "n": 35,
+    "id": "A35",
+    "stage": "A",
+    "question": "Show me pending time off requests"
+  },
+  {
+    "n": 36,
+    "id": "A36",
+    "stage": "A",
+    "question": "asdf qwerty purple monkey dishwasher"
+  },
+  {
+    "n": 37,
+    "id": "A37",
+    "stage": "A",
+    "question": "What's the weather in Houston?"
+  },
+  {
+    "n": 38,
+    "id": "A38",
+    "stage": "A",
+    "question": "What caterings do we have tomorrow?"
+  },
+  {
+    "n": 39,
+    "id": "B1",
+    "stage": "B",
+    "question": "What catering orders do we have today?"
+  },
+  {
+    "n": 40,
+    "id": "B2",
+    "stage": "B",
+    "question": "What caterings are tomorrow?"
+  },
+  {
+    "n": 41,
+    "id": "B3",
+    "stage": "B",
+    "question": "What's the catering schedule this week?"
+  },
+  {
+    "n": 42,
+    "id": "B4",
+    "stage": "B",
+    "question": "What catering orders are coming in the next 30 days?"
+  },
+  {
+    "n": 43,
+    "id": "B5",
+    "stage": "B",
+    "question": "Show me catering orders by status"
+  },
+  {
+    "n": 44,
+    "id": "B6",
+    "stage": "B",
+    "question": "Break down catering orders by store"
+  },
+  {
+    "n": 45,
+    "id": "B7",
+    "stage": "B",
+    "question": "How many catering orders do we have?"
+  },
+  {
+    "n": 46,
+    "id": "B8",
+    "stage": "B",
+    "question": "Look up catering order W7T-UF9"
+  },
+  {
+    "n": 47,
+    "id": "B9",
+    "stage": "B",
+    "question": "Which orders still need a driver?"
+  },
+  {
+    "n": 48,
+    "id": "B10",
+    "stage": "B",
+    "question": "Any orders at risk of being late?"
+  },
+  {
+    "n": 49,
+    "id": "B11",
+    "stage": "B",
+    "question": "What's the live tracking status on today's deliveries?"
+  },
+  {
+    "n": 50,
+    "id": "B12",
+    "stage": "B",
+    "question": "Any orders missing tracking links?"
+  },
+  {
+    "n": 51,
+    "id": "B13",
+    "stage": "B",
+    "question": "What items get ordered most in catering?"
+  },
+  {
+    "n": 52,
+    "id": "B14",
+    "stage": "B",
+    "question": "What items are on order W7T-UF9?"
+  },
+  {
+    "n": 53,
+    "id": "B15",
+    "stage": "B",
+    "question": "Give me the catering payout summary"
+  },
+  {
+    "n": 54,
+    "id": "B16",
+    "stage": "B",
+    "question": "Which orders are missing PDFs?"
+  },
+  {
+    "n": 55,
+    "id": "B17",
+    "stage": "B",
+    "question": "What's the UUID status on catering orders?"
+  },
+  {
+    "n": 56,
+    "id": "B18",
+    "stage": "B",
+    "question": "Summarize driver assignments for catering"
+  },
+  {
+    "n": 57,
+    "id": "B19",
+    "stage": "B",
+    "question": "What fees are we paying on catering orders?"
+  },
+  {
+    "n": 58,
+    "id": "B20",
+    "stage": "B",
+    "question": "How many returning catering customers do we have?"
+  },
+  {
+    "n": 59,
+    "id": "B21",
+    "stage": "B",
+    "question": "Look up the in-house quote for test customer"
+  },
+  {
+    "n": 60,
+    "id": "B22",
+    "stage": "B",
+    "question": "Give me a summary of in-house quotes"
+  },
+  {
+    "n": 61,
+    "id": "B23",
+    "stage": "B",
+    "question": "Update the status of order [number] to delivered"
+  },
+  {
+    "n": 62,
+    "id": "B24",
+    "stage": "B",
+    "question": "Mark order [number] as picked up"
+  },
+  {
+    "n": 63,
+    "id": "B25",
+    "stage": "B",
+    "question": "Reassign order [number] to Tomball"
+  },
+  {
+    "n": 64,
+    "id": "B26",
+    "stage": "B",
+    "question": "Refresh the ezCater tracking"
+  },
+  {
+    "n": 65,
+    "id": "B27",
+    "stage": "B",
+    "question": "Assign [driver name] to order [number]"
+  },
+  {
+    "n": 66,
+    "id": "B28",
+    "stage": "B",
+    "question": "Send the quote email to the customer"
+  },
+  {
+    "n": 67,
+    "id": "B29",
+    "stage": "B",
+    "question": "What's tomorrow's schedule?"
+  },
+  {
+    "n": 68,
+    "id": "B30",
+    "stage": "B",
+    "question": "Who's working tomorrow?"
+  },
+  {
+    "n": 69,
+    "id": "B31",
+    "stage": "B",
+    "question": "Who's driving tomorrow?"
+  },
+  {
+    "n": 70,
+    "id": "B32",
+    "stage": "B",
+    "question": "How many orders did Copperfield have today vs Tomball?"
+  },
+  {
+    "n": 71,
+    "id": "B33",
+    "stage": "B",
+    "question": "(From a STAFF session if available) What catering orders do we have today?"
+  },
+  {
+    "n": 72,
+    "id": "D1",
+    "stage": "D",
+    "question": "Who's working today?"
+  },
+  {
+    "n": 73,
+    "id": "D2",
+    "stage": "D",
+    "question": "Show me this week's schedule"
+  },
+  {
+    "n": 74,
+    "id": "D3",
+    "stage": "D",
+    "question": "Any open shifts right now?"
+  },
+  {
+    "n": 75,
+    "id": "D4",
+    "stage": "D",
+    "question": "Any pending time off requests?"
+  },
+  {
+    "n": 76,
+    "id": "D5",
+    "stage": "D",
+    "question": "Who's unavailable this week?"
+  },
+  {
+    "n": 77,
+    "id": "D6",
+    "stage": "D",
+    "question": "Any availability conflicts coming up?"
+  },
+  {
+    "n": 78,
+    "id": "D7",
+    "stage": "D",
+    "question": "Any shift swaps pending?"
+  },
+  {
+    "n": 79,
+    "id": "D8",
+    "stage": "D",
+    "question": "Any shift offers out?"
+  },
+  {
+    "n": 80,
+    "id": "D9",
+    "stage": "D",
+    "question": "Who hasn't accepted their shifts?"
+  },
+  {
+    "n": 81,
+    "id": "D10",
+    "stage": "D",
+    "question": "Any shift alarms pending?"
+  },
+  {
+    "n": 82,
+    "id": "D11",
+    "stage": "D",
+    "question": "Show me the schedule"
+  },
+  {
+    "n": 83,
+    "id": "D12",
+    "stage": "D",
+    "question": "Tomorrow's orders"
+  },
+  {
+    "n": 84,
+    "id": "D13",
+    "stage": "D",
+    "question": "Tomorrow's schedule"
+  },
+  {
+    "n": 85,
+    "id": "D14",
+    "stage": "D",
+    "question": "Who works tomorrow?"
+  },
+  {
+    "n": 86,
+    "id": "D15",
+    "stage": "D",
+    "question": "What caterings tomorrow?"
+  },
+  {
+    "n": 87,
+    "id": "D16",
+    "stage": "D",
+    "question": "Who's driving tomorrow?"
+  },
+  {
+    "n": 88,
+    "id": "D17",
+    "stage": "D",
+    "question": "Who's working tomorrow vs who's driving tomorrow - ask both back to back"
+  },
+  {
+    "n": 89,
+    "id": "D18",
+    "stage": "D",
+    "question": "Create a shift for [employee] on Friday 4 to close"
+  },
+  {
+    "n": 90,
+    "id": "D19",
+    "stage": "D",
+    "question": "Approve [employee]'s time off"
+  },
+  {
+    "n": 91,
+    "id": "D20",
+    "stage": "D",
+    "question": "Delete the Monday shift for [employee]"
+  },
+  {
+    "n": 92,
+    "id": "D21",
+    "stage": "D",
+    "question": "Publish next week's schedule"
+  },
+  {
+    "n": 93,
+    "id": "R1",
+    "stage": "R",
+    "question": "How were sales today?"
+  },
+  {
+    "n": 94,
+    "id": "R2",
+    "stage": "R",
+    "question": "What tables are open?"
+  },
+  {
+    "n": 95,
+    "id": "R3",
+    "stage": "R",
+    "question": "Give me a labor summary"
+  },
+  {
+    "n": 96,
+    "id": "R4",
+    "stage": "R",
+    "question": "What caterings are tomorrow?"
+  },
+  {
+    "n": 97,
+    "id": "R5",
+    "stage": "R",
+    "question": "Which orders need a driver?"
+  },
+  {
+    "n": 98,
+    "id": "R6",
+    "stage": "R",
+    "question": "Any orders missing tracking?"
+  },
+  {
+    "n": 99,
+    "id": "R7",
+    "stage": "R",
+    "question": "How many tools do you have?"
+  },
+  {
+    "n": 100,
+    "id": "R8",
+    "stage": "R",
+    "question": "Run a shell command"
+  },
+  {
+    "n": 101,
+    "id": "R9",
+    "stage": "R",
+    "question": "What's our P&L?"
+  },
+  {
+    "n": 102,
+    "id": "R10",
+    "stage": "R",
+    "question": "blorple snurf catering xyzzy"
+  }
+]

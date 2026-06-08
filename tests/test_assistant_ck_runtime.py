@@ -651,7 +651,7 @@ def test_runtime_answers_operator_catering_count_with_approved_tool(tmp_path, mo
         assert data["queued"] is False
         assert data["storage"] == "operational_tool"
         assert data["tool_id"] == "orders.store_summary"
-        assert "3 caterings today" in data["answer"]
+        assert "3 catering orders today" in data["answer"]
         assert "2 still need driver attention" in data["answer"]
     finally:
         httpd.shutdown()
@@ -1800,7 +1800,7 @@ def test_runtime_answers_operator_catering_followup_with_previous_question(tmp_p
         assert data["storage"] == "operational_tool"
         assert data["tool_id"] == "orders.store_summary"
         assert "earlier this morning (2026-06-05)" in data["answer"]
-        assert "2 caterings" in data["answer"]
+        assert "2 catering orders" in data["answer"]
         assert "copperfield: 1" in data["answer"]
     finally:
         httpd.shutdown()
@@ -1883,6 +1883,24 @@ def test_runtime_answers_operator_driver_summary_with_approved_tool(tmp_path, mo
         thread.join(timeout=3)
         os.environ.pop("ASSISTANT_REVIEW_DB", None)
         os.environ.pop("ASSISTANT_RUNTIME_TOKEN", None)
+
+
+def test_runtime_driver_summary_uses_singular_verbs_for_one_driver():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._drivers_summary_answer(
+        {
+            "total_drivers": 1,
+            "active_drivers": 1,
+            "drivers_on_shift": 1,
+            "drivers_on_active_orders": 0,
+        }
+    )
+
+    assert "There is 1 driver in the current view" in answer
+    assert "1 driver is active" in answer
+    assert "1 driver is on shift" in answer
+    assert "0 drivers are tied to active orders" in answer
 
 
 def test_runtime_owner_tool_matcher_covers_live_sweep_phrases():
@@ -2091,7 +2109,7 @@ def test_runtime_answers_wave1_catering_today_with_explicit_route(monkeypatch):
     assert data is not None
     assert data["queued"] is False
     assert data["tool_id"] == "orders.catering_today"
-    assert "2 caterings" in data["answer"]
+    assert "2 catering orders" in data["answer"]
     assert "TO-1" in data["answer"]
 
 
@@ -2213,6 +2231,10 @@ def test_runtime_wave1_schedule_routes_are_verifiable():
     assert route_kind == "store_today"
     assert route_args["tool"] == "schedule.store_today"
     assert route_args["window"] == "today"
+    tomorrow_kind, tomorrow_args = runtime._route_args("schedule.store_today", "Tomorrow's schedule")
+    assert tomorrow_kind == "store_today"
+    assert tomorrow_args["tool"] == "schedule.store_today"
+    assert tomorrow_args["window"] == "tomorrow"
     assert runtime._tool_answer_verified(
         "schedule.store_today",
         payload,
@@ -2236,9 +2258,31 @@ def test_runtime_schedule_today_labels_local_visible_allowed_rows():
         "schedule.store_today",
     )
 
-    assert "Local-date shifts for 2026-06-07 from allowed schedule stores" in answer
+    assert "Today's schedule (today, 2026-06-07) from allowed schedule stores" in answer
     assert "2 visible schedule shifts" in answer
     assert "Store split for allowed schedule stores: tomball: 2" in answer
+
+
+def test_runtime_schedule_tomorrow_labels_scope_word_and_date():
+    from scripts import assistant_ck_runtime as runtime
+
+    answer = runtime._schedule_read_answer(
+        {
+            "ok": True,
+            "date": "2026-06-08",
+            "window_label": "tomorrow_local_date_visible_allowed_schedule_stores",
+            "shift_count": 1,
+            "assigned_shift_count": 1,
+            "open_shift_count": 0,
+            "total_hours": 5,
+            "by_store": {"tomball": 1},
+        },
+        "schedule.store_today",
+        "Who's working tomorrow?",
+    )
+
+    assert "Tomorrow's schedule (tomorrow, 2026-06-08)" in answer
+    assert "Store split for allowed schedule stores: tomball: 1" in answer
 
 
 def test_runtime_schedule_week_labels_window_and_draft_published_open_scope():
@@ -2385,8 +2429,8 @@ def test_runtime_tool_discovery_reports_partner_catalog(monkeypatch):
     assert data["storage"] == "tool_catalog"
     assert data["tool_id"] == "assistant.tool_discovery"
     assert "2 active Cenas AI catalog tools" in data["answer"]
-    assert "1 are wired" in data["answer"]
-    assert "1 are partner catalog entries" in data["answer"]
+    assert "1 is wired" in data["answer"]
+    assert "1 partner catalog entry is waiting" in data["answer"]
 
 
 def test_runtime_answers_operator_labor_summary_with_approved_tool(tmp_path, monkeypatch):

@@ -266,7 +266,7 @@
     "expected_tool_id": "schedule.store_week",
     "assertions": [
       {"type": "mirror_present"},
-      {"type": "answer_states_scope_label", "must_include": ["This week's schedule", "week"]},
+      {"type": "answer_states_scope_label", "must_include": ["Current week schedule", "week"]},
       {"type": "count_reconciles_or_scope_explains", "compare_to": "schedule.open_shifts"}
     ]
   },

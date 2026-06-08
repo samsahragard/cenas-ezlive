@@ -344,9 +344,13 @@ def _tool_discovery_answer(principal: dict, tools: list[dict]) -> str:
         if tool.get("tool_id")
     ][:24]
     sample = ", ".join(sample_ids)
-    answer = f"This {role} session has {total} active Cenas AI catalog tools."
+    answer = f"This {role} session has {total} active Cenas AI catalog {_plural(total, 'tool')}."
     if implemented or catalog_only:
-        answer += f" {implemented} are wired to approved executable paths now; {catalog_only} are partner catalog entries waiting on implementation."
+        answer += (
+            f" {implemented} {_count_verb(implemented, 'is', 'are')} wired to approved executable paths now; "
+            f"{catalog_only} partner catalog {_plural(catalog_only, 'entry', 'entries')} "
+            f"{_count_verb(catalog_only, 'is', 'are')} waiting on implementation."
+        )
     if sample:
         answer += f" First tools: {sample}."
     return answer
@@ -727,17 +731,23 @@ def _toast_webhook_activity_answer(summary: dict, question: str = "") -> str:
     scope = summary.get("scope") or {}
     store = scope.get("store_key") or "all stores"
     business_date = scope.get("business_date") or "today"
+    event_count = int(counts.get("events") or 0)
+    order_count = int(counts.get("orders") or 0)
+    check_count = int(counts.get("checks") or 0)
+    selection_count = int(counts.get("selections") or 0)
+    payment_count = int(counts.get("payments") or 0)
+    employee_fact_count = int(counts.get("employee_facts") or 0)
     answer = (
         "The Toast webhook database is connected. "
-        f"It currently has {int(counts.get('events') or 0):,} webhook events, "
-        f"{int(counts.get('orders') or 0):,} current orders, "
-        f"{int(counts.get('checks') or 0):,} checks, "
-        f"{int(counts.get('selections') or 0):,} selections/items, "
-        f"{int(counts.get('payments') or 0):,} payments, and "
-        f"{int(counts.get('employee_facts') or 0):,} employee Toast facts."
+        f"It currently has {event_count:,} webhook {_plural(event_count, 'event')}, "
+        f"{order_count:,} current {_plural(order_count, 'order')}, "
+        f"{check_count:,} {_plural(check_count, 'check')}, "
+        f"{selection_count:,} {_plural(selection_count, 'selection')}/items, "
+        f"{payment_count:,} {_plural(payment_count, 'payment')}, and "
+        f"{employee_fact_count:,} employee Toast {_plural(employee_fact_count, 'fact')}."
     )
     recent = int(summary.get("recent_last_hour_events") or 0)
-    answer += f" It has accepted {recent:,} Toast webhook events in the last hour."
+    answer += f" It has accepted {recent:,} Toast webhook {_plural(recent, 'event')} in the last hour."
     fact_types = summary.get("fact_types_for_scope") or []
     if fact_types:
         answer += f" For {store} on {business_date}, employee fact types are: {_count_list(fact_types)}."
@@ -751,8 +761,10 @@ def _toast_webhook_activity_answer(summary: dict, question: str = "") -> str:
             parts.append(f"table {table}")
         if server:
             parts.append(f"server {server}")
-        parts.append(f"{int(latest.get('selection_count') or 0)} items")
-        parts.append(f"{int(latest.get('payment_count') or 0)} payments")
+        latest_items = int(latest.get("selection_count") or 0)
+        latest_payments = int(latest.get("payment_count") or 0)
+        parts.append(f"{latest_items} {_plural(latest_items, 'item')}")
+        parts.append(f"{latest_payments} {_plural(latest_payments, 'payment')}")
         when = latest.get("modified_date") or latest.get("opened_date") or latest.get("closed_date")
         answer += " Latest current order snapshot: " + ", ".join(parts)
         if when:
@@ -794,16 +806,23 @@ def _toast_employee_profiles_answer(summary: dict, question: str = "") -> str:
         return "I cannot read the Toast employee profile databases right now."
     if summary.get("scope") == "overview":
         central = summary.get("central_counts") or {}
+        profile_db_count = int(summary.get("profile_db_count") or 0)
+        employee_profiles = int(central.get("employee_profiles") or 0)
+        identity_links = int(central.get("identity_links") or 0)
+        employee_facts = int(central.get("employee_facts") or 0)
         answer = (
             "The Toast employee profile databases are connected. "
-            f"There are {int(summary.get('profile_db_count') or 0)} per-employee SQLite files, "
-            f"{int(central.get('employee_profiles') or 0)} central employee profiles, "
-            f"{int(central.get('identity_links') or 0)} Toast identity links, and "
-            f"{int(central.get('employee_facts') or 0):,} employee Toast facts."
+            f"{_there_is_are(profile_db_count)} {profile_db_count} per-employee SQLite {_plural(profile_db_count, 'file')}, "
+            f"{employee_profiles} central employee {_plural(employee_profiles, 'profile')}, "
+            f"{identity_links} Toast identity {_plural(identity_links, 'link')}, and "
+            f"{employee_facts:,} employee Toast {_plural(employee_facts, 'fact')}."
         )
         unmatched = int(central.get("unmatched_employee_refs") or 0)
         if unmatched:
-            answer += f" There are {unmatched} unmatched Toast employee references waiting on mapping."
+            answer += (
+                f" {_there_is_are(unmatched)} {unmatched} unmatched Toast employee "
+                f"{_plural(unmatched, 'reference')} waiting on mapping."
+            )
         top = summary.get("top_employees_by_toast_facts") or []
         if top:
             bits = [
@@ -822,12 +841,17 @@ def _toast_employee_profiles_answer(summary: dict, question: str = "") -> str:
     if employee_id is not None:
         answer += f" (employee {employee_id})"
     if personal.get("exists"):
+        toast_facts = int(personal.get("toast_fact_count") or 0)
+        related_orders = int(personal.get("related_orders") or 0)
+        related_checks = int(personal.get("related_checks") or 0)
+        related_selections = int(personal.get("related_selections") or 0)
+        related_payments = int(personal.get("related_payments") or 0)
         answer += (
-            f" has a personal Toast profile DB with {int(personal.get('toast_fact_count') or 0):,} facts, "
-            f"{int(personal.get('related_orders') or 0):,} related orders, "
-            f"{int(personal.get('related_checks') or 0):,} checks, "
-            f"{int(personal.get('related_selections') or 0):,} selections/items, and "
-            f"{int(personal.get('related_payments') or 0):,} payments."
+            f" has a personal Toast profile DB with {toast_facts:,} {_plural(toast_facts, 'fact')}, "
+            f"{related_orders:,} related {_plural(related_orders, 'order')}, "
+            f"{related_checks:,} {_plural(related_checks, 'check')}, "
+            f"{related_selections:,} {_plural(related_selections, 'selection')}/items, and "
+            f"{related_payments:,} {_plural(related_payments, 'payment')}."
         )
         metadata = personal.get("metadata") or {}
         if metadata.get("generated_at"):
@@ -970,6 +994,14 @@ def _plural(count: int, singular: str, plural: str | None = None) -> str:
     return singular if count == 1 else (plural or singular + "s")
 
 
+def _count_verb(count: int, singular: str, plural: str) -> str:
+    return singular if count == 1 else plural
+
+
+def _there_is_are(count: int) -> str:
+    return _count_verb(count, "There is", "There are")
+
+
 def _requested_store(question: str) -> str | None:
     text = question.casefold()
     aliases = {
@@ -1052,10 +1084,10 @@ def _orders_summary_answer(summary: dict, question: str = "") -> str:
         if requested_store:
             answer = (
                 f"For {label}{date_suffix}, {requested_store} has "
-                f"{count} {_plural(count, 'catering')}."
+                f"{count} {_plural(count, 'catering order')}."
             )
         else:
-            answer = f"For {label}{date_suffix}, there are {count} {_plural(count, 'catering')}."
+            answer = f"For {label}{date_suffix}, {_there_is_are(count).casefold()} {count} {_plural(count, 'catering order')}."
         split = _store_split(store_counts)
         if split and not requested_store:
             answer += " Store split: " + split + "."
@@ -1076,17 +1108,17 @@ def _orders_summary_answer(summary: dict, question: str = "") -> str:
         ]
         answer = "Today catering orders by requested store: " + "; ".join(compare_bits) + "."
     elif requested_store:
-        answer = f"{requested_store} has {today_orders} {_plural(today_orders, 'catering')} today."
+        answer = f"{requested_store} has {today_orders} {_plural(today_orders, 'catering order')} today."
     else:
         answer = (
-            f"You have {today_orders} {_plural(today_orders, 'catering')} today"
+            f"You have {today_orders} {_plural(today_orders, 'catering order')} today"
             f" and {upcoming_orders} upcoming {_plural(upcoming_orders, 'order')} in the current view."
         )
     if needs_driver:
-        answer += f" {needs_driver} still {_plural(needs_driver, 'need', 'need')} driver attention."
+        answer += f" {needs_driver} still {_count_verb(needs_driver, 'needs', 'need')} driver attention."
     else:
         answer += " No orders currently need driver attention."
-    answer += f" {live_tracking} {_plural(live_tracking, 'order')} have tracking links"
+    answer += f" {live_tracking} {_plural(live_tracking, 'order')} {_count_verb(live_tracking, 'has', 'have')} tracking links"
     if active_tracking:
         answer += f", with {active_tracking} currently active"
     answer += "."
@@ -1128,7 +1160,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     }:
         count = int(payload.get("count") or 0)
         window = str(payload.get("window") or "requested window").replace("_", " ")
-        answer = f"There are {count} {_plural(count, 'catering')} in the {window} view."
+        answer = f"{_there_is_are(count)} {count} {_plural(count, 'catering order')} in the {window} view."
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
@@ -1157,7 +1189,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
 
     if tool_id == "orders.catering_needs_driver":
         count = int(payload.get("count") or 0)
-        answer = f"{count} {_plural(count, 'catering')} need driver attention."
+        answer = f"{count} {_plural(count, 'catering order')} {_count_verb(count, 'needs', 'need')} driver attention."
         ids = _order_id_list(payload.get("orders") or [])
         if ids:
             answer += " First visible orders: " + ids + "."
@@ -1166,7 +1198,10 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
     if tool_id == "orders.catering_live_tracking":
         count = int(payload.get("count") or 0)
         active = int(payload.get("active_count") or 0)
-        answer = f"{count} {_plural(count, 'catering')} have tracking links; {active} are currently active."
+        answer = (
+            f"{count} {_plural(count, 'catering order')} {_count_verb(count, 'has', 'have')} tracking links; "
+            f"{active} {_count_verb(active, 'is', 'are')} currently active."
+        )
         split = _dict_split(payload.get("by_status") or {})
         if split:
             answer += " Tracking status split: " + split + "."
@@ -1174,7 +1209,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
 
     if tool_id == "orders.catering_tracking_missing":
         count = int(payload.get("count") or 0)
-        answer = f"{count} active {_plural(count, 'catering')} are missing tracking links."
+        answer = f"{count} active {_plural(count, 'catering order')} {_count_verb(count, 'is', 'are')} missing tracking links."
         split = _dict_split(payload.get("by_store") or {})
         if split:
             answer += " Store split: " + split + "."
@@ -1190,7 +1225,7 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
 
     if tool_id == "orders.catering_late_risk":
         count = int(payload.get("count") or 0)
-        answer = f"{count} same-day {_plural(count, 'catering')} show late risk."
+        answer = f"{count} same-day {_plural(count, 'catering order')} {_count_verb(count, 'shows', 'show')} late risk."
         ids = _order_id_list(payload.get("orders") or [])
         if ids:
             answer += " First visible orders: " + ids + "."
@@ -1216,7 +1251,8 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
                 labels.append(f"{item.get('qty') or 1} x {item.get('label') or item.get('item_key') or 'item'}")
         order_id = order.get("external_order_id") or "the selected order"
         suffix = "; ".join(labels) if labels else "no safe item rows found"
-        return f"Order {order_id} has {int(payload.get('item_count') or 0)} item rows: {suffix}."
+        item_count = int(payload.get("item_count") or 0)
+        return f"Order {order_id} has {item_count} item {_plural(item_count, 'row')}: {suffix}."
 
     if tool_id == "orders.catering_item_mix":
         top_items = payload.get("top_items") if isinstance(payload.get("top_items"), list) else []
@@ -1257,7 +1293,8 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
 
     if tool_id == "orders.catering_driver_assignment_summary":
         split = _dict_split(payload.get("by_status") or {})
-        answer = f"Driver assignment jobs: {int(payload.get('job_count') or 0)} visible jobs."
+        job_count = int(payload.get("job_count") or 0)
+        answer = f"Driver assignment jobs: {job_count} visible {_plural(job_count, 'job')}."
         if split:
             answer += " Status split: " + split + "."
         return answer
@@ -1271,8 +1308,9 @@ def _orders_read_answer(payload: dict, tool_id: str, question: str = "") -> str:
 
     if tool_id == "orders.in_house_quotes_summary":
         split = _dict_split(payload.get("by_status") or {})
+        quote_count = int(payload.get("quote_count") or 0)
         answer = (
-            f"There are {int(payload.get('quote_count') or 0)} visible in-house catering quotes "
+            f"{_there_is_are(quote_count)} {quote_count} visible in-house catering {_plural(quote_count, 'quote')} "
             f"totaling {_money(payload.get('subtotal_total'))}."
         )
         if split:
@@ -1324,8 +1362,14 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
     if tool_id == "schedule.store_today":
         shifts = int(payload.get("shift_count") or 0)
         local_date = str(payload.get("date") or "today").strip()
+        window_label = str(payload.get("window_label") or "").casefold()
+        question_text = str(question or "").casefold()
+        day_scope = "tomorrow" if (
+            window_label.startswith("tomorrow_") or re.search(r"\btomorrow\b", question_text)
+        ) else "today"
+        day_label = "Tomorrow's schedule" if day_scope == "tomorrow" else "Today's schedule"
         answer = (
-            f"Local-date shifts for {local_date} from allowed schedule stores: "
+            f"{day_label} ({day_scope}, {local_date}) from allowed schedule stores: "
             f"{shifts} visible schedule {_plural(shifts, 'shift')}: "
             f"{int(payload.get('assigned_shift_count') or 0)} assigned, "
             f"{int(payload.get('open_shift_count') or 0)} open, "
@@ -1428,16 +1472,16 @@ def _schedule_read_answer(payload: dict, tool_id: str, question: str = "") -> st
 
     if tool_id == "schedule.time_off_pending":
         count = int(payload.get("pending_count") or 0)
-        return f"There are {count} pending time-off {_plural(count, 'request')} in the current schedule view."
+        return f"{_there_is_are(count)} {count} pending time-off {_plural(count, 'request')} in the current schedule view."
 
     if tool_id == "schedule.unavailability_blocks":
         count = int(payload.get("block_count") or 0)
-        return f"There are {count} upcoming schedule unavailability {_plural(count, 'block')} in the current view."
+        return f"{_there_is_are(count)} {count} upcoming schedule unavailability {_plural(count, 'block')} in the current view."
 
     if tool_id == "schedule.availability_conflicts":
         count = int(payload.get("conflict_count") or 0)
         split = _dict_split(payload.get("by_type") or {})
-        answer = f"There are {count} schedule availability {_plural(count, 'conflict')} in the current view."
+        answer = f"{_there_is_are(count)} {count} schedule availability {_plural(count, 'conflict')} in the current view."
         if split:
             answer += " Conflict split: " + split + "."
         return answer
@@ -1470,11 +1514,11 @@ def _drivers_summary_answer(summary: dict) -> str:
     on_orders = int(summary.get("drivers_on_active_orders") or 0)
     average_score = summary.get("average_score")
     answer = (
-        f"There are {total} {_plural(total, 'driver')} in the current view; "
-        f"{active} {_plural(active, 'driver')} are active."
+        f"{_there_is_are(total)} {total} {_plural(total, 'driver')} in the current view; "
+        f"{active} {_plural(active, 'driver')} {_count_verb(active, 'is', 'are')} active."
     )
-    answer += f" {on_shift} {_plural(on_shift, 'driver')} are on shift"
-    answer += f" and {on_orders} {_plural(on_orders, 'driver')} are tied to active orders."
+    answer += f" {on_shift} {_plural(on_shift, 'driver')} {_count_verb(on_shift, 'is', 'are')} on shift"
+    answer += f" and {on_orders} {_plural(on_orders, 'driver')} {_count_verb(on_orders, 'is', 'are')} tied to active orders."
     if average_score is not None:
         answer += f" Average current score is {average_score}."
     by_store = summary.get("by_store") or {}
@@ -1576,7 +1620,9 @@ def _route_args(tool_id: str, resolved_question: str) -> tuple[str, dict]:
         }
     if tool_id.startswith("schedule."):
         text = str(resolved_question or "").casefold()
-        if "today" in text:
+        if re.search(r"\btomorrow\b", text):
+            window = "tomorrow"
+        elif "today" in text:
             window = "today"
         elif re.search(r"\b(this week|week|weekly)\b", text):
             window = "current_week"

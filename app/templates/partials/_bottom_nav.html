@@ -337,16 +337,18 @@
        as tabs. Same change as the Manager, Catering and Operations
        tabs below — an <a> with no data-pop, so the popover JS skips
        it. #}
+    {% if has_dashboard_access('dash.today', store_slug) %}
     <a href="/{{ store_slug }}/today"
        class="ck-bnav-tab ck-bnav-today-tab{% if _bn_active in ['today_dashboard', 'dashboard', 'notifications', 'team_reports', 'sam_chat'] %} active{% endif %}">
       <i class="ti ti-layout-dashboard bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Today</span>
     </a>
+    {% endif %}
     {# Manager — every role except expo. Per Sam 2026-05-21 this tab no
        longer opens a popover: it links straight to the tabbed Manager
        dashboard (default tab = Daily Log), from where the other
        manager pages are reachable as tabs. #}
-    {% if user_role != 'expo' %}
+    {% if has_dashboard_access('dash.manager', store_slug) %}
     <a href="/{{ store_slug }}/manager"
        class="ck-bnav-tab ck-bnav-manager-tab{% if _bn_active.startswith('manager_') %} active{% endif %}">
       <i class="ti ti-clipboard-text bn-ico" aria-hidden="true"></i>
@@ -359,11 +361,13 @@
        (Ez Orders / Ez Market / Ez Manage / Ez Drivers / In-House / Live Map) are
        reachable as tabs. Same change as the Manager tab above — an <a>
        with no data-pop, so the popover JS skips it. #}
+    {% if has_dashboard_access('dash.catering', store_slug) %}
     <a href="/{{ store_slug }}/catering"
        class="ck-bnav-tab ck-bnav-catering-tab{% if _bn_active in ['catering_dashboard', 'ezcater_orders', 'ez_market', 'ez_manage', 'drivers_admin', 'driver_tracking', 'in_house_catering', 'dev_ezcater_live_map'] %} active{% endif %}">
       <i class="ti ti-clipboard-list bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Catering</span>
     </a>
+    {% endif %}
     <a href="/assistant"
        class="ck-bnav-tab ck-bnav-ai-tab{% if _bn_active in ['assistant_page', 'sam_chat'] %} active{% endif %}"
        aria-label="Open Cenas AI assistant">
@@ -377,11 +381,13 @@
        there). Twin of the Catering / Operations link-out tabs - an <a> with
        no data-pop, so the popover JS skips it. The kitchen surface keys were
        moved off the Operations tab (below) so they light Kitchen, not Ops. #}
+    {% if has_dashboard_access('dash.kitchen', store_slug) %}
     <a href="/{{ store_slug }}/kitchen"
        class="ck-bnav-tab ck-bnav-kitchen-tab{% if _bn_active in ['kitchen_dashboard', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes'] %} active{% endif %}">
       <i class="ti ti-tools-kitchen-2 bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Kitchen</span>
     </a>
+    {% endif %}
     {# Operations — per Sam 2026-05-21 (dck) this tab no longer opens a
        popover: it links straight to the tabbed Operations dashboard
        (default tab = Team), from where the seven operations surfaces
@@ -389,11 +395,13 @@
        Corporate Order) are reachable as tabs. Same change as the
        Manager and Catering tabs above — an <a> with no data-pop, so
        the popover JS skips it. #}
+    {% if has_dashboard_access('dash.operations', store_slug) %}
     <a href="/{{ store_slug }}/operations"
        class="ck-bnav-tab ck-bnav-operations-tab{% if _bn_active in ['operations_dashboard', 'partner_team', 'sales_total', 'sales_toast', 'sales_online', 'sales_ezcater', 'sales_doordash', 'sales_uber', 'boh_labor', 'foh_labor', 'perf_all', 'perf_server', 'perf_bartenders', 'all_roster', 'boh_roster', 'foh_roster', 'weekly_schedule', 'corporate_order', 'corporate_order_reports'] %} active{% endif %}">
       <i class="ti ti-chart-bar bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Operations</span>
     </a>
+    {% endif %}
     {# Vendors - per Sam 2026-05-21 (ck) this tab no longer opens a
        popover: it links straight to the tabbed Vendors dashboard
        (default tab = Produce), from where the five vendor surfaces
@@ -401,11 +409,13 @@
        Specs) are reachable as tabs. Same change as the Manager,
        Catering, Operations and Today tabs - an <a> with no data-pop,
        so the popover JS skips it. #}
+    {% if has_dashboard_access('dash.vendors', store_slug) %}
     <a href="/{{ store_slug }}/vendors"
        class="ck-bnav-tab ck-bnav-vendors-tab{% if _bn_active == 'vendors_dashboard' or _bn_active == 'produce' or _bn_active.startswith('produce_') or _bn_active.startswith('vendor_recent_') %} active{% endif %}">
       <i class="ti ti-leaf bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Vendors</span>
     </a>
+    {% endif %}
   {% endif %}
   </div>
 </nav>

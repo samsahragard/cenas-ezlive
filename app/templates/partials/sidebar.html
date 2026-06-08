@@ -77,13 +77,15 @@
     {% else %}
 
     {# ==== TODAY ==== direct link to the tabbed Today dashboard (Sam 2026-05-21): the sidebar Today entry no longer expands a sub-menu - it links straight to /<store>/today (which opens on the Dashboard tab; Notifications / Task Reports are reachable as tabs there). The Cenas AI animation now links to the standalone /assistant page. #}
+    {% if has_dashboard_access('dash.today', store_slug) %}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/today"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Today</span>
     </a>
+    {% endif %}
 
-    {# ==== MANAGER ==== direct link to the tabbed Manager dashboard (Sam 2026-05-21): the sidebar Manager entry no longer expands a sub-menu - it links straight to /<store>/manager (which opens on the Daily Log tab; the other manager pages are reachable as tabs there). Still Sam + Masood only via the is_sam_chat_user() gate. #}
-    {% if has_permission('dash.manager') %}
+    {# ==== MANAGER ==== direct link to the tabbed Manager dashboard (Sam 2026-05-21): the sidebar Manager entry no longer expands a sub-menu - it links straight to /<store>/manager (which opens on the Daily Log tab; the other manager pages are reachable as tabs there). #}
+    {% if has_dashboard_access('dash.manager', store_slug) %}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/manager"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Manager</span>
@@ -91,16 +93,20 @@
     {% endif %}
 
     {# ==== CATERING ==== direct link to the tabbed Catering dashboard (Sam 2026-05-21): the sidebar Catering entry no longer expands a sub-menu - it links straight to /<store>/catering (which opens on the Ez Orders tab; the other catering surfaces are reachable as tabs there). #}
+    {% if has_dashboard_access('dash.catering', store_slug) %}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/catering"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Catering</span>
     </a>
+    {% endif %}
 
     {# ==== OPERATIONS ==== direct link to the tabbed Operations dashboard (Sam 2026-05-21, dck/ck): the sidebar Operations entry no longer expands a sub-menu - it links straight to /<store>/operations (which opens on the Team tab; Sales / Labor / Performance / Schedule / Corporate Order are reachable as tabs there). #}
+    {% if has_dashboard_access('dash.operations', store_slug) %}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/operations"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Operations</span>
     </a>
+    {% endif %}
 
     {# Schedules sidebar entry REMOVED (Sam #2878): the schedule + its history is
        reached via the Team page > Schedule tab; the standalone link was redundant. #}
@@ -110,16 +116,20 @@
        longer expands a sub-menu — it links straight to /<store>/kitchen
        which opens on the Fresh Food tab; Prep List / Recipes reachable
        as tabs there. Twin of Today / Manager / Catering / Operations. #}
+    {% if has_dashboard_access('dash.kitchen', store_slug) %}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/kitchen"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Kitchen</span>
     </a>
+    {% endif %}
 
     {# ==== VENDORS ==== direct link to the tabbed Vendors dashboard (Sam 2026-05-21, ck): the sidebar Vendors entry no longer expands a sub-menu - it links straight to /<store>/vendors (which opens on the Produce tab; Webstaurant / Performance Food / Restaurant Depot / Specs are reachable as tabs there). #}
+    {% if has_dashboard_access('dash.vendors', store_slug) %}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/vendors"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Vendors</span>
     </a>
+    {% endif %}
 
         {# ==== ADMIN / LEGAL / ANOMALIES / DEVELOPER — per-section gates ====
 
@@ -144,14 +154,14 @@
        Insurance / Documents / Audit log reachable as tabs there. Twin
        of Today / Manager / Catering / Operations / Kitchen.
        Partner-only by default (matches the existing gating). #}
-    {% if user_role == 'partner' %}
+    {% if has_dashboard_access('dash.legal', store_slug) %}
     <a class="ck-sb-section-head" href="/partner/legal/dashboard"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Legal</span>
     </a>
     {% endif %}
 
-    {% if has_permission('developer.view_chat') %}
+    {% if has_dashboard_access('dash.dev_chat', store_slug) %}
     <div class="ck-sb-section collapsed" data-id="developer">
       <button class="ck-sb-section-head" aria-expanded="false">
         <span class="ck-sb-section-label">Developer</span>

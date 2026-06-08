@@ -250,6 +250,8 @@ def create_app():
     # PERMISSION_ENFORCE=1 once denial logs show no legit flows
     # blocked.
     ezperms.install(app)
+    from app.web.dashboard_access import has_dashboard_access as _has_dashboard_access
+    app.jinja_env.globals["has_dashboard_access"] = _has_dashboard_access
     # Universal ribbon (Phase 2 / Block 1B, ck 2026-05-14). Registers
     # the /partner/ribbon/collapse/<category> endpoint + two Jinja
     # globals: ribbon_items_for (the stub content router from

@@ -24,6 +24,7 @@ from pathlib import Path
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, g, jsonify, session
 
 from app.services import corporate_shop
+from app.web.dashboard_access import current_role_is, has_dashboard_access
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,31 @@ def _partner_gate():
     EZLIVE_PASSWORD already enforced by auth.py."""
     if getattr(g, "current_store", None) == "partner" and not session.get("partner_auth_ok"):
         return redirect(url_for("auth.partner_login"))
+
+
+@corp_order.before_request
+def _dashboard_gate():
+    """Corporate Order is the only Operations sub-tab Expo may reach."""
+    from app.web.permissions import accessible_store_slugs
+
+    target = getattr(g, "current_store", None)
+    if target:
+        session["last_store_slug"] = target
+    user = getattr(g, "current_user", None)
+    if user is not None and user.permission_level not in ("partner", "corporate"):
+        allowed = accessible_store_slugs(user)
+        if target not in allowed:
+            if allowed:
+                return redirect(f"/{allowed[0]}/")
+            return ("Forbidden — your account isn't assigned to this store.", 403)
+
+    if not has_dashboard_access("dash.operations", target):
+        abort(403)
+    if current_role_is("expo") and request.endpoint not in (
+        "corporate_order.view",
+        "corporate_order.submit",
+    ):
+        abort(403)
 
 # Email recipient(s) for new corporate orders. Defaults to Sam; override via
 # CORPORATE_ORDER_TO env var (comma-separated list) to add Masood etc. later.

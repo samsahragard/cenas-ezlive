@@ -31,6 +31,11 @@ from app.models import Driver, DriverShift, DriverLocation, Order
 from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
 # Phase 0 Block 4 (ck, 2026-05-13): permission gating per samai's spec.
 from app.services.permissions import requires_permission
+from app.web.dashboard_access import (
+    current_role_is,
+    has_dashboard_access,
+    require_dashboard_access,
+)
 
 APP_TZ = os.getenv("APP_TZ", "America/Chicago")
 
@@ -131,6 +136,9 @@ def _per_store_gate():
     from app.web.permissions import accessible_store_slugs
 
     u = getattr(g, "current_user", None)
+    target = getattr(g, "current_store", None)
+    if target:
+        session["last_store_slug"] = target
     if u is None:
         return None  # legacy auth_ok sessions (tooling) skip this
     if u.permission_level in ("partner", "corporate"):
@@ -145,7 +153,6 @@ def _per_store_gate():
             return ("Forbidden — Expo accounts don't have Insights access.", 403)
 
     # (1) Per-store scope block.
-    target = getattr(g, "current_store", None)
     if target is None:
         return None
     allowed = accessible_store_slugs(u)
@@ -162,6 +169,9 @@ def _per_store_gate():
 def home():
     """Per-store manager dashboard. Re-uses the existing /home view but
     filtered to the current store's location."""
+    require_dashboard_access("dash.today")
+    if current_role_is("expo"):
+        abort(403)
     from app.web import ezcater_routes
     return ezcater_routes.home()
 
@@ -1263,23 +1273,16 @@ def _manager_model_for_slug(slug: str):
     }.get(slug)
 
 
-# Audience gate for the Manager section: per Sam #1109 + #1115, every
-# manager page is visible to all manager-tier roles + partner/corporate
-# above. Expo and drivers excluded. Using the existing User.permission_level
-# values (partner / corporate / gm / manager / expo / corporate-driver
-# per User model docstring) — no new role / helper / hierarchy needed.
-# Sam's user.permission_level == 'partner' grants access via this gate.
-_MANAGER_ROLES_DENIED = {"expo", "corporate-driver", "driver"}
+def _manager_dashboard_ok():
+    return has_dashboard_access("dash.manager")
 
 
-def _manager_role_ok():
-    user = getattr(g, "current_user", None)
-    if user is None:
-        return False
-    role = (getattr(user, "permission_level", None) or "").strip().lower()
-    if not role:
-        return False
-    return role not in _MANAGER_ROLES_DENIED
+def _kitchen_dashboard_ok():
+    return has_dashboard_access("dash.kitchen")
+
+
+def _operations_full_access_ok():
+    return has_dashboard_access("dash.operations") and not current_role_is("expo")
 
 
 # ---- Daily Manager Log v3 (dck build-order #2, 2026-05-19) ----------
@@ -1416,7 +1419,7 @@ def _create_daily_log_v3_entry(db, store_scope, user):
 @store_bp.route("/manager/daily-log/image/<int:image_id>", methods=["GET"])
 def daily_log_image(image_id: int):
     """Serve a Daily Manager Log entry image. Manager-tier gated."""
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     from app.models import DailyLogEntryImage
     db = next(get_db())
@@ -4020,7 +4023,7 @@ def manager_dashboard():
     label, url) the template needs to point each iframe at its page. No
     DB session is opened — the iframed pages run their own queries when
     the browser loads them."""
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     valid = {key for key, _ in _MANAGER_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
@@ -4057,7 +4060,7 @@ def manager_page_list(page: str):
     label = _MANAGER_PAGE_LABELS.get(page)
     if Model is None or label is None:
         abort(404)
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     active_key = "manager_" + page.replace("-", "_")
     db = next(get_db())
@@ -4101,7 +4104,7 @@ def manager_page_new(page: str):
     label = _MANAGER_PAGE_LABELS.get(page)
     if Model is None or label is None:
         abort(404)
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     active_key = "manager_" + page.replace("-", "_")
     if page == "incident-reports":
@@ -4127,7 +4130,7 @@ def manager_page_create(page: str):
     Model = _manager_model_for_slug(page)
     if Model is None:
         abort(404)
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     user = getattr(g, "current_user", None)
     db = next(get_db())
@@ -4179,7 +4182,7 @@ def manager_page_detail(page: str, entry_id: int):
     label = _MANAGER_PAGE_LABELS.get(page)
     if Model is None or label is None:
         abort(404)
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     active_key = "manager_" + page.replace("-", "_")
     db = next(get_db())
@@ -4212,7 +4215,7 @@ def manager_page_edit(page: str, entry_id: int):
     label = _MANAGER_PAGE_LABELS.get(page)
     if Model is None or label is None:
         abort(404)
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     user = getattr(g, "current_user", None)
     db = next(get_db())
@@ -4248,7 +4251,7 @@ def manager_page_update(page: str, entry_id: int):
     Model = _manager_model_for_slug(page)
     if Model is None:
         abort(404)
-    if not _manager_role_ok():
+    if not _manager_dashboard_ok():
         abort(403)
     user = getattr(g, "current_user", None)
     db = next(get_db())
@@ -4287,7 +4290,7 @@ _RECIPE_CATEGORIES = ["cold", "hot", "sauces", "marinated", "chop"]
 
 @store_bp.route("/recipes", methods=["GET"])
 def recipes_index():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     from app.models import Recipe
     import json as _json
@@ -4333,7 +4336,7 @@ def recipes_index():
 
 @store_bp.route("/recipes/new", methods=["GET"])
 def recipes_new():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     return render_template(
         "recipes.html", recipes=[], recipe=None, form_mode="new",
@@ -4344,7 +4347,7 @@ def recipes_new():
 
 @store_bp.route("/recipes", methods=["POST"])
 def recipes_create():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -4378,7 +4381,7 @@ def recipes_create():
 
 @store_bp.route("/recipes/<int:recipe_id>", methods=["GET"])
 def recipes_detail(recipe_id: int):
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -4414,7 +4417,7 @@ def recipes_detail(recipe_id: int):
 
 @store_bp.route("/recipes/<int:recipe_id>/edit", methods=["GET"])
 def recipes_edit(recipe_id: int):
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -4450,7 +4453,7 @@ def recipes_edit(recipe_id: int):
 
 @store_bp.route("/recipes/<int:recipe_id>", methods=["POST"])
 def recipes_update(recipe_id: int):
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -4809,7 +4812,7 @@ def _ff_lines_by_order(db, order_ids):
 
 @store_bp.route("/fresh-food/place-order", methods=["GET"])
 def fresh_food_place_order():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     db = next(get_db())
     today, delivery_date = _ff_target_order_date(request.args.get("order_date"))
@@ -4831,7 +4834,7 @@ def fresh_food_place_order():
 
 @store_bp.route("/fresh-food/place-order", methods=["POST"])
 def fresh_food_place_order_submit():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
     body = request.get_json(silent=True) or {}
@@ -4876,7 +4879,7 @@ def fresh_food_place_order_submit():
 
 @store_bp.route("/fresh-food/developer", methods=["GET"])
 def fresh_food_developer():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
 
@@ -5046,7 +5049,7 @@ def fresh_food_developer():
 
 @store_bp.route("/fresh-food/recent-orders", methods=["GET"])
 def fresh_food_recent_orders():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     from app.models import FreshFoodOrder
     db = next(get_db())
@@ -5077,7 +5080,7 @@ def fresh_food_recent_orders():
 @store_bp.route("/fresh-food/recent-orders/<int:order_id>/fulfill",
                 methods=["POST"])
 def fresh_food_recent_orders_fulfill(order_id: int):
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
     body = request.get_json(silent=True) or {}
@@ -5121,7 +5124,7 @@ def fresh_food_recent_orders_fulfill(order_id: int):
 
 @store_bp.route("/fresh-food/recent-orders/report.csv", methods=["GET"])
 def fresh_food_recent_orders_report():
-    if not _manager_role_ok():
+    if not _kitchen_dashboard_ok():
         abort(403)
     import csv
     import io as _io
@@ -5485,7 +5488,7 @@ def weekly_schedule():
     drivers excluded — same gate as the other manager pages. If Toast
     is unreachable the grid falls back to manually-logged
     AttendanceShift rows + a notice, so it is never blank."""
-    if not _manager_role_ok():
+    if not _operations_full_access_ok():
         abort(403)
 
     raw = request.args.get("date") or ""
@@ -5810,6 +5813,7 @@ def catering_dashboard():
     label, url) the template needs to point each iframe at its page. No
     DB session is opened — the iframed pages run their own queries when
     the browser loads them."""
+    require_dashboard_access("dash.catering")
     valid = {key for key, _ in _CATERING_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
@@ -5955,6 +5959,7 @@ def kitchen_dashboard():
     (Fresh Food / Prep List / Recipes were direct sub-items) with a
     single direct link to /<store>/kitchen that opens this tabbed page.
     Each tab embeds the real page inline via iframe."""
+    require_dashboard_access("dash.kitchen")
     valid = {key for key, _, _ in _KITCHEN_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
@@ -5991,6 +5996,8 @@ def team_workspace():
     dashboards: the roster loads client-side from
     GET /<store>/schedules-v2/team-roster; this route only renders the page
     with the store context (store_slug drives the iframe srcs + the fetch)."""
+    if not _operations_full_access_ok():
+        abort(403)
     label = g.store_label or "Cenas Kitchen"
     today_label = _today_label()
     # +Add dropdown is gated to the positions THIS manager may add -- sourced
@@ -6076,10 +6083,14 @@ def operations_dashboard():
     label, url, coming) the template needs to point each iframe at its
     page. No DB session is opened — the iframed pages run their own
     queries when the browser loads them."""
-    valid = {key for key, _, _ in _OPERATIONS_DASH_TABS}
+    require_dashboard_access("dash.operations")
+    dash_tab_specs = _OPERATIONS_DASH_TABS
+    if current_role_is("expo"):
+        dash_tab_specs = [tab for tab in _OPERATIONS_DASH_TABS if tab[0] == "corp-order"]
+    valid = {key for key, _, _ in dash_tab_specs}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
-        active_tab = _OPERATIONS_DASH_TABS[0][0]   # 'team'
+        active_tab = dash_tab_specs[0][0]
     if active_tab == "schedule":
         # 'schedule' is now a LINK-OUT to the V2 area (samai #2165) - it has no
         # in-dash panel, so a direct ?tab=schedule hit goes straight to V2.
@@ -6096,7 +6107,7 @@ def operations_dashboard():
             # hide V2 sub-nav cards like Add Staff). Every other tab stays iframe.
             "linkout": (key == "schedule"),
         }
-        for key, caption, coming in _OPERATIONS_DASH_TABS
+        for key, caption, coming in dash_tab_specs
     ]
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
@@ -6165,7 +6176,7 @@ def _today_dash_full_url(tab_key):
     if tab_key == "dashboard":
         return url_for("store.home")
     if tab_key == "notifications":
-        return "/partner/notifications"
+        return url_for("store.notifications_page")
     if tab_key == "task-reports":
         return "/partner/team-reports/"
     if tab_key == "agents":
@@ -6177,6 +6188,28 @@ def _today_dash_full_url(tab_key):
     if tab_key == "automation":
         return "/sam/automation"
     return url_for("store.home")
+
+
+@store_bp.route("/notifications", methods=["GET"])
+def notifications_page():
+    """Store-scoped Notifications page for the Today dashboard iframe."""
+    require_dashboard_access("dash.today")
+    from app.services.ribbon import RIBBON_CATEGORIES
+    from app.web.ribbon_routes import ribbon_render_context
+
+    store_scope = STORE_TO_LOCATION.get(getattr(g, "current_store", None))
+    if store_scope == "both":
+        store_scope = None
+    user = getattr(g, "current_user", None)
+    categories = ribbon_render_context(user, "notifications", store_scope)
+    total_count = sum((cat.get("count") or 0) for cat in categories)
+    return render_template(
+        "notifications.html",
+        active="notifications",
+        categories=categories,
+        category_meta=RIBBON_CATEGORIES,
+        total_count=total_count,
+    )
 
 
 @store_bp.route("/today", methods=["GET"])
@@ -6199,11 +6232,14 @@ def today_dashboard():
     always present, so the default tab is always valid. Gating fails OPEN — if a gate
     helper raises, the tab is kept and its destination page enforces
     its own gate."""
+    require_dashboard_access("dash.today")
     # Build the visible tab set, applying the same audience gates the
     # Today section's sidebar entries use.
     dash_tabs = []
     _SAM_ONLY_KEYS = {"agents", "pass", "docs", "automation"}
     for key, caption in _TODAY_DASH_TABS:
+        if current_role_is("expo") and key != "notifications":
+            continue
         if key == "task-reports":
             try:
                 from app.services.permissions import has_permission
@@ -6223,7 +6259,7 @@ def today_dashboard():
     valid = {key for key, _ in dash_tabs}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
-        active_tab = _TODAY_DASH_TABS[0][0]   # 'dashboard' — always present
+        active_tab = dash_tabs[0][0]
     tabs = [
         {
             "key": key,
@@ -6307,6 +6343,7 @@ def vendors_dashboard():
     label, url) the template needs to point each iframe at its page. No
     DB session is opened - the iframed pages run their own queries when
     the browser loads them."""
+    require_dashboard_access("dash.vendors")
     valid = {key for key, _ in _VENDORS_DASH_TABS}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:

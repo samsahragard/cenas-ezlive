@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, time, timedelta
 from sqlalchemy import (
     String,
@@ -22,6 +23,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+def _local_today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(os.getenv("APP_TZ", "America/Chicago"))).date()
+    except Exception:
+        return date.today()
 
 
 class Order(Base):
@@ -2545,7 +2554,7 @@ class DailyManagerLog(ManagerLogMixin, Base):
     subject: Mapped[str] = mapped_column(String(24), nullable=False, default="general")
     issue: Mapped[str] = mapped_column(String(16), nullable=False, default="general")
     priority: Mapped[str] = mapped_column(String(10), nullable=False, default="low")
-    entry_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False, default=_local_today)
     show_on_roster: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     author: Mapped["User | None"] = relationship("User")
@@ -2718,7 +2727,7 @@ class AttendanceShift(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     entry_date: Mapped[date] = mapped_column(
-        Date, nullable=False, default=date.today, index=True)
+        Date, nullable=False, default=_local_today, index=True)
 
     employee_name: Mapped[str] = mapped_column(String(120), nullable=False)
     role_title: Mapped[str | None] = mapped_column(String(60), nullable=True)

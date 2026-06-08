@@ -52,6 +52,21 @@ from app.services.permissions import requires_permission
 
 legal = Blueprint("legal", __name__)
 
+APP_TZ = os.getenv("APP_TZ", "America/Chicago")
+
+
+def _local_today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(APP_TZ)).date()
+    except Exception:
+        return date.today()
+
+
+def _today_label() -> str:
+    _t = _local_today()
+    return f"{_t:%a, %b} {_t.day}"
+
 # Upload constraints — same shape as chat attachments + a few more
 # extensions legal frequently traffics in. Storage path comes from
 # LEGAL_ATTACHMENTS_DIR env var on Render (/var/data/legal-attachments)
@@ -258,8 +273,7 @@ def legal_dashboard():
         for key, caption, coming in _LEGAL_DASH_TABS
     ]
     store_label = g.store_label or "Cenas Kitchen"
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "legal_dashboard.html",
         active="legal_dashboard",
@@ -285,7 +299,7 @@ def legal_overview():
         for m in all_matters:
             counts[m.status] = counts.get(m.status, 0) + 1
         # Upcoming next actions (date set + not closed)
-        today = date.today()
+        today = _local_today()
         upcoming = sorted(
             [m for m in all_matters
              if m.next_action_on and m.status in ("open", "in-review")],
@@ -416,7 +430,7 @@ def legal_matter_create():
             counsel_email=(request.form.get("counsel_email") or "").strip() or None,
             counsel_phone=(request.form.get("counsel_phone") or "").strip() or None,
             matter_ref=(request.form.get("matter_ref") or "").strip() or None,
-            opened_on=_parse_date(request.form.get("opened_on")) or date.today(),
+            opened_on=_parse_date(request.form.get("opened_on")) or _local_today(),
             next_action_on=_parse_date(request.form.get("next_action_on")),
             next_action_text=(request.form.get("next_action_text") or "").strip() or None,
             notes=first_note or None,
@@ -530,7 +544,7 @@ def legal_matter_update(matter_id: int):
         m.notes = (request.form.get("notes") or "").strip() or m.notes
         m.key_dates = _parse_key_dates(request.form.get("key_dates"))
         if m.status in ("resolved", "archived") and m.closed_on is None:
-            m.closed_on = date.today()
+            m.closed_on = _local_today()
         elif m.status in ("open", "in-review"):
             m.closed_on = None
 
@@ -565,7 +579,7 @@ def legal_matter_status(matter_id: int):
         before_status = m.status
         m.status = new_status
         if new_status in ("resolved", "archived") and m.closed_on is None:
-            m.closed_on = date.today()
+            m.closed_on = _local_today()
         elif new_status in ("open", "in-review"):
             m.closed_on = None
         _log_access(db, "status_change", target_type="legal_matter",
@@ -926,7 +940,7 @@ def legal_insurance():
                       .order_by(LegalInsurancePolicy.status,
                                 LegalInsurancePolicy.renewal_on)
                       .all())
-        today = date.today()
+        today = _local_today()
         soon = today + timedelta(days=30)
         _log_access(db, "view_insurance")
         db.commit()

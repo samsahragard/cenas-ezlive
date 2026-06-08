@@ -32,6 +32,22 @@ from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
 # Phase 0 Block 4 (ck, 2026-05-13): permission gating per samai's spec.
 from app.services.permissions import requires_permission
 
+APP_TZ = os.getenv("APP_TZ", "America/Chicago")
+
+
+def _local_today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(APP_TZ)).date()
+    except Exception:
+        return date.today()
+
+
+def _today_label() -> str:
+    _t = _local_today()
+    return f"{_t:%a, %b} {_t.day}"
+
+
 # slug → location filter for downstream report functions
 STORE_TO_LOCATION = {
     "dos":       "tomball",
@@ -585,7 +601,7 @@ def driver_tracking():
         # 4/26-5/9 with check date 5/14 — that's the previous period when
         # today is 5/10 (the new period's first day). The paycheck detail
         # page still shows full history including the in-progress period.
-        cur_start, _, _ = period_containing(_date.today())
+        cur_start, _, _ = period_containing(_local_today())
         period_start, period_end, check_date = previous_period(cur_start)
 
         rows = []
@@ -1297,10 +1313,10 @@ def _render_daily_log_v3(db, label, active_key):
     from app.models import DailyManagerLog
     raw = request.args.get("date") or ""
     try:
-        sel = date.fromisoformat(raw) if raw else date.today()
+        sel = date.fromisoformat(raw) if raw else _local_today()
     except ValueError:
-        sel = date.today()
-    today = date.today()
+        sel = _local_today()
+    today = _local_today()
     window = [sel - timedelta(days=i) for i in range(12)]  # reverse-chrono
     win_lo = window[-1]
     q = db.query(DailyManagerLog).filter(
@@ -1343,9 +1359,9 @@ def _create_daily_log_v3_entry(db, store_scope, user):
     from app.models import DailyManagerLog, DailyLogEntryImage
     raw_date = request.form.get("entry_date") or ""
     try:
-        entry_date = date.fromisoformat(raw_date) if raw_date else date.today()
+        entry_date = date.fromisoformat(raw_date) if raw_date else _local_today()
     except ValueError:
-        entry_date = date.today()
+        entry_date = _local_today()
 
     def _field(name, default, cap):
         return ((request.form.get(name) or default).strip()[:cap] or default)
@@ -1418,7 +1434,7 @@ def _render_incident_reports_v3(db, label, active_key, form_mode=None):
     # not extend base_dashboard. Form posts back to manager_page_create.
     if form_mode == "new":
         user = getattr(g, "current_user", None)
-        today = _date.today()
+        today = _local_today()
         # Preview report-id: counts today's rows so the draft pill mirrors
         # what the server will assign on actual submit. May skew by 1 if a
         # peer files between preview and submit — harmless, the persisted
@@ -1572,7 +1588,7 @@ def _create_incident_v3_entry(db, store_scope, user):
     from app.models import IncidentReport
     from datetime import date as _date, datetime as _dt
 
-    today = _date.today()
+    today = _local_today()
     today_count = db.query(IncidentReport).filter(
         IncidentReport.created_at >= datetime.combine(today, datetime.min.time())
     ).count()
@@ -2333,7 +2349,7 @@ def _render_training_v3(db, label, active_key):
 
     user = getattr(g, "current_user", None)
     uid = getattr(user, "id", None)
-    today = date.today()
+    today = _local_today()
     now = datetime.utcnow()
     records = []
     kpis = {"total": 0, "current": 0, "expiring": 0, "overdue": 0}
@@ -2551,7 +2567,7 @@ def _render_employee_counseling_v3(db, label, active_key):
         "positive": _lc("positive"),
         "flagged": sum(1 for r in rows if r["has_prior_issue"]),
     }
-    today = date.today()
+    today = _local_today()
     return render_template(
         "employee_counseling.html",
         page_slug="counseling", page_label=label,
@@ -2609,10 +2625,10 @@ def _render_attendance_v3(db, label, active_key):
     from app.models import AttendanceShift
     raw = request.args.get("date") or ""
     try:
-        sel = date.fromisoformat(raw) if raw else date.today()
+        sel = date.fromisoformat(raw) if raw else _local_today()
     except ValueError:
-        sel = date.today()
-    today = date.today()
+        sel = _local_today()
+    today = _local_today()
     loc = g.current_location
 
     def _scoped(q):
@@ -2805,9 +2821,9 @@ def _attendance_v3_post(db, store_scope, user):
     if action == "add_shift":
         raw_date = request.form.get("entry_date") or ""
         try:
-            d = date.fromisoformat(raw_date) if raw_date else date.today()
+            d = date.fromisoformat(raw_date) if raw_date else _local_today()
         except ValueError:
-            d = date.today()
+            d = _local_today()
         name = (request.form.get("name") or "").strip()[:120]
         if not name:
             return
@@ -2831,9 +2847,9 @@ def _attendance_v3_post(db, store_scope, user):
         # logs the tagged attendance event. tag: late | ncns | ncl | switch.
         raw_date = request.form.get("entry_date") or ""
         try:
-            d = date.fromisoformat(raw_date) if raw_date else date.today()
+            d = date.fromisoformat(raw_date) if raw_date else _local_today()
         except ValueError:
-            d = date.today()
+            d = _local_today()
         name = (request.form.get("name") or "").strip()[:120]
         if not name:
             return
@@ -2886,9 +2902,9 @@ def _attendance_v3_post(db, store_scope, user):
             return
         raw_date = request.form.get("entry_date") or ""
         try:
-            d = date.fromisoformat(raw_date) if raw_date else date.today()
+            d = date.fromisoformat(raw_date) if raw_date else _local_today()
         except ValueError:
-            d = date.today()
+            d = _local_today()
         shift = (db.query(AttendanceShift)
                  .filter(AttendanceShift.entry_date == d,
                          AttendanceShift.employee_name == name).first())
@@ -3126,7 +3142,7 @@ def _prep_log_event(db, entry, item, user, action, details=None):
         from app.models import PrepAuditLog
         db.add(PrepAuditLog(
             entry_id=(entry.id if entry else None),
-            entry_date=(entry.entry_date if entry else date.today()),
+            entry_date=(entry.entry_date if entry else _local_today()),
             store_scope=(entry.store_scope if entry else None),
             prep_item_id=(item.id if item else None),
             item_name=(item.name if item else None),
@@ -3305,10 +3321,10 @@ def _render_prep_list_v3(db, label, active_key):
     from app.models import PrepItem, PrepEntry, PrepAuditLog
     raw = request.args.get("date") or ""
     try:
-        sel = date.fromisoformat(raw) if raw else date.today()
+        sel = date.fromisoformat(raw) if raw else _local_today()
     except ValueError:
-        sel = date.today()
-    today = date.today()
+        sel = _local_today()
+    today = _local_today()
     loc = g.current_location
     active_prep_tab = (request.args.get("tab") or "board").strip().lower()
     if active_prep_tab not in ("board", "recent", "performance", "developer"):
@@ -3746,9 +3762,9 @@ def _prep_list_v3_post(db, store_scope, user):
 
     raw_date = request.form.get("view_date") or ""
     try:
-        d = date.fromisoformat(raw_date) if raw_date else date.today()
+        d = date.fromisoformat(raw_date) if raw_date else _local_today()
     except ValueError:
-        d = date.today()
+        d = _local_today()
     loc = g.current_location
 
     def _entry_for(item_id, create=True):
@@ -4009,8 +4025,7 @@ def manager_dashboard():
     ]
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "manager_dashboard.html",
         active="manager_dashboard",
@@ -5464,12 +5479,12 @@ def weekly_schedule():
 
     raw = request.args.get("date") or ""
     try:
-        anchor = date.fromisoformat(raw) if raw else date.today()
+        anchor = date.fromisoformat(raw) if raw else _local_today()
     except ValueError:
-        anchor = date.today()
+        anchor = _local_today()
     week_start = _sched_week_start(anchor)
     week_end = week_start + timedelta(days=6)
-    today = date.today()
+    today = _local_today()
     loc = g.current_location
 
     # The 7 day columns.
@@ -5810,8 +5825,7 @@ def catering_dashboard():
         db.close()
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "catering_dashboard.html",
         active="catering_dashboard",
@@ -5944,8 +5958,7 @@ def kitchen_dashboard():
         for key, caption, coming in _KITCHEN_DASH_TABS
     ]
     label = g.store_label or "Cenas Kitchen"
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "kitchen_dashboard.html",
         active="kitchen_dashboard",
@@ -5968,8 +5981,7 @@ def team_workspace():
     GET /<store>/schedules-v2/team-roster; this route only renders the page
     with the store context (store_slug drives the iframe srcs + the fetch)."""
     label = g.store_label or "Cenas Kitchen"
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     # +Add dropdown is gated to the positions THIS manager may add -- sourced
     # from addable_positions_for(), the SAME addable_roles()/position_role() the
     # 403 add-gate uses, so the FE can never drift from enforcement
@@ -6076,8 +6088,7 @@ def operations_dashboard():
     ]
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "operations_dashboard.html",
         active="operations_dashboard",
@@ -6223,8 +6234,7 @@ def today_dashboard():
     ]
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "today_dashboard.html",
         active="today_dashboard",
@@ -6311,8 +6321,7 @@ def vendors_dashboard():
     ]
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" - no %-d / %#d (platform-specific).
-    _t = date.today()
-    today_label = f"{_t:%a, %b} {_t.day}"
+    today_label = _today_label()
     return render_template(
         "vendors_dashboard.html",
         active="vendors_dashboard",

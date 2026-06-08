@@ -1237,6 +1237,12 @@
     }
     // value stays "<position_id>|<store_key>" so /assign is unchanged.
     STORE_LIST.forEach(function (st) {
+      // S-store-scope (Sam 2026-06-08): show ONLY the active store tab's
+      // positions in the editor -- on the Tomball tab show the Tomball block
+      // only, on Copperfield show Copperfield only. A both-stores employee is
+      // edited per tab (they appear under each store's panel). Save is scoped
+      // to match (see save-assign), so the hidden store is never touched.
+      if (state.activeStore && st.key !== state.activeStore) return;
       var skey = st.key, slabel = st.label;
       var held = byStore[skey] || [];
       out += '<div class="tws-store-grp"><div class="lbl">' + esc(slabel) + '</div>';
@@ -1502,9 +1508,20 @@
       var am = msgEl(editEl, "assign");
       var emp2 = empFromRow(elRoster.querySelector('[data-emp-row="' + empId + '"]'));
       // current pairs (from positions_by_store) vs checked pairs -> diff.
-      var current = {};  // "pid|store" -> true
+      // S-store-scope (Sam 2026-06-08): the picker now renders only the active
+      // store, so diff ONLY within the store(s) actually shown. A store whose
+      // block is hidden must NEVER fall into `remove` -- otherwise saving on the
+      // Tomball tab would wipe the person's Copperfield positions (and vice versa).
+      var shownStores = {};
+      Array.prototype.slice.call(editEl.querySelectorAll('[data-assign-picker] input')).forEach(function (c) {
+        var _sk = String(c.value).split("|")[1]; if (_sk) shownStores[_sk] = true;
+      });
+      var current = {};  // "pid|store" -> true (scoped to shown stores)
       var pbs = emp2.positions_by_store || {};
-      Object.keys(pbs).forEach(function (sk) { (pbs[sk] || []).forEach(function (pid) { current[pid + "|" + sk] = true; }); });
+      Object.keys(pbs).forEach(function (sk) {
+        if (!shownStores[sk]) return;  // store not shown -> leave its assignments untouched
+        (pbs[sk] || []).forEach(function (pid) { current[pid + "|" + sk] = true; });
+      });
       var checked = {};
       Array.prototype.slice.call(editEl.querySelectorAll('[data-assign-picker] input:checked')).forEach(function (c) { checked[c.value] = true; });
       var assignments = [], remove = [];

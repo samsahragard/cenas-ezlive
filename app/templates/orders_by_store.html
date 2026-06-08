@@ -88,6 +88,29 @@
   .ezo-page .ezo-tab.active {
     background: var(--gold); border-color: var(--gold); color: #2a1607;
   }
+  .ezo-page .ezo-store-filters {
+    display: flex; gap: 7px; flex-wrap: wrap; margin: -2px 0 16px;
+  }
+  .ezo-page .ezo-filter-tab,
+  .ezo-page .ezo-combined-tab {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 30px; padding: 7px 12px; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: 5px;
+    color: var(--cream-dim); font-family: 'Manrope', sans-serif;
+    font-size: 12px; font-weight: 800; line-height: 1;
+    text-decoration: none; letter-spacing: 0.02em; white-space: nowrap;
+    transition: all .15s;
+  }
+  .ezo-page .ezo-filter-tab:hover,
+  .ezo-page .ezo-combined-tab:hover {
+    border-color: var(--border-active); color: var(--cream);
+    background: var(--surface-hover);
+  }
+  .ezo-page .ezo-filter-tab.active {
+    border-color: rgba(91,202,197,0.58);
+    background: rgba(91,202,197,0.12);
+    color: var(--cream);
+  }
 
   /* ---- action buttons (outlined gold pills) ---- */
   .ezo-page .ezo-actions {
@@ -136,6 +159,7 @@
     font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 800;
     color: var(--gold); letter-spacing: 0.02em;
     margin: 26px 0 11px; scroll-margin-top: 14px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
   .ezo-page .ezo-dayhead:first-of-type { margin-top: 4px; }
   .ezo-page .ezo-dayhead .ct {
@@ -443,18 +467,6 @@
   }
   .ezo-page .ezo-unhook:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* ---- combined-view link per day ---- */
-  .ezo-page .ezo-combined {
-    display: block; margin-top: 10px; padding: 11px 12px;
-    text-align: center; text-decoration: none; border-radius: 10px;
-    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 800;
-    letter-spacing: 0.05em; text-transform: uppercase;
-    background: linear-gradient(180deg, #f6cb45 0%, #e3a008 100%);
-    color: #2a1607; box-shadow: 0 0 14px 1px rgba(246,203,69,0.4);
-    transition: filter .14s;
-  }
-  .ezo-page .ezo-combined:hover { filter: brightness(1.06); }
-
   /* ---- empty state ---- */
   .ezo-page .ezo-empty {
     text-align: center; padding: 44px 22px; background: var(--surface);
@@ -467,7 +479,8 @@
   @media (max-width: 460px) {
     .ezo-page { padding: 14px 12px 24px; }
     .ezo-page .ezo-tab,
-    .ezo-page .ezo-act { flex: 1 0 auto; justify-content: center; }
+    .ezo-page .ezo-act,
+    .ezo-page .ezo-filter-tab { flex: 1 0 auto; justify-content: center; }
     .ezo-page .ez-sheet-top,
     .ezo-page .ez-sheet-summary,
     .ezo-page .ez-sheet-detail-grid {
@@ -488,6 +501,17 @@
     <a class="ezo-tab" href="/orders">Manually Processed PDF</a>
     <a class="ezo-tab" href="/{{ _store }}/driver-tracking">Driver Payroll</a>
   </div>
+
+  {% if store_filter_options %}
+    <div class="ezo-store-filters" aria-label="Store filter">
+      {% for opt in store_filter_options %}
+        <a class="ezo-filter-tab{% if (selected_store_filter or '') == opt.value %} active{% endif %}"
+           href="/{{ _store }}/orders{% if opt.value %}?store={{ opt.value }}{% endif %}">
+          {{ opt.label }}
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
 
   {% if not groups %}
     {# ---- empty state ---- #}
@@ -519,9 +543,15 @@
 
     {# ---- per-day sections ---- #}
     {% for grp in groups %}
+      {% set _combined_location = selected_store_filter if selected_store_filter in ('tomball', 'copperfield') else location %}
       <div class="ezo-dayhead" id="ezo-sec-{{ loop.index0 }}">
-        {{ grp.display }}
-        <span class="ct">· {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }}</span>
+        <span>
+          {{ grp.display }}
+          <span class="ct">· {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }}</span>
+        </span>
+        <a class="ezo-combined-tab" href="/orders/{{ _combined_location }}/{{ grp.date }}?collapse_empty_rows=1">
+          Combined view
+        </a>
       </div>
 
       <div class="ezo-list">
@@ -642,10 +672,6 @@
         {% endfor %}
       </div>
 
-      {# per-day combined view — same target URL as the prior template #}
-      <a class="ezo-combined" href="/orders/{{ location }}/{{ grp.date }}?collapse_empty_rows=1">
-        All {{ grp.orders|length }} order{{ 's' if grp.orders|length != 1 else '' }} — combined view
-      </a>
     {% endfor %}
 
   {% endif %}

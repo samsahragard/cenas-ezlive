@@ -6,7 +6,7 @@ import pytest
 
 os.environ.setdefault("ALLOW_DEV_SECRET", "1")
 
-from app.models import Employee, EmployeePosition, Position, User
+from app.models import Employee, EmployeePosition, Order, Position, User
 
 
 @pytest.fixture
@@ -174,6 +174,57 @@ def test_management_roles_can_access_catering_driver_manage_and_team_roster(
     roster = client.get("/dos/schedules-v2/team-roster")
     assert roster.status_code == 200
     assert roster.get_json() is not None
+
+
+def test_corporate_ez_orders_can_filter_combined_store_scope(dashboard_app):
+    flask_app, db = dashboard_app
+    corporate = _seed_actor(db, uid=230, role="corporate", position="Corporate")
+    db.add_all([
+        Order(
+            external_order_id="TOM-230",
+            origin_store_id="store_2",
+            delivery_date="2099-06-08",
+            deliver_at="2099-06-08T11:00:00",
+            status="confirmed",
+            client="Tomball Catering",
+            potential_payout=35.0,
+        ),
+        Order(
+            external_order_id="COP-230",
+            origin_store_id="store_1",
+            delivery_date="2099-06-08",
+            deliver_at="2099-06-08T12:00:00",
+            status="confirmed",
+            client="Copperfield Catering",
+            potential_payout=35.0,
+        ),
+    ])
+    db.commit()
+    client = _client_as(flask_app, corporate)
+
+    combined = client.get("/corporate/orders")
+    assert combined.status_code == 200
+    combined_html = combined.get_data(as_text=True)
+    assert "TOM-230" in combined_html
+    assert "COP-230" in combined_html
+    assert 'href="/corporate/orders?store=copperfield"' in combined_html
+    assert 'href="/corporate/orders?store=tomball"' in combined_html
+    assert 'class="ezo-combined"' not in combined_html
+    assert 'class="ezo-combined-tab"' in combined_html
+
+    tomball = client.get("/corporate/orders?store=tomball")
+    assert tomball.status_code == 200
+    tomball_html = tomball.get_data(as_text=True)
+    assert "TOM-230" in tomball_html
+    assert "COP-230" not in tomball_html
+    assert 'href="/orders/tomball/2099-06-08?collapse_empty_rows=1"' in tomball_html
+
+    copperfield = client.get("/corporate/orders?store=copperfield")
+    assert copperfield.status_code == 200
+    copperfield_html = copperfield.get_data(as_text=True)
+    assert "COP-230" in copperfield_html
+    assert "TOM-230" not in copperfield_html
+    assert 'href="/orders/copperfield/2099-06-08?collapse_empty_rows=1"' in copperfield_html
 
 
 def test_expo_can_access_all_vendor_tabs_but_not_insights(dashboard_app):

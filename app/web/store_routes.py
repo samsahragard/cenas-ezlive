@@ -566,8 +566,17 @@ def orders_list():
         from app.services.orders_query import rotated_dispatch_letters
         db = next(get_db())
         try:
-            tom = list_orders_for_location(db, "tomball")
-            cop = list_orders_for_location(db, "copperfield")
+            selected_store_filter = _orders_store_filter_arg(request.args.get("store"))
+            tom = (
+                list_orders_for_location(db, "tomball")
+                if selected_store_filter in ("", "tomball")
+                else []
+            )
+            cop = (
+                list_orders_for_location(db, "copperfield")
+                if selected_store_filter in ("", "copperfield")
+                else []
+            )
             combined = tom + cop
             groups = group_orders_by_date(combined)
             display_drivers = rotated_dispatch_letters(groups)
@@ -581,6 +590,12 @@ def orders_list():
                 active_drivers_by_prefix=_active_drivers_by_prefix(db),
                 driver_status_by_order_id=_driver_status_by_order_id(db, combined),
                 compact_order_card=compact_order_card,
+                selected_store_filter=selected_store_filter,
+                store_filter_options=[
+                    {"value": "", "label": "All"},
+                    {"value": "copperfield", "label": "Copperfield"},
+                    {"value": "tomball", "label": "Tomball"},
+                ],
             )
         finally:
             db.close()
@@ -5817,6 +5832,27 @@ def _catering_dash_full_url(tab_key):
     if tab_key == "live-map":
         return url_for("ezcater_tracking_watch.page")
     return url_for("store.orders_list")
+
+
+def _orders_store_filter_arg(raw: str | None) -> str:
+    val = (raw or "").strip().lower().replace("_", "-")
+    aliases = {
+        "": "",
+        "all": "",
+        "both": "",
+        "combined": "",
+        "tomball": "tomball",
+        "dos": "tomball",
+        "dos-mas": "tomball",
+        "store-2": "tomball",
+        "store-4": "tomball",
+        "copperfield": "copperfield",
+        "uno": "copperfield",
+        "uno-mas": "copperfield",
+        "store-1": "copperfield",
+        "store-3": "copperfield",
+    }
+    return aliases.get(val, "")
 
 
 @store_bp.route("/catering", methods=["GET"])

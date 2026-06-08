@@ -222,22 +222,25 @@
   .ezo-page .ez-sheet-dropdown summary {
     list-style: none;
     cursor: pointer;
-    padding: 9px 14px;
-    background: linear-gradient(180deg, #f6cb45 0%, #d99a08 100%);
-    color: #241409;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    min-height: 28px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(250,246,236,0.035);
+    color: rgba(250,246,236,0.62);
   }
   .ezo-page .ez-sheet-dropdown summary::-webkit-details-marker { display: none; }
   .ezo-page .ez-sheet-dropdown summary::after {
-    content: '+';
-    float: right;
-    font-size: 12px;
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 140ms ease, color 140ms ease;
   }
-  .ezo-page .ez-sheet-dropdown[open] summary::after { content: '-'; }
+  .ezo-page .ez-sheet-dropdown[open] summary::after { transform: rotate(225deg); }
   .ezo-page .ez-sheet-detail-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(120px, 1fr));
@@ -607,7 +610,7 @@
               </div>
             </div>
             <details class="ez-sheet-dropdown" onclick="event.stopPropagation();">
-              <summary>DROPDOWN INFORMATION</summary>
+              <summary aria-label="Show order details"></summary>
               <div class="ez-sheet-detail-grid">
                 <div>
                   <span class="ez-sheet-label">Pickup</span>

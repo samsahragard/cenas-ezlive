@@ -140,19 +140,25 @@
   .ezm-sheet-dropdown summary {
     list-style: none;
     cursor: pointer;
-    padding: 10px 14px;
-    background: rgba(228,179,64,0.08);
-    border-top: 0.5px solid rgba(228,179,64,0.14);
-    color: #FFD970;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    min-height: 28px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(250,246,236,0.035);
+    color: rgba(250,246,236,0.62);
   }
   .ezm-sheet-dropdown summary::-webkit-details-marker { display: none; }
-  .ezm-sheet-dropdown summary::after { content: 'show'; float: right; color: rgba(250,246,236,0.58); }
-  .ezm-sheet-dropdown[open] summary::after { content: 'hide'; }
+  .ezm-sheet-dropdown summary::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 140ms ease, color 140ms ease;
+  }
+  .ezm-sheet-dropdown[open] summary::after { transform: rotate(225deg); }
   .ezm-sheet-detail-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(120px, 1fr));
@@ -385,7 +391,7 @@ if (document.readyState === 'loading') {
         </div>
       </div>
       <details class="ezm-sheet-dropdown">
-        <summary>Details</summary>
+        <summary aria-label="Show order details"></summary>
         <div class="ezm-sheet-detail-grid">
           <div>
             <span class="ezm-sheet-label">Pickup</span>

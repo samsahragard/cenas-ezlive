@@ -142,15 +142,17 @@
   .em-sheet-muted { color: rgba(250,246,236,0.64); font-size: 12px; }
   .em-sheet-dropdown { border-top: 0.5px solid rgba(250,246,236,0.07); }
   .em-sheet-dropdown summary {
-    list-style: none; cursor: pointer; padding: 9px 14px;
-    background: linear-gradient(180deg, #f6cb45 0%, #d99a08 100%);
-    color: #241409; font-family: 'JetBrains Mono', monospace;
-    font-size: 10px; font-weight: 900; letter-spacing: 0.08em;
-    text-transform: uppercase;
+    list-style: none; cursor: pointer; min-height: 28px; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(250,246,236,0.035); color: rgba(250,246,236,0.62);
   }
   .em-sheet-dropdown summary::-webkit-details-marker { display: none; }
-  .em-sheet-dropdown summary::after { content: '+'; float: right; }
-  .em-sheet-dropdown[open] summary::after { content: '-'; }
+  .em-sheet-dropdown summary::after {
+    content: ""; width: 8px; height: 8px;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg); transition: transform 140ms ease, color 140ms ease;
+  }
+  .em-sheet-dropdown[open] summary::after { transform: rotate(225deg); }
   .em-sheet-detail-grid {
     display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr));
     gap: 12px; padding: 13px 14px 15px; background: rgba(0,0,0,0.18);
@@ -242,7 +244,7 @@
             </div>
           </div>
           <details class="em-sheet-dropdown">
-            <summary>DROPDOWN INFORMATION</summary>
+            <summary aria-label="Show order details"></summary>
             <div class="em-sheet-detail-grid">
               <div>
                 <span class="em-sheet-label">Pickup</span>

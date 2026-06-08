@@ -303,6 +303,21 @@ def _apply_passcode(db, emp, row, *, passcode, phone, full_name):
     emp.lockout_until = None
     emp.session_version = (emp.session_version or 0) + 1  # bump -> invalidate any stale session (guardrail #4)
     emp.updated_at = datetime.utcnow()
+    # If this employee is a linked manager (User), keep their keypad login in sync:
+    # set the SAME passcode on the User + bump its session_version, so a manager who
+    # uses the link / code-page changes how they sign in at /keypad-login (managers
+    # authenticate against User.passcode, not Employee.passcode).
+    _uid = getattr(emp, "user_id", None)
+    if _uid:
+        from app.models import User as _User
+        _u = db.query(_User).filter_by(id=_uid).first()
+        if _u is not None:
+            _u.passcode_hash = emp.passcode_hash
+            if hasattr(_u, "failed_attempts"):
+                _u.failed_attempts = 0
+            if hasattr(_u, "lockout_until"):
+                _u.lockout_until = None
+            _u.session_version = (_u.session_version or 0) + 1
     row.used = True   # consume the single-use token (the OTHER channel for this reset now dies)
     try:
         db.commit()

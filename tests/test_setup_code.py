@@ -311,3 +311,51 @@ def test_login_wrong_value_rejected(app_bound):
     r = c.post("/employee/login/passcode",
                json={"identifier": "dan@test.local", "passcode": "00000"})
     assert r.status_code == 401
+
+
+# ============================================================
+# 8. MANAGER reset (Sam 2026-06-07): a roster employee linked to a manager User
+#    must get the code set as the passcode on the LINKED USER too, since managers
+#    sign in via /keypad-login against User.passcode (not Employee.passcode).
+# ============================================================
+def test_reset_sets_code_as_passcode_on_employee_and_linked_user(app_bound):
+    from werkzeug.security import check_password_hash
+    flask_app, db = app_bound
+    # partner (id=1) FIRST so it owns id=1 (the session below sets user_id=1).
+    db.add(User(id=1, full_name="P", email="p@test.local",
+                passcode_hash=generate_password_hash("12345"),
+                permission_level="partner", store_scope=None, active=True,
+                first_login_done=True, session_version=1))
+    db.flush()
+    mgr_user = User(full_name="Gina KM", email="ginakm@test.local",
+                    phone="2815550199",
+                    passcode_hash=generate_password_hash("11111"),
+                    permission_level="km", store_scope="tomball", active=True,
+                    first_login_done=True, session_version=1)
+    db.add(mgr_user)
+    db.flush()
+    emp = Employee(full_name="Gina KM", email="ginakm@test.local",
+                   phone="2815550199",
+                   passcode_hash=generate_password_hash("11111"),
+                   user_id=mgr_user.id, active=True, session_version=1)
+    db.add(emp)
+    db.commit()
+
+    client = flask_app.test_client()
+    with client.session_transaction() as s:
+        s["partner_auth_ok"] = True
+        s["auth_ok"] = True
+        s["user_id"] = 1
+        s["user_session_version"] = 1
+
+    r = client.post("/dos/schedules-v2/employees/%d/reset-pin" % emp.id)
+    assert r.status_code == 200, r.get_data(as_text=True)
+    code = r.get_json()["setup_code"]
+
+    u = db.query(User).filter_by(id=mgr_user.id).one()
+    e = db.query(Employee).filter_by(id=emp.id).one()
+    # the code is now the passcode on BOTH the linked User and the Employee...
+    assert check_password_hash(u.passcode_hash, code), "code must work at keypad (User.passcode)"
+    assert check_password_hash(e.passcode_hash, code)
+    # ...and the OLD pin is dead (the reset actually reset).
+    assert not check_password_hash(u.passcode_hash, "11111")

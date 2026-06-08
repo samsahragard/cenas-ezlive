@@ -257,6 +257,37 @@ def sv2_employee_reset_pin(emp_id):
     # emailed link AND this manager-displayed code. Whichever the employee uses
     # FIRST sets the PIN; the other stops working. Surface the code so the manager
     # can read it out; omit it gracefully if no invite (e.g. no email on file).
+    #
+    # Sam 2026-06-07: make the CODE a working login PIN IMMEDIATELY, on the Employee
+    # AND (critically) the linked manager User. Managers/partners sign in via
+    # /keypad-login against User.passcode -- so without setting it on the User, a
+    # manager (e.g. a KM) could never log in with the code and her OLD pin kept
+    # working. Setting it here overwrites the old pin and bumps session_version on
+    # both -> her session is killed and the code IS the new pin (changeable later).
+    if setup_code:
+        from werkzeug.security import generate_password_hash as _genhash
+        from app.models import User as _User
+        _db2 = SessionLocal()
+        try:
+            _emp = _db2.query(Employee).filter_by(id=emp_id).first()
+            if _emp is not None:
+                _emp.passcode_hash = _genhash(setup_code)
+                _emp.failed_attempts = 0
+                _emp.lockout_until = None
+                _emp.session_version = (_emp.session_version or 0) + 1
+                _uid = getattr(_emp, "user_id", None)
+                if _uid:
+                    _u = _db2.query(_User).filter_by(id=_uid).first()
+                    if _u is not None:
+                        _u.passcode_hash = _genhash(setup_code)
+                        if hasattr(_u, "failed_attempts"):
+                            _u.failed_attempts = 0
+                        if hasattr(_u, "lockout_until"):
+                            _u.lockout_until = None
+                        _u.session_version = (_u.session_version or 0) + 1
+                _db2.commit()
+        finally:
+            _db2.close()
     resp = {"ok": True,
             "message": "We emailed a link AND generated a code. Give the code to the "
                        "employee, or they can use the link. Whichever they use first "

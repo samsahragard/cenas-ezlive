@@ -7,6 +7,26 @@ from typing import Any
 from app.db import get_db
 from app.models import Order, OrderItem, PrepBreakdownRecord, ProcessingJob, ProcessingOrder, FailureSnapshot
 
+
+# Fields set AFTER ingest (driver assignment, lifecycle status, payroll, delivery
+# progress, live tracking) that an ezCater MODIFY ('updated' webhook re-ingest)
+# must NOT wipe. Carried forward across the delete-and-recreate in _persist_order
+# so a modified order keeps its driver + state (Sam 2026-06-07).
+_PRESERVE_ON_MODIFY = (
+    "status", "assigned_driver", "assigned_driver_id", "approved_by_user_id",
+    "ezcater_driver_name", "tracking_status",
+    "delivery_window_start", "delivery_window_end", "customer_rating",
+    "setup_photo_url", "setup_photo_uploaded_at",
+    "parking_photo_url", "parking_photo_uploaded_at", "parking_cost",
+    "potential_payout", "paid_payout", "paycheck_id",
+    "delivery_tracking_id", "ezcater_status_key", "ezcater_driver_lat",
+    "ezcater_driver_lng", "ezcater_status_updated_at",
+    "delivery_start_time", "delivery_complete_time", "delivery_result",
+    "food_total", "tip_amount", "delivery_fee", "caterer_total_due",
+    "pickup_miles", "pickup_kitchen",
+)
+
+
 def persist_processing_job(pdf_count: int) -> int:
     db = next(get_db())
     try:
@@ -70,9 +90,15 @@ def _persist_order(db, bundle: dict[str, Any]) -> int:
     external_id = normalized.get("order_id")
     pdf_path = bundle.get("pdf_path", "")
 
-    # overwrite if exists
+    # overwrite if exists. MODIFY (Sam 2026-06-07): the ezCater 'updated' webhook
+    # re-ingests through here; the delete-and-recreate would wipe operational state
+    # set AFTER ingest (assigned driver, lifecycle status, payroll, delivery
+    # progress, live tracking). Capture those first and re-apply them below, so a
+    # modified order keeps its driver + state while picking up the new content.
     existing = db.query(Order).filter_by(external_order_id=external_id).first()
+    _preserve = None
     if existing:
+        _preserve = {f: getattr(existing, f, None) for f in _PRESERVE_ON_MODIFY}
         db.delete(existing)
         db.flush()
 
@@ -113,6 +139,13 @@ def _persist_order(db, bundle: dict[str, Any]) -> int:
     )
     db.add(order)
     db.flush()
+
+    if _preserve:
+        # MODIFY: restore the preserved operational state onto the rebuilt row, so
+        # a modified order keeps its assigned driver + lifecycle/payroll state.
+        for _f, _v in _preserve.items():
+            if _v is not None:
+                setattr(order, _f, _v)
 
     breakdowns = kitchen_result.get("breakdowns", [])
 

@@ -78,7 +78,36 @@ def _landing_for_user(u) -> str:
     slugs = accessible_store_slugs(u)
     if not slugs:
         return "/"
-    return f"/{slugs[0]}/"
+    return _landing_for_store_slug(slugs[0])
+
+
+_STORE_ROOT_RE = re.compile(r"^/(dos|uno|partner|corporate)/?$")
+
+
+def _landing_for_store_slug(store_slug: str) -> str:
+    """Store roots can be role-gated; Today is the safe dashboard landing."""
+    return f"/{store_slug}/today"
+
+
+def _next_for_user(u, nxt: str | None) -> str:
+    """Keep safe relative next URLs, but do not preserve forbidden store roots."""
+    from app.web.permissions import accessible_store_slugs
+
+    target = (nxt or "").strip() or "/"
+    if not target.startswith("/") or target.startswith("//"):
+        return _landing_for_user(u)
+
+    root_match = _STORE_ROOT_RE.match(target)
+    if root_match:
+        requested_store = root_match.group(1)
+        allowed = accessible_store_slugs(u)
+        if requested_store in allowed:
+            return _landing_for_store_slug(requested_store)
+        return _landing_for_user(u)
+
+    if target == "/":
+        return _landing_for_user(u)
+    return target
 
 
 def _find_user_by_passcode(db, passcode: str) -> User | None:
@@ -289,10 +318,7 @@ def login():
     GET now redirects here too so there's a single entry point."""
     u = getattr(g, "current_user", None)
     if u is not None:
-        nxt = request.args.get("next") or _landing_for_user(u)
-        if not nxt.startswith("/"):
-            nxt = "/"
-        return redirect(nxt)
+        return redirect(_next_for_user(u, request.args.get("next")))
     # Driver session takes a driver to their profile, NOT this login page.
     # Prevents the post-driver-logout symptom where the partner-keypad
     # rendered over an active driver session.
@@ -565,8 +591,7 @@ def login_submit():
                 "ok": True,
                 "next": url_for("keypad_auth.change_passcode"),
             })
-        if nxt == "/":
-            nxt = _landing_for_user(user_match)
+        nxt = _next_for_user(user_match, nxt)
         return jsonify({"ok": True, "next": nxt})
     finally:
         db.close()

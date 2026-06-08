@@ -210,6 +210,60 @@ def test_driver_view_login_opens_driver_profile_without_touching_real_pin(app_dr
         assert s.get("partner_auth_ok") is None
 
 
+@pytest.fixture()
+def app_expo_user():
+    tmp = os.path.join(tempfile.gettempdir(), "_vl_expo_pytest.db")
+    if os.path.exists(tmp):
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    app, SessionLocal = _prepare_temp_app(tmp)
+    from app.models import User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    user = User(
+        full_name="Expo One",
+        phone="5552223333",
+        permission_level="expo",
+        store_scope="tomball",
+        active=True,
+        session_version=1,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("13579"),
+    )
+    db.add(user)
+    db.commit()
+    uid = user.id
+    db.close()
+    yield app, uid
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+
+
+def test_store_root_next_lands_on_permitted_today_page(app_expo_user):
+    app, _ = app_expo_user
+    c = app.test_client()
+    r = c.post(
+        "/keypad-login",
+        json={"phone": "5552223333", "pin": "13579", "next": "/dos/"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+    assert r.get_json()["next"] == "/dos/today"
+
+
+def test_default_store_landing_uses_today_page():
+    from app.models import User
+    from app.web.keypad_auth import _landing_for_user
+
+    user = User(permission_level="expo", store_scope="tomball")
+    assert _landing_for_user(user) == "/dos/today"
+
+
 def test_employee_view_code_wins_if_driver_code_collides(app_emp):
     app, eid = app_emp
     from app.db import SessionLocal

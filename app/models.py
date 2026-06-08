@@ -3656,6 +3656,31 @@ class CenaToastLink(Base):
     confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class CenaToastIgnore(Base):
+    """Partner cleanup marker for the Team > Link tab.
+
+    Toast-only people cannot be deleted from Toast from inside Cenas, and a
+    Cenas-only profile may need to be hidden from matching without losing
+    historical rows. This table stores one ignored identity per store/source so
+    the Link page can stay clean while the underlying systems remain intact.
+    source = 'cena' uses employees.id as source_id; source = 'toast' uses the
+    Toast employee guid.
+    """
+
+    __tablename__ = "cena_toast_ignore"
+    __table_args__ = (
+        UniqueConstraint("store_key", "source", "source_id", name="uq_cena_toast_ignore_identity"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    ignored_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ignored_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ToastEmployeeSnapshot(Base):
     """Sam #2845: a CACHED snapshot of one Toast employee's labor/performance/pay
     for a store, refreshed by a scheduled BULK sync (sync_toast_snapshots) so the

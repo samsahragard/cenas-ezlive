@@ -107,6 +107,67 @@ def _cena_roster(db, store: str) -> list[dict]:
     return out
 
 
+def _ignored_link_ids(db, store: str) -> tuple[set[int], set[str]]:
+    """Return ignored Cenas employee ids and Toast ids for this store."""
+    from app.models import CenaToastIgnore
+
+    ignored_cena: set[int] = set()
+    ignored_toast: set[str] = set()
+    rows = (db.query(CenaToastIgnore.source, CenaToastIgnore.source_id)
+              .filter(CenaToastIgnore.store_key == store)
+              .all())
+    for source, source_id in rows:
+        sid = str(source_id or "").strip()
+        if not sid:
+            continue
+        if source == "cena":
+            try:
+                ignored_cena.add(int(sid))
+            except (TypeError, ValueError):
+                continue
+        elif source == "toast":
+            ignored_toast.add(sid)
+    return ignored_cena, ignored_toast
+
+
+def _confirmed_link_rows(
+    db,
+    store: str,
+    cena_by_id: dict[int, dict],
+    toast_by_id: dict[str, dict],
+    ignored_cena: set[int],
+    ignored_toast: set[str],
+) -> list[dict]:
+    """Saved links rendered as first-class rows on the Link tab."""
+    from app.models import CenaToastLink
+
+    rows: list[dict] = []
+    for link in (db.query(CenaToastLink)
+                   .filter(CenaToastLink.store_key == store)
+                   .order_by(CenaToastLink.cena_employee_id)
+                   .all()):
+        try:
+            cena_emp_id = int(link.cena_employee_id)
+        except (TypeError, ValueError):
+            continue
+        toast_id = str(link.toast_id or "").strip()
+        if cena_emp_id in ignored_cena or toast_id in ignored_toast:
+            continue
+        cena = cena_by_id.get(cena_emp_id)
+        if not cena:
+            continue
+        toast = toast_by_id.get(toast_id)
+        rows.append({
+            "cena_emp_id": cena_emp_id,
+            "cena_name": cena.get("name") or "",
+            "cena_phone": cena.get("phone") or "",
+            "toast_id": toast_id,
+            "toast_name": (link.toast_name or (toast or {}).get("name") or toast_id[:8]),
+            "toast_phone": (toast or {}).get("phone") or "",
+        })
+    return rows
+
+
 @store_bp.route("/schedules-v2/toast/match-suggestions", methods=["GET"])
 @require_level(_MGR)
 def sv2_toast_match_suggestions():
@@ -140,10 +201,8 @@ def sv2_toast_match_suggestions():
         log.warning("toast-link: fetch_employees failed for %s: %s", store, ex)
         return jsonify({"ok": False, "error": f"Toast employees unavailable: {ex}"}), 502
 
-    # Build the Toast side: skip deleted; index by normalized full name + by
-    # last name (the weak fallback, only used when a full-name match misses).
-    toast_by_full: dict[str, dict] = {}
-    toast_by_last: dict[str, list[dict]] = {}
+    # Build the Toast side: skip deleted. Confirmed/ignored filtering happens
+    # after we read the local Link cleanup state.
     toast_records: list[dict] = []
     for e in toast_emps:
         if e.get("deleted"):
@@ -158,6 +217,29 @@ def sv2_toast_match_suggestions():
             "_last": last.lower(),
         }
         toast_records.append(rec)
+
+    db = SessionLocal()
+    try:
+        ignored_cena, ignored_toast = _ignored_link_ids(db, store)
+        cena = [c for c in _cena_roster(db, store)
+                if c.get("emp_id") not in ignored_cena]
+        toast_records = [r for r in toast_records
+                         if str(r.get("toast_id") or "") not in ignored_toast]
+        toast_by_id = {str(r["toast_id"]): r for r in toast_records if r.get("toast_id")}
+        cena_by_id = {int(c["emp_id"]): c for c in cena if c.get("emp_id") is not None}
+        confirmed_links = _confirmed_link_rows(
+            db, store, cena_by_id, toast_by_id, ignored_cena, ignored_toast)
+    finally:
+        db.close()
+
+    confirmed_cena = {int(r["cena_emp_id"]) for r in confirmed_links}
+    confirmed_toast = {str(r["toast_id"]) for r in confirmed_links}
+    matchable_toast = [r for r in toast_records
+                       if str(r.get("toast_id") or "") not in confirmed_toast]
+
+    toast_by_full: dict[str, dict] = {}
+    toast_by_last: dict[str, list[dict]] = {}
+    for rec in matchable_toast:
         if rec["_full"]:
             # First writer wins on a full-name collision (rare); both still
             # appear in unmatched_toast if neither gets claimed.
@@ -165,17 +247,17 @@ def sv2_toast_match_suggestions():
         if rec["_last"]:
             toast_by_last.setdefault(rec["_last"], []).append(rec)
 
-    db = SessionLocal()
-    try:
-        cena = _cena_roster(db, store)
-    finally:
-        db.close()
-
     suggestions: list[dict] = []
     unmatched_cena: list[dict] = []
     claimed: set[str] = set()  # toast_ids already paired
 
     for c in cena:
+        try:
+            cena_emp_id = int(c["emp_id"])
+        except (TypeError, ValueError):
+            cena_emp_id = None
+        if cena_emp_id in confirmed_cena:
+            continue
         full = _norm_full(c["name"])
         parts = full.split()
         match = None
@@ -207,10 +289,11 @@ def sv2_toast_match_suggestions():
                                    "name": c["name"], "phone": c["phone"]})
 
     unmatched_toast = [{"toast_id": r["toast_id"], "name": r["name"], "phone": r["phone"]}
-                       for r in toast_records if r["toast_id"] not in claimed]
+                       for r in matchable_toast if r["toast_id"] not in claimed]
 
     return jsonify({
         "ok": True,
+        "confirmed_links": confirmed_links,
         "suggestions": suggestions,
         "unmatched_cena": unmatched_cena,
         "unmatched_toast": unmatched_toast,

@@ -6054,6 +6054,7 @@ def team_workspace():
         # Schedule store selector (Sam #2589): concrete options + the default pick.
         schedule_stores=schedule_stores,
         schedule_store_default=schedule_store_default,
+        link_store_default=schedule_store_default,
         is_partner=is_partner,
     ))
     # Sam 2026-06-07: never serve a STALE Team Roster -- a cached old page is the

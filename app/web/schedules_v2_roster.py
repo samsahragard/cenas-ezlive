@@ -29,7 +29,7 @@ from flask import jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app.db import SessionLocal
-from app.models import (CANONICAL_POSITIONS, CenaToastLink, Employee,
+from app.models import (CANONICAL_POSITIONS, CenaToastIgnore, CenaToastLink, Employee,
                         EmployeeAvailability, EmployeePosition,
                         EmployeeStoreAssignment, EmployeeUnavailabilityBlock,
                         Position, User)
@@ -656,6 +656,28 @@ def sv2_employee_availability_set(emp_id):
 # load that person's Toast data by toast_id. Manager-gated @require_level(_MGR),
 # same as the roster writes above; confirmed_by = current_user_id().
 # ==========================================================================
+def _link_employee_for_store(db, emp_id: int, store: str):
+    """Active Cenas employee assigned to this store, else None."""
+    return (db.query(Employee)
+              .join(EmployeeStoreAssignment,
+                    EmployeeStoreAssignment.employee_id == Employee.id)
+              .filter(Employee.id == emp_id,
+                      Employee.active.is_(True),
+                      EmployeeStoreAssignment.store_key == store)
+              .first())
+
+
+def _clear_link_ignores(db, store: str, cena_emp_id: int, toast_id: str) -> None:
+    """A deliberate relink revives previously ignored identities for that pair."""
+    (db.query(CenaToastIgnore)
+       .filter(CenaToastIgnore.store_key == store,
+               ((CenaToastIgnore.source == "cena")
+                & (CenaToastIgnore.source_id == str(cena_emp_id)))
+               | ((CenaToastIgnore.source == "toast")
+                  & (CenaToastIgnore.source_id == toast_id)))
+       .delete(synchronize_session=False))
+
+
 @store_bp.route("/schedules-v2/toast/link", methods=["POST"])
 @require_level("partner")   # Sam #2675: only the partner (owner) confirms a Toast match
 def sv2_toast_link():
@@ -680,6 +702,20 @@ def sv2_toast_link():
         return jsonify({"ok": False, "error": "store not resolved"}), 400
     db = SessionLocal()
     try:
+        if _link_employee_for_store(db, cena_emp_id, store) is None:
+            return jsonify({"ok": False,
+                            "error": "That profile is not active at this store."}), 400
+
+        # One Toast person can only represent one Cenas profile per store. If Sam
+        # rematches Deylin/Augustine to a different profile, move the Toast link
+        # instead of leaving a duplicate hidden behind the dropdown pools.
+        (db.query(CenaToastLink)
+           .filter(CenaToastLink.store_key == store,
+                   CenaToastLink.toast_id == toast_id,
+                   CenaToastLink.cena_employee_id != cena_emp_id)
+           .delete(synchronize_session=False))
+        _clear_link_ignores(db, store, cena_emp_id, toast_id)
+
         row = (db.query(CenaToastLink)
                  .filter_by(cena_employee_id=cena_emp_id, store_key=store).first())
         now = datetime.utcnow()
@@ -724,6 +760,75 @@ def sv2_toast_unlink():
            .delete(synchronize_session=False))
         db.commit()
         return jsonify({"ok": True}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/toast/ignore", methods=["POST"])
+@require_level("partner")   # cleanup decisions are owner-only, same as link/unlink
+def sv2_toast_ignore():
+    """Hide one Cenas-only or Toast-only identity from this store's Link tab.
+
+    Body:
+      {source:"cena", cena_emp_id:int} or
+      {source:"toast", toast_id:str, display_name?:str}
+
+    This is deliberately non-destructive for Toast identities. For Cenas
+    profiles, the existing employee deactivate endpoint remains the soft-delete;
+    ignore is a reversible matching cleanup marker.
+    """
+    data = request.get_json(silent=True) or {}
+    source = str(data.get("source") or "").strip().lower()
+    store = _store()
+    if not store:
+        return jsonify({"ok": False, "error": "store not resolved"}), 400
+    if source not in ("cena", "toast"):
+        return jsonify({"ok": False, "error": "source must be cena or toast"}), 400
+
+    db = SessionLocal()
+    try:
+        display_name = str(data.get("display_name") or "").strip() or None
+        if source == "cena":
+            try:
+                cena_emp_id = int(data.get("cena_emp_id"))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "cena_emp_id required"}), 400
+            emp = _link_employee_for_store(db, cena_emp_id, store)
+            if emp is None:
+                return jsonify({"ok": False,
+                                "error": "That profile is not active at this store."}), 400
+            source_id = str(cena_emp_id)
+            display_name = emp.full_name or display_name
+            (db.query(CenaToastLink)
+               .filter_by(cena_employee_id=cena_emp_id, store_key=store)
+               .delete(synchronize_session=False))
+        else:
+            source_id = str(data.get("toast_id") or "").strip()
+            if not source_id:
+                return jsonify({"ok": False, "error": "toast_id required"}), 400
+            (db.query(CenaToastLink)
+               .filter(CenaToastLink.store_key == store,
+                       CenaToastLink.toast_id == source_id)
+               .delete(synchronize_session=False))
+
+        now = datetime.utcnow()
+        uid = current_user_id()
+        row = (db.query(CenaToastIgnore)
+                 .filter_by(store_key=store, source=source, source_id=source_id)
+                 .first())
+        if row is None:
+            row = CenaToastIgnore(store_key=store, source=source,
+                                  source_id=source_id, display_name=display_name,
+                                  ignored_by=uid, ignored_at=now)
+            db.add(row)
+        else:
+            row.display_name = display_name
+            row.ignored_by = uid
+            row.ignored_at = now
+        db.commit()
+        return jsonify({"ok": True,
+                        "ignored": {"source": source, "source_id": source_id,
+                                    "store_key": store}}), 200
     finally:
         db.close()
 

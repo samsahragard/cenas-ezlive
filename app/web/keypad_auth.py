@@ -483,22 +483,44 @@ def login_submit():
             from app.web.employee_auth import (_establish_employee_session,
                                                _find_employee_by_phone)
             emp = _find_employee_by_phone(db, digits)
-            if emp is not None and getattr(emp, "passcode_hash", None):
+            if emp is not None:
                 if emp.lockout_until and emp.lockout_until > now:
                     mins = max(1, int((emp.lockout_until - now).total_seconds() // 60) + 1)
                     return jsonify({
                         "ok": False,
                         "error": f"Too many failed attempts. Try again in {mins} min.",
                     }), 429
-                if _check(emp.passcode_hash, passcode):
-                    emp.failed_attempts = 0
-                    emp.lockout_until = None
-                    db.commit()
+
+                def _emp_signed_in():
                     stores = _establish_employee_session(emp)
                     if len(stores) > 1 and not session.get("active_store"):
                         # both-store: the login page pops the "Which store today?" picker
                         return jsonify({"ok": True, "next": "/employee/login?needpick=1"})
                     return jsonify({"ok": True, "next": "/employee/dashboard"})
+
+                # (a) normal employee passcode.
+                if getattr(emp, "passcode_hash", None) and _check(emp.passcode_hash, passcode):
+                    emp.failed_attempts = 0
+                    emp.lockout_until = None
+                    db.commit()
+                    return _emp_signed_in()
+                # (b) RESET CODE (Sam 2026-06-07): the manager-issued reset code also logs
+                #     the employee in HERE (the keypad) -> set it as the passcode + consume
+                #     the shared single-use token (the emailed link dies). This is the path
+                #     for a NO-User / never-set-up employee (e.g. Gina) who has no passcode
+                #     yet -- without it she reads INVALID at the keypad no matter what.
+                from app.web.employee_setup import _resolve_setup_by_code
+                emp_c, _row = _resolve_setup_by_code(db, digits, passcode)
+                if emp_c is not None and emp_c.id == emp.id:
+                    from werkzeug.security import generate_password_hash as _genhash
+                    emp.passcode_hash = _genhash(passcode)
+                    emp.failed_attempts = 0
+                    emp.lockout_until = None
+                    emp.session_version = (emp.session_version or 0) + 1
+                    _row.used = True
+                    db.commit()
+                    return _emp_signed_in()
+                # (c) neither a matching passcode nor a valid reset code.
                 emp.failed_attempts = (emp.failed_attempts or 0) + 1
                 if emp.failed_attempts >= MAX_FAILED_ATTEMPTS:
                     emp.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)

@@ -44,13 +44,14 @@ def app_bound(db_session, monkeypatch):
     from app.web import schedules_v2_roster as roster_mod
     from app.web import employee_auth as auth_mod
     from app.web import store_routes as store_mod
+    from app.web import keypad_auth as keypad_mod
 
     flask_app = create_app()
     flask_app.config["TESTING"] = True
     flask_app.config["WTF_CSRF_ENABLED"] = False
 
     sess = lambda: db_session
-    for mod in (appdb, sv2_mod, roster_mod, setup_mod, auth_mod, store_mod):
+    for mod in (appdb, sv2_mod, roster_mod, setup_mod, auth_mod, store_mod, keypad_mod):
         if hasattr(mod, "SessionLocal"):
             monkeypatch.setattr(mod, "SessionLocal", sess, raising=False)
     import app.services.brief_email as be
@@ -359,3 +360,40 @@ def test_reset_sets_code_as_passcode_on_employee_and_linked_user(app_bound):
     assert check_password_hash(e.passcode_hash, code)
     # ...and the OLD pin is dead (the reset actually reset).
     assert not check_password_hash(u.passcode_hash, "11111")
+
+
+# ============================================================
+# 9. KEYPAD login with the reset code (Sam 2026-06-07): a NO-User, never-set-up
+#    employee (e.g. Gina) signs in at the NUMBER-PAD keypad with phone + the code.
+# ============================================================
+def test_keypad_login_with_reset_code_for_no_user_employee(app_bound):
+    flask_app, db = app_bound
+    db.add(User(id=1, full_name="P", email="p@test.local",
+                passcode_hash=generate_password_hash("12345"),
+                permission_level="partner", store_scope=None, active=True,
+                first_login_done=True, session_version=1))
+    # no User link, NO passcode (never completed setup) -- Gina's exact state.
+    emp = Employee(full_name="Gina NoUser", email="ginanouser@test.local",
+                   phone="4752769760", active=True, session_version=1)
+    db.add(emp)
+    db.commit()
+
+    client = flask_app.test_client()
+    with client.session_transaction() as s:
+        s["partner_auth_ok"] = True
+        s["auth_ok"] = True
+        s["user_id"] = 1
+        s["user_session_version"] = 1
+    r = client.post("/dos/schedules-v2/employees/%d/reset-pin" % emp.id)
+    assert r.status_code == 200, r.get_data(as_text=True)
+    code = r.get_json()["setup_code"]
+
+    # NUMBER-PAD keypad: phone + the reset code -> signed in (Path 4 code path).
+    fresh = flask_app.test_client()
+    r2 = fresh.post("/keypad-login", json={"phone": "4752769760", "pin": code})
+    assert r2.status_code == 200, r2.get_data(as_text=True)
+    assert r2.get_json().get("ok") is True
+    # a wrong value at the keypad is still rejected.
+    bad = flask_app.test_client()
+    r3 = bad.post("/keypad-login", json={"phone": "4752769760", "pin": "99999"})
+    assert r3.status_code == 401

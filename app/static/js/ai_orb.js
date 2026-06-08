@@ -19,10 +19,8 @@
 
   function isAssistantSurface() {
     var path = window.location.pathname || "";
-    var params = new URLSearchParams(window.location.search || "");
     return path.indexOf("/assistant") !== -1 ||
-      path.indexOf("/sam/chat") !== -1 ||
-      params.get("tab") === "cena";
+      path.indexOf("/sam/chat") !== -1;
   }
 
   function numberAttr(el, name, fallback) {

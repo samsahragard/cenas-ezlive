@@ -557,6 +557,17 @@ def test_gate_allows_sam(app_with_sam):
     assert r.status_code == 200
 
 
+def test_retired_combined_chat_redirects_to_assistant(app_with_sam):
+    _app, client_for, _db = app_with_sam
+    r = client_for(1).get("/sam/combined")
+    assert r.status_code == 302
+    assert r.headers["Location"] == "/assistant"
+
+    r = client_for(2).get("/sam/combined")
+    assert r.status_code == 302
+    assert r.headers["Location"] == "/assistant"
+
+
 def test_gate_dormant_when_env_unset(app_with_sam, monkeypatch):
     # SAM_CHAT_USER_ID unset -> nobody gets in, not even Sam (id=1).
     _app, client_for, _db = app_with_sam

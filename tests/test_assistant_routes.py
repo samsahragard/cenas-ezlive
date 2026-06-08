@@ -306,6 +306,114 @@ def test_assistant_turn_mirror_writes_cena_review_chat(db_session, monkeypatch):
     ) == 1
 
 
+def test_assistant_review_items_list_and_acknowledge(db_session, monkeypatch):
+    test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr(ar, "SessionLocal", test_session_factory)
+    ctx = {
+        "kind": "partner",
+        "role": "partner",
+        "principal_id": 1,
+        "display_name": "Sam",
+        "store_slugs": ["tomball", "copperfield"],
+        "current_store": "tomball",
+        "path": "/assistant",
+        "permissions": ["*"],
+        "is_owner_operator": True,
+        "can_ask_personal": True,
+        "can_ask_operational": True,
+    }
+    monkeypatch.setattr(ar, "_principal_context", lambda: ctx)
+
+    now = datetime.utcnow()
+    session_row = SamChatSession(
+        started_at=now,
+        last_message_at=now,
+        title="Cenas AI Review: Sam",
+    )
+    db_session.add(session_row)
+    db_session.flush()
+    queued = SamChatMessage(
+        session_id=session_row.id,
+        role="system",
+        content=ar._assistant_review_content(
+            ctx,
+            "what was on the ticket",
+            {
+                "ok": True,
+                "answer": "I saved that for Sam review.",
+                "queued": True,
+                "reason": "data_question_needs_approved_tool",
+                "route_path": "review",
+                "routed_tool_id": None,
+            },
+            200,
+            asked_at="2026-06-08T12:00:00Z",
+        ),
+        model=ar._CENA_REVIEW_MODEL,
+        created_at=now,
+    )
+    answered = SamChatMessage(
+        session_id=session_row.id,
+        role="system",
+        content=ar._assistant_review_content(
+            ctx,
+            "today's net sales",
+            {
+                "ok": True,
+                "answer": "Net sales are $10.",
+                "queued": False,
+                "tool_id": "toast.sales_summary",
+                "route_path": "deterministic",
+            },
+            200,
+            asked_at="2026-06-08T12:01:00Z",
+        ),
+        model=ar._CENA_REVIEW_MODEL,
+        created_at=now,
+    )
+    db_session.add_all([queued, answered])
+    db_session.commit()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+    client = app.test_client()
+
+    response = client.get("/assistant/review-items")
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert [item["question"] for item in data["items"]] == ["what was on the ticket"]
+    assert data["items"][0]["acknowledged"] is False
+
+    response = client.post(f"/assistant/review-items/{queued.id}/ack", json={})
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["item"]["acknowledged"] is True
+    assert data["item"]["acknowledged_by"] == "Sam"
+
+    assert client.get("/assistant/review-items").get_json()["items"] == []
+    with_ack = client.get("/assistant/review-items?include_acknowledged=1").get_json()
+    assert with_ack["items"][0]["id"] == queued.id
+    assert with_ack["items"][0]["acknowledged"] is True
+
+
+def test_assistant_review_items_forbidden_for_non_partner(monkeypatch):
+    monkeypatch.setattr(ar, "_principal_context", lambda: {
+        "kind": "employee",
+        "role": "employee",
+        "principal_id": 9,
+        "display_name": "Employee",
+        "is_owner_operator": False,
+    })
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(ar.assistant_bp)
+
+    assert app.test_client().get("/assistant/review-items").status_code == 403
+
+
 def test_assistant_review_payload_redacts_raw_response_and_marks_queue():
     ctx = {
         "kind": "partner",

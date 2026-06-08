@@ -1,18 +1,15 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'assistant_page' %}
 
-{% block title %}Cenas AI - Cenas Kitchen{% endblock %}
+{% block title %}C.E.N.A - Cenas Kitchen{% endblock %}
 {% block page_module_class %}mod-today{% endblock %}
 {% block page_module %}AI{% endblock %}
-{% block page_title %}Cenas AI{% endblock %}
-{% block page_subtitle %}Role-scoped assistant{% endblock %}
+{% block page_title %}C.E.N.A{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block content %}
 <style>
   .aiassist {
-    --ai-bg: #241610;
-    --ai-panel: #170b07;
-    --ai-panel-2: #21100a;
     --ai-line: rgba(217, 164, 54, 0.18);
     --ai-line-strong: rgba(217, 164, 54, 0.34);
     --ai-gold: #E4B340;
@@ -23,42 +20,22 @@
     color: var(--ai-cream);
     min-height: max(660px, calc(var(--ck-page-available-height, 100vh) - 210px));
     display: grid;
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-    gap: 14px;
+    grid-template-rows: auto minmax(260px, 1fr) auto;
+    position: relative;
   }
   .aiassist * { box-sizing: border-box; }
-  .aiassist-panel,
-  .aiassist-rail {
-    border: 1px solid var(--ai-line);
-    border-radius: 12px;
-    background:
-      radial-gradient(circle at 16% 0%, rgba(228, 179, 64, 0.08), transparent 34%),
-      linear-gradient(135deg, rgba(40, 22, 14, 0.96), rgba(15, 8, 5, 0.97));
-    overflow: hidden;
-  }
-  .aiassist-rail {
+  .aiassist-hello {
     display: flex;
     flex-direction: column;
-    min-height: 0;
-  }
-  .aiassist-profile {
-    padding: 18px 16px;
-    border-bottom: 1px solid var(--ai-line);
-  }
-  .aiassist-profile-top {
-    display: flex;
     align-items: center;
-    gap: 12px;
-  }
-  .aiassist-orb-small {
-    width: 86px;
-    height: 62px;
-    flex: 0 0 auto;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px 18px 8px;
+    text-align: center;
   }
   .aiassist-orb-button {
-    width: 86px;
-    height: 62px;
-    flex: 0 0 auto;
+    width: 118px;
+    height: 84px;
     padding: 0;
     border: 0;
     border-radius: 999px;
@@ -67,91 +44,34 @@
     filter: drop-shadow(0 5px 14px rgba(0, 0, 0, 0.55));
   }
   .aiassist-orb-button.is-listening {
-    filter: drop-shadow(0 0 16px rgba(91, 202, 197, 0.9));
+    filter: drop-shadow(0 0 18px rgba(91, 202, 197, 0.92));
   }
-  .aiassist-name {
-    font-size: 15px;
+  .aiassist-orb {
+    width: 118px;
+    height: 84px;
+  }
+  .aiassist-greeting {
+    font-size: clamp(18px, 2.2vw, 24px);
     font-weight: 800;
     color: var(--ai-gold-bright);
   }
-  .aiassist-role {
-    margin-top: 3px;
-    font-size: 12px;
-    color: var(--ai-muted);
-  }
-  .aiassist-tools {
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-height: 0;
-    overflow: auto;
-  }
-  .aiassist-tool {
-    padding: 9px 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(217, 164, 54, 0.12);
-    background: rgba(0, 0, 0, 0.18);
+  .aiassist-status {
+    min-height: 18px;
     color: var(--ai-muted);
     font-size: 12px;
-    line-height: 1.35;
-  }
-  .aiassist-tool strong {
-    display: block;
-    color: var(--ai-cream);
-    font-size: 12.5px;
-    margin-bottom: 2px;
-  }
-  .aiassist-tool.is-active {
-    border-color: rgba(91, 202, 197, 0.35);
-  }
-  .aiassist-tool.is-waiting {
-    border-color: rgba(228, 179, 64, 0.24);
-  }
-  .aiassist-panel {
-    min-width: 0;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: auto minmax(260px, 1fr) auto;
-  }
-  .aiassist-head {
-    padding: 15px 18px;
-    border-bottom: 1px solid var(--ai-line);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-  }
-  .aiassist-title {
-    font-size: 16px;
-    font-weight: 800;
-  }
-  .aiassist-sub {
-    margin-top: 3px;
-    color: var(--ai-muted);
-    font-size: 12px;
-  }
-  .aiassist-pill {
-    border: 1px solid var(--ai-line-strong);
-    border-radius: 999px;
-    padding: 6px 10px;
-    color: var(--ai-gold-bright);
-    font-size: 12px;
-    white-space: nowrap;
-    background: rgba(0, 0, 0, 0.22);
   }
   .aiassist-thread {
-    padding: 18px;
+    padding: 18px clamp(14px, 3vw, 34px);
     overflow: auto;
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
   .aiassist-msg {
-    max-width: min(760px, 86%);
+    max-width: min(760px, 82%);
     padding: 12px 14px;
     border-radius: 12px;
-    border: 1px solid rgba(217, 164, 54, 0.14);
+    border: 1px solid rgba(217, 164, 54, 0.12);
     background: rgba(255, 255, 255, 0.045);
     line-height: 1.48;
     font-size: 14px;
@@ -161,10 +81,12 @@
   .aiassist-msg.user {
     align-self: flex-end;
     border-color: rgba(232, 122, 62, 0.34);
-    background: rgba(232, 122, 62, 0.15);
+    background: rgba(232, 122, 62, 0.17);
   }
   .aiassist-msg.assistant {
     align-self: flex-start;
+    border-color: rgba(91, 202, 197, 0.22);
+    background: rgba(91, 202, 197, 0.08);
   }
   .aiassist-msg.queued {
     border-color: rgba(228, 179, 64, 0.42);
@@ -173,27 +95,17 @@
     margin-bottom: 6px;
     font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
     font-size: 10px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
     color: var(--ai-faint);
   }
   .aiassist-form {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto;
     gap: 9px;
-    padding: 13px;
+    padding: 13px clamp(12px, 2.5vw, 22px);
     border-top: 1px solid var(--ai-line);
-    background: rgba(0, 0, 0, 0.22);
-  }
-  .aiassist-icon,
-  .aiassist-send {
-    border-radius: 10px;
-    border: 1px solid rgba(217, 164, 54, 0.28);
-    background: rgba(0, 0, 0, 0.32);
-    color: var(--ai-cream);
-    min-height: 44px;
-    min-width: 44px;
-    font: inherit;
+    background: rgba(0, 0, 0, 0.18);
   }
   .aiassist-input {
     min-height: 44px;
@@ -207,9 +119,13 @@
     font: inherit;
   }
   .aiassist-send {
+    min-height: 44px;
+    min-width: 54px;
+    border-radius: 10px;
+    border: 1px solid rgba(232, 122, 62, 0.86);
     background: #E87A3E;
-    border-color: rgba(232, 122, 62, 0.86);
     color: #170b05;
+    font: inherit;
     font-weight: 900;
     cursor: pointer;
   }
@@ -217,65 +133,156 @@
     opacity: 0.56;
     cursor: wait;
   }
+  .aiassist-review-toggle {
+    position: absolute;
+    left: 16px;
+    bottom: 76px;
+    z-index: 6;
+    border: 1px solid rgba(217, 164, 54, 0.34);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.46);
+    color: var(--ai-gold-bright);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 8px 11px;
+    cursor: pointer;
+  }
+  .aiassist-review-toggle[hidden] {
+    display: none;
+  }
+  .aiassist-review-drawer {
+    position: absolute;
+    left: 16px;
+    bottom: 118px;
+    z-index: 7;
+    width: min(440px, calc(100% - 32px));
+    max-height: min(520px, calc(100% - 150px));
+    display: none;
+    flex-direction: column;
+    border: 1px solid var(--ai-line-strong);
+    border-radius: 12px;
+    background: rgba(18, 8, 5, 0.97);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+    overflow: hidden;
+  }
+  .aiassist-review-drawer.is-open {
+    display: flex;
+  }
+  .aiassist-review-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--ai-line);
+    color: var(--ai-gold-bright);
+    font-weight: 900;
+  }
+  .aiassist-review-close {
+    border: 1px solid rgba(217, 164, 54, 0.24);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--ai-cream);
+    font: inherit;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+  }
+  .aiassist-review-list {
+    padding: 10px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .aiassist-review-item {
+    border: 1px solid rgba(217, 164, 54, 0.16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.045);
+    padding: 10px;
+  }
+  .aiassist-review-item.is-acknowledged {
+    opacity: 0.58;
+  }
+  .aiassist-review-meta {
+    color: var(--ai-faint);
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .aiassist-review-question {
+    color: var(--ai-cream);
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .aiassist-review-answer {
+    color: var(--ai-muted);
+    font-size: 12px;
+    line-height: 1.45;
+    margin-bottom: 9px;
+  }
+  .aiassist-review-ack {
+    border: 1px solid rgba(91, 202, 197, 0.36);
+    border-radius: 8px;
+    background: rgba(91, 202, 197, 0.12);
+    color: var(--ai-cream);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 7px 9px;
+    cursor: pointer;
+  }
   @media (max-width: 820px) {
     .aiassist {
-      grid-template-columns: 1fr;
       min-height: max(620px, calc(var(--ck-page-available-height, 100vh) - 150px));
-    }
-    .aiassist-rail {
-      min-height: auto;
-    }
-    .aiassist-tools {
-      display: none;
     }
     .aiassist-msg {
       max-width: 94%;
+    }
+    .aiassist-orb-button,
+    .aiassist-orb {
+      width: 96px;
+      height: 68px;
+    }
+    .aiassist-review-toggle {
+      bottom: 88px;
+    }
+    .aiassist-review-drawer {
+      bottom: 128px;
     }
   }
 </style>
 
 <section class="aiassist" id="aiassist">
-  <aside class="aiassist-rail" aria-label="Assistant context">
-    <div class="aiassist-profile">
-      <div class="aiassist-profile-top">
-        <button class="aiassist-orb-button" id="aiassist-voice-orb" type="button" aria-label="Hold for voice input" title="Hold for voice input">
-          <canvas class="aiassist-orb-small" data-ck-ai-orb data-width="86" data-height="62" aria-hidden="true"></canvas>
-        </button>
-        <div>
-          <div class="aiassist-name" id="aiassist-name">Cenas AI</div>
-          <div class="aiassist-role" id="aiassist-role">Checking access...</div>
-        </div>
-      </div>
+  <header class="aiassist-hello" aria-label="C.E.N.A assistant">
+    <button class="aiassist-orb-button" id="aiassist-voice-orb" type="button" aria-label="Hold for voice input" title="Hold for voice input">
+      <canvas class="aiassist-orb" data-ck-ai-orb data-width="118" data-height="84" aria-hidden="true"></canvas>
+    </button>
+    <div class="aiassist-greeting" id="aiassist-greeting">hi.</div>
+    <div class="aiassist-status" id="aiassist-status" aria-live="polite"></div>
+  </header>
+
+  <div class="aiassist-thread" id="aiassist-thread" aria-live="polite"></div>
+
+  <button class="aiassist-review-toggle" id="aiassist-review-toggle" type="button" hidden>
+    Saved for Sam
+  </button>
+  <aside class="aiassist-review-drawer" id="aiassist-review-drawer" aria-label="Saved for Sam review">
+    <div class="aiassist-review-head">
+      <span>Saved for Sam</span>
+      <button class="aiassist-review-close" id="aiassist-review-close" type="button" aria-label="Close saved review list">x</button>
     </div>
-    <div class="aiassist-tools" id="aiassist-tools">
-      <div class="aiassist-tool is-waiting"><strong>Loading tools</strong>Reading your role catalog...</div>
+    <div class="aiassist-review-list" id="aiassist-review-list">
+      <div class="aiassist-review-item">
+        <div class="aiassist-review-answer">Loading saved questions...</div>
+      </div>
     </div>
   </aside>
 
-  <main class="aiassist-panel" aria-label="Cenas AI chat">
-    <header class="aiassist-head">
-      <div>
-        <div class="aiassist-title">Ask Cenas AI</div>
-        <div class="aiassist-sub" id="aiassist-sub">Partner catalog tools are checked by your signed-in role.</div>
-      </div>
-      <div class="aiassist-pill" id="aiassist-pill">Gemini 2.5</div>
-    </header>
-
-    <div class="aiassist-thread" id="aiassist-thread">
-      <div class="aiassist-msg assistant">
-        <div class="aiassist-meta">Cenas AI</div>
-        Ask me a Cenas question. I will answer through approved tools when available, and save missing-tool questions for Sam review.
-      </div>
-    </div>
-
-    <form class="aiassist-form" id="aiassist-form">
-      <button class="aiassist-icon" type="button" aria-label="Attach" disabled>
-        <i class="ti ti-paperclip" aria-hidden="true"></i>
-      </button>
-      <textarea class="aiassist-input" id="aiassist-input" name="question" rows="1" maxlength="2000" placeholder="Ask Cenas AI..."></textarea>
-      <button class="aiassist-send" id="aiassist-send" type="submit">Ask</button>
-    </form>
-  </main>
+  <form class="aiassist-form" id="aiassist-form">
+    <textarea class="aiassist-input" id="aiassist-input" name="question" rows="1" maxlength="2000" placeholder="Ask Cenas AI..."></textarea>
+    <button class="aiassist-send" id="aiassist-send" type="submit">Ask</button>
+  </form>
 </section>
 {% endblock %}
 
@@ -286,21 +293,22 @@
   var root = document.getElementById("aiassist");
   if (!root) return;
 
-  var nameEl = document.getElementById("aiassist-name");
-  var roleEl = document.getElementById("aiassist-role");
-  var toolsEl = document.getElementById("aiassist-tools");
-  var subEl = document.getElementById("aiassist-sub");
-  var pillEl = document.getElementById("aiassist-pill");
+  var greetingEl = document.getElementById("aiassist-greeting");
+  var statusEl = document.getElementById("aiassist-status");
   var thread = document.getElementById("aiassist-thread");
   var form = document.getElementById("aiassist-form");
   var input = document.getElementById("aiassist-input");
   var send = document.getElementById("aiassist-send");
   var voiceOrb = document.getElementById("aiassist-voice-orb");
+  var reviewToggle = document.getElementById("aiassist-review-toggle");
+  var reviewDrawer = document.getElementById("aiassist-review-drawer");
+  var reviewClose = document.getElementById("aiassist-review-close");
+  var reviewList = document.getElementById("aiassist-review-list");
   var lastUserQuestion = "";
   var lastAssistantAnswer = "";
   var voiceRecognition = null;
   var voiceListening = false;
-  var originalRoleText = "";
+  var originalStatusText = "";
 
   function esc(text) {
     return String(text == null ? "" : text)
@@ -316,10 +324,17 @@
     return role + " - " + now.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
   }
 
+  function shortTime(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString([], {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+  }
+
   function addMessage(kind, text, queued) {
     var msg = document.createElement("div");
     msg.className = "aiassist-msg " + kind + (queued ? " queued" : "");
-    msg.innerHTML = '<div class="aiassist-meta">' + esc(meta(kind === "user" ? "You" : "Cenas AI")) + '</div>' + esc(text || "");
+    msg.innerHTML = '<div class="aiassist-meta">' + esc(meta(kind === "user" ? "You" : "C.E.N.A")) + '</div>' + esc(text || "");
     thread.appendChild(msg);
     thread.scrollTop = thread.scrollHeight;
     return msg;
@@ -334,10 +349,10 @@
     voiceListening = !!on;
     if (voiceOrb) voiceOrb.classList.toggle("is-listening", voiceListening);
     if (voiceListening) {
-      originalRoleText = roleEl.textContent || "";
-      roleEl.textContent = "Listening...";
-    } else if (originalRoleText) {
-      roleEl.textContent = originalRoleText;
+      originalStatusText = statusEl.textContent || "";
+      statusEl.textContent = "Listening...";
+    } else {
+      statusEl.textContent = originalStatusText || "";
     }
   }
 
@@ -383,20 +398,65 @@
     }
   }
 
-  function setTools(tools) {
-    var active = (tools || []).filter(function (tool) { return tool.available; });
-    var waiting = (tools || []).filter(function (tool) { return !tool.available; });
-    pillEl.textContent = active.length + " active " + (active.length === 1 ? "tool" : "tools");
-    subEl.textContent = "Role catalog loaded for this session.";
-    toolsEl.innerHTML = active.slice(0, 14).map(function (tool) {
-      return '<div class="aiassist-tool is-active"><strong>' + esc(tool.label || tool.tool_id) + '</strong>' + esc(tool.tool_id || "") + '</div>';
+  function renderReviewItems(items) {
+    if (!reviewList) return;
+    if (!items || !items.length) {
+      reviewList.innerHTML = '<div class="aiassist-review-item"><div class="aiassist-review-answer">No saved questions waiting.</div></div>';
+      return;
+    }
+    reviewList.innerHTML = items.map(function (item) {
+      var route = item.route_path ? "route: " + item.route_path : "review";
+      var tool = item.tool_id ? " · " + item.tool_id : "";
+      return '<div class="aiassist-review-item" data-review-id="' + esc(item.id) + '">' +
+        '<div class="aiassist-review-meta">' + esc(item.actor || "Unknown") + ' · ' + esc(shortTime(item.asked_at)) + ' · ' + esc(route + tool) + '</div>' +
+        '<div class="aiassist-review-question">' + esc(item.question || "") + '</div>' +
+        '<div class="aiassist-review-answer">' + esc(item.answer || item.reason || "") + '</div>' +
+        '<button class="aiassist-review-ack" type="button" data-review-ack="' + esc(item.id) + '">Acknowledge</button>' +
+        '</div>';
     }).join("");
-    if (!toolsEl.innerHTML) {
-      toolsEl.innerHTML = '<div class="aiassist-tool is-waiting"><strong>No active tools</strong>Questions will be saved for Sam review.</div>';
-    }
-    if (waiting.length) {
-      toolsEl.insertAdjacentHTML("beforeend", '<div class="aiassist-tool is-waiting"><strong>' + waiting.length + ' review-gated</strong>Saved for Sam review when needed.</div>');
-    }
+  }
+
+  function loadReviewItems() {
+    if (!reviewToggle) return;
+    fetch("/assistant/review-items?limit=100", {
+      headers: {"X-Current-Path": window.location.pathname + window.location.search + window.location.hash}
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("review unavailable");
+        return r.json();
+      })
+      .then(function (data) {
+        var items = data.items || [];
+        reviewToggle.hidden = false;
+        reviewToggle.textContent = "Saved for Sam" + (items.length ? " (" + items.length + ")" : "");
+        renderReviewItems(items);
+      })
+      .catch(function () {
+        reviewToggle.hidden = true;
+      });
+  }
+
+  function acknowledgeReview(id, button) {
+    if (!id) return;
+    if (button) button.disabled = true;
+    fetch("/assistant/review-items/" + encodeURIComponent(id) + "/ack", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Current-Path": window.location.pathname + window.location.search + window.location.hash
+      },
+      body: "{}"
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("ack failed");
+        return r.json();
+      })
+      .then(function () {
+        loadReviewItems();
+      })
+      .catch(function () {
+        if (button) button.disabled = false;
+      });
   }
 
   fetch("/assistant/context", {
@@ -405,16 +465,18 @@
     .then(function (r) { return r.json(); })
     .then(function (data) {
       var principal = data.principal || {};
-      nameEl.textContent = principal.display_name || "Cenas AI";
-      roleEl.textContent = (principal.role || "user") + " - " + (principal.kind || "session");
-      setTools(data.tools || []);
+      var displayName = principal.display_name || "";
+      greetingEl.textContent = displayName ? "hi, " + displayName + "." : "hi.";
+      statusEl.textContent = "";
       if (!data.enabled) {
-        subEl.textContent = "Assistant runtime is unavailable; questions can still be saved for review.";
+        statusEl.textContent = "Assistant runtime is unavailable.";
       }
+      loadReviewItems();
     })
     .catch(function () {
-      roleEl.textContent = "Review-gated";
-      toolsEl.innerHTML = '<div class="aiassist-tool is-waiting"><strong>Could not load tools</strong>Questions can still be submitted for review.</div>';
+      greetingEl.textContent = "hi.";
+      statusEl.textContent = "Could not load assistant context.";
+      loadReviewItems();
     });
 
   input.addEventListener("input", resizeInput);
@@ -444,6 +506,26 @@
     }
   } catch (err) {}
 
+  if (reviewToggle && reviewDrawer) {
+    reviewToggle.addEventListener("click", function () {
+      reviewDrawer.classList.toggle("is-open");
+      if (reviewDrawer.classList.contains("is-open")) loadReviewItems();
+    });
+  }
+  if (reviewClose && reviewDrawer) {
+    reviewClose.addEventListener("click", function () {
+      reviewDrawer.classList.remove("is-open");
+    });
+  }
+  if (reviewList) {
+    reviewList.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!target || !target.getAttribute) return;
+      var id = target.getAttribute("data-review-ack");
+      if (id) acknowledgeReview(id, target);
+    });
+  }
+
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     var question = input.value.trim();
@@ -471,12 +553,15 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var answer = data && data.answer ? data.answer : "I could not answer that yet.";
-        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("Cenas AI")) + '</div>' + esc(answer);
-        if (data && data.queued) pending.classList.add("queued");
+        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>' + esc(answer);
+        if (data && data.queued) {
+          pending.classList.add("queued");
+          loadReviewItems();
+        }
         if (answer) lastAssistantAnswer = answer;
       })
       .catch(function () {
-        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("Cenas AI")) + '</div>I could not reach the assistant right now.';
+        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>I could not reach the assistant right now.';
         pending.classList.add("queued");
       })
       .finally(function () {

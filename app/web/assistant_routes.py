@@ -99,6 +99,7 @@ _CENA_REVIEW_SESSION_TITLE = "Cenas AI Review"
 _CENA_REVIEW_SESSION_PREFIX = "Cenas AI Review: "
 _CENA_REVIEW_CLIP_CHARS = 8000
 _CENA_REVIEW_PAYLOAD_PREFIX = "CENAS_ASSISTANT_REVIEW_V2\n"
+_CENA_REVIEW_MODEL = "assistant-review-mirror"
 _ORDERS_SUMMARY_RE = re.compile(
     r"\b("
     r"catering|caterings|ezcater|orders?|deliver(?:y|ies)|"
@@ -794,6 +795,64 @@ def _assistant_review_content(*args, **kwargs) -> str:
     )
 
 
+def _assistant_review_payload_from_message(message: SamChatMessage) -> dict[str, Any] | None:
+    if message.model != _CENA_REVIEW_MODEL:
+        return None
+    content = message.content or ""
+    if not content.startswith(_CENA_REVIEW_PAYLOAD_PREFIX):
+        return None
+    try:
+        payload = json.loads(content.split("\n", 1)[1])
+    except (IndexError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _is_saved_for_sam_review(payload: dict[str, Any]) -> bool:
+    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+    tool = payload.get("tool") if isinstance(payload.get("tool"), dict) else {}
+    return bool(
+        result.get("queued") is True
+        or result.get("status") in {"queued", "review", "needs_review", "unavailable"}
+        or tool.get("route_path") == "review"
+    )
+
+
+def _assistant_review_item(message: SamChatMessage) -> dict[str, Any] | None:
+    payload = _assistant_review_payload_from_message(message)
+    if not payload or not _is_saved_for_sam_review(payload):
+        return None
+    actor = payload.get("actor") if isinstance(payload.get("actor"), dict) else {}
+    turn = payload.get("turn") if isinstance(payload.get("turn"), dict) else {}
+    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+    tool = payload.get("tool") if isinstance(payload.get("tool"), dict) else {}
+    ack = payload.get("acknowledged") if isinstance(payload.get("acknowledged"), dict) else None
+    return {
+        "id": message.id,
+        "session_id": message.session_id,
+        "asked_at": payload.get("asked_at") or (
+            message.created_at.isoformat() if message.created_at else None
+        ),
+        "actor": actor.get("display_name") or "Unknown",
+        "role": actor.get("role"),
+        "question": turn.get("question") or "",
+        "answer": turn.get("answer") or "",
+        "reason": result.get("reason") or result.get("status"),
+        "route_path": tool.get("route_path"),
+        "tool_id": tool.get("final_tool_id") or tool.get("id") or tool.get("routed_tool_id"),
+        "acknowledged": bool(ack),
+        "acknowledged_at": ack.get("at") if ack else None,
+        "acknowledged_by": ack.get("by") if ack else None,
+    }
+
+
+def _can_review_saved_for_sam(ctx: dict[str, Any]) -> bool:
+    return bool(
+        ctx.get("kind") != "anonymous"
+        and (ctx.get("is_owner_operator") or ctx.get("role") == "partner")
+    )
+
+
 def _mirror_assistant_turn_to_cena_chat(
     ctx: dict[str, Any],
     question: str,
@@ -826,7 +885,7 @@ def _mirror_assistant_turn_to_cena_chat(
                 previous_answer,
                 asked_at,
             ),
-            model="assistant-review-mirror",
+            model=_CENA_REVIEW_MODEL,
             created_at=now,
         ))
         db.commit()
@@ -1924,6 +1983,87 @@ def assistant_tools():
         "generated_at": _now_iso(),
         "tools": _tool_catalog_for(ctx),
     })
+
+
+@assistant_bp.route("/assistant/review-items", methods=["GET"])
+def assistant_review_items():
+    ctx = _principal_context()
+    if not _can_review_saved_for_sam(ctx):
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+    if SessionLocal is None:
+        return jsonify({"ok": False, "error": "database_unavailable"}), 503
+
+    include_acknowledged = str(request.args.get("include_acknowledged") or "").lower() in {"1", "true", "yes"}
+    try:
+        limit = max(1, min(int(request.args.get("limit") or 100), 200))
+    except ValueError:
+        limit = 100
+
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(SamChatMessage)
+            .filter(SamChatMessage.model == _CENA_REVIEW_MODEL)
+            .order_by(SamChatMessage.created_at.desc(), SamChatMessage.id.desc())
+            .limit(limit * 4)
+            .all()
+        )
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            item = _assistant_review_item(row)
+            if not item:
+                continue
+            if item["acknowledged"] and not include_acknowledged:
+                continue
+            items.append(item)
+            if len(items) >= limit:
+                break
+        return jsonify({
+            "ok": True,
+            "generated_at": _now_iso(),
+            "items": items,
+            "pending_count": sum(1 for item in items if not item["acknowledged"]),
+        })
+    finally:
+        db.close()
+
+
+@assistant_bp.route("/assistant/review-items/<int:message_id>/ack", methods=["POST"])
+def assistant_review_item_ack(message_id: int):
+    ctx = _principal_context()
+    if not _can_review_saved_for_sam(ctx):
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+    if SessionLocal is None:
+        return jsonify({"ok": False, "error": "database_unavailable"}), 503
+
+    db = SessionLocal()
+    try:
+        row = db.get(SamChatMessage, message_id)
+        if row is None:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        payload = _assistant_review_payload_from_message(row)
+        if not payload or not _is_saved_for_sam_review(payload):
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        payload["acknowledged"] = {
+            "at": _now_iso(),
+            "by": ctx.get("display_name") or "User",
+            "principal_id": ctx.get("principal_id"),
+        }
+        row.content = _CENA_REVIEW_PAYLOAD_PREFIX + json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+        db.add(row)
+        db.commit()
+        item = _assistant_review_item(row)
+        return jsonify({"ok": True, "item": item})
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 @assistant_bp.route("/assistant/ask", methods=["POST"])

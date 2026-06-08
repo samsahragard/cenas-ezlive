@@ -39,7 +39,7 @@
       {% endif %}
     </a>
     {% if user_role != 'driver' %}
-    <a class="ck-sb-ai-orb" href="/{{ store_slug }}/today?tab=cena" aria-label="Open Cenas AI assistant" title="Cenas AI">
+    <a class="ck-sb-ai-orb" href="/assistant" aria-label="Open Cenas AI assistant" title="Cenas AI">
       <canvas data-ck-ai-orb data-width="86" data-height="62" aria-hidden="true"></canvas>
     </a>
     {% endif %}
@@ -76,7 +76,7 @@
     </div>
     {% else %}
 
-    {# ==== TODAY ==== direct link to the tabbed Today dashboard (Sam 2026-05-21): the sidebar Today entry no longer expands a sub-menu - it links straight to /<store>/today (which opens on the Dashboard tab; Notifications / Task Reports / Cena / Cena+Dev / Agents / Page Info / Pass are reachable as tabs there). Same change as the Manager + Catering entries below. Sam #205 (2026-05-23): the prior indented "Cena + Dev" sidebar link was REMOVED — Sam wants the combined chat as a tab next to the Cena tab, NOT as a sidebar dropdown under TODAY. #}
+    {# ==== TODAY ==== direct link to the tabbed Today dashboard (Sam 2026-05-21): the sidebar Today entry no longer expands a sub-menu - it links straight to /<store>/today (which opens on the Dashboard tab; Notifications / Task Reports are reachable as tabs there). The Cenas AI animation now links to the standalone /assistant page. #}
     <a class="ck-sb-section-head" href="/{{ store_slug }}/today"
        style="margin-top: 10px; text-decoration: none;">
       <span class="ck-sb-section-label">Today</span>

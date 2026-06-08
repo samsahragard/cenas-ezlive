@@ -1008,15 +1008,8 @@ def sam_chat_page():
 
 @sam_chat_bp.route("/sam/combined", methods=["GET"])
 def sam_chat_combined():
-    """Side-by-side: /sam/chat (left, Sam<->Cena) + /partner/developer/chat
-    (right, team dev chat). Sam directive 2026-05-23 #167 - so Sam does
-    not have to flip between pages. Both panes load the existing surfaces
-    in iframes via the parent session cookies; no new state, no API
-    duplication. Hard-gated to Sam like the rest of /sam/chat."""
-    gate = _require_sam_page()
-    if gate is not None:
-        return gate
-    return render_template("sam_combined.html", active="sam_combined")
+    """Retired Cena + Dev combined chat surface."""
+    return redirect("/assistant")
 
 
 @sam_chat_bp.route("/sam/agents", methods=["GET"])

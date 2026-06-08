@@ -6134,12 +6134,6 @@ _TODAY_DASH_TABS = [
     ("dashboard",     "Dashboard"),
     ("notifications", "Notifications"),
     ("task-reports",  "Task Reports"),
-    ("cena",          "Cenas AI"),
-    # Sam #205 (2026-05-23): the four siblings live RIGHT NEXT to the
-    # Cenas AI tab — not under a sidebar dropdown. Order matches the spec:
-    # Cena + Dev (the combined chat surface), then Agents (Cena's roster),
-    # then Page Info (aick's page guide), then Pass (credential locations).
-    ("cena-dev",      "Cena + Dev"),
     ("agents",        "Agents"),
     ("pass",          "Pass"),
     # Sam #240 (2026-05-23): consolidated docs surface — replaces the
@@ -6160,12 +6154,10 @@ def _today_dash_full_url(tab_key):
       dashboard     -> /<store>/                  (store.home)
       notifications -> /partner/notifications      (flat, not store-scoped)
       task-reports  -> /partner/team-reports/      (flat, not store-scoped)
-      cena          -> /assistant                  (flat, role-level Cenas AI)
-      cena-dev      -> /sam/combined               (flat; side-by-side chat)
       agents        -> /sam/agents                 (flat; Cena's roster)
       page-info     -> /partner/developer/app/page-guide  (flat; aick's page guide)
       pass          -> /sam/pass                   (flat; credential LOCATIONS only)
-    The flat notifications / team-reports / chat / combined / agents /
+    The flat notifications / team-reports / agents /
     page-guide / pass paths are written as literals because they live
     outside the /<store> blueprint; url_for on a store endpoint would
     prepend the slug. Falls back to the store home page on an unknown
@@ -6176,10 +6168,6 @@ def _today_dash_full_url(tab_key):
         return "/partner/notifications"
     if tab_key == "task-reports":
         return "/partner/team-reports/"
-    if tab_key == "cena":
-        return "/assistant"
-    if tab_key == "cena-dev":
-        return "/sam/combined"
     if tab_key == "agents":
         return "/sam/agents"
     if tab_key == "pass":
@@ -6205,16 +6193,16 @@ def today_dashboard():
     the browser loads them.
 
     Tab gating mirrors the sidebar: the Task Reports tab is omitted
-    unless the viewer holds team_reports.view. The Cenas AI tab is the
-    role-level assistant page; the Cena+Dev / Agents / Pass / Docs /
-    Automation tabs remain Sam-only. Dashboard and Notifications are
+    unless the viewer holds team_reports.view. The standalone /assistant
+    page is reached from the AI animation, so it is not embedded here.
+    Agents / Pass / Docs / Automation tabs remain Sam-only. Dashboard and Notifications are
     always present, so the default tab is always valid. Gating fails OPEN — if a gate
     helper raises, the tab is kept and its destination page enforces
     its own gate."""
     # Build the visible tab set, applying the same audience gates the
     # Today section's sidebar entries use.
     dash_tabs = []
-    _SAM_ONLY_KEYS = {"cena-dev", "agents", "pass", "docs", "automation"}
+    _SAM_ONLY_KEYS = {"agents", "pass", "docs", "automation"}
     for key, caption in _TODAY_DASH_TABS:
         if key == "task-reports":
             try:

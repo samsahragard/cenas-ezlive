@@ -49,7 +49,7 @@
 <h2>Recently shipped (Phase 2 surfaces now live)</h2>
 <ul>
   <li><span class="status-chip shipped">Shipped</span> <strong>Operator-side AI assistant</strong>: <code>/sam/chat</code> + Cena gateway runtime on AiCk (8765). SSE-streamed to the browser; tool catalogue + audit log live.</li>
-  <li><span class="status-chip shipped">Shipped</span> <strong>Cena page tab suite</strong>: Cena + Dev / Agents / Page Info / Pass / Docs (this surface) / Automation — all live under <code>/sam/*</code>.</li>
+  <li><span class="status-chip shipped">Shipped</span> <strong>Cena page tab suite</strong>: Agents / Page Info / Pass / Docs (this surface) / Automation — all live under <code>/sam/*</code>.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>Catering driver-assignment via Selenium UI flow</strong>: webhook auto-assigns + manager dropdown re-assigns drive partnerportal.ezcater.com from the AiCk gateway (Sam #669 + #900, 2026-05-24..2026-05-25). Replaces the courierAssign GraphQL API path; gateway callback writes back to Render.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>ck failover gateway</strong>: Mini_IT13 (100.73.38.82:8766) accepts forwarded driver-assign jobs when aick's Selenium fails (CENA2_GATEWAY_URL). Proven end-to-end in production 2026-05-25.</li>
   <li><span class="status-chip shipped">Shipped</span> <strong>pwck driver-assign service (now primary)</strong>: per the Architecture audit, the driver-assign primary is now <code>pwck</code> (Mini_IT13 <code>:9000</code>, <code>/pwck/run</code>); aick Selenium is fallback; <code>ck_gateway:8766</code> (Mini_IT13) is the driver-assign FAILOVER and is UP (netstat-verified). See Architecture / Integrations for the live topology.</li>

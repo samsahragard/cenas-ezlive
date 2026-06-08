@@ -91,7 +91,6 @@
   .tws-pill.active { background: var(--tws-gold); color: #1a0d08; }
   .tws-pill .ct { opacity: .7; margin-left: 4px; font-weight: 500; }
   .tws-pill.active .ct { opacity: .85; }
-  .tws-spacer { flex: 1 1 auto; }
   .tws-select, .tws-addbtn {
     font-family: inherit; font-size: 12.5px; color: var(--tws-cream);
     background: var(--tws-card); border: 1px solid var(--tws-border-soft);
@@ -120,12 +119,6 @@
   .tws-pos-opt:hover { background: var(--tws-card-hi); }
   .tws-pos-opt input { accent-color: var(--tws-gold); margin: 0; }
   .tws-pos-sep { height: 1px; background: var(--tws-border-soft); margin: 4px 2px; }
-
-  /* stat cards (quieted, per the mockup caption) */
-  .tws-stats { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-  .tws-stat { background: var(--tws-card); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 10px 14px; min-width: 116px; }
-  .tws-stat .n { font-family: 'Instrument Serif', serif; font-size: 24px; color: var(--tws-cream); line-height: 1; }
-  .tws-stat .l { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--tws-cream-meta); margin-top: 5px; }
 
   /* store sections + rows (dense, readable) */
   .tws-store { margin-bottom: 18px; }
@@ -355,18 +348,11 @@
         <button class="tws-pill" data-filter="boh">BOH<span class="ct" data-ct="boh">--</span></button>
         <button class="tws-pill" data-filter="foh">FOH<span class="ct" data-ct="foh">--</span></button>
       </div>
-      <span class="tws-spacer"></span>
       <div class="tws-posfilter" id="tws-pos-wrap">
         <button type="button" class="tws-select" id="tws-pos-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filter by position">All positions</button>
         <div class="tws-pos-pop hidden" id="tws-pos-pop" role="group" aria-label="Filter by position"></div>
       </div>
       <label class="tws-chk"><input type="checkbox" id="tws-inactive"> Include inactive</label>
-    </div>
-
-    <div class="tws-stats">
-      <div class="tws-stat"><div class="n" id="tws-stat-showing">--</div><div class="l">Showing</div></div>
-      <div class="tws-stat"><div class="n" id="tws-stat-active">--</div><div class="l">Active total</div></div>
-      <div class="tws-stat"><div class="n" id="tws-stat-positions">--</div><div class="l">Positions</div></div>
     </div>
 
     <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
@@ -672,13 +658,10 @@
 
   function renderBoard(b) {
     state.board = b;
-    // pill counts + stats
+    // pill counts
     ["all", "boh", "foh"].forEach(function (k) {
       var el = root.querySelector('[data-ct="' + k + '"]'); if (el) el.textContent = (b.counts && b.counts[k] != null) ? b.counts[k] : "--";
     });
-    document.getElementById("tws-stat-showing").textContent = (b.stats && b.stats.showing != null) ? b.stats.showing : "--";
-    document.getElementById("tws-stat-active").textContent = (b.stats && b.stats.active_total != null) ? b.stats.active_total : "--";
-    document.getElementById("tws-stat-positions").textContent = (b.stats && b.stats.positions != null) ? b.stats.positions : "--";
     // Build the multi-select position filter popover from the FULL canonical
     // name list (once). The server matches by NAME (team_roster._passes), so
     // each checkbox value = the NAME, and we include every canonical position

@@ -159,6 +159,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
 
     "km": {
+        "team_reports.view",  # Sam 2026-06-08 (1.1): Today > Task Reports, store-scoped (NOT view_all_stores)
         "labor.view_own_wage", "labor.view_own_hours",
         "labor.view_others_hours",  # read-only on roster
         "labor.view_boh_costs", "labor.view_store_summary",
@@ -183,6 +184,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
 
     "assistant_km": {
+        "team_reports.view",  # Sam 2026-06-08 (1.1): Today > Task Reports, store-scoped (NOT view_all_stores)
         "labor.view_own_wage", "labor.view_own_hours",
         "labor.view_boh_costs",  # read-only
         "labor.view_store_summary",
@@ -203,6 +205,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
 
     "corporate_chef": {
+        "team_reports.view",  # Sam 2026-06-08 (1.1): Today > Task Reports, store-scoped (NOT view_all_stores)
         # multi-store role; scope='all_stores' on every store-scoped tag
         "labor.view_own_wage", "labor.view_others_wage",
         "labor.view_own_hours", "labor.view_others_hours",
@@ -227,6 +230,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
 
     "foh_manager": {
+        "team_reports.view",  # Sam 2026-06-08 (1.1): Today > Task Reports, store-scoped (NOT view_all_stores)
         "labor.view_own_wage", "labor.view_own_hours",
         "labor.view_others_hours",  # FOH staff only
         "labor.view_foh_costs", "labor.view_store_summary",

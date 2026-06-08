@@ -273,10 +273,14 @@ class TestStoreScope:
         assert _user_has(partner, "orders.unassign_driver", "anything") is True
 
     def test_role_without_tag_denied_regardless_of_store(self):
-        """An expo has 'orders.view' but NOT 'orders.unassign_driver'.
-        Even within their own store, the missing tag denies."""
+        """A role is denied a tag it lacks even within its own store. NOTE
+        (aick 2026-06-08): expo's management-profile upgrade (Sam 2026-06-07)
+        granted it orders.* + drivers.*, so the prior 'orders.unassign_driver'
+        assertion went stale and failed on main. labor.view_all_stores is a
+        corporate-tier tag expo genuinely lacks -- the real 'missing tag denies'
+        case."""
         expo = _make_user("expo", store_scope="tomball")
-        assert _user_has(expo, "orders.unassign_driver", "tomball") is False
+        assert _user_has(expo, "labor.view_all_stores", "tomball") is False
 
 
 # ============================================================

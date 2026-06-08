@@ -59,6 +59,15 @@ KITCHEN_MGR = ["partner", "corporate_chef", "km"]                              #
 KITCHEN     = ["partner", "corporate_chef", "km", "cook", "expo"]              # kitchen staff
 DRIVERS_MGR = ["partner", "corporate", "gm", "corporate_driver"]              # drivers + mgrs
 
+# Sam's "core management 6" + partner, for the DASHBOARD keys ONLY (Sam 2026-06-08,
+# spec 1.1-1.9). Dedicated to dash.* so a future dashboard-audience change never
+# ripples through MGR_UP/GM_UP (which ~30 feature perms reference). DASH_MGMT6
+# EXCLUDES expo (Expo is out of the Manager dashboard per 1.2, and gets the other
+# dashboards per-key); DASH_MGMT6_EXPO adds expo for the dashboards it shares.
+DASH_MGMT6      = ["partner", "corporate", "corporate_chef", "gm",
+                   "km", "assistant_km", "foh_manager"]
+DASH_MGMT6_EXPO = DASH_MGMT6 + ["expo"]
+
 # ---- ADD-PEOPLE rank tiers (Sam #2381/#2383): a manager can ADD only roles
 # STRICTLY BELOW their own rank. Partner adds anyone; GM/KM (+ corporate_chef)
 # add FOH-Mgr/Asst-KM + everything below; Asst-KM/FOH-Mgr add only the floor
@@ -113,19 +122,19 @@ CATALOG = [
    {"id":"1.1","key":"dash.today","label":"Access Today Dashboard","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:/<store>/today","blueprint_or_fn":"store_routes (today tab)"},
     "notes":"Shows the Today tab - daily overview home for partners/managers."},
-   {"id":"1.2","key":"dash.manager","label":"Access Manager Dashboard","status":"live","default_roles":MGR_UP,
+   {"id":"1.2","key":"dash.manager","label":"Access Manager Dashboard","status":"live","default_roles":DASH_MGMT6,
     "maps_to":{"route":"/<store>/manager","blueprint_or_fn":"store_routes.py:3202"},
     "notes":"Shows the Manager tab (Daily Log, Incidents, Attendance, Training...). Required to run a shift."},
    {"id":"1.3","key":"dash.catering","label":"Access Catering Dashboard","status":"live","default_roles":MGR_UP+["corporate_driver"],
     "maps_to":{"route":"verify:ez/catering","blueprint_or_fn":"ezcater_routes / ezcater_live_routes"},
     "notes":"Shows the Catering tab (EZ orders queue, driver assignment, tracking). Drivers + catering mgrs."},
-   {"id":"1.4","key":"dash.operations","label":"Access Operations Dashboard","status":"live","default_roles":GM_UP,
+   {"id":"1.4","key":"dash.operations","label":"Access Operations Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO,
     "maps_to":{"route":"verify:/<store>/operations","blueprint_or_fn":"store_routes (operations tab)"},
     "notes":"Shows Operations tab (Team, Forecasts, Sales, Labor, Marketing). Partner/GM-only typically."},
-   {"id":"1.5","key":"dash.vendors","label":"Access Vendors Dashboard","status":"live","default_roles":GM_UP,
+   {"id":"1.5","key":"dash.vendors","label":"Access Vendors Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO,
     "maps_to":{"route":"verify:/<store>/vendors","blueprint_or_fn":"vendors/produce routes"},
     "notes":"Shows Vendors tab (directory, POs, invoices, portal). GM-and-above."},
-   {"id":"1.6","key":"dash.kitchen","label":"Access Kitchen Dashboard","status":"live","default_roles":KITCHEN,
+   {"id":"1.6","key":"dash.kitchen","label":"Access Kitchen Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO + ["cook"],
     "maps_to":{"route":"verify:/<store>/kitchen","blueprint_or_fn":"store_routes (kitchen: fresh/prep/recipes)"},
     "notes":"Shows Kitchen tab (Fresh Food, Prep List, Recipes). KMs, chefs, prep cooks."},
    {"id":"1.7","key":"dash.legal","label":"Access Legal Dashboard","status":"reserved","default_roles":PARTNER,

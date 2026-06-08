@@ -33,11 +33,17 @@ def test_the_seven_management_positions_are_exactly_sams_list():
 
 
 def test_every_management_position_gets_the_manager_dashboards():
-    """All 7 management-section roles grant dash.today + dash.manager by catalog
-    default -- the exact thing Expo was missing."""
+    """All 7 management-section roles grant dash.today. dash.manager goes to every
+    management role EXCEPT expo -- Sam 2026-06-08 (spec 1.2): the Manager dashboard
+    is for the 6 manager roles, not Expo."""
     for r in MGMT:
-        missing = CORE_MGMT_DASHBOARDS - DRM.get(r, set())
-        assert not missing, "%s (management section) missing %s" % (r, missing)
+        assert "dash.today" in DRM.get(r, set()), "%s (management) missing dash.today" % r
+    for r in MGMT:
+        if r == "expo":
+            assert "dash.manager" not in DRM.get("expo", set()), \
+                "expo should NOT get dash.manager (Sam spec 1.2)"
+        else:
+            assert "dash.manager" in DRM.get(r, set()), "%s missing dash.manager" % r
 
 
 def test_every_management_position_has_a_real_baseline_not_hourly():
@@ -51,11 +57,16 @@ def test_every_management_position_has_a_real_baseline_not_hourly():
 
 
 def test_expo_regression_is_management_not_near_hourly():
-    """Direct regression guard for the reported bug (Yessika / Expo)."""
+    """Direct regression guard for the reported bug (Yessika / Expo). Sam
+    2026-06-08 refined it: Expo gets the operational dashboards (today, catering,
+    operations, vendors, kitchen) but NOT the Manager dashboard (spec 1.2)."""
     cat = DRM.get("expo", set())
-    assert "dash.manager" in cat
+    assert "dash.manager" not in cat          # Sam 1.2: Expo is NOT in the Manager dashboard
     assert "dash.today" in cat
     assert "dash.kitchen" in cat              # keeps its kitchen access too
+    assert "dash.catering" in cat
+    assert "dash.operations" in cat
+    assert "dash.vendors" in cat
     assert len(cat) >= 30, len(cat)
     assert len(ROLE_PERMISSIONS.get("expo", set())) >= 20
 

@@ -28,3 +28,12 @@ def test_assistant_bubble_sends_previous_question_for_followups():
     assert "var previousQuestion = lastUserQuestion;" in script
     assert "lastUserQuestion = question;" in script
     assert "previous_question: previousQuestion" in script
+
+
+def test_assistant_bubble_does_not_render_on_full_assistant_page():
+    script = Path("app/static/js/assistant_bubble.js").read_text(encoding="utf-8")
+
+    assert "function isFullAssistantPage()" in script
+    assert 'window.location.pathname === "/assistant"' in script
+    assert 'params.get("tab") === "cena"' in script
+    assert "if (isFullAssistantPage()) return;" in script

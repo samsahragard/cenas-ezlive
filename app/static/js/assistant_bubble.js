@@ -13,6 +13,11 @@
     return roots[0] || null;
   }
 
+  function isFullAssistantPage() {
+    var params = new URLSearchParams(window.location.search || "");
+    return window.location.pathname === "/assistant" || params.get("tab") === "cena";
+  }
+
   if (window.__cenasAssistantLoaded) {
     dedupeRoots();
     return;
@@ -178,6 +183,7 @@
 
   function init() {
     if (dedupeRoots()) return;
+    if (isFullAssistantPage()) return;
 
     var root = el("div", "ckai-root");
     root.setAttribute("hidden", "hidden");

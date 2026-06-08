@@ -70,41 +70,6 @@
   }
   .ezo-page * { box-sizing: border-box; }
 
-  /* ---- top strip: location pill + LIVE badge ---- */
-  .ezo-page .ezo-topstrip {
-    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
-  }
-  .ezo-page .ezo-loc {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--gold-bright); background: rgba(228,179,64,0.12);
-    padding: 6px 12px; border-radius: 999px; letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .ezo-page .ezo-spacer { flex: 1; }
-  .ezo-page .ezo-live {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    font-weight: 700; color: #95C75F;
-    background: rgba(149,199,95,0.12);
-    border: 0.5px solid rgba(149,199,95,0.32);
-    padding: 5px 10px; border-radius: 999px; letter-spacing: 0.1em;
-  }
-  .ezo-page .ezo-live .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #95C75F; box-shadow: 0 0 6px 1px rgba(149,199,95,0.7);
-  }
-
-  /* ---- title + subtitle ---- */
-  .ezo-page .ezo-h1 {
-    font-family: 'Instrument Serif', serif; font-size: 38px;
-    line-height: 1.05; font-weight: 400; margin: 0 0 6px;
-  }
-  .ezo-page .ezo-h1 .a { color: var(--cream); font-style: normal; }
-  .ezo-page .ezo-h1 .b { color: var(--gold); font-style: italic; }
-  .ezo-page .ezo-sub {
-    color: var(--cream-faint); font-size: 13px; margin: 0 0 18px;
-  }
-
   /* ---- tab row ---- */
   .ezo-page .ezo-tabs {
     display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px;
@@ -400,23 +365,12 @@
 
   @media (max-width: 460px) {
     .ezo-page { padding: 14px 12px 24px; }
-    .ezo-page .ezo-h1 { font-size: 32px; }
     .ezo-page .ezo-tab,
     .ezo-page .ezo-act { flex: 1 0 auto; justify-content: center; }
   }
 </style>
 
 <div class="ezo-page">
-
-  {# ---- top strip ---- #}
-  <div class="ezo-topstrip">
-    <span class="ezo-loc">{{ location_label or 'All Orders' }}</span>
-    <span class="ezo-spacer"></span>
-    <span class="ezo-live"><span class="dot"></span>LIVE</span>
-  </div>
-
-  {# ---- title + subtitle ---- #}
-  <h1 class="ezo-h1"><span class="a">All</span> <span class="b">Orders</span></h1>
 
   {# ---- tab row: SamAI 2026-06-06 owner order, squared tabs. #}
   {% set _store = g.current_store or 'partner' %}

@@ -20,13 +20,14 @@ helpers (no request context needed)."""
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta
 
 os.environ.setdefault("ALLOW_DEV_SECRET", "1")  # create_app needs a dev secret
 
 import pytest
 from werkzeug.security import generate_password_hash
 
-from app.models import Employee, EmployeeSetupToken, User
+from app.models import Driver, Employee, EmployeeSetupToken, User
 from app.web import employee_setup as setup_mod
 
 
@@ -397,3 +398,42 @@ def test_keypad_login_with_reset_code_for_no_user_employee(app_bound):
     bad = flask_app.test_client()
     r3 = bad.post("/keypad-login", json={"phone": "4752769760", "pin": "99999"})
     assert r3.status_code == 401
+
+
+def test_keypad_employee_reset_code_works_when_driver_same_phone_is_locked(app_bound):
+    """Gina regression: the main keypad must not let a stale/locked Driver row
+    with the same phone block a valid Team Roster employee reset code."""
+    flask_app, db = app_bound
+    db.add(User(id=1, full_name="P", email="p@test.local",
+                passcode_hash=generate_password_hash("12345"),
+                permission_level="partner", store_scope=None, active=True,
+                first_login_done=True, session_version=1))
+    emp = Employee(full_name="Gina Paola Buritica Amaya",
+                   email="gina.employee@test.local",
+                   phone="4752769760", active=True, session_version=1)
+    driver = Driver(name="Gina Driver", location="tomball", phone="(475) 276-9760",
+                    active=True, status="active",
+                    passcode_hash=generate_password_hash("22222"),
+                    first_login_done=True, session_version=1,
+                    failed_attempts=6,
+                    lockout_until=datetime.utcnow() + timedelta(minutes=5))
+    db.add_all([emp, driver])
+    db.commit()
+
+    client = flask_app.test_client()
+    with client.session_transaction() as s:
+        s["partner_auth_ok"] = True
+        s["auth_ok"] = True
+        s["user_id"] = 1
+        s["user_session_version"] = 1
+    r = client.post("/dos/schedules-v2/employees/%d/reset-pin" % emp.id)
+    assert r.status_code == 200, r.get_data(as_text=True)
+    code = r.get_json()["setup_code"]
+
+    fresh = flask_app.test_client()
+    r2 = fresh.post("/keypad-login", json={"phone": "4752769760", "pin": code})
+    assert r2.status_code == 200, r2.get_data(as_text=True)
+    assert r2.get_json().get("ok") is True
+    with fresh.session_transaction() as s:
+        assert s.get("employee_id") == emp.id
+        assert s.get("driver_id") is None

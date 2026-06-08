@@ -251,7 +251,7 @@ def app_with_partner(db_session, monkeypatch):
                    first_login_done=True, session_version=1)
     db_session.add(partner)
     # Seed the canonical positions the +Add validates against.
-    for nm in ["GM", "Server", "Cook"]:
+    for nm in ["GM", "KM", "Server", "Cook"]:
         db_session.add(Position(name=nm, store_key=None))
     db_session.commit()
 
@@ -306,6 +306,63 @@ def test_endpoint_management_add_writes_position_store_and_user(app_with_partner
     # New +Add employee has no linked User yet -> permission carried by the
     # EmployeePosition row for the boot backfill (no parallel mechanism).
     assert emp.user_id is None
+
+
+def test_endpoint_add_reactivates_existing_employee_and_adds_management_role(app_with_partner):
+    """A deactivated employee with the same email is the same person. +Add should
+    reactivate and add the requested management placement instead of returning
+    'employee with that email already exists'."""
+    flask_app, db = app_with_partner
+    client = _partner_client(flask_app)
+    km = _pid(db, "KM")
+    existing = Employee(full_name="Janeth Old", email="janeth@test.local",
+                        phone="8325411871", active=False, session_version=3)
+    db.add(existing)
+    db.commit()
+
+    r = client.post("/dos/schedules-v2/employees/add",
+                    json={"full_name": "Janeth Arvizu Animas",
+                          "email": "janeth@test.local",
+                          "phone": "8325411871",
+                          "assignments": [{"position_id": km, "store_key": "tomball"}],
+                          "section": "management"})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["employee_id"] == existing.id
+
+    rows = db.query(Employee).filter(Employee.email == "janeth@test.local").all()
+    assert len(rows) == 1
+    emp = rows[0]
+    assert emp.active is True
+    assert emp.full_name == "Janeth Arvizu Animas"
+    eps = db.query(EmployeePosition).filter_by(employee_id=emp.id).all()
+    assert {(ep.position_id, ep.store_key) for ep in eps} == {(km, "tomball")}
+    sas = db.query(EmployeeStoreAssignment).filter_by(employee_id=emp.id).all()
+    assert {sa.store_key for sa in sas} == {"tomball"}
+
+
+def test_endpoint_add_rejects_email_and_phone_matching_different_employees(app_with_partner):
+    """Reactivation is only safe when the identity resolves to one Employee row."""
+    flask_app, db = app_with_partner
+    client = _partner_client(flask_app)
+    km = _pid(db, "KM")
+    db.add_all([
+        Employee(full_name="Email Owner", email="janeth@test.local",
+                 phone="1111111111", active=True, session_version=1),
+        Employee(full_name="Phone Owner", email="other@test.local",
+                 phone="8325411871", active=True, session_version=1),
+    ])
+    db.commit()
+
+    r = client.post("/dos/schedules-v2/employees/add",
+                    json={"full_name": "Janeth Arvizu Animas",
+                          "email": "janeth@test.local",
+                          "phone": "8325411871",
+                          "assignments": [{"position_id": km, "store_key": "tomball"}],
+                          "section": "management"})
+    assert r.status_code == 409, r.get_data(as_text=True)
+    assert "two different employees" in r.get_json()["error"]
 
 
 def test_endpoint_hourly_add_writes_rows(app_with_partner):

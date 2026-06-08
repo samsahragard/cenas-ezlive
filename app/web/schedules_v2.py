@@ -216,7 +216,9 @@ def sv2_employee_add():
     holds. POSITION + STORE are BOTH multi-select (Sam #2315): multi-position
     (EmployeePosition M2M) + multi-store (one EmployeeStoreAssignment per store =
     the schedulability gate, so the hire is immediately schedulable at each).
-    Email is the login IDENTITY; duplicate email (and phone) are rejected."""
+    Email is the login IDENTITY. Re-adding an existing identity reuses/reactivates
+    that Employee row and adds the requested store/position placement instead of
+    creating a duplicate account."""
     data = request.get_json(silent=True) or {}
     full_name = (data.get("full_name") or "").strip()
     email = (data.get("email") or "").strip()
@@ -277,16 +279,29 @@ def sv2_employee_add():
 
     db = SessionLocal()
     try:
-        # Email is the login identity (login + invite key off it), so it must be
-        # unique. Phone is the SMS-identity UNIQUE. Guard both here (case-insensitive
-        # email; small-table scan).
+        # Email/phone identify a person, but they must not trap rehires or section
+        # moves. If the identity already exists, reuse/reactivate that Employee row
+        # and add the requested placement. If email and phone point at different
+        # rows, stop: that would merge two people.
+        from app.services.ezcater_known_drivers_seed import normalize_phone
         all_emps = db.query(Employee).all()
-        if any((e.email or "").lower() == email.lower() for e in all_emps):
-            return jsonify({"ok": False,
-                            "error": "An employee with that email already exists."}), 409
-        if phone and any((e.phone or "") == phone for e in all_emps):
-            return jsonify({"ok": False,
-                            "error": "An employee with that phone already exists."}), 409
+        email_lc = email.lower()
+        phone_digits = normalize_phone(phone or "") if phone else ""
+        email_match = next(
+            (e for e in all_emps if (e.email or "").lower() == email_lc),
+            None,
+        )
+        phone_match = next(
+            (e for e in all_emps
+             if phone_digits and normalize_phone(e.phone or "") == phone_digits),
+            None,
+        )
+        if email_match is not None and phone_match is not None and email_match.id != phone_match.id:
+            return jsonify({
+                "ok": False,
+                "error": "That email and phone belong to two different employees.",
+            }), 409
+        existing_emp = email_match or phone_match
         # Validate position_ids against the CANONICAL catalog (the 14) - a manager
         # can only assign real positions (mirrors the cleaned dropdown).
         valid_pids = set()
@@ -350,8 +365,19 @@ def sv2_employee_add():
                                 "error": "Positions outside the %s section: %s."
                                          % (section, ", ".join(_wrong))}), 400
 
-        emp = Employee(full_name=full_name, email=email, phone=phone, active=True)
-        db.add(emp)
+        if existing_emp is not None:
+            emp = existing_emp
+            emp.full_name = full_name
+            emp.email = email
+            if phone is not None:
+                emp.phone = phone
+            emp.active = True
+            emp.failed_attempts = 0
+            emp.lockout_until = None
+            emp.session_version = (emp.session_version or 0) + 1
+        else:
+            emp = Employee(full_name=full_name, email=email, phone=phone, active=True)
+            db.add(emp)
         # S5 PLACEMENT->PERMISSION: a brand-new +Add employee has NO linked User
         # yet (the User is created later via Team admin and linked, or the boot
         # backfill links it). So apply_section_placement_to_user is a NO-OP here
@@ -364,15 +390,31 @@ def sv2_employee_add():
         from app.services import tier_invariants as ti
         try:
             db.flush()
+            existing_stores = {
+                row.store_key
+                for row in db.query(EmployeeStoreAssignment.store_key)
+                             .filter(EmployeeStoreAssignment.employee_id == emp.id)
+                             .all()
+            }
             for sk in dict.fromkeys(store_keys):       # multi-store (Sam #2315), de-duped
-                db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
+                if sk not in existing_stores:
+                    db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key=sk))
+                    existing_stores.add(sk)
             # EmployeePosition now carries store_key (per-store positions, Sam
             # #2435). Write the explicit valid (position, store) pairs; else (old
             # cartesian path) every valid position at every picked store.
             _ep_pairs = ([(p, s) for (p, s) in pairs if p in valid_pids] if pairs
                          else [(p, s) for p in valid_pids for s in store_keys])
+            existing_positions = {
+                (row.position_id, row.store_key)
+                for row in db.query(EmployeePosition.position_id, EmployeePosition.store_key)
+                             .filter(EmployeePosition.employee_id == emp.id)
+                             .all()
+            }
             for (pid, sk) in dict.fromkeys(_ep_pairs):
-                db.add(EmployeePosition(employee_id=emp.id, position_id=pid, store_key=sk))
+                if (pid, sk) not in existing_positions:
+                    db.add(EmployeePosition(employee_id=emp.id, position_id=pid, store_key=sk))
+                    existing_positions.add((pid, sk))
             # Derive the placement permission from the just-written positions +
             # stores, run the tier guards, and -- if a User is somehow already
             # linked (re-add of an existing identity) -- write it onto the User.

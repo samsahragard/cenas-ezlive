@@ -381,6 +381,56 @@ def login_submit():
 
     db = SessionLocal()
     try:
+        def _try_employee_phone_login():
+            """Return an employee-login response when this phone + PIN really
+            matches the Team Roster employee identity.
+
+            This intentionally runs before Driver/User lockout returns. Some
+            people legitimately have multiple functions tied to one phone
+            (Gina: roster employee/KM plus driver rows). A stale or locked Driver
+            row must not block a fresh Team Roster reset code for the same phone.
+            This is still not a cascade to a different account: the Employee row
+            must match the same normalized phone and the submitted PIN/code.
+            """
+            if not digits:
+                return None
+            from app.web.employee_auth import (_establish_employee_session,
+                                               _find_employee_by_phone)
+            emp = _find_employee_by_phone(db, digits)
+            if emp is None:
+                return None
+
+            if emp.lockout_until and emp.lockout_until > now:
+                return None
+
+            def _emp_signed_in():
+                stores = _establish_employee_session(emp)
+                if len(stores) > 1 and not session.get("active_store"):
+                    return jsonify({"ok": True, "next": "/employee/login?needpick=1"})
+                return jsonify({"ok": True, "next": "/employee/dashboard"})
+
+            if getattr(emp, "passcode_hash", None) and _check(emp.passcode_hash, passcode):
+                emp.failed_attempts = 0
+                emp.lockout_until = None
+                db.commit()
+                return _emp_signed_in()
+
+            from app.web.employee_setup import _resolve_setup_by_code
+            emp_c, row = _resolve_setup_by_code(db, digits, passcode)
+            if emp_c is not None and emp_c.id == emp.id:
+                emp.passcode_hash = generate_password_hash(passcode)
+                emp.failed_attempts = 0
+                emp.lockout_until = None
+                emp.session_version = (emp.session_version or 0) + 1
+                row.used = True
+                db.commit()
+                return _emp_signed_in()
+            return None
+
+        employee_login = _try_employee_phone_login()
+        if employee_login is not None:
+            return employee_login
+
         # ===== Path 1: Driver lookup by phone (highest-volume login source) =====
         if digits:
             driver_match = None

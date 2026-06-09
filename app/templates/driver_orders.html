@@ -48,7 +48,7 @@
   }
   .do-card-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(92px, max-content);
     gap: 14px;
     padding: 13px 14px;
     border-bottom: 1px solid rgba(236,227,208,0.08);
@@ -64,7 +64,8 @@
   }
   .do-order-meta {
     text-align: right;
-    min-width: 96px;
+    min-width: 92px;
+    max-width: 132px;
   }
   .do-link { color: #FFD970; text-decoration: none; font-weight: 800; }
   .do-link:hover { text-decoration: underline; }
@@ -140,6 +141,44 @@
     display: grid;
     gap: 12px;
   }
+  .do-proof-dropdown {
+    padding: 0;
+  }
+  .do-proof-summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px;
+    cursor: pointer;
+    color: rgba(236,227,208,0.54);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .do-proof-summary::-webkit-details-marker {
+    display: none;
+  }
+  .do-proof-summary::after {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid #FFD970;
+    border-bottom: 2px solid #FFD970;
+    transform: rotate(45deg);
+    transition: transform 140ms ease;
+    flex: 0 0 auto;
+  }
+  .do-proof-dropdown[open] .do-proof-summary::after {
+    transform: rotate(225deg);
+  }
+  .do-proof-body {
+    border-top: 1px solid rgba(236,227,208,0.08);
+    padding: 12px;
+  }
   .do-proof-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -195,18 +234,14 @@
   }
 
   @media (max-width: 760px) {
-    .do-card-head,
     .do-card-body,
     .do-proof-grid {
       grid-template-columns: 1fr;
     }
-    .do-order-meta {
-      text-align: left;
-      min-width: 0;
-    }
     .do-card-head {
       gap: 8px;
       padding: 12px;
+      grid-template-columns: minmax(0, 1fr) minmax(92px, max-content);
     }
     .do-card-body {
       padding: 12px;
@@ -265,46 +300,48 @@
         {% endif %}
       </div>
 
-      <div class="do-panel">
-        <div class="do-panel-title">Complete delivery</div>
-        <form id="{{ form_id }}" class="do-complete-form" method="POST" action="{{ url_for('driver.driver_order_complete', order_id=o.id) }}" enctype="multipart/form-data">
-          <div class="do-proof-grid">
-            <label class="do-field do-file">
-              <span class="do-field-label">Picture</span>
-              <input type="file" name="delivery_photo" accept="image/*" capture="environment">
-              {% if o.setup_photo_url %}
-                <a class="do-proof-link" href="{{ o.setup_photo_url }}" target="_blank">View picture</a>
-                {% if o.setup_photo_uploaded_at %}
-                  <span class="do-sub">{{ fmt_driver_dt(o.setup_photo_uploaded_at) }}</span>
+      <details class="do-panel do-proof-dropdown">
+        <summary class="do-proof-summary">Complete delivery</summary>
+        <div class="do-proof-body">
+          <form id="{{ form_id }}" class="do-complete-form" method="POST" action="{{ url_for('driver.driver_order_complete', order_id=o.id) }}" enctype="multipart/form-data">
+            <div class="do-proof-grid">
+              <label class="do-field do-file">
+                <span class="do-field-label">Picture</span>
+                <input type="file" name="delivery_photo" accept="image/*" capture="environment">
+                {% if o.setup_photo_url %}
+                  <a class="do-proof-link" href="{{ o.setup_photo_url }}" target="_blank">View picture</a>
+                  {% if o.setup_photo_uploaded_at %}
+                    <span class="do-sub">{{ fmt_driver_dt(o.setup_photo_uploaded_at) }}</span>
+                  {% endif %}
                 {% endif %}
-              {% endif %}
-            </label>
+              </label>
 
-            <label class="do-field do-file">
-              <span class="do-field-label">Parking picture</span>
-              <input type="file" name="parking_photo" accept="image/*" capture="environment">
-              {% if o.parking_photo_url %}
-                <a class="do-proof-link" href="{{ o.parking_photo_url }}" target="_blank">View receipt</a>
-                {% if o.parking_photo_uploaded_at %}
-                  <span class="do-sub">{{ fmt_driver_dt(o.parking_photo_uploaded_at) }}</span>
+              <label class="do-field do-file">
+                <span class="do-field-label">Parking picture</span>
+                <input type="file" name="parking_photo" accept="image/*" capture="environment">
+                {% if o.parking_photo_url %}
+                  <a class="do-proof-link" href="{{ o.parking_photo_url }}" target="_blank">View receipt</a>
+                  {% if o.parking_photo_uploaded_at %}
+                    <span class="do-sub">{{ fmt_driver_dt(o.parking_photo_uploaded_at) }}</span>
+                  {% endif %}
                 {% endif %}
-              {% endif %}
-            </label>
+              </label>
 
-            <label class="do-field">
-              <span class="do-field-label">Parking cost</span>
-              <input class="do-cost" type="number" min="0" step="0.01" name="parking_cost" value="{{ '%.2f'|format(o.parking_cost) if o.parking_cost is not none else '' }}" placeholder="0.00">
-            </label>
-          </div>
+              <label class="do-field">
+                <span class="do-field-label">Parking cost</span>
+                <input class="do-cost" type="number" min="0" step="0.01" name="parking_cost" value="{{ '%.2f'|format(o.parking_cost) if o.parking_cost is not none else '' }}" placeholder="0.00">
+              </label>
+            </div>
 
-          <button class="do-btn" type="submit">
-            {% if o.status == 'delivered' %}Update Proof{% else %}Delivery Complete{% endif %}
-          </button>
-        </form>
-        {% if o.delivered_actual_at %}
-          <div class="do-sub">Complete {{ fmt_driver_dt(o.delivered_actual_at) }}</div>
-        {% endif %}
-      </div>
+            <button class="do-btn" type="submit">
+              {% if o.status == 'delivered' %}Update Proof{% else %}Delivery Complete{% endif %}
+            </button>
+          </form>
+          {% if o.delivered_actual_at %}
+            <div class="do-sub">Complete {{ fmt_driver_dt(o.delivered_actual_at) }}</div>
+          {% endif %}
+        </div>
+      </details>
     </div>
   </article>
   {% endfor %}

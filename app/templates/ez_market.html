@@ -1,15 +1,24 @@
 {% extends "base_dashboard.html" %}
-{% block title %}Ez Market — Cenas Kitchen{% endblock %}
-{# Page Title Library: module CATERING. Greeting-style title (like HOME). #}
+{% block title %}Ez Market - Cenas Kitchen{% endblock %}
+{# Page Title Library: driver market title. #}
 {% block page_module %}CATERING{% endblock %}
 {% block page_module_class %}mod-catering{% endblock %}
-{% block page_title %}<span class="word-primary">Hi,</span> <span class="ck-accent">{{ viewer_name or 'there' }}</span>{% endblock %}
+{% block page_title %}<span class="word-primary">Ez</span> <span class="ck-accent">Market</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">{{ available|length }} upcoming orders · last refreshed just now</p>
 {% endblock %}
 
 {% block head_extra %}
 <style>
+  .ck-topbar .menu-toggle,
+  .ck-mobile-trigger,
+  .ck-topbar .topbar-right .dash-role-banner {
+    display: none !important;
+  }
+  .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
+    padding-right: 0;
+  }
+
   .em-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
   .em-tab {
     background: transparent; border: none; border-bottom: 2px solid transparent;

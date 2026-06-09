@@ -27,6 +27,10 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
 def test_ez_market_driver_stats_strip_removed():
     template = _read("ez_market.html")
 
+    assert '<span class="word-primary">Ez</span> <span class="ck-accent">Market</span>' in template
+    assert "Hi," not in template
+    assert ".ck-topbar .menu-toggle" in template
+    assert ".ck-topbar .topbar-right .dash-role-banner" in template
     assert "em-stats" not in template
     assert "em-disclaimer" not in template
     assert "Potential today" not in template
@@ -63,3 +67,10 @@ def test_driver_sidebar_matches_driver_nav_order():
 
     assert positions == sorted(positions)
     assert 'href="/driver/logs"' not in template
+
+
+def test_driver_profile_hides_role_badge():
+    template = _read("my_profile.html")
+
+    assert ".ck-topbar .topbar-right .dash-role-banner" in template
+    assert "display: none !important;" in template

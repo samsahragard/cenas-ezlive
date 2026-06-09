@@ -573,6 +573,184 @@ def server_tips_for_guids(server_guids, location_filter, business_date,
     }
 
 
+def _activity_table_label(order: dict, check: dict, table_map: dict[str, str] | None = None) -> str | None:
+    table_map = table_map or {}
+    table = order.get("table")
+    if isinstance(table, dict):
+        guid = str(table.get("guid") or "").strip()
+        if guid and table_map.get(guid):
+            return table_map[guid]
+        for key in ("name", "tableNumber", "number"):
+            value = str(table.get(key) or "").strip()
+            if value:
+                return value
+    elif table:
+        return str(table).strip() or None
+    for source in (check, order):
+        for key in ("tableName", "table_name", "displayNumber"):
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value
+    return None
+
+
+def _activity_table_map(client, location: str, restaurant_guid: str) -> dict[str, str]:
+    try:
+        tables = client.fetch_tables(location, restaurant_guid)
+    except Exception as ex:
+        log.warning("toast: table lookup skip %s: %s", location, ex)
+        return {}
+    out: dict[str, str] = {}
+    for table in tables or []:
+        if not isinstance(table, dict):
+            continue
+        guid = str(table.get("guid") or "").strip()
+        name = str(table.get("name") or "").strip()
+        if guid and name:
+            out[guid] = name
+    return out
+
+
+def _seconds_between(later: datetime | None, earlier: datetime | None) -> int | None:
+    if later is None or earlier is None:
+        return None
+    return max(0, int(round((later - earlier).total_seconds())))
+
+
+def _iso_utc(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def server_activity_for_guids(server_guids, location_filter, business_date,
+                              refresh: bool = False, limit: int = 16) -> dict:
+    """LIVE same-day service activity for one employee's confirmed Toast guids.
+
+    This is the employee-safe companion to server_perf_report: it filters first
+    by the caller's confirmed Toast server guid(s), returns ticket/timing/tip
+    metrics and recent table/check activity, and intentionally does NOT expose
+    raw card subtotal / sales dollars. The employee self-view can show "how am I
+    doing today?" without widening their data scope beyond their own checks.
+    """
+    guids = {g for g in (server_guids or set()) if g}
+    empty = {
+        "business_date": business_date,
+        "locations": [],
+        "tickets": 0,
+        "open_checks": 0,
+        "closed_checks": 0,
+        "cc_tips": 0.0,
+        "tip_pct": None,
+        "avg_drink_secs": None,
+        "avg_app_secs": None,
+        "app_count": 0,
+        "avg_entree_secs": None,
+        "avg_gap_secs": None,
+        "avg_duration_secs": None,
+        "activities": [],
+    }
+    if not guids:
+        return empty
+
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+    item_categories = _load_item_categories()
+    now_utc = datetime.now(timezone.utc)
+    totals = {
+        "tickets": 0,
+        "open_checks": 0,
+        "closed_checks": 0,
+        "cc_tips": 0.0,
+        "cc_subtotal": 0.0,
+        "drink_secs": [],
+        "app_secs": [],
+        "entree_secs": [],
+        "gap_secs": [],
+        "duration_secs": [],
+    }
+    activities: list[dict] = []
+
+    for loc, rg in locations.items():
+        table_map = _activity_table_map(client, loc, rg)
+        try:
+            orders = client.fetch_orders_for_date(loc, rg, business_date, refresh=refresh)
+        except Exception as ex:
+            log.warning("toast: server_activity skip %s/%s: %s", loc, business_date, ex)
+            continue
+        for order in orders or []:
+            if not isinstance(order, dict) or order.get("voided") or order.get("deleted"):
+                continue
+            for check in order.get("checks") or []:
+                if not isinstance(check, dict):
+                    continue
+                ac = _analyze_check(check, order, item_categories)
+                if not ac or ac.get("server_guid") not in guids:
+                    continue
+                totals["tickets"] += 1
+                totals["cc_tips"] += ac["cc_tips"]
+                totals["cc_subtotal"] += ac["cc_subtotal"]
+                if ac["closed"]:
+                    totals["closed_checks"] += 1
+                else:
+                    totals["open_checks"] += 1
+                opened = ac["opened"]
+                drink_secs = _seconds_between(ac["first_drink"], opened)
+                app_secs = _seconds_between(ac["first_appetizer"], opened)
+                entree_secs = _seconds_between(ac["first_entree"], opened)
+                gap_secs = _seconds_between(ac["first_entree"], ac["first_drink"])
+                duration_secs = _seconds_between(ac["closed"], opened)
+                open_for_secs = None if ac["closed"] else _seconds_between(now_utc, opened)
+                if drink_secs is not None:
+                    totals["drink_secs"].append(drink_secs)
+                if app_secs is not None:
+                    totals["app_secs"].append(app_secs)
+                if entree_secs is not None:
+                    totals["entree_secs"].append(entree_secs)
+                if gap_secs is not None:
+                    totals["gap_secs"].append(gap_secs)
+                if duration_secs is not None:
+                    totals["duration_secs"].append(duration_secs)
+                activities.append({
+                    "location": loc,
+                    "table_name": _activity_table_label(order, check, table_map),
+                    "status": "closed" if ac["closed"] else "open",
+                    "opened_at": _iso_utc(opened),
+                    "closed_at": _iso_utc(ac["closed"]),
+                    "first_drink_at": _iso_utc(ac["first_drink"]),
+                    "first_appetizer_at": _iso_utc(ac["first_appetizer"]),
+                    "first_entree_at": _iso_utc(ac["first_entree"]),
+                    "drink_secs": drink_secs,
+                    "app_secs": app_secs,
+                    "entree_secs": entree_secs,
+                    "gap_secs": gap_secs,
+                    "duration_secs": duration_secs,
+                    "open_for_secs": open_for_secs,
+                    "cc_tips": round(float(ac["cc_tips"] or 0.0), 2),
+                })
+
+    activities.sort(key=lambda row: row.get("opened_at") or "", reverse=True)
+    return {
+        "business_date": business_date,
+        "locations": sorted(locations.keys()),
+        "tickets": totals["tickets"],
+        "open_checks": totals["open_checks"],
+        "closed_checks": totals["closed_checks"],
+        "cc_tips": round(totals["cc_tips"], 2),
+        "tip_pct": (
+            round(totals["cc_tips"] / totals["cc_subtotal"] * 100, 1)
+            if totals["cc_subtotal"] > 0 else None
+        ),
+        "avg_drink_secs": statistics.mean(totals["drink_secs"]) if totals["drink_secs"] else None,
+        "avg_app_secs": statistics.mean(totals["app_secs"]) if totals["app_secs"] else None,
+        "app_count": len(totals["app_secs"]),
+        "avg_entree_secs": statistics.mean(totals["entree_secs"]) if totals["entree_secs"] else None,
+        "avg_gap_secs": statistics.mean(totals["gap_secs"]) if totals["gap_secs"] else None,
+        "avg_duration_secs": statistics.mean(totals["duration_secs"]) if totals["duration_secs"] else None,
+        "activities": activities[:max(0, int(limit or 0))],
+    }
+
+
 # ============== formatting helpers (used by templates) ==============
 
 # ============== THIRD-PARTY SALES REPORT ==============

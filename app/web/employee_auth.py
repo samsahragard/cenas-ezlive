@@ -179,6 +179,79 @@ def _employee_store_keys(emp_id) -> list[str]:
     return out
 
 
+def _central_today_parts() -> tuple[str, str]:
+    today_ct = datetime.utcnow() - timedelta(hours=5)
+    return today_ct.strftime("%Y%m%d"), today_ct.strftime("%Y-%m-%d")
+
+
+def _employee_live_service_for_links(links, *, is_tipped: bool) -> dict | None:
+    """Employee-safe live Toast service activity for this logged-in employee.
+
+    Joins through the confirmed local identity map only:
+    employees.id -> cena_toast_link.toast_id -> Toast server GUID. Manager-only
+    sales subtotals stay inside toast_reports, and tip dollars/ratios are
+    stripped unless the rank cache explicitly marks this employee as tipped.
+    """
+    try:
+        guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
+        if not guids:
+            return None
+        stores = {
+            (l.store_key or "").strip().lower()
+            for l in links
+            if (l.store_key or "").strip()
+        }
+        loc_filter = next(iter(stores)) if len(stores) == 1 else None
+        bd, day_iso = _central_today_parts()
+        from app.services import toast_reports
+        live = toast_reports.server_activity_for_guids(guids, loc_filter, bd)
+        if not isinstance(live, dict):
+            return None
+        live = dict(live)
+        live["date"] = day_iso
+        if not is_tipped:
+            live.pop("cc_tips", None)
+            live.pop("tip_pct", None)
+            live["activities"] = [
+                {k: v for k, v in dict(row).items() if k != "cc_tips"}
+                for row in (live.get("activities") or [])
+                if isinstance(row, dict)
+            ]
+        return live
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "employee perf: live service activity failed", exc_info=True)
+        return None
+
+
+def _merge_live_service_into_today(perf_periods: list[dict], live_service: dict | None,
+                                   *, is_tipped: bool) -> None:
+    if not live_service:
+        return
+    for period in perf_periods:
+        if period.get("period") != "today":
+            continue
+        service = dict(period.get("service") or {})
+        service["live_toast"] = {
+            "tickets": int(live_service.get("tickets") or 0),
+            "open_checks": int(live_service.get("open_checks") or 0),
+            "closed_checks": int(live_service.get("closed_checks") or 0),
+            "avg_drink_secs": live_service.get("avg_drink_secs"),
+            "avg_app_secs": live_service.get("avg_app_secs"),
+            "app_count": live_service.get("app_count"),
+            "avg_entree_secs": live_service.get("avg_entree_secs"),
+            "avg_gap_secs": live_service.get("avg_gap_secs"),
+            "avg_duration_secs": live_service.get("avg_duration_secs"),
+        }
+        if is_tipped and "cc_tips" in live_service:
+            period["tips"] = round(float(live_service.get("cc_tips") or 0.0), 2)
+            service["live_toast"]["cc_tips"] = period["tips"]
+            service["live_toast"]["tip_pct"] = live_service.get("tip_pct")
+            period["tips_live"] = True
+        period["service"] = service
+        return
+
+
 def _post_login_response(stores):
     """Lane B: shape the login JSON. A both-store person (2+ assigned stores,
     active_store not yet set by _establish_employee_session) is routed to the
@@ -420,7 +493,10 @@ def my_performance():
             # semantics so the BOTH-endpoints BOH-omission invariant holds for is_tipped =
             # None / absent / False / ranking-None too (common before GATE-3 sets classifications),
             # not only explicit False. Only an explicitly-tipped account keeps its tip keys.
-            if not (isinstance(ranking, dict) and ranking.get("is_tipped")):
+            is_tipped = bool(isinstance(ranking, dict) and ranking.get("is_tipped") is True)
+            live_service = _employee_live_service_for_links(links, is_tipped=is_tipped)
+            _merge_live_service_into_today(perf_periods, live_service, is_tipped=is_tipped)
+            if not is_tipped:
                 for _p in perf_periods:
                     _p.pop("tips", None)
                 for _s in shifts:
@@ -429,11 +505,51 @@ def my_performance():
             resp = {"ok": True, "linked": True, "perf_periods": perf_periods, "shifts": shifts}
             if ranking is not None:
                 resp["ranking"] = ranking
+            if live_service is not None:
+                resp["live_service"] = live_service
             return jsonify(resp), 200
 
         # Linked, but no sanitized cache is available yet. Fail closed: no old
         # ToastEmployeeSnapshot fallback, because those snapshots may carry Toast
         # GUIDs and sales-derived report fields that are not employee-visible.
+        ranking = None
+        try:
+            from app.models import PerfRankCache, sanitize_rank_json
+            rk = (db.query(PerfRankCache)
+                    .filter(PerfRankCache.cena_employee_id == emp.id).first())
+            if rk and rk.rank_json:
+                ranking = sanitize_rank_json(rk.rank_json)
+        except Exception:
+            ranking = None
+        is_tipped = bool(isinstance(ranking, dict) and ranking.get("is_tipped") is True)
+        live_service = _employee_live_service_for_links(links, is_tipped=is_tipped)
+        if live_service and (live_service.get("tickets") or live_service.get("activities")):
+            today_iso = live_service.get("date") or _central_today_parts()[1]
+            perf_periods = [{
+                "period": "today",
+                "period_start": today_iso,
+                "period_end": today_iso,
+                "total_hours": 0.0,
+                "reg_hours": 0.0,
+                "ot_hours": 0.0,
+                "base_pay": 0.0,
+                "tips": round(float(live_service.get("cc_tips") or 0.0), 2),
+                "service": {},
+            }]
+            _merge_live_service_into_today(perf_periods, live_service, is_tipped=is_tipped)
+            if not is_tipped:
+                for _p in perf_periods:
+                    _p.pop("tips", None)
+            resp = {
+                "ok": True,
+                "linked": True,
+                "perf_periods": perf_periods,
+                "shifts": [],
+                "live_service": live_service,
+            }
+            if ranking is not None:
+                resp["ranking"] = ranking
+            return jsonify(resp), 200
         return jsonify({"ok": True, "linked": True, "syncing": True}), 200
     finally:
         db.close()

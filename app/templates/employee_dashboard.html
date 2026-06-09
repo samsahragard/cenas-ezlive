@@ -162,6 +162,24 @@
   .perf-sub-lbl{ font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
     color:rgba(244,231,208,0.6); margin-bottom:9px; display:flex; justify-content:space-between; align-items:baseline; }
   .perf-sub-lbl .cnt{ letter-spacing:0.3px; color:rgba(244,231,208,0.45); font-weight:600; }
+  .live-summary{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:10px; }
+  .live-pill{ background:rgba(228,179,64,0.10); border:0.5px solid var(--bd-gold); border-radius:11px;
+    padding:9px 10px; min-width:0; }
+  .live-pill b{ display:block; font-size:16px; color:var(--blue-deep); line-height:1.1; }
+  .live-pill span{ display:block; font-size:9.5px; font-weight:800; letter-spacing:0.55px; text-transform:uppercase;
+    color:rgba(244,231,208,0.58); margin-top:4px; }
+  .live-list{ display:flex; flex-direction:column; gap:7px; }
+  .live-row{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; padding:10px 12px; }
+  .live-row.open{ border-color:rgba(104,218,130,0.54); box-shadow:0 0 0 1px rgba(104,218,130,0.08); }
+  .live-top{ display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+  .live-title{ font-size:13px; font-weight:800; color:var(--blue-deep); overflow:hidden; text-overflow:ellipsis; }
+  .live-status{ flex:none; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px;
+    color:#241409; background:var(--blue-bright); border-radius:999px; padding:3px 7px; }
+  .live-status.open{ background:#68da82; }
+  .live-meta{ display:flex; gap:9px; flex-wrap:wrap; margin-top:7px; font-size:11.5px; color:rgba(250,246,236,0.78); }
+  .live-meta b{ color:var(--cream); font-weight:800; }
+  .live-empty{ font-size:12px; line-height:1.45; color:rgba(250,246,236,0.68); background:var(--surface);
+    border:0.5px dashed rgba(228,179,64,0.42); border-radius:11px; padding:11px 12px; }
   .shift-list{ display:flex; flex-direction:column; gap:7px; }
   .shift-row{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; padding:10px 12px; }
   .shift-row.flag{ border-color:#E4B340; box-shadow:0 0 0 1px rgba(228,179,64,0.28); }
@@ -268,12 +286,17 @@
     </div>
     <div class="perf-note" id="perf-note" hidden></div>
     <div class="perf-tabs" id="perf-tabs" role="tablist">
-      <div class="perf-tab" data-period="today">Today</div>
+      <div class="perf-tab active" data-period="today">Today</div>
       <div class="perf-tab" data-period="week">Week</div>
       <div class="perf-tab" data-period="month">Month</div>
-      <div class="perf-tab active" data-period="last30">Last 30</div>
+      <div class="perf-tab" data-period="last30">Last 30</div>
     </div>
     <div class="perf-cards" id="perf-cards"></div>
+    <div class="perf-sub" id="perf-live-wrap" hidden>
+      <div class="perf-sub-lbl"><span>Live today</span><span class="cnt" id="live-date-lbl"></span></div>
+      <div class="live-summary" id="live-summary"></div>
+      <div class="live-list" id="live-list"></div>
+    </div>
     <div class="perf-sub" id="perf-rank-wrap" hidden>
       <div class="perf-sub-lbl"><span>Your rankings</span><span class="cnt" id="rank-period-lbl"></span></div>
       <div class="rank-grid" id="rank-grid"></div>
@@ -378,7 +401,7 @@
   //     shift list shows recent shifts with a needs_review badge (raw totals kept). ---
   (function(){
     var card = document.getElementById('perf-card');
-    var PERIODS = {}, shifts = [], sel = 'last30', RANK = null;
+    var PERIODS = {}, shifts = [], sel = 'today', RANK = null, LIVE = null, tabsBound = false;
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
@@ -399,6 +422,15 @@
       note('Your profile is linked. Your hours, shifts and pay will appear here shortly.');
     }
     function hm(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}); }
+    function hms(sec){
+      if(sec==null || !Number.isFinite(Number(sec))) return '';
+      sec = Math.max(0, Number(sec)||0);
+      var m = Math.round(sec/60);
+      if(m < 1) return '<1m';
+      if(m < 60) return m + 'm';
+      var h = Math.floor(m/60), r = m % 60;
+      return h + 'h' + (r ? ' ' + r + 'm' : '');
+    }
     function inWin(bd, p){ return !!(bd && p && bd >= p.period_start && bd <= p.period_end); }
     var PLABEL = { today:'today', week:'this week', month:'this month', last30:'last 30 days' };
     function pcard(val, lbl, sub, hero, href){
@@ -439,6 +471,51 @@
         pcard(num(sc,0), 'Shifts', null, false, metricHref('shifts', 'count')) +
         pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean', false, metricHref('attendance'));
       box.innerHTML = html;
+    }
+    function livePill(value, label){
+      return '<div class="live-pill"><b>'+esc(value)+'</b><span>'+esc(label)+'</span></div>';
+    }
+    function renderLive(){
+      var wrap=document.getElementById('perf-live-wrap'), sum=document.getElementById('live-summary'), list=document.getElementById('live-list');
+      if(!wrap || !sum || !list){ return; }
+      if(sel !== 'today'){ wrap.hidden = true; return; }
+      wrap.hidden = false;
+      var live = LIVE || {};
+      var rows = Array.isArray(live.activities) ? live.activities : [];
+      var showTips = !!(RANK && RANK.is_tipped===true);
+      var dateLbl = live.date || '';
+      document.getElementById('live-date-lbl').textContent = dateLbl;
+      var chips = [
+        livePill(num(live.tickets||0,0), 'tickets'),
+        livePill(num(live.open_checks||0,0), 'open now')
+      ];
+      if(showTips){
+        chips.push(livePill(money(live.cc_tips||0), 'cc tips'));
+        chips.push(livePill(live.tip_pct==null ? '-' : (num(live.tip_pct,1)+'%'), 'tip percent'));
+      }
+      chips.push(livePill(live.avg_duration_secs==null ? '-' : hms(live.avg_duration_secs), 'avg duration'));
+      chips.push(livePill(live.avg_gap_secs==null ? '-' : hms(live.avg_gap_secs), 'drink to entree'));
+      sum.innerHTML = chips.join('');
+      if(!rows.length){
+        list.innerHTML = '<div class="live-empty">No live table activity yet for today. Once Toast shows a check under your name, it appears here.</div>';
+        return;
+      }
+      list.innerHTML = rows.slice(0,8).map(function(a){
+        var title = a.table_name ? ('Table ' + a.table_name) : 'Check activity';
+        var status = String(a.status||'open').toLowerCase();
+        var meta = [];
+        if(a.opened_at){ meta.push('<span>opened <b>'+esc(hm(a.opened_at))+'</b></span>'); }
+        if(status==='open' && a.open_for_secs!=null){ meta.push('<span>open <b>'+esc(hms(a.open_for_secs))+'</b></span>'); }
+        if(status!=='open' && a.duration_secs!=null){ meta.push('<span>duration <b>'+esc(hms(a.duration_secs))+'</b></span>'); }
+        if(a.drink_secs!=null){ meta.push('<span>drink <b>'+esc(hms(a.drink_secs))+'</b></span>'); }
+        if(a.app_secs!=null){ meta.push('<span>apps <b>'+esc(hms(a.app_secs))+'</b></span>'); }
+        if(a.entree_secs!=null){ meta.push('<span>entree <b>'+esc(hms(a.entree_secs))+'</b></span>'); }
+        if(a.gap_secs!=null){ meta.push('<span>gap <b>'+esc(hms(a.gap_secs))+'</b></span>'); }
+        if(showTips && a.cc_tips!=null){ meta.push('<span>tips <b>'+money(a.cc_tips)+'</b></span>'); }
+        return '<div class="live-row '+(status==='open'?'open':'')+'">'+
+          '<div class="live-top"><div class="live-title">'+esc(title)+'</div><div class="live-status '+(status==='open'?'open':'')+'">'+esc(status)+'</div></div>'+
+          '<div class="live-meta">'+meta.join('')+'</div></div>';
+      }).join('');
     }
     function renderShifts(){
       var wrap=document.getElementById('perf-shifts-wrap'), list=document.getElementById('shift-list');
@@ -564,33 +641,46 @@
     function selectPeriod(p){
       sel=p;
       document.querySelectorAll('.perf-tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-period')===p); });
-      renderCards(); renderRank();
+      renderCards(); renderLive(); renderRank();
     }
     function render(d){
       show();
+      PERIODS = {};
       (d.perf_periods||[]).forEach(function(p){ PERIODS[p.period]=p; });
       shifts = d.shifts || [];
       RANK = d.ranking || null;
-      if(!PERIODS[sel]){ var ks=Object.keys(PERIODS); sel = (ks.indexOf('last30')>=0) ? 'last30' : (ks[0]||'last30'); }
-      document.querySelectorAll('.perf-tab').forEach(function(t){ t.addEventListener('click', function(){ selectPeriod(t.getAttribute('data-period')); }); });
+      LIVE = d.live_service || null;
+      if(!PERIODS[sel]){ var ks=Object.keys(PERIODS); sel = (ks.indexOf('today')>=0) ? 'today' : ((ks.indexOf('last30')>=0) ? 'last30' : (ks[0]||'today')); }
+      if(!tabsBound){
+        tabsBound = true;
+        document.querySelectorAll('.perf-tab').forEach(function(t){ t.addEventListener('click', function(){ selectPeriod(t.getAttribute('data-period')); }); });
+      }
       selectPeriod(sel);
       renderShifts();
     }
-    fetch('/employee/my-performance', { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
-      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status:r.status, d:d }; }); })
-      .then(function(res){
-        var d = res.d || {};
-        // Staff-wide profile rollout: render the performance card only when the
-        // employee-own sanitized feed has data. Pending/no-link cases keep the
-        // polished shell and show a professional unavailable state instead.
-        if (d && d.ok && d.linked && (d.perf_periods || d.shifts)) render(d);
-        else if (d && d.ok && d.linked && d["sync"+"ing"]) {
-          emptyState('Performance is not available yet', 'Your profile is active. Your schedule, roster, time off, and alerts are available while performance data is prepared.');
-        } else if (d && d.ok && d.linked === false) {
-          emptyState('Your profile is ready', 'Your schedule, roster, time off, and alerts are available. Performance data appears when your profile is linked and verified.');
-        }
-      })
-      .catch(function(){ /* leave the card hidden */ });
+    function loadPerformance(silent){
+      fetch('/employee/my-performance', { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status:r.status, d:d }; }); })
+        .then(function(res){
+          var d = res.d || {};
+          // Staff-wide profile rollout: render the performance card only when the
+          // employee-own sanitized feed has data. Pending/no-link cases keep the
+          // polished shell and show a professional unavailable state instead.
+          if (d && d.ok && d.linked && (d.perf_periods || d.shifts || d.live_service)) render(d);
+          else if (!silent && d && d.ok && d.linked && d["sync"+"ing"]) {
+            emptyState('Performance is not available yet', 'Your profile is active. Your schedule, roster, time off, and alerts are available while performance data is prepared.');
+          } else if (!silent && d && d.ok && d.linked === false) {
+            emptyState('Your profile is ready', 'Your schedule, roster, time off, and alerts are available. Performance data appears when your profile is linked and verified.');
+          }
+        })
+        .catch(function(){ /* leave the card hidden */ });
+    }
+    loadPerformance(false);
+    window.setInterval(function(){
+      if(sel === 'today' && document.visibilityState === 'visible'){
+        loadPerformance(true);
+      }
+    }, 60000);
   })();
 </script>
 <script>

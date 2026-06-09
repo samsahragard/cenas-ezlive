@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{% block title %}Cenas Employee Console{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="cc-body{% block body_class %}{% endblock %}">
+{% set _active = active_tab|default(active_nav|default('')) or '' %}
+{% set _path = request.path if request else '' %}
+{% set _synced = sync_label|default('synced') %}
+{% set _tabs = [
+  ('today', '/employee/dashboard', 'Today', '<path d="M3 12h4l3-8 4 16 3-8h4"/><path d="M4 20h16"/>'),
+  ('tables', '/employee/tables', 'Tables', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/><path d="M3 15h18"/>'),
+  ('shifts', '/employee/my-schedule', 'Shifts', '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M8 14h3"/><path d="M13 14h3"/>'),
+  ('inbox', '/employee/messages', 'Inbox', '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  ('you', '/employee/my-profile', 'You', '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>')
+] %}
+
+<div class="cc-shell">
+  <header class="cc-topbar">
+    <a class="cc-brand" href="/employee/dashboard" aria-label="Cenas Kitchen employee home">
+      <img class="cc-brand-mark" src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="" />
+      <span class="cc-brand-word">Cenas Kitchen</span>
+    </a>
+    <div class="cc-sync" aria-label="Live sync status">
+      <span class="cc-sync-dot" aria-hidden="true"></span>
+      <span>{{ _synced }}</span>
+    </div>
+  </header>
+
+  <main class="cc-main" id="main">
+    {% block employee_hero %}{% endblock %}
+    {% block employee_content %}{% endblock %}
+  </main>
+</div>
+
+<nav class="cc-bottom-tabs" aria-label="Employee tabs">
+  <div class="cc-bottom-tabs-inner">
+    {% for key, href, label, icon in _tabs %}
+      {% set selected = (_active == key) or (not _active and _path == href) %}
+      <a class="cc-tab{% if selected %} active{% endif %}" href="{{ href }}"{% if selected %} aria-current="page"{% endif %}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">{{ icon|safe }}</svg>
+        <span>{{ label }}</span>
+      </a>
+    {% endfor %}
+  </div>
+</nav>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

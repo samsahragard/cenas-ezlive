@@ -10,27 +10,6 @@
 
 {% block head_extra %}
 <style>
-  .em-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
-  .em-stat {
-    background: #241610;
-    border: 0.5px solid rgba(217,164,54,0.18);
-    border-radius: 12px;
-    padding: 14px 16px;
-  }
-  .em-stat-label { font-size: 11px; color: #E4B340; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
-  .em-stat-value { font-size: 24px; font-weight: 600; color: #FFD970; margin-top: 4px; text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 18px rgba(255,200,80,0.65); }
-  .em-stat-sub { font-size: 11px; color: rgba(236,227,208,0.5); margin-top: 2px; }
-
-  .em-disclaimer {
-    background: #241610; border-left: 2px solid rgba(228,179,64,0.55);
-    padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
-    border-radius: 0 8px 8px 0; margin-bottom: 16px;
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  }
-  .em-disclaimer a { color: #FFD970; text-decoration: none; font-weight: 500;
-    text-shadow: 0 0 10px rgba(255,200,80,0.45); }
-  .em-disclaimer a:hover { text-decoration: underline; }
-
   .em-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
   .em-tab {
     background: transparent; border: none; border-bottom: 2px solid transparent;
@@ -280,32 +259,6 @@
   {% endif %}
 </div>
 {% else %}
-{# Stats + tabs shown to everyone (Sam 2026-05-12). For non-drivers,
-   driver-only values render as 'n/a' but the category stays visible. #}
-<div class="em-stats">
-  <div class="em-stat">
-    <div class="em-stat-label">Potential today</div>
-    <div class="em-stat-value">{% if stat_potential_today is none %}n/a{% else %}${{ "%.2f"|format(stat_potential_today) }}{% endif %}</div>
-  </div>
-  <div class="em-stat">
-    <div class="em-stat-label">My queue</div>
-    <div class="em-stat-value">{% if stat_my_queue is none %}n/a{% else %}{{ stat_my_queue }}{% endif %}</div>
-  </div>
-  <div class="em-stat">
-    <div class="em-stat-label">Potential week</div>
-    <div class="em-stat-value">{% if stat_potential_week is none %}n/a{% else %}${{ "%.2f"|format(stat_potential_week) }}{% endif %}</div>
-  </div>
-</div>
-
-<div class="em-disclaimer">
-  Estimates only — final amounts are set by payroll on Fridays.
-  {% if viewer_is_driver %}
-    <a href="{{ url_for('driver_system.pay_history') }}">View past pay checks →</a>
-  {% else %}
-    <span style="color: rgba(236,227,208,0.45);">View past pay checks → n/a</span>
-  {% endif %}
-</div>
-
 <div class="em-tabs">
   <button class="em-tab active" onclick="showTab('available')">Available <span class="em-tab-count">({{ available|length }})</span></button>
   <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({% if viewer_is_driver %}{{ my_pending_reqs|length + my_active|length }}{% else %}n/a{% endif %})</span></button>

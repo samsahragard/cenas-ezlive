@@ -8,7 +8,7 @@
 {% block page_title %}<span class="word-primary">Drivers</span> <span class="ck-accent">Live</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
-    {% if current_location == 'both' %}All locations · live GPS{% else %}<span class="location-badge">{{ store_label }}</span> · live GPS{% endif %}
+    {% if current_location == 'both' %}All locations · legacy phone GPS{% else %}<span class="location-badge">{{ store_label }}</span> · legacy phone GPS{% endif %}
     · auto-refresh every 5s
   </p>
 {% endblock %}
@@ -46,12 +46,12 @@
 <div id="drivers-map"></div>
 
 <div style="margin-top:16px;">
-  <div id="drivers-empty">No drivers on shift right now.</div>
+  <div id="drivers-empty">No legacy phone GPS positions right now.</div>
   <div id="drivers-list"></div>
 </div>
 
 <p style="margin-top:14px;font-size:12px;color:var(--text-3);">
-  Drivers must be logged in and tap "Start shift" in the Driver Portal for their location to appear here. Markers turn grey if a position is &gt;30s stale (driver's phone polls every 5s when on shift, with heartbeat-resend if GPS momentarily fails).
+  ezCater catering routes now record from the ezCater live tracking link. This legacy map only shows old phone GPS positions if any are still streaming; route history is shown from the payroll route links.
 </p>
 
 <script>

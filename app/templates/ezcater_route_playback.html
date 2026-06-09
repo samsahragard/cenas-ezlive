@@ -1,0 +1,120 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Route Map - {{ order.external_order_id or order.id }} - Cenas Kitchen{% endblock %}
+
+{% block page_module %}DRIVER{% endblock %}
+{% block page_title %}<span class="word-primary">Route</span> <span class="ck-accent">Map</span>{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {{ order.external_order_id or ('Order #' ~ order.id) }}
+    {% if driver %} · {{ driver.name }}{% elif summary.driver_name %} · {{ summary.driver_name }}{% endif %}
+    {% if order.delivery_date %} · {{ order.delivery_date }}{% endif %}
+    · <a href="{{ back_url }}" style="color:var(--accent-soft);">Back</a>
+  </p>
+{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  #route-map { height: 65vh; min-height: 460px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); }
+  .route-stats { display:flex; flex-wrap:wrap; gap: 18px; margin: 12px 0 18px;
+                 background: rgba(0,0,0,0.40); border-radius: 12px; padding: 14px 18px;
+                 border: 1px solid rgba(255,255,255,0.08); }
+  .route-stat { display:flex; flex-direction:column; gap: 2px; min-width: 120px; }
+  .route-stat .v { font-size: 18px; font-weight: 600; color: #fff; overflow-wrap:anywhere; }
+  .route-stat .l { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+  .route-empty { display:none; margin: 12px 0; font-size: 13px; color: var(--text-3); }
+  .marker-start { background: #7bb87b; }
+  .marker-end { background: #c0392b; }
+  .marker-dot { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+  @media (max-width: 640px) {
+    #route-map { min-height: 360px; height: 58vh; }
+    .route-stat { min-width: 42%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="route-stats">
+  <div class="route-stat">
+    <span class="v">{{ '%.2f mi'|format(summary.distance_miles) }}</span>
+    <span class="l">Route miles</span>
+  </div>
+  <div class="route-stat">
+    <span class="v">{{ summary.duration_minutes }} min</span>
+    <span class="l">Route time</span>
+  </div>
+  <div class="route-stat">
+    <span class="v">{{ summary.point_count }}</span>
+    <span class="l">ezCater fixes</span>
+  </div>
+  <div class="route-stat">
+    <span class="v">{{ '%.1f mi'|format(summary.extra_miles_over_20) }}</span>
+    <span class="l">D-Miles over 20</span>
+  </div>
+  <div class="route-stat">
+    <span class="v">{{ summary.status_key or order.ezcater_status_key or 'tracked' }}</span>
+    <span class="l">Last status</span>
+  </div>
+</div>
+
+{% if order.delivery_tracking_id %}
+<p style="margin:0 0 12px;font-size:12px;color:var(--text-3);">
+  ezCater tracker:
+  <a href="https://delivery-tracking.ezcater.com/delivery/{{ order.delivery_tracking_id }}"
+     target="_blank" rel="noopener" style="color:var(--accent-soft);">{{ order.delivery_tracking_id }}</a>
+</p>
+{% endif %}
+
+<div id="route-empty" class="route-empty">
+  No route points have been captured for this delivery yet. Points are recorded while ezCater live tracking is active.
+</div>
+<div id="route-map"></div>
+
+<p style="margin-top:14px;font-size:12px;color:var(--text-3);">
+  Green dot = first ezCater fix. Red dot = latest fix. The line is rebuilt from sampled ezCater live locations.
+</p>
+
+<script>
+(function() {
+  const TRACK_URL = {{ route_track_url|tojson }};
+  const map = L.map('route-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(map);
+
+  function labelTime(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+  }
+
+  fetch(TRACK_URL).then(r => r.json()).then(data => {
+    const rows = data.points || [];
+    const points = rows.map(p => [p.lat, p.lng]);
+    if (points.length === 0) {
+      document.getElementById('route-empty').style.display = 'block';
+      map.setView([30.05, -95.45], 10);
+      return;
+    }
+    const line = L.polyline(points, { color: '#e87a3e', weight: 4, opacity: 0.9 }).addTo(map);
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    L.marker(points[0], { icon: L.divIcon({ html: '<div class="marker-dot marker-start"></div>', className: '' }) })
+     .bindPopup('First fix<br>' + labelTime(first.captured_at))
+     .addTo(map);
+    L.marker(points[points.length - 1], { icon: L.divIcon({ html: '<div class="marker-dot marker-end"></div>', className: '' }) })
+     .bindPopup('Latest fix<br>' + labelTime(last.captured_at))
+     .addTo(map);
+    map.fitBounds(line.getBounds(), { padding: [40, 40], maxZoom: 17 });
+  }).catch(() => {
+    document.getElementById('route-empty').style.display = 'block';
+    map.setView([30.05, -95.45], 10);
+  });
+})();
+</script>
+{% endblock %}

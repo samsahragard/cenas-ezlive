@@ -22,6 +22,8 @@ import urllib.request
 from datetime import datetime
 from typing import Iterable
 
+from sqlalchemy.orm import object_session
+
 from app.db import SessionLocal
 from app.models import Order
 
@@ -87,9 +89,18 @@ def poll_one(order: Order) -> dict | None:
         order.ezcater_driver_lat = loc.get("latitude")
         order.ezcater_driver_lng = loc.get("longitude")
         order.ezcater_status_key = (d0.get("currentStatus") or {}).get("key")
+        if d0.get("name") and not order.ezcater_driver_name:
+            order.ezcater_driver_name = str(d0.get("name"))
     elif data.get("status") in ("expired", "completed"):
         order.ezcater_status_key = data["status"]
     order.ezcater_status_updated_at = datetime.utcnow()
+    try:
+        db = object_session(order)
+        if db is not None:
+            from app.services.ezcater_route_history import record_tracking_sample
+            record_tracking_sample(db, order, body)
+    except Exception:
+        logger.exception("ezcater route-history capture failed for order_id=%s", getattr(order, "id", None))
     return body
 
 

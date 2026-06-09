@@ -52,7 +52,7 @@
           <th>Date</th>
           <th>Order #</th>
           <th style="text-align:right;" title="Expected extra miles over 20, from the route">E-Miles</th>
-          <th style="text-align:right;" title="Driven extra miles over 20 (manager-entered)">D-Miles</th>
+          <th style="text-align:right;" title="Driven extra miles over 20 from ezCater route history unless manager-entered">D-Miles</th>
           <th style="text-align:right;" title="Verified extra miles a manager signs off — this is what pays">V-Miles</th>
           <th style="text-align:right;">Per order</th>
           <th style="text-align:right;">$10</th>
@@ -75,9 +75,24 @@
               <span style="color:var(--accent-soft);font-weight:600;">{{ d.order_number }}</span>
               {% endif %}
             {% else %}{{ d.order_number }}{% endif %}
+            {% if d.order_id and d.route_point_count %}
+              {% if manager_edit %}
+                {% set route_href = url_for('store.ezcater_route_playback', order_id=d.order_id) %}
+              {% else %}
+                {% set route_href = url_for('driver_system.pay_history_route', delivery_id=d.order_id) %}
+              {% endif %}
+              <div style="margin-top:3px;font-size:11px;line-height:1.35;white-space:nowrap;">
+                <a href="{{ route_href }}" style="color:rgba(123,184,123,0.95);text-decoration:none;"
+                   title="View the ezCater route map for this delivery">
+                  Route {{ '%.1f'|format(d.route_miles or 0) }} mi · {{ d.route_minutes or 0 }} min
+                </a>
+                <span style="color:var(--text-3);">· {{ d.route_point_count }} pts</span>
+              </div>
+            {% endif %}
           </td>
           <td style="text-align:right;{% if d.expected_miles == 0 %}opacity:0.4;{% endif %}">{{ '%.1f'|format(d.expected_miles) }}</td>
-          <td style="text-align:right;{% if not row_edit %}opacity:0.4;{% endif %}" title="Manager-entered; no automatic source yet">
+          <td style="text-align:right;{% if not row_edit and d.driven_miles is none %}opacity:0.4;{% endif %}"
+              title="{% if d.driven_miles_source == 'ezcater' %}Auto-filled from ezCater route history; managers can override before saving{% elif d.driven_miles_source == 'manager' %}Manager-entered driven miles{% else %}Driven miles will appear when ezCater route history is available{% endif %}">
             {% if row_edit %}
               <input type="number" step="0.1" min="0" name="dmiles_{{ d.order_id }}"
                      value="{% if d.driven_miles is not none %}{{ '%.1f'|format(d.driven_miles) }}{% endif %}"
@@ -161,7 +176,7 @@
   all gated on tracking_status='Tracked'.
   The three miles columns are all "extra over 20", one-way from the home kitchen to the first drop-off (Google Routes API):
   <strong>E-Miles</strong> is expected (from the route), <strong>D-Miles</strong> is what the driver actually drove
-  (manager-entered), and <strong>V-Miles</strong> is what a manager verifies on the Ez Drivers page — V-Miles is what pays.
+  (from ezCater route history unless a manager overrides it), and <strong>V-Miles</strong> is what a manager verifies on the Ez Drivers page — V-Miles is what pays.
   Until a manager verifies an order, V-Miles defaults to the expected miles, so pay is unchanged.
   $10, Notes, and the 5★ bonus are manager inputs from the Ez Drivers page.
 </p>

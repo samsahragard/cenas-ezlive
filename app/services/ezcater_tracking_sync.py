@@ -4,9 +4,9 @@ This is the shared app-side receiver logic for two sources:
 - the partner bookmarklet/manual sync page
 - CK/pwck read-only collector posts
 
-It intentionally only writes the ezCater tracking UUID/status cache fields on
-Order. It does not assign drivers, fulfill orders, notify anyone, or change
-driver payroll tracking_status.
+It writes the ezCater tracking UUID/status cache fields on Order and, when a
+live driver location is available, route history + tracking_status='Tracked'.
+It does not fulfill orders, notify anyone, or change delivery lifecycle state.
 """
 from __future__ import annotations
 

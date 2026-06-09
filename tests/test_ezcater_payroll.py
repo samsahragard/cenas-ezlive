@@ -60,6 +60,25 @@ def test_untracked_five_star_no_bonus():
     assert pay.total == payroll.BASE_PER_DELIVERY  # base only, no 5-star bonus
 
 
+def test_ezcater_route_history_counts_as_tracked_and_auto_fills_driven_miles():
+    route = SimpleNamespace(
+        point_count=3,
+        distance_miles=26.4,
+        duration_minutes=42,
+        started_at=None,
+        ended_at=None,
+    )
+    pay = payroll.compute_one(_order(tracking_status=None, pickup_miles=25), route_summary=route)
+
+    assert pay.bonus_tracked == payroll.BONUS_TRACKED
+    assert pay.verified_miles == 5.0
+    assert pay.driven_miles == 6.4
+    assert pay.driven_miles_source == "ezcater"
+    assert pay.route_miles == 26.4
+    assert pay.route_minutes == 42
+    assert pay.route_point_count == 3
+
+
 # ---- period math ----
 
 def test_period_containing_anchor_returns_anchor():

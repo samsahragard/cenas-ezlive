@@ -270,7 +270,7 @@
   <div class="mp-section-label">Score breakdown · last 30 days</div>
   {% if score_row %}
     {% set rows = [
-      ('Tracking compliance', score_row.tracking_pts, 25, 'turn on tracking on every run'),
+      ('Tracking compliance', score_row.tracking_pts, 25, 'start each delivery in ezCater so live tracking is available'),
       ('On-time delivery',    score_row.on_time_pts, 25, 'leave the kitchen at the suggested departure time'),
       ('Cancellation rate',   score_row.cancellation_pts, 20, 'cancellations within 30 days deduct points'),
       ('Photo proof on setup', score_row.photo_pts, 10, 'upload a setup photo within 5 min of delivering'),
@@ -303,11 +303,11 @@
   <div class="mp-section-label">How your pay works</div>
   <div style="background: #241610; border-radius: 12px; padding: 14px 16px;">
     <div class="mp-pay-row"><span>Base · every delivery</span><strong>$25.00</strong></div>
-    <div class="mp-pay-row"><span>+ Tracking bonus (when GPS is on)</span><strong>$10.00</strong></div>
+    <div class="mp-pay-row"><span>+ Tracking bonus (when ezCater tracking is active)</span><strong>$10.00</strong></div>
     <div class="mp-pay-row"><span>+ Mileage over 20 mi (only if tracked)</span><strong>$2.00 / mi</strong></div>
     <div class="mp-pay-row"><span>+ 5-star bonus (when tracked + 5-star review)</span><strong>$5.00</strong></div>
     <div style="font-size:11px;color:rgba(236,227,208,0.55);margin-top:8px;">
-      Skipping tracking means $25 flat. On multi-stop routes, mileage only counts on the first leg.
+      If ezCater tracking never starts, the delivery pays the $25 base only. On multi-stop routes, mileage only counts on the first leg.
     </div>
   </div>
 </div>
@@ -333,7 +333,7 @@
     <div class="mp-rule">
       <div class="mp-rule-icon" style="color:#FAF6EC;">ⓘ</div>
       <div class="mp-rule-text"><strong>Tracking is the highest-weighted metric for a reason.</strong>
-        Without tracking we can't verify the delivery for the bonus components — so an untracked run earns $25 flat.</div>
+        ezCater live tracking verifies the delivery for the bonus components, route time, and route miles.</div>
     </div>
   </div>
 </div>

@@ -973,6 +973,88 @@ def pay_history():
         db.close()
 
 
+def _driver_can_view_route(db, driver: Driver, order: Order) -> bool:
+    if order.assigned_driver_id == driver.id:
+        return True
+    from app.services.ezcater_payroll import normalize_driver_name
+
+    if normalize_driver_name(order.ezcater_driver_name) == normalize_driver_name(driver.name):
+        return True
+    from app.models import EzcaterTrackingPoint
+
+    return (
+        db.query(EzcaterTrackingPoint.id)
+        .filter(EzcaterTrackingPoint.order_id == order.id)
+        .filter(EzcaterTrackingPoint.driver_id == driver.id)
+        .first()
+        is not None
+    )
+
+
+@driver_system_bp.route("/pay-history/route/<int:delivery_id>", methods=["GET"])
+@require_driver
+def pay_history_route(delivery_id: int):
+    driver = _current_driver()
+    if not driver:
+        return redirect(url_for("driver.driver_login"))
+    from app.services.ezcater_route_history import route_summary_for_order
+
+    db = SessionLocal()
+    try:
+        order = db.get(Order, delivery_id)
+        if not order or not _driver_can_view_route(db, driver, order):
+            abort(404)
+        summary = route_summary_for_order(db, delivery_id)
+        return render_template(
+            "ezcater_route_playback.html",
+            active="pay_history",
+            order=order,
+            driver=driver,
+            summary=summary,
+            route_track_url=url_for("driver_system.pay_history_route_track", delivery_id=delivery_id),
+            back_url=url_for("driver_system.pay_history"),
+            location_labels={},
+            viewer="driver",
+        )
+    finally:
+        db.close()
+
+
+@driver_system_bp.route("/pay-history/route/<int:delivery_id>/track.json", methods=["GET"])
+@require_driver
+def pay_history_route_track(delivery_id: int):
+    driver = _current_driver()
+    if not driver:
+        return jsonify({"error": "not signed in"}), 401
+    from app.services.ezcater_route_history import route_point_dicts, route_summary_for_order
+
+    db = SessionLocal()
+    try:
+        order = db.get(Order, delivery_id)
+        if not order or not _driver_can_view_route(db, driver, order):
+            return jsonify({"error": "not found"}), 404
+        summary = route_summary_for_order(db, delivery_id)
+        return jsonify({
+            "order_id": delivery_id,
+            "order_number": order.external_order_id,
+            "tracking_uuid": order.delivery_tracking_id,
+            "summary": {
+                "point_count": summary.point_count,
+                "distance_miles": round(summary.distance_miles, 3),
+                "extra_miles_over_20": round(summary.extra_miles_over_20, 3),
+                "duration_minutes": summary.duration_minutes,
+                "started_at": summary.started_at.isoformat() + "Z" if summary.started_at else None,
+                "ended_at": summary.ended_at.isoformat() + "Z" if summary.ended_at else None,
+                "driver_id": summary.driver_id,
+                "driver_name": summary.driver_name,
+                "status_key": summary.status_key,
+            },
+            "points": route_point_dicts(db, delivery_id),
+        })
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/pay-history/<int:delivery_id>/flag", methods=["POST"])
 @require_driver
 def pay_history_flag(delivery_id: int):

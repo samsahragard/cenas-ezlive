@@ -1,6 +1,6 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'driver_logs' %}
-{% block title %}Driver Status — Cenas Kitchen{% endblock %}
+{% block title %}Driver Status - Cenas Kitchen{% endblock %}
 
 {# Page Title Library: module DRIVER, two-word title "Driver Status". #}
 {% block page_module %}DRIVER{% endblock %}
@@ -16,29 +16,23 @@
 
 {% block content %}
 
-{# ============== SHIFT TOGGLE + GPS STREAMING ============== #}
-<div id="shift-card" data-on-shift="{{ '1' if on_shift else '0' }}"
-     style="background:#241610;border:1px solid rgba(217,164,54,0.18);border-radius:14px;
+<div style="background:#241610;border:1px solid rgba(217,164,54,0.18);border-radius:14px;
             padding:16px 18px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-  <div style="flex:1;min-width:200px;">
-    <div id="shift-state" style="font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
-                                  color:{{ '#7bb87b' if on_shift else 'rgba(255,255,255,0.55)' }};">
-      {% if on_shift %}On shift{% else %}Off shift{% endif %}
+  <div style="flex:1;min-width:220px;">
+    <div style="font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#7bb87b;">
+      ezCater tracking active
     </div>
-    <div id="shift-meta" style="font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;">
-      {% if on_shift %}Started at {{ shift_started_at }}{% else %}Tap Start when you begin a delivery — your phone will share its location with the manager until you tap End.{% endif %}
+    <div style="font-size:12px;color:rgba(255,255,255,0.60);margin-top:4px;line-height:1.45;">
+      Driver GPS, route time, and route miles are recorded from the ezCater live tracking link once a delivery is started.
     </div>
   </div>
-  <button id="shift-toggle" type="button"
-          style="padding:10px 22px;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;
-                 border:none;border-radius:10px;cursor:pointer;color:#fff;
-                 background:{{ '#c0392b' if on_shift else '#E87A3E' }};">
-    {% if on_shift %}End shift{% else %}Start shift{% endif %}
-  </button>
+  <a href="{{ url_for('driver.driver_orders') }}"
+     style="padding:10px 18px;font-size:13px;font-weight:600;text-decoration:none;
+            border-radius:10px;color:#1a1a1a;background:var(--accent-soft);">
+    Driver Orders
+  </a>
 </div>
-<div id="gps-status" style="font-size:12px;color:rgba(255,255,255,0.45);margin:-10px 0 18px 4px;"></div>
 
-{# ============== LOG TABLE ============== #}
 {# Solid fill (Sam #1432): the shared .table-scroll uses var(--glass) +
    backdrop-blur, which let the restaurant-photo backdrop bleed through.
    Pin it to the ribbon colour so the driver log table reads as a solid
@@ -67,7 +61,7 @@
         {% for log in logs %}
         <tr>
           <td>{{ log.pickup_date }}</td>
-          <td>{% if log.order_link %}<a href="{{ log.order_link }}" target="_blank" style="color:var(--accent-soft);">{{ log.order_link }}</a>{% else %}—{% endif %}</td>
+          <td>{% if log.order_link %}<a href="{{ log.order_link }}" target="_blank" rel="noopener" style="color:var(--accent-soft);">{{ log.order_link }}</a>{% else %}—{% endif %}</td>
           <td>{{ log.ex_miles if log.ex_miles is not none else '—' }}</td>
           <td>{{ log.ex_miles_verified if log.ex_miles_verified is not none else '—' }}</td>
           <td>{% if log.on_time %}✓{% else %}—{% endif %}</td>
@@ -85,363 +79,5 @@
     </tbody>
   </table>
 </div>
-
-{# ============== GPS STREAMING SCRIPT ============== #}
-<script>
-(function() {
-  const card    = document.getElementById('shift-card');
-  const stateEl = document.getElementById('shift-state');
-  const metaEl  = document.getElementById('shift-meta');
-  const btn     = document.getElementById('shift-toggle');
-  const statusEl= document.getElementById('gps-status');
-
-  let onShift = card.dataset.onShift === '1';
-  let pollId = null;
-  let tickId = null;
-  let wakeLock = null;
-  let postCount = 0;
-  let lastPos = null;        // last successful GPS fix; reused as heartbeat when getCurrentPosition fails
-  let lastFixAt = 0;         // wall-clock ms of last successful fix
-  let postQueue = [];        // failed POST bodies, drained on next cycle
-  let permDenied = false;    // sticky: surfaces a permanent banner so driver knows to re-grant
-  let nativeWatcherId = null;
-
-  // Polling cadence + colour thresholds for the age indicator.
-  const POLL_MS       = 5000;
-  const STALE_AMBER_S = 15;
-  const STALE_RED_S   = 30;
-
-  // Capacitor native shell detection. When the page is loaded inside the
-  // Cenas Kitchen Driver Android/iOS app (the Capacitor wrapper), we route
-  // GPS through the @capacitor-community/background-geolocation plugin
-  // running as a native foreground service. That survives the WebView
-  // being suspended (Chrome closed, phone in pocket, app-switched away) —
-  // the thing pure-web getCurrentPosition cannot do. The web polling path
-  // below remains as the fallback when the page is loaded in a regular
-  // browser instead of the Capacitor shell.
-  const inCapacitor = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
-  const BgGeo = inCapacitor && window.Capacitor.Plugins ? window.Capacitor.Plugins.BackgroundGeolocation : null;
-  // Per Sam #672: native HTTP delivery via the cenas-gps-native plugin —
-  // no JS callback in the data path, so GPS fixes keep streaming to
-  // /driver/track even while the WebView is suspended (screen lock,
-  // app-switch, deep doze). Preferred over BgGeo when present.
-  const CenasNative = inCapacitor && window.Capacitor.Plugins ? window.Capacitor.Plugins.CenasGpsNative : null;
-
-  function setUI(state, msg) {
-    if (state === 'on') {
-      stateEl.textContent = 'On shift';
-      stateEl.style.color = '#7bb87b';
-      btn.textContent = 'End shift';
-      btn.style.background = '#c0392b';
-    } else {
-      stateEl.textContent = 'Off shift';
-      stateEl.style.color = 'rgba(255,255,255,0.55)';
-      btn.textContent = 'Start shift';
-      btn.style.background = '#E87A3E';
-    }
-    if (msg !== undefined) metaEl.textContent = msg;
-  }
-
-  async function requestWakeLock() {
-    if (!('wakeLock' in navigator)) return;
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      // OS/browser may release under battery pressure or visibility change.
-      // Auto-renew while on shift + visible so the page keeps polling.
-      wakeLock.addEventListener('release', () => {
-        wakeLock = null;
-        if (onShift && document.visibilityState === 'visible') requestWakeLock();
-      });
-    } catch (e) { /* lock denied — not fatal, polling continues while tab is foreground */ }
-  }
-
-  function releaseWakeLock() {
-    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
-  }
-
-  async function postOne(body) {
-    try {
-      const res = await fetch('/driver/track', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-      });
-      if (res.ok) return {ok: true};
-      if (res.status === 409) return {closed: true};
-      return {http: res.status};
-    } catch (e) {
-      return {network: true};
-    }
-  }
-
-  async function flushQueue() {
-    while (postQueue.length > 0) {
-      const r = await postOne(postQueue[0]);
-      if (r.ok) { postQueue.shift(); postCount++; }
-      else break;  // leave the rest for the next tick
-    }
-  }
-
-  async function postPosition(pos, isHeartbeat) {
-    const c = pos.coords;
-    const body = {
-      lat: c.latitude, lng: c.longitude,
-      accuracy_m: c.accuracy, speed_mps: c.speed, heading_deg: c.heading,
-      is_heartbeat: !!isHeartbeat,
-    };
-    const r = await postOne(body);
-    if (r.ok) {
-      postCount++;
-      if (!isHeartbeat) { lastPos = pos; lastFixAt = Date.now(); }
-      else if (!lastFixAt) { lastFixAt = Date.now(); }  // first heartbeat counts as a touch
-      if (postQueue.length > 0) flushQueue();
-    } else if (r.closed) {
-      statusEl.textContent = 'shift closed on server — refresh page';
-      stopStreaming();
-    } else {
-      postQueue.push(body);
-    }
-  }
-
-  function pollOnce() {
-    if (!('geolocation' in navigator)) {
-      statusEl.textContent = 'this device has no GPS';
-      stopStreaming();
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      pos => { permDenied = false; postPosition(pos, false); },
-      (err) => {
-        if (err.code === 1 /* PERMISSION_DENIED */) permDenied = true;
-        // Heartbeat-resend: reuse last good fix so the manager-side timestamp
-        // stays fresh while GPS recovers (driver indoors, GPS warming, etc.).
-        if (lastPos) postPosition(lastPos, true);
-      },
-      {enableHighAccuracy: true, maximumAge: 0, timeout: 8000}
-    );
-  }
-
-  function tickStatus() {
-    if (permDenied) {
-      statusEl.style.color = '#c0392b';
-      statusEl.textContent = '⚠ location permission denied — re-enable in your browser settings, then refresh';
-      return;
-    }
-    if (!lastFixAt) {
-      statusEl.style.color = 'rgba(255,255,255,0.55)';
-      statusEl.textContent = pollId ? 'requesting GPS…' : '';
-      return;
-    }
-    const ageS = Math.round((Date.now() - lastFixAt) / 1000);
-    let color = 'rgba(123,184,123,0.85)';
-    if (ageS >= STALE_AMBER_S) color = '#c0a850';
-    if (ageS >= STALE_RED_S)   color = '#c0392b';
-    statusEl.style.color = color;
-    const fixWord = postCount === 1 ? 'fix' : 'fixes';
-    const qSuffix = postQueue.length > 0 ? ` · ${postQueue.length} queued` : '';
-    const wakeSuffix = (onShift && 'wakeLock' in navigator && !wakeLock) ? ' · screen sleep risk' : '';
-    statusEl.textContent = `streamed · ${postCount} ${fixWord} · last ${ageS}s ago${qSuffix}${wakeSuffix}`;
-  }
-
-  async function startNativeTracking() {
-    if (!BgGeo) return false;
-    try {
-      nativeWatcherId = await BgGeo.addWatcher({
-        requestPermissions: true,
-        stale: false,
-        backgroundMessage: 'Cenas Kitchen driver tracking active',
-        backgroundTitle: 'On Shift',
-        distanceFilter: 10,   // meters between reports while moving
-      }, async (loc, err) => {
-        if (err) {
-          if (err.code === 'NOT_AUTHORIZED') permDenied = true;
-          return;
-        }
-        const body = {
-          lat: loc.latitude,
-          lng: loc.longitude,
-          accuracy_m: loc.accuracy,
-          speed_mps: loc.speed,
-          heading_deg: loc.bearing,
-          is_native: true,
-        };
-        const r = await postOne(body);
-        if (r.ok) {
-          postCount++;
-          lastPos = {coords: {latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy, speed: loc.speed, heading: loc.bearing}};
-          lastFixAt = Date.now();
-          if (postQueue.length > 0) flushQueue();
-        } else if (r.closed) {
-          stopStreaming();
-        } else {
-          postQueue.push(body);
-        }
-      });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  async function stopNativeTracking() {
-    if (BgGeo && nativeWatcherId !== null) {
-      try { await BgGeo.removeWatcher({id: nativeWatcherId}); } catch (_) {}
-      nativeWatcherId = null;
-    }
-  }
-
-  async function reportBatteryOptStatus(granted, prompted) {
-    // Fire-and-forget POST so the server has a record of whether each
-    // driver's phone is whitelisted from battery optimization. Helps Sam
-    // see which drivers will keep GPS streaming when the screen is off.
-    try {
-      await fetch('/driver/battery-opt-status', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({granted: !!granted, prompted: !!prompted}),
-      });
-    } catch (_) { /* best-effort */ }
-  }
-
-  async function startCenasNativeTracking() {
-    if (!CenasNative) return false;
-    try {
-      const perms = await CenasNative.requestPermissions();
-      if (perms && perms.location !== 'granted') {
-        permDenied = true;
-        statusEl.textContent = 'location permission denied — tap status for help';
-        return false;
-      }
-      // Battery-optimization auto-prompt per Sam #1025. First shift start
-      // after install pops the system dialog asking the user to whitelist
-      // Cenas Kitchen from Doze / battery saver. If already granted, this
-      // resolves immediately without prompting. Result is reported to the
-      // server either way so we can see who's whitelisted.
-      if (typeof CenasNative.requestIgnoreBatteryOptimizations === 'function') {
-        try {
-          const bat = await CenasNative.requestIgnoreBatteryOptimizations();
-          reportBatteryOptStatus(bat && bat.granted, bat && bat.prompted);
-        } catch (_) {
-          reportBatteryOptStatus(false, false);
-        }
-      }
-      const trackUrl = window.location.origin + '/driver/track';
-      const res = await CenasNative.start({
-        url: trackUrl,
-        interval_ms: 5000,
-        distance_m: 10,
-      });
-      if (!res || !res.started) return false;
-      if (perms && perms.backgroundLocation !== 'granted') {
-        statusEl.textContent = 'native GPS active — grant background for screen-off tracking';
-      } else {
-        statusEl.textContent = 'native GPS active (background-safe)';
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  async function stopCenasNativeTracking() {
-    if (!CenasNative) return;
-    try { await CenasNative.stop(); } catch (_) {}
-  }
-
-  async function startStreaming() {
-    if (!('geolocation' in navigator)) {
-      statusEl.textContent = 'this device has no GPS';
-      return;
-    }
-    // Preferred path: cenas-gps-native handles HTTP delivery entirely
-    // inside the foreground service, so GPS keeps streaming even when
-    // the WebView is suspended. JS does not see individual fixes; the
-    // server-side manager view is the source of truth for whether fixes
-    // are arriving.
-    if (inCapacitor && CenasNative) {
-      const ok = await startCenasNativeTracking();
-      if (ok) {
-        tickId = setInterval(tickStatus, 1000);
-        return;
-      }
-      // fall through if plugin refused to start (perms denied, etc.)
-    }
-    // Legacy native path (BgGeo with JS callback) — kept for older
-    // APK builds + as a fallback while cenas-gps-native bakes in.
-    if (inCapacitor && BgGeo) {
-      const ok = await startNativeTracking();
-      if (ok) {
-        tickId = setInterval(tickStatus, 1000);
-        statusEl.textContent = 'legacy GPS active (background-safe)';
-        return;
-      }
-    }
-    requestWakeLock();
-    pollOnce();                          // immediate first fix
-    pollId = setInterval(pollOnce, POLL_MS);
-    tickId = setInterval(tickStatus, 1000);
-    statusEl.textContent = 'requesting GPS…';
-  }
-
-  function stopStreaming() {
-    if (pollId !== null) { clearInterval(pollId); pollId = null; }
-    if (tickId !== null) { clearInterval(tickId); tickId = null; }
-    stopCenasNativeTracking();
-    stopNativeTracking();
-    releaseWakeLock();
-    statusEl.textContent = '';
-    statusEl.style.color = 'rgba(255,255,255,0.45)';
-    postCount = 0; lastPos = null; lastFixAt = 0;
-    postQueue = []; permDenied = false;
-  }
-
-  async function startShift() {
-    btn.disabled = true;
-    try {
-      const res = await fetch('/driver/shift/start', {method: 'POST'});
-      if (!res.ok) throw new Error(`server ${res.status}`);
-      const data = await res.json();
-      onShift = true;
-      setUI('on', `Started at ${new Date(data.started_at).toLocaleTimeString()}`);
-      startStreaming();
-    } catch (e) {
-      statusEl.textContent = `failed to start: ${e.message}`;
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  async function endShift() {
-    btn.disabled = true;
-    stopStreaming();
-    try {
-      await fetch('/driver/shift/end', {method: 'POST'});
-      onShift = false;
-      setUI('off', 'Tap Start when you begin a delivery — your phone will share its location with the manager until you tap End.');
-    } catch (e) {
-      statusEl.textContent = `failed to end: ${e.message}`;
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  btn.addEventListener('click', () => {
-    if (onShift) endShift(); else startShift();
-  });
-
-  // If page loads with an open shift (e.g. driver re-opened the tab), resume.
-  if (onShift) startStreaming();
-
-  // When the tab returns to foreground: re-acquire the wake lock (the OS
-  // commonly releases it when the page is hidden) AND poll immediately so
-  // the manager-side timestamp catches up without waiting for the next tick.
-  document.addEventListener('visibilitychange', () => {
-    if (onShift && document.visibilityState === 'visible') {
-      if (!wakeLock) requestWakeLock();
-      pollOnce();
-    }
-  });
-})();
-</script>
 
 {% endblock %}

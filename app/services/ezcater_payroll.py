@@ -2,7 +2,8 @@
 
 Sam's rules (2026-05-10):
     Base:       $25  per delivery (always)
-    Bonus:      $10  per delivery (only if tracking_status == 'Tracked')
+    Bonus:      $10  per delivery (only if tracking_status == 'Tracked'
+                or ezCater route history exists)
     Extra mi:   $2.00 / mile over 20 (only if 'Tracked', one-way, kitchen
                 -> first drop-off; for multi-stop routes the 1st->2nd leg
                 rarely qualifies because miles reset to 0). Rate raised
@@ -94,7 +95,7 @@ class DeliveryPay:
     bonus_tracked: float
     # Three miles columns, all "extra over 20" (Sam #1492/#1503):
     #   E-Miles = expected, derived from the route distance (display-only)
-    #   D-Miles = driven, manager-entered, no automatic source (display-only)
+    #   D-Miles = driven, from ezCater route history unless manager-entered
     #   V-Miles = verified by a manager on the Ez Drivers page -> THIS pays
     expected_miles: float
     driven_miles: float | None
@@ -114,6 +115,14 @@ class DeliveryPay:
     # delivery time. ready_at_ct is a CT display string for the "pending" badge.
     ready: bool = True
     ready_at_ct: str = ""
+    # ezCater route-history summary, shown on manager and driver pay pages.
+    route_miles: float | None = None
+    route_extra_miles: float | None = None
+    route_minutes: int | None = None
+    route_point_count: int = 0
+    route_started_at: datetime | None = None
+    route_ended_at: datetime | None = None
+    driven_miles_source: str = ""
 
 
 def _is_tracked(tracking_status: str | None) -> bool:
@@ -153,8 +162,11 @@ def _ready_at_ct(ready_at: datetime | None) -> str:
         return ready_at.strftime("%a %m/%d %H:%M UTC")
 
 
-def compute_one(order: Order, five_star: bool = False) -> DeliveryPay:
-    tracked = _is_tracked(order.tracking_status)
+def compute_one(order: Order, five_star: bool = False, route_summary=None) -> DeliveryPay:
+    route_point_count = int(getattr(route_summary, "point_count", 0) or 0)
+    route_miles_raw = getattr(route_summary, "distance_miles", None) if route_point_count else None
+    route_extra_raw = max(0.0, float(route_miles_raw) - MILES_THRESHOLD) if route_miles_raw is not None else None
+    tracked = _is_tracked(order.tracking_status) or route_point_count > 0
     miles = order.pickup_miles or 0.0
     # Keep the paying calc on the UNROUNDED miles so the total stays
     # byte-identical to the pre-redesign formula; round only for display.
@@ -191,9 +203,17 @@ def compute_one(order: Order, five_star: bool = False) -> DeliveryPay:
     expected_miles = round(expected_raw, 2)
     # V-Miles display value (what pays, rounded for the column).
     verified_miles = round(verified_raw, 2)
-    # D-Miles: extra miles actually driven. No automatic source, so it's blank
-    # until a manager enters it; display-only, never pays.
-    driven_miles = round(mgr_driven, 2) if mgr_driven is not None else None
+    # D-Miles: extra miles actually driven. Prefer manager input, otherwise
+    # show the ezCater route-history estimate. Display-only; never pays.
+    if mgr_driven is not None:
+        driven_miles = round(mgr_driven, 2)
+        driven_source = "manager"
+    elif route_extra_raw is not None:
+        driven_miles = round(route_extra_raw, 2)
+        driven_source = "ezcater"
+    else:
+        driven_miles = None
+        driven_source = ""
 
     bonus_tracked_v = BONUS_TRACKED if bonus_on else 0.0
     bonus_five_star = FIVE_STAR_BONUS if five_pay else 0.0
@@ -203,7 +223,7 @@ def compute_one(order: Order, five_star: bool = False) -> DeliveryPay:
     return DeliveryPay(
         order_number=order.external_order_id or "?",
         delivery_date=order.delivery_date,
-        tracking_status=order.tracking_status,
+        tracking_status=order.tracking_status or ("Tracked" if tracked else None),
         pickup_miles=order.pickup_miles,
         five_star=five_flag,
         base=BASE_PER_DELIVERY,
@@ -220,6 +240,13 @@ def compute_one(order: Order, five_star: bool = False) -> DeliveryPay:
         order_id=getattr(order, "id", None),
         ready=ready,
         ready_at_ct=_ready_at_ct(ready_at) if not ready else "",
+        route_miles=round(route_miles_raw, 2) if route_miles_raw is not None else None,
+        route_extra_miles=round(route_extra_raw, 2) if route_extra_raw is not None else None,
+        route_minutes=getattr(route_summary, "duration_minutes", None) if route_point_count else None,
+        route_point_count=route_point_count,
+        route_started_at=getattr(route_summary, "started_at", None) if route_point_count else None,
+        route_ended_at=getattr(route_summary, "ended_at", None) if route_point_count else None,
+        driven_miles_source=driven_source,
     )
 
 
@@ -274,6 +301,11 @@ def paycheck_for(driver_name: str, period_start: date, period_end: date) -> Payc
                 if normalize_driver_name(L.driver_name) == norm_target:
                     log_lookup[(L.driver_name, L.pickup_date, L.order_link or "")] = L
 
+        route_summaries = {}
+        if matched:
+            from app.services.ezcater_route_history import route_summary_by_order_ids
+            route_summaries = route_summary_by_order_ids(db, [o.id for o in matched])
+
         rows = []
         for o in matched:
             # Best-effort five_star lookup — match the log row by pickup_date
@@ -284,7 +316,7 @@ def paycheck_for(driver_name: str, period_start: date, period_end: date) -> Payc
                 if ldate == o.delivery_date and (not llink or llink in (o.external_order_id or "")):
                     five_star = bool(L.five_star)
                     break
-            rows.append(compute_one(o, five_star=five_star))
+            rows.append(compute_one(o, five_star=five_star, route_summary=route_summaries.get(o.id)))
 
         return PaycheckPeriod(
             period_start=period_start,

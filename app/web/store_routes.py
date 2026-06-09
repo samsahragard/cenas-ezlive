@@ -1110,6 +1110,18 @@ def _scoped_driver(db, driver_id):
     return drv
 
 
+def _store_can_view_order(order: Order) -> bool:
+    if g.current_location == "both":
+        return True
+    origin = (order.origin_store_id or order.reported_store_id or "").strip().lower()
+    pickup = (order.pickup_kitchen or "").strip().lower()
+    if g.current_location == "tomball":
+        return origin in {"store_2", "store_4"} or pickup == "tomball"
+    if g.current_location == "copperfield":
+        return origin in {"store_1", "store_3"} or pickup == "copperfield"
+    return False
+
+
 @store_bp.route("/drivers/<int:driver_id>/shifts", methods=["GET"])
 def driver_shifts(driver_id: int):
     db = next(get_db())
@@ -1132,6 +1144,64 @@ def driver_shifts(driver_id: int):
             rows=rows,
             active="drivers_admin",
         )
+    finally:
+        db.close()
+
+
+@store_bp.route("/ezcater-route/<int:order_id>", methods=["GET"])
+def ezcater_route_playback(order_id: int):
+    from app.services.ezcater_route_history import route_summary_for_order
+
+    db = next(get_db())
+    try:
+        order = db.get(Order, order_id)
+        if not order or not _store_can_view_order(order):
+            abort(404)
+        summary = route_summary_for_order(db, order_id)
+        driver_id = summary.driver_id or order.assigned_driver_id
+        driver = db.get(Driver, driver_id) if driver_id else None
+        return render_template(
+            "ezcater_route_playback.html",
+            active="driver_tracking",
+            order=order,
+            driver=driver,
+            summary=summary,
+            route_track_url=url_for("store.ezcater_route_track", order_id=order_id),
+            back_url=request.referrer or url_for("store.driver_tracking"),
+            location_labels=LOCATION_LABELS,
+            viewer="manager",
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/ezcater-route/<int:order_id>/track.json", methods=["GET"])
+def ezcater_route_track(order_id: int):
+    from app.services.ezcater_route_history import route_point_dicts, route_summary_for_order
+
+    db = next(get_db())
+    try:
+        order = db.get(Order, order_id)
+        if not order or not _store_can_view_order(order):
+            return jsonify({"error": "not found"}), 404
+        summary = route_summary_for_order(db, order_id)
+        return jsonify({
+            "order_id": order_id,
+            "order_number": order.external_order_id,
+            "tracking_uuid": order.delivery_tracking_id,
+            "summary": {
+                "point_count": summary.point_count,
+                "distance_miles": round(summary.distance_miles, 3),
+                "extra_miles_over_20": round(summary.extra_miles_over_20, 3),
+                "duration_minutes": summary.duration_minutes,
+                "started_at": summary.started_at.isoformat() + "Z" if summary.started_at else None,
+                "ended_at": summary.ended_at.isoformat() + "Z" if summary.ended_at else None,
+                "driver_id": summary.driver_id,
+                "driver_name": summary.driver_name,
+                "status_key": summary.status_key,
+            },
+            "points": route_point_dicts(db, order_id),
+        })
     finally:
         db.close()
 

@@ -164,7 +164,8 @@ class Order(Base):
     # which prefers a set value and otherwise falls back to the auto-derived
     # estimate. All nullable — NULL means "not yet verified", so estimates keep
     # showing until a manager confirms. Only pay_verified_miles changes pay
-    # (extra miles over 20 at $2.00/mi); pay_driven_miles is display-only.
+    # (extra miles over 20 at $2.00/mi); pay_driven_miles is display-only
+    # and overrides the ezCater route-history driven estimate when set.
     pay_verified_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
     pay_driven_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
     pay_bonus_tracked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
@@ -439,6 +440,38 @@ class DriverLocation(Base):
     accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     speed_mps: Mapped[float | None] = mapped_column(Float, nullable=True)
     heading_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class EzcaterTrackingPoint(Base):
+    """One sampled ezCater live-tracking location for a delivery.
+
+    This is separate from DriverLocation because the source is ezCater's
+    public delivery tracker, not the driver's phone streaming to Cenas.
+    """
+    __tablename__ = "ezcater_tracking_point"
+    __table_args__ = (
+        Index("ix_ezcater_tracking_point_order_time", "order_id", "captured_at"),
+        Index("ix_ezcater_tracking_point_driver_time", "driver_id", "captured_at"),
+        Index("ix_ezcater_tracking_point_uuid_time", "tracking_uuid", "captured_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("drivers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    tracking_uuid: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    driver_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    provider_status_key: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
 
 
 class ProducePriceSnapshot(Base):

@@ -222,7 +222,7 @@
   <div style="padding: 18px 20px;">
     <div style="display:flex; justify-content:space-between; align-items:start; gap:10px; margin-bottom:14px;">
       <div>
-        <div style="font-size:15px;font-weight:500;">Stack a 2nd delivery for <span id="sm-driver-name">—</span>?</div>
+        <div style="font-size:15px;font-weight:500;">Same-day delivery warning for <span id="sm-driver-name">—</span></div>
         <div style="font-size:12px;color:rgba(236,227,208,0.6);margin-top:2px;" id="sm-subtitle">Running combined-route check…</div>
       </div>
       <button type="button" onclick="document.getElementById('stack-modal').close()"
@@ -234,8 +234,8 @@
          white-space:pre-wrap; max-height:240px; overflow-y:auto; margin:0 0 14px;"></pre>
     <div style="display:flex; gap:8px; justify-content:flex-end;">
       <button type="button" onclick="document.getElementById('stack-modal').close()"
-              class="ezm-btn ezm-btn-ghost">Cancel · try another driver</button>
-      <button type="button" id="sm-confirm" class="ezm-btn ezm-btn-approve">Confirm stack</button>
+              class="ezm-btn ezm-btn-ghost">Cancel</button>
+      <button type="button" id="sm-confirm" class="ezm-btn ezm-btn-approve">Continue approval</button>
     </div>
   </div>
 </dialog>
@@ -259,7 +259,6 @@ function initEzManage() {
   const smDetails = document.getElementById('sm-details');
   const smConfirm = document.getElementById('sm-confirm');
   let pendingForm = null;
-  let pendingBlocked = false;
 
   document.querySelectorAll('.ezm-approve-form').forEach(form => {
     form.addEventListener('submit', async (e) => {
@@ -276,34 +275,32 @@ function initEzManage() {
           return;
         }
         if (!data.stack_needed) {
-          // Driver has no active delivery — straight approve
+          // No same-day reminder needed.
           form.submit();
           return;
         }
-        // Stack confirmation needed
+        // Same-day reminder needed.
         pendingForm = form;
-        pendingBlocked = false;
         smDriver.textContent = driverName;
-        if (data.blocked) {
-          pendingBlocked = true;
-          smSubtitle.textContent = 'Same-day driver limit';
-          smVerdict.textContent = '⚠ Cannot combine — ' + data.reason;
-          smVerdict.style.background = 'rgba(226,100,92,0.18)';
-          smVerdict.style.color = '#E2645C';
+        if (data.warning_needed) {
+          smSubtitle.textContent = 'Same-day reminder';
+          smVerdict.textContent = data.message || 'This driver already has another delivery on this date. Continue?';
+          smVerdict.style.background = 'rgba(255,217,112,0.12)';
+          smVerdict.style.color = '#FFD970';
           smDetails.textContent =
-            `Active delivery: ${data.active_external_order_id || data.active_delivery_id || '—'}\n` +
-            `Delivery date: ${data.active_delivery_date || '—'}\n\n` +
-            'Pick another driver for this same-day delivery.';
-          smConfirm.textContent = 'Pick another driver';
-          smConfirm.style.background = 'rgba(226,100,92,0.30)';
+            `New delivery: ${data.new_external_order_id || data.new_delivery_id || '—'} at ${data.new_deliver_at || '—'}\n` +
+            `Existing ${data.existing_kind || 'delivery'}: ${data.existing_external_order_id || data.existing_delivery_id || '—'} at ${data.existing_deliver_at || '—'}\n` +
+            `Spacing: ${data.gap_label || 'same day'}`;
+          smConfirm.textContent = 'Continue approval';
+          smConfirm.style.background = '#E4B340';
         } else if (data.feasible === false && data.reason) {
-          smSubtitle.textContent = 'Hard filter failed';
-          smVerdict.textContent = '⚠ Cannot combine — ' + data.reason;
-          smVerdict.style.background = 'rgba(226,100,92,0.18)';
-          smVerdict.style.color = '#E2645C';
+          smSubtitle.textContent = 'Same-day reminder';
+          smVerdict.textContent = data.reason;
+          smVerdict.style.background = 'rgba(255,217,112,0.12)';
+          smVerdict.style.color = '#FFD970';
           smDetails.textContent = '';
-          smConfirm.textContent = 'Approve anyway';
-          smConfirm.style.background = 'rgba(226,100,92,0.30)';
+          smConfirm.textContent = 'Continue approval';
+          smConfirm.style.background = '#E4B340';
         } else {
           const rr = (data.result && data.result.route_result) || {};
           const feasible = !!data.feasible;
@@ -312,7 +309,7 @@ function initEzManage() {
             smVerdict.textContent = '✓ Feasible — both windows met';
             smVerdict.style.background = 'rgba(156,203,118,0.18)';
             smVerdict.style.color = '#9CCB76';
-            smConfirm.textContent = 'Confirm stack';
+            smConfirm.textContent = 'Continue approval';
             smConfirm.style.background = '#E4B340';
           } else {
             smVerdict.textContent = '⚠ Not feasible — driver will miss a window';
@@ -339,11 +336,6 @@ function initEzManage() {
 
   smConfirm.addEventListener('click', () => {
     modal.close();
-    if (pendingBlocked) {
-      pendingBlocked = false;
-      pendingForm = null;
-      return;
-    }
     if (pendingForm) pendingForm.submit();
   });
 }

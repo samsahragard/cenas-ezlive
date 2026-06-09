@@ -3,7 +3,6 @@
 Pages defined per SPEC.md §4-7 and §16. Calls into:
   - app.services.delivery_lifecycle for state transitions
   - app.services.driver_scoring for the My Profile score breakdown
-  - app.services.routing_service.compute_pair_route_plan for the stack modal
 
 Auth gating:
   - Driver-facing pages (/ez-market, /my-profile, /pay-history) require
@@ -14,6 +13,7 @@ Auth gating:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Callable
@@ -55,7 +55,7 @@ MANAGER_ROLES = {
     "expo",
 }
 APP_TZ = "America/Chicago"
-ACTIVE_DELIVERY_STATUSES = ["approved", "picked_up", "en_route"]
+SAME_DAY_ASSIGNED_STATUSES = ["approved", "picked_up", "en_route", "delivered"]
 
 
 # ---- auth helpers ----
@@ -93,30 +93,121 @@ def require_manager(fn: Callable):
 
 # ---- shared helpers ----
 
-def _active_delivery_for_driver_on_date(
+
+def _order_time_value(order: Order) -> datetime | None:
+    if order.delivery_window_start:
+        return order.delivery_window_start
+    if not order.delivery_date or not order.deliver_at:
+        return None
+    match = re.search(r"(\d{1,2}:\d{2})\s*([AP]M)", order.deliver_at, re.IGNORECASE)
+    if not match:
+        return None
+    text = f"{order.delivery_date} {match.group(1)} {match.group(2).upper()}"
+    try:
+        return datetime.strptime(text, "%Y-%m-%d %I:%M %p")
+    except ValueError:
+        return None
+
+
+def _order_time_label(order: Order) -> str:
+    return order.deliver_at or "time unknown"
+
+
+def _gap_label(new_order: Order, existing_order: Order) -> str:
+    new_time = _order_time_value(new_order)
+    existing_time = _order_time_value(existing_order)
+    if not new_time or not existing_time:
+        return "same day"
+    minutes = int(round(abs((new_time - existing_time).total_seconds()) / 60))
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} apart"
+    hours, mins = divmod(minutes, 60)
+    if mins == 0:
+        return f"{hours} hour{'s' if hours != 1 else ''} apart"
+    return f"{hours} hr {mins} min apart"
+
+
+def _same_day_warning_for_driver(
     db,
     driver_id: int,
-    delivery_date: str | None,
+    new_order: Order,
     *,
-    exclude_order_id: int | None = None,
-) -> Order | None:
-    """An in-progress assignment for this driver on the candidate date.
+    include_pending: bool,
+    include_assigned: bool = True,
+) -> dict:
+    """Return advisory same-day warning data; never blocks assignment/request."""
+    delivery_date = new_order.delivery_date
+    if not delivery_date:
+        return {"warning_needed": False}
 
-    The one-driver/one-delivery rule is same-day only. A delivery on a
-    different date should never trip the stack modal or block approval.
-    """
-    q = (
-        db.query(Order)
-        .filter(Order.assigned_driver_id == driver_id)
-        .filter(Order.status.in_(ACTIVE_DELIVERY_STATUSES))
-    )
-    if delivery_date:
-        q = q.filter(Order.delivery_date == delivery_date)
-    else:
-        q = q.filter(Order.delivery_date.is_(None))
-    if exclude_order_id is not None:
-        q = q.filter(Order.id != exclude_order_id)
-    return q.order_by(Order.deliver_at.asc(), Order.id.asc()).first()
+    candidates: list[tuple[Order, str]] = []
+    if include_assigned:
+        assigned = (
+            db.query(Order)
+            .filter(Order.assigned_driver_id == driver_id)
+            .filter(Order.delivery_date == delivery_date)
+            .filter(Order.status.in_(SAME_DAY_ASSIGNED_STATUSES))
+            .filter(Order.id != new_order.id)
+            .order_by(Order.deliver_at.asc(), Order.id.asc())
+            .all()
+        )
+        candidates.extend((o, "assigned delivery") for o in assigned)
+
+    if include_pending:
+        pending_reqs = (
+            db.query(DeliveryRequest)
+            .filter(DeliveryRequest.driver_id == driver_id)
+            .filter(DeliveryRequest.status == "pending")
+            .all()
+        )
+        for req in pending_reqs:
+            if req.delivery_id == new_order.id:
+                continue
+            pending_order = db.get(Order, req.delivery_id)
+            if pending_order and pending_order.delivery_date == delivery_date:
+                candidates.append((pending_order, "pending request"))
+
+    if not candidates:
+        return {"warning_needed": False}
+
+    new_time = _order_time_value(new_order)
+
+    def sort_key(item: tuple[Order, str]) -> tuple[int, str, int]:
+        existing, _ = item
+        existing_time = _order_time_value(existing)
+        if new_time and existing_time:
+            return (
+                int(abs((new_time - existing_time).total_seconds()) // 60),
+                existing.deliver_at or "",
+                existing.id,
+            )
+        return (999999, existing.deliver_at or "", existing.id)
+
+    existing, existing_kind = sorted(candidates, key=sort_key)[0]
+    gap = _gap_label(new_order, existing)
+    return {
+        "warning_needed": True,
+        "stack_needed": True,
+        "blocked": False,
+        "feasible": True,
+        "reason": "driver has another delivery on this date",
+        "message": (
+            f"Heads up: another {existing_kind} is already "
+            f"on {delivery_date}. It is {gap}. Do you want to continue?"
+        ),
+        "gap_label": gap,
+        "new_delivery_id": new_order.id,
+        "new_external_order_id": new_order.external_order_id,
+        "new_delivery_date": new_order.delivery_date,
+        "new_deliver_at": _order_time_label(new_order),
+        "existing_kind": existing_kind,
+        "existing_delivery_id": existing.id,
+        "existing_external_order_id": existing.external_order_id,
+        "existing_delivery_date": existing.delivery_date,
+        "existing_deliver_at": _order_time_label(existing),
+        "existing_status": existing.status,
+    }
+
 
 def _format_load(db, driver_id: int, today: date) -> str:
     """SPEC §5: '0 today' / '3 today (1 in progress)' / '2 today (done)' format."""
@@ -476,35 +567,6 @@ def ez_market_request(delivery_id: int):
         order = db.get(Order, delivery_id)
         if not order:
             abort(404)
-        # Tier cap check
-        tier_caps = {"new": 1, "trusted": 2, "rockstar": 3, "top_rockstar": 5}
-        cap = tier_caps.get(driver.current_tier or "new", 1)
-        pending_count = (
-            db.query(DeliveryRequest)
-            .filter(DeliveryRequest.driver_id == driver.id)
-            .filter(DeliveryRequest.status == "pending")
-            .count()
-        )
-        if pending_count >= cap:
-            flash(f"Max {cap} pending requests ({(driver.current_tier or 'new').replace('_', ' ').title()} tier).",
-                  "error")
-            return redirect(url_for("driver_system.ez_market"))
-        # Issue B (samai #1599): same-day time-window conflict against
-        # this driver's existing pending requests. First-of-day auto-
-        # allows (pending_count==0 is handled by the cap check above being
-        # a no-op for the first request). For 2nd+, refuse and surface
-        # which existing request conflicts so the driver can cancel it
-        # before re-requesting.
-        if pending_count > 0:
-            clash = lifecycle.find_conflicting_request(db, driver.id, order)
-            if clash is not None:
-                flash(
-                    f"This conflicts with your pending request for "
-                    f"order #{clash.delivery_id}. Cancel that request "
-                    f"first, then try this one again.",
-                    "error",
-                )
-                return redirect(url_for("driver_system.ez_market"))
         try:
             lifecycle.request_delivery(db, order, driver)
             db.commit()
@@ -517,6 +579,33 @@ def ez_market_request(delivery_id: int):
             logger.exception("request_delivery failed")
             flash("Request failed — try again or refresh.", "error")
         return redirect(url_for("driver_system.ez_market"))
+    finally:
+        db.close()
+
+
+@driver_system_bp.route("/ez-market/request-warning", methods=["GET"])
+@require_driver
+def ez_market_request_warning():
+    driver = _current_driver()
+    if not driver:
+        return jsonify({"ok": False, "error": "not signed in"}), 401
+    try:
+        delivery_id = int(request.args.get("delivery_id", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "bad params"}), 400
+    db = SessionLocal()
+    try:
+        order = db.get(Order, delivery_id)
+        if not order:
+            return jsonify({"ok": False, "error": "delivery not found"}), 404
+        warning = _same_day_warning_for_driver(
+            db,
+            driver.id,
+            order,
+            include_pending=True,
+            include_assigned=True,
+        )
+        return jsonify({"ok": True, **warning})
     finally:
         db.close()
 
@@ -715,22 +804,6 @@ def ez_manage_approve(request_id: int):
         if not order or not driver:
             abort(404)
         try:
-            same_day_active = _active_delivery_for_driver_on_date(
-                db,
-                driver.id,
-                order.delivery_date,
-                exclude_order_id=order.id,
-            )
-            if same_day_active is not None:
-                flash(
-                    f"Couldn't approve: {driver.name} already has an active "
-                    f"delivery on {order.delivery_date or 'this date'} "
-                    f"({same_day_active.external_order_id or same_day_active.id}). "
-                    "Pick another driver.",
-                    "error",
-                )
-                return redirect(url_for("driver_system.ez_manage"))
-
             from app.services.driver_assignment_jobs import (
                 AssignmentAlreadyInProgress,
                 create_assignment_job,
@@ -870,9 +943,7 @@ def ez_manage_decline_all(delivery_id: int):
 @driver_system_bp.route("/ez-manage/feasibility-check", methods=["GET"])
 @require_manager
 def ez_manage_feasibility_check():
-    """Ajax endpoint for the stack confirmation modal — runs the pair
-    feasibility check between a driver's active delivery and a candidate
-    new delivery."""
+    """Ajax endpoint for the same-day reminder modal."""
     try:
         driver_id = int(request.args.get("driver_id", 0))
         new_id = int(request.args.get("new_delivery_id", 0))
@@ -884,23 +955,22 @@ def ez_manage_feasibility_check():
         new_o = db.get(Order, new_id)
         if not driver or not new_o:
             return jsonify({"ok": False, "error": "driver or delivery not found"}), 404
-        active = _active_delivery_for_driver_on_date(
+        warning = _same_day_warning_for_driver(
             db,
             driver.id,
-            new_o.delivery_date,
-            exclude_order_id=new_o.id,
+            new_o,
+            include_pending=False,
+            include_assigned=True,
         )
-        if not active:
+        if not warning.get("warning_needed"):
             return jsonify({"ok": True, "stack_needed": False})
         return jsonify({
             "ok": True,
             "stack_needed": True,
-            "blocked": True,
-            "feasible": False,
-            "reason": "driver already has an active delivery on this date",
-            "active_delivery_id": active.id,
-            "active_external_order_id": active.external_order_id,
-            "active_delivery_date": active.delivery_date,
+            **warning,
+            "active_delivery_id": warning.get("existing_delivery_id"),
+            "active_external_order_id": warning.get("existing_external_order_id"),
+            "active_delivery_date": warning.get("existing_delivery_date"),
         })
     finally:
         db.close()

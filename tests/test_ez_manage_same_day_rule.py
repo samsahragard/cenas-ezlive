@@ -83,7 +83,7 @@ def test_feasibility_ignores_driver_active_delivery_on_different_date(app_bound)
     assert data == {"ok": True, "stack_needed": False}
 
 
-def test_feasibility_blocks_driver_active_delivery_on_same_date(app_bound):
+def test_feasibility_warns_driver_active_delivery_on_same_date(app_bound):
     flask_app, db = app_bound
     manager = _manager(db)
     driver = _driver(db)
@@ -102,19 +102,47 @@ def test_feasibility_blocks_driver_active_delivery_on_same_date(app_bound):
     data = resp.get_json()
     assert data["ok"] is True
     assert data["stack_needed"] is True
-    assert data["blocked"] is True
-    assert data["feasible"] is False
+    assert data["warning_needed"] is True
+    assert data["blocked"] is False
+    assert data["feasible"] is True
     assert data["active_delivery_id"] == active.id
     assert data["active_external_order_id"] == "ACTIVE"
-    assert data["reason"] == "driver already has an active delivery on this date"
+    assert data["existing_external_order_id"] == "ACTIVE"
+    assert data["reason"] == "driver has another delivery on this date"
 
 
-def test_approve_refuses_second_same_day_active_delivery_server_side(app_bound):
+def test_feasibility_warns_driver_delivered_delivery_on_same_date(app_bound):
+    flask_app, db = app_bound
+    manager = _manager(db)
+    driver = _driver(db)
+    delivered = _order(db, driver_id=driver.id, status="delivered", day="2026-06-08", ext="DONE")
+    new_order = _order(db, status="requested", day="2026-06-08", ext="TODAY")
+
+    with flask_app.test_request_context(
+        f"/ez-manage/feasibility-check?driver_id={driver.id}&new_delivery_id={new_order.id}"
+    ):
+        from flask import g
+
+        g.current_user = manager
+        resp = driver_mod.ez_manage_feasibility_check()
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["stack_needed"] is True
+    assert data["warning_needed"] is True
+    assert data["blocked"] is False
+    assert data["feasible"] is True
+    assert data["existing_delivery_id"] == delivered.id
+    assert data["existing_external_order_id"] == "DONE"
+
+
+def test_approve_allows_second_same_day_active_delivery_server_side(app_bound):
     flask_app, db = app_bound
     manager = _manager(db)
     driver = _driver(db)
     _order(db, driver_id=driver.id, status="approved", day="2026-06-08", ext="ACTIVE")
-    new_order = _order(db, status="requested", day="2026-06-08", ext="TODAY")
+    new_order = _order(db, status="requested", day="2026-06-08", ext=None)
     req = DeliveryRequest(delivery_id=new_order.id, driver_id=driver.id, status="pending")
     db.add(req)
     db.commit()
@@ -126,6 +154,60 @@ def test_approve_refuses_second_same_day_active_delivery_server_side(app_bound):
         resp = driver_mod.ez_manage_approve(req.id)
 
     assert resp.status_code == 302
-    assert new_order.status == "requested"
-    assert new_order.assigned_driver_id is None
+    assert new_order.status == "approved"
+    assert new_order.assigned_driver_id == driver.id
+    assert req.status == "approved"
+
+
+def test_request_warning_reports_same_day_pending_request(app_bound):
+    flask_app, db = app_bound
+    driver = _driver(db)
+    existing = _order(db, status="requested", day="2026-06-08", ext="EXISTING")
+    db.add(DeliveryRequest(delivery_id=existing.id, driver_id=driver.id, status="pending"))
+    new_order = _order(db, status="available", day="2026-06-08", ext="TODAY")
+    db.commit()
+
+    with flask_app.test_request_context(
+        f"/ez-market/request-warning?delivery_id={new_order.id}"
+    ):
+        from flask import session
+
+        session["driver_id"] = driver.id
+        resp = driver_mod.ez_market_request_warning()
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["warning_needed"] is True
+    assert data["existing_kind"] == "pending request"
+    assert data["existing_external_order_id"] == "EXISTING"
+
+
+def test_request_allows_second_same_day_pending_request_server_side(app_bound):
+    flask_app, db = app_bound
+    driver = _driver(db)
+    existing = _order(db, status="requested", day="2026-06-08", ext="EXISTING")
+    db.add(DeliveryRequest(delivery_id=existing.id, driver_id=driver.id, status="pending"))
+    new_order = _order(db, status="available", day="2026-06-08", ext="TODAY")
+    db.commit()
+
+    with flask_app.test_request_context(
+        f"/ez-market/request/{new_order.id}",
+        method="POST",
+    ):
+        from flask import session
+
+        session["driver_id"] = driver.id
+        resp = driver_mod.ez_market_request(new_order.id)
+
+    assert resp.status_code == 302
+    saved_order = db.get(Order, new_order.id)
+    assert saved_order.status == "requested"
+    req = (
+        db.query(DeliveryRequest)
+        .filter(DeliveryRequest.delivery_id == new_order.id)
+        .filter(DeliveryRequest.driver_id == driver.id)
+        .first()
+    )
+    assert req is not None
     assert req.status == "pending"

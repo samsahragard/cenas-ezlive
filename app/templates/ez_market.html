@@ -89,6 +89,25 @@
   .em-banner { padding: 6px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
   .em-banner.pending { background: rgba(228,179,64,0.14); color: #E4B340; }
   .em-banner.approved { background: rgba(156,203,118,0.14); color: #9CCB76; }
+  .em-warn-dialog {
+    background: rgba(20,12,8,0.98);
+    color: #FAF6EC;
+    border: 0.5px solid rgba(217,164,54,0.35);
+    border-radius: 12px;
+    padding: 0;
+    max-width: 520px;
+    width: 92%;
+  }
+  .em-warn-dialog::backdrop { background: rgba(0,0,0,0.62); }
+  .em-warn-body { padding: 18px 20px; }
+  .em-warn-title { color: #FFD970; font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+  .em-warn-copy { color: rgba(236,227,208,0.86); font-size: 13px; line-height: 1.45; }
+  .em-warn-details {
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    background: rgba(0,0,0,0.28); color: rgba(236,227,208,0.82);
+    font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap;
+  }
+  .em-warn-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
   .em-manager-sheet { display: flex; flex-direction: column; gap: 16px; }
   .em-manager-day {
@@ -160,7 +179,7 @@
 <script>
   // 30s polling refresh (SPEC §4)
   setInterval(() => location.reload(), 30000);
-  // Scroll cap-limit flash into view in case browser preserved scroll position
+  // Scroll flash messages into view in case browser preserved scroll position.
   document.addEventListener('DOMContentLoaded', function() {
     var flash = document.querySelector('.em-flash-stack');
     if (flash && flash.children.length > 0) {
@@ -198,6 +217,19 @@
   </div>
   {% endfor %}
 </div>
+{% endif %}
+{% if viewer_is_driver %}
+<dialog id="em-request-warning-dialog" class="em-warn-dialog">
+  <div class="em-warn-body">
+    <div class="em-warn-title">Same-day delivery warning</div>
+    <div id="em-request-warning-copy" class="em-warn-copy"></div>
+    <div id="em-request-warning-details" class="em-warn-details"></div>
+    <div class="em-warn-actions">
+      <button type="button" class="em-btn ghost" id="em-request-warning-cancel" style="width:auto;">Cancel</button>
+      <button type="button" class="em-btn" id="em-request-warning-confirm" style="width:auto;">Continue request</button>
+    </div>
+  </div>
+</dialog>
 {% endif %}
 {% if not viewer_is_driver %}
 <div class="em-manager-sheet">
@@ -324,7 +356,8 @@
             {% endif %}
           </div>
           {% if viewer_is_driver and o.status in ['available', 'requested'] %}
-          <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}">
+          <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}"
+                class="em-request-form" data-delivery-id="{{ o.id }}">
             <button type="submit" class="em-btn">Request delivery</button>
           </form>
           {% elif viewer_is_driver %}
@@ -406,5 +439,55 @@ function showTab(name) {
     document.getElementById('tab-' + n).style.display = (n === name) ? '' : 'none';
   });
 }
+
+(function() {
+  const modal = document.getElementById('em-request-warning-dialog');
+  if (!modal) return;
+  const copy = document.getElementById('em-request-warning-copy');
+  const details = document.getElementById('em-request-warning-details');
+  const cancel = document.getElementById('em-request-warning-cancel');
+  const confirmBtn = document.getElementById('em-request-warning-confirm');
+  let pendingForm = null;
+
+  document.querySelectorAll('.em-request-form').forEach(form => {
+    form.addEventListener('submit', async (event) => {
+      if (form.dataset.warningConfirmed === '1') return;
+      event.preventDefault();
+      try {
+        const deliveryId = form.dataset.deliveryId;
+        const r = await fetch(`/ez-market/request-warning?delivery_id=${deliveryId}`);
+        const data = await r.json();
+        if (!data.ok || !data.warning_needed) {
+          form.dataset.warningConfirmed = '1';
+          form.submit();
+          return;
+        }
+        pendingForm = form;
+        copy.textContent = data.message || 'You already have another delivery on this date. Do you want to continue?';
+        details.textContent =
+          `This request: ${data.new_external_order_id || data.new_delivery_id || '-'} at ${data.new_deliver_at || '-'}\n` +
+          `Existing ${data.existing_kind || 'delivery'}: ${data.existing_external_order_id || data.existing_delivery_id || '-'} at ${data.existing_deliver_at || '-'}\n` +
+          `Spacing: ${data.gap_label || 'same day'}`;
+        modal.showModal();
+      } catch (err) {
+        form.dataset.warningConfirmed = '1';
+        form.submit();
+      }
+    });
+  });
+
+  cancel.addEventListener('click', () => {
+    pendingForm = null;
+    modal.close();
+  });
+  confirmBtn.addEventListener('click', () => {
+    if (!pendingForm) return;
+    pendingForm.dataset.warningConfirmed = '1';
+    const form = pendingForm;
+    pendingForm = null;
+    modal.close();
+    form.submit();
+  });
+})();
 </script>
 {% endblock %}

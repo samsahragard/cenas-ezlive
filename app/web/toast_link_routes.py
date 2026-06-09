@@ -300,6 +300,23 @@ def sv2_toast_match_suggestions():
     }), 200
 
 
+@store_bp.route("/schedules-v2/toast/reconcile-profiles", methods=["POST"])
+@require_level("partner")
+def sv2_toast_reconcile_profiles():
+    """Partner-only manual nudge for Toast-only -> Cenas profile creation.
+
+    The scheduled Toast sync runs this automatically; this endpoint gives Sam a
+    safe same-day trigger without exposing the cron token.
+    """
+    store = _store()
+    if not store or store not in ("tomball", "copperfield"):
+        return jsonify({"ok": False,
+                        "error": "Select a specific store (Tomball or Copperfield)."}), 400
+    from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
+    summary = reconcile_toast_employee_profiles(only_store=store)
+    return jsonify({"ok": True, "store": store, "profiles": summary}), 200
+
+
 def toast_employee_summary(store: str, toast_id: str) -> tuple[dict, int]:
     """Resolve ONE Toast employee's recent labor + performance + (derived) pay
     for `store`, by Toast GUID. SHARED by the manager Link-tab endpoint and the

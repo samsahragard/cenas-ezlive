@@ -255,6 +255,18 @@ def test_toast_profile_reconcile_respects_ignored_toast_rows(link_app):
     assert db.query(CenaToastLink).filter_by(store_key="tomball", toast_id="toast-c").count() == 0
 
 
+def test_partner_can_nudge_toast_profile_reconcile_for_store(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+
+    resp = client.post("/uno/schedules-v2/toast/reconcile-profiles")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    assert body["store"] == "copperfield"
+    assert body["profiles"]["created"] == 1
+    assert db.query(CenaToastLink).filter_by(store_key="copperfield", toast_id="toast-x").count() == 1
+
+
 def test_team_link_page_defaults_to_url_store_and_contains_cleanup_controls(link_app):
     flask_app, _db = link_app
     client = _client(flask_app)

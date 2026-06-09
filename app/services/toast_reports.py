@@ -37,12 +37,12 @@ PERF_ROLE_TITLES = {
 
 # Word-boundary keyword fallback when item GUID isn't in the categories lookup.
 DRINK_KEYWORD_WORDS = {
-    "DRINK", "DRINKS", "BEER", "WINE", "COCKTAIL", "MARG", "MARGARITA", "MOJITO",
+    "DRINK", "DRINKS", "BEER", "WINE", "COCKTAIL", "MARG", "MARGARITA", "RITA", "MOJITO",
     "PALOMA", "SODA", "JUICE", "TEA", "COFFEE", "WATER", "FOUNTAIN", "BOTTLE",
     "BOTTLED", "BUCKET", "PITCHER", "MICHELADA", "SANGRIA", "TEQUILA", "CORONA",
     "MODELO", "MILLER", "SHOT", "SHOTS", "RUM", "VODKA", "WHISKEY", "BOURBON",
     "GIN", "ESPRESSO", "LATTE", "CAPPUCCINO", "AMERICANO", "MILK", "LEMONADE",
-    "AGUA", "FRESCA", "ICED",
+    "AGUA", "FRESCA", "ICED", "RANCHWATER",
 }
 
 NON_SERVER_NAMES = {
@@ -748,6 +748,150 @@ def server_activity_for_guids(server_guids, location_filter, business_date,
         "avg_gap_secs": statistics.mean(totals["gap_secs"]) if totals["gap_secs"] else None,
         "avg_duration_secs": statistics.mean(totals["duration_secs"]) if totals["duration_secs"] else None,
         "activities": activities[:max(0, int(limit or 0))],
+    }
+
+
+def _payment_method_type(payment: dict) -> str | None:
+    value = str(payment.get("type") or "").strip().upper()
+    if not value:
+        return None
+    if "CREDIT" in value or value in {"VISA", "MASTERCARD", "AMEX", "DISCOVER"}:
+        return "Credit"
+    if "CASH" in value:
+        return "Cash"
+    if "GIFT" in value:
+        return "Gift card"
+    return value.title()
+
+
+def _payment_status(payment: dict) -> str | None:
+    value = str(payment.get("paymentStatus") or "").strip()
+    return value.title() if value else None
+
+
+def _selection_group(selection: dict, item_categories: dict) -> str:
+    if not str(selection.get("displayName") or selection.get("name") or "").strip():
+        return "other"
+    cat = _classify_selection(selection, item_categories)
+    if cat == "drink":
+        return "drink"
+    if cat in {"appetizer", "entree"}:
+        return "food"
+    return "other"
+
+
+def _safe_selection_row(selection: dict, item_categories: dict) -> dict | None:
+    if not isinstance(selection, dict) or selection.get("voided") or selection.get("deleted"):
+        return None
+    name = str(selection.get("displayName") or selection.get("name") or "").strip()
+    if not name:
+        return None
+    created = _parse_iso(selection.get("createdDate"))
+    try:
+        qty = float(selection.get("quantity") or 1)
+    except (TypeError, ValueError):
+        qty = 1.0
+    return {
+        "name": name,
+        "quantity": qty,
+        "created_at": _iso_utc(created),
+        "group": _selection_group(selection, item_categories),
+    }
+
+
+def _selection_counts(selections: list[dict]) -> dict[str, int]:
+    counts = {"food": 0, "drink": 0, "other": 0}
+    for selection in selections:
+        group = selection.get("group") or "other"
+        counts[group if group in counts else "other"] += 1
+    return counts
+
+
+def server_table_timelines_for_guids(server_guids, location_filter, business_date,
+                                     refresh: bool = False, limit: int = 20) -> dict:
+    """Employee-safe table/check/item timelines for confirmed Toast server guids.
+
+    Returns names and timestamps needed for the employee "Tables" page while
+    omitting raw Toast ids, customer data, card details, sales totals, prices,
+    payment amounts, tax, discounts, and tips.
+    """
+    guids = {g for g in (server_guids or set()) if g}
+    empty = {
+        "business_date": business_date,
+        "locations": [],
+        "tickets": 0,
+        "timelines": [],
+        "raw_payloads_included": False,
+    }
+    if not guids:
+        return empty
+
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+    item_categories = _load_item_categories()
+    timelines: list[dict] = []
+
+    for loc, rg in locations.items():
+        table_map = _activity_table_map(client, loc, rg)
+        try:
+            orders = client.fetch_orders_for_date(loc, rg, business_date, refresh=refresh)
+        except Exception as ex:
+            log.warning("toast: server table timeline skip %s/%s: %s", loc, business_date, ex)
+            continue
+        for order in orders or []:
+            if not isinstance(order, dict) or order.get("voided") or order.get("deleted"):
+                continue
+            for check in order.get("checks") or []:
+                if not isinstance(check, dict):
+                    continue
+                ac = _analyze_check(check, order, item_categories)
+                if not ac or ac.get("server_guid") not in guids:
+                    continue
+                selections = []
+                for selection in sorted(check.get("selections") or [], key=lambda s: s.get("createdDate") or ""):
+                    safe = _safe_selection_row(selection, item_categories)
+                    if safe:
+                        selections.append(safe)
+                payment_methods: list[dict] = []
+                seen_methods: set[tuple[str | None, str | None]] = set()
+                for payment in check.get("payments") or []:
+                    if not isinstance(payment, dict) or payment.get("voided") or payment.get("deleted"):
+                        continue
+                    method = _payment_method_type(payment)
+                    status = _payment_status(payment)
+                    key = (method, status)
+                    if not method or key in seen_methods:
+                        continue
+                    seen_methods.add(key)
+                    payment_methods.append({
+                        "method": method,
+                        "status": status,
+                        "paid_at": _iso_utc(_parse_iso(payment.get("paidDate"))),
+                    })
+                opened = ac["opened"]
+                closed = ac["closed"]
+                timelines.append({
+                    "location": loc,
+                    "table_name": _activity_table_label(order, check, table_map),
+                    "display_number": str(check.get("displayNumber") or order.get("displayNumber") or "").strip() or None,
+                    "status": "closed" if closed else "open",
+                    "opened_at": _iso_utc(opened),
+                    "closed_at": _iso_utc(closed),
+                    "duration_secs": _seconds_between(closed, opened),
+                    "drink_rang_at": _iso_utc(ac["first_drink"]),
+                    "food_rang_at": _iso_utc(ac["first_appetizer"] or ac["first_entree"]),
+                    "selections": selections,
+                    "selection_groups": _selection_counts(selections),
+                    "payment_methods": payment_methods,
+                })
+
+    timelines.sort(key=lambda row: row.get("opened_at") or "", reverse=True)
+    return {
+        "business_date": business_date,
+        "locations": sorted(locations.keys()),
+        "tickets": len(timelines),
+        "timelines": timelines[:max(0, int(limit or 0))],
+        "raw_payloads_included": False,
     }
 
 

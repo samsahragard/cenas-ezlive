@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from flask import jsonify
+from flask import jsonify, session
 
 from app.db import SessionLocal
 from app.services.sling_reports import _fmt_phone
@@ -301,13 +301,22 @@ def sv2_toast_match_suggestions():
 
 
 @store_bp.route("/schedules-v2/toast/reconcile-profiles", methods=["POST"])
-@require_level("partner")
 def sv2_toast_reconcile_profiles():
     """Partner-only manual nudge for Toast-only -> Cenas profile creation.
 
     The scheduled Toast sync runs this automatically; this endpoint gives Sam a
     safe same-day trigger without exposing the cron token.
     """
+    from app.web.permissions import level_at_least, load_current_user
+
+    user = load_current_user()
+    allowed = bool(
+        (user is not None and level_at_least(user.permission_level, "partner"))
+        or session.get("partner_auth_ok")
+    )
+    if not allowed:
+        return ("Forbidden -- partner access required.", 403)
+
     store = _store()
     if not store or store not in ("tomball", "copperfield"):
         return jsonify({"ok": False,

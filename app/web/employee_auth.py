@@ -386,33 +386,25 @@ def dashboard_page():
         full_name = (emp.full_name or "").strip()
         first_name = full_name.split(" ")[0] if full_name else None
 
-        # Cenas Floor OS: feed the Today tab demo data when Toast is not
-        # connected yet for this employee. The shape (FloorDay + stats) is the
-        # same in demo and live mode so the template does not branch.
-        from app.services import floor_demo
-        from app.services.employee_floor_metrics import calculate_day_stats
+        # Cenas Floor Pulse V2: the Today tab is date-true. Today is keyed to the
+        # real local business date; with no posted checks for today it shows
+        # zeros and an empty peer ranking (yesterday never rolls forward). Week /
+        # Month / Last 30 show stats + technical averages + peer ranking, with NO
+        # table map or ticket rail. Range comes from ?range=.
+        from datetime import date as _date
 
-        floor_day = floor_demo.demo_today()
-        hours = floor_day.get("hours_worked")
-        base_pay_amount = (hours or 0) * 2.13  # tipped-server base; demo only
-        stats = calculate_day_stats(
-            floor_day,
-            pending_tip_rate=floor_demo.PENDING_TIP_RATE,
-            hours=hours,
-            base_pay=base_pay_amount,
-        )
-        target = floor_day.get("target_tips") or 0
-        opportunity = max(0.0, target - (stats.get("recorded_tips") or 0))
-        coaching = floor_demo.best_next_action(floor_day, stats)
-        ledger = floor_demo.demo_ledger()
-        station_chips = [
-            {
-                "table": t,
-                "attention": floor_demo.table_attention(t),
-                "summary": floor_demo.table_summary(t)["label"],
-            }
-            for t in floor_day["tables"]
-        ]
+        from app.services import floor_pulse as fp
+
+        range_key = (request.args.get("range") or "today").lower()
+        if range_key not in fp.RANGE_KEYS:
+            range_key = "today"
+
+        stats = fp.employee_stats(range_key)
+        leaderboard = fp.build_leaderboard(range_key)
+        me = fp.my_rank(leaderboard)
+        cash_pending = fp.cash_pending_peers(range_key)
+        technical = fp.technical_rows(stats)
+        today_label = _date.today().strftime("%a, %b ") + str(_date.today().day)
 
         initials = "".join(w[0] for w in (full_name or "").split()[:2]).upper() or "--"
         view = SimpleNamespace(
@@ -421,21 +413,23 @@ def dashboard_page():
             store_name=store_name,
             initials=initials,
             role="Server",
-            location=store_name or floor_demo.DEMO_LOCATION.label,
+            location=store_name or "Copperfield",
         )
         return render_template(
             "employee_dashboard.html",
             employee=view,
-            floor_day=floor_day,
+            range_key=range_key,
+            range_options=[(k, lbl) for k, lbl in (
+                ("today", "Today"), ("week", "Week"),
+                ("month", "Month"), ("last30", "Last 30"),
+            )],
             stats=stats,
-            opportunity=opportunity,
-            coaching=coaching,
-            ledger=ledger,
-            station_chips=station_chips,
-            base_pay=base_pay_amount,
-            section=floor_demo.DEMO_SECTION,
-            manager=floor_demo.DEMO_MANAGER,
-            on_since=floor_demo.DEMO_ON_SINCE,
+            leaderboard=leaderboard,
+            me=me,
+            cash_pending=cash_pending,
+            technical=technical,
+            today_label=today_label,
+            is_today=(range_key == "today"),
             demo_mode=True,
             sync_label="demo mode",
             logout_url="/employee/logout",

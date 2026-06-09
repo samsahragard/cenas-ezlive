@@ -20,51 +20,42 @@ def employee_tables_page():
         if emp is None:
             return redirect("/employee/login")
 
-        # Cenas Floor OS: demo fixture today; the live Toast path lives in
-        # /employee/tables/data above and remains available for callers that
-        # already know how to consume it. The Floor OS shell renders the
-        # demo when the live links are not present.
-        from app.services import floor_demo
-        from app.services.employee_floor_metrics import calculate_day_stats
+        # Cenas Floor Pulse V2: the Tables tab is date-true. "Today" has no
+        # posted checks (date reset) and shows an empty state with a jump to
+        # Yesterday's completed ticket rail. Table tiles deep-link to their
+        # ticket via ?table=; filters via ?filter=. The live Toast path lives in
+        # /employee/tables/data above and remains available untouched.
+        from app.services import floor_pulse as fp
 
         day_key = (request.args.get("day") or "today").lower()
         if day_key not in ("today", "yesterday"):
             day_key = "today"
-        floor_day = floor_demo.demo_today() if day_key == "today" else floor_demo.demo_yesterday()
 
-        hours = floor_day.get("hours_worked")
-        base_pay_amount = (hours or 0) * 2.13
-        stats = calculate_day_stats(
-            floor_day,
-            pending_tip_rate=floor_demo.PENDING_TIP_RATE,
-            hours=hours,
-            base_pay=base_pay_amount,
-        )
-        target = floor_day.get("target_tips") or 0
-        opportunity = max(0.0, target - (stats.get("recorded_tips") or 0))
-        coaching = floor_demo.best_next_action(floor_day, stats)
-        station_chips = [
-            {
-                "table": t,
-                "attention": floor_demo.table_attention(t),
-                "summary": floor_demo.table_summary(t)["label"],
-            }
-            for t in floor_day["tables"]
-        ]
+        flt = (request.args.get("filter") or "all").lower()
+        if flt not in ("all", "mine", "open", "attention", "new"):
+            flt = "all"
+
+        selected_table = request.args.get("table") or None
+
+        all_tickets = fp.tickets_for_day(day_key)
+        counts = fp.filter_counts(all_tickets)
+        # A ?table= deep-link must show that ticket even if a stale filter would
+        # hide it -- fall back to "all" so the selection is never orphaned.
+        if selected_table and flt != "all":
+            visible_ids = {t["table_id"] for t in fp.filter_tickets(all_tickets, flt)}
+            if selected_table not in visible_ids:
+                flt = "all"
+        tickets = [fp.ticket_view(t) for t in fp.filter_tickets(all_tickets, flt)]
 
         return render_template(
             "employee_tables.html",
             employee=emp,
-            floor_day=floor_day,
-            stats=stats,
-            opportunity=opportunity,
-            coaching=coaching,
-            station_chips=station_chips,
+            tickets=tickets,
+            counts=counts,
             day_key=day_key,
             day_options=[("today", "Today"), ("yesterday", "Yesterday")],
-            now_minutes=floor_demo.DEMO_NOW_MINUTES,
-            clock=floor_demo.clock,
-            ago=floor_demo.ago,
+            filter_key=flt,
+            selected_table=selected_table,
             demo_mode=True,
             sync_label="demo mode",
             dashboard_url="/employee/dashboard",

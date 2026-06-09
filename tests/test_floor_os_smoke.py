@@ -61,7 +61,10 @@ def _assert_floor_os_shell(html: str):
     assert 'aria-current="page"' in html
 
 
-def test_today_tab_renders_floor_os(app_emp):
+def test_today_tab_resets_to_zero_by_date(app_emp):
+    """Floor Pulse V2: Today is date-true. With no checks posted for the real
+    local date, the hero take-home is $0.00 and the empty state shows. Yesterday
+    must not roll forward into Today."""
     app, eid = app_emp
     c = app.test_client()
     _login(c, eid)
@@ -69,43 +72,80 @@ def test_today_tab_renders_floor_os(app_emp):
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     _assert_floor_os_shell(html)
-    # Today-specific Floor OS markers
-    assert "cf-hero" in html
-    assert "cf-money" in html
-    assert "cf-coach" in html
-    assert "cf-ledger" in html
-    # Honest demo-mode label
+    # V2 hero + date-reset markers
+    assert "cfp-hero-money" in html
+    assert "$0.00" in html
+    assert "Nothing posted for" in html
+    assert "Yesterday will not roll forward" in html
+    # Today range shows the empty peer ranking, not a fabricated board.
+    assert "No ranked shift yet" in html
     assert "Demo mode" in html
 
 
-def test_tables_tab_renders_floor_os(app_emp):
+def test_today_week_range_shows_stats_and_ranking_no_table_rail(app_emp):
+    """Week/Month/Last30: stats + technical averages + peer ranking, and NO
+    table map / ticket rail."""
     app, eid = app_emp
     c = app.test_client()
     _login(c, eid)
-    r = c.get("/employee/tables")
+    r = c.get("/employee/dashboard?range=week")
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     _assert_floor_os_shell(html)
-    # Tables-specific Floor OS markers
-    assert "cf-map" in html
-    assert "cf-rail-wrap" in html
-    assert "cf-ticket" in html
-    assert "cf-ticket-perf" in html
-    # The day toggle ships with 'today' selected by default
-    assert 'data-value="today"' in html
-    # Honest source label
-    assert "demo mode" in html.lower()
+    # Stats present
+    assert "Technical averages" in html
+    assert "Peer ranking" in html
+    assert "Rank #" in html  # the employee's own rank chip
+    assert "Kennya Garcia" in html  # leaderboard rows
+    # The range note replaces the live table rail
+    assert "No table rail on week view" in html
+    # No today-only zero state on a populated range
+    assert "Nothing posted for" not in html
 
 
-def test_tables_tab_day_toggle_serves_yesterday(app_emp):
+def test_today_hero_cards_link_to_sections(app_emp):
+    """Clickable hero cells must target the on-page section anchors."""
     app, eid = app_emp
     c = app.test_client()
     _login(c, eid)
-    r = c.get("/employee/tables?day=yesterday")
-    assert r.status_code == 200
-    html = r.get_data(as_text=True)
-    # The yesterday fixture has the y5/y6/y7 check ids
-    assert "#y5" in html or "y5" in html
+    html = c.get("/employee/dashboard?range=week").get_data(as_text=True)
+    assert 'href="#cfp-earnings"' in html
+    assert 'href="#cfp-leaderboard"' in html
+    assert 'href="#cfp-technical"' in html
+    assert 'id="cfp-earnings"' in html
+    assert 'id="cfp-leaderboard"' in html
+    assert 'id="cfp-technical"' in html
+
+
+def test_tables_today_empty_yesterday_has_rail(app_emp):
+    """Tables: Today is empty (date reset) with a jump to Yesterday; Yesterday
+    carries the ticket rail and table tiles that open their ticket."""
+    app, eid = app_emp
+    c = app.test_client()
+    _login(c, eid)
+    today = c.get("/employee/tables").get_data(as_text=True)
+    assert "No tables for today" in today
+    assert "View yesterday tickets" in today
+
+    yest = c.get("/employee/tables?day=yesterday").get_data(as_text=True)
+    assert "cfp-table-map" in yest
+    assert "cfp-ticket-list" in yest
+    # Table tile and its matching ticket anchor both exist for table 62B
+    assert 'data-table="62B"' in yest
+    assert 'id="cfp-ticket-62B"' in yest
+
+
+def test_tables_deeplink_table_selects_and_keeps_filter_safe(app_emp):
+    """A ?table= deep-link (from Best Next Move / Right Now) marks the ticket
+    selected, and is not orphaned by a filter that would hide it."""
+    app, eid = app_emp
+    c = app.test_client()
+    _login(c, eid)
+    # table 63 is NOT owner (owner=False) so filter=mine would hide it; the
+    # route must fall back so the deep-linked ticket stays visible + selected.
+    html = c.get("/employee/tables?day=yesterday&filter=mine&table=63").get_data(as_text=True)
+    assert 'id="cfp-ticket-63"' in html
+    assert "is-selected" in html
 
 
 def test_shifts_tab_renders_floor_os(app_emp):

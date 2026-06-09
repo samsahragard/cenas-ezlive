@@ -1,130 +1,234 @@
-{# Cenas Floor OS - Today tab.
-   Employee landing page. Surfaces projected take-home, settled vs pending
-   tips, opportunity, next-best-action coaching, the rich metric grid, and a
-   daily ledger. Demo data feeds these helpers when Toast is not connected;
-   the source label is honest about which.
+{# Cenas Floor Pulse V2 - Today tab.
+   Date-true: Today shows zeros + empty ranking when no checks have posted for
+   the real local date. Week / Month / Last 30 show stats + technical averages
+   + peer ranking and intentionally hide the table map / ticket rail.
+   Clickable hero cards scroll to their section; Right-Now boxes deep-link to
+   Tables filters; Best-Next-Move opens that table's ticket.
 #}
 {% extends "employee_console_base.html" %}
-{% from "_floor_macros.html" import welcome_row, segmented, hero_command, coaching_card, metric_card, station_chip, empty_state, sync_chip %}
 {% set active_tab = 'today' %}
-{% block title %}Today &middot; Cenas Floor OS{% endblock %}
+{% block title %}Today &middot; Cenas Floor Pulse{% endblock %}
 
-{% block head_extra %}
-<style>
-  /* Today tab: tiny page-level helpers that don't belong in the shared layer */
-  .today-hero-wrap { position: relative; }
-  .today-hero-wrap .cf-demo-badge { position: absolute; right: 16px; top: -10px; }
-</style>
-{% endblock %}
+{% macro money(v) %}${{ '%.2f'|format(v or 0) }}{% endmacro %}
+{% macro money0(v) %}${{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
 
 {% block employee_hero %}
-  {{ welcome_row(employee.initials|default('--'), employee.full_name|default('Team member'), employee.role|default('Server'), employee.location|default('')) }}
+<section class="cfp-welcome">
+  <div class="cfp-big-avatar" aria-hidden="true">{{ employee.initials }}</div>
+  <div class="cfp-welcome-body">
+    <h1>{{ employee.full_name or 'Team member' }}</h1>
+    <p>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      {{ employee.role }} &middot; {{ employee.location }}
+    </p>
+  </div>
+  {% if demo_mode %}<span class="cfp-livepill"><i></i> Demo mode</span>{% endif %}
+</section>
+
+{# Range selector: server-rendered links so each range is a real, shareable URL. #}
+<div class="cfp-segment" role="tablist" aria-label="Performance range">
+  {% for key, label in range_options %}
+    <a class="cfp-seg-link{% if range_key == key %} is-on{% endif %}"
+       role="tab" aria-selected="{{ 'true' if range_key == key else 'false' }}"
+       href="/employee/dashboard?range={{ key }}">{{ label }}</a>
+  {% endfor %}
+</div>
 {% endblock %}
 
 {% block employee_content %}
 
-{{ segmented('today-section', [('performance', 'Performance'), ('roster', 'Roster'), ('service', 'Service')], 'performance', 'Today sections') }}
-
-{# --- PERFORMANCE pane (the default; always visible on initial render) --- #}
-<section id="cf-pane-performance" data-pane="performance">
-
-  {{ segmented('today-range', [('today', 'Today'), ('week', 'Week'), ('month', 'Month'), ('last30', 'Last 30')], 'today', 'Performance range') }}
-
-  <div class="today-hero-wrap">
-    {% if demo_mode %}<span class="cf-demo-badge">Demo mode</span>{% endif %}
-    {{ hero_command('Tonight', stats, opportunity) }}
+{# ---- Hero command with clickable cells ---- #}
+<section class="cfp-hero-card">
+  <div class="cfp-hero-head">
+    <span>
+      {%- if range_key == 'today' -%}Today projected take-home
+      {%- elif range_key == 'week' -%}This week take-home
+      {%- elif range_key == 'month' -%}This month take-home
+      {%- else -%}Last 30 days take-home{%- endif -%}
+    </span>
+    <b>{% if is_today %}{{ today_label }}{% elif range_key == 'week' %}current week{% elif range_key == 'month' %}current month{% else %}rolling 30{% endif %}</b>
   </div>
-
-  {{ coaching_card(coaching.title, coaching.body) }}
-
-  <div class="cf-card-grid">
-    {{ metric_card(
-        '$%.2f' % (base_pay or 0),
-        'base pay so far'
-    ) }}
-    {{ metric_card(
-        '$%.2f' % (stats.tips_per_hour or 0) if stats.tips_per_hour is not none else '--',
-        'tips / hour',
-        trend='on pace' if stats.tips_per_hour else None
-    ) }}
-    {{ metric_card(
-        '$%.2f' % (stats.average_check or 0) if stats.average_check is not none else '--',
-        'average check'
-    ) }}
-    {{ metric_card(
-        stats.bar_drink_count|int if stats.bar_drink_count else 0,
-        'bar drinks',
-        trend='3 over pace' if (stats.bar_drink_count or 0) >= 15 else None
-    ) }}
+  <strong class="cfp-hero-money">{{ money(stats.projected_take_home) }}</strong>
+  <p>
+    {% if is_today %}
+      {{ money(stats.settled_ticket_tips) }} settled tips + {{ money(stats.open_tip_estimate) }} estimated on {{ stats.open_tickets }} open check{{ '' if stats.open_tickets == 1 else 's' }}.
+    {% else %}
+      {{ money(stats.tips) }} tips + {{ money(stats.base_pay) }} base pay across {{ '%.1f'|format(stats.hours) }} hours.
+    {% endif %}
+  </p>
+  <div class="cfp-hero-grid">
+    <a class="cfp-jump" href="#cfp-earnings">
+      <span>Tips / Hr</span><b>{{ money(stats.tip_per_hour) }}</b>
+    </a>
+    <a class="cfp-jump" href="#cfp-leaderboard">
+      <span>Avg Tip</span><b>{{ '%.0f'|format(stats.tip_pct) }}%</b>
+    </a>
+    <a class="cfp-jump" href="#cfp-technical">
+      <span>Drink Pace</span><b>{% if stats.avg_drink %}{{ stats.avg_drink|round|int }}m{% else %}--{% endif %}</b>
+    </a>
   </div>
-
-  <div class="cf-eyebrow">Daily breakdown</div>
-  <div class="cf-ledger">
-    {% for row in ledger %}
-      <div class="cf-ledger-row">
-        <span>{{ row.day }}{% if row.live %} <span class="cf-mini-live" aria-label="today"></span>{% endif %}</span>
-        <span>{{ '%.1fh' % row.hours if row.hours else 'off' }}</span>
-        <span>${{ '%.2f' % row.tips }}</span>
-        <strong>${{ '%.2f' % (row.base + row.tips) }}</strong>
-      </div>
-    {% endfor %}
-    <div class="cf-ledger-key"><span>day</span><span>hours</span><span>tips</span><span>total</span></div>
-  </div>
-
 </section>
 
-{# --- ROSTER pane --- #}
-<section id="cf-pane-roster" data-pane="roster" hidden>
-  <div class="cf-block">
-    <div class="cf-eyebrow">Your station tonight</div>
-    <div class="cf-bigrow"><span>Section</span><strong>{{ section|default('-') }}</strong></div>
-    <div class="cf-bigrow"><span>On since</span><strong>{{ on_since|default('-') }}</strong></div>
-    <div class="cf-bigrow"><span>Manager on duty</span><strong>{{ manager|default('-') }}</strong></div>
+{# ---- Today: date-reset empty state + live summary + best next move ---- #}
+{% if is_today %}
+  {% if stats.total_tables == 0 %}
+    <section class="cfp-empty-state">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+      <strong>Nothing posted for {{ today_label }} yet</strong>
+      <p>Today stays at zero until checks post for this exact local date. Yesterday will not roll forward.</p>
+    </section>
+  {% endif %}
+
+  <section class="cfp-block" id="cfp-live">
+    <div class="cfp-section-head">
+      <h2>Right now</h2>
+      <a class="cfp-head-link" href="/employee/tables?filter=all">View tables</a>
+    </div>
+    <div class="cfp-now-grid">
+      <a class="is-good" href="/employee/tables?filter=mine">
+        <strong>{{ stats.owned_tables }}</strong><span>Tables</span><em>yours</em>
+      </a>
+      <a class="is-warn" href="/employee/tables?filter=new">
+        <strong>{{ stats.new_seated }}</strong><span>New</span><em>seated</em>
+      </a>
+      <a class="is-danger" href="/employee/tables?filter=attention">
+        <strong>{{ stats.attention }}</strong><span>Needs</span><em>attention</em>
+      </a>
+    </div>
+  </section>
+
+  {% if stats.next_move %}
+    <section class="cfp-next-card is-{{ stats.next_move.tone }}">
+      <div class="cfp-next-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div>
+      <div>
+        <strong>Table {{ stats.next_move.table_id }}</strong>
+        <span>{{ stats.next_move.next_action }}</span>
+        <em>{{ stats.next_move.covers }} top &middot; {{ money(stats.next_move.amount) }} open check</em>
+      </div>
+      <a class="cfp-next-open" href="/employee/tables?table={{ stats.next_move.table_id }}" aria-label="Open ticket for table {{ stats.next_move.table_id }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </section>
+  {% else %}
+    <section class="cfp-next-card is-empty">
+      <div class="cfp-next-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div>
+      <div>
+        <strong>No live next move yet</strong>
+        <span>When a table needs attention, it will show here.</span>
+        <em>Reflects today's checks only.</em>
+      </div>
+    </section>
+  {% endif %}
+{% else %}
+  {# ---- Week / Month / Last 30: stats only, no table rail ---- #}
+  <section class="cfp-range-note">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="13" y="6" width="3" height="11"/></svg>
+    <div>
+      <strong>No table rail on {{ range_key if range_key != 'last30' else 'last 30' }} view</strong>
+      <span>This view only shows stats, averages, and peer rankings so you see performance without table clutter.</span>
+    </div>
+  </section>
+{% endif %}
+
+{# ---- Earnings breakdown ---- #}
+<section class="cfp-block" id="cfp-earnings">
+  <div class="cfp-section-head">
+    <h2>Earnings breakdown</h2>
+    <span>{{ 'daily' if is_today else 'range' }}</span>
   </div>
-  {{ coaching_card('Floor read',
-      'You are carrying ' ~ (stats.total_tables or 0) ~ ' tables with ' ~ (stats.open_checks or 0)
-      ~ ' open check' ~ ('' if (stats.open_checks or 0) == 1 else 's')
-      ~ '. Hot tables need attention before new seating.') }}
-  <div class="cf-map">
-    <div class="cf-map-head"><strong>Live station map</strong><span>{{ floor_day.tables|length }} tables</span></div>
-    <div class="cf-table-grid">
-      {% for chip in station_chips %}
-        {{ station_chip(chip.table, chip.attention, chip.summary) }}
-      {% endfor %}
+  <div class="cfp-metric-grid">
+    <div class="cfp-metric">
+      <span>Base pay so far</span><strong>{{ money(stats.base_pay) }}</strong><em>{{ '%.1f'|format(stats.hours) }} hours</em>
+    </div>
+    <div class="cfp-metric is-good">
+      <span>Tips / hour</span><strong>{{ money(stats.tip_per_hour) }}</strong><em>{{ 'actual hours' if stats.hours else 'no hours yet' }}</em>
+    </div>
+    <div class="cfp-metric">
+      <span>Tip %</span><strong>{{ '%.0f'|format(stats.tip_pct) }}%</strong><em>credit card tips</em>
+    </div>
+    <div class="cfp-metric">
+      <span>Avg check</span><strong>{{ money(stats.avg_check) }}</strong><em>{{ stats.tickets }} tickets</em>
     </div>
   </div>
+  {% if stats.cash_unknown %}
+    <p class="cfp-note-copy">{{ stats.cash_unknown }} cash check{{ '' if stats.cash_unknown == 1 else 's' }} have an unknown tip. Shown neutrally and not counted against performance.</p>
+  {% endif %}
 </section>
 
-{# --- SERVICE pane --- #}
-<section id="cf-pane-service" data-pane="service" hidden>
-  <div class="cf-card-grid">
-    {{ metric_card(
-        ('%dm' % (stats.seat_to_first_drink_avg_min|round(0)|int)) if stats.seat_to_first_drink_avg_min is not none else '--',
-        'seat -> first drink',
-        trend='1m faster' if (stats.seat_to_first_drink_avg_min or 99) < 7 else None
-    ) }}
-    {{ metric_card(
-        ('%dm' % (stats.seat_to_kitchen_fire_avg_min|round(0)|int)) if stats.seat_to_kitchen_fire_avg_min is not none else '--',
-        'seat -> kitchen',
-        trend='on pace' if stats.seat_to_kitchen_fire_avg_min else None
-    ) }}
-    {{ metric_card(
-        ('%dm' % (stats.average_table_turn_min|round(0)|int)) if stats.average_table_turn_min is not none else '--',
-        'average turn',
-        trend='6m slow' if (stats.average_table_turn_min or 0) > 68 else None,
-        bad=(stats.average_table_turn_min or 0) > 68
-    ) }}
-    {{ metric_card(
-        ('%d%%' % (stats.dessert_attach_pct|int)) if stats.dessert_attach_pct is not none else '--',
-        'dessert attach',
-        trend='add 2' if (stats.dessert_attach_pct or 0) < 18 else None,
-        bad=(stats.dessert_attach_pct or 0) < 18
-    ) }}
+{# ---- Technical averages (ops style) ---- #}
+<section class="cfp-block" id="cfp-technical">
+  <div class="cfp-section-head">
+    <h2>Technical averages</h2>
+    <span>operations style</span>
   </div>
-  {{ coaching_card(
-      'Service coaching',
-      'Your drink pace is strong. The biggest improvement tonight is closing tables faster and asking dessert before the check hits the table.'
-  ) }}
+  <div class="cfp-tech-grid">
+    {% for label, value in technical %}
+      <article><span>{{ label }}</span><strong>{{ value }}</strong></article>
+    {% endfor %}
+  </div>
+  {% if leaderboard %}
+    <div class="cfp-ops-table-wrap">
+      <table class="cfp-ops-table">
+        <thead>
+          <tr><th>Server</th><th>Tickets</th><th>Avg Drink</th><th>Avg Apps</th><th>Avg Entree</th><th>Gap</th><th>Duration</th><th>Tip %</th></tr>
+        </thead>
+        <tbody>
+          {% for row in leaderboard[:8] %}
+            <tr class="{{ 'is-me' if row.is_me else '' }}">
+              <td>{% if row.is_me %}You &middot; {% endif %}{{ row.name }}</td>
+              <td>{{ row.tickets }}</td>
+              <td>{% if row.avg_drink %}{{ row.avg_drink|round|int }}m{% else %}--{% endif %}</td>
+              <td>{% if row.avg_apps %}{{ row.avg_apps|round|int }}m{% else %}--{% endif %}</td>
+              <td>{% if row.avg_entree %}{{ row.avg_entree|round|int }}m{% else %}--{% endif %}</td>
+              <td>{% if row.gap %}{{ row.gap|round|int }}m{% else %}--{% endif %}</td>
+              <td>{% if row.duration %}{{ row.duration|round|int }}m{% else %}--{% endif %}</td>
+              <td>{{ '%.1f'|format(row.tip_pct) }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
+
+{# ---- Peer leaderboard ---- #}
+<section class="cfp-block" id="cfp-leaderboard">
+  <div class="cfp-section-head">
+    <h2>Peer ranking</h2>
+    <span>tip/hr + tip%</span>
+  </div>
+  {% if me %}
+    <div class="cfp-my-rank">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM7 4H4v2a3 3 0 0 0 3 3M17 4h3v2a3 3 0 0 1-3 3"/></svg>
+      <div>
+        <strong>Rank #{{ me.rank }} of {{ me.of }}</strong>
+        <span>{{ money(me.tip_per_hour) }} / hr &middot; {{ '%.1f'|format(me.tip_pct) }}% tip &middot; {{ me.score|round|int }} score</span>
+      </div>
+    </div>
+  {% else %}
+    <div class="cfp-empty-state compact">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/></svg>
+      <strong>No ranked shift yet</strong>
+      <p>Ranking starts once today has tipped employees with hours and sales.</p>
+    </div>
+  {% endif %}
+  <div class="cfp-rank-list">
+    {% for row in leaderboard[:50] %}
+      <article class="{{ 'is-me' if row.is_me else '' }}">
+        <b>#{{ row.rank }}</b>
+        <div>
+          <strong>{{ row.name }}</strong>
+          <span>{{ money(row.tip_per_hour) }} / hr &middot; {{ '%.1f'|format(row.tip_pct) }}% tip{% if row.cash_unknown %} &middot; cash tip unknown{% endif %}</span>
+        </div>
+        <em>{{ row.score|round|int }}</em>
+      </article>
+    {% endfor %}
+  </div>
+  {% if cash_pending %}
+    <p class="cfp-note-copy">
+      {{ cash_pending|length }} teammate{{ '' if cash_pending|length == 1 else 's' }} with only cash tips this shift are held out of the ranking until those tips are recorded - their unknown cash is never counted against them.
+    </p>
+  {% endif %}
 </section>
 
 {% endblock %}
@@ -133,28 +237,19 @@
 <script>
 (function(){
   "use strict";
-  // Section segmented control: hides/shows panes locally without a route reload.
-  function showPane(name){
-    var panes = document.querySelectorAll('[data-pane]');
-    panes.forEach(function(p){ p.hidden = (p.getAttribute('data-pane') !== name); });
-  }
-  document.addEventListener('click', function(ev){
-    var btn = ev.target.closest('button[data-seg]');
-    if(!btn) return;
-    var group = btn.getAttribute('data-seg');
-    var value = btn.getAttribute('data-value');
-    // Update active state for buttons in the same group
-    document.querySelectorAll('button[data-seg="' + group + '"]').forEach(function(b){
-      var on = (b === btn);
-      b.classList.toggle('is-on', on);
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
+  // Clickable hero cells scroll to their section. Reduced motion is honored by
+  // the JS branch below (behavior: reduce ? "auto" : "smooth"); the CSS
+  // prefers-reduced-motion media query is a belt-and-suspenders backstop.
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll(".cfp-jump").forEach(function(a){
+    a.addEventListener("click", function(ev){
+      var id = a.getAttribute("href");
+      if(!id || id.charAt(0) !== "#") return;
+      var target = document.querySelector(id);
+      if(!target) return;
+      ev.preventDefault();
+      target.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "start"});
     });
-    if(group === 'today-section'){
-      showPane(value);
-    }
-    // today-range is a placeholder: today's data is the only range with content
-    // in this initial release. The control still selects to give an honest
-    // signal that ranges are coming, without faking numbers.
   });
 })();
 </script>

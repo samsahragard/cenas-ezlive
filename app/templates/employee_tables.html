@@ -1,99 +1,127 @@
-{# Cenas Floor OS - Tables tab.
-   Live station rail: per-table block with the cream ticket-chit + perforated
-   edge, followed by the timeline rail (seated -> drinks -> kitchen -> next
-   action / closed). Day toggle (today / yesterday) switches the fixture.
+{# Cenas Floor Pulse V2 - Tables tab.
+   Table map at the top; clicking a table tile scrolls to its ticket below and
+   highlights both. Today/Yesterday selector (Today is empty by date-reset).
+   Filters All/Mine/Open/Needs/New. ?table= deep-links + scrolls to a ticket.
 #}
 {% extends "employee_console_base.html" %}
-{% from "_floor_macros.html" import segmented, hero_command, coaching_card, metric_card, station_chip, tip_pill, stop, source_footer, sync_chip %}
 {% set active_tab = 'tables' %}
-{% block title %}Tables &middot; Cenas Floor OS{% endblock %}
+{% block title %}Tables &middot; Cenas Floor Pulse{% endblock %}
+
+{% macro money(v) %}${{ '%.2f'|format(v or 0) }}{% endmacro %}
+{% macro money0(v) %}${{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
 
 {% block employee_hero %}
-<div class="cf-eyebrow">Tables &middot; {{ floor_day.sub }}</div>
-{{ hero_command(floor_day.label, stats, opportunity) }}
-{{ coaching_card(coaching.title, coaching.body) }}
-{{ segmented('table-day', day_options, day_key, 'Table day') }}
+<section class="cfp-page-title">
+  <div>
+    <h1>Tables</h1>
+    <p>{{ 'Today' if day_key == 'today' else 'Yesterday' }} &middot; ticket rail</p>
+  </div>
+  {% if demo_mode %}<span class="cfp-livepill"><i></i> Demo mode</span>{% endif %}
+</section>
+
+<div class="cfp-segment" role="tablist" aria-label="Table day">
+  {% for key, label in day_options %}
+    <a class="cfp-seg-link{% if day_key == key %} is-on{% endif %}"
+       role="tab" aria-selected="{{ 'true' if day_key == key else 'false' }}"
+       href="/employee/tables?day={{ key }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="cfp-filter-row" role="group" aria-label="Ticket filters">
+  {% set fl = [('all','All'),('mine','Mine'),('open','Open'),('attention','Needs'),('new','New')] %}
+  {% for key, label in fl %}
+    <a class="cfp-chip{% if filter_key == key %} is-active{% endif %}"
+       href="/employee/tables?day={{ day_key }}&filter={{ key }}">{{ label }} {{ counts[key] }}</a>
+  {% endfor %}
+</div>
 {% endblock %}
 
 {% block employee_content %}
 
-<div class="cf-card-grid compact">
-  {{ metric_card(stats.total_tables or 0, 'tables') }}
-  {{ metric_card(stats.covers or 0, 'guests') }}
-  {{ metric_card(('$%.2f' % (stats.average_check or 0)) if stats.average_check is not none else '--', 'avg check') }}
-  {{ metric_card(('%d%%' % (stats.drink_attach_pct|int)) if stats.drink_attach_pct is not none else '--', 'drink attach') }}
-</div>
+{% if not tickets %}
+  <section class="cfp-empty-state">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <strong>No tables for today</strong>
+    <p>This is correct when today has no checks posted yet. Tap Yesterday to see the last completed ticket rail.</p>
+    <a href="/employee/tables?day=yesterday">View yesterday tickets</a>
+  </section>
+{% else %}
 
-<div class="cf-map">
-  <div class="cf-map-head">
-    <strong>Live station map</strong>
-    <span>{{ floor_day.tables|length }} table{{ '' if floor_day.tables|length == 1 else 's' }}</span>
-  </div>
-  <div class="cf-table-grid">
-    {% for chip in station_chips %}
-      {{ station_chip(chip.table, chip.attention, chip.summary) }}
-    {% endfor %}
-  </div>
-</div>
+  {# ---- Live station map: tiles scroll to the matching ticket ---- #}
+  <section class="cfp-block" id="cfp-map">
+    <div class="cfp-section-head">
+      <h2>Live station map</h2>
+      <span>{{ tickets|length }} ticket{{ '' if tickets|length == 1 else 's' }}</span>
+    </div>
+    <div class="cfp-table-map">
+      {% for t in tickets %}
+        <button type="button"
+                class="cfp-table-tile is-{{ t.tone }}{% if selected_table == t.table_id %} is-selected{% endif %}"
+                data-table="{{ t.table_id }}"
+                aria-label="Open ticket for table {{ t.table_id }}">
+          {% if t.owner %}<i class="cfp-owner-dot" aria-hidden="true"></i>{% endif %}
+          <strong>{{ t.table_id }}</strong>
+          <span>{{ 'paid' if t.status == 'closed' else 'open' }} &middot; {{ money0(t.amount) }}</span>
+          <em>{{ t.covers }} top &middot; {{ t.opened_mins }}m</em>
+        </button>
+      {% endfor %}
+    </div>
+  </section>
 
-<div class="cf-rail-wrap">
-  {% for table in floor_day.tables %}
-    {% set table_total = table.checks|sum(attribute='total') %}
-    {% set has_open = table.checks|selectattr('status', 'equalto', 'open')|list|length > 0 %}
-    <section class="cf-table-block" aria-label="Table {{ table.name }}">
-      <div class="cf-table-head">
-        <div>
-          <span class="cf-table-prefix">TABLE</span>
-          <strong>{{ table.name }}</strong>
-          {% if has_open %}<span class="cf-live"><span></span>on floor</span>{% endif %}
-        </div>
-        <small>{{ table.checks|length }} check{{ '' if table.checks|length == 1 else 's' }} &middot; ${{ '%.2f' % table_total }}</small>
-      </div>
-      <div class="cf-chit-list">
-        {% for check in table.checks %}
-          {% set drinks = check.items|selectattr('kind', 'in', ['cocktail', 'nonAlcoholic'])|list %}
-          {% set food = check.items|selectattr('kind', 'in', ['food', 'side', 'dessert'])|list %}
-          {% set is_open = check.status == 'open' %}
-          <article class="cf-ticket{% if is_open %} is-open{% endif %}">
-            <div class="cf-ticket-perf" aria-hidden="true"></div>
-            <div class="cf-ticket-top">
-              <div>
-                <div class="cf-ticket-id">#{{ check.id }}</div>
-                <div class="cf-ticket-meta">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                  {{ check.covers }} guest{{ '' if check.covers == 1 else 's' }}
-                </div>
-              </div>
-              <div class="cf-ticket-money">
-                <strong>${{ '%.2f' % check.total }}</strong>
-                {{ tip_pill(check) }}
-              </div>
+  {# ---- Ticket rail ---- #}
+  <section class="cfp-block">
+    <div class="cfp-section-head">
+      <h2>Ticket rail</h2>
+      <span>tap table above</span>
+    </div>
+    <div class="cfp-ticket-list">
+      {% for t in tickets %}
+        <article class="cfp-ticket-card is-{{ t.tone }}{% if selected_table == t.table_id %} is-selected{% endif %}"
+                 id="cfp-ticket-{{ t.table_id }}" data-ticket="{{ t.table_id }}">
+          <div class="cfp-ticket-top">
+            <div>
+              <span>Table {{ t.table_id }}</span>
+              <strong>Ticket #{{ t.ticket_id }}</strong>
             </div>
-            <div class="cf-rail">
-              {{ stop('Seated', clock(check.seated_at) ~ ' &middot; ' ~ ago(check.seated_at, now_minutes)) }}
-              {% if drinks %}
-                {{ stop('Drinks fired', clock(check.drinks_fired_at), items=drinks) }}
-              {% else %}
-                {{ stop('No drinks rung', '', empty=True) }}
-              {% endif %}
-              {% if food %}
-                {{ stop('Kitchen fired', clock(check.kitchen_fired_at), items=food) }}
-              {% endif %}
-              {% if is_open %}
-                {{ stop('Next action', 'dessert ask' if drinks and food else 'check in', live=True) }}
-              {% else %}
-                {% set pay_label = 'cash' if check.payment_method == 'cash' else 'card' %}
-                {{ stop('Closed', clock(check.closed_at) ~ ' &middot; ' ~ pay_label) }}
-              {% endif %}
+            <div>
+              <b>{{ money(t.amount) }}</b>
+              <em>{{ t.status_label }}</em>
             </div>
-          </article>
-        {% endfor %}
-      </div>
-    </section>
-  {% endfor %}
-</div>
+          </div>
+          <div class="cfp-ticket-pills">
+            <span>{{ t.covers }} guests</span>
+            <span>{{ t.opened_mins }}m duration</span>
+            {% if t.status == 'closed' and t.tip_pct is not none %}
+              <span>{{ '%.0f'|format(t.tip_pct) }}% tip</span>
+            {% elif t.status == 'closed' and t.payment == 'Cash' %}
+              <span>cash tip unknown</span>
+            {% else %}
+              <span>{{ money(t.est_tip) }} est. tip</span>
+            {% endif %}
+            <span>{{ t.payment if t.payment else 'not paid yet' }}</span>
+          </div>
+          <div class="cfp-timeline">
+            <div class="cfp-tl-stop"><i></i><span>Seated</span><b>{{ t.seated or '--' }}</b></div>
+            <div class="cfp-tl-stop"><i></i><span>Drinks</span><b>{{ t.drinks or '--' }}</b></div>
+            <div class="cfp-tl-stop"><i></i><span>Kitchen</span><b>{{ t.kitchen or '--' }}</b></div>
+            <div class="cfp-tl-stop{% if t.status != 'closed' %} is-live{% endif %}">
+              <i></i><span>{{ 'Closed' if t.status == 'closed' else 'Open' }}</span>
+              <b>{{ t.closed if t.status == 'closed' else 'live' }}</b>
+            </div>
+          </div>
+          <div class="cfp-items">
+            {% for item in t['items'] %}<span>{{ item }}</span>{% endfor %}
+          </div>
+          <div class="cfp-ticket-action">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+            <span>{{ t.next_action }}</span>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
 
-{{ source_footer(floor_day.source, demo_mode) }}
+{% endif %}
 
 {% endblock %}
 
@@ -101,16 +129,41 @@
 <script>
 (function(){
   "use strict";
-  // Day toggle reloads with a query param so the route picks up the fixture.
-  document.addEventListener('click', function(ev){
-    var btn = ev.target.closest('button[data-seg="table-day"]');
-    if(!btn) return;
-    var value = btn.getAttribute('data-value');
-    var url = new URL(window.location.href);
-    if(value === 'today'){ url.searchParams.delete('day'); }
-    else { url.searchParams.set('day', value); }
-    window.location.assign(url.toString());
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function selectTable(tableId){
+    if(!tableId) return;
+    // Clear prior selection, then mark tile + ticket.
+    document.querySelectorAll(".cfp-table-tile.is-selected, .cfp-ticket-card.is-selected")
+      .forEach(function(el){ el.classList.remove("is-selected"); });
+    var tile = document.querySelector('.cfp-table-tile[data-table="' + CSS.escape(tableId) + '"]');
+    var card = document.getElementById("cfp-ticket-" + tableId);
+    if(tile) tile.classList.add("is-selected");
+    if(card){
+      card.classList.add("is-selected");
+      card.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "start"});
+    }
+  }
+
+  // Tile click -> scroll to ticket + highlight. Also reflect in the URL so a
+  // refresh keeps the selection (and the server keeps the filter honest).
+  document.querySelectorAll(".cfp-table-tile").forEach(function(tile){
+    tile.addEventListener("click", function(){
+      var id = tile.getAttribute("data-table");
+      selectTable(id);
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.set("table", id);
+        window.history.replaceState(null, "", url.toString());
+      } catch(_e){ /* old browser */ }
+    });
   });
+
+  // Day toggle + filter chips reload (server-rendered links); nothing to do.
+  // On load, if a ?table= came in from a deep link (Best Next Move / Right Now),
+  // scroll to it.
+  var pre = {{ (selected_table | tojson) if selected_table else 'null' }};
+  if(pre){ window.setTimeout(function(){ selectTable(pre); }, 60); }
 })();
 </script>
 {% endblock %}

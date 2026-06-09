@@ -1231,17 +1231,27 @@ def cron_toast_sync():
     as belt-and-suspenders + nudge a refresh on demand; the in-app poller does
     this automatically every ~15 min regardless. snapshots_now lets a caller
     confirm the table is populating across calls. Optional ?store=tomball|
-    copperfield. Accepts Authorization: Bearer, X-Cron-Token, or ?token= ."""
+    copperfield. Optional ?profiles=inline creates/links Toast-only app profiles
+    before returning; otherwise profile reconciliation runs in the background
+    sync thread. Accepts Authorization: Bearer, X-Cron-Token, or ?token= ."""
     import os
     import threading
     if _extract_cron_token() != os.getenv("CRON_TOKEN"):
         abort(403)
     from app.services.toast_sync import sync_toast_snapshots, snapshot_status
     store = (request.args.get("store") or "").strip() or None
-    threading.Thread(target=sync_toast_snapshots, kwargs={"only_store": store},
+    profile_mode = (request.args.get("profiles") or "").strip().lower()
+    profiles = {"queued": True}
+    reconcile_in_thread = True
+    if profile_mode == "inline":
+        from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
+        profiles = reconcile_toast_employee_profiles(only_store=store)
+        reconcile_in_thread = False
+    threading.Thread(target=sync_toast_snapshots,
+                     kwargs={"only_store": store, "reconcile_profiles": reconcile_in_thread},
                      name="toast-sync-cron", daemon=True).start()
     return jsonify({"ok": True, "started": True, "store": store or "all",
-                    "status": snapshot_status()}), 202
+                    "profiles": profiles, "status": snapshot_status()}), 202
 
 
 @driver_system_bp.route("/cron/import-schedules", methods=["POST"])

@@ -35,13 +35,22 @@ _started = False
 _started_lock = threading.Lock()
 
 
-def sync_toast_snapshots(only_store: str | None = None) -> dict:
+def sync_toast_snapshots(only_store: str | None = None, reconcile_profiles: bool = True) -> dict:
     """Pull every distinct CONFIRMED (store_key, toast_id) link once via
     toast_employee_summary() and upsert ToastEmployeeSnapshot. Per-row commit so
     a partial failure still persists the good rows + a concurrent worker sees
-    freshness quickly. Returns {total, ok, failed}; never raises out."""
+    freshness quickly. Returns {total, synced, failed, profiles?}; never raises out."""
     from app.models import CenaToastLink, ToastEmployeeSnapshot
+    from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
     from app.web.toast_link_routes import toast_employee_summary
+
+    profile_summary = None
+    if reconcile_profiles:
+        try:
+            profile_summary = reconcile_toast_employee_profiles(only_store=only_store)
+        except Exception as ex:
+            profile_summary = {"error": f"{type(ex).__name__}: {ex}"}
+            log.exception("toast-sync: profile reconciliation failed")
 
     db = SessionLocal()
     total = ok = failed = 0
@@ -79,7 +88,10 @@ def sync_toast_snapshots(only_store: str | None = None) -> dict:
         log.info("toast-sync: refreshed %d snapshot(s) -- %d ok, %d failed", total, ok, failed)
         # key is "synced" (not "ok") so callers can spread this into a response
         # alongside an "ok": True success flag without a key collision.
-        return {"total": total, "synced": ok, "failed": failed}
+        result = {"total": total, "synced": ok, "failed": failed}
+        if profile_summary is not None:
+            result["profiles"] = profile_summary
+        return result
     finally:
         db.close()
 

@@ -7,7 +7,7 @@ os.environ.setdefault("ALLOW_DEV_SECRET", "1")
 import pytest
 from werkzeug.security import generate_password_hash
 
-from app.models import CenaToastIgnore, CenaToastLink, Employee, EmployeeStoreAssignment, Position, User
+from app.models import CenaToastIgnore, CenaToastLink, Employee, EmployeeStoreAssignment, Position, Signal, User
 
 
 class _FakeToastClient:
@@ -27,6 +27,7 @@ def link_app(db_session, monkeypatch):
     from app.web import schedules_v2_roster as roster_mod
     from app.web import store_routes as store_mod
     from app.web import toast_link_routes as toast_mod
+    from app.services import toast_employee_profiles as profile_mod
 
     db_session.add(User(
         id=1,
@@ -48,7 +49,7 @@ def link_app(db_session, monkeypatch):
     flask_app.config["WTF_CSRF_ENABLED"] = False
 
     sess = lambda: db_session
-    for mod in (appdb, perm_mod, sv2_mod, roster_mod, store_mod, toast_mod):
+    for mod in (appdb, perm_mod, sv2_mod, roster_mod, store_mod, toast_mod, profile_mod):
         if hasattr(mod, "SessionLocal"):
             monkeypatch.setattr(mod, "SessionLocal", sess, raising=False)
 
@@ -69,8 +70,15 @@ def link_app(db_session, monkeypatch):
             return fake_toast
 
     monkeypatch.setattr(toast_mod, "ToastClient", FakeToastClass, raising=True)
+    monkeypatch.setattr(profile_mod, "ToastClient", FakeToastClass, raising=True)
     monkeypatch.setattr(
         toast_mod,
+        "restaurant_guids",
+        lambda: {"tomball": "guid-tomball", "copperfield": "guid-copperfield"},
+        raising=True,
+    )
+    monkeypatch.setattr(
+        profile_mod,
         "restaurant_guids",
         lambda: {"tomball": "guid-tomball", "copperfield": "guid-copperfield"},
         raising=True,
@@ -196,6 +204,55 @@ def test_ignore_hides_cenas_and_toast_only_records(link_app):
     assert "10" not in _ids(body["unmatched_cena"], "emp_id")
     assert "toast-c" not in _ids(body["unmatched_toast"], "toast_id")
     assert db.query(CenaToastIgnore).count() == 2
+
+
+def test_toast_profile_reconcile_creates_and_links_toast_only_people(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+
+    from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
+
+    summary = reconcile_toast_employee_profiles(only_store="tomball", db=db)
+    assert summary["created"] == 3
+    assert summary["linked"] == 3
+
+    body = client.get("/dos/schedules-v2/toast/match-suggestions").get_json()
+    assert _ids(body["confirmed_links"], "toast_id") == {"toast-a", "toast-b", "toast-c"}
+    assert body["unmatched_toast"] == []
+    assert db.query(Signal).filter_by(rule_name="labor.toast_employee_profile_created").count() == 3
+
+
+def test_toast_profile_reconcile_reuses_existing_employee_by_phone(link_app):
+    _flask_app, db = link_app
+    emp = Employee(id=30, full_name="Austin Existing", phone="9362529997",
+                   active=True, session_version=1)
+    db.add(emp)
+    db.add(EmployeeStoreAssignment(employee_id=30, store_key="tomball"))
+    db.commit()
+
+    from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
+
+    summary = reconcile_toast_employee_profiles(only_store="tomball", db=db)
+    assert summary["reused"] == 1
+    assert summary["created"] == 2
+
+    row = db.query(CenaToastLink).filter_by(store_key="tomball", toast_id="toast-a").one()
+    assert row.cena_employee_id == 30
+    assert db.query(Employee).filter(Employee.phone == "9362529997").count() == 1
+
+
+def test_toast_profile_reconcile_respects_ignored_toast_rows(link_app):
+    _flask_app, db = link_app
+    db.add(CenaToastIgnore(store_key="tomball", source="toast", source_id="toast-c",
+                           display_name="Different Person"))
+    db.commit()
+
+    from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
+
+    summary = reconcile_toast_employee_profiles(only_store="tomball", db=db)
+    assert summary["created"] == 2
+    assert summary["linked"] == 2
+    assert db.query(CenaToastLink).filter_by(store_key="tomball", toast_id="toast-c").count() == 0
 
 
 def test_team_link_page_defaults_to_url_store_and_contains_cleanup_controls(link_app):

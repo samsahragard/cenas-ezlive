@@ -94,10 +94,10 @@
   .ezo-page .ezo-filter-tab,
   .ezo-page .ezo-combined-tab {
     display: inline-flex; align-items: center; justify-content: center;
-    min-height: 30px; padding: 7px 12px; background: var(--surface);
+    min-height: 34px; padding: 9px 16px; background: var(--surface);
     border: 0.5px solid var(--border); border-radius: 5px;
     color: var(--cream-dim); font-family: 'Manrope', sans-serif;
-    font-size: 12px; font-weight: 800; line-height: 1;
+    font-size: 13px; font-weight: 800; line-height: 1;
     text-decoration: none; letter-spacing: 0.02em; white-space: nowrap;
     transition: all .15s;
   }
@@ -476,17 +476,78 @@
     font-size: 14px; color: var(--cream-dim); margin: 0 0 14px;
   }
 
+  @media (max-width: 760px) {
+    .ezo-page .ez-sheet-summary {
+      grid-template-columns: minmax(112px, .85fr) minmax(190px, 1.15fr);
+      gap: 10px;
+      align-items: end;
+    }
+    .ezo-page .ez-sheet-current-cell {
+      grid-column: 1 / -1;
+    }
+    .ezo-page .ez-sheet-driver-cell {
+      min-width: 0;
+    }
+    .ezo-page .ezo-driver-pick,
+    .ezo-page .ezo-driver-control {
+      width: 100%;
+      align-items: stretch;
+    }
+    .ezo-page .ezo-driver-pick select {
+      width: 100%;
+      min-width: 0;
+    }
+  }
+
   @media (max-width: 460px) {
     .ezo-page { padding: 14px 12px 24px; }
     .ezo-page .ezo-tab,
     .ezo-page .ezo-act,
     .ezo-page .ezo-filter-tab { flex: 1 0 auto; justify-content: center; }
-    .ezo-page .ez-sheet-top,
-    .ezo-page .ez-sheet-summary,
+    .ezo-page .ezo-combined-tab {
+      min-height: 36px;
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+    .ezo-page .ez-sheet-top {
+      grid-template-columns: minmax(58px, 1.08fr) minmax(48px, .82fr) minmax(58px, .95fr) minmax(45px, .8fr) minmax(38px, auto);
+      gap: 5px;
+      padding: 12px 10px 10px;
+    }
+    .ezo-page .ez-sheet-id {
+      font-size: 13px;
+      letter-spacing: 0.01em;
+    }
+    .ezo-page .ez-sheet-store,
+    .ezo-page .ez-sheet-date,
+    .ezo-page .ez-sheet-weekday {
+      min-width: 0;
+      font-size: 10.5px;
+      line-height: 1.05;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ezo-page .ez-sheet-pay {
+      font-size: 17px;
+      line-height: 1;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ezo-page .ez-sheet-summary {
+      grid-template-columns: minmax(92px, .82fr) minmax(150px, 1.18fr);
+      gap: 9px;
+      align-items: end;
+      padding: 10px 10px 11px;
+    }
+    .ezo-page .ezo-driver-pick select {
+      padding: 9px 28px 9px 10px;
+      font-size: 12px;
+      border-radius: 9px;
+    }
     .ezo-page .ez-sheet-detail-grid {
       grid-template-columns: 1fr;
     }
-    .ezo-page .ez-sheet-pay { text-align: left; }
     .ezo-page .ez-sheet-detail-wide { grid-column: auto; }
   }
 </style>
@@ -592,11 +653,11 @@
               <div class="ez-sheet-pay">{{ card.payout_label }}</div>
             </div>
             <div class="ez-sheet-summary">
-              <div>
+              <div class="ez-sheet-status-cell">
                 <span class="ez-sheet-label">Status</span>
                 <span class="ez-sheet-strong">{{ card.status_label }}</span>
               </div>
-              <div>
+              <div class="ez-sheet-driver-cell">
                 <span class="ez-sheet-label">Employee dropdown</span>
                 {% if _driver_options %}
                   <span class="ezo-driver-pick"
@@ -634,7 +695,7 @@
                   <span class="ez-sheet-muted">No roster options</span>
                 {% endif %}
               </div>
-              <div>
+              <div class="ez-sheet-current-cell">
                 <span class="ez-sheet-label">Current ezCater driver</span>
                 <span class="ez-sheet-strong">{{ card.current_driver_label }}</span>
               </div>

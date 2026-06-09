@@ -41,6 +41,7 @@ schedules-v2-b2 branch when it lands.
 """
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -386,24 +387,32 @@ def dashboard_page():
         full_name = (emp.full_name or "").strip()
         first_name = full_name.split(" ")[0] if full_name else None
 
-        # Cenas Floor Pulse V2: the Today tab is date-true. Today is keyed to the
-        # real local business date; with no posted checks for today it shows
-        # zeros and an empty peer ranking (yesterday never rolls forward). Week /
-        # Month / Last 30 show stats + technical averages + peer ranking, with NO
-        # table map or ticket rail. Range comes from ?range=.
+        # Cenas Floor Pulse V2 - Today tab, wired to REAL Toast performance.
+        # The page renders only the employee's own identity; all numbers are
+        # hydrated client-side from the existing sanitized, session-scoped
+        # endpoints (/employee/performance-center for money + rankings + peer
+        # leaderboard, /employee/my-performance for the service/technical
+        # averages). Those endpoints already enforce: confirmed Toast link only,
+        # BOH tip-omission, min-cohort-gated peer rows, zero cross-employee data.
+        # No demo fixture, no re-derived pay math here.
         from datetime import date as _date
 
-        from app.services import floor_pulse as fp
+        # Primary position label for the header (own positions only).
+        role_label = None
+        try:
+            from app.models import EmployeePosition, Position
+            pos = (db.query(Position.name)
+                     .join(EmployeePosition, EmployeePosition.position_id == Position.id)
+                     .filter(EmployeePosition.employee_id == emp.id)
+                     .order_by(Position.name.asc())
+                     .first())
+            role_label = (pos[0] or "").strip() if pos else None
+        except Exception:
+            role_label = None
 
         range_key = (request.args.get("range") or "today").lower()
-        if range_key not in fp.RANGE_KEYS:
+        if range_key not in ("today", "week", "month", "last30"):
             range_key = "today"
-
-        stats = fp.employee_stats(range_key)
-        leaderboard = fp.build_leaderboard(range_key)
-        me = fp.my_rank(leaderboard)
-        cash_pending = fp.cash_pending_peers(range_key)
-        technical = fp.technical_rows(stats)
         today_label = _date.today().strftime("%a, %b ") + str(_date.today().day)
 
         initials = "".join(w[0] for w in (full_name or "").split()[:2]).upper() or "--"
@@ -412,26 +421,23 @@ def dashboard_page():
             full_name=full_name or None,
             store_name=store_name,
             initials=initials,
-            role="Server",
-            location=store_name or "Copperfield",
+            role=role_label,
+            location=store_name,
         )
+        config = {
+            "perfUrl": "/employee/performance-center",
+            "myPerfUrl": "/employee/my-performance",
+            "tablesUrl": "/employee/tables",
+            "loginUrl": "/employee/login",
+            "initialRange": range_key,
+            "todayLabel": today_label,
+        }
         return render_template(
             "employee_dashboard.html",
             employee=view,
+            config=config,   # embedded via |tojson (HTML-safe) in the template
             range_key=range_key,
-            range_options=[(k, lbl) for k, lbl in (
-                ("today", "Today"), ("week", "Week"),
-                ("month", "Month"), ("last30", "Last 30"),
-            )],
-            stats=stats,
-            leaderboard=leaderboard,
-            me=me,
-            cash_pending=cash_pending,
-            technical=technical,
             today_label=today_label,
-            is_today=(range_key == "today"),
-            demo_mode=True,
-            sync_label="demo mode",
             logout_url="/employee/logout",
             login_url="/employee/login",
         )

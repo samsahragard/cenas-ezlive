@@ -72,7 +72,9 @@ def test_employee_console_base_renders_five_tabs():
     assert html.count('class="cc-tab') == 5
     assert 'href="/employee/tables"' in html
     assert 'aria-current="page"' in html
-    assert "Live sync status" in html
+    assert 'aria-label="Sync status"' in html
+    # Topbar logout reachable from every tab.
+    assert 'id="cc-logout"' in html
 
 
 def test_employee_surface_map_lists_real_paths_for_all_five_tabs():

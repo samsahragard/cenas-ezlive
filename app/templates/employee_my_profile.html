@@ -15,21 +15,14 @@
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
     {{ employee.role|default('Server') }}{% if employee.location %} &middot; {{ employee.location }}{% endif %}
   </span>
+  {% if tenure_label %}
   <div class="cf-badges">
-    {% if tenure_label %}
-      <em>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 15 8.5 22 9.3 17 14.2 18.2 21 12 17.8 5.8 21 7 14.2 2 9.3 9 8.5"/></svg>
-        {{ tenure_label }}
-      </em>
-    {% endif %}
-    {% if stats and stats.recorded_tips and stats.sales %}
-      {% set tip_pct = ((stats.recorded_tips / stats.sales) * 100)|round(0)|int %}
-      <em class="good">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-        {{ tip_pct }}% avg tip
-      </em>
-    {% endif %}
+    <em>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 15 8.5 22 9.3 17 14.2 18.2 21 12 17.8 5.8 21 7 14.2 2 9.3 9 8.5"/></svg>
+      {{ tenure_label }}
+    </em>
   </div>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -67,4 +60,26 @@
   </div>
 </div>
 
+<button type="button" class="cf-logout" id="cf-logout">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+  Log out
+</button>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  "use strict";
+  var btn = document.getElementById("cf-logout");
+  if(!btn) return;
+  var loginUrl = {{ (login_url | default('/employee/login')) | tojson }};
+  btn.addEventListener("click", function(){
+    btn.disabled = true; btn.textContent = "Signing out...";
+    fetch("/employee/logout", {method:"POST", credentials:"same-origin", headers:{Accept:"application/json"}})
+      .then(function(){ window.location.assign(loginUrl); })
+      .catch(function(){ window.location.assign(loginUrl); });
+  });
+})();
+</script>
 {% endblock %}

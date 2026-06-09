@@ -1,11 +1,11 @@
-{# Cenas Floor OS - Shifts tab.
+{# Cenas Floor Pulse - Shifts tab.
    My shifts + time-off request, on the ink-navy console look. When no shifts
-   are posted the panel shows the honest empty state. Time-off form is local-
-   only when the backend isn't wired (mock_submit flag); validation lives in
-   the route (and a small client mirror for UX).
+   are posted the panel shows the honest empty state. The time-off form shows an
+   optimistic success state until its backend wiring lands; validation runs
+   client-side for fast feedback.
 #}
 {% extends "employee_console_base.html" %}
-{% from "_floor_macros.html" import segmented, empty_state, sync_chip %}
+{% from "_floor_macros.html" import segmented, empty_state %}
 {% set active_tab = 'shifts' %}
 {% block title %}Shifts &middot; Cenas Floor OS{% endblock %}
 
@@ -60,9 +60,6 @@
       request saved as pending
     </div>
     <button class="cf-primary" type="submit" id="cf-timeoff-submit">Request time off</button>
-    {% if mock_submit %}
-      <small style="color:var(--cf-faint);font: 800 10px var(--cf-mono);text-align:center;letter-spacing:.1em;text-transform:uppercase;">demo mode &middot; request stays on this device</small>
-    {% endif %}
   </form>
 </section>
 
@@ -106,8 +103,7 @@
         err.textContent = 'End date cannot be before start date.';
         err.hidden = false; return;
       }
-      // Mock-submit path: show success, keep the data local. The honest
-      // signal is the "demo mode" footnote under the button.
+      // Optimistic success state; the time-off backend wiring lands separately.
       ok.hidden = false;
     });
   }

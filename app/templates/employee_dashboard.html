@@ -1,16 +1,16 @@
-{# Cenas Floor Pulse V2 - Today tab.
-   Date-true: Today shows zeros + empty ranking when no checks have posted for
-   the real local date. Week / Month / Last 30 show stats + technical averages
-   + peer ranking and intentionally hide the table map / ticket rail.
-   Clickable hero cards scroll to their section; Right-Now boxes deep-link to
-   Tables filters; Best-Next-Move opens that table's ticket.
+{# Cenas Floor Pulse - Today tab, wired to REAL Toast performance.
+   The page renders the employee's own identity + a config of endpoint paths;
+   all numbers hydrate client-side from /employee/performance-center (money +
+   rankings + sanitized peer leaderboard) and /employee/my-performance (service
+   averages). Those endpoints already enforce: confirmed Toast link only,
+   BOH tip-omission, min-cohort-gated peers, zero cross-employee data.
+
+   Honest states: not linked -> "connect Toast" card; syncing -> "preparing";
+   no shifts in range -> real zeros; BOH (not tipped) -> no tip UI at all.
 #}
 {% extends "employee_console_base.html" %}
 {% set active_tab = 'today' %}
-{% block title %}Today &middot; Cenas Floor Pulse{% endblock %}
-
-{% macro money(v) %}${{ '%.2f'|format(v or 0) }}{% endmacro %}
-{% macro money0(v) %}${{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+{% block title %}Today &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
 <section class="cfp-welcome">
@@ -19,238 +19,320 @@
     <h1>{{ employee.full_name or 'Team member' }}</h1>
     <p>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-      {{ employee.role }} &middot; {{ employee.location }}
+      {% if employee.role %}{{ employee.role }}{% if employee.location %} &middot; {% endif %}{% endif %}{{ employee.location or '' }}
     </p>
   </div>
-  {% if demo_mode %}<span class="cfp-livepill"><i></i> Demo mode</span>{% endif %}
 </section>
 
-{# Range selector: server-rendered links so each range is a real, shareable URL. #}
 <div class="cfp-segment" role="tablist" aria-label="Performance range">
-  {% for key, label in range_options %}
-    <a class="cfp-seg-link{% if range_key == key %} is-on{% endif %}"
-       role="tab" aria-selected="{{ 'true' if range_key == key else 'false' }}"
-       href="/employee/dashboard?range={{ key }}">{{ label }}</a>
+  {% for key, label in [('today','Today'),('week','Week'),('month','Month'),('last30','Last 30')] %}
+    <button type="button" class="cfp-seg-btn{% if range_key == key %} is-on{% endif %}"
+            role="tab" aria-selected="{{ 'true' if range_key == key else 'false' }}"
+            data-range="{{ key }}">{{ label }}</button>
   {% endfor %}
 </div>
 {% endblock %}
 
 {% block employee_content %}
 
-{# ---- Hero command with clickable cells ---- #}
-<section class="cfp-hero-card">
-  <div class="cfp-hero-head">
-    <span>
-      {%- if range_key == 'today' -%}Today projected take-home
-      {%- elif range_key == 'week' -%}This week take-home
-      {%- elif range_key == 'month' -%}This month take-home
-      {%- else -%}Last 30 days take-home{%- endif -%}
-    </span>
-    <b>{% if is_today %}{{ today_label }}{% elif range_key == 'week' %}current week{% elif range_key == 'month' %}current month{% else %}rolling 30{% endif %}</b>
-  </div>
-  <strong class="cfp-hero-money">{{ money(stats.projected_take_home) }}</strong>
-  <p>
-    {% if is_today %}
-      {{ money(stats.settled_ticket_tips) }} settled tips + {{ money(stats.open_tip_estimate) }} estimated on {{ stats.open_tickets }} open check{{ '' if stats.open_tickets == 1 else 's' }}.
-    {% else %}
-      {{ money(stats.tips) }} tips + {{ money(stats.base_pay) }} base pay across {{ '%.1f'|format(stats.hours) }} hours.
-    {% endif %}
-  </p>
-  <div class="cfp-hero-grid">
-    <a class="cfp-jump" href="#cfp-earnings">
-      <span>Tips / Hr</span><b>{{ money(stats.tip_per_hour) }}</b>
-    </a>
-    <a class="cfp-jump" href="#cfp-leaderboard">
-      <span>Avg Tip</span><b>{{ '%.0f'|format(stats.tip_pct) }}%</b>
-    </a>
-    <a class="cfp-jump" href="#cfp-technical">
-      <span>Drink Pace</span><b>{% if stats.avg_drink %}{{ stats.avg_drink|round|int }}m{% else %}--{% endif %}</b>
-    </a>
-  </div>
-</section>
+<div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your numbers...</div>
 
-{# ---- Today: date-reset empty state + live summary + best next move ---- #}
-{% if is_today %}
-  {% if stats.total_tables == 0 %}
-    <section class="cfp-empty-state">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-      <strong>Nothing posted for {{ today_label }} yet</strong>
-      <p>Today stays at zero until checks post for this exact local date. Yesterday will not roll forward.</p>
-    </section>
-  {% endif %}
+{# Not-linked / syncing / access honest states #}
+<div id="cfp-state" class="cfp-empty-state" hidden>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+  <strong id="cfp-state-title">Performance not available</strong>
+  <p id="cfp-state-body"></p>
+</div>
 
-  <section class="cfp-block" id="cfp-live">
-    <div class="cfp-section-head">
-      <h2>Right now</h2>
-      <a class="cfp-head-link" href="/employee/tables?filter=all">View tables</a>
+{# Everything below is filled in from the real payload; hidden until ready. #}
+<div id="cfp-content" hidden>
+
+  <section class="cfp-hero-card">
+    <div class="cfp-hero-head">
+      <span id="cfp-hero-label">Take-home</span>
+      <b id="cfp-hero-range"></b>
     </div>
-    <div class="cfp-now-grid">
-      <a class="is-good" href="/employee/tables?filter=mine">
-        <strong>{{ stats.owned_tables }}</strong><span>Tables</span><em>yours</em>
-      </a>
-      <a class="is-warn" href="/employee/tables?filter=new">
-        <strong>{{ stats.new_seated }}</strong><span>New</span><em>seated</em>
-      </a>
-      <a class="is-danger" href="/employee/tables?filter=attention">
-        <strong>{{ stats.attention }}</strong><span>Needs</span><em>attention</em>
-      </a>
+    <strong class="cfp-hero-money" id="cfp-hero-money">$0.00</strong>
+    <p id="cfp-hero-sub"></p>
+    <div class="cfp-hero-grid">
+      <a class="cfp-jump" href="#cfp-earnings"><span id="cfp-hg-l1">Tips / Hr</span><b id="cfp-hg-tiphr">--</b></a>
+      <a class="cfp-jump" href="#cfp-leaderboard"><span id="cfp-hg-l2">Avg Tip</span><b id="cfp-hg-tippct">--</b></a>
+      <a class="cfp-jump" href="#cfp-technical"><span>Drink Pace</span><b id="cfp-hg-drink">--</b></a>
     </div>
   </section>
 
-  {% if stats.next_move %}
-    <section class="cfp-next-card is-{{ stats.next_move.tone }}">
-      <div class="cfp-next-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div>
-      <div>
-        <strong>Table {{ stats.next_move.table_id }}</strong>
-        <span>{{ stats.next_move.next_action }}</span>
-        <em>{{ stats.next_move.covers }} top &middot; {{ money(stats.next_move.amount) }} open check</em>
-      </div>
-      <a class="cfp-next-open" href="/employee/tables?table={{ stats.next_move.table_id }}" aria-label="Open ticket for table {{ stats.next_move.table_id }}">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-      </a>
-    </section>
-  {% else %}
-    <section class="cfp-next-card is-empty">
-      <div class="cfp-next-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div>
-      <div>
-        <strong>No live next move yet</strong>
-        <span>When a table needs attention, it will show here.</span>
-        <em>Reflects today's checks only.</em>
-      </div>
-    </section>
-  {% endif %}
-{% else %}
-  {# ---- Week / Month / Last 30: stats only, no table rail ---- #}
-  <section class="cfp-range-note">
+  {# today-only empty marker (real: no checks posted yet today) #}
+  <section class="cfp-empty-state" id="cfp-today-empty" hidden>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+    <strong id="cfp-today-empty-title">Nothing posted yet today</strong>
+    <p>Today stays at zero until your checks post for this date. Yesterday will not roll forward.</p>
+  </section>
+
+  {# range note for week/month/last30 (no table rail) #}
+  <section class="cfp-range-note" id="cfp-range-note" hidden>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="13" y="6" width="3" height="11"/></svg>
     <div>
-      <strong>No table rail on {{ range_key if range_key != 'last30' else 'last 30' }} view</strong>
-      <span>This view only shows stats, averages, and peer rankings so you see performance without table clutter.</span>
+      <strong id="cfp-range-note-title">Stats view</strong>
+      <span>This view shows stats, averages, and peer rankings. The table map and ticket rail live on the Tables tab.</span>
     </div>
   </section>
-{% endif %}
 
-{# ---- Earnings breakdown ---- #}
-<section class="cfp-block" id="cfp-earnings">
-  <div class="cfp-section-head">
-    <h2>Earnings breakdown</h2>
-    <span>{{ 'daily' if is_today else 'range' }}</span>
-  </div>
-  <div class="cfp-metric-grid">
-    <div class="cfp-metric">
-      <span>Base pay so far</span><strong>{{ money(stats.base_pay) }}</strong><em>{{ '%.1f'|format(stats.hours) }} hours</em>
-    </div>
-    <div class="cfp-metric is-good">
-      <span>Tips / hour</span><strong>{{ money(stats.tip_per_hour) }}</strong><em>{{ 'actual hours' if stats.hours else 'no hours yet' }}</em>
-    </div>
-    <div class="cfp-metric">
-      <span>Tip %</span><strong>{{ '%.0f'|format(stats.tip_pct) }}%</strong><em>credit card tips</em>
-    </div>
-    <div class="cfp-metric">
-      <span>Avg check</span><strong>{{ money(stats.avg_check) }}</strong><em>{{ stats.tickets }} tickets</em>
-    </div>
-  </div>
-  {% if stats.cash_unknown %}
-    <p class="cfp-note-copy">{{ stats.cash_unknown }} cash check{{ '' if stats.cash_unknown == 1 else 's' }} have an unknown tip. Shown neutrally and not counted against performance.</p>
-  {% endif %}
-</section>
+  <section class="cfp-block" id="cfp-earnings">
+    <div class="cfp-section-head"><h2>Earnings breakdown</h2><span id="cfp-earn-scope">range</span></div>
+    <div class="cfp-metric-grid" id="cfp-earn-grid"></div>
+  </section>
 
-{# ---- Technical averages (ops style) ---- #}
-<section class="cfp-block" id="cfp-technical">
-  <div class="cfp-section-head">
-    <h2>Technical averages</h2>
-    <span>operations style</span>
-  </div>
-  <div class="cfp-tech-grid">
-    {% for label, value in technical %}
-      <article><span>{{ label }}</span><strong>{{ value }}</strong></article>
-    {% endfor %}
-  </div>
-  {% if leaderboard %}
-    <div class="cfp-ops-table-wrap">
-      <table class="cfp-ops-table">
-        <thead>
-          <tr><th>Server</th><th>Tickets</th><th>Avg Drink</th><th>Avg Apps</th><th>Avg Entree</th><th>Gap</th><th>Duration</th><th>Tip %</th></tr>
-        </thead>
-        <tbody>
-          {% for row in leaderboard[:8] %}
-            <tr class="{{ 'is-me' if row.is_me else '' }}">
-              <td>{% if row.is_me %}You &middot; {% endif %}{{ row.name }}</td>
-              <td>{{ row.tickets }}</td>
-              <td>{% if row.avg_drink %}{{ row.avg_drink|round|int }}m{% else %}--{% endif %}</td>
-              <td>{% if row.avg_apps %}{{ row.avg_apps|round|int }}m{% else %}--{% endif %}</td>
-              <td>{% if row.avg_entree %}{{ row.avg_entree|round|int }}m{% else %}--{% endif %}</td>
-              <td>{% if row.gap %}{{ row.gap|round|int }}m{% else %}--{% endif %}</td>
-              <td>{% if row.duration %}{{ row.duration|round|int }}m{% else %}--{% endif %}</td>
-              <td>{{ '%.1f'|format(row.tip_pct) }}%</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% endif %}
-</section>
+  <section class="cfp-block" id="cfp-technical" hidden>
+    <div class="cfp-section-head"><h2>Technical averages</h2><span>operations style</span></div>
+    <div class="cfp-tech-grid" id="cfp-tech-grid"></div>
+  </section>
 
-{# ---- Peer leaderboard ---- #}
-<section class="cfp-block" id="cfp-leaderboard">
-  <div class="cfp-section-head">
-    <h2>Peer ranking</h2>
-    <span>tip/hr + tip%</span>
-  </div>
-  {% if me %}
-    <div class="cfp-my-rank">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM7 4H4v2a3 3 0 0 0 3 3M17 4h3v2a3 3 0 0 1-3 3"/></svg>
-      <div>
-        <strong>Rank #{{ me.rank }} of {{ me.of }}</strong>
-        <span>{{ money(me.tip_per_hour) }} / hr &middot; {{ '%.1f'|format(me.tip_pct) }}% tip &middot; {{ me.score|round|int }} score</span>
-      </div>
-    </div>
-  {% else %}
-    <div class="cfp-empty-state compact">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/></svg>
-      <strong>No ranked shift yet</strong>
-      <p>Ranking starts once today has tipped employees with hours and sales.</p>
-    </div>
-  {% endif %}
-  <div class="cfp-rank-list">
-    {% for row in leaderboard[:50] %}
-      <article class="{{ 'is-me' if row.is_me else '' }}">
-        <b>#{{ row.rank }}</b>
-        <div>
-          <strong>{{ row.name }}</strong>
-          <span>{{ money(row.tip_per_hour) }} / hr &middot; {{ '%.1f'|format(row.tip_pct) }}% tip{% if row.cash_unknown %} &middot; cash tip unknown{% endif %}</span>
-        </div>
-        <em>{{ row.score|round|int }}</em>
-      </article>
-    {% endfor %}
-  </div>
-  {% if cash_pending %}
-    <p class="cfp-note-copy">
-      {{ cash_pending|length }} teammate{{ '' if cash_pending|length == 1 else 's' }} with only cash tips this shift are held out of the ranking until those tips are recorded - their unknown cash is never counted against them.
-    </p>
-  {% endif %}
-</section>
+  <section class="cfp-block" id="cfp-leaderboard">
+    <div class="cfp-section-head"><h2>Peer ranking</h2><span id="cfp-lb-basis">tip/hr + tip%</span></div>
+    <div id="cfp-my-rank-wrap"></div>
+    <div class="cfp-rank-list" id="cfp-rank-list"></div>
+    <p class="cfp-note-copy" id="cfp-lb-note" hidden></p>
+  </section>
+
+</div>
 
 {% endblock %}
 
 {% block scripts %}
+<script type="application/json" id="cfp-config">{{ config | tojson }}</script>
 <script>
 (function(){
   "use strict";
-  // Clickable hero cells scroll to their section. Reduced motion is honored by
-  // the JS branch below (behavior: reduce ? "auto" : "smooth"); the CSS
-  // prefers-reduced-motion media query is a belt-and-suspenders backstop.
+  var CFG = JSON.parse(document.getElementById("cfp-config").textContent);
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var PERF = null;       // /employee/performance-center payload
+  var SERVICE = null;    // period -> service{} from /employee/my-performance
+  var range = CFG.initialRange || "today";
+
+  function $(id){ return document.getElementById(id); }
+  function show(el){ if(el) el.hidden = false; }
+  function hide(el){ if(el) el.hidden = true; }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+  function money(v){ var n=Number(v); return Number.isFinite(n) ? "$"+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}) : "--"; }
+  function pct(v,d){ var n=Number(v); return Number.isFinite(n) ? n.toFixed(d==null?0:d)+"%" : "--"; }
+  function mins(secs){ var n=Number(secs); return Number.isFinite(n) && n>0 ? Math.round(n/60)+"m" : "--"; }
+
+  // ---- fetch helpers --------------------------------------------------------
+  function getJson(url){
+    return fetch(url, {credentials:"same-origin", headers:{Accept:"application/json"}})
+      .then(function(r){
+        var ct = r.headers.get("content-type")||"";
+        if(ct.indexOf("application/json")===-1){ var e=new Error("non-json"); e.status=(r.status===200?401:r.status); throw e; }
+        return r.json();
+      });
+  }
+
+  function honestState(title, body){
+    hide($("cfp-loading")); hide($("cfp-content"));
+    $("cfp-state-title").textContent = title;
+    $("cfp-state-body").textContent = body;
+    show($("cfp-state"));
+  }
+
+  // ---- render ---------------------------------------------------------------
+  function rangeLabel(r){
+    return {today:"Today", week:"This week", month:"This month", last30:"Last 30 days"}[r] || r;
+  }
+
+  function renderRange(){
+    var data = PERF;
+    if(!data) return;
+    var tipped = data.is_tipped === true;
+    var p = (data.periods && data.periods[range]) || {money:{}, rankings:{}};
+    var m = p.money || {};
+    var isToday = range === "today";
+
+    $("cfp-hero-label").textContent = rangeLabel(range) + " take-home";
+    $("cfp-hero-range").textContent = isToday ? (CFG.todayLabel||"today")
+      : (range==="week"?"current week":range==="month"?"current month":"rolling 30");
+    $("cfp-hero-money").textContent = money(m.total_pay || 0);
+
+    // hero sub
+    if(tipped){
+      var live = m.tips_live ? " (live, finalizes at clock-out)" : "";
+      $("cfp-hero-sub").textContent = money(m.tips||0) + " tips + " + money(m.base_pay||0)
+        + " base across " + (Number(m.hours||0).toFixed(1)) + " hours" + live + ".";
+    } else {
+      $("cfp-hero-sub").textContent = money(m.base_pay||0) + " base across "
+        + (Number(m.hours||0).toFixed(1)) + " hours.";
+    }
+
+    // hero cells. For tipped roles: Tips/Hr + Avg Tip. For BOH (no tips at all):
+    // relabel those two cells to coherent non-tip metrics so a cook never sees
+    // an "Avg Tip --".
+    if(tipped){
+      $("cfp-hg-l1").textContent = "Tips / Hr";
+      $("cfp-hg-tiphr").textContent = money(m.tips_per_hour);
+      $("cfp-hg-l2").textContent = "Avg Tip";
+      $("cfp-hg-tippct").textContent = pct(m.tip_pct,0);
+    } else {
+      $("cfp-hg-l1").textContent = "Eff / Hr";
+      $("cfp-hg-tiphr").textContent = money(m.effective_hourly);
+      $("cfp-hg-l2").textContent = "Shifts";
+      $("cfp-hg-tippct").textContent = String(m.shifts||0);
+    }
+    var svc = (SERVICE && SERVICE[range]) || {};
+    $("cfp-hg-drink").textContent = mins(svc.avg_drink_secs);
+
+    // today empty vs range note
+    var hasShifts = Number(m.shifts||0) > 0 || Number(m.hours||0) > 0;
+    if(isToday){
+      hide($("cfp-range-note"));
+      if(!hasShifts){ $("cfp-today-empty-title").textContent = "Nothing posted yet today"; show($("cfp-today-empty")); }
+      else { hide($("cfp-today-empty")); }
+    } else {
+      hide($("cfp-today-empty"));
+      $("cfp-range-note-title").textContent = "No table rail on " + (range==="last30"?"last 30":range) + " view";
+      show($("cfp-range-note"));
+    }
+
+    // earnings
+    $("cfp-earn-scope").textContent = isToday ? "daily" : "range";
+    var cards = [];
+    cards.push(mcard("Base pay so far", money(m.base_pay), (Number(m.hours||0).toFixed(1))+" hours"));
+    if(tipped) cards.push(mcard("Tips / hour", money(m.tips_per_hour), m.hours?"actual hours":"no hours yet", true));
+    cards.push(mcard("Effective hourly", money(m.effective_hourly), tipped ? "base + tips" : "per hour worked"));
+    if(tipped) cards.push(mcard("Tip %", pct(m.tip_pct,0), m.tips_live?"live":"credit card tips"));
+    cards.push(mcard("Shifts", String(m.shifts||0), rangeLabel(range)));
+    $("cfp-earn-grid").innerHTML = cards.join("");
+
+    // technical averages from service blob (real ops metrics); hide if none
+    var techRows = [
+      ["Avg drink", mins(svc.avg_drink_secs)],
+      ["Avg apps", mins(svc.avg_app_secs)],
+      ["Avg entree", mins(svc.avg_entree_secs)],
+      ["Drink-entree gap", mins(svc.avg_gap_secs)],
+      ["Avg duration", mins(svc.avg_duration_secs)],
+      ["Hours", Number(m.hours||0).toFixed(1)+"h"],
+    ];
+    var anyTech = [svc.avg_drink_secs, svc.avg_app_secs, svc.avg_entree_secs, svc.avg_gap_secs, svc.avg_duration_secs]
+      .some(function(v){ return Number(v) > 0; });
+    if(anyTech){
+      $("cfp-tech-grid").innerHTML = techRows.map(function(r){
+        return '<article><span>'+esc(r[0])+'</span><strong>'+esc(r[1])+'</strong></article>';
+      }).join("");
+      show($("cfp-technical"));
+    } else {
+      hide($("cfp-technical"));
+    }
+
+    renderLeaderboard(p, tipped);
+  }
+
+  function mcard(label, value, note, good){
+    return '<div class="cfp-metric'+(good?' is-good':'')+'">'
+         +   '<span>'+esc(label)+'</span><strong>'+esc(value)+'</strong>'
+         +   (note?'<em>'+esc(note)+'</em>':'')+'</div>';
+  }
+
+  function renderLeaderboard(p, tipped){
+    var ranks = p.rankings || {};
+    // tipped -> combined; BOH -> effective_hourly. standing carries the same peers.
+    var block = tipped ? (ranks.combined || ranks.standing) : (ranks.effective_hourly || ranks.standing);
+    $("cfp-lb-basis").textContent = tipped ? "tip/hr + tip%" : "effective hourly";
+    var meWrap = $("cfp-my-rank-wrap");
+    var list = $("cfp-rank-list");
+    var note = $("cfp-lb-note");
+
+    var peers = (block && block.peers) || [];
+    var ownRank = block && block.rank;
+    var cohort = block && block.cohort_size;
+
+    if(!peers.length){
+      meWrap.innerHTML = '<div class="cfp-empty-state compact">'
+        + '<strong>No peer ranking yet</strong>'
+        + '<p>Ranking appears once enough teammates in your role have posted shifts for this range.</p></div>';
+      list.innerHTML = "";
+      hide(note);
+      return;
+    }
+
+    if(ownRank){
+      var meVal = tipped
+        ? (money(findPeerVal(peers, "tips_per_hour")) + " / hr")
+        : (money(findPeerVal(peers, "effective_hourly")) + " / hr");
+      meWrap.innerHTML = '<div class="cfp-my-rank">'
+        + '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/></svg>'
+        + '<div><strong>Rank #'+ownRank+(cohort?(" of "+cohort):"")+'</strong>'
+        + '<span>'+esc(meVal)+'</span></div></div>';
+    } else {
+      meWrap.innerHTML = "";
+    }
+
+    list.innerHTML = peers.map(function(row){
+      var metric = tipped
+        ? (money(row.tips_per_hour)+" / hr"+(row.tip_percent!=null?(" &middot; "+pct(row.tip_percent,1)+" tip"):""))
+        : (money(row.effective_hourly)+" / hr");
+      return '<article class="'+(row.is_me?"is-me":"")+'">'
+        + '<b>#'+(row.rank||"--")+'</b>'
+        + '<div><strong>'+esc(row.is_me?("You - "+(row.name||"")):(row.name||"Team member"))+'</strong>'
+        + '<span>'+metric+'</span></div>'
+        + '<em></em></article>';
+    }).join("");
+    hide(note);
+  }
+
+  function findPeerVal(peers, key){
+    for(var i=0;i<peers.length;i++){ if(peers[i].is_me && peers[i][key]!=null) return peers[i][key]; }
+    return null;
+  }
+
+  // ---- range switching ------------------------------------------------------
+  function setRange(r){
+    range = r;
+    document.querySelectorAll("button[data-range]").forEach(function(b){
+      var on = b.getAttribute("data-range")===r;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-selected", on?"true":"false");
+    });
+    try { var u=new URL(window.location.href); if(r==="today")u.searchParams.delete("range"); else u.searchParams.set("range",r); window.history.replaceState(null,"",u.toString()); } catch(_e){}
+    if(PERF) renderRange();
+  }
+  document.querySelectorAll("button[data-range]").forEach(function(b){
+    b.addEventListener("click", function(){ setRange(b.getAttribute("data-range")); });
+  });
+
+  // hero jump links honor reduced motion
   document.querySelectorAll(".cfp-jump").forEach(function(a){
     a.addEventListener("click", function(ev){
-      var id = a.getAttribute("href");
-      if(!id || id.charAt(0) !== "#") return;
-      var target = document.querySelector(id);
-      if(!target) return;
+      var id=a.getAttribute("href"); if(!id||id.charAt(0)!=="#") return;
+      var t=document.querySelector(id); if(!t) return;
       ev.preventDefault();
-      target.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "start"});
+      t.scrollIntoView({behavior: reduce?"auto":"smooth", block:"start"});
     });
   });
+
+  // ---- boot -----------------------------------------------------------------
+  getJson(CFG.perfUrl)
+    .then(function(j){
+      if(!j || j.ok === false){ honestState("Performance not available", "Try again in a few minutes."); return null; }
+      if(j.linked === false){ honestState("Connect your Toast profile", "Your performance appears here once a manager links your Cena profile to Toast."); return null; }
+      if(j.syncing === true){ honestState("Preparing your numbers", "Your performance is being synced. Check back shortly."); return null; }
+      PERF = j;
+      // pull service averages (best-effort; technical section hides if absent)
+      return getJson(CFG.myPerfUrl).then(function(mp){
+        SERVICE = {};
+        if(mp && mp.ok && Array.isArray(mp.perf_periods)){
+          mp.perf_periods.forEach(function(pp){ if(pp && pp.period) SERVICE[pp.period] = pp.service || {}; });
+        }
+        return PERF;
+      }).catch(function(){ SERVICE = {}; return PERF; });
+    })
+    .then(function(ok){
+      if(!ok) return;
+      hide($("cfp-loading")); hide($("cfp-state")); show($("cfp-content"));
+      setRange(range);
+    })
+    .catch(function(e){
+      if(e && e.status === 401){ honestState("Please sign in again", "Your session expired. Reload and sign back in."); return; }
+      honestState("Performance not available", "Try again in a few minutes.");
+    });
 })();
 </script>
 {% endblock %}

@@ -170,18 +170,3 @@
   <span class="cf-switch{% if on %} is-on{% endif %}" aria-hidden="true"></span>
 </button>
 {% endmacro %}
-
-{# Honest source label at the bottom of the Tables tab. #}
-{% macro source_footer(source_label, demo) %}
-<div class="cf-foot">
-  {{ source_label }}{% if demo %} &middot; demo mode &middot; cash tips may be unknown{% else %} &middot; cash tips may be unknown{% endif %}
-</div>
-{% endmacro %}
-
-{# Sync chip override: live vs demo. Drop into the cc-sync slot. #}
-{% macro sync_chip(demo) %}
-<div class="cc-sync" aria-label="Sync status">
-  <span class="cc-sync-dot" aria-hidden="true"></span>
-  <span>{% if demo %}demo mode{% else %}live{% endif %}</span>
-</div>
-{% endmacro %}

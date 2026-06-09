@@ -1,14 +1,13 @@
-{# Cenas Floor Pulse V2 - Tables tab.
-   Table map at the top; clicking a table tile scrolls to its ticket below and
-   highlights both. Today/Yesterday selector (Today is empty by date-reset).
-   Filters All/Mine/Open/Needs/New. ?table= deep-links + scrolls to a ticket.
+{# Cenas Floor Pulse - Tables tab, wired to REAL Toast table timelines.
+   Hydrates the table map + ticket rail from /employee/tables/data (session-
+   scoped to the employee's confirmed Toast guid(s)). Clicking a table tile
+   scrolls to + highlights its ticket. Today/Yesterday via ?day=. ?table=
+   deep-links to a ticket. No per-ticket tip is shown (cash tips are unknown /
+   not employee-visible here) - neutral by construction.
 #}
 {% extends "employee_console_base.html" %}
 {% set active_tab = 'tables' %}
-{% block title %}Tables &middot; Cenas Floor Pulse{% endblock %}
-
-{% macro money(v) %}${{ '%.2f'|format(v or 0) }}{% endmacro %}
-{% macro money0(v) %}${{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+{% block title %}Tables &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
 <section class="cfp-page-title">
@@ -16,7 +15,6 @@
     <h1>Tables</h1>
     <p>{{ 'Today' if day_key == 'today' else 'Yesterday' }} &middot; ticket rail</p>
   </div>
-  {% if demo_mode %}<span class="cfp-livepill"><i></i> Demo mode</span>{% endif %}
 </section>
 
 <div class="cfp-segment" role="tablist" aria-label="Table day">
@@ -26,144 +24,171 @@
        href="/employee/tables?day={{ key }}">{{ label }}</a>
   {% endfor %}
 </div>
-
-<div class="cfp-filter-row" role="group" aria-label="Ticket filters">
-  {% set fl = [('all','All'),('mine','Mine'),('open','Open'),('attention','Needs'),('new','New')] %}
-  {% for key, label in fl %}
-    <a class="cfp-chip{% if filter_key == key %} is-active{% endif %}"
-       href="/employee/tables?day={{ day_key }}&filter={{ key }}">{{ label }} {{ counts[key] }}</a>
-  {% endfor %}
-</div>
 {% endblock %}
 
 {% block employee_content %}
 
-{% if not tickets %}
-  <section class="cfp-empty-state">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-    <strong>No tables for today</strong>
-    <p>This is correct when today has no checks posted yet. Tap Yesterday to see the last completed ticket rail.</p>
-    <a href="/employee/tables?day=yesterday">View yesterday tickets</a>
-  </section>
-{% else %}
+<div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your tables...</div>
 
-  {# ---- Live station map: tiles scroll to the matching ticket ---- #}
+<div id="cfp-state" class="cfp-empty-state" hidden>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+  <strong id="cfp-state-title">No tables</strong>
+  <p id="cfp-state-body"></p>
+  <a id="cfp-state-cta" href="/employee/tables?day=yesterday" hidden>View yesterday tickets</a>
+</div>
+
+<div id="cfp-content" hidden>
   <section class="cfp-block" id="cfp-map">
-    <div class="cfp-section-head">
-      <h2>Live station map</h2>
-      <span>{{ tickets|length }} ticket{{ '' if tickets|length == 1 else 's' }}</span>
-    </div>
-    <div class="cfp-table-map">
-      {% for t in tickets %}
-        <button type="button"
-                class="cfp-table-tile is-{{ t.tone }}{% if selected_table == t.table_id %} is-selected{% endif %}"
-                data-table="{{ t.table_id }}"
-                aria-label="Open ticket for table {{ t.table_id }}">
-          {% if t.owner %}<i class="cfp-owner-dot" aria-hidden="true"></i>{% endif %}
-          <strong>{{ t.table_id }}</strong>
-          <span>{{ 'paid' if t.status == 'closed' else 'open' }} &middot; {{ money0(t.amount) }}</span>
-          <em>{{ t.covers }} top &middot; {{ t.opened_mins }}m</em>
-        </button>
-      {% endfor %}
-    </div>
+    <div class="cfp-section-head"><h2>Live station map</h2><span id="cfp-map-count"></span></div>
+    <div class="cfp-table-map" id="cfp-table-map"></div>
   </section>
-
-  {# ---- Ticket rail ---- #}
   <section class="cfp-block">
-    <div class="cfp-section-head">
-      <h2>Ticket rail</h2>
-      <span>tap table above</span>
-    </div>
-    <div class="cfp-ticket-list">
-      {% for t in tickets %}
-        <article class="cfp-ticket-card is-{{ t.tone }}{% if selected_table == t.table_id %} is-selected{% endif %}"
-                 id="cfp-ticket-{{ t.table_id }}" data-ticket="{{ t.table_id }}">
-          <div class="cfp-ticket-top">
-            <div>
-              <span>Table {{ t.table_id }}</span>
-              <strong>Ticket #{{ t.ticket_id }}</strong>
-            </div>
-            <div>
-              <b>{{ money(t.amount) }}</b>
-              <em>{{ t.status_label }}</em>
-            </div>
-          </div>
-          <div class="cfp-ticket-pills">
-            <span>{{ t.covers }} guests</span>
-            <span>{{ t.opened_mins }}m duration</span>
-            {% if t.status == 'closed' and t.tip_pct is not none %}
-              <span>{{ '%.0f'|format(t.tip_pct) }}% tip</span>
-            {% elif t.status == 'closed' and t.payment == 'Cash' %}
-              <span>cash tip unknown</span>
-            {% else %}
-              <span>{{ money(t.est_tip) }} est. tip</span>
-            {% endif %}
-            <span>{{ t.payment if t.payment else 'not paid yet' }}</span>
-          </div>
-          <div class="cfp-timeline">
-            <div class="cfp-tl-stop"><i></i><span>Seated</span><b>{{ t.seated or '--' }}</b></div>
-            <div class="cfp-tl-stop"><i></i><span>Drinks</span><b>{{ t.drinks or '--' }}</b></div>
-            <div class="cfp-tl-stop"><i></i><span>Kitchen</span><b>{{ t.kitchen or '--' }}</b></div>
-            <div class="cfp-tl-stop{% if t.status != 'closed' %} is-live{% endif %}">
-              <i></i><span>{{ 'Closed' if t.status == 'closed' else 'Open' }}</span>
-              <b>{{ t.closed if t.status == 'closed' else 'live' }}</b>
-            </div>
-          </div>
-          <div class="cfp-items">
-            {% for item in t['items'] %}<span>{{ item }}</span>{% endfor %}
-          </div>
-          <div class="cfp-ticket-action">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-            <span>{{ t.next_action }}</span>
-          </div>
-        </article>
-      {% endfor %}
-    </div>
+    <div class="cfp-section-head"><h2>Ticket rail</h2><span>tap table above</span></div>
+    <div class="cfp-ticket-list" id="cfp-ticket-list"></div>
   </section>
-
-{% endif %}
+</div>
 
 {% endblock %}
 
 {% block scripts %}
+<script type="application/json" id="cfp-config">{{ config | tojson }}</script>
 <script>
 (function(){
   "use strict";
+  var CFG = JSON.parse(document.getElementById("cfp-config").textContent);
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function selectTable(tableId){
-    if(!tableId) return;
-    // Clear prior selection, then mark tile + ticket.
-    document.querySelectorAll(".cfp-table-tile.is-selected, .cfp-ticket-card.is-selected")
-      .forEach(function(el){ el.classList.remove("is-selected"); });
-    var tile = document.querySelector('.cfp-table-tile[data-table="' + CSS.escape(tableId) + '"]');
-    var card = document.getElementById("cfp-ticket-" + tableId);
-    if(tile) tile.classList.add("is-selected");
-    if(card){
-      card.classList.add("is-selected");
-      card.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "start"});
-    }
+  function $(id){ return document.getElementById(id); }
+  function show(el){ if(el) el.hidden=false; }
+  function hide(el){ if(el) el.hidden=true; }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+  function money0(v){ var n=Number(v); return Number.isFinite(n) ? "$"+Math.round(n).toLocaleString("en-US") : "$0"; }
+
+  function clockFromIso(iso){
+    if(!iso) return "--";
+    var d=new Date(iso); if(isNaN(d)) return "--";
+    var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?"p":"a"; var hh=h%12===0?12:h%12;
+    return hh+":"+(m<10?"0"+m:m)+ap;
+  }
+  function durLabel(secs){ var n=Number(secs); if(!Number.isFinite(n)||n<=0) return ""; var m=Math.round(n/60); return m+"m"; }
+  function checkAmount(t){
+    // sum payment amounts if present; else fall back to selection count is not a $.
+    var pays = t.payment_methods||[];
+    var sum = 0, any=false;
+    pays.forEach(function(p){ if(p && Number(p.amount)){ sum+=Number(p.amount); any=true; } });
+    return any ? sum : null;
+  }
+  function payLabel(t){
+    var pays=t.payment_methods||[];
+    if(!pays.length) return t.status==="closed" ? "paid" : "open";
+    var m=pays[0].method;
+    return m || (t.status==="closed"?"paid":"open");
   }
 
-  // Tile click -> scroll to ticket + highlight. Also reflect in the URL so a
-  // refresh keeps the selection (and the server keeps the filter honest).
-  document.querySelectorAll(".cfp-table-tile").forEach(function(tile){
-    tile.addEventListener("click", function(){
-      var id = tile.getAttribute("data-table");
-      selectTable(id);
-      try {
-        var url = new URL(window.location.href);
-        url.searchParams.set("table", id);
-        window.history.replaceState(null, "", url.toString());
-      } catch(_e){ /* old browser */ }
-    });
-  });
+  function tileTone(t){
+    if(t.status!=="closed"){
+      // open: drinks + food fired -> hot; else close
+      return (t.drink_rang_at && t.food_rang_at) ? "warn" : "warn";
+    }
+    return "good";
+  }
 
-  // Day toggle + filter chips reload (server-rendered links); nothing to do.
-  // On load, if a ?table= came in from a deep link (Best Next Move / Right Now),
-  // scroll to it.
-  var pre = {{ (selected_table | tojson) if selected_table else 'null' }};
-  if(pre){ window.setTimeout(function(){ selectTable(pre); }, 60); }
+  // DOM-safe, unique key: strip to [A-Za-z0-9_-] and suffix the row index so
+  // two checks with the same/blank table name never collide on one element id.
+  function tableSlug(t, i){
+    var base = String(t.table_name || t.display_number || "t").replace(/[^A-Za-z0-9_-]/g, "");
+    return (base || "t") + "-" + i;
+  }
+
+  function render(timelines){
+    if(!timelines.length){
+      hide($("cfp-loading")); hide($("cfp-content"));
+      if(CFG.dayKey==="today"){
+        $("cfp-state-title").textContent="No tables for today yet";
+        $("cfp-state-body").textContent="This is correct when no checks have posted today. Tap Yesterday to see your last completed ticket rail.";
+        show($("cfp-state-cta"));
+      } else {
+        $("cfp-state-title").textContent="No tickets for yesterday";
+        $("cfp-state-body").textContent="No completed checks were found for your profile on that date.";
+        hide($("cfp-state-cta"));
+      }
+      show($("cfp-state"));
+      return;
+    }
+
+    hide($("cfp-loading")); hide($("cfp-state")); show($("cfp-content"));
+    $("cfp-map-count").textContent = timelines.length + (timelines.length===1?" ticket":" tickets");
+
+    var map = $("cfp-table-map");
+    var rail = $("cfp-ticket-list");
+    map.innerHTML = timelines.map(function(t,i){
+      var slug=tableSlug(t,i);
+      var amt=checkAmount(t);
+      var sub = (t.status==="closed"?"paid":"open") + (amt!=null?(" · "+money0(amt)):"");
+      return '<button type="button" class="cfp-table-tile is-'+tileTone(t)+'" data-table="'+esc(slug)+'" aria-label="Open ticket for table '+esc(t.table_name||t.display_number)+'">'
+        + '<strong>'+esc(t.table_name||("#"+t.display_number))+'</strong>'
+        + '<span>'+esc(sub)+'</span>'
+        + '<em>'+esc(durLabel(t.duration_secs)|| (t.status==="closed"?"closed":"live"))+'</em>'
+        + '</button>';
+    }).join("");
+
+    rail.innerHTML = timelines.map(function(t,i){
+      var slug=tableSlug(t,i);
+      var amt=checkAmount(t);
+      var drinks=(t.selections||[]).filter(function(s){return s.group==="drink";});
+      var food=(t.selections||[]).filter(function(s){return s.group!=="drink";});
+      function items(arr){ return arr.map(function(s){ var q=Number(s.quantity)||1; return '<span>'+(q>1?(q+"x "):"")+esc(s.name)+'</span>'; }).join(""); }
+      var sel=(t.selections||[]);
+      return '<article class="cfp-ticket-card is-'+tileTone(t)+(CFG.selectedTable===slug?" is-selected":"")+'" id="cfp-ticket-'+esc(slug)+'" data-ticket="'+esc(slug)+'">'
+        + '<div class="cfp-ticket-top">'
+        +   '<div><span>Table '+esc(t.table_name||"-")+'</span><strong>Ticket #'+esc(t.display_number||"")+'</strong></div>'
+        +   '<div><b>'+(amt!=null?money0(amt):"--")+'</b><em>'+(t.status==="closed"?"Closed":"Open")+'</em></div>'
+        + '</div>'
+        + '<div class="cfp-ticket-pills">'
+        +   '<span>'+(sel.length)+' items</span>'
+        +   (durLabel(t.duration_secs)?('<span>'+durLabel(t.duration_secs)+' duration</span>'):'')
+        +   '<span>'+esc(payLabel(t))+'</span>'
+        + '</div>'
+        + '<div class="cfp-timeline">'
+        +   '<div class="cfp-tl-stop"><i></i><span>Seated</span><b>'+clockFromIso(t.opened_at)+'</b></div>'
+        +   '<div class="cfp-tl-stop"><i></i><span>Drinks</span><b>'+clockFromIso(t.drink_rang_at)+'</b></div>'
+        +   '<div class="cfp-tl-stop"><i></i><span>Kitchen</span><b>'+clockFromIso(t.food_rang_at)+'</b></div>'
+        +   '<div class="cfp-tl-stop'+(t.status!=="closed"?" is-live":"")+'"><i></i><span>'+(t.status==="closed"?"Closed":"Open")+'</span><b>'+(t.status==="closed"?clockFromIso(t.closed_at):"live")+'</b></div>'
+        + '</div>'
+        + (sel.length?('<div class="cfp-items">'+items(drinks)+items(food)+'</div>'):'')
+        + '</article>';
+    }).join("");
+
+    // tile click -> scroll + highlight
+    map.querySelectorAll(".cfp-table-tile").forEach(function(tile){
+      tile.addEventListener("click", function(){ selectTable(tile.getAttribute("data-table")); });
+    });
+    if(CFG.selectedTable){ window.setTimeout(function(){ selectTable(CFG.selectedTable); }, 60); }
+  }
+
+  function selectTable(slug){
+    if(!slug) return;
+    document.querySelectorAll(".cfp-table-tile.is-selected, .cfp-ticket-card.is-selected").forEach(function(el){ el.classList.remove("is-selected"); });
+    var tile=document.querySelector('.cfp-table-tile[data-table="'+CSS.escape(slug)+'"]');
+    var card=document.getElementById("cfp-ticket-"+slug);
+    if(tile) tile.classList.add("is-selected");
+    if(card){ card.classList.add("is-selected"); card.scrollIntoView({behavior:reduce?"auto":"smooth", block:"start"}); }
+    try{ var u=new URL(window.location.href); u.searchParams.set("table",slug); window.history.replaceState(null,"",u.toString()); }catch(_e){}
+  }
+
+  fetch(CFG.dataUrl+"?day="+encodeURIComponent(CFG.dayKey)+"&limit=40", {credentials:"same-origin", headers:{Accept:"application/json"}})
+    .then(function(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e=new Error("non-json"); e.status=(r.status===200?401:r.status); throw e; } return r.json(); })
+    .then(function(j){
+      if(!j || j.ok===false){ hide($("cfp-loading")); $("cfp-state-title").textContent="Tables not available"; $("cfp-state-body").textContent="Try again in a few minutes."; show($("cfp-state")); return; }
+      if(j.linked===false){ hide($("cfp-loading")); $("cfp-state-title").textContent="Connect your Toast profile"; $("cfp-state-body").textContent="Your live tables appear here once a manager links your Cena profile to Toast."; hide($("cfp-state-cta")); show($("cfp-state")); return; }
+      render((j.timelines)||[]);
+    })
+    .catch(function(e){
+      hide($("cfp-loading"));
+      $("cfp-state-title").textContent = (e&&e.status===401) ? "Please sign in again" : "Tables not available";
+      $("cfp-state-body").textContent = (e&&e.status===401) ? "Your session expired. Reload and sign back in." : "Try again in a few minutes.";
+      show($("cfp-state"));
+    });
 })();
 </script>
 {% endblock %}

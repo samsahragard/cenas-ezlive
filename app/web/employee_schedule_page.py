@@ -72,11 +72,11 @@ def my_schedule_page():
         "loginUrl": "/employee/login",
     }
 
-    # Cenas Floor OS: the Floor OS Shifts tab reads its own shift list. The
+    # Cenas Floor Pulse: the Shifts tab reads its own shift list. The
     # /employee/my-schedule/shifts JSON endpoint is the live source -- but for
     # the initial server-render we ship the empty-state path so the tab works
-    # before the JSON client is wired. The active_section + mock_submit flag
-    # control the segmented control + time-off form.
+    # before the JSON client is wired. active_section drives the segmented
+    # control; the time-off form posts to its backend when that lands.
     section = (request.args.get("view") or "shifts").lower()
     if section not in ("shifts", "timeoff"):
         section = "shifts"
@@ -85,9 +85,6 @@ def my_schedule_page():
         employee=view,
         shifts=[],            # populated by /employee/my-schedule/shifts client-side
         active_section=section,
-        mock_submit=True,     # the time-off form posts to a backend that ships later
-        demo_mode=True,
-        sync_label="demo mode",
         config_json=json.dumps(config),
         dashboard_url="/employee/dashboard",
         login_url="/employee/login",

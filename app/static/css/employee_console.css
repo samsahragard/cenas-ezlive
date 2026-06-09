@@ -1910,3 +1910,27 @@ body::after {
   .cfp-hero-money { font-size: 42px; }
   .cfp-now-grid strong { font-size: 25px; }
 }
+
+/* Logout: topbar icon (every tab) + a full button on the You page. */
+.cc-topbar-right { display: inline-flex; align-items: center; gap: 8px; }
+.cc-logout {
+  display: inline-grid; place-items: center;
+  width: 38px; height: 38px;
+  border: 1px solid var(--cc-border); border-radius: 12px;
+  background: rgba(255, 255, 255, .04); color: var(--cc-txt2);
+  cursor: pointer;
+}
+.cc-logout:hover { color: var(--cc-txt); border-color: var(--cc-border-strong); background: rgba(255, 255, 255, .07); }
+.cc-logout:disabled { opacity: .55; cursor: default; }
+.cc-logout:focus-visible { outline: 2px solid rgba(248, 196, 107, .85); outline-offset: 2px; }
+
+.cf-logout {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; margin-top: 14px; padding: 14px;
+  border: 1px solid rgba(251, 113, 133, .32); border-radius: 16px;
+  background: rgba(251, 113, 133, .08); color: var(--cc-down);
+  font: 800 13px var(--cc-sans); letter-spacing: .02em; cursor: pointer;
+}
+.cf-logout:hover { background: rgba(251, 113, 133, .14); }
+.cf-logout:disabled { opacity: .6; cursor: default; }
+.cf-logout:focus-visible { outline: 2px solid rgba(248, 196, 107, .85); outline-offset: 2px; }

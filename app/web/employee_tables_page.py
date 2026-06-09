@@ -1,6 +1,8 @@
 """Employee-owned tables/check timeline page."""
 from __future__ import annotations
 
+import re
+
 from flask import jsonify, redirect, render_template, request, session
 
 from app.db import SessionLocal
@@ -20,44 +22,34 @@ def employee_tables_page():
         if emp is None:
             return redirect("/employee/login")
 
-        # Cenas Floor Pulse V2: the Tables tab is date-true. "Today" has no
-        # posted checks (date reset) and shows an empty state with a jump to
-        # Yesterday's completed ticket rail. Table tiles deep-link to their
-        # ticket via ?table=; filters via ?filter=. The live Toast path lives in
-        # /employee/tables/data above and remains available untouched.
-        from app.services import floor_pulse as fp
-
+        # Cenas Floor Pulse - Tables tab wired to REAL Toast table timelines. The
+        # page renders identity + a config of endpoint paths; the table map +
+        # ticket rail hydrate client-side from /employee/tables/data (already
+        # session-scoped to the employee's confirmed Toast guid(s); no cash-tip /
+        # GUID leakage). Today vs Yesterday is the existing ?day= the data
+        # endpoint supports; deep-link a ticket via ?table=.
         day_key = (request.args.get("day") or "today").lower()
         if day_key not in ("today", "yesterday"):
             day_key = "today"
+        # Bound the deep-link arg to a DOM-safe charset. It is only ever used as
+        # a CSS.escape'd element-id lookup on the client; restricting it here
+        # also closes the only request-controlled value that reaches the config
+        # (defense in depth on top of the |tojson HTML-safe embed below).
+        selected_table = re.sub(r"[^A-Za-z0-9_-]", "", request.args.get("table") or "")[:32] or None
 
-        flt = (request.args.get("filter") or "all").lower()
-        if flt not in ("all", "mine", "open", "attention", "new"):
-            flt = "all"
-
-        selected_table = request.args.get("table") or None
-
-        all_tickets = fp.tickets_for_day(day_key)
-        counts = fp.filter_counts(all_tickets)
-        # A ?table= deep-link must show that ticket even if a stale filter would
-        # hide it -- fall back to "all" so the selection is never orphaned.
-        if selected_table and flt != "all":
-            visible_ids = {t["table_id"] for t in fp.filter_tickets(all_tickets, flt)}
-            if selected_table not in visible_ids:
-                flt = "all"
-        tickets = [fp.ticket_view(t) for t in fp.filter_tickets(all_tickets, flt)]
-
+        config = {
+            "dataUrl": "/employee/tables/data",   # GET ?day=today|yesterday&limit=
+            "loginUrl": "/employee/login",
+            "dayKey": day_key,
+            "selectedTable": selected_table,
+        }
         return render_template(
             "employee_tables.html",
             employee=emp,
-            tickets=tickets,
-            counts=counts,
+            config=config,   # embedded via |tojson (HTML-safe) in the template
             day_key=day_key,
             day_options=[("today", "Today"), ("yesterday", "Yesterday")],
-            filter_key=flt,
             selected_table=selected_table,
-            demo_mode=True,
-            sync_label="demo mode",
             dashboard_url="/employee/dashboard",
             login_url="/employee/login",
         )
